@@ -291,9 +291,26 @@ function serializeSelectionAsWordHtml(container: HTMLElement): string | null {
   return `${WORD_HTML_META}<style>${cssRules.join('\n')}</style>${wordContainer.innerHTML}`;
 }
 
+/**
+ * `Selection` for ProseMirror `view.root`. `Document` has `getSelection()` in typings; `ShadowRoot`
+ * has it in Chromium but often not in `lib.dom`, so we call it via a narrow cast with fallback.
+ */
+function getSelectionFromViewRoot(root: Document | ShadowRoot | Element): Selection | null {
+  if (root instanceof Document) {
+    return root.getSelection();
+  }
+  if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+    const extended = root as ShadowRoot & { getSelection?: () => Selection | null };
+    if (typeof extended.getSelection === 'function') {
+      return extended.getSelection() ?? null;
+    }
+    return extended.ownerDocument.getSelection();
+  }
+  return typeof document !== 'undefined' ? document.getSelection() : null;
+}
+
 export function buildSelectionClipboardHtml(view: EditorView, editor?: Editor): string | null {
-  const rootSelection =
-    view.root instanceof Document || view.root instanceof ShadowRoot ? view.root.getSelection() : null;
+  const rootSelection = getSelectionFromViewRoot(view.root);
   if (!rootSelection || rootSelection.isCollapsed || rootSelection.rangeCount === 0) {
     return null;
   }
@@ -838,7 +855,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
 
         if (richHtml) {
           clipboardData.setData('text/html', embedSliceInHtml(richHtml, sliceJson, bodySectPrJson));
-          clipboardData.setData('text/plain', this.view.root.getSelection?.()?.toString() ?? '');
+          clipboardData.setData('text/plain', getSelectionFromViewRoot(this.view.root)?.toString() ?? '');
           return;
         }
 

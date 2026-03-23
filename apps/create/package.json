@@ -1,0 +1,18 @@
+{
+  "name": "@superdoc-dev/create",
+  "version": "0.1.0",
+  "description": "Set up SuperDoc in your project — AGENTS.md, skills, and MCP configuration",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "create-superdoc": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skill"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "test": "bun test"
+  }
+}

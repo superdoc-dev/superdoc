@@ -408,6 +408,39 @@ const registerRelativeImages = async (images, editor, view) => {
             originalSrc: mediaPath,
           });
           view.dispatch(tr);
+
+          // Read natural dimensions so DOCX export sizes the image correctly.
+          // Done as a separate update after rId/originalSrc are already set —
+          // Image() may hang in non-browser environments (tests, headless).
+          if (!currentNode.attrs.size?.width || !currentNode.attrs.size?.height) {
+            try {
+              const size = await new Promise((resolve, reject) => {
+                const img = new globalThis.Image();
+                img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                img.onerror = () => resolve(null);
+                setTimeout(() => reject(new Error('timeout')), 5000);
+                img.src = dataUrl;
+              });
+              if (size) {
+                // Re-find node — position may have shifted after previous dispatch
+                let sizePos = null;
+                view.state.doc.descendants((n, p) => {
+                  if (sizePos !== null) return false;
+                  if (n.type.name === 'image' && n.attrs.rId === rId) sizePos = p;
+                });
+                if (sizePos !== null) {
+                  const sizeTr = view.state.tr;
+                  const sizeNode = sizeTr.doc.nodeAt(sizePos);
+                  if (sizeNode?.type.name === 'image') {
+                    sizeTr.setNodeMarkup(sizePos, undefined, { ...sizeNode.attrs, size });
+                    view.dispatch(sizeTr);
+                  }
+                }
+              }
+            } catch {
+              // Image loading unavailable — export will use fallback dimensions
+            }
+          }
         }
       }
     } catch (error) {

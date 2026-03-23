@@ -1511,8 +1511,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Editing: Editable, tracked changes plugin disabled, comments
     else if (cleanedMode === 'editing') {
-      this.commands.disableTrackChangesShowOriginal?.();
-      this.commands.disableTrackChanges?.();
+      // During init, track changes are already in their default (disabled) state.
+      // These commands dispatch doc-changing transactions that trigger a full PM
+      // DOM reconciliation (~88s for large documents). Safe to skip on first boot.
+      if (_caller !== 'init') {
+        this.commands.disableTrackChangesShowOriginal?.();
+        this.commands.disableTrackChanges?.();
+      }
       this.setEditable(true, false);
       this.setOptions({ documentMode: 'editing' });
       if (pm) pm.classList.remove('view-mode');

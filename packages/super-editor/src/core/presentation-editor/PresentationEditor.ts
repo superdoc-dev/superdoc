@@ -642,18 +642,24 @@ export class PresentationEditor extends EventEmitter {
       },
     };
     try {
+      // Set the presentationEditor reference in beforeCreate so that plugins
+      // can detect presentation mode during init() and skip expensive decoration
+      // generation that DomPainter doesn't use (e.g. linkedStyles, dropcap).
+      const originalBeforeCreate = (editorOptions as any).onBeforeCreate;
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      const pe = this;
       this.#editor = new Editor({
         ...(editorOptions as ConstructorParameters<typeof Editor>[0]),
         element: this.#hiddenHost,
         editorProps: normalizedEditorProps,
         documentMode: this.#documentMode,
+        onBeforeCreate: ({ editor }: { editor: Editor }) => {
+          (editor as Editor & { presentationEditor?: PresentationEditor | null }).presentationEditor = pe;
+          (editor as Editor & { _presentationEditor?: PresentationEditor })._presentationEditor = pe;
+          originalBeforeCreate?.({ editor });
+        },
       });
       this.#wrapHiddenEditorFocus();
-      // Set bidirectional reference for renderer-neutral helpers
-      // Type assertion is safe here as we control both Editor and PresentationEditor
-      (this.#editor as Editor & { presentationEditor?: PresentationEditor | null }).presentationEditor = this;
-      // Add reference back to PresentationEditor for event handler detection
-      (this.#editor as Editor & { _presentationEditor?: PresentationEditor })._presentationEditor = this;
       this.#syncHiddenEditorA11yAttributes();
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
@@ -4129,6 +4135,7 @@ export class PresentationEditor extends EventEmitter {
       this.#applyZoom();
 
       const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
+
       const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);

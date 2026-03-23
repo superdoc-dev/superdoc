@@ -988,6 +988,10 @@ export const useCommentsStore = defineStore('comments', () => {
   const createCommentForTrackChanges = (editor, superdoc, trackedChangesOverride = null, options = {}) => {
     const { reopenResolved = false } = options;
     const trackedChanges = trackedChangesOverride ?? trackChangesHelpers.getTrackChanges(editor.state);
+
+    // Skip the expensive force dispatch when there are no tracked changes.
+    if (!trackedChanges.length) return;
+
     const groupedChanges = groupChanges(trackedChanges);
     const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
     if (!activeDocumentId) return;

@@ -1,0 +1,86 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 9398346931860614865a29a8e91fb9e786d23f87..81ce672bcd04d1d690e2dc0ac7e896e1a064eea0 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -5044,8 +5044,21 @@ var EditorView = function () {
+       if (pluginsChanged || prevProps.handleDOMEvents != this._props.handleDOMEvents) {
+         ensureListeners(this);
+       }
++      var prevEditable = this.editable;
+       this.editable = getEditable(this);
+       updateCursorWrapper(this);
++      if (!redraw && !pluginsChanged && prev.doc === state.doc) {
++        if (this.editable !== prevEditable) {
++          this.dom.contentEditable = String(this.editable);
++        }
++        if (updateSel || !state.selection.eq(prev.selection)) {
++          this.domObserver.stop();
++          selectionToDOM(this);
++          this.domObserver.start();
++        }
++        this.updatePluginViews(prev);
++        return;
++      }
+       var innerDeco = viewDecorations(this),
+         outerDeco = computeDocDeco(this);
+       var scroll = prev.plugins != state.plugins && !prev.doc.eq(state.doc) ? "reset" : state.scrollToSelection > prev.scrollToSelection ? "to selection" : "preserve";
+diff --git a/dist/index.js b/dist/index.js
+index 9c60a5b6763ec394d83a1ce305ae5d9ed5e78525..cd8fbd439563a9bc031457882394ad0087eb5e34 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5470,8 +5470,25 @@ class EditorView {
+         if (pluginsChanged || prevProps.handleDOMEvents != this._props.handleDOMEvents) {
+             ensureListeners(this);
+         }
++        let prevEditable = this.editable;
+         this.editable = getEditable(this);
+         updateCursorWrapper(this);
++        // Fast path: when the document structure hasn't changed (same doc
++        // reference), plugins haven't changed, and no node view rebuild is
++        // needed, skip the expensive decoration recomputation and DOM tree
++        // walk. Selection and editable sync are preserved for input handling.
++        if (!redraw && !pluginsChanged && prev.doc === state.doc) {
++            if (this.editable !== prevEditable) {
++                this.dom.contentEditable = String(this.editable);
++            }
++            if (updateSel || !state.selection.eq(prev.selection)) {
++                this.domObserver.stop();
++                selectionToDOM(this);
++                this.domObserver.start();
++            }
++            this.updatePluginViews(prev);
++            return;
++        }
+         let innerDeco = viewDecorations(this), outerDeco = computeDocDeco(this);
+         let scroll = prev.plugins != state.plugins && !prev.doc.eq(state.doc) ? "reset"
+             : state.scrollToSelection > prev.scrollToSelection ? "to selection" : "preserve";
+diff --git a/src/index.ts b/src/index.ts
+index 9ca5c99eb2b6ea8d07323832c54544cced28beed..5a747c486ac74870e4fc38f8d469e5e22c9ac992 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -171,8 +171,25 @@ export class EditorView {
+       ensureListeners(this)
+     }
+ 
++    let prevEditable = this.editable
+     this.editable = getEditable(this)
+     updateCursorWrapper(this)
++    // Fast path: when the document structure hasn't changed (same doc
++    // reference), plugins haven't changed, and no node view rebuild is
++    // needed, skip the expensive decoration recomputation and DOM tree
++    // walk. Selection and editable sync are preserved for input handling.
++    if (!redraw && !pluginsChanged && prev.doc === state.doc) {
++      if (this.editable !== prevEditable) {
++        this.dom.contentEditable = String(this.editable)
++      }
++      if (updateSel || !state.selection.eq(prev.selection)) {
++        this.domObserver.stop()
++        selectionToDOM(this)
++        this.domObserver.start()
++      }
++      this.updatePluginViews(prev)
++      return
++    }
+     let innerDeco = viewDecorations(this), outerDeco = computeDocDeco(this)
+ 
+     let scroll = prev.plugins != state.plugins && !prev.doc.eq(state.doc) ? "reset"

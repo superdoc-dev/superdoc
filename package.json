@@ -142,8 +142,7 @@
       "superdoc": "workspace:*",
       "@superdoc-dev/react": "workspace:*",
       "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
-      "@superdoc-dev/sdk": "workspace:*",
-      "openapi-types": "12.1.3"
+      "@superdoc-dev/sdk": "workspace:*"
     },
     "ignoredBuiltDependencies": [
       "@parcel/watcher",
@@ -169,7 +168,7 @@
     ],
     "patchedDependencies": {
       "readable-stream@3.6.2": "patches/readable-stream@3.6.2.patch",
-      "openapi-types@12.1.3": "patches/openapi-types@12.1.3.patch"
+      "prosemirror-view@1.41.5": "patches/prosemirror-view@1.41.5.patch"
     }
   },
   "dependencies": {

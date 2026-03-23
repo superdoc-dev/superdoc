@@ -445,12 +445,14 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     },
   });
 
-  it('does not emit w:rPr when runPropertiesInlineKeys is missing', () => {
-    const params = runWithContent({ runProperties: { bold: true, color: 'FF0000' } });
+  it('emits w:rPr when runPropertiesInlineKeys is missing (legacy / collab: export all run property keys)', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, color: { val: 'FF0000' } },
+    });
     const result = translator.decode(params);
     const elements = result?.elements ?? [];
     const hasRPr = elements.some((el) => el?.name === 'w:rPr');
-    expect(hasRPr).toBe(false);
+    expect(hasRPr).toBe(true);
   });
 
   it('does not emit w:rPr when runPropertiesInlineKeys is empty array', () => {

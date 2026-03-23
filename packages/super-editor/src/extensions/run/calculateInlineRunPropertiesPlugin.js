@@ -110,6 +110,9 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           const hadInlineKeys =
             Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties) && hadInlineKeys) return;
+          // Allow-list = prior inline keys ∪ mark keys only. Do not union Object.keys(runProperties): runs often
+          // carry resolved paragraph-style noise in runProperties; listing every key would re-export it on w:rPr
+          // and bloat document.xml. Importer / plan-engine must seed runPropertiesInlineKeys for true OOXML keys.
           const newInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segments[0])])];
           const newOverrideKeys = overrideKeysFromInlineProps(runProperties);
           tr.setNodeMarkup(

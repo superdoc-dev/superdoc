@@ -16,9 +16,11 @@ export function generateParagraphProperties(params) {
   // Only include w:rPr in pPr when the paragraph had inline rPr on import; filter to inline keys and drop if empty.
   const inlineKeys = paragraphProperties.runPropertiesInlineKeys;
   delete paragraphProperties.runPropertiesInlineKeys;
-  if (!Array.isArray(inlineKeys) || inlineKeys.length === 0) {
+  // Only strip when we have an explicit empty allow-list. Missing runPropertiesInlineKeys (old collab /
+  // legacy nodes) keeps paragraph runProperties so export still matches historical behavior.
+  if (Array.isArray(inlineKeys) && inlineKeys.length === 0) {
     delete paragraphProperties.runProperties;
-  } else if (paragraphProperties.runProperties) {
+  } else if (Array.isArray(inlineKeys) && paragraphProperties.runProperties) {
     const filtered = Object.fromEntries(
       inlineKeys
         .filter((k) => k in paragraphProperties.runProperties)

@@ -134,9 +134,12 @@ const encode = (params, encodedAttrs = {}) => {
 
   const elements = Array.isArray(runNode.elements) ? runNode.elements : [];
 
-  // Parsing run properties
+  // Inline export allow-list = keys from encoded w:rPr only. Do not add keys that appear only
+  // after resolveRunProperties (e.g. resolved lang): baseline comparison still inflated document.xml
+  // on real documents. Plan-engine / explicit w:rPr continue to seed keys where needed.
   const rPrNode = elements.find((child) => child?.name === 'w:rPr');
-  const runProperties = rPrNode ? wRPrTranslator.encode({ ...params, nodes: [rPrNode] }) : {};
+  const encodedRunProperties = (rPrNode ? wRPrTranslator.encode({ ...params, nodes: [rPrNode] }) : undefined) ?? {};
+  const runPropertiesInlineKeysFromCombine = Object.keys(encodedRunProperties);
 
   // Resolving run properties following style hierarchy
   const paragraphProperties = params?.extraParams?.paragraphProperties || {};
@@ -156,11 +159,9 @@ const encode = (params, encodedAttrs = {}) => {
       numRows: params.extraParams.totalRows,
     };
   }
-  const runPropertiesInlineKeysFromCombine =
-    runProperties && typeof runProperties === 'object' ? Object.keys(runProperties) : [];
   const resolvedRunProperties = resolveRunProperties(
     params,
-    runProperties ?? {},
+    encodedRunProperties,
     paragraphProperties,
     tableInfo,
     false,
@@ -225,8 +226,8 @@ const encode = (params, encodedAttrs = {}) => {
 
   // Keys from the run's style (styleId) in styles.xml — don't export these (already in styles.xml)
   let runPropertiesStyleKeys = null;
-  if (runProperties?.styleId && params?.docx) {
-    const styleRPr = getParagraphStyleRunPropertiesFromStylesXml(params.docx, runProperties.styleId, params);
+  if (encodedRunProperties?.styleId && params?.docx) {
+    const styleRPr = getParagraphStyleRunPropertiesFromStylesXml(params.docx, encodedRunProperties.styleId, params);
     if (styleRPr && Object.keys(styleRPr).length > 0) {
       runPropertiesStyleKeys = Object.keys(styleRPr);
     }
@@ -321,7 +322,11 @@ const decode = (params, decodedAttrs = {}) => {
 
   // Export run properties that were inline or that override the style (so user overrides are preserved).
   // Exclude keys that are style-only (in styleKeys but not in overrideKeys).
-  const candidateKeys = [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])];
+  // Old collaboration payloads often omit runPropertiesInlineKeys — fall back to all keys on runProperties
+  // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
+  const candidateKeys =
+    inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+
   const exportKeys = candidateKeys.filter(
     (k) =>
       k in (runProperties || {}) &&

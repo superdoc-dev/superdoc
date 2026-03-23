@@ -82,11 +82,11 @@ describe('generateParagraphProperties', () => {
     });
   });
 
-  it('strips runProperties when runPropertiesInlineKeys is missing', () => {
+  it('preserves runProperties when runPropertiesInlineKeys is missing for backward compatibility', () => {
     const paragraphProperties = { spacing: { line: 240 }, runProperties: { bold: true } };
     const node = { type: 'paragraph', attrs: { paragraphProperties } };
     wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
-      expect(decodeNode.attrs.paragraphProperties.runProperties).toBeUndefined();
+      expect(decodeNode.attrs.paragraphProperties.runProperties).toEqual({ bold: true });
       return { type: 'element', name: 'w:pPr', elements: [] };
     });
 
@@ -96,7 +96,7 @@ describe('generateParagraphProperties', () => {
       expect.objectContaining({
         node: expect.objectContaining({
           attrs: expect.objectContaining({
-            paragraphProperties: expect.not.objectContaining({ runProperties: expect.anything() }),
+            paragraphProperties: expect.objectContaining({ runProperties: { bold: true } }),
           }),
         }),
       }),

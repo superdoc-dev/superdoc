@@ -5,28 +5,42 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { TextSelection } from 'prosemirror-state';
 
+function numFmtIsBullet(numFmt) {
+  if (numFmt == null) return false;
+  const v = String(numFmt).toLowerCase();
+  return v === 'bullet' || v === 'image' || v === 'none';
+}
+
+function getParagraphListKind(node, editor) {
+  const paraProps = getResolvedParagraphProperties(node);
+  if (!paraProps?.numberingProperties || !node.attrs.listRendering) {
+    return null;
+  }
+  const { numId, ilvl = 0 } = paraProps.numberingProperties;
+  const details = ListHelpers.getListDefinitionDetails({ numId, level: ilvl, editor });
+  const fmt = details?.listNumberingType ?? node.attrs.listRendering?.numberingType;
+  if (fmt == null) {
+    return null;
+  }
+  return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
+}
+
+function paragraphMatchesToggleListType(node, editor, listType) {
+  const kind = getParagraphListKind(node, editor);
+  if (!kind) return false;
+  if (listType === 'bulletList') return kind === 'bullet';
+  if (listType === 'orderedList') return kind === 'ordered';
+  return false;
+}
+
 export const toggleList =
   (listType) =>
   ({ editor, state, tr, dispatch }) => {
-    // 1. Find first paragraph in selection that is a list of the same type
-    let predicate;
-    if (listType === 'orderedList') {
-      predicate = (n) => {
-        const paraProps = getResolvedParagraphProperties(n);
-        return (
-          paraProps.numberingProperties && n.attrs.listRendering && n.attrs.listRendering.numberingType !== 'bullet'
-        );
-      };
-    } else if (listType === 'bulletList') {
-      predicate = (n) => {
-        const paraProps = getResolvedParagraphProperties(n);
-        return (
-          paraProps.numberingProperties && n.attrs.listRendering && n.attrs.listRendering.numberingType === 'bullet'
-        );
-      };
-    } else {
+    if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
+
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -55,12 +69,11 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    // 2. If not found, check if the paragraph right before the selection is a list of the same type
     if (!firstListNode && from > 0) {
       const $from = state.doc.resolve(from);
-      const parentIndex = $from.index(-1);
-      if (parentIndex > 0) {
-        const beforeNode = $from.node(-1).child(parentIndex - 1);
+      const blockIndex = $from.index(0);
+      if (blockIndex > 0) {
+        const beforeNode = state.doc.child(blockIndex - 1);
         if (beforeNode && beforeNode.type.name === 'paragraph' && predicate(beforeNode)) {
           firstListNode = beforeNode;
         }

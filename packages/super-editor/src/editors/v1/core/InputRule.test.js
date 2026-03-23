@@ -30,6 +30,7 @@ import {
   handleHtmlPaste,
   handleClipboardPaste,
   isWordHtml,
+  isSuperdocOriginClipboardHtml,
 } from './InputRule.js';
 
 const createEditorContext = (initialDoc) => {
@@ -122,6 +123,15 @@ describe('InputRule helpers', () => {
     expect(isWordHtml('<p>plain</p>')).toBe(false);
   });
 
+  it('detects SuperDoc clipboard HTML without the hidden slice div', () => {
+    expect(
+      isSuperdocOriginClipboardHtml(
+        '<p class="MsoListParagraph" data-num-id="1" data-level="0" data-list-numbering-type="decimal">A</p>',
+      ),
+    ).toBe(true);
+    expect(isSuperdocOriginClipboardHtml('<meta name="Generator" content="Microsoft Word"><p>Plain</p>')).toBe(false);
+  });
+
   it('delegates clipboard handling for plain text', () => {
     const editor = { options: { mode: 'text' } };
     const handled = handleClipboardPaste({ editor }, '');
@@ -138,6 +148,31 @@ describe('InputRule helpers', () => {
 
     expect(handleDocxPasteMock).toHaveBeenCalledWith(html, editor, {});
     expect(handled).toBe('docx-result');
+  });
+
+  it('uses HTML paste for Word-shaped SuperDoc round-trip in docx mode (not DOCX converter)', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    editor.options.mode = 'docx';
+    const html =
+      '<meta name="Generator" content="Microsoft Word">' +
+      '<p class="MsoListParagraph" data-num-id="3" data-level="0" data-list-numbering-type="decimal"><span>Item</span></p>';
+
+    const handled = handleClipboardPaste({ editor, view }, html);
+
+    expect(handleDocxPasteMock).not.toHaveBeenCalled();
+    expect(flattenListsInHtmlMock).toHaveBeenCalled();
+    expect(handled).toBe(true);
+  });
+
+  it('falls back to browser HTML handling for Word HTML outside docx mode', () => {
+    const { editor } = createEditorContext(doc(p('Base')));
+    const html = '<meta name="Generator" content="Microsoft Word"><p>Content</p>';
+
+    const handled = handleClipboardPaste({ editor, view: editor.view }, html);
+
+    expect(handleDocxPasteMock).not.toHaveBeenCalled();
+    expect(flattenListsInHtmlMock).toHaveBeenCalled();
+    expect(handled).toBe(true);
   });
 
   it('uses Google Docs handler when matching markup is found', () => {

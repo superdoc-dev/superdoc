@@ -63,6 +63,8 @@ export function inputRulesPlugin(config: InputRulesPluginConfig): Plugin;
  */
 export function isWordHtml(html: string): boolean;
 
+export function isSuperdocOriginClipboardHtml(html: string | null | undefined): boolean;
+
 /**
  * Handle HTML paste events
  */

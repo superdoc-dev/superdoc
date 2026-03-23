@@ -21,7 +21,9 @@ function parseCssLength(value) {
 
 export function parseAttrs(node) {
   const numberingProperties = {};
-  let indent, spacing;
+  let indent, spacing, justification;
+  let sectionProperties = null;
+  let pageBreakSource = null;
   const { styleid: styleId, ...extraAttrs } = Array.from(node.attributes).reduce((acc, attr) => {
     if (attr.name === 'data-num-id') {
       numberingProperties.numId = parseInt(attr.value);
@@ -47,6 +49,19 @@ export function parseAttrs(node) {
       } catch {
         // ignore invalid spacing value
       }
+    } else if (attr.name === 'data-justification') {
+      justification = attr.value;
+    } else if (attr.name === 'data-sd-sect-pr') {
+      try {
+        const parsedSectionProperties = JSON.parse(attr.value);
+        if (parsedSectionProperties && typeof parsedSectionProperties === 'object') {
+          sectionProperties = parsedSectionProperties;
+        }
+      } catch {
+        // ignore invalid section payload
+      }
+    } else if (attr.name === 'data-sd-page-break-source') {
+      pageBreakSource = attr.value || null;
     } else {
       acc[attr.name] = attr.value;
     }
@@ -108,7 +123,6 @@ export function parseAttrs(node) {
   // CSS inline style fallback for text-align (e.g. Google Docs paste)
   // Skip 'left' — Google Docs sets text-align: left on every paragraph,
   // and storing it would bake in unnecessary direct formatting on export.
-  let justification;
   if (!justification && node.style) {
     const textAlign = node.style.textAlign;
     if (textAlign && CSS_ALIGN_TO_OOXML[textAlign]) {
@@ -137,6 +151,14 @@ export function parseAttrs(node) {
 
   if (Object.keys(numberingProperties).length > 0) {
     attrs.paragraphProperties.numberingProperties = numberingProperties;
+  }
+
+  if (sectionProperties) {
+    attrs.paragraphProperties.sectPr = sectionProperties;
+  }
+
+  if (pageBreakSource) {
+    attrs.pageBreakSource = pageBreakSource;
   }
 
   return attrs;

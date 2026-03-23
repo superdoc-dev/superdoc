@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
-import { Fragment, DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
+import { Fragment, DOMParser as PMDOMParser, DOMSerializer as PmDOMSerializer, Slice } from 'prosemirror-model';
 import { CommandService } from './CommandService.js';
 import { chainableEditorState } from './helpers/chainableEditorState.js';
 import { getHTMLFromFragment } from './helpers/getHTMLFromFragment.js';
@@ -7,7 +7,8 @@ import { warnNoDOM } from './helpers/domWarnings.js';
 import { getTextContentFromNodes } from './helpers/getTextContentFromNodes.js';
 import { isRegExp } from './utilities/isRegExp.js';
 import { handleDocxPaste, wrapTextsInRuns } from './inputRules/docx-paste/docx-paste.js';
-import { flattenListsInHtml } from './inputRules/html/html-helpers.js';
+import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { flattenListsInHtml, unflattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { handleGoogleDocsHtml } from './inputRules/google-docs-paste/google-docs-paste.js';
 import {
   detectPasteUrl,
@@ -15,6 +16,81 @@ import {
   normalizePastedLinks,
   resolveLinkProtocols,
 } from './inputRules/paste-link-normalizer.js';
+import { getSectPrColumns } from './super-converter/section-properties.js';
+import {
+  SUPERDOC_SLICE_MIME,
+  SUPERDOC_MEDIA_MIME,
+  SUPERDOC_SLICE_ATTR,
+  SUPERDOC_BODY_SECT_PR_ATTR,
+  embedSliceInHtml,
+  extractSliceFromHtml,
+  stripSliceFromHtml,
+  extractBodySectPrFromHtml,
+  bodySectPrShouldEmbed,
+  collectReferencedImageMediaForClipboard,
+  mergeSuperdocClipboardMediaIntoEditor,
+} from './helpers/superdocClipboardSlice.js';
+import { annotateFragmentDomWithClipboardData } from './helpers/clipboardFragmentAnnotate.js';
+
+/** Heuristic: clipboard HTML from SuperDoc copy (slice attrs, list/section metadata). */
+export function isSuperdocOriginClipboardHtml(html) {
+  if (!html || typeof html !== 'string') return false;
+  if (html.includes(SUPERDOC_SLICE_ATTR) || html.includes(SUPERDOC_BODY_SECT_PR_ATTR)) {
+    return true;
+  }
+  if (/data-sd-sect-pr\s*=/i.test(html)) {
+    return true;
+  }
+  if (/data-sd-block-id\s*=/i.test(html)) {
+    return true;
+  }
+  if (
+    /data-num-id\s*=/i.test(html) &&
+    (/data-level\s*=/i.test(html) || /data-list-numbering-type\s*=/i.test(html) || /data-list-level\s*=/i.test(html))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Apply pasted body `sectPr` when target has single-column layout. */
+function tryApplyEmbeddedBodySectPr(editor, view, bodySectPr) {
+  if (!bodySectPr || typeof bodySectPr !== 'object') return;
+
+  const incomingCols = getSectPrColumns(bodySectPr);
+  if (!incomingCols?.count || incomingCols.count <= 1) return;
+
+  const current = view.state.doc.attrs?.bodySectPr;
+  const currentCols = current && getSectPrColumns(current);
+  if (currentCols?.count > 1) return;
+
+  const clone = JSON.parse(JSON.stringify(bodySectPr));
+  const tr = view.state.tr.setDocAttribute('bodySectPr', clone);
+  const converter = editor?.converter;
+  if (converter) {
+    converter.bodySectPr = clone;
+  }
+  view.dispatch(tr);
+}
+
+/** Like tryApplyEmbeddedBodySectPr but on `tr` (one dispatch with slice paste meta). */
+function applyEmbeddedBodySectPrToTransaction(editor, tr, bodySectPr, docBeforePaste) {
+  if (!bodySectPr || typeof bodySectPr !== 'object') return;
+
+  const incomingCols = getSectPrColumns(bodySectPr);
+  if (!incomingCols?.count || incomingCols.count <= 1) return;
+
+  const current = docBeforePaste.attrs?.bodySectPr;
+  const currentCols = current && getSectPrColumns(current);
+  if (currentCols?.count > 1) return;
+
+  const clone = JSON.parse(JSON.stringify(bodySectPr));
+  tr.setDocAttribute('bodySectPr', clone);
+  const converter = editor?.converter;
+  if (converter) {
+    converter.bodySectPr = clone;
+  }
+}
 
 export class InputRule {
   match;
@@ -189,6 +265,10 @@ export const inputRulesPlugin = ({ editor, rules }) => {
     },
 
     props: {
+      handleDOMEvents: {
+        cut: (view, event) => handleCutEvent(view, event, editor),
+      },
+
       handleTextInput(view, from, to, text) {
         return run({
           editor,
@@ -226,8 +306,6 @@ export const inputRulesPlugin = ({ editor, rules }) => {
       // Paste handler
       handlePaste(view, event, slice) {
         const clipboard = event.clipboardData;
-        const html = clipboard.getData('text/html');
-        const plainText = clipboard.getData('text/plain');
 
         // Allow specialised plugins (e.g., field-annotation) first shot.
         const fieldAnnotationContent = slice.content.content.filter((item) => item.type.name === 'fieldAnnotation');
@@ -235,6 +313,32 @@ export const inputRulesPlugin = ({ editor, rules }) => {
           return false;
         }
 
+        const rawHtml = clipboard.getData('text/html');
+        const isSuperdocHtml = isSuperdocOriginClipboardHtml(rawHtml);
+        const embeddedBodySectPr = isSuperdocHtml ? extractBodySectPrFromHtml(rawHtml) : null;
+
+        const superdocSliceData = clipboard.getData(SUPERDOC_SLICE_MIME) || extractSliceFromHtml(rawHtml);
+        if (isSuperdocHtml || superdocSliceData) {
+          mergeSuperdocClipboardMediaIntoEditor(editor, clipboard);
+        }
+        if (superdocSliceData) {
+          try {
+            if (handleSuperdocSlicePaste(superdocSliceData, editor, view, embeddedBodySectPr)) return true;
+          } catch (err) {
+            console.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
+          }
+        }
+
+        const html = stripSliceFromHtml(rawHtml);
+        const plainText = clipboard.getData('text/plain');
+        // SuperDoc HTML is still Word-shaped; use HTML paste, not DOCX converter.
+        if (isSuperdocHtml) {
+          const ok = handleHtmlPaste(html, editor);
+          if (ok && embeddedBodySectPr) {
+            tryApplyEmbeddedBodySectPr(editor, view, embeddedBodySectPr);
+          }
+          return ok;
+        }
         const result = handleClipboardPaste({ editor, view }, html, plainText);
         return result;
       },
@@ -461,6 +565,39 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
   const container = resolvedDocument.createElement('div');
   container.innerHTML = html;
 
+  // Strip Word conditional list-marker spans so paste does not duplicate markers.
+  const stripWordListConditionalPrefixes = (root) => {
+    const stripFromNode = (node) => {
+      if (!node?.childNodes) return;
+
+      for (let i = 0; i < node.childNodes.length; i += 1) {
+        const current = node.childNodes[i];
+        if (current?.nodeType === Node.COMMENT_NODE && current.nodeValue?.includes('[if !supportLists]')) {
+          let j = i + 1;
+          while (j < node.childNodes.length) {
+            const next = node.childNodes[j];
+            if (next?.nodeType === Node.COMMENT_NODE && next.nodeValue?.includes('[endif]')) {
+              node.removeChild(next);
+              break;
+            }
+            node.removeChild(next);
+          }
+          node.removeChild(current);
+          i -= 1;
+          continue;
+        }
+
+        if (current?.nodeType === Node.ELEMENT_NODE) {
+          stripFromNode(current);
+        }
+      }
+    };
+
+    stripFromNode(root);
+  };
+
+  stripWordListConditionalPrefixes(container);
+
   const walkAndClean = (node) => {
     for (const child of [...node.children]) {
       if (forbiddenTags.includes(child.tagName.toLowerCase())) {
@@ -518,10 +655,10 @@ export function handleClipboardPaste({ editor, view }, html, plainText) {
       return handlePlainTextUrlPaste(editor, view, plainText, detected);
     }
     case 'word-html':
-      if (editor.options.mode === 'docx') {
+      if (editor.options.mode === 'docx' && !isSuperdocOriginClipboardHtml(html)) {
         return handleDocxPaste(html, editor, view);
       }
-      break;
+      return handleHtmlPaste(html, editor);
     case 'google-docs':
       return handleGoogleDocsHtml(html, editor, view);
     // falls through to browser-html handling when not in DOCX mode
@@ -530,4 +667,257 @@ export function handleClipboardPaste({ editor, view }, html, plainText) {
   }
 
   return false;
+}
+
+/** Cut: put slice + annotated HTML on clipboard, then delete selection (copy uses ProseMirrorRenderer). */
+function handleCutEvent(view, event, editor) {
+  const clipboardData = event.clipboardData;
+  if (!clipboardData) return false;
+
+  const { from, to } = view.state.selection;
+  if (from === to) return false;
+
+  event.preventDefault();
+
+  try {
+    const slice = view.state.doc.slice(from, to);
+    const fragment = slice.content;
+    const sliceJson = JSON.stringify(slice.toJSON());
+
+    clipboardData.setData(SUPERDOC_SLICE_MIME, sliceJson);
+    const mediaJson = collectReferencedImageMediaForClipboard(sliceJson, editor);
+    if (mediaJson) {
+      clipboardData.setData(SUPERDOC_MEDIA_MIME, mediaJson);
+    }
+
+    const div = document.createElement('div');
+    const serializer = PmDOMSerializer.fromSchema(view.state.schema);
+    div.appendChild(serializer.serializeFragment(fragment));
+
+    annotateFragmentDomWithClipboardData(div, fragment, editor);
+
+    const html = unflattenListsInHtml(div.innerHTML);
+    const bodySectPr = view.state.doc.attrs?.bodySectPr;
+    const bodySectPrJson = bodySectPr && bodySectPrShouldEmbed(bodySectPr) ? JSON.stringify(bodySectPr) : '';
+    clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson));
+    clipboardData.setData('text/plain', fragment.textBetween(0, fragment.size, '\n\n'));
+
+    view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
+  } catch (error) {
+    console.warn('Failed to handle cut:', error);
+  }
+
+  return true;
+}
+
+const BULLET_MARKER_CHARS = new Set(['•', '◦', '▪', '\u2022', '\u25E6', '\u25AA']);
+
+function numberingFmtForSliceRemap(lr) {
+  if (lr?.numberingType) {
+    return lr.numberingType;
+  }
+  const marker = (lr?.markerText || '').trim();
+  if (marker && BULLET_MARKER_CHARS.has(marker)) {
+    return 'bullet';
+  }
+  return 'decimal';
+}
+
+function lvlTextForRemap(fmt, ilvl, lr) {
+  if (fmt === 'bullet') {
+    return lr?.markerText?.trim() || '•';
+  }
+  const stored = lr?.markerText;
+  if (stored?.includes?.('%')) {
+    return stored;
+  }
+  return `%${ilvl + 1}.`;
+}
+
+/** Remap pasted list numIds and rebuild defs so target doc’s abstract ids don’t clash. */
+function createListIdAllocator(editor) {
+  const existingIds = new Set(
+    Object.keys(editor?.converter?.numbering?.definitions || {})
+      .map((value) => Number(value))
+      .filter(Number.isFinite),
+  );
+  let nextId = Number(ListHelpers.getNewListId(editor));
+
+  return () => {
+    while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
+      nextId = Number.isFinite(nextId) ? nextId + 1 : Number(ListHelpers.getNewListId(editor));
+    }
+    const allocatedId = nextId;
+    existingIds.add(allocatedId);
+    nextId += 1;
+    return allocatedId;
+  };
+}
+
+function remapPastedListNumberingInFragment(fragment, editor) {
+  if (!editor?.converter || !fragment.size) {
+    return fragment;
+  }
+
+  /** @type {Array<{ oldId: number, ilvl: number, fmt: string, lr: object | null | undefined, path: number[] | null }>} */
+  const paragraphMeta = [];
+
+  const collect = (node) => {
+    if (node.type.name === 'paragraph') {
+      const np = node.attrs.paragraphProperties?.numberingProperties;
+      if (np?.numId != null) {
+        const oldId = Number(np.numId);
+        if (Number.isFinite(oldId)) {
+          const rawIlvl = Number(np.ilvl ?? 0);
+          const ilvl = Number.isFinite(rawIlvl) ? rawIlvl : 0;
+          const lr = node.attrs.listRendering;
+          const fmt = numberingFmtForSliceRemap(lr);
+          const path = Array.isArray(lr?.path) ? lr.path.map((n) => Number(n)) : null;
+          paragraphMeta.push({ oldId, ilvl, fmt, lr, path });
+        }
+      }
+    }
+    if (node.content?.size) {
+      node.content.forEach((child) => collect(child));
+    }
+  };
+
+  fragment.forEach((node) => collect(node));
+
+  if (paragraphMeta.length === 0) {
+    return fragment;
+  }
+
+  const oldToNew = new Map();
+  const allocateListId = createListIdAllocator(editor);
+  for (const { oldId } of paragraphMeta) {
+    if (!oldToNew.has(oldId)) {
+      oldToNew.set(oldId, allocateListId());
+    }
+  }
+
+  const generatedLevels = new Set();
+
+  for (const { oldId, ilvl, fmt, lr, path } of paragraphMeta) {
+    const newId = oldToNew.get(oldId);
+    const genKey = `${newId}:${ilvl}`;
+    if (generatedLevels.has(genKey)) {
+      continue;
+    }
+
+    const listType = fmt === 'bullet' ? 'bulletList' : 'orderedList';
+    let start = 1;
+    if (Array.isArray(path) && path.length) {
+      const atLevel = path[ilvl];
+      const parsedAt = Number(atLevel);
+      if (Number.isFinite(parsedAt)) {
+        start = parsedAt;
+      } else {
+        const tail = Number(path[path.length - 1]);
+        if (Number.isFinite(tail)) {
+          start = tail;
+        }
+      }
+    }
+
+    const lvlText = lvlTextForRemap(fmt, ilvl, lr);
+
+    ListHelpers.generateNewListDefinition({
+      numId: newId,
+      listType,
+      level: String(ilvl),
+      start: String(start),
+      text: lvlText,
+      fmt,
+      editor,
+    });
+
+    if (start > 1) {
+      ListHelpers.setLvlOverride(editor, newId, ilvl, { startOverride: start });
+    }
+
+    generatedLevels.add(genKey);
+  }
+
+  const rewriteFragment = (frag) => {
+    const out = [];
+    frag.forEach((node) => {
+      out.push(rewriteNode(node));
+    });
+    return Fragment.fromArray(out);
+  };
+
+  const rewriteNode = (node) => {
+    if (node.type.name === 'paragraph') {
+      const np = node.attrs.paragraphProperties?.numberingProperties;
+      if (np?.numId != null) {
+        const oldId = Number(np.numId);
+        if (oldToNew.has(oldId)) {
+          const nextNp = { ...np, numId: oldToNew.get(oldId) };
+          const pp = { ...node.attrs.paragraphProperties, numberingProperties: nextNp };
+          const attrs = { ...node.attrs, paragraphProperties: pp };
+          return node.type.create(attrs, node.content, node.marks);
+        }
+      }
+      return node;
+    }
+
+    if (node.content?.size) {
+      const nextContent = rewriteFragment(node.content);
+      if (nextContent !== node.content) {
+        return node.copy(nextContent);
+      }
+    }
+
+    return node;
+  };
+
+  return rewriteFragment(fragment);
+}
+
+function handleSuperdocSlicePaste(sliceData, editor, view, embeddedBodySectPr = null) {
+  const sliceJson = JSON.parse(sliceData);
+  const slice = Slice.fromJSON(editor.schema, sliceJson);
+
+  if (!slice.content.size) return false;
+
+  const stripped = stripBlockIds(slice.content);
+  const cleanContent = remapPastedListNumberingInFragment(stripped, editor);
+  const cleanSlice = new Slice(cleanContent, slice.openStart, slice.openEnd);
+
+  const { dispatch, state } = view;
+  if (!dispatch) return false;
+
+  const tr = state.tr.replaceSelection(cleanSlice);
+  tr.setMeta('superdocSlicePaste', true);
+  normalizePastedLinks(tr, editor);
+  if (embeddedBodySectPr) {
+    applyEmbeddedBodySectPrToTransaction(editor, tr, embeddedBodySectPr, state.doc);
+  }
+  dispatch(tr.scrollIntoView());
+
+  return true;
+}
+
+function stripBlockIds(fragment) {
+  const children = [];
+  fragment.forEach((node) => {
+    let newNode = node;
+
+    const needsClean = node.type.name === 'paragraph' || node.attrs.sdBlockId != null;
+
+    if (needsClean) {
+      const cleanAttrs = { ...node.attrs, sdBlockId: null, sdBlockRev: 0 };
+      newNode = node.type.create(cleanAttrs, node.childCount ? stripBlockIds(node.content) : node.content, node.marks);
+    } else if (node.childCount) {
+      const newContent = stripBlockIds(node.content);
+      if (newContent !== node.content) {
+        newNode = node.copy(newContent);
+      }
+    }
+
+    children.push(newNode);
+  });
+
+  return Fragment.fromArray(children);
 }

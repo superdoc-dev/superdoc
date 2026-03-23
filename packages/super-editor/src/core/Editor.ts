@@ -97,6 +97,27 @@ const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
 
+type ExtensionInstanceLike = {
+  type?: string;
+  config?: Record<string, unknown>;
+  constructor?: new (config: Record<string, unknown>) => unknown;
+};
+
+const cloneExtensionInstance = <T extends ExtensionInstanceLike>(extension: T): T => {
+  const config = extension?.config;
+  const ExtensionCtor = extension?.constructor;
+
+  if (!config || typeof config !== 'object' || typeof ExtensionCtor !== 'function') {
+    return extension;
+  }
+
+  try {
+    return new ExtensionCtor(config) as T;
+  } catch {
+    return extension;
+  }
+};
+
 /**
  * Given a table cell node, returns the total cell content width in pixels.
  * Sums all colwidth values and subtracts left/right cell margins (padding).
@@ -2003,12 +2024,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
     ];
     const externalExtensions = this.options.externalExtensions || [];
 
-    const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {
-      const extensionType = typeof extension?.type === 'string' ? extension.type : undefined;
-      return extensionType ? allowedExtensions.includes(extensionType) : false;
-    });
+    const allExtensions = [...coreExtensions, ...this.options.extensions!]
+      .filter((extension) => {
+        const extensionType = typeof extension?.type === 'string' ? extension.type : undefined;
+        return extensionType ? allowedExtensions.includes(extensionType) : false;
+      })
+      .map((extension) => cloneExtensionInstance(extension));
 
-    this.extensionService = ExtensionService.create(allExtensions, externalExtensions, this);
+    const isolatedExternalExtensions = externalExtensions.map((extension) => cloneExtensionInstance(extension));
+
+    this.extensionService = ExtensionService.create(allExtensions, isolatedExternalExtensions, this);
   }
 
   /**

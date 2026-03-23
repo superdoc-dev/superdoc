@@ -63,13 +63,14 @@ export function computeDiff(
   oldPartsState: PartsState | null | undefined = null,
   newPartsState: PartsState | null | undefined = null,
 ): DiffResult {
+  const docDiffs = diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc));
   const headerFootersDiff = diffHeaderFooters(oldHeaderFooters, newHeaderFooters, schema);
   return {
-    docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
+    docDiffs,
     commentDiffs: diffComments(oldComments, newComments, schema),
     stylesDiff: diffStyles(oldStyles, newStyles),
     numberingDiff: diffNumbering(oldNumbering, newNumbering),
     headerFootersDiff,
-    partsDiff: diffParts(headerFootersDiff, oldPartsState, newPartsState),
+    partsDiff: diffParts(docDiffs, headerFootersDiff, oldPartsState, newPartsState),
   };
 }

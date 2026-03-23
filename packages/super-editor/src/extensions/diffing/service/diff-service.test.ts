@@ -4,6 +4,7 @@ import { Editor } from '@core/Editor.js';
 import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
+import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 import type { CommentInput } from '../algorithm/comment-diffing.ts';
 import { captureHeaderFooterState } from '../algorithm/header-footer-diffing.ts';
 import { applyDiffPayload, captureSnapshot, compareToSnapshot } from './index.ts';
@@ -194,6 +195,24 @@ async function reopenExportedDocument(exported: Blob | Buffer): Promise<Editor> 
   });
 }
 
+async function openFixtureDocument(name: string): Promise<Editor> {
+  const buffer = await getTestDataAsBuffer(`diffing/${name}`);
+  const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+
+  return new Editor({
+    isHeadless: true,
+    extensions: getStarterExtensions(),
+    documentId: `fixture-${name}`,
+    content: docx,
+    mode: 'docx',
+    media,
+    mediaFiles,
+    fonts,
+    annotations: true,
+    user: TEST_USER,
+  });
+}
+
 describe('diff-service tracked apply', () => {
   it('applies appended text as tracked changes', async () => {
     const baseEditor = await openBlankDocxWithText('Section 1. Payment is due within thirty days.');
@@ -260,6 +279,31 @@ describe('diff-service tracked apply', () => {
       expect(getTrackChanges(reopenedEditor.state).length).toBeGreaterThan(0);
     } finally {
       reopenedEditor?.destroy?.();
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('replays body image dependencies through partsDiff', async () => {
+    const baseEditor = await openFixtureDocument('diff_before6.docx');
+    const targetEditor = await openFixtureDocument('diff_after6.docx');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const mediaUpserts = Object.keys(
+        (diff.payload.partsDiff as Record<string, unknown> | null)?.upserts ?? {},
+      ).filter((path) => path.startsWith('word/media/'));
+
+      expect(mediaUpserts.length).toBeGreaterThan(0);
+
+      const { tr } = applyDiffPayload(baseEditor, diff, { changeMode: 'direct' });
+      baseEditor.dispatch(tr);
+
+      for (const path of mediaUpserts) {
+        expect((baseEditor.storage.image as { media?: Record<string, unknown> }).media?.[path]).toBeDefined();
+      }
+    } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();
     }

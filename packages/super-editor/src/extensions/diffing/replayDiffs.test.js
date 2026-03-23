@@ -93,6 +93,43 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
 };
 
 /**
+ * Replays diffs through the direct compare/replay command path using the
+ * compare editor instance so part closures can be captured.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @returns {Promise<void>}
+ */
+const expectDirectReplayPopulatesBodyMedia = async (beforeName, afterName, applyTrackedChanges = false) => {
+  const testUser = { name: 'Test User', email: 'test@example.com' };
+  const beforeEditor = await getEditorFromFixture(beforeName, applyTrackedChanges ? testUser : undefined);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    const diff = beforeEditor.commands.compareDocuments(
+      afterEditor.state.doc,
+      afterEditor.converter?.comments ?? [],
+      afterEditor.converter?.translatedLinkedStyles,
+      afterEditor.converter?.translatedNumbering,
+      afterEditor,
+    );
+
+    const mediaUpserts = Object.keys(diff.partsDiff?.upserts ?? {}).filter((path) => path.startsWith('word/media/'));
+    expect(mediaUpserts.length).toBeGreaterThan(0);
+
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges });
+    expect(success).toBe(true);
+
+    for (const path of mediaUpserts) {
+      expect(beforeEditor.storage.image.media?.[path]).toBeDefined();
+    }
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
  * Replays diffs with applyTrackedChanges disabled while track changes mode is active,
  * asserting replay does not create tracked marks.
  *
@@ -495,5 +532,23 @@ describe('investigate replay issues', () => {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();
     }
+  });
+});
+
+describe('parts-aware replay', () => {
+  it('populates body media when replaying direct diffs with a compare editor', async () => {
+    await expectDirectReplayPopulatesBodyMedia('diff_before6.docx', 'diff_after6.docx');
+  });
+
+  it('populates body media when replaying tracked direct diffs with a compare editor', async () => {
+    await expectDirectReplayPopulatesBodyMedia('diff_before6.docx', 'diff_after6.docx', true);
+  });
+
+  it('populates body media when replaying direct diffs for diff_before19/diff_after19', async () => {
+    await expectDirectReplayPopulatesBodyMedia('diff_before19.docx', 'diff_after19.docx');
+  });
+
+  it('populates body media when replaying tracked direct diffs for diff_before19/diff_after19', async () => {
+    await expectDirectReplayPopulatesBodyMedia('diff_before19.docx', 'diff_after19.docx', true);
   });
 });

@@ -14,6 +14,7 @@ export interface HeaderFooterPartClosure {
 }
 
 export interface PartsState {
+  bodyClosure: Record<string, PartSnapshot>;
   headerFooterClosures: Record<string, HeaderFooterPartClosure>;
 }
 
@@ -31,8 +32,8 @@ export interface PartsDiff {
 /**
  * Minimal editor shape needed to capture part closures.
  *
- * Header/footer part fidelity currently depends on `convertedXml` for XML
- * parts and the editor media stores for binary targets.
+ * Part fidelity currently depends on `convertedXml` for XML parts and the
+ * editor media stores for binary targets.
  */
 export type PartsStateEditor = {
   converter?: {
@@ -51,8 +52,8 @@ export type PartsStateEditor = {
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
 
 /**
- * Captures all package closures reachable from the editor's current
- * header/footer parts.
+ * Captures the body and header/footer part closures needed for coarse
+ * parts-aware replay.
  */
 export function capturePartsState(
   editor: PartsStateEditor,
@@ -71,50 +72,68 @@ export function capturePartsState(
     };
   }
 
-  return { headerFooterClosures };
+  return {
+    bodyClosure: collectBodyClosure(convertedXml, mediaStore),
+    headerFooterClosures,
+  };
 }
 
 /**
- * Computes a parts diff from changed header/footer parts.
+ * Computes a coarse parts diff for body and header/footer changes.
  *
- * This first slice scopes parts replay to header/footer roots only.
+ * Body changes currently use a conservative strategy: any document diff
+ * causes the captured body relationship closure to be compared and emitted.
  */
 export function diffParts(
+  docDiffs: Array<unknown>,
   headerFootersDiff: HeaderFootersDiff | null | undefined,
   previousPartsState: PartsState | null | undefined,
   nextPartsState: PartsState | null | undefined,
 ): PartsDiff | null {
-  if (!headerFootersDiff) {
-    return null;
-  }
-
   const upserts: Record<string, PartSnapshot> = {};
   const deletes = new Set<string>();
 
-  for (const part of [...headerFootersDiff.addedParts, ...headerFootersDiff.modifiedParts]) {
-    const closure = nextPartsState?.headerFooterClosures?.[part.refId];
-    if (!closure) continue;
-    for (const [partPath, snapshot] of Object.entries(closure.parts)) {
-      upserts[partPath] = structuredClone(snapshot);
-      deletes.delete(partPath);
+  if (docDiffs.length > 0) {
+    for (const [partPath, snapshot] of Object.entries(nextPartsState?.bodyClosure ?? {})) {
+      const previous = previousPartsState?.bodyClosure?.[partPath];
+      if (!previous || !partSnapshotsEqual(previous, snapshot)) {
+        upserts[partPath] = structuredClone(snapshot);
+      }
+    }
+
+    for (const partPath of Object.keys(previousPartsState?.bodyClosure ?? {})) {
+      if (!(partPath in (nextPartsState?.bodyClosure ?? {})) && !(partPath in upserts)) {
+        deletes.add(partPath);
+      }
     }
   }
 
-  for (const part of headerFootersDiff.removedParts) {
-    const closure = previousPartsState?.headerFooterClosures?.[part.refId];
-    if (closure) {
-      for (const partPath of Object.keys(closure.parts)) {
-        if (!(partPath in upserts)) {
-          deletes.add(partPath);
-        }
+  if (headerFootersDiff) {
+    for (const part of [...headerFootersDiff.addedParts, ...headerFootersDiff.modifiedParts]) {
+      const closure = nextPartsState?.headerFooterClosures?.[part.refId];
+      if (!closure) continue;
+      for (const [partPath, snapshot] of Object.entries(closure.parts)) {
+        upserts[partPath] = structuredClone(snapshot);
+        deletes.delete(partPath);
       }
-      continue;
     }
 
-    deletes.add(part.partPath);
-    const relsPath = toRelsPathForPart(part.partPath);
-    if (relsPath) {
-      deletes.add(relsPath);
+    for (const part of headerFootersDiff.removedParts) {
+      const closure = previousPartsState?.headerFooterClosures?.[part.refId];
+      if (closure) {
+        for (const partPath of Object.keys(closure.parts)) {
+          if (!(partPath in upserts)) {
+            deletes.add(partPath);
+          }
+        }
+        continue;
+      }
+
+      deletes.add(part.partPath);
+      const relsPath = toRelsPathForPart(part.partPath);
+      if (relsPath) {
+        deletes.add(relsPath);
+      }
     }
   }
 
@@ -143,6 +162,42 @@ function collectPartClosure(
   const snapshots: Record<string, PartSnapshot> = {};
   const visited = new Set<string>();
   collectPartAndDependencies(partPath, convertedXml, mediaStore, snapshots, visited);
+  return snapshots;
+}
+
+function collectBodyClosure(
+  convertedXml: Record<string, unknown>,
+  mediaStore: Record<string, unknown>,
+): Record<string, PartSnapshot> {
+  const relsPart = convertedXml[DOCUMENT_RELS_PATH];
+  if (!relsPart || typeof relsPart !== 'object') {
+    return {};
+  }
+
+  const snapshots: Record<string, PartSnapshot> = {
+    [DOCUMENT_RELS_PATH]: {
+      kind: 'xml',
+      content: structuredClone(relsPart),
+    },
+  };
+  const visited = new Set<string>([DOCUMENT_RELS_PATH]);
+
+  for (const relationship of readRelationships(relsPart)) {
+    const type = String(relationship.attributes?.Type ?? '');
+    if (!shouldCaptureBodyRelationship(type)) {
+      continue;
+    }
+    if (String(relationship.attributes?.TargetMode ?? '') === 'External') {
+      continue;
+    }
+    const target = String(relationship.attributes?.Target ?? '');
+    const targetPath = resolveOpcTargetPath(target, 'word');
+    if (!targetPath) {
+      continue;
+    }
+    collectPartAndDependencies(targetPath, convertedXml, mediaStore, snapshots, visited);
+  }
+
   return snapshots;
 }
 
@@ -222,3 +277,28 @@ function toRelsPathForPart(partPath: string): string | null {
   }
   return `word/_rels/${fileName}.rels`;
 }
+
+function shouldCaptureBodyRelationship(type: string): boolean {
+  return !BODY_RELATIONSHIP_EXCLUSIONS.has(type);
+}
+
+function partSnapshotsEqual(a: PartSnapshot, b: PartSnapshot): boolean {
+  return a.kind === b.kind && JSON.stringify(a.content) === JSON.stringify(b.content);
+}
+
+const BODY_RELATIONSHIP_EXCLUSIONS = new Set([
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes',
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes',
+  'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
+  'http://schemas.microsoft.com/office/2016/09/relationships/commentsIds',
+  'http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible',
+]);

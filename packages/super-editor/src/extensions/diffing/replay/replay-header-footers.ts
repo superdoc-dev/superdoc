@@ -115,10 +115,12 @@ export function replayHeaderFooters({
     result.warnings.push(`Header/footer replay skipped for "${part.refId}": stored part content was not found.`);
   }
 
+  let slotChangesApplied = 0;
   for (const slot of headerFootersDiff.slotChanges) {
     const applied = applyHeaderFooterSlotChange(tr, editor, slot);
     if (applied) {
       result.applied += 1;
+      slotChangesApplied += 1;
       continue;
     }
     result.skipped += 1;
@@ -127,7 +129,7 @@ export function replayHeaderFooters({
     );
   }
 
-  if (headerFootersDiff.slotChanges.length > 0) {
+  if (slotChangesApplied > 0) {
     syncTitlePageCache(tr, editor);
   }
 

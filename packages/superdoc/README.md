@@ -1,33 +1,28 @@
-# 🦋️📝️ SuperDoc
+# SuperDoc
 
-> The modern collaborative document editor for the web
+> The document engine for DOCX files.
 
 [![Documentation](https://img.shields.io/badge/docs-available-1355ff.svg)](https://docs.superdoc.dev/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![npm version](https://img.shields.io/npm/v/superdoc.svg?color=1355ff)](https://www.npmjs.com/package/superdoc)
-[![Discord](https://img.shields.io/badge/discord-join-1355ff)](https://discord.gg/FBeRDqWy)
+[![Discord](https://img.shields.io/badge/discord-join-1355ff)](https://discord.com/invite/b9UuaZRyaB)
 
-SuperDoc is a powerful document editor that brings Microsoft Word-level capabilities to your web applications. With real-time collaboration, extensive formatting options, and seamless integration capabilities, SuperDoc makes document editing on the web better for everyone.
+SuperDoc renders and edits DOCX files in the browser. Built on OOXML — not bolted onto HTML. As you type, you write directly to the XML. Import a document, edit it, export it. Nothing lost.
 
-## ✨ Features
+## Features
 
-- **Document Compatibility**: View and edit DOCX and PDF documents directly in the browser
-- **Microsoft Word Integration**: Full support for importing/exporting, advanced formatting, comments, and tracked changes
-- **Paginated Layout**: True WYSIWYG editing with accurate page rendering powered by the layout engine
-- **Real-time Collaboration**: Built-in multiplayer editing, live updates, commenting, sharing, and revision history
-- **Framework Agnostic**: Seamlessly integrates with Vue, React, or vanilla JavaScript
-- **Extensible Architecture**: Modular design makes it easy to extend and customize
-- **Dual License**: Available under AGPLv3 for community use and Commercial license for enterprise deployments
+- **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers, complex tables. Not a contenteditable wrapper with export bolted on.
+- **Self-hosted** — Runs entirely in the browser. Your documents never leave your servers.
+- **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
+- **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
+- **Built for agents** — [SDK](https://www.npmjs.com/package/@superdoc-dev/sdk), [CLI](https://www.npmjs.com/package/@superdoc-dev/cli), and [MCP server](https://www.npmjs.com/package/@superdoc-dev/mcp) let LLMs read, edit, and save .docx files programmatically.
+- **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
-## 🚀 Quick Start
-
-### Installation
+## Quick start
 
 ```bash
 npm install superdoc
 ```
-
-### Basic Usage
 
 ```javascript
 import 'superdoc/style.css';
@@ -39,91 +34,32 @@ const superdoc = new SuperDoc({
     {
       id: 'my-doc-id',
       type: 'docx',
-      data: fileObject, // Optional: JS File object if not using collaboration
+      data: fileObject,
     },
   ],
 });
 ```
 
-## 🛠️ Development Setup
+For React, Vue, and other frameworks, see the [documentation](https://docs.superdoc.dev).
 
-1. **Clone the Repository**
+## Documentation
 
-```bash
-git clone https://github.com/your-username/SuperDoc.git
-cd SuperDoc
-```
+[docs.superdoc.dev](https://docs.superdoc.dev) — installation, integration guides, collaboration setup, API reference, and more.
 
-2. **Choose Your Package**
+## Contributing
 
-SuperDoc consists of two main packages:
+Check the [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues, or read the [Contributing Guide](../../CONTRIBUTING.md) to get started. Bug reports with reproduction .docx files are especially valuable.
 
-- **/packages/superdoc**: Main package (recommended)
+## Community
 
-  ```bash
-  cd packages/superdoc
-  npm install && npm run dev
-  ```
+- [Discord](https://discord.com/invite/b9UuaZRyaB) — Chat with the team and other contributors
+- [Email](mailto:q@superdoc.dev) — Reach the team directly
 
-- **/packages/super-editor**: Core editor component
-  ```bash
-  cd packages/super-editor
-  npm install && npm run dev
-  ```
+## License
 
-## 🏗️ Architecture
-
-SuperDoc uses a **paginated-only** rendering approach powered by `PresentationEditor` and the layout engine:
-
-- **For web applications**: Use `SuperDoc` - it automatically uses `PresentationEditor` for paginated rendering
-- **For Node.js/CLI/headless environments**: Use `Editor` directly from `@superdoc/super-editor`
-
-The layout engine provides:
-- True WYSIWYG page rendering with accurate pagination
-- Support for multi-column layouts, headers, footers, and section breaks
-- Virtualization for optimal performance with large documents
-- Zoom controls and responsive page scaling
-
-**Note**: If you need a flow-mode (unpaginated) editor, use the core `Editor` class directly. SuperDoc is designed for paginated document editing.
-
-## 📖 Documentation
-
-For comprehensive documentation, visit our [SuperDocumentation](https://docs.superdoc.dev) site. Key topics include:
-
-- Complete API reference
-- Integration guides
-- Collaboration setup
-- Advanced customization
-- Best practices
-
-## 🤝 Contributing
-
-We love contributions! Here's how you can help:
-
-1. Check our [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues
-2. Fork the repository and create a feature/bugfix branch
-3. Write clear, documented code following our style guidelines
-4. Submit a PR with detailed description of your changes
-
-See our [Contributing Guide](CONTRIBUTING.md) for more details.
-
-## 💬 Community
-
-- [Discord Server](https://discord.gg/FBeRDqWy) - Join our community chat
-- [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions) - Ask questions and share ideas
-- [Email Support](mailto:support@harbourshare.com) - Get help from our team
-
-## 📄 License
-
-- Open Source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
-- Commercial: [Enterprise License](https://www.harbourshare.com/request-a-demo)
-
-## 📱 Contact
-
-- [✉️ Email](mailto:support@harbourshare.com?subject=[SuperDoc]%20Project%20inquiry)
-- [🔗 LinkedIn](https://www.linkedin.com/company/harbourshare/)
-- [⛵️ Website](https://superdoc.dev)
+- Open source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
+- Commercial: [Enterprise License](https://www.superdocportal.dev/get-in-touch)
 
 ---
 
-Created and actively maintained by [Harbour](https://www.harbourshare.com) and the SuperDoc community.
+Created and maintained by [Harbour](https://www.superdoc.dev) and the SuperDoc community.

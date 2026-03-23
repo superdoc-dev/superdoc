@@ -48,6 +48,7 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
   let timeoutMs: number | undefined;
   let sessionId: string | undefined;
   let help = false;
+  let version = false;
   const rest: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -70,6 +71,11 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
 
     if (token === '--help' || token === '-h') {
       help = true;
+      continue;
+    }
+
+    if (token === '--version' || token === '-v') {
+      version = true;
       continue;
     }
 
@@ -137,6 +143,7 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
       timeoutMs,
       sessionId,
       help,
+      version,
     },
     rest,
   };

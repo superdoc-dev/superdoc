@@ -15,10 +15,10 @@ describe('translateAnchorNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // default mock for translateImageNode
+    // default mock for translateImageNode — must include wp:extent so the guard passes
     translateImageNode.mockReturnValue({
       attributes: { fakeAttr: 'val' },
-      elements: [{ name: 'pic:fake' }],
+      elements: [{ name: 'wp:extent' }, { name: 'wp:effectExtent' }, { name: 'pic:fake' }],
     });
 
     // default mock for pixelsToEmu

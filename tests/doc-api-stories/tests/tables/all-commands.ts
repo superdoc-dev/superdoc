@@ -4,11 +4,6 @@ import { corpusDoc, unwrap, useStoryHarness } from '../harness';
 
 type TableFixture = {
   tableNodeId: string;
-  tableTarget: {
-    kind: 'block';
-    nodeType: 'table';
-    nodeId: string;
-  };
   cellNodeId: string;
 };
 
@@ -143,10 +138,12 @@ describe('document-api story: all table commands', () => {
     }
 
     if (operationId === 'tables.getCells') {
-      expect(typeof result?.tableNodeId).toBe('string');
+      expect(typeof result?.nodeId).toBe('string');
       expect(Array.isArray(result?.cells)).toBe(true);
       expect(result.cells.length).toBeGreaterThan(0);
       expect(typeof result.cells[0]?.nodeId).toBe('string');
+      expect(result.cells[0]?.address?.nodeId).toBe(result.cells[0]?.nodeId);
+      expect(result.cells[0]?.address?.nodeType).toBe('tableCell');
       return;
     }
 
@@ -187,17 +184,9 @@ describe('document-api story: all table commands', () => {
     assertMutationSuccess('create.table', createResult);
 
     const tableNodeId = createResult?.table?.nodeId ?? (await firstNodeId(sessionId, 'table'));
-    const tableTarget =
-      createResult?.table ??
-      ({
-        kind: 'block',
-        nodeType: 'table',
-        nodeId: tableNodeId,
-      } as const);
-
     const cellNodeId = await firstNodeId(sessionId, 'tableCell');
 
-    return { tableNodeId, tableTarget, cellNodeId };
+    return { tableNodeId, cellNodeId };
   }
 
   const scenarios: Scenario[] = [
@@ -274,7 +263,7 @@ describe('document-api story: all table commands', () => {
           await api.doc.tables.split({
             sessionId,
             nodeId: firstTableNodeId,
-            atRowIndex: 1,
+            rowIndex: 1,
           }),
         );
         assertMutationSuccess('tables.split', splitResult);
@@ -306,7 +295,8 @@ describe('document-api story: all table commands', () => {
           }),
         );
         assertMutationSuccess('tables.move', moveResult);
-        clearContentsTableBySession.set(sessionId, firstTableNodeId);
+        const movedTableNodeId = moveResult?.table?.nodeId ?? firstTableNodeId;
+        clearContentsTableBySession.set(sessionId, movedTableNodeId);
       },
       run: async (sessionId) => {
         const firstTableNodeId = clearContentsTableBySession.get(sessionId);
@@ -390,7 +380,7 @@ describe('document-api story: all table commands', () => {
         }
         splitTableBySession.delete(sessionId);
 
-        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, atRowIndex: 1 }));
+        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, rowIndex: 1 }));
       },
     },
     {
@@ -461,7 +451,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.insertRow({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             position: 'below',
           }),
@@ -473,7 +463,7 @@ describe('document-api story: all table commands', () => {
       setup: 'table',
       run: async (sessionId, fixture) => {
         const f = requireFixture('tables.deleteRow', fixture);
-        return unwrap<any>(await api.doc.tables.deleteRow({ sessionId, tableNodeId: f.tableNodeId, rowIndex: 0 }));
+        return unwrap<any>(await api.doc.tables.deleteRow({ sessionId, nodeId: f.tableNodeId, rowIndex: 0 }));
       },
     },
     {
@@ -484,7 +474,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setRowHeight({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             heightPt: 36,
             rule: 'atLeast',
@@ -507,7 +497,7 @@ describe('document-api story: all table commands', () => {
           const setHeightResult = unwrap<any>(
             await api.doc.tables.setRowHeight({
               sessionId,
-              tableNodeId: f.tableNodeId,
+              nodeId: f.tableNodeId,
               rowIndex: preset.rowIndex,
               heightPt: preset.heightPt,
               rule: 'exact',
@@ -529,7 +519,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setRowOptions({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             allowBreakAcrossPages: false,
             repeatHeader: true,
@@ -545,7 +535,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.insertColumn({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
             position: 'right',
           }),
@@ -560,7 +550,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.deleteColumn({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
           }),
         );
@@ -574,7 +564,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setColumnWidth({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
             widthPt: 72,
           }),
@@ -596,7 +586,7 @@ describe('document-api story: all table commands', () => {
           const setWidthResult = unwrap<any>(
             await api.doc.tables.setColumnWidth({
               sessionId,
-              tableNodeId: f.tableNodeId,
+              nodeId: f.tableNodeId,
               columnIndex: preset.columnIndex,
               widthPt: preset.widthPt,
             }),
@@ -799,7 +789,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.mergeCells({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             start: { rowIndex: 0, columnIndex: 0 },
             end: { rowIndex: 0, columnIndex: 1 },
           }),
@@ -814,7 +804,7 @@ describe('document-api story: all table commands', () => {
         const mergeResult = unwrap<any>(
           await api.doc.tables.mergeCells({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             start: { rowIndex: 0, columnIndex: 0 },
             end: { rowIndex: 0, columnIndex: 1 },
           }),
@@ -822,8 +812,17 @@ describe('document-api story: all table commands', () => {
         assertMutationSuccess('tables.mergeCells', mergeResult);
       },
       run: async (sessionId, fixture) => {
+        // Use table-scoped coordinates (tableNodeId + rowIndex + columnIndex)
+        // instead of direct cellNodeId — exercises the new coordinate path.
         const f = requireFixture('tables.unmergeCells', fixture);
-        return unwrap<any>(await api.doc.tables.unmergeCells({ sessionId, nodeId: f.cellNodeId }));
+        return unwrap<any>(
+          await api.doc.tables.unmergeCells({
+            sessionId,
+            nodeId: f.tableNodeId,
+            rowIndex: 0,
+            columnIndex: 0,
+          }),
+        );
       },
     },
     {
@@ -1292,4 +1291,120 @@ describe('document-api story: all table commands', () => {
       await saveResult(sessionId, scenario.operationId);
     });
   }
+
+  // -------------------------------------------------------------------------
+  // tables.unmergeCells — additional coordinate-path edge cases
+  // -------------------------------------------------------------------------
+
+  it('tables.unmergeCells: direct cell nodeId form still works', async () => {
+    const sessionId = makeSessionId('unmerge-direct-cell');
+    const fixture = await setupTableFixture(sessionId);
+    const f = requireFixture('tables.unmergeCells', fixture);
+
+    // Merge cells (0,0)–(0,1) so we have something to unmerge.
+    const mergeResult = unwrap<any>(
+      await api.doc.tables.mergeCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 0, columnIndex: 1 },
+      }),
+    );
+    assertMutationSuccess('tables.mergeCells', mergeResult);
+
+    // Unmerge via direct cell nodeId (original form).
+    const result = unwrap<any>(await api.doc.tables.unmergeCells({ sessionId, nodeId: f.cellNodeId }));
+    assertMutationSuccess('tables.unmergeCells', result);
+  });
+
+  it('tables.unmergeCells: TableCellInfo handoff from tables.getCells still works', async () => {
+    const sessionId = makeSessionId('unmerge-cell-info-handoff');
+    const fixture = await setupTableFixture(sessionId);
+    const f = requireFixture('tables.unmergeCells', fixture);
+
+    const mergeResult = unwrap<any>(
+      await api.doc.tables.mergeCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 0, columnIndex: 1 },
+      }),
+    );
+    assertMutationSuccess('tables.mergeCells', mergeResult);
+
+    const cellsResult = unwrap<any>(
+      await api.doc.tables.getCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        rowIndex: 0,
+        columnIndex: 0,
+      }),
+    );
+    const cellInfo = cellsResult.cells[0];
+    expect(cellInfo).toMatchObject({ rowIndex: 0, columnIndex: 0, colspan: 2, rowspan: 1 });
+
+    const result = unwrap<any>(await api.doc.tables.unmergeCells({ sessionId, ...cellInfo }));
+    assertMutationSuccess('tables.unmergeCells', result);
+  });
+
+  it('tables.unmergeCells: non-anchor coordinate inside a merged span resolves correctly', async () => {
+    const sessionId = makeSessionId('unmerge-non-anchor');
+    const fixture = await setupTableFixture(sessionId);
+    const f = requireFixture('tables.unmergeCells', fixture);
+
+    // Merge cells (0,0)–(0,1) → creates a merged cell anchored at (0,0).
+    const mergeResult = unwrap<any>(
+      await api.doc.tables.mergeCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 0, columnIndex: 1 },
+      }),
+    );
+    assertMutationSuccess('tables.mergeCells', mergeResult);
+
+    // Target (0,1) — a covered coordinate inside the merged span, NOT the anchor.
+    // The resolver must canonicalize this to the anchor cell at (0,0).
+    const result = unwrap<any>(
+      await api.doc.tables.unmergeCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        rowIndex: 0,
+        columnIndex: 1,
+      }),
+    );
+    assertMutationSuccess('tables.unmergeCells', result);
+  });
+
+  it('tables.unmergeCells: out-of-bounds coordinates report failure', async () => {
+    const sessionId = makeSessionId('unmerge-oob');
+    const fixture = await setupTableFixture(sessionId);
+    const f = requireFixture('tables.unmergeCells', fixture);
+
+    const attempt = await (async () => {
+      try {
+        const result = unwrap<any>(
+          await api.doc.tables.unmergeCells({
+            sessionId,
+            nodeId: f.tableNodeId,
+            rowIndex: 99,
+            columnIndex: 99,
+          }),
+        );
+
+        return { threw: false as const, result };
+      } catch (error) {
+        return { threw: true as const, error };
+      }
+    })();
+
+    if (attempt.threw) {
+      expect(attempt.error).toBeInstanceOf(Error);
+      expect(String(attempt.error)).toContain('out of bounds');
+      return;
+    }
+
+    expect(attempt.result?.success).toBe(false);
+    expect(attempt.result?.failure?.code ?? attempt.result?.receipt?.failure?.code).toBe('INVALID_TARGET');
+  });
 });

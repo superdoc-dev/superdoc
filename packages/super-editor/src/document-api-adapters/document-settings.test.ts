@@ -70,7 +70,7 @@ describe('readDefaultTableStyle', () => {
 describe('setDefaultTableStyle', () => {
   it('adds w:defaultTableStyle when not present', () => {
     const converter = makeConverter([]);
-    const root = ensureSettingsRoot(converter);
+    const root = ensureSettingsRoot(converter.convertedXml!['word/settings.xml'] as any);
     setDefaultTableStyle(root, 'TableGrid');
     expect(readDefaultTableStyle(root)).toBe('TableGrid');
   });
@@ -140,14 +140,14 @@ describe('removeDefaultTableStyle', () => {
 describe('defaultTableStyle roundtrip', () => {
   it('set then read returns the same value', () => {
     const converter = makeConverter([]);
-    const root = ensureSettingsRoot(converter);
+    const root = ensureSettingsRoot(converter.convertedXml!['word/settings.xml'] as any);
     setDefaultTableStyle(root, 'GridTable5-Dark-Accent2');
     expect(readDefaultTableStyle(root)).toBe('GridTable5-Dark-Accent2');
   });
 
   it('set then remove then read returns null', () => {
     const converter = makeConverter([]);
-    const root = ensureSettingsRoot(converter);
+    const root = ensureSettingsRoot(converter.convertedXml!['word/settings.xml'] as any);
     setDefaultTableStyle(root, 'TableGrid');
     removeDefaultTableStyle(root);
     expect(readDefaultTableStyle(root)).toBeNull();

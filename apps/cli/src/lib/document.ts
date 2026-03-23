@@ -1,9 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
-import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
-import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
+import {
+  Editor,
+  BLANK_DOCX_BASE64,
+  getDocumentApiAdapters,
+  markdownToPmDoc,
+  initPartsRuntime,
+} from 'superdoc/super-editor';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
@@ -11,9 +14,11 @@ import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
 import {
   DEFAULT_BOOTSTRAP_SETTLING_MS,
+  waitForContentSettling,
   detectRoomState,
   resolveBootstrapDecision,
   claimBootstrap,
+  clearBootstrapMarker,
   writeBootstrapMarker,
   detectBootstrapRace,
   type RoomState,
@@ -22,6 +27,7 @@ import {
 } from './bootstrap';
 import { CliError } from './errors';
 import { pathExists } from './guards';
+import { buildHeadlessCommentBridge } from './headless-comment-bridge';
 import type { ContextMetadata } from './context';
 import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
 import type { SessionPool } from '../host/session-pool';
@@ -44,7 +50,7 @@ interface ContentOverrideOptions {
 }
 
 /** Options passed through to Editor.open() alongside content overrides. */
-type EditorPassThroughOptions = Record<string, string>;
+type EditorPassThroughOptions = Record<string, unknown>;
 
 interface OpenDocumentOptions {
   documentId?: string;
@@ -63,14 +69,43 @@ export interface FileOutputMeta {
   byteLength: number;
 }
 
-function toUint8Array(data: unknown): Uint8Array {
+function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
+  const editorWithDoc = editor as EditorWithDoc;
+
+  // Shadow the lazy getter with an eagerly-created DocumentApi so the CLI and
+  // story harnesses always dispatch against the same source-backed adapter graph.
+  Object.defineProperty(editorWithDoc, 'doc', {
+    configurable: true,
+    value: createDocumentApi(getDocumentApiAdapters(editor)),
+  });
+
+  return editorWithDoc;
+}
+
+async function toUint8Array(data: unknown): Promise<Uint8Array> {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer());
+  }
+  if (typeof data === 'object' && data !== null && 'arrayBuffer' in data && typeof data.arrayBuffer === 'function') {
+    const arrayBuffer = await data.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  }
 
-  throw new CliError('DOCUMENT_EXPORT_FAILED', 'Exported document data is not binary.');
+  const constructorName =
+    typeof data === 'object' && data !== null && 'constructor' in data && typeof data.constructor === 'function'
+      ? data.constructor.name
+      : undefined;
+  const objectKeys = typeof data === 'object' && data !== null ? Object.keys(data).slice(0, 8) : [];
+
+  throw new CliError(
+    'DOCUMENT_EXPORT_FAILED',
+    `Exported document data is not binary (type=${typeof data}, constructor=${constructorName ?? 'unknown'}, keys=${objectKeys.join(',')}).`,
+  );
 }
 
 async function readDocumentSource(doc: string, io: CliIO): Promise<{ bytes: Uint8Array; meta: DocumentSourceMeta }> {
@@ -142,12 +177,17 @@ export async function openDocument(
   // HTML content override). Always inject via options.document — never set globals.
   const domEnv = createCliDomEnvironment();
 
+  // Wire headless comment/tracked-change bridge when collaboration is active.
+  const hasCollaboration = options.ydoc != null && options.collaborationProvider != null;
+  const commentBridge = hasCollaboration ? buildHeadlessCommentBridge(options.ydoc, options.user) : null;
+
   let editor: Editor;
   try {
     const isTest = process.env.NODE_ENV === 'test';
     editor = await Editor.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
       document: domEnv.document,
+      isHeadless: true,
       user: options.user
         ? { name: options.user.name, email: options.user.email, image: null }
         : { id: 'cli', name: 'CLI' },
@@ -157,9 +197,11 @@ export async function openDocument(
       ...(options.isNewFile != null ? { isNewFile: options.isNewFile } : {}),
       // Pass through HTML override directly — happy-dom provides DOM support.
       ...(htmlOverride != null ? { html: htmlOverride } : {}),
+      ...(commentBridge?.editorOptions ?? {}),
       ...passThroughEditorOpts,
     });
   } catch (error) {
+    commentBridge?.dispose();
     domEnv.dispose();
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
@@ -168,6 +210,10 @@ export async function openDocument(
     });
   }
 
+  // Parts/runtime registration is idempotent. Re-run it here so adapter-side
+  // afterCommit hooks are always wired, including in headless CLI sessions.
+  initPartsRuntime(editor as never);
+
   // Apply content override post-init.
   //   - markdown: DOM-free AST pipeline
   //   - plainText: builds PM paragraphs directly, preserving all whitespace
@@ -175,8 +221,7 @@ export async function openDocument(
     try {
       const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
       const tr = editor.state.tr;
-      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
-      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content);
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();
@@ -209,15 +254,13 @@ export async function openDocument(
     }
   }
 
-  const adapters = getDocumentApiAdapters(editor);
-  const docApi = createDocumentApi(adapters);
-  Object.defineProperty(editor, 'doc', { value: docApi, configurable: true, writable: true });
-  const editorWithDoc = editor as EditorWithDoc;
+  const editorWithDoc = bindCurrentDocumentApi(editor);
 
   return {
     editor: editorWithDoc,
     meta,
     dispose() {
+      commentBridge?.dispose();
       editor.destroy();
       domEnv.dispose();
     },
@@ -251,6 +294,11 @@ export async function openCollaborativeDocument(
   try {
     await runtime.waitForSync();
 
+    // SD-2138: Some providers fire "synced" before Yjs updates are fully
+    // applied to local shared types. Give a brief window for the XmlFragment
+    // to be populated from incoming server state before checking room state.
+    await waitForContentSettling(runtime.ydoc);
+
     const onMissing = profile.onMissing ?? 'seedFromDoc';
     let finalRoomState = detectRoomState(runtime.ydoc);
     let decision = resolveBootstrapDecision(finalRoomState, onMissing, doc != null);
@@ -264,6 +312,18 @@ export async function openCollaborativeDocument(
         // here would produce a dual-seed race.
         finalRoomState = detectRoomState(runtime.ydoc);
         decision = { action: 'join' };
+      } else {
+        // SD-2138: Re-check room state after the claim settling period.
+        // Some providers fire "synced" before Yjs updates are fully applied,
+        // so content from the server may have arrived during the settling
+        // wait.  If the room is now populated, join instead of seeding —
+        // seeding here would destructively overwrite existing content.
+        const postClaimState = detectRoomState(runtime.ydoc);
+        if (postClaimState === 'populated') {
+          clearBootstrapMarker(runtime.ydoc);
+          finalRoomState = postClaimState;
+          decision = { action: 'join' };
+        }
       }
     }
 
@@ -390,7 +450,7 @@ export async function exportToPath(editor: Editor, outputPath: string, force = f
     });
   }
 
-  const bytes = toUint8Array(exported);
+  const bytes = await toUint8Array(exported);
 
   try {
     await writeFile(outputPath, bytes);

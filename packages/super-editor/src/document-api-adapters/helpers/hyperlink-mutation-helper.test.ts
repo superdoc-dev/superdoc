@@ -9,8 +9,8 @@ vi.mock('@superdoc/url-validation', () => ({
   }),
 }));
 
-vi.mock('../../core/super-converter/docx-helpers/document-rels.js', () => ({
-  insertNewRelationship: vi.fn(() => 'rId-mock'),
+vi.mock('../../core/parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: vi.fn(() => 'rId-mock'),
 }));
 
 vi.mock('./transaction-meta.js', () => ({

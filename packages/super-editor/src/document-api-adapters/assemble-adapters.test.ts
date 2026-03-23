@@ -23,7 +23,7 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('info.info');
     expect(adapters).toHaveProperty('comments');
     expect(adapters).toHaveProperty('write.write');
-    expect(adapters).toHaveProperty('format.apply');
+    expect(adapters).toHaveProperty('selectionMutation.execute');
     expect(adapters).toHaveProperty('paragraphs.setStyle');
     expect(adapters).toHaveProperty('paragraphs.clearStyle');
     expect(adapters).toHaveProperty('paragraphs.resetDirectFormatting');
@@ -43,6 +43,8 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('paragraphs.clearBorder');
     expect(adapters).toHaveProperty('paragraphs.setShading');
     expect(adapters).toHaveProperty('paragraphs.clearShading');
+    expect(adapters).toHaveProperty('paragraphs.setDirection');
+    expect(adapters).toHaveProperty('paragraphs.clearDirection');
     expect(adapters).toHaveProperty('trackChanges.list');
     expect(adapters).toHaveProperty('trackChanges.get');
     expect(adapters).toHaveProperty('trackChanges.accept');
@@ -103,10 +105,12 @@ describe('assembleDocumentApiAdapters', () => {
 
     expect(typeof adapters.find.find).toBe('function');
     expect(typeof adapters.write.write).toBe('function');
-    expect(typeof adapters.format.apply).toBe('function');
+    expect(typeof adapters.selectionMutation.execute).toBe('function');
     expect(typeof adapters.paragraphs.setStyle).toBe('function');
     expect(typeof adapters.paragraphs.setAlignment).toBe('function');
     expect(typeof adapters.paragraphs.setBorder).toBe('function');
+    expect(typeof adapters.paragraphs.setDirection).toBe('function');
+    expect(typeof adapters.paragraphs.clearDirection).toBe('function');
     expect(typeof adapters.create.paragraph).toBe('function');
     expect(typeof adapters.create.heading).toBe('function');
     expect(typeof adapters.create.sectionBreak).toBe('function');

@@ -6,8 +6,6 @@ description: Set paragraph spacing properties (before, after, line, lineRule) in
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set paragraph spacing properties (before, after, line, lineRule) in twips.
@@ -26,29 +24,39 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (required: before)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `before` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (required: after)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `after` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (required: line)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `line` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 4
+### Variant 4 (required: lineRule)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `lineRule` | enum | yes | `"auto"`, `"exact"`, `"atLeast"` |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
-  "after": 1,
   "before": 1,
-  "line": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -145,18 +153,22 @@ _No fields._
   },
   "properties": {
     "after": {
+      "description": "Space after paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "before": {
+      "description": "Space before paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "line": {
+      "description": "Line spacing value. Meaning depends on lineRule. Must be provided together with lineRule.",
       "minimum": 1,
       "type": "integer"
     },
     "lineRule": {
+      "description": "Line spacing rule. Required when 'line' is set.",
       "enum": [
         "auto",
         "exact",

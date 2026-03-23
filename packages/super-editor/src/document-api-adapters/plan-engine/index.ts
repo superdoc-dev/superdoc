@@ -11,5 +11,17 @@ export { registerStepExecutor, getStepExecutor, hasStepExecutor, clearExecutorRe
 export { planError, PlanError } from './errors.js';
 export { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 export type { CapturedRun, CapturedStyle } from './style-resolver.js';
-export type { CompiledTarget, StepExecutor, CompileContext, ExecuteContext } from './executor-registry.types.js';
-export { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-wrappers.js';
+export type {
+  CompiledTarget,
+  CompiledSelectionTarget,
+  StepExecutor,
+  CompileContext,
+  ExecuteContext,
+} from './executor-registry.types.js';
+export {
+  writeWrapper,
+  insertStructuredWrapper,
+  replaceStructuredWrapper,
+  styleApplyWrapper,
+  selectionMutationWrapper,
+} from './plan-wrappers.js';

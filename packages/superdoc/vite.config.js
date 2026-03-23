@@ -22,7 +22,27 @@ import sourceResolve from '../../vite.sourceResolve';
 // TODO: Remove once rolldown supports trailing-slash imports or node-stdlib-browser drops them.
 const require = createRequire(import.meta.url);
 const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package.json'));
+const repoRequire = createRequire(path.resolve(__dirname, '../../package.json'));
 const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
+
+const resolvePackageEsmEntry = (pkg) => {
+  const resolved = repoRequire.resolve(pkg);
+  if (resolved.endsWith(`${path.sep}index.cjs`)) {
+    return resolved.slice(0, -'index.cjs'.length) + 'index.js';
+  }
+  return resolved;
+};
+
+// y-prosemirror cursor/selection plugins return DecorationSet instances that must share
+// identity with the EditorView's prosemirror-view copy. If multiple ProseMirror module
+// instances are bundled, `instanceof DecorationSet` checks fail and collaborative startup
+// can crash during the first Yjs rerender.
+const proseMirrorSingletonAliases = [
+  { find: 'prosemirror-model', replacement: resolvePackageEsmEntry('prosemirror-model') },
+  { find: 'prosemirror-state', replacement: resolvePackageEsmEntry('prosemirror-state') },
+  { find: 'prosemirror-transform', replacement: resolvePackageEsmEntry('prosemirror-transform') },
+  { find: 'prosemirror-view', replacement: resolvePackageEsmEntry('prosemirror-view') },
+];
 
 const visualizerConfig = {
   filename: './dist/bundle-analysis.html',
@@ -40,6 +60,8 @@ const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'sto
 
 export const getAliases = (_isDev) => {
   const aliases = [
+    ...proseMirrorSingletonAliases,
+
     // Workspace packages (source paths for dev)
     { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },
 
@@ -50,6 +72,10 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/converter/internal', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter') },
     { find: '@superdoc/super-editor/converter', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter/SuperConverter.js') },
     { find: '@superdoc/super-editor/editor', replacement: path.resolve(__dirname, '../super-editor/src/core/Editor.ts') },
+    { find: '@superdoc/super-editor/blank-docx', replacement: path.resolve(__dirname, '../super-editor/src/core/blank-docx.ts') },
+    { find: '@superdoc/super-editor/document-api-adapters', replacement: path.resolve(__dirname, '../super-editor/src/document-api-adapters/index.ts') },
+    { find: '@superdoc/super-editor/markdown', replacement: path.resolve(__dirname, '../super-editor/src/core/helpers/markdown/index.ts') },
+    { find: '@superdoc/super-editor/parts-runtime', replacement: path.resolve(__dirname, '../super-editor/src/core/parts/init-parts-runtime.ts') },
     { find: '@superdoc/super-editor/super-input', replacement: path.resolve(__dirname, '../super-editor/src/components/SuperInput.vue') },
     { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/core/components/AIWriter.vue') },
     { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
@@ -79,6 +105,11 @@ export default defineConfig(({ mode, command }) => {
     !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
       outDir: 'dist',
+      // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
+      // tree, but we do not use this build as the authoritative type-check gate.
+      // Keep declaration generation enabled and silence the plugin's diagnostic
+      // logger so build:es stays clean while postbuild validates emitted entries.
+      logLevel: 'silent',
     }),
     copy({
       targets: [
@@ -209,8 +240,10 @@ export default defineConfig(({ mode, command }) => {
     },
     resolve: {
       alias: getAliases(isDev),
+      dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],
+      preserveSymlinks: false,
     },
     css: {
       postcss: './postcss.config.mjs',

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { AllSelection, EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { CellSelection, TableMap } from 'prosemirror-tables';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from './tableHelpers/createTable.js';
@@ -1080,6 +1080,263 @@ describe('Table commands', async () => {
       });
 
       editor.converter = originalConverter;
+    });
+  });
+
+  describe('insertTableAt trailing separator paragraph', () => {
+    it('inserts table followed by a trailing paragraph', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      const doc = editor.state.doc;
+      let foundTable = false;
+      let nodeAfterTable = null;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table' && !foundTable) {
+          foundTable = true;
+          if (i + 1 < doc.childCount) {
+            nodeAfterTable = doc.child(i + 1);
+          }
+        }
+      }
+
+      expect(foundTable).toBe(true);
+      expect(nodeAfterTable).not.toBeNull();
+      expect(nodeAfterTable.type.name).toBe('paragraph');
+    });
+
+    it('does not insert separator when table is placed between paragraphs', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert some text so we have paragraphs in the doc
+      editor.commands.insertContent('Hello');
+      editor.commands.splitBlock();
+      editor.commands.insertContent('World');
+
+      const docBefore = editor.state.doc;
+      // Find position between the two paragraphs (after first paragraph)
+      const firstParaEnd = docBefore.child(0).nodeSize;
+
+      editor.commands.insertTableAt({ pos: firstParaEnd, rows: 2, columns: 2 });
+
+      const doc = editor.state.doc;
+      // The table should be at index 1 (between the two paragraphs)
+      // There should NOT be an extra separator paragraph injected
+      let tableCount = 0;
+      let paragraphCount = 0;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table') tableCount++;
+        if (doc.child(i).type.name === 'paragraph') paragraphCount++;
+      }
+
+      expect(tableCount).toBe(1);
+      // Original 2 paragraphs, no extra separator
+      expect(paragraphCount).toBe(2);
+    });
+
+    it('removes both table and separator paragraph on single undo', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const docBefore = editor.state.doc;
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      editor.commands.undo();
+
+      expect(editor.state.doc.toJSON()).toEqual(docBefore.toJSON());
+    });
+
+    it('creates row paraIds without assigning legacy table or cell paraIds', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      const table = editor.state.doc.nodeAt(tablePos);
+      expect(table?.attrs.paraId).toBeNull();
+
+      table?.forEach((row) => {
+        expect(row.attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+        row.forEach((cell) => {
+          expect(cell.attrs.paraId).toBeNull();
+        });
+      });
+    });
+  });
+
+  describe('insertTable trailing separator paragraph', () => {
+    it('inserts table followed by a trailing paragraph when inserted at document end', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      const doc = editor.state.doc;
+      let foundTable = false;
+      let nodeAfterTable = null;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table' && !foundTable) {
+          foundTable = true;
+          if (i + 1 < doc.childCount) {
+            nodeAfterTable = doc.child(i + 1);
+          }
+        }
+      }
+
+      expect(foundTable).toBe(true);
+      expect(nodeAfterTable).not.toBeNull();
+      expect(nodeAfterTable.type.name).toBe('paragraph');
+    });
+
+    it('places the selection in the first table cell after insertion', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('places the selection in the first table cell when sep.before is true', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert a first table — produces [table, paragraph]
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // The cursor is now inside the first table cell. Move it to the
+      // trailing empty paragraph so the next insertTable triggers sep.before.
+      const doc = editor.state.doc;
+      const lastChild = doc.child(doc.childCount - 1);
+      expect(lastChild.type.name).toBe('paragraph');
+      const trailingParaPos = doc.content.size - lastChild.nodeSize + 1;
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(doc.resolve(trailingParaPos))));
+
+      // Insert a second table from the trailing paragraph (previous sibling is a table → sep.before = true)
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // Find the SECOND table
+      let tableCount = 0;
+      let secondTablePos = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'table') {
+          tableCount++;
+          if (tableCount === 2) {
+            secondTablePos = pos;
+            return false;
+          }
+        }
+        return true;
+      });
+      expect(secondTablePos).not.toBeNull();
+
+      const secondTable = editor.state.doc.nodeAt(secondTablePos);
+      const map = TableMap.get(secondTable);
+      const expectedPos = secondTablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(expectedPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('replaces the initial empty paragraph instead of keeping it before the table', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      expect(editor.state.doc.child(0).type.name).toBe('table');
+      expect(editor.state.doc.child(1).type.name).toBe('paragraph');
+      expect(editor.state.doc.childCount).toBe(2);
+    });
+
+    it('does not throw when insertTable is called with a NodeSelection on a top-level block', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert a documentSection (atom: true, group: 'block') to get a
+      // selectable top-level block node. When selected as a NodeSelection,
+      // $from.depth is 0 and $from.end() returns doc.content.size, which
+      // previously caused insertTable to compute an out-of-range offset.
+      const { schema } = editor.state;
+      const sectionNode = schema.nodes.documentSection.create(null, [schema.nodes.paragraph.create()]);
+      const { tr } = editor.state;
+      const insertPos = tr.selection.$from.before(1);
+      tr.insert(insertPos, sectionNode);
+      tr.setSelection(NodeSelection.create(tr.doc, insertPos));
+      editor.view.dispatch(tr);
+
+      expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+      expect(editor.state.selection.$from.depth).toBe(0);
+
+      // Inserting a table while a top-level node is selected should not throw
+      expect(() => editor.commands.insertTable({ rows: 2, cols: 2 })).not.toThrow();
+
+      // Verify a table was actually inserted
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      // Verify the cursor is inside the first table cell
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('places cursor in first cell and adds trailing paragraph when inserting table with AllSelection', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Type some text so the paragraph is non-empty (simulates a real document)
+      editor.commands.insertContent('This is a test');
+
+      // Select all content (Ctrl+A equivalent)
+      editor.view.dispatch(editor.state.tr.setSelection(new AllSelection(editor.state.doc)));
+      expect(editor.state.selection).toBeInstanceOf(AllSelection);
+
+      // Insert a table while everything is selected
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // The table should be followed by a trailing separator paragraph
+      const doc = editor.state.doc;
+      const tablePos = findTablePos(doc);
+      expect(tablePos).not.toBeNull();
+      const table = doc.nodeAt(tablePos);
+      const tableEndPos = tablePos + table.nodeSize;
+      const $afterTable = doc.resolve(tableEndPos);
+      const nodeAfterTable = $afterTable.nodeAfter;
+      expect(nodeAfterTable?.type.name).toBe('paragraph');
+
+      // The cursor should be in the first table cell, not the last
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
     });
   });
 

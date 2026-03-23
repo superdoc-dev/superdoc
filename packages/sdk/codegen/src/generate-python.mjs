@@ -2,11 +2,13 @@ import path from 'node:path';
 import {
   camelCase,
   createOperationTree,
+  filterOperationsBySurface,
   loadContract,
   pascalCase,
   resolveRef,
   REPO_ROOT,
   sanitizeOperationId,
+  stripBoundParams,
   writeGeneratedFile,
 } from './shared.mjs';
 
@@ -133,6 +135,18 @@ function buildParamsObjectSpec(operation) {
   return { type: 'object', properties, required };
 }
 
+function buildBoundParamsObjectSpec(operation) {
+  const properties = {};
+  const required = [];
+
+  for (const param of stripBoundParams(operation.params)) {
+    properties[param.name] = paramTypeSpec(param);
+    if (param.required) required.push(param.name);
+  }
+
+  return { type: 'object', properties, required };
+}
+
 // ---------------------------------------------------------------------------
 // Response and param type generation
 // ---------------------------------------------------------------------------
@@ -179,6 +193,13 @@ function classNameFor(pathParts, asyncMode) {
   return `${prefix}${pathParts.map((p) => pascalCase(p)).join('')}Api`;
 }
 
+const ENVELOPE_KEY_BY_OPERATION_ID = {
+  'doc.find': 'result',
+  'doc.getText': 'text',
+  'doc.getMarkdown': 'markdown',
+  'doc.getHtml': 'html',
+};
+
 const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
   'doc.getText': 'text',
   'doc.getMarkdown': 'markdown',
@@ -205,8 +226,8 @@ function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap
       const operationId = value.__operation.id;
       const resultType = resultTypeMap.get(operationId) ?? 'dict[str, Any]';
       const paramsType = paramTypeMap.get(operationId) ?? 'dict[str, Any]';
-      const stringEnvelopeKey =
-        resultType === 'str' ? (STRING_ENVELOPE_KEY_BY_OPERATION_ID[operationId] ?? null) : null;
+      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[operationId] ?? null;
+      const stringEnvelopeKey = resultType === 'str' ? (STRING_ENVELOPE_KEY_BY_OPERATION_ID[operationId] ?? null) : null;
       const invokeExpression = `${asyncMode ? 'await ' : ''}self._runtime.invoke(${JSON.stringify(operationId)}, params or {}, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)`;
 
       if (asyncMode) {
@@ -216,6 +237,9 @@ function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap
         if (stringEnvelopeKey) {
           lines.push(`        raw = ${invokeExpression}`);
           lines.push(`        return _unwrap_string_envelope(raw, ${JSON.stringify(stringEnvelopeKey)})`);
+        } else if (envelopeKey) {
+          lines.push(`        raw = ${invokeExpression}`);
+          lines.push(`        return _unwrap_envelope(raw, ${JSON.stringify(envelopeKey)})`);
         } else {
           lines.push(`        return ${invokeExpression}`);
         }
@@ -226,6 +250,9 @@ function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap
         if (stringEnvelopeKey) {
           lines.push(`        raw = ${invokeExpression}`);
           lines.push(`        return _unwrap_string_envelope(raw, ${JSON.stringify(stringEnvelopeKey)})`);
+        } else if (envelopeKey) {
+          lines.push(`        raw = ${invokeExpression}`);
+          lines.push(`        return _unwrap_envelope(raw, ${JSON.stringify(envelopeKey)})`);
         } else {
           lines.push(`        return ${invokeExpression}`);
         }
@@ -284,16 +311,49 @@ function renderAllClasses(treeNode, pathParts, asyncMode, resultTypeMap, paramTy
 // client.py generation
 // ---------------------------------------------------------------------------
 
+function generateBoundParamTypes(operations, generatedClasses, classBlocks, $defs) {
+  const map = new Map();
+
+  for (const [operationId, operation] of Object.entries(operations)) {
+    const paramsClassName = `Doc${pascalCase(sanitizeOperationId(operationId))}BoundParams`;
+    const paramsType = toPythonType(
+      buildBoundParamsObjectSpec(operation),
+      paramsClassName,
+      generatedClasses,
+      classBlocks,
+      $defs,
+    );
+    map.set(operationId, paramsType);
+  }
+
+  return map;
+}
+
 function generateClientPy(contract) {
   const $defs = contract.$defs;
-  const tree = createOperationTree(contract.operations);
+  const allOperations = contract.operations;
+  const documentOperations = filterOperationsBySurface(allOperations, 'document');
   const generatedClasses = new Set();
   const classBlocks = [];
-  const resultTypeMap = generateResponseTypes(contract.operations, generatedClasses, classBlocks, $defs);
-  const paramTypeMap = generateParamTypes(contract.operations, generatedClasses, classBlocks, $defs);
+
+  // Raw types for all operations (internal)
+  const resultTypeMap = generateResponseTypes(allOperations, generatedClasses, classBlocks, $defs);
+  const paramTypeMap = generateParamTypes(allOperations, generatedClasses, classBlocks, $defs);
+
+  // Bound types for document-surface operations (public)
+  const boundParamTypeMap = generateBoundParamTypes(documentOperations, generatedClasses, classBlocks, $defs);
+
   const sharedTypes = classBlocks.join('\n\n');
-  const syncClasses = renderAllClasses(tree, ['doc'], false, resultTypeMap, paramTypeMap);
-  const asyncClasses = renderAllClasses(tree, ['doc'], true, resultTypeMap, paramTypeMap);
+
+  // Raw operation trees (all operations — internal)
+  const rawTree = createOperationTree(allOperations);
+  const rawSyncClasses = renderAllClasses(rawTree, ['doc'], false, resultTypeMap, paramTypeMap);
+  const rawAsyncClasses = renderAllClasses(rawTree, ['doc'], true, resultTypeMap, paramTypeMap);
+
+  // Bound operation trees (document-surface only — public)
+  const boundTree = createOperationTree(documentOperations);
+  const boundSyncClasses = renderAllClasses(boundTree, ['bound', 'doc'], false, resultTypeMap, boundParamTypeMap);
+  const boundAsyncClasses = renderAllClasses(boundTree, ['bound', 'doc'], true, resultTypeMap, boundParamTypeMap);
 
   return [
     '# Auto-generated by packages/sdk/codegen/src/generate-python.mjs',
@@ -303,20 +363,34 @@ function generateClientPy(contract) {
     '',
     'from typing import Any, Literal, TypedDict, cast',
     '',
+    'def _unwrap_envelope(value: Any, key: str) -> Any:',
+    '    if isinstance(value, dict) and key in value:',
+    '        return value[key]',
+    '    return value',
+    '',
     'def _unwrap_string_envelope(value: Any, key: str) -> str:',
-    '    if isinstance(value, str):',
-    '        return value',
-    '    if isinstance(value, dict):',
-    '        extracted = value.get(key)',
-    '        if isinstance(extracted, str):',
-    '            return extracted',
-    '    return cast(str, value)',
+    '    extracted = _unwrap_envelope(value, key)',
+    '    if isinstance(extracted, str):',
+    '        return extracted',
+    '    return cast(str, extracted)',
     '',
     sharedTypes,
     '',
-    syncClasses,
+    '# ---------------------------------------------------------------------------',
+    '# Raw API (all operations — internal use only)',
+    '# ---------------------------------------------------------------------------',
     '',
-    asyncClasses,
+    rawSyncClasses,
+    '',
+    rawAsyncClasses,
+    '',
+    '# ---------------------------------------------------------------------------',
+    '# Bound API (document-surface only — public document handle)',
+    '# ---------------------------------------------------------------------------',
+    '',
+    boundSyncClasses,
+    '',
+    boundAsyncClasses,
     '',
   ].join('\n');
 }
@@ -334,7 +408,11 @@ export async function generatePythonSdk(contract) {
     writeGeneratedFile(path.join(PYTHON_GENERATED_DIR, 'client.py'), clientContent),
     writeGeneratedFile(
       path.join(PYTHON_GENERATED_DIR, '__init__.py'),
-      'from .client import _SyncDocApi, _AsyncDocApi\n',
+      [
+        'from .client import _SyncDocApi, _AsyncDocApi',
+        'from .client import _SyncBoundDocApi, _AsyncBoundDocApi',
+        '',
+      ].join('\n'),
     ),
   ]);
 }

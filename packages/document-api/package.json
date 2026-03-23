@@ -16,6 +16,9 @@
       "default": "./src/types/index.ts"
     }
   },
+  "scripts": {
+    "test": "bun test"
+  },
   "files": [
     "src"
   ]

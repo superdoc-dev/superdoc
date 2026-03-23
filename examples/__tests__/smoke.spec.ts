@@ -17,7 +17,9 @@ test('example loads without errors', async ({ page }) => {
   await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
 
   await page.goto('/');
-  await expect(page.locator('body')).toBeVisible();
+  // SPA frameworks (e.g. Nuxt with ssr:false) hide the body during hydration;
+  // give them enough time to mount before checking visibility.
+  await expect(page.locator('body')).toBeVisible({ timeout: 30_000 });
 
   // Give the app a moment to initialize (SuperDoc is async)
   await page.waitForTimeout(2000);

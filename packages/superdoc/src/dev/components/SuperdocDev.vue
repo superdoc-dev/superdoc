@@ -1,6 +1,7 @@
 <script setup>
 import '@superdoc/common/styles/common-styles.css';
 import '../dev-styles.css';
+import '../themes/neon-night.css';
 import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed, watch } from 'vue';
 
 import { SuperDoc } from '@superdoc/index.js';
@@ -8,7 +9,7 @@ import { DOCX, PDF, HTML } from '@superdoc/common';
 import { getFileObject } from '@superdoc/common';
 import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 import SuperdocLogo from './superdoc-logo.webp?url';
-import { fieldAnnotationHelpers } from '@superdoc/super-editor';
+import { Editor, fieldAnnotationHelpers, getStarterExtensions } from '@superdoc/super-editor';
 import { toolbarIcons } from '../../../../super-editor/src/components/toolbar/toolbarIcons';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
@@ -31,6 +32,7 @@ const currentFile = ref(null);
 const commentsPanel = ref(null);
 const showCommentsPanel = ref(true);
 const sidebarInstanceKey = ref(0);
+const compareInput = ref(null);
 
 const urlParams = new URLSearchParams(window.location.search);
 const wordBaselineServiceUrl = 'http://127.0.0.1:9185';
@@ -48,6 +50,7 @@ const collabUrl = 'ws://localhost:8081/v1/collaboration';
 const useWordOverlay = ref(urlParams.get('wordOverlay') !== '0');
 const wordOverlayOpacity = ref(Number.isFinite(overlayOpacityFromUrl) ? clampOpacity(overlayOpacityFromUrl) : 0.45);
 const wordOverlayBlendMode = ref(urlParams.get('wordOverlayBlend') || 'difference');
+const selectedTheme = ref('default');
 const generatedWordScreenshots = ref([]);
 const isGeneratingWordBaseline = ref(false);
 const wordBaselineStatus = ref('');
@@ -72,6 +75,14 @@ let closeActivityStream = null;
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
+
+const DEV_THEME_CLASSES = ['sd-theme-docs', 'sd-theme-word', 'sd-theme-blueprint', 'sd-theme-neon-night'];
+
+const applyDevTheme = (theme) => {
+  const html = document.documentElement;
+  DEV_THEME_CLASSES.forEach((cls) => html.classList.remove(cls));
+  if (theme !== 'default') html.classList.add(`sd-theme-${theme}`);
+};
 
 // URL loading
 const documentUrl = ref('');
@@ -239,6 +250,62 @@ const handleNewFile = async (file) => {
   }
 
   sidebarInstanceKey.value += 1;
+};
+
+/**
+ * Triggers the compare file picker.
+ * @returns {void}
+ */
+const handleCompareClick = () => {
+  compareInput.value?.click?.();
+};
+
+/**
+ * Loads a comparison DOCX file, computes diffs, and replays tracked changes.
+ * @param {Event} event
+ * @returns {Promise<void>}
+ */
+const handleCompareFile = async (event) => {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const editor = activeEditor.value;
+  if (!editor) return;
+
+  let compareEditor = null;
+  try {
+    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(file)) || [];
+    if (!docx) return;
+
+    compareEditor = new Editor({
+      isHeadless: true,
+      skipViewCreation: true,
+      extensions: getStarterExtensions(),
+      documentId: `compare-${Date.now()}`,
+      content: docx,
+      mode: 'docx',
+      media,
+      mediaFiles,
+      fonts,
+      annotations: true,
+    });
+
+    const compareDoc = compareEditor.state.doc;
+    const compareComments = compareEditor.converter?.comments ?? [];
+    const compareTranslatedLinkedStyles = compareEditor.converter?.translatedLinkedStyles;
+    const compareTranslatedNumbering = compareEditor.converter?.translatedNumbering;
+    const diff = editor.commands.compareDocuments(
+      compareDoc,
+      compareComments,
+      compareTranslatedLinkedStyles,
+      compareTranslatedNumbering,
+    );
+    const userToApply = editor.options?.user ?? user;
+    editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
+  } finally {
+    compareEditor?.destroy?.();
+  }
 };
 
 /**
@@ -637,6 +704,7 @@ const init = async () => {
     // format: 'docx',
     // html: '<p>Hello world</p>',
     // isDev: true,
+    // allowSelectionInViewMode: true,
     user,
     title: 'Test document',
     users: [
@@ -1042,6 +1110,10 @@ watch(
   },
 );
 
+watch(selectedTheme, (theme) => {
+  applyDevTheme(theme);
+});
+
 const handleTitleChange = (e) => {
   title.value = e.target.innerText;
 
@@ -1061,6 +1133,8 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
+  applyDevTheme(selectedTheme.value);
+
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
     clearYjsChanges();
@@ -1100,6 +1174,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  applyDevTheme('default');
   detachWordOverlayListener();
   removeWordOverlay();
 
@@ -1298,6 +1373,16 @@ if (scrollTestMode.value) {
         </div>
         <div class="dev-app__header-actions">
           <div class="dev-app__header-buttons">
+            <label class="dev-app__theme-control">
+              <span>Theme</span>
+              <select v-model="selectedTheme" class="dev-app__theme-select">
+                <option value="default">Default</option>
+                <option value="docs">Docs</option>
+                <option value="word">Word</option>
+                <option value="blueprint">Blueprint</option>
+                <option value="neon-night">Neon Night</option>
+              </select>
+            </label>
             <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">
               <button
                 class="dev-app__header-export-btn dev-app__dropdown-trigger"
@@ -1379,6 +1464,16 @@ if (scrollTestMode.value) {
               <button class="dev-app__header-export-btn" @click="zoomOut">−</button>
               <span class="dev-app__zoom-label">{{ currentZoom }}%</span>
               <button class="dev-app__header-export-btn" @click="zoomIn">+</button>
+            </div>
+            <div class="dev-app__compare-control">
+              <button class="dev-app__header-export-btn" @click="handleCompareClick">Compare documents</button>
+              <input
+                ref="compareInput"
+                class="dev-app__compare-input"
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                @change="handleCompareFile"
+              />
             </div>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
@@ -1818,6 +1913,35 @@ if (scrollTestMode.value) {
   gap: 4px;
 }
 
+.dev-app__theme-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.dev-app__theme-select {
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dev-app__theme-select:focus {
+  outline: none;
+  border-color: rgba(147, 197, 253, 0.75);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dev-app__theme-select option {
+  color: #111827;
+}
+
 .dev-app__zoom-controls .dev-app__header-export-btn {
   min-width: 32px;
   padding: 6px 8px;
@@ -1886,6 +2010,15 @@ if (scrollTestMode.value) {
 .dev-app__dropdown-item:hover {
   background: rgba(148, 163, 184, 0.12);
   border-color: rgba(148, 163, 184, 0.25);
+}
+
+.dev-app__compare-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dev-app__compare-input {
+  display: none;
 }
 
 .dev-app__main {

@@ -1,4 +1,5 @@
-import { Mark, Attribute } from '@core/index.js';
+import { Mark } from '@core/Mark.js';
+import { Attribute } from '@core/Attribute.js';
 import { TrackDeleteMarkName } from './constants.js';
 
 const trackDeleteClass = 'track-delete';
@@ -73,6 +74,11 @@ export const TrackDelete = Mark.create({
             'data-date': attrs.date,
           };
         },
+      },
+
+      sourceId: {
+        default: '',
+        rendered: false,
       },
 
       importedAuthor: {

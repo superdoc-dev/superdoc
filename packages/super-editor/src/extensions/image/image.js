@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Attribute, Node } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
+import { Node } from '@core/Node.js';
 import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
 import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
@@ -222,6 +223,16 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {{bright?: number, contrast?: number}} [lum] - DrawingML luminance adjustment from a:lum
+       * @private
+       */
+      lum: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
        * @private
        */
@@ -320,6 +331,24 @@ export const Image = Node.create({
         rendered: false,
       },
       rawSrcRect: {
+        default: null,
+        rendered: false,
+      },
+
+      /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+      lockAspectRatio: {
+        default: true,
+        rendered: false,
+      },
+
+      /** Decorative image flag. Maps to OOXML adec:decorative. */
+      decorative: {
+        default: false,
+        rendered: false,
+      },
+
+      /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+      hyperlink: {
         default: null,
         rendered: false,
       },

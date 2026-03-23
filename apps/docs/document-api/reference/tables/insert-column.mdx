@@ -6,8 +6,6 @@ description: Insert a new column into the target table.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Insert a new column into the target table.
@@ -26,13 +24,26 @@ Returns a TableMutationResult receipt confirming a column was inserted.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="table")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | yes |  |
+| `count` | integer | no |  |
+| `position` | enum | yes | `"left"`, `"right"` |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2
+### Variant 2 (required: nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | yes |  |
+| `count` | integer | no |  |
+| `nodeId` | string | yes |  |
+| `position` | enum | yes | `"left"`, `"right"` |
 
 ### Example request
 
@@ -41,26 +52,25 @@ _No fields._
   "columnIndex": 1,
   "count": 1,
   "position": "left",
-  "tableNodeId": "example",
-  "tableTarget": {
+  "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (table.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table` | TableAddress | no | TableAddress |
 | `table.kind` | `"block"` | no | Constant: `"block"` |
 | `table.nodeId` | string | no |  |
-| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -73,6 +83,10 @@ _No fields._
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
 ### Example response
 
 ```json
@@ -81,7 +95,7 @@ _No fields._
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -113,12 +127,12 @@ _No fields._
   "oneOf": [
     {
       "required": [
-        "tableTarget"
+        "target"
       ]
     },
     {
       "required": [
-        "tableNodeId"
+        "nodeId"
       ]
     }
   ],
@@ -131,17 +145,17 @@ _No fields._
       "minimum": 1,
       "type": "integer"
     },
+    "nodeId": {
+      "type": "string"
+    },
     "position": {
       "enum": [
         "left",
         "right"
       ]
     },
-    "tableNodeId": {
-      "type": "string"
-    },
-    "tableTarget": {
-      "$ref": "#/$defs/BlockNodeAddress"
+    "target": {
+      "$ref": "#/$defs/TableAddress"
     }
   },
   "required": [
@@ -164,7 +178,7 @@ _No fields._
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -227,7 +241,7 @@ _No fields._
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

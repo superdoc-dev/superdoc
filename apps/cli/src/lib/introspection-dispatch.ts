@@ -226,7 +226,9 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
   },
 
   'doc.status': async (_input, context) => {
-    const activeSessionId = await getActiveSessionId();
+    // In host mode, do not read or report the project-global active session id.
+    // It is a CLI-only convenience and has no meaning in host/SDK execution.
+    const activeSessionId = context.executionMode === 'host' ? null : await getActiveSessionId();
 
     try {
       return await withActiveContext(
@@ -245,6 +247,7 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
               document: {
                 path: metadata.sourcePath,
                 source: metadata.source,
+                sourceByteLength: metadata.sourceSnapshot?.size ?? null,
                 byteLength,
                 revision: metadata.revision,
               },
@@ -259,6 +262,9 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
               `Context: ${metadata.contextId}`,
               `Default: ${activeSessionId ?? '<none>'}`,
               `Document: ${metadata.sourcePath ?? '<stdin>'}`,
+              `Source: ${metadata.source}`,
+              metadata.sourceSnapshot ? `Source size: ${metadata.sourceSnapshot.size} bytes` : undefined,
+              `Working size: ${byteLength} bytes`,
               `Session Type: ${metadata.sessionType}`,
               metadata.collaboration ? `Collab Doc ID: ${metadata.collaboration.documentId}` : undefined,
               `Revision: ${metadata.revision}`,
@@ -269,9 +275,10 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
           };
         },
         context.sessionId,
+        context.executionMode,
       );
     } catch (error) {
-      if (error instanceof CliError && error.code === 'NO_ACTIVE_DOCUMENT') {
+      if (error instanceof CliError && (error.code === 'NO_ACTIVE_DOCUMENT' || error.code === 'SESSION_REQUIRED')) {
         return {
           command: 'status',
           data: {

@@ -118,8 +118,37 @@ export const VerticalNavigation = Extension.create({
           const adjacent = getAdjacentLineClientTarget(editor, coords, event.key === 'ArrowUp' ? -1 : 1);
           if (!adjacent) return false;
 
-          // 3. Hit test at (goal X, adjacent line center Y)
-          const hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+          // 3. Hit test at (goal X, adjacent line center Y).
+          //    When the adjacent line is outside the visible viewport (e.g., crossing
+          //    a page boundary), hit testing with screen coordinates produces incorrect
+          //    positions. In that case, fall back to layout-based position resolution
+          //    using the line's PM position range and computeCaretLayoutRect.
+          let hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+
+          // Check if the hit test result is plausible: if the adjacent line has PM
+          // position data, the hit should land within or very close to that range.
+          // A miss indicates off-screen coordinate mapping failure or fragment
+          // boundary misalignment (adjacent line center Y mapping to wrong fragment).
+          //
+          // Tolerance is kept small (5 positions) to catch cases where the hit
+          // lands on the current line's fragment start instead of the adjacent
+          // line — this causes the cursor to appear stuck since the "new" position
+          // equals the current one.
+          if (adjacent.pmStart != null && adjacent.pmEnd != null) {
+            const TOLERANCE = 5;
+            const hitPos = hit?.pos;
+            if (
+              !hit ||
+              !Number.isFinite(hitPos) ||
+              hitPos < adjacent.pmStart - TOLERANCE ||
+              hitPos > adjacent.pmEnd + TOLERANCE
+            ) {
+              // Hit test produced a position outside the adjacent line's range.
+              // Resolve position directly from layout data using binary search at goalX.
+              hit = resolvePositionAtGoalX(editor, adjacent.pmStart, adjacent.pmEnd, goalX);
+            }
+          }
+
           if (!hit || !Number.isFinite(hit.pos)) return false;
 
           // 4. Move selection
@@ -207,10 +236,15 @@ function getCurrentCoords(editor, selection) {
 
 /**
  * Finds the adjacent line center Y in client space and associated page index.
+ * Also returns the PM position range from the line's data attributes so that
+ * when the adjacent line is outside the viewport (off-screen), the caller can
+ * resolve the target position directly from layout data rather than relying on
+ * hit testing with potentially inaccurate screen coordinates.
+ *
  * @param {Object} editor
  * @param {{ clientX: number, clientY: number, height: number }} coords
  * @param {number} direction -1 for up, 1 for down.
- * @returns {{ clientY: number, pageIndex?: number } | null}
+ * @returns {{ clientY: number, pageIndex?: number, pmStart?: number, pmEnd?: number } | null}
  */
 function getAdjacentLineClientTarget(editor, coords, direction) {
   const presentationEditor = editor.presentationEditor;
@@ -219,16 +253,23 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const caretY = coords.clientY + coords.height / 2;
   const currentLine = findLineElementAtPoint(doc, caretX, caretY);
   if (!currentLine) return null;
-  const adjacentLine = findAdjacentLineElement(currentLine, direction);
+  const adjacentLine = findAdjacentLineElement(currentLine, direction, caretX);
   if (!adjacentLine) return null;
   const pageEl = adjacentLine.closest?.(`.${DOM_CLASS_NAMES.PAGE}`);
   const pageIndex = pageEl ? Number(pageEl.dataset.pageIndex ?? 'NaN') : null;
   const rect = adjacentLine.getBoundingClientRect();
   const clientY = rect.top + rect.height / 2;
   if (!Number.isFinite(clientY)) return null;
+
+  // Read PM position range from data attributes for layout-based fallback
+  const pmStart = Number(adjacentLine.dataset?.pmStart);
+  const pmEnd = Number(adjacentLine.dataset?.pmEnd);
+
   return {
     clientY,
     pageIndex: Number.isFinite(pageIndex) ? pageIndex : undefined,
+    pmStart: Number.isFinite(pmStart) ? pmStart : undefined,
+    pmEnd: Number.isFinite(pmEnd) ? pmEnd : undefined,
   };
 }
 
@@ -286,63 +327,269 @@ function findLineElementAtPoint(doc, x, y) {
 }
 
 /**
- * Locates the next or previous line element across fragments/pages.
+ * Locates the visually adjacent line element across fragments/pages.
  * @param {Element} currentLine
  * @param {number} direction -1 for up, 1 for down.
+ * @param {number} caretX
  * @returns {Element | null}
  */
-function findAdjacentLineElement(currentLine, direction) {
-  const lineClass = DOM_CLASS_NAMES.LINE;
-  const fragmentClass = DOM_CLASS_NAMES.FRAGMENT;
+function findAdjacentLineElement(currentLine, direction, caretX) {
   const pageClass = DOM_CLASS_NAMES.PAGE;
-  const headerClass = 'superdoc-page-header';
-  const footerClass = 'superdoc-page-footer';
-  const fragment = currentLine.closest?.(`.${fragmentClass}`);
   const page = currentLine.closest?.(`.${pageClass}`);
-  if (!fragment || !page) return null;
+  if (!page) return null;
 
-  const lineEls = Array.from(fragment.querySelectorAll(`.${lineClass}`));
-  const index = lineEls.indexOf(currentLine);
-  if (index !== -1) {
-    const nextInFragment = lineEls[index + direction];
-    if (nextInFragment) return nextInFragment;
-  }
+  const currentLineMetrics = getLineMetrics(currentLine);
+  if (!currentLineMetrics) return null;
 
-  const fragments = Array.from(page.querySelectorAll(`.${fragmentClass}`)).filter((frag) => {
-    const parent = frag.closest?.(`.${headerClass}, .${footerClass}`);
-    return !parent;
-  });
-  const fragmentIndex = fragments.indexOf(fragment);
-  if (fragmentIndex !== -1) {
-    const nextFragment = fragments[fragmentIndex + direction];
-    const fallbackLine = getEdgeLineFromFragment(nextFragment, direction);
-    if (fallbackLine) return fallbackLine;
-  }
+  const currentPageLines = getPageLineElements(page);
+  const adjacentOnCurrentPage = findClosestLineInDirection(
+    currentPageLines,
+    currentLine,
+    currentLineMetrics,
+    direction,
+    caretX,
+  );
+  if (adjacentOnCurrentPage) return adjacentOnCurrentPage;
 
   const pages = Array.from(page.parentElement?.querySelectorAll?.(`.${pageClass}`) ?? []);
   const pageIndex = pages.indexOf(page);
   if (pageIndex === -1) return null;
   const nextPage = pages[pageIndex + direction];
   if (!nextPage) return null;
-  const pageFragments = Array.from(nextPage.querySelectorAll(`.${fragmentClass}`)).filter((frag) => {
-    const parent = frag.closest?.(`.${headerClass}, .${footerClass}`);
-    return !parent;
-  });
-  if (direction > 0) {
-    return getEdgeLineFromFragment(pageFragments[0], direction);
-  }
-  return getEdgeLineFromFragment(pageFragments[pageFragments.length - 1], direction);
+  const nextPageLines = getPageLineElements(nextPage);
+  return findEdgeLineForPage(nextPageLines, direction, caretX);
 }
 
 /**
- * Returns the first or last line in a fragment, depending on direction.
- * @param {Element | null | undefined} fragment
+ * Resolves the PM position at a given goalX within a line's position range.
+ *
+ * Uses binary search with computeCaretLayoutRect to find the position within
+ * [pmStart, pmEnd] whose layout X is closest to goalX. This avoids relying on
+ * screen-space hit testing, which fails when the target line is outside the
+ * visible viewport (e.g., after crossing a page boundary).
+ *
+ * @param {Object} editor
+ * @param {number} pmStart - Start PM position of the target line.
+ * @param {number} pmEnd - End PM position of the target line.
+ * @param {number} goalX - Target X coordinate in layout space.
+ * @returns {{ pos: number } | null}
+ */
+export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
+  const presentationEditor = editor.presentationEditor;
+  let bestPos = pmStart;
+  let bestDist = Infinity;
+
+  // Binary search: characters within a single line have monotonically increasing X.
+  // NOTE: assumes LTR text. For RTL, X decreases with position so the search
+  // direction would be inverted. bestPos/bestDist tracking limits the impact.
+  let lo = pmStart;
+  let hi = pmEnd;
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const rect = presentationEditor.computeCaretLayoutRect(mid);
+    if (!rect || !Number.isFinite(rect.x)) {
+      // Can't measure this position (e.g. inline node boundary) — skip it
+      // and continue searching. Breaking here would fall back to pmStart,
+      // causing the caret to jump to the line start.
+      lo = mid + 1;
+      continue;
+    }
+
+    const dist = Math.abs(rect.x - goalX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestPos = mid;
+    }
+
+    if (rect.x < goalX) {
+      lo = mid + 1;
+    } else if (rect.x > goalX) {
+      hi = mid - 1;
+    } else {
+      // Exact match
+      break;
+    }
+  }
+
+  return { pos: bestPos };
+}
+
+/**
+ * Returns all non-header/footer line elements for a page.
+ * @param {Element} page
+ * @returns {Element[]}
+ */
+function getPageLineElements(page) {
+  const fragmentClass = DOM_CLASS_NAMES.FRAGMENT;
+  const lineClass = DOM_CLASS_NAMES.LINE;
+  const headerClass = 'superdoc-page-header';
+  const footerClass = 'superdoc-page-footer';
+
+  return Array.from(page.querySelectorAll(`.${fragmentClass}`))
+    .filter((fragment) => !fragment.closest?.(`.${headerClass}, .${footerClass}`))
+    .flatMap((fragment) => Array.from(fragment.querySelectorAll(`.${lineClass}`)));
+}
+
+/**
+ * Chooses the closest visual line in the requested direction.
+ * @param {Element[]} lineEls
+ * @param {Element} currentLine
+ * @param {NonNullable<ReturnType<typeof getLineMetrics>>} currentMetrics
  * @param {number} direction
+ * @param {number} caretX
  * @returns {Element | null}
  */
-function getEdgeLineFromFragment(fragment, direction) {
-  if (!fragment) return null;
-  const lineEls = Array.from(fragment.querySelectorAll(`.${DOM_CLASS_NAMES.LINE}`));
-  if (lineEls.length === 0) return null;
-  return direction > 0 ? lineEls[0] : lineEls[lineEls.length - 1];
+function findClosestLineInDirection(lineEls, currentLine, currentMetrics, direction, caretX) {
+  const directionalCandidates = lineEls
+    .filter((line) => line !== currentLine)
+    .map((line) => ({ line, metrics: getLineMetrics(line) }))
+    .filter(({ metrics }) => metrics && isLineInDirection(metrics.centerY, currentMetrics.centerY, direction));
+
+  if (directionalCandidates.length === 0) return null;
+
+  const nearestVerticalDistance = directionalCandidates.reduce((minDistance, { metrics }) => {
+    const distance = Math.abs(metrics.centerY - currentMetrics.centerY);
+    return Math.min(minDistance, distance);
+  }, Infinity);
+
+  const targetRowCenterY = directionalCandidates
+    .filter(({ metrics }) =>
+      isWithinTolerance(Math.abs(metrics.centerY - currentMetrics.centerY), nearestVerticalDistance, 1),
+    )
+    .reduce((bestCenterY, { metrics }) => {
+      if (bestCenterY == null) return metrics.centerY;
+      return direction > 0 ? Math.min(bestCenterY, metrics.centerY) : Math.max(bestCenterY, metrics.centerY);
+    }, null);
+
+  if (!Number.isFinite(targetRowCenterY)) return null;
+
+  const rowCandidates = directionalCandidates.filter(({ metrics }) =>
+    isWithinTolerance(metrics.centerY, targetRowCenterY, getRowTolerance(currentMetrics, metrics)),
+  );
+
+  return chooseLineClosestToX(rowCandidates, caretX);
+}
+
+/**
+ * Chooses the first/last visual row on a page, then the line closest to caretX.
+ * @param {Element[]} lineEls
+ * @param {number} direction
+ * @param {number} caretX
+ * @returns {Element | null}
+ */
+function findEdgeLineForPage(lineEls, direction, caretX) {
+  const candidates = lineEls.map((line) => ({ line, metrics: getLineMetrics(line) })).filter(({ metrics }) => metrics);
+
+  if (candidates.length === 0) return null;
+
+  const targetRowCenterY = candidates.reduce((edgeCenterY, { metrics }) => {
+    if (edgeCenterY == null) return metrics.centerY;
+    return direction > 0 ? Math.min(edgeCenterY, metrics.centerY) : Math.max(edgeCenterY, metrics.centerY);
+  }, null);
+
+  if (!Number.isFinite(targetRowCenterY)) return null;
+
+  const rowCandidates = candidates.filter(({ metrics }) =>
+    isWithinTolerance(metrics.centerY, targetRowCenterY, Math.max(metrics.height / 2, 1)),
+  );
+
+  return chooseLineClosestToX(rowCandidates, caretX);
+}
+
+/**
+ * Picks the line whose horizontal span is closest to the requested caret X.
+ * @param {{ line: Element, metrics: ReturnType<typeof getLineMetrics> }[]} candidates
+ * @param {number} caretX
+ * @returns {Element | null}
+ */
+function chooseLineClosestToX(candidates, caretX) {
+  if (candidates.length === 0) return null;
+
+  let best = null;
+  for (const candidate of candidates) {
+    const horizontalDistance = getHorizontalDistanceToLine(candidate.metrics, caretX);
+    const centerDistance = Math.abs(candidate.metrics.centerX - caretX);
+    if (
+      !best ||
+      horizontalDistance < best.horizontalDistance ||
+      (horizontalDistance === best.horizontalDistance && centerDistance < best.centerDistance)
+    ) {
+      best = {
+        line: candidate.line,
+        horizontalDistance,
+        centerDistance,
+      };
+    }
+  }
+
+  return best?.line ?? null;
+}
+
+/**
+ * Reads the geometry used for visual row and column matching.
+ * @param {Element} line
+ * @returns {{ top: number, bottom: number, left: number, right: number, height: number, centerX: number, centerY: number } | null}
+ */
+function getLineMetrics(line) {
+  const rect = line?.getBoundingClientRect?.();
+  if (!rect) return null;
+
+  const { top, bottom, left, right, height, width } = rect;
+  if (![top, bottom, left, right, height, width].every(Number.isFinite)) return null;
+
+  return {
+    top,
+    bottom,
+    left,
+    right,
+    height,
+    centerX: left + width / 2,
+    centerY: top + height / 2,
+  };
+}
+
+/**
+ * Returns whether a line center lies above or below the current line center.
+ * @param {number} lineCenterY
+ * @param {number} currentCenterY
+ * @param {number} direction
+ * @returns {boolean}
+ */
+function isLineInDirection(lineCenterY, currentCenterY, direction) {
+  const epsilon = 1;
+  return direction > 0 ? lineCenterY > currentCenterY + epsilon : lineCenterY < currentCenterY - epsilon;
+}
+
+/**
+ * Returns whether two numeric values are within a tolerance.
+ * @param {number} value
+ * @param {number} expected
+ * @param {number} tolerance
+ * @returns {boolean}
+ */
+function isWithinTolerance(value, expected, tolerance) {
+  return Math.abs(value - expected) <= tolerance;
+}
+
+/**
+ * Determines the Y tolerance for considering lines part of the same visual row.
+ * @param {{ height: number }} currentMetrics
+ * @param {{ height: number }} candidateMetrics
+ * @returns {number}
+ */
+function getRowTolerance(currentMetrics, candidateMetrics) {
+  return Math.max(Math.min(currentMetrics.height, candidateMetrics.height) / 2, 1);
+}
+
+/**
+ * Returns the horizontal distance from the caret X to a line's bounds.
+ * @param {{ left: number, right: number }} metrics
+ * @param {number} caretX
+ * @returns {number}
+ */
+function getHorizontalDistanceToLine(metrics, caretX) {
+  if (caretX < metrics.left) return metrics.left - caretX;
+  if (caretX > metrics.right) return caretX - metrics.right;
+  return 0;
 }

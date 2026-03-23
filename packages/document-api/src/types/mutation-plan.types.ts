@@ -5,11 +5,13 @@
  * that changes document state is a step dispatched by the plan engine.
  */
 
-import type { NodeAddress } from './base.js';
-import type { TextAddress, TrackedChangeAddress } from './address.js';
+import type { BlockNodeAddress } from './base.js';
+import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
 import type { InlineRunPatch } from '../format/inline-run-patch.js';
+import type { SDFragment } from './fragment.js';
+import type { Placement, NestingPolicy } from './placement.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -18,22 +20,27 @@ import type { InlineRunPatch } from '../format/inline-run-patch.js';
 export type SelectWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   require: 'first' | 'exactlyOne' | 'all';
 };
 
 export type RefWhere = {
   by: 'ref';
   ref: string;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
-export type StepWhere = SelectWhere | RefWhere;
+export type TargetWhere = {
+  by: 'target';
+  target: SelectionTarget;
+};
+
+export type StepWhere = SelectWhere | RefWhere | TargetWhere;
 
 export type AssertWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 // ---------------------------------------------------------------------------
@@ -87,12 +94,7 @@ export type TextRewriteStep = {
 export type TextInsertStep = {
   id: string;
   op: 'text.insert';
-  where: {
-    by: 'select';
-    select: TextSelector | NodeSelector;
-    within?: NodeAddress;
-    require: 'first' | 'exactlyOne';
-  };
+  where: StepWhere;
   args: {
     position: 'before' | 'after';
     content: { text: string };
@@ -104,7 +106,10 @@ export type TextDeleteStep = {
   id: string;
   op: 'text.delete';
   where: StepWhere;
-  args: Record<string, never>;
+  args: {
+    /** Controls block-edge expansion. Defaults to `'selection'`. */
+    behavior?: DeleteBehavior;
+  };
 };
 
 export type StyleApplyStep = {
@@ -125,6 +130,27 @@ export type AssertStep = {
   };
 };
 
+export type StructuralInsertStep = {
+  id: string;
+  op: 'structural.insert';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    placement?: Placement;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
+export type StructuralReplaceStep = {
+  id: string;
+  op: 'structural.replace';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
 export type DomainStep = {
   id: string;
   op: string;
@@ -132,15 +158,27 @@ export type DomainStep = {
   args: Record<string, unknown>;
 };
 
-export type MutationStep = TextRewriteStep | TextInsertStep | TextDeleteStep | StyleApplyStep | AssertStep | DomainStep;
+export type MutationStep =
+  | TextRewriteStep
+  | TextInsertStep
+  | TextDeleteStep
+  | StyleApplyStep
+  | StructuralInsertStep
+  | StructuralReplaceStep
+  | AssertStep
+  | DomainStep;
 
 // ---------------------------------------------------------------------------
 // Plan input
 // ---------------------------------------------------------------------------
 
-export type ChangeMode = 'direct' | 'tracked';
+import type { ChangeMode } from '../write/write.js';
+import type { StoryLocator } from './story.types.js';
+export type { ChangeMode } from '../write/write.js';
 
 export type MutationsApplyInput = {
+  /** Target story for the mutation plan. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
@@ -148,6 +186,8 @@ export type MutationsApplyInput = {
 };
 
 export type MutationsPreviewInput = {
+  /** Target story for the mutation preview. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
@@ -188,10 +228,18 @@ export type SpanStepResolution = {
   text: string;
 };
 
+/** Resolution for a selection-based target (may span multiple blocks). */
+export type SelectionStepResolution = {
+  selectionTarget: SelectionTarget;
+  range: { from: number; to: number };
+  text: string;
+};
+
 export type TextStepData = {
   domain: 'text';
   resolutions: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
 };
 
 export type AssertStepData = {
@@ -210,7 +258,12 @@ export type TableStepData = {
   affectedColumns?: number[];
 };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
+export type StructuralStepData = {
+  domain: 'structural';
+  insertedBlockIds?: string[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData | StructuralStepData;
 
 export type StepOutcome = {
   stepId: string;
@@ -253,6 +306,7 @@ export type StepPreview = {
   op: string;
   resolutions?: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
   style?: unknown;
 };
 
@@ -275,14 +329,7 @@ export type PlanExecutionError = {
 };
 
 // ---------------------------------------------------------------------------
-// Revision guard options
+// Revision guard options — canonical definitions in write/write.ts
 // ---------------------------------------------------------------------------
 
-export type RevisionGuardOptions = {
-  expectedRevision?: string;
-};
-
-export type MutationOptions = RevisionGuardOptions & {
-  changeMode?: ChangeMode;
-  dryRun?: boolean;
-};
+export type { RevisionGuardOptions, MutationOptions } from '../write/write.js';

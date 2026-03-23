@@ -96,8 +96,8 @@ describe('[blank-doc.docx] import, add node, export', () => {
     expect(lvlText).toBe('0');
 
     const runNode = listItem.elements.find((el) => el.name === 'w:r');
-    const runText = runNode.elements[0].elements[0].text;
-    expect(runText).toBe('hello world');
+    const textElement = runNode.elements.find((el) => el.name === 'w:t');
+    expect(textElement.elements[0].text).toBe('hello world');
   });
 
   it('can add a second list item by splitting the first', () => {

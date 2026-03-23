@@ -3,10 +3,11 @@
  *
  * Reads and writes `translatedLinkedStyles.docDefaults` (the style-engine-facing
  * JS object), then syncs the mutation back to `convertedXml` via the docDefaults
- * translator's decode path. After a successful non-dry mutation, emits a
- * `'stylesDefaultsChanged'` event so the layout pipeline re-renders.
+ * translator's decode path.
  *
- * Lifecycle is handled by `executeOutOfBandMutation`.
+ * Lifecycle is handled by the centralized parts system (`mutatePart`).
+ * The `stylesDefaultsChanged` event is emitted by the styles part descriptor's
+ * `afterCommit` hook.
  */
 
 import type {
@@ -21,10 +22,10 @@ import type {
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { isCollaborationActive } from './collaboration-detection.js';
-import { executeOutOfBandMutation } from './out-of-band-mutation.js';
+import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import { syncDocDefaultsToConvertedXml, type DocDefaultsTranslator } from './styles-xml-sync.js';
 import { translator as docDefaultsTranslator } from '../core/super-converter/v3/handlers/w/docDefaults/docDefaults-translator.js';
+import type { PartId } from '../core/parts/types.js';
 
 // ---------------------------------------------------------------------------
 // Local type shapes (avoids importing engine-specific modules directly)
@@ -50,7 +51,7 @@ interface ConverterForStyles {
 // Constants
 // ---------------------------------------------------------------------------
 
-const STYLES_PART = 'word/styles.xml';
+const STYLES_PART = 'word/styles.xml' as const satisfies PartId;
 
 const PROPERTIES_KEY_BY_CHANNEL: Record<StylesChannel, 'runProperties' | 'paragraphProperties'> = {
   run: 'runProperties',
@@ -63,7 +64,7 @@ const XML_PATH_BY_CHANNEL: Record<StylesChannel, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Underline key mapping (API ↔ storage)
+// Underline key mapping (API <-> storage)
 // ---------------------------------------------------------------------------
 
 const UNDERLINE_API_TO_STORAGE: Record<string, string> = {
@@ -129,7 +130,7 @@ function normalizeObjectSubKeys(obj: Record<string, unknown>, key: string): Reco
 }
 
 // ---------------------------------------------------------------------------
-// JSON deep equality — single shared comparator
+// JSON deep equality -- single shared comparator
 // ---------------------------------------------------------------------------
 
 function jsonDeepEqual(a: unknown, b: unknown): boolean {
@@ -214,7 +215,7 @@ function applyShallowMerge(targetProps: Record<string, unknown>, key: string, va
   const current = asRecord(targetProps[key]);
   const patch = value as Record<string, unknown>;
 
-  // Handle underline key mapping: API keys → storage keys
+  // Handle underline key mapping: API keys -> storage keys
   if (key === 'underline') {
     const storagePatch = cloneForStorage(mapUnderlineToStorage(normalizeObjectSubKeys(patch, key)));
     targetProps[key] = { ...current, ...storagePatch };
@@ -310,14 +311,6 @@ export function stylesApplyAdapter(
     );
   }
 
-  if (isCollaborationActive(editor)) {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'styles.apply is unavailable during active collaboration. Stylesheet mutations cannot be synced via Yjs.',
-      { reason: 'collaboration_active' },
-    );
-  }
-
   const stylesRoot = stylesPart.elements?.find((el: XmlElement) => el.name === 'w:styles');
   if (!stylesRoot) {
     throw new DocumentApiAdapterError(
@@ -335,10 +328,17 @@ export function stylesApplyAdapter(
     xmlPath: XML_PATH_BY_CHANNEL[channel],
   };
 
-  // --- Execute via out-of-band lifecycle ---
-  return executeOutOfBandMutation<StylesApplyReceipt>(
+  const dryRun = options.dryRun;
+
+  // --- Execute via centralized parts mutation pipeline ---
+  const result = mutatePart({
     editor,
-    (dryRun) => {
+    partId: STYLES_PART,
+    operation: 'mutate',
+    source: 'styles.apply',
+    dryRun,
+    expectedRevision: options.expectedRevision,
+    mutate({ dryRun: isDryRun }) {
       const propsKey = PROPERTIES_KEY_BY_CHANNEL[channel];
 
       const existingProps = converter.translatedLinkedStyles?.docDefaults?.[propsKey] as
@@ -348,7 +348,7 @@ export function stylesApplyAdapter(
       // Dry-run: structuredClone for full immutability guarantee.
       // Real mutation: ensure hierarchy exists and mutate in-place.
       let targetProps: Record<string, unknown>;
-      if (dryRun) {
+      if (isDryRun) {
         targetProps = existingProps ? structuredClone(existingProps) : {};
       } else {
         if (!converter.translatedLinkedStyles) {
@@ -365,23 +365,22 @@ export function stylesApplyAdapter(
 
       const { before, after, changed } = applyPatch(targetProps, input.patch as Record<string, unknown>, channel);
 
-      // Post-mutation side effects (only on real, changed mutations)
-      if (changed && !dryRun) {
+      // Sync derived model -> OOXML JSON (only on real, changed mutations)
+      // This updates the canonical part in the store so the pipeline's diff detects the change.
+      if (changed && !isDryRun) {
         syncDocDefaultsToConvertedXml(converter, docDefaultsTranslator as unknown as DocDefaultsTranslator);
-        editor.emit('stylesDefaultsChanged');
       }
 
-      const receipt: StylesApplyReceipt = {
+      return {
         success: true,
         changed,
         resolution,
-        dryRun,
+        dryRun: isDryRun,
         before,
         after,
-      };
-
-      return { changed, payload: receipt };
+      } satisfies StylesApplyReceipt;
     },
-    options,
-  );
+  });
+
+  return result.result as StylesApplyReceipt;
 }

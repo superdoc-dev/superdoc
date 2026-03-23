@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
-import { helpers } from '@core/index.js';
+import * as helpers from '@core/helpers/index.js';
 import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';

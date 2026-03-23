@@ -118,6 +118,45 @@ describe('toFlowBlocks', () => {
       });
       expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });
+
+    it('uses previous paragraph font for empty numbered paragraph (new list item)', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'First item' }],
+          },
+          {
+            type: 'paragraph',
+            content: [],
+            attrs: {
+              paragraphProperties: {
+                numberingProperties: { numId: 1, ilvl: 0 },
+              },
+            },
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, {
+        defaultFont: 'CustomListFont',
+        defaultSize: 13,
+      });
+
+      expect(blocks).toHaveLength(2);
+      const firstBlock = blocks[0];
+      const secondBlock = blocks[1];
+      expect(firstBlock.kind).toBe('paragraph');
+      expect(secondBlock.kind).toBe('paragraph');
+      expect((secondBlock as { runs: Array<{ fontFamily?: string; fontSize?: number }> }).runs).toHaveLength(1);
+
+      const firstFont = (firstBlock as { runs: Array<{ fontFamily?: string; fontSize?: number }> }).runs[0];
+      const secondFont = (secondBlock as { runs: Array<{ fontFamily?: string; fontSize?: number }> }).runs[0];
+      expect(firstFont.fontFamily).toBeDefined();
+      expect(secondFont.fontFamily).toBe(firstFont.fontFamily);
+      expect(secondFont.fontSize).toBe(firstFont.fontSize);
+    });
   });
 
   describe('mark mapping', () => {
@@ -824,6 +863,49 @@ describe('toFlowBlocks', () => {
       expect(tailBreaks.length).toBe(1);
       // Should not have requirePageBoundary since it's only a column change
       expect((tailBreaks[0] as never).attrs?.requirePageBoundary).toBeUndefined();
+    });
+
+    it('preserves explicit custom column widths for continuous section breaks', () => {
+      const pmDoc: PMNode = {
+        type: 'doc',
+        attrs: { bodySectPr: createTestBodySectPr() },
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Single column' }] },
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                sectPr: {
+                  elements: [
+                    { name: 'w:type', attributes: { 'w:val': 'continuous' } },
+                    {
+                      name: 'w:cols',
+                      attributes: { 'w:num': '2', 'w:equalWidth': '0' },
+                      elements: [
+                        { name: 'w:col', attributes: { 'w:w': '1080', 'w:space': '1523' } },
+                        { name: 'w:col', attributes: { 'w:w': '7459' } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            content: [{ type: 'text', text: 'Custom columns' }],
+          },
+        ],
+      } as never;
+
+      const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+      const allBreaks = getSectionBreaks(blocks, { includeFirst: true });
+      const contentBreak = allBreaks.find((b) => b.attrs?.sectionIndex === 0);
+
+      expect(contentBreak).toBeDefined();
+      expect((contentBreak as FlowBlock).columns).toEqual({
+        count: 2,
+        gap: 101.53333333333333,
+        widths: [72, 497.26666666666665],
+        equalWidth: false,
+      });
     });
 
     it('does not mark requirePageBoundary when header/footer margins change', () => {
@@ -3025,8 +3107,8 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
-      expect(paragraph.attrs?.rtl).toBeUndefined();
+      expect(paragraph.attrs?.direction).toBe('rtl');
+      expect(paragraph.attrs?.rtl).toBe(true);
       expect(paragraph.attrs?.indent?.left).toBe(24);
       expect(paragraph.attrs?.indent?.right).toBe(12);
     });
@@ -3052,8 +3134,8 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
-      expect(paragraph.attrs?.rtl).toBeUndefined();
+      expect(paragraph.attrs?.direction).toBe('ltr');
+      expect(paragraph.attrs?.rtl).toBe(false);
     });
 
     it('handles multiple page breaks', () => {
@@ -3799,6 +3881,417 @@ describe('toFlowBlocks', () => {
       expect(originalBlocks.some((block) => block.kind === 'image')).toBe(true);
     });
 
+    it('renumbers visible list markers after suppressing tracked empty list artifacts', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Delta content that should render as (b)'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      expect(paragraphBlocks).toHaveLength(2);
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(a)', '(b)']);
+      const secondParagraphText = paragraphBlocks[1].runs
+        .filter((run) => 'text' in run)
+        .map((run) => run.text)
+        .join('');
+      expect(secondParagraphText).toContain('Delta content');
+    });
+
+    it('clears ghost offsets when marker sequence restarts within the same list key', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
+          listParagraph('(e)', [5], 'Adjusted to c'),
+          listParagraph('(c)', [3], 'Restart should stay c'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)', '(c)']);
+    });
+
+    it('keeps ghost offsets across split paragraph blocks from the same source list item', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        content: PMNode[] | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: content ?? [],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [1], [{ type: 'text', text: 'Alpha item' }]),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph(
+            '(c)',
+            [3],
+            [
+              { type: 'text', text: 'Split item before image' },
+              {
+                type: 'image',
+                attrs: {
+                  src: 'data:image/png;base64,iVBORw0KGgo=',
+                  size: { width: 10, height: 10 },
+                  wrap: { type: 'Square' },
+                },
+              },
+              { type: 'text', text: 'Split item after image' },
+            ],
+          ),
+          listParagraph('(d)', [4], [{ type: 'text', text: 'Delta should render as c' }]),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const markerTexts = blocks
+        .filter((block) => block.kind === 'paragraph')
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+
+      expect(markerTexts.length).toBeGreaterThanOrEqual(3);
+      expect(markerTexts[0]).toBe('(a)');
+      expect(markerTexts[1]).toBe('(b)');
+      expect(markerTexts.at(-1)).toBe('(c)');
+    });
+
+    it('keeps ghost offsets across non-list paragraphs within the same logical list sequence', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
+          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Intro paragraph' }] },
+          listParagraph('(e)', [5], 'Should continue as c after the intro paragraph'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)']);
+    });
+
+    it('uses listRendering.path as the source ordinal instead of parsing marker text', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 11, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'decimal',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('Item 1.', [1], 'Alpha item'),
+          listParagraph('Item two.', [2], null, { id: 'ghost-two', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('Item three.', [3], 'Adjusted to 2 from path metadata'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+      expect(markerTexts).toEqual(['Item 1.', 'Item 2.']);
+    });
+
+    it('continues style-based lists across non-list paragraphs when numbering is inherited from the paragraph style', () => {
+      const converterContext = {
+        docx: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            MLAgr3: {
+              type: 'paragraph',
+              paragraphProperties: {
+                styleId: 'MLAgr3',
+                numberingProperties: { numId: 5, ilvl: 2 },
+              },
+            },
+          },
+        },
+        translatedNumbering: {
+          abstracts: {},
+          definitions: {},
+        },
+      };
+
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            styleId: 'MLAgr3',
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
+          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'By way of example, you will:' }] },
+          listParagraph('(e)', [5], 'Should continue as c from style-based numbering'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, {
+        trackedChangesMode: 'review',
+        converterContext,
+      });
+      const markerTexts = blocks
+        .filter((block) => block.kind === 'paragraph')
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)']);
+    });
+
+    it('renumbers roman markers correctly and avoids single-letter roman corruption', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 9, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'lowerRoman',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(i)', [1], 'Roman one'),
+          listParagraph('(ii)', [2], null, { id: 'ghost-ii', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(iii)', [3], 'Should render as ii'),
+          listParagraph('(i)', [1], 'Restart should remain i'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(i)', '(ii)', '(i)']);
+    });
+
     describe('adversarial input protection', () => {
       it('rejects trackFormat marks with excessively large JSON payloads', () => {
         const hugeString = 'x'.repeat(15000);
@@ -3936,7 +4429,7 @@ describe('toFlowBlocks', () => {
   });
 
   describe('bidi alignment fallback', () => {
-    it('defaults RTL paragraphs to right alignment when no explicit alignment', () => {
+    it('defaults RTL paragraphs to no explicit alignment (renderer defaults to right)', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -3960,9 +4453,9 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs).toMatchObject({
-        alignment: undefined,
-      });
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
+      expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
     it('respects explicit alignment on RTL paragraphs', () => {
@@ -3990,12 +4483,14 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
     });
 
-    it('adjustRightInd overrides alignment to right', () => {
+    it('preserves explicit left alignment on RTL paragraphs', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -4021,9 +4516,51 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });
+    });
+
+    it('maps start to right and end to left for RTL paragraphs', () => {
+      const pmDocStart = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'start',
+              },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      };
+
+      const pmDocEnd = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'end',
+              },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      };
+
+      const { blocks: blocksStart } = toFlowBlocks(pmDocStart);
+      const { blocks: blocksEnd } = toFlowBlocks(pmDocEnd);
+
+      expect(blocksStart[0].attrs?.alignment).toBe('right');
+      expect(blocksEnd[0].attrs?.alignment).toBe('left');
     });
   });
 

@@ -168,6 +168,80 @@ describe('operation-params deriveParamsFromInputSchema with $ref', () => {
     expect(modeParam).toBeDefined();
     expect(modeParam!.type).toBe('string'); // enum → string
   });
+
+  test('derives params from top-level allOf by merging object members', () => {
+    const inputSchema = {
+      allOf: [
+        {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                target: { $ref: '#/$defs/TextAddress' },
+              },
+              required: ['target'],
+            },
+            {
+              type: 'object',
+              properties: {
+                ref: { type: 'string' },
+              },
+              required: ['ref'],
+            },
+          ],
+        },
+        {
+          type: 'object',
+          properties: {
+            text: { type: 'string' },
+          },
+          required: ['text'],
+        },
+      ],
+    };
+    const { params } = deriveParamsFromInputSchema(inputSchema, $defs);
+    const paramNames = params.map((param) => param.name);
+
+    expect(paramNames).toContain('target');
+    expect(paramNames).toContain('ref');
+    expect(paramNames).toContain('text');
+    expect(params.find((param) => param.name === 'text')?.required).toBe(true);
+    expect(params.find((param) => param.name === 'target')?.required).toBe(false);
+    expect(params.find((param) => param.name === 'ref')?.required).toBe(false);
+  });
+
+  test('merges duplicate properties across oneOf branches into a single param schema', () => {
+    const inputSchema = {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            target: { $ref: '#/$defs/TextAddress' },
+            text: { type: 'string' },
+          },
+          required: ['target', 'text'],
+        },
+        {
+          type: 'object',
+          properties: {
+            target: {
+              oneOf: [{ $ref: '#/$defs/TextAddress' }, { type: 'string' }],
+            },
+            content: { type: 'object' },
+          },
+          required: ['target', 'content'],
+        },
+      ],
+    };
+    const { params } = deriveParamsFromInputSchema(inputSchema, $defs);
+    const targetParam = params.find((param) => param.name === 'target');
+
+    expect(targetParam).toBeDefined();
+    expect(targetParam!.type).toBe('json');
+    expect((targetParam!.schema as { oneOf: CliTypeSpec[] }).oneOf.length).toBeGreaterThan(1);
+    expect(params.find((param) => param.name === 'text')).toBeDefined();
+    expect(params.find((param) => param.name === 'content')).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

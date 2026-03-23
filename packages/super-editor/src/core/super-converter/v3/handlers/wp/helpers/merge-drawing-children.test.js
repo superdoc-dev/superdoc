@@ -204,6 +204,111 @@ describe('mergeDrawingChildren', () => {
     });
   });
 
+  describe('zero drawing ID fix', () => {
+    it('patches wp:docPr id=0 using the generated ID', () => {
+      const result = mergeDrawingChildren({
+        order: ['wp:extent', 'wp:docPr', 'a:graphic'],
+        generated: [
+          { name: 'wp:extent', attributes: { cx: 100 } },
+          { name: 'wp:docPr', attributes: { id: 42, name: 'Picture 1' } },
+          { name: 'a:graphic', attributes: {} },
+        ],
+        original: [
+          { index: 1, xml: { name: 'wp:docPr', attributes: { id: 0, name: 'Picture 1', descr: 'alt text' } } },
+          { index: 2, xml: { name: 'a:graphic', attributes: {} } },
+        ],
+      });
+
+      const docPr = result.find((el) => el.name === 'wp:docPr');
+      expect(docPr.attributes.id).toBe(42);
+      expect(docPr.attributes.descr).toBe('alt text');
+    });
+
+    it('patches pic:cNvPr id=0 inside original a:graphic subtree', () => {
+      const result = mergeDrawingChildren({
+        order: ['wp:extent', 'wp:docPr', 'a:graphic'],
+        generated: [
+          { name: 'wp:extent', attributes: { cx: 100 } },
+          { name: 'wp:docPr', attributes: { id: 7 } },
+          {
+            name: 'a:graphic',
+            elements: [
+              {
+                name: 'a:graphicData',
+                elements: [
+                  {
+                    name: 'pic:pic',
+                    elements: [
+                      {
+                        name: 'pic:nvPicPr',
+                        elements: [{ name: 'pic:cNvPr', attributes: { id: 7 } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        original: [
+          { index: 1, xml: { name: 'wp:docPr', attributes: { id: 0 } } },
+          {
+            index: 2,
+            xml: {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'pic:pic',
+                      elements: [
+                        {
+                          name: 'pic:nvPicPr',
+                          elements: [{ name: 'pic:cNvPr', attributes: { id: 0, name: 'Original' } }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const graphic = result.find((el) => el.name === 'a:graphic');
+      const cNvPr = graphic.elements[0].elements[0].elements[0].elements[0];
+      expect(cNvPr.attributes.id).toBe(7);
+      expect(cNvPr.attributes.name).toBe('Original');
+    });
+
+    it('does not overwrite valid positive IDs on originals', () => {
+      const result = mergeDrawingChildren({
+        order: ['wp:extent', 'wp:docPr'],
+        generated: [
+          { name: 'wp:extent', attributes: {} },
+          { name: 'wp:docPr', attributes: { id: 99 } },
+        ],
+        original: [{ index: 1, xml: { name: 'wp:docPr', attributes: { id: 5 } } }],
+      });
+
+      const docPr = result.find((el) => el.name === 'wp:docPr');
+      expect(docPr.attributes.id).toBe(5);
+    });
+
+    it('handles missing generated wp:docPr gracefully', () => {
+      const result = mergeDrawingChildren({
+        order: ['wp:extent', 'wp:docPr'],
+        generated: [{ name: 'wp:extent', attributes: {} }],
+        original: [{ index: 1, xml: { name: 'wp:docPr', attributes: { id: 0 } } }],
+      });
+
+      const docPr = result.find((el) => el.name === 'wp:docPr');
+      expect(docPr.attributes.id).toBe(0);
+    });
+  });
+
   describe('deep copy behavior', () => {
     it('returns deep copies, not references to original objects', () => {
       const originalXml = { name: 'wp:docPr', attributes: { id: 1 } };

@@ -1,6 +1,6 @@
 // @ts-check
 import { gapCursor } from 'prosemirror-gapcursor';
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { callOrGet } from '@core/utilities/callOrGet.js';
 import { getExtensionConfigField } from '@core/helpers/getExtensionConfigField.js';
 

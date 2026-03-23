@@ -3,6 +3,7 @@ import { NodeTranslator } from '@translator';
 import { translateChildNodes } from '../../../../v2/exporter/helpers/index.js';
 import { cloneMark, cloneXmlNode, applyRunPropertiesTemplate, resolveFontFamily } from './helpers/helpers.js';
 import { ensureTrackedWrapper, prepareRunTrackingContext } from './helpers/track-change-helpers.js';
+import { appendTrackFormatChangeToRunProperties, findTrackFormatMark } from '../../helpers.js';
 import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-translator.js';
 import { translator as wRPrTranslator } from '../rpr';
 import validXmlAttributes from './attributes/index.js';
@@ -17,6 +18,81 @@ const XML_NODE_NAME = 'w:r';
  */
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
 const SD_KEY_NAME = 'run';
+
+const REFERENCE_RUN_STYLE_BY_XML_NAME = {
+  'w:footnoteReference': 'FootnoteReference',
+  'w:endnoteReference': 'EndnoteReference',
+};
+
+const hasXmlNodeNamed = (node, targetName) => {
+  if (!node || typeof node !== 'object') return false;
+  if (node.name === targetName) return true;
+  if (!Array.isArray(node.elements)) return false;
+  return node.elements.some((child) => hasXmlNodeNamed(child, targetName));
+};
+
+const getRunPropertiesNode = (runNode) => {
+  if (!runNode) return null;
+  if (!Array.isArray(runNode.elements)) runNode.elements = [];
+
+  let runPropertiesNode = runNode.elements.find((element) => element?.name === 'w:rPr');
+  if (!runPropertiesNode) {
+    runPropertiesNode = { type: 'element', name: 'w:rPr', elements: [] };
+    runNode.elements.unshift(runPropertiesNode);
+  }
+
+  if (!Array.isArray(runPropertiesNode.elements)) {
+    runPropertiesNode.elements = [];
+  }
+
+  return runPropertiesNode;
+};
+
+const collectRunPropertyChanges = (runNode) => {
+  const runPropertiesNode = runNode?.elements?.find((element) => element?.name === 'w:rPr');
+  if (!Array.isArray(runPropertiesNode?.elements)) return [];
+
+  return runPropertiesNode.elements
+    .filter((element) => element?.name === 'w:rPrChange')
+    .map((element) => cloneXmlNode(element));
+};
+
+const restoreRunPropertyChanges = (runNode, runPropertyChanges = []) => {
+  if (!runPropertyChanges.length) return;
+
+  const runPropertiesNode = getRunPropertiesNode(runNode);
+  const existingNames = new Set(runPropertiesNode.elements.map((element) => element?.name));
+
+  runPropertyChanges.forEach((changeElement) => {
+    if (!changeElement?.name || existingNames.has(changeElement.name)) return;
+    runPropertiesNode.elements.push(changeElement);
+    existingNames.add(changeElement.name);
+  });
+};
+
+const ensureReferenceRunFormatting = (runNode, referenceXmlName) => {
+  const styleId = REFERENCE_RUN_STYLE_BY_XML_NAME[referenceXmlName];
+  if (!styleId) return;
+
+  if (!Array.isArray(runNode.elements)) runNode.elements = [];
+  let runProps = runNode.elements.find((el) => el?.name === 'w:rPr');
+  if (!runProps) {
+    runProps = { name: 'w:rPr', elements: [] };
+    runNode.elements.unshift(runProps);
+  }
+
+  if (!Array.isArray(runProps.elements)) runProps.elements = [];
+
+  const hasStyle = runProps.elements.some((el) => el?.name === 'w:rStyle');
+  if (!hasStyle) {
+    runProps.elements.push({ name: 'w:rStyle', attributes: { 'w:val': styleId } });
+  }
+
+  const hasVertAlign = runProps.elements.some((el) => el?.name === 'w:vertAlign');
+  if (!hasVertAlign) {
+    runProps.elements.push({ name: 'w:vertAlign', attributes: { 'w:val': 'superscript' } });
+  }
+};
 
 /*
  * Wraps the provided content in a SuperDoc run node.
@@ -177,6 +253,7 @@ const decode = (params, decodedAttrs = {}) => {
 
   // Separate out tracking marks
   const { runNode: runNodeForExport, trackingMarksByType } = prepareRunTrackingContext(node);
+  const runTrackFormatMark = findTrackFormatMark(runNodeForExport.marks);
 
   const runAttrs = runNodeForExport.attrs || {};
   const runProperties = runAttrs.runProperties || {};
@@ -202,6 +279,8 @@ const decode = (params, decodedAttrs = {}) => {
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;
   const applyBaseRunProps = (runNode) => applyRunPropertiesTemplate(runNode, runPropsTemplate);
   const replaceRunProps = (runNode) => {
+    const existingRunPropertyChanges = collectRunPropertyChanges(runNode);
+
     // Remove existing rPr if any
     if (Array.isArray(runNode.elements)) {
       runNode.elements = runNode.elements.filter((el) => el?.name !== 'w:rPr');
@@ -210,6 +289,13 @@ const decode = (params, decodedAttrs = {}) => {
     }
     if (runPropsTemplate) {
       runNode.elements.unshift(cloneXmlNode(runPropsTemplate));
+    }
+
+    restoreRunPropertyChanges(runNode, existingRunPropertyChanges);
+
+    if (!existingRunPropertyChanges.length && runTrackFormatMark) {
+      const runPropertiesNode = getRunPropertiesNode(runNode);
+      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark]);
     }
   };
 
@@ -220,6 +306,11 @@ const decode = (params, decodedAttrs = {}) => {
     if (child.name === 'w:r') {
       const clonedRun = cloneXmlNode(child);
       replaceRunProps(clonedRun);
+      if (hasXmlNodeNamed(clonedRun, 'w:footnoteReference')) {
+        ensureReferenceRunFormatting(clonedRun, 'w:footnoteReference');
+      } else if (hasXmlNodeNamed(clonedRun, 'w:endnoteReference')) {
+        ensureReferenceRunFormatting(clonedRun, 'w:endnoteReference');
+      }
       runs.push(clonedRun);
       return;
     }
@@ -250,9 +341,20 @@ const decode = (params, decodedAttrs = {}) => {
       return;
     }
 
+    // Run-level SDTs are paragraph siblings in OOXML (not children of w:r).
+    // Emit them directly so Word does not need to normalize invalid nesting.
+    if (child.name === 'w:sdt') {
+      const sdtClone = cloneXmlNode(child);
+      runs.push(sdtClone);
+      return;
+    }
+
     const runWrapper = { name: XML_NODE_NAME, elements: [] };
     applyBaseRunProps(runWrapper);
     if (!Array.isArray(runWrapper.elements)) runWrapper.elements = [];
+    if (child.name === 'w:footnoteReference' || child.name === 'w:endnoteReference') {
+      ensureReferenceRunFormatting(runWrapper, child.name);
+    }
     runWrapper.elements.push(cloneXmlNode(child));
     runs.push(runWrapper);
   });

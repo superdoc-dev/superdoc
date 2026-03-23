@@ -8,14 +8,14 @@ import { SNIPPET_MAX_LENGTH } from '@superdoc/document-api';
 // ---------------------------------------------------------------------------
 
 const mockedDeps = vi.hoisted(() => ({
-  findAdapter: vi.fn(),
+  findLegacyAdapter: vi.fn(),
   getBlockIndex: vi.fn(),
   captureRunsInRange: vi.fn(),
   getRevision: vi.fn(() => 'rev-1'),
 }));
 
 vi.mock('../find-adapter.js', () => ({
-  findAdapter: mockedDeps.findAdapter,
+  findLegacyAdapter: mockedDeps.findLegacyAdapter,
 }));
 
 vi.mock('../helpers/index-cache.js', () => ({
@@ -131,7 +131,7 @@ function makeEditorWithBlocks(
 
 /**
  * Builds a FindOutput-shaped mock from matches/context arrays.
- * Merges parallel arrays into per-item discovery items as the real findAdapter does.
+ * Merges parallel arrays into per-item discovery items as the real findLegacyAdapter does.
  */
 function setupFindResult(options: { matches: any[]; context?: any[]; total: number }) {
   const contextArr = options.context ?? [];
@@ -144,7 +144,7 @@ function setupFindResult(options: { matches: any[]; context?: any[]; total: numb
     if (contextArr[idx]) item.context = contextArr[idx];
     return item;
   });
-  mockedDeps.findAdapter.mockReturnValue({
+  mockedDeps.findLegacyAdapter.mockReturnValue({
     evaluatedRevision: '',
     total: options.total,
     items,
@@ -308,26 +308,27 @@ describe('queryMatchAdapter — V3 ref emission', () => {
     expect(result.evaluatedRevision).toBe('rev-42');
     const match = result.items[0];
 
-    // Match-level handle
-    expect(match.handle.ref.startsWith('text:')).toBe(true);
+    // Match-level handle — V4 refs use 'text:v4:' prefix
+    expect(match.handle.ref.startsWith('text:v4:')).toBe(true);
     expect(match.handle.refStability).toBe('ephemeral');
     expect(match.handle.targetKind).toBe('text');
-    const matchRef = JSON.parse(atob(match.handle.ref.slice(5)));
-    expect(matchRef.v).toBe(3);
+    const matchRef = JSON.parse(atob(match.handle.ref.slice(8)));
+    expect(matchRef.v).toBe(4);
     expect(matchRef.scope).toBe('match');
     expect(matchRef.rev).toBe('rev-42');
+    expect(matchRef.storyKey).toBe('body');
     expect(matchRef.segments).toHaveLength(1);
 
     // Block-level ref
     const block = match.blocks[0];
-    const blockRef = JSON.parse(atob(block.ref.slice(5)));
-    expect(blockRef.v).toBe(3);
+    const blockRef = JSON.parse(atob(block.ref.slice(8)));
+    expect(blockRef.v).toBe(4);
     expect(blockRef.scope).toBe('block');
     expect(blockRef.blockIndex).toBe(0);
 
     // Run-level ref
-    const runRef = JSON.parse(atob(block.runs[0].ref.slice(5)));
-    expect(runRef.v).toBe(3);
+    const runRef = JSON.parse(atob(block.runs[0].ref.slice(8)));
+    expect(runRef.v).toBe(4);
     expect(runRef.scope).toBe('run');
     expect(runRef.blockIndex).toBe(0);
     expect(runRef.runIndex).toBe(0);
@@ -364,7 +365,7 @@ describe('queryMatchAdapter — offset-aware id', () => {
   });
 
   it('uses pagination offset in id (D20: post-filter pagination)', () => {
-    // With D20 fix, text selectors don't pass limit/offset to findAdapter.
+    // With D20 fix, text selectors don't pass limit/offset to findLegacyAdapter.
     // The adapter fetches ALL matches, filters zero-width, then paginates itself.
     // Set up 4 matches; request offset=2, limit=2 → should get items 2 and 3.
     const candidates = [
@@ -473,12 +474,13 @@ describe('queryMatchAdapter — node-selector matches', () => {
     expect(match.blocks).toEqual([]);
     expect(match.handle.refStability).toBe('ephemeral');
     expect(match.handle.targetKind).toBe('node');
-    // Ref should be a V3 text ref, not an empty string or nodeId
-    expect(match.handle.ref.startsWith('text:')).toBe(true);
-    const refPayload = JSON.parse(atob(match.handle.ref.slice(5)));
-    expect(refPayload.v).toBe(3);
+    // Ref should be a V4 text ref, not an empty string or nodeId
+    expect(match.handle.ref.startsWith('text:v4:')).toBe(true);
+    const refPayload = JSON.parse(atob(match.handle.ref.slice(8)));
+    expect(refPayload.v).toBe(4);
     expect(refPayload.scope).toBe('match');
     expect(refPayload.rev).toBe('rev-10');
+    expect(refPayload.storyKey).toBe('body');
     expect(refPayload.segments).toEqual([{ blockId: 'p1', start: 5, end: 6 }]);
   });
 
@@ -517,8 +519,9 @@ describe('queryMatchAdapter — node-selector matches', () => {
     expect(match.handle.refStability).toBe('ephemeral');
     expect(match.handle.targetKind).toBe('node');
 
-    const refPayload = JSON.parse(atob(match.handle.ref.slice(5)));
-    expect(refPayload.v).toBe(3);
+    const refPayload = JSON.parse(atob(match.handle.ref.slice(8)));
+    expect(refPayload.v).toBe(4);
+    expect(refPayload.storyKey).toBe('body');
     expect(refPayload.segments).toEqual([
       { blockId: 'p1', start: 8, end: 11 }, // 'First block'.length = 11
       { blockId: 'p2', start: 0, end: 4 },

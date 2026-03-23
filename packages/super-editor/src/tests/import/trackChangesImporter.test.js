@@ -87,7 +87,6 @@ describe('TrackChangesImporter', () => {
     ];
 
     const result = handleTrackChangeNode({ docx: {}, nodes, nodeListHandler: defaultNodeListHandler() });
-    console.log('result:', result.nodes[0].content[0]);
     expect(result.nodes.length).toBe(1);
     expect(result.consumed).toBe(1);
     // Find the trackDelete mark (may not be first mark due to fontSize fallback adding textStyle)
@@ -95,6 +94,7 @@ describe('TrackChangesImporter', () => {
     expect(trackDeleteMark).toBeDefined();
     expect(trackDeleteMark.attrs).toEqual({
       id: '1',
+      sourceId: '1',
       date: '2023-10-01',
       author: 'Author',
       importedAuthor: 'Author (imported)',
@@ -123,6 +123,7 @@ describe('TrackChangesImporter', () => {
     expect(trackInsertMark).toBeDefined();
     expect(trackInsertMark.attrs).toEqual({
       id: '1',
+      sourceId: '1',
       date: '2023-10-01',
       author: 'Author',
       importedAuthor: 'Author (imported)',
@@ -147,6 +148,7 @@ describe('TrackChangesImporter', () => {
     expect(mark).toBeDefined();
     expect(mark.attrs).toEqual({
       id: '3',
+      sourceId: '3',
       date: '2024-09-05T10:44:00Z',
       author: 'Nested Author',
       importedAuthor: 'Nested Author (imported)',
@@ -173,11 +175,90 @@ describe('TrackChangesImporter', () => {
     // Check the trackDelete mark attrs (mark may not be at index 0 due to fontSize fallback)
     expect(mark.attrs).toEqual({
       id: '4',
+      sourceId: '4',
       date: '2024-09-05T11:12:00Z',
       author: 'Nested Author',
       importedAuthor: 'Nested Author (imported)',
     });
     expect(result.nodes[0].content?.[0]?.text).toBe('nested delete ');
+  });
+});
+
+describe('paragraph-level rPrChange on the paragraph mark', () => {
+  const paragraphXml = `<w:p>
+    <w:pPr>
+      <w:rPr>
+        <w:b/>
+        <w:i/>
+        <w:rPrChange w:id="10" w:author="alice@example.com" w:date="2025-01-15T12:00:00Z">
+          <w:rPr/>
+        </w:rPrChange>
+      </w:rPr>
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:lang w:val="en-US"/>
+      </w:rPr>
+      <w:t xml:space="preserve">inherited </w:t>
+    </w:r>
+    <w:r>
+      <w:rPr>
+        <w:b/>
+        <w:i/>
+        <w:rPrChange w:id="10" w:author="alice@example.com" w:date="2025-01-15T12:00:00Z">
+          <w:rPr/>
+        </w:rPrChange>
+      </w:rPr>
+      <w:t>styles</w:t>
+    </w:r>
+  </w:p>`;
+
+  it('preserves paragraph mark run properties without applying them to inherited text runs', () => {
+    const nodes = parseXmlToJson(paragraphXml).elements;
+    const handler = defaultNodeListHandler();
+    const result = handler.handler({ nodes, docx: {} });
+    const paragraph = result[0];
+    expect(paragraph.type).toBe('paragraph');
+    expect(paragraph.attrs.paragraphProperties.runProperties).toMatchObject({ bold: true, italic: true });
+
+    const inheritedRun = paragraph.content[0];
+    expect(inheritedRun.type).toBe('run');
+    const textNode = inheritedRun.content[0];
+    expect(textNode.text).toBe('inherited ');
+    const boldMark = textNode.marks.find((m) => m.type === 'bold');
+    const italicMark = textNode.marks.find((m) => m.type === 'italic');
+    expect(boldMark).toBeUndefined();
+    expect(italicMark).toBeUndefined();
+  });
+
+  it('does not propagate paragraph-level rPrChange onto inherited text runs', () => {
+    const nodes = parseXmlToJson(paragraphXml).elements;
+    const handler = defaultNodeListHandler();
+    const result = handler.handler({ nodes, docx: {} });
+    const paragraph = result[0];
+    const inheritedRun = paragraph.content[0];
+    const trackMark =
+      inheritedRun.marks?.find((m) => m.type === TrackFormatMarkName) ||
+      inheritedRun.content?.[0]?.marks?.find((m) => m.type === TrackFormatMarkName);
+    expect(trackMark).toBeUndefined();
+  });
+
+  it('keeps the explicit run styling and run-level trackFormat on the final word', () => {
+    const nodes = parseXmlToJson(paragraphXml).elements;
+    const handler = defaultNodeListHandler();
+    const result = handler.handler({ nodes, docx: {} });
+    const paragraph = result[0];
+    const explicitRun = paragraph.content[1];
+    expect(explicitRun.type).toBe('run');
+    expect(explicitRun.content[0].text).toBe('styles');
+
+    const explicitTextMarks = explicitRun.content[0].marks || [];
+    expect(explicitTextMarks.find((m) => m.type === 'bold')).toBeDefined();
+    expect(explicitTextMarks.find((m) => m.type === 'italic')).toBeDefined();
+
+    const runTrackMarks = (explicitRun.marks || []).filter((m) => m.type === TrackFormatMarkName);
+    expect(runTrackMarks).toHaveLength(1);
+    expect(runTrackMarks[0].attrs.id).toBe('10');
   });
 });
 
@@ -222,6 +303,7 @@ describe('trackChanges live xml test', () => {
     expect(insertionMark).toBeDefined();
     expect(insertionMark.attrs).toEqual({
       id: '0',
+      sourceId: '0',
       date: '2024-09-02T15:56:00Z',
       author: 'torcsi@harbourcollaborators.com',
       importedAuthor: 'torcsi@harbourcollaborators.com (imported)',
@@ -236,6 +318,7 @@ describe('trackChanges live xml test', () => {
     expect(deletionMark).toBeDefined();
     expect(deletionMark.attrs).toEqual({
       id: '1',
+      sourceId: '1',
       date: '2024-09-02T15:56:00Z',
       author: 'torcsi@harbourcollaborators.com',
       importedAuthor: 'torcsi@harbourcollaborators.com (imported)',

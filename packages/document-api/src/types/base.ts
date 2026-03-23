@@ -8,6 +8,8 @@
  * Nothing in this file imports from leaf node-info files.
  */
 
+import type { StoryLocator } from './story.types.js';
+
 export type NodeKind = 'block' | 'inline';
 
 export const NODE_KINDS = ['block', 'inline'] as const satisfies readonly NodeKind[];
@@ -27,6 +29,12 @@ export type NodeType =
   | 'comment'
   | 'hyperlink'
   | 'footnoteRef'
+  | 'endnoteRef'
+  | 'crossRef'
+  | 'indexEntry'
+  | 'citation'
+  | 'authorityEntry'
+  | 'sequenceField'
   | 'tab'
   | 'lineBreak'
 
@@ -49,6 +57,12 @@ export const NODE_TYPES = [
   'comment',
   'hyperlink',
   'footnoteRef',
+  'endnoteRef',
+  'crossRef',
+  'indexEntry',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
   'tab',
   'lineBreak',
 ] as const satisfies readonly NodeType[];
@@ -77,10 +91,8 @@ export const BLOCK_NODE_TYPES = [
 /**
  * Block node types that `blocks.delete` can target in this release.
  * Excludes `tableRow` and `tableCell` (row/column semantics are out of scope).
- * Excludes `image` — the ProseMirror image node is inline, so the adapter
- * cannot resolve block-level image targets.
  */
-export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'tableOfContents'>;
+export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'tableOfContents' | 'image'>;
 
 export const DELETABLE_BLOCK_NODE_TYPES = [
   'paragraph',
@@ -96,7 +108,21 @@ export const DELETABLE_BLOCK_NODE_TYPES = [
  */
 export type InlineNodeType = Extract<
   NodeType,
-  'run' | 'bookmark' | 'comment' | 'hyperlink' | 'sdt' | 'image' | 'footnoteRef' | 'tab' | 'lineBreak'
+  | 'run'
+  | 'bookmark'
+  | 'comment'
+  | 'hyperlink'
+  | 'sdt'
+  | 'image'
+  | 'footnoteRef'
+  | 'endnoteRef'
+  | 'crossRef'
+  | 'indexEntry'
+  | 'citation'
+  | 'authorityEntry'
+  | 'sequenceField'
+  | 'tab'
+  | 'lineBreak'
 >;
 
 export const INLINE_NODE_TYPES = [
@@ -107,6 +133,12 @@ export const INLINE_NODE_TYPES = [
   'sdt',
   'image',
   'footnoteRef',
+  'endnoteRef',
+  'crossRef',
+  'indexEntry',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
   'tab',
   'lineBreak',
 ] as const satisfies readonly InlineNodeType[];
@@ -132,7 +164,31 @@ export type BlockNodeAddress = {
   kind: 'block';
   nodeType: BlockNodeType;
   nodeId: string;
+  /** Story containing this block. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
+
+export type TableAddress = {
+  kind: 'block';
+  nodeType: 'table';
+  nodeId: string;
+};
+
+export type TableRowAddress = {
+  kind: 'block';
+  nodeType: 'tableRow';
+  nodeId: string;
+};
+
+export type TableCellAddress = {
+  kind: 'block';
+  nodeType: 'tableCell';
+  nodeId: string;
+};
+
+export type TableOrRowAddress = TableAddress | TableRowAddress;
+
+export type TableOrCellAddress = TableAddress | TableCellAddress;
 
 export type DeletableBlockNodeAddress = {
   kind: 'block';
@@ -144,6 +200,8 @@ export type InlineNodeAddress = {
   kind: 'inline';
   nodeType: InlineNodeType;
   anchor: InlineAnchor;
+  /** Story containing this inline node. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type NodeAddress = BlockNodeAddress | InlineNodeAddress;

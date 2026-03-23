@@ -1,3 +1,6 @@
+import type { BlockNodeType } from './base.js';
+import type { StoryLocator } from './story.types.js';
+
 export type Range = {
   /** Inclusive start offset (0-based, UTF-16 code units). */
   start: number;
@@ -9,6 +12,8 @@ export type TextAddress = {
   kind: 'text';
   blockId: string;
   range: Range;
+  /** Story containing this text. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /**
@@ -38,7 +43,75 @@ export type TextSegment = {
 export type TextTarget = {
   kind: 'text';
   segments: [TextSegment, ...TextSegment[]];
+  /** Story containing this text target. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
+
+// ---------------------------------------------------------------------------
+// Selection-based mutation targeting
+// ---------------------------------------------------------------------------
+
+/**
+ * Block node types valid as `nodeEdge` selection anchors.
+ *
+ * Excludes:
+ * - `tableRow`, `tableCell` — row/column semantics out of scope
+ * - `listItem` — derived from paragraph attrs, no distinct PM wrapper node
+ */
+export type SelectionEdgeNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'listItem'>;
+
+export const SELECTION_EDGE_NODE_TYPES = [
+  'paragraph',
+  'heading',
+  'table',
+  'tableOfContents',
+  'sdt',
+  'image',
+] as const satisfies readonly SelectionEdgeNodeType[];
+
+/** Block node address valid as a `nodeEdge` selection anchor. */
+export type SelectionEdgeNodeAddress = {
+  kind: 'block';
+  nodeType: SelectionEdgeNodeType;
+  nodeId: string;
+  /** Story containing this node. Omit for body (backward compatible). */
+  story?: StoryLocator;
+};
+
+/**
+ * A point within a document selection.
+ *
+ * - `text`: A character offset within a specific block's flattened text model.
+ * - `nodeEdge`: The boundary of a block-level node (before or after).
+ */
+export type SelectionPoint =
+  | {
+      kind: 'text';
+      blockId: string;
+      offset: number;
+      /** Story containing this point. Omit for body (backward compatible). */ story?: StoryLocator;
+    }
+  | { kind: 'nodeEdge'; node: SelectionEdgeNodeAddress; edge: 'before' | 'after' };
+
+/**
+ * A contiguous document selection — the canonical public target for the core
+ * selection-mutation family (`delete`, `replace`, `format.apply`, `mutations.apply`).
+ *
+ * Other range-targeted APIs (comments, hyperlinks) continue to use `TextAddress`.
+ */
+export type SelectionTarget = {
+  kind: 'selection';
+  start: SelectionPoint;
+  end: SelectionPoint;
+  /** Story containing this selection. Omit for body (backward compatible). */
+  story?: StoryLocator;
+};
+
+/** Discriminated input for direct operations: either an explicit target or a ref string. */
+export type TargetLocator = { target: SelectionTarget; ref?: undefined } | { ref: string; target?: undefined };
+
+/** Delete behavior mode. */
+export type DeleteBehavior = 'selection' | 'exact';
 
 export type EntityType = 'comment' | 'trackedChange';
 

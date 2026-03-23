@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
+import { sanitizeHref } from '@superdoc/url-validation';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 import { TextSelection } from 'prosemirror-state';
@@ -118,20 +119,21 @@ const text = ref('');
 const rawUrl = ref('');
 const isAnchor = ref(false);
 
-// Prepend http if missing
+const HAS_PROTOCOL = /^[a-z][a-z0-9+.-]*:/i;
+
+// Default to https:// when no scheme is specified. Validation stays centralized in sanitizeHref.
 const url = computed(() => {
   if (!rawUrl.value) return '';
-  if (!rawUrl.value.startsWith('http') && !rawUrl.value.startsWith('#')) return 'http://' + rawUrl.value;
-  return rawUrl.value;
+  if (rawUrl.value.startsWith('#') || HAS_PROTOCOL.test(rawUrl.value)) return rawUrl.value;
+  return 'https://' + rawUrl.value;
 });
 
-const validUrl = computed(() => {
-  // anchors (starting with #) are always considered valid
-  if (url.value.startsWith('#')) return true;
-
-  const urlSplit = url.value.split('.').filter(Boolean);
-  return url.value.includes('.') && urlSplit.length > 1;
+const sanitizedUrl = computed(() => {
+  if (!url.value) return null;
+  return sanitizeHref(url.value);
 });
+
+const validUrl = computed(() => sanitizedUrl.value !== null);
 
 // --- CASE LOGIC ---
 const isEditing = computed(() => !isAnchor.value && !!getLinkHrefAtSelection());
@@ -141,7 +143,9 @@ const isDisabled = computed(() => !validUrl.value);
 const isViewingMode = computed(() => props.editor?.options?.documentMode === 'viewing');
 
 const openLink = () => {
-  window.open(url.value, '_blank');
+  const href = sanitizedUrl.value?.href;
+  if (!href) return;
+  window.open(href, '_blank');
 };
 
 const updateFromEditor = () => {
@@ -189,10 +193,16 @@ const handleSubmit = () => {
     return;
   }
 
-  const finalText = text.value || url.value;
+  const href = sanitizedUrl.value?.href;
+  if (!href) {
+    urlError.value = true;
+    return;
+  }
+
+  const finalText = text.value || href;
 
   if (editor.commands?.toggleLink) {
-    editor.commands.toggleLink({ href: url.value, text: finalText });
+    editor.commands.toggleLink({ href, text: finalText });
   }
 
   // Move cursor to end of link and refocus editor.
@@ -207,6 +217,15 @@ const handleRemove = () => {
   if (props.editor && props.editor.commands && props.editor.commands.unsetLink) {
     props.editor.commands.unsetLink();
     props.closePopover();
+  }
+};
+
+const navigateToAnchor = (url) => {
+  const presentationEditor = props.editor?.presentationEditor ?? null;
+  if (presentationEditor) {
+    presentationEditor.goToAnchor(url);
+  } else if (props.goToAnchor) {
+    props.goToAnchor(url);
   }
 };
 </script>
@@ -271,7 +290,9 @@ const handleRemove = () => {
     </div>
 
     <div v-else-if="isAnchor" class="input-row go-to-anchor clickable">
-      <a @click.stop.prevent="goToAnchor">Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a>
+      <a @click.stop.prevent="navigateToAnchor(rawUrl)"
+        >Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a
+      >
     </div>
   </div>
 </template>
@@ -288,8 +309,8 @@ const handleRemove = () => {
   display: flex;
   flex-direction: column;
   padding: 1em;
-  border-radius: 5px;
-  background-color: #fff;
+  border-radius: var(--sd-ui-radius, 6px);
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   box-sizing: border-box;
 
   :deep(svg) {
@@ -303,34 +324,34 @@ const handleRemove = () => {
     align-content: baseline;
     display: flex;
     align-items: center;
-    font-size: 16px;
+    font-size: var(--sd-ui-font-size-600, 16px);
 
     input {
-      font-size: 13px;
+      font-size: var(--sd-ui-font-size-300, 13px);
       flex-grow: 1;
       padding: 10px;
-      border-radius: 8px;
+      border-radius: var(--sd-ui-radius, 6px);
       padding-left: 32px;
-      box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
-      color: #666;
-      border: 1px solid #ddd;
+      box-shadow: var(--sd-ui-shadow, 0 4px 12px rgba(0, 0, 0, 0.12));
+      color: var(--sd-ui-text-muted, #666666);
+      border: 1px solid var(--sd-ui-border, #dbdbdb);
       box-sizing: border-box;
 
       &:active,
       &:focus {
         outline: none;
-        border: 1px solid #1355ff;
+        border: 1px solid var(--sd-ui-action, #1355ff);
       }
 
       &[readonly] {
-        background-color: #f5f5f5;
+        background-color: var(--sd-ui-disabled-bg, #f5f5f5);
         cursor: default;
-        color: #888;
-        border-color: #e0e0e0;
+        color: var(--sd-ui-text-disabled, #888);
+        border-color: var(--sd-ui-border, #e0e0e0);
 
         &:active,
         &:focus {
-          border-color: #e0e0e0;
+          border-color: var(--sd-ui-border, #e0e0e0);
         }
       }
     }
@@ -340,7 +361,7 @@ const handleRemove = () => {
     position: absolute;
     left: 25px;
     width: auto;
-    color: #999;
+    color: var(--sd-ui-text-disabled, #ababab);
     pointer-events: none;
   }
 
@@ -351,12 +372,12 @@ const handleRemove = () => {
 
   &.high-contrast {
     .input-icon {
-      color: #000;
+      color: var(--sd-ui-text, #47484a);
     }
 
     .input-row input {
-      color: #000;
-      border-color: #000;
+      color: var(--sd-ui-text, #47484a);
+      border-color: var(--sd-ui-text, #47484a);
     }
   }
 }
@@ -375,9 +396,9 @@ const handleRemove = () => {
 }
 
 .open-link-icon:hover {
-  color: #1355ff;
-  background-color: white;
-  border: 1px solid #dbdbdb;
+  color: var(--sd-ui-action, #1355ff);
+  background-color: var(--sd-ui-bg, #ffffff);
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
 }
 
 .open-link-icon :deep(svg) {
@@ -416,7 +437,7 @@ const handleRemove = () => {
 }
 
 .go-to-anchor a {
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   text-decoration: underline;
 }
 
@@ -425,8 +446,9 @@ const handleRemove = () => {
 }
 
 .link-title {
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   font-weight: 600;
+  color: var(--sd-ui-text, #47484a);
   margin-bottom: 10px;
 }
 
@@ -439,20 +461,20 @@ const handleRemove = () => {
   justify-content: center;
   align-items: center;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: var(--sd-ui-radius, 6px);
   outline: none;
-  background-color: white;
-  color: black;
+  background-color: var(--sd-ui-bg, #ffffff);
+  color: var(--sd-ui-text, #47484a);
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;
   transition: all 0.2s ease;
-  border: 1px solid #ebebeb;
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
   box-sizing: border-box;
 }
 
 .remove-btn:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-ui-hover-bg, #dbdbdb);
 }
 
 .submit-btn {
@@ -460,13 +482,13 @@ const handleRemove = () => {
   justify-content: center;
   align-items: center;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: var(--sd-ui-radius, 6px);
   outline: none;
   border: none;
-  background-color: #1355ff;
-  color: white;
+  background-color: var(--sd-ui-action, #1355ff);
+  color: var(--sd-ui-action-text, #ffffff);
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -474,7 +496,7 @@ const handleRemove = () => {
     background-color: black;
   } */
   &:hover {
-    background-color: #0d47c1;
+    background-color: var(--sd-ui-action-hover, #0f44cc);
   }
 }
 

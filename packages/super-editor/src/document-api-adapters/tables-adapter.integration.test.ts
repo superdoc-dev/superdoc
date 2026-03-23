@@ -5,6 +5,9 @@ import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpe
 import DocxZipper from '@core/DocxZipper.js';
 import type { Editor } from '../core/Editor.js';
 import { createTableAdapter, tablesSplitAdapter } from './tables-adapter.js';
+import { insertStructuredWrapper } from './plan-engine/plan-wrappers.js';
+import { clearExecutorRegistry } from './plan-engine/executor-registry.js';
+import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -38,11 +41,59 @@ describe('tables adapter DOCX integration', () => {
 
   beforeAll(async () => {
     docData = await loadTestDataForEditorTests('blank-doc.docx');
+    clearExecutorRegistry();
+    registerBuiltInExecutors();
   });
 
   afterEach(() => {
     editor?.destroy();
     editor = undefined;
+  });
+
+  it('two consecutive create.table calls produce non-adjacent tables in DOCX', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    createTableAdapter(editor, { rows: 2, columns: 2, at: { kind: 'documentEnd' } }, DIRECT_MUTATION_OPTIONS);
+    createTableAdapter(editor, { rows: 2, columns: 2, at: { kind: 'documentEnd' } }, DIRECT_MUTATION_OPTIONS);
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+
+    expect(documentXml).toBeTruthy();
+    expect(documentXml).not.toMatch(/<\/w:tbl>\s*<w:tbl>/);
+    expect(documentXml).toMatch(/<\/w:tbl>\s*<w:p\b[^>]*?\/?>\s*<w:tbl\b/);
+  });
+
+  it('two consecutive markdown table inserts produce non-adjacent tables in DOCX', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+    insertStructuredWrapper(editor, {
+      value: '| C | D |\n| --- | --- |\n| baz | qux |',
+      type: 'markdown',
+    });
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+
+    expect(documentXml).toBeTruthy();
+    expect(documentXml).not.toMatch(/<\/w:tbl>\s*<w:tbl>/);
+    expect(documentXml).toMatch(/<\/w:tbl>\s*<w:p\b[^>]*?\/?>\s*<w:tbl\b/);
   });
 
   it('exports a paragraph separator between split tables', async () => {
@@ -61,7 +112,7 @@ describe('tables adapter DOCX integration', () => {
     );
     const tableNodeId = resolveTableNodeId(createResult);
 
-    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, atRowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
+    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, rowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
     expect(splitResult.success).toBe(true);
 
     const exportedFiles = await exportDocxFiles(editor);
@@ -70,5 +121,25 @@ describe('tables adapter DOCX integration', () => {
     expect(documentXml).toBeTruthy();
     expect(documentXml).not.toMatch(/<\/w:tbl>\s*<w:tbl>/);
     expect(documentXml).toMatch(/<\/w:tbl>\s*<w:p\b[^>]*(?:\/>|>[\s\S]*?<\/w:p>)\s*<w:tbl>/);
+  });
+
+  it('exports row paraIds without writing invalid table or cell w14 identity attrs', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    createTableAdapter(editor, { rows: 2, columns: 2, at: { kind: 'documentEnd' } }, DIRECT_MUTATION_OPTIONS);
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+
+    expect(documentXml).toBeTruthy();
+    expect(documentXml).toMatch(/<w:tr\b[^>]*\bw14:paraId=/);
+    expect(documentXml).not.toMatch(/<w:tbl\b[^>]*\bw14:(?:paraId|textId)=/);
+    expect(documentXml).not.toMatch(/<w:tc\b[^>]*\bw14:(?:paraId|textId)=/);
   });
 });

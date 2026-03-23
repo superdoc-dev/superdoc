@@ -82,6 +82,43 @@ function buildBlockIndexFromParagraph(paragraph: ProseMirrorNode, nodeId: string
   return { candidates: [candidate], byId };
 }
 
+describe('getNodeAdapter — inline SDT', () => {
+  it('resolves inline structuredContent as SDSdt (not SDRun)', () => {
+    const textChild = createNode('text', [], { text: 'sdt text' });
+    const sdtNode = createNode('structuredContent', [textChild], {
+      isInline: true,
+      attrs: { id: 42, tag: 'test-tag', alias: 'Test', controlType: 'text', lockMode: 'contentLocked' },
+    });
+    const paragraph = createNode('paragraph', [sdtNode], {
+      attrs: { sdBlockId: 'p-sdt' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+
+    const editor = makeEditor(doc);
+    const blockIndex = buildBlockIndexFromParagraph(paragraph, 'p-sdt');
+    const inlineIndex = buildInlineIndex(editor, blockIndex);
+    const sdtCandidate = findInlineByType(inlineIndex, 'sdt')[0];
+    if (!sdtCandidate) throw new Error('Expected sdt candidate');
+
+    const result = getNodeAdapter(editor, {
+      kind: 'inline',
+      nodeType: 'sdt',
+      anchor: sdtCandidate.anchor,
+    });
+
+    expect(result.node.kind).toBe('sdt');
+    expect(result.address.kind).toBe('inline');
+
+    const sdt = result.node as import('@superdoc/document-api').SDSdt;
+    expect(sdt.sdt.tag).toBe('test-tag');
+    expect(sdt.sdt.type).toBe('text');
+    expect(sdt.sdt.lock).toBe('content');
+    expect(sdt.sdt.scope).toBe('inline');
+  });
+});
+
 describe('getNodeAdapter — inline', () => {
   it('resolves inline images by anchor', () => {
     const textNode = createNode('text', [], { text: 'Hi' });
@@ -105,8 +142,8 @@ describe('getNodeAdapter — inline', () => {
       anchor: imageCandidate.anchor,
     });
 
-    expect(result.nodeType).toBe('image');
-    expect(result.kind).toBe('inline');
+    expect(result.node.kind).toBe('image');
+    expect(result.address.kind).toBe('inline');
   });
 
   it('resolves hyperlink marks by anchor', () => {
@@ -131,8 +168,8 @@ describe('getNodeAdapter — inline', () => {
       anchor: hyperlink.anchor,
     });
 
-    expect(result.nodeType).toBe('hyperlink');
-    expect(result.kind).toBe('inline');
+    expect(result.node.kind).toBe('hyperlink');
+    expect(result.address.kind).toBe('inline');
   });
 });
 
@@ -151,6 +188,52 @@ describe('getNodeAdapter — block', () => {
       }),
     ).toThrow('Multiple nodes share paragraph id "dup".');
   });
+
+  it('falls back to nodeId when nodeType is stale after paragraph → heading restyle', () => {
+    // The block is now a heading (via styleId), but the saved address still says 'paragraph'.
+    const paragraph = createNode('paragraph', [], {
+      attrs: { sdBlockId: 'p-restyle', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = makeEditor(doc);
+
+    // Address saved before the restyle had nodeType: 'paragraph'
+    const result = getNodeAdapter(editor, {
+      kind: 'block',
+      nodeType: 'paragraph',
+      nodeId: 'p-restyle',
+    });
+
+    expect(result.node.kind).toBe('heading');
+    // The returned address should reflect the current (correct) nodeType
+    expect(result.address).toMatchObject({ kind: 'block', nodeType: 'heading', nodeId: 'p-restyle' });
+  });
+
+  it('falls back to nodeId when nodeType is stale after paragraph → listItem restyle', () => {
+    const paragraph = createNode('paragraph', [], {
+      attrs: { sdBlockId: 'p-list', paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = makeEditor(doc);
+
+    // Saved address has nodeType: 'paragraph', but the block is now indexed as 'listItem'.
+    // The lookup should succeed (not throw) and return the canonical address.
+    const result = getNodeAdapter(editor, {
+      kind: 'block',
+      nodeType: 'paragraph',
+      nodeId: 'p-list',
+    });
+
+    // projectContentNode returns 'paragraph' kind for PM paragraph nodes with
+    // numbering (unlike headings which check styleId), but the address reflects
+    // the block index's canonical nodeType.
+    expect(result.node.kind).toBe('paragraph');
+    expect(result.address).toMatchObject({ kind: 'block', nodeType: 'listItem', nodeId: 'p-list' });
+  });
 });
 
 describe('getNodeByIdAdapter', () => {
@@ -166,8 +249,8 @@ describe('getNodeByIdAdapter', () => {
     const editor = makeEditor(doc);
     const result = getNodeByIdAdapter(editor, { nodeId: 'p1' });
 
-    expect(result.nodeType).toBe('paragraph');
-    expect(result.kind).toBe('block');
+    expect(result.node.kind).toBe('paragraph');
+    expect(result.address.kind).toBe('block');
   });
 
   it('resolves a block node by id with nodeType', () => {
@@ -177,7 +260,7 @@ describe('getNodeByIdAdapter', () => {
 
     const result = getNodeByIdAdapter(editor, { nodeId: 'p2', nodeType: 'paragraph' });
 
-    expect(result.nodeType).toBe('paragraph');
+    expect(result.node.kind).toBe('paragraph');
   });
 
   it('throws when nodeId is missing', () => {

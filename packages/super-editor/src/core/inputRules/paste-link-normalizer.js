@@ -1,9 +1,6 @@
 import { TextSelection } from 'prosemirror-state';
 import { sanitizeHref, UrlValidationConstants } from '@superdoc/url-validation';
-import {
-  findRelationshipIdFromTarget,
-  insertNewRelationship,
-} from '@core/super-converter/docx-helpers/document-rels.js';
+import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { mergeRanges } from '../../utils/rangeUtils.js';
 
 /**
@@ -273,14 +270,10 @@ function normalizeOneLinkMark(tr, editor, linkMarkType, span, allowedProtocols) 
  */
 function allocateRelationshipId(editor, href) {
   if (!canAllocateRels(editor)) return null;
-
-  try {
-    const existing = findRelationshipIdFromTarget(href, editor);
-    if (existing) return existing;
-    return insertNewRelationship(href, 'hyperlink', editor);
-  } catch {
-    return null;
-  }
+  return findOrCreateRelationship(editor, 'paste-link-normalizer:allocateRelationshipId', {
+    target: href,
+    type: 'hyperlink',
+  });
 }
 
 /**

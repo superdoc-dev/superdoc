@@ -1,16 +1,14 @@
 ---
 title: lists.create
 sidebarTitle: lists.create
-description: Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.
+description: "Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is \"continuePrevious\", preset and style are not allowed — the new items inherit formatting from the previous sequence."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
-Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.
+Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.
 
 - Operation ID: `lists.create`
 - API member path: `editor.doc.lists.create(...)`
@@ -26,16 +24,7 @@ Returns a ListsCreateResult with the new listId and the first item address.
 
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `at` | BlockAddress | no | BlockAddress |
-| `at.kind` | `"block"` | no | Constant: `"block"` |
-| `at.nodeId` | string | no |  |
-| `at.nodeType` | `"paragraph"` | no | Constant: `"paragraph"` |
-| `kind` | enum | yes | `"ordered"`, `"bullet"` |
-| `level` | integer | no |  |
-| `mode` | enum | yes | `"empty"`, `"fromParagraphs"` |
-| `target` | BlockAddressOrRange | no | BlockAddressOrRange |
+_No fields._
 
 ### Example request
 
@@ -46,7 +35,6 @@ Returns a ListsCreateResult with the new listId and the first item address.
     "nodeId": "node-def456",
     "nodeType": "paragraph"
   },
-  "kind": "ordered",
   "mode": "empty",
   "target": {
     "kind": "block",
@@ -58,7 +46,7 @@ Returns a ListsCreateResult with the new listId and the first item address.
 
 ## Output fields
 
-### Variant 1 (item.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -74,7 +62,7 @@ Returns a ListsCreateResult with the new listId and the first item address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"`, `"INVALID_INPUT"`, `"NO_COMPATIBLE_PREVIOUS"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -98,11 +86,14 @@ Returns a ListsCreateResult with the new listId and the first item address.
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
 - `LEVEL_OUT_OF_RANGE`
+- `INVALID_INPUT`
+- `NO_COMPATIBLE_PREVIOUS`
 
 ## Raw schemas
 
@@ -110,56 +101,224 @@ Returns a ListsCreateResult with the new listId and the first item address.
 ```json
 {
   "additionalProperties": false,
-  "else": {
-    "required": [
-      "mode",
-      "kind",
-      "target"
-    ]
-  },
-  "if": {
-    "properties": {
-      "mode": {
-        "const": "empty"
+  "allOf": [
+    {
+      "else": {
+        "required": [
+          "mode",
+          "target"
+        ]
+      },
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "empty"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "mode",
+          "at"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sequence": {
+            "properties": {
+              "mode": {
+                "const": "continuePrevious"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        "required": [
+          "sequence"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "preset"
+              ]
+            },
+            {
+              "required": [
+                "style"
+              ]
+            }
+          ]
+        }
       }
     }
-  },
+  ],
   "properties": {
     "at": {
-      "$ref": "#/$defs/BlockAddress"
+      "$ref": "#/$defs/BlockAddress",
+      "description": "Required when mode is 'empty'. The paragraph to create the list at. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}."
     },
     "kind": {
+      "description": "List type: 'bullet' for bullet points, 'ordered' for numbered lists.",
       "enum": [
         "ordered",
         "bullet"
       ]
     },
     "level": {
+      "description": "List nesting level (0-8). 0 is the top level.",
       "maximum": 8,
       "minimum": 0,
       "type": "integer"
     },
     "mode": {
+      "description": "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
       "enum": [
         "empty",
         "fromParagraphs"
       ]
     },
+    "preset": {
+      "description": "Predefined list style preset. Overrides 'kind' with a specific numbering or bullet format.",
+      "enum": [
+        "decimal",
+        "decimalParenthesis",
+        "lowerLetter",
+        "upperLetter",
+        "lowerRoman",
+        "upperRoman",
+        "disc",
+        "circle",
+        "square",
+        "dash"
+      ]
+    },
+    "sequence": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "new"
+            },
+            "startAt": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "continuePrevious"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "style": {
+      "additionalProperties": false,
+      "properties": {
+        "levels": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alignment": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              },
+              "indents": {
+                "additionalProperties": false,
+                "properties": {
+                  "firstLine": {
+                    "type": "integer"
+                  },
+                  "hanging": {
+                    "type": "integer"
+                  },
+                  "left": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "level": {
+                "maximum": 8,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "lvlText": {
+                "type": "string"
+              },
+              "markerFont": {
+                "type": "string"
+              },
+              "numFmt": {
+                "type": "string"
+              },
+              "pictureBulletId": {
+                "type": "integer"
+              },
+              "start": {
+                "type": "integer"
+              },
+              "tabStopAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "trailingCharacter": {
+                "enum": [
+                  "tab",
+                  "space",
+                  "nothing"
+                ]
+              }
+            },
+            "required": [
+              "level"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "levels"
+      ],
+      "type": "object"
+    },
     "target": {
-      "$ref": "#/$defs/BlockAddressOrRange"
+      "$ref": "#/$defs/BlockAddressOrRange",
+      "description": "Required when mode is 'fromParagraphs'. Each call converts ONE paragraph into a list item. To make a list with N items, create N separate paragraphs first, then call superdoc_list create for EACH one. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}."
     }
   },
   "required": [
-    "mode",
-    "kind"
+    "mode"
   ],
-  "then": {
-    "required": [
-      "mode",
-      "kind",
-      "at"
-    ]
-  },
   "type": "object"
 }
 ```
@@ -198,7 +357,9 @@ Returns a ListsCreateResult with the new listId and the first item address.
             "code": {
               "enum": [
                 "INVALID_TARGET",
-                "LEVEL_OUT_OF_RANGE"
+                "LEVEL_OUT_OF_RANGE",
+                "INVALID_INPUT",
+                "NO_COMPATIBLE_PREVIOUS"
               ]
             },
             "details": {},
@@ -263,7 +424,9 @@ Returns a ListsCreateResult with the new listId and the first item address.
         "code": {
           "enum": [
             "INVALID_TARGET",
-            "LEVEL_OUT_OF_RANGE"
+            "LEVEL_OUT_OF_RANGE",
+            "INVALID_INPUT",
+            "NO_COMPATIBLE_PREVIOUS"
           ]
         },
         "details": {},

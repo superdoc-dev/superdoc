@@ -1,11 +1,9 @@
 import { buildContractSnapshot } from './contract-snapshot.js';
 import { stableStringify, type GeneratedFile } from './generation-utils.js';
-import { OPERATION_EXPECTED_RESULT_MAP } from '../../src/index.js';
 
 const GENERATED_FILE_HEADER = 'GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`.\n';
 
 const STABLE_SCHEMA_ROOT = 'packages/document-api/generated/schemas';
-const TOOL_MANIFEST_ROOT = 'packages/document-api/generated/manifests';
 const AGENT_ARTIFACT_ROOT = 'packages/document-api/generated/agent';
 
 function buildOperationContractMap() {
@@ -22,7 +20,8 @@ function buildOperationContractMap() {
         successSchema: operation.schemas.success,
         failureSchema: operation.schemas.failure,
         ...(operation.skipAsATool ? { skipAsATool: true } : {}),
-        ...(operation.essential ? { essential: true } : {}),
+        ...(operation.intentGroup ? { intentGroup: operation.intentGroup } : {}),
+        ...(operation.intentAction ? { intentAction: operation.intentAction } : {}),
       },
     ]),
   );
@@ -60,56 +59,21 @@ export function buildStableSchemaArtifacts(): GeneratedFile[] {
   ];
 }
 
-function toToolDescription(operationId: string, mutates: boolean): string {
-  if (mutates) {
-    return `Apply Document API mutation \`${operationId}\`.`;
-  }
-  return `Read Document API data via \`${operationId}\`.`;
-}
-
-export function buildToolManifestArtifacts(): GeneratedFile[] {
-  const contractMap = buildOperationContractMap();
-
-  const tools = Object.entries(contractMap.operations).map(([operationId, operation]) => ({
-    name: operationId,
-    memberPath: operation.memberPath,
-    description: toToolDescription(operationId, operation.metadata.mutates),
-    expectedResult: OPERATION_EXPECTED_RESULT_MAP[operationId as keyof typeof OPERATION_EXPECTED_RESULT_MAP],
-    mutates: operation.metadata.mutates,
-    idempotency: operation.metadata.idempotency,
-    supportsTrackedMode: operation.metadata.supportsTrackedMode,
-    supportsDryRun: operation.metadata.supportsDryRun,
-    deterministicTargetResolution: operation.metadata.deterministicTargetResolution,
-    preApplyThrows: operation.metadata.throws.preApply,
-    possibleFailureCodes: operation.metadata.possibleFailureCodes,
-    remediationHints: operation.metadata.remediationHints ?? [],
-    inputSchema: operation.inputSchema,
-    outputSchema: operation.outputSchema,
-    successSchema: operation.successSchema,
-    failureSchema: operation.failureSchema,
-  }));
-
-  const manifest = {
-    contractVersion: contractMap.contractVersion,
-    sourceHash: contractMap.sourceHash,
-    generatedAt: null,
-    sourceCommit: null,
-    tools,
-  };
-
-  return [
-    {
-      path: `${TOOL_MANIFEST_ROOT}/document-api-tools.json`,
-      content: stableStringify(manifest),
-    },
-  ];
-}
-
 const DEFAULT_REMEDIATION_BY_CODE: Record<string, string> = {
   TARGET_NOT_FOUND: 'Refresh targets via find/get operations and retry with a fresh address or ID.',
   CAPABILITY_UNAVAILABLE: 'Check runtime capabilities and switch to supported mode or operation.',
   INVALID_TARGET: 'Confirm the target shape and operation compatibility, then retry with a valid target.',
   NO_OP: 'Treat as idempotent no-op and avoid retry loops unless inputs change.',
+  // SDM/1 structural codes
+  INVALID_PAYLOAD: 'Check fragment structure: every node needs a valid kind and required payload fields.',
+  CAPABILITY_UNSUPPORTED: 'This node kind or operation is not supported by the current engine. Check capabilities.',
+  ADDRESS_STALE: 'The address was obtained before a mutation and is no longer valid. Re-resolve the address.',
+  DUPLICATE_ID: 'A node ID in the fragment conflicts with an existing document node. Use unique IDs or omit them.',
+  INVALID_CONTEXT:
+    'The target context does not allow this content (e.g., inserting block content inside an inline context).',
+  RAW_MODE_REQUIRED: 'This node kind requires raw mode opt-in. Set rawMode: true in the operation options.',
+  PRESERVE_ONLY_VIOLATION:
+    'This node family is preserve-only and cannot be inserted or replaced via the structural API.',
 };
 
 export function buildAgentArtifacts(): GeneratedFile[] {
@@ -241,10 +205,6 @@ export function buildAgentArtifacts(): GeneratedFile[] {
 
 export function getStableSchemaRoot(): string {
   return STABLE_SCHEMA_ROOT;
-}
-
-export function getToolManifestRoot(): string {
-  return TOOL_MANIFEST_ROOT;
 }
 
 export function getAgentArtifactRoot(): string {

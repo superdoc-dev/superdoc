@@ -132,35 +132,23 @@ describe('validateCreateParagraphInput', () => {
     expect(result.at?.kind).toBe('before');
   });
 
-  test('validates at: before with nodeId shorthand', () => {
-    const result = validateCreateParagraphInput({
-      at: {
-        kind: 'before',
-        nodeId: 'p1',
-      },
-    });
-
-    expect(result.at).toEqual({
-      kind: 'before',
-      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
-    });
+  test('rejects bare nodeId shorthand in before location', () => {
+    expect(() =>
+      validateCreateParagraphInput({
+        at: { kind: 'before', nodeId: 'p1' },
+      }),
+    ).toThrow(CliError);
   });
 
-  test('validates at: after with nodeId shorthand', () => {
-    const result = validateCreateParagraphInput({
-      at: {
-        kind: 'after',
-        nodeId: 'p2',
-      },
-    });
-
-    expect(result.at).toEqual({
-      kind: 'after',
-      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
-    });
+  test('rejects bare nodeId shorthand in after location', () => {
+    expect(() =>
+      validateCreateParagraphInput({
+        at: { kind: 'after', nodeId: 'p2' },
+      }),
+    ).toThrow(CliError);
   });
 
-  test('rejects relative at location when both target and nodeId are provided', () => {
+  test('rejects relative at location when nodeId is provided alongside target', () => {
     expect(() =>
       validateCreateParagraphInput({
         at: {
@@ -172,7 +160,7 @@ describe('validateCreateParagraphInput', () => {
     ).toThrow(CliError);
   });
 
-  test('rejects relative at location when neither target nor nodeId is provided', () => {
+  test('rejects relative at location when target is missing', () => {
     expect(() => validateCreateParagraphInput({ at: { kind: 'after' } })).toThrow(CliError);
   });
 
@@ -218,12 +206,11 @@ describe('validateQuery', () => {
     expect(result.offset).toBe(5);
   });
 
-  test('validates includeNodes', () => {
+  test('validates nodeType on node selector', () => {
     const result = validateQuery({
       select: { type: 'node', nodeType: 'paragraph' },
-      includeNodes: true,
     });
-    expect(result.includeNodes).toBe(true);
+    expect((result.select as { nodeType?: string }).nodeType).toBe('paragraph');
   });
 
   test('rejects non-object input', () => {

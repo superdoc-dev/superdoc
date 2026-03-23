@@ -52,6 +52,9 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'cors',
   'pg',
   'ioredis',
+  'ai',
+  'zod',
+  '@anthropic-ai/sdk',
 ]);
 
 const PREFIX_EXTERNAL_IMPORTS = [
@@ -64,7 +67,11 @@ const PREFIX_EXTERNAL_IMPORTS = [
   '@liveblocks/',
   '@fastify/',
   '@aws-sdk/',
+  '@ai-sdk/',
+  '@google-cloud/',
+  '@langchain/',
   'next/',
+  'openai/',
 ];
 
 const IMPORT_REGEX = /import\s+(?:(?:[\s\S]*?)\s+from\s+)?['"]([^'"]+)['"]/g;

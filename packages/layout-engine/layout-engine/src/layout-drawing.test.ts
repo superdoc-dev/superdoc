@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { layoutDrawingBlock } from './layout-drawing.js';
 import type { DrawingBlock, DrawingMeasure, DrawingFragment, DrawingGeometry } from '@superdoc/contracts';
 import type { DrawingLayoutContext } from './layout-drawing.js';

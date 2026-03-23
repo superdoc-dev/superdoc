@@ -96,7 +96,7 @@ export function findParagraphsWithSectPr(doc: PMNode): {
       return;
     }
 
-    if (node.type === 'index') {
+    if (node.type === 'index' || node.type === 'bibliography' || node.type === 'tableOfAuthorities') {
       getNodeChildren(node).forEach(visitNode);
     }
   };

@@ -27,12 +27,22 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 
 async function run(command, args) {
   console.log(`  > ${command} ${args.join(' ')}`);
-  const { stdout, stderr } = await execFileAsync(command, args, {
-    cwd: REPO_ROOT,
-    env: process.env,
-  });
-  if (stdout.trim()) console.log(stdout.trim());
-  if (stderr.trim()) console.error(stderr.trim());
+  try {
+    const { stdout, stderr } = await execFileAsync(command, args, {
+      cwd: REPO_ROOT,
+      env: process.env,
+    });
+    if (stdout.trim()) console.log(stdout.trim());
+    if (stderr.trim()) console.error(stderr.trim());
+  } catch (error) {
+    if (typeof error?.stdout === 'string' && error.stdout.trim()) {
+      console.log(error.stdout.trim());
+    }
+    if (typeof error?.stderr === 'string' && error.stderr.trim()) {
+      console.error(error.stderr.trim());
+    }
+    throw new Error(`Command failed: ${command} ${args.join(' ')}`);
+  }
 }
 
 /**

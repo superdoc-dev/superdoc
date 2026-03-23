@@ -20,6 +20,18 @@ export interface InvokeOptions {
   stdinBytes?: Uint8Array;
 }
 
+/**
+ * Minimal invoke interface that both SuperDocRuntime and BoundRuntime satisfy.
+ * Generated code depends on this interface, not on the concrete runtime class.
+ */
+export interface RuntimeInvoker {
+  invoke<TData = unknown>(
+    operation: OperationSpec,
+    params?: Record<string, unknown>,
+    options?: InvokeOptions,
+  ): Promise<TData>;
+}
+
 export type ChangeMode = 'direct' | 'tracked';
 
 export interface UserIdentity {
@@ -92,6 +104,15 @@ export function buildOperationArgv(
     }
   }
 
+  // Legacy alias: tables.split renamed atRowIndex → rowIndex (SD-2132).
+  if (operation.operationId === 'doc.tables.split' && normalizedParams.atRowIndex !== undefined) {
+    if (normalizedParams.rowIndex !== undefined && normalizedParams.rowIndex !== normalizedParams.atRowIndex) {
+      throw new Error('tables.split: cannot provide both rowIndex and atRowIndex with different values.');
+    }
+    const { atRowIndex, ...rest } = normalizedParams;
+    normalizedParams = { ...rest, rowIndex: atRowIndex };
+  }
+
   const argv: string[] = [...operation.commandTokens];
 
   for (const spec of operation.params) {
@@ -117,7 +138,9 @@ export function buildOperationArgv(
         }
         break;
       case 'jsonFlag':
-        argv.push(flag, typeof value === 'string' ? value : JSON.stringify(value));
+        // CLI always parses --*-json values via JSON.parse, so even scalar
+        // strings must be serialized as JSON string literals.
+        argv.push(flag, JSON.stringify(value));
         break;
     }
   }

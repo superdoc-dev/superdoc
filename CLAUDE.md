@@ -59,13 +59,18 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 |------|----------|
 | React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
-| Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
+| Presentation mode visuals | `layout-engine/painters/dom/src/features/feature-registry.ts` → feature module |
+| Rendering orchestration | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
 | Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
 | Adding a doc-api operation | See `packages/document-api/README.md` § "Adding a new operation" |
+| Theming (`createTheme()`) | `packages/superdoc/src/core/theme/create-theme.js` |
+| CSS variable defaults | `packages/superdoc/src/assets/styles/helpers/variables.css` |
+| Preset themes | `packages/superdoc/src/assets/styles/helpers/themes.css` |
+| Consumer-facing agent guide | `packages/superdoc/AGENTS.md` (ships with npm package) |
 
 ## Style Resolution Boundary
 
@@ -79,7 +84,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 
 ## When to Modify Which System
 
-- **Visual rendering**: Modify `pm-adapter/` (to feed data) and/or `painters/dom/` (to render it)
+- **Visual rendering**: Check `painters/dom/src/features/feature-registry.ts` to find the feature module, then modify it. If no module exists yet, create one (see layout-engine CLAUDE.md). Feed data via `pm-adapter/`
 - **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
@@ -111,13 +116,31 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 - `pnpm dev` - Start dev server (from examples/)
 - `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
 
+## AI Eval Suite
+
+The `evals/` directory contains a Promptfoo-based evaluation suite for validating AI tool call quality.
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval` | Run deterministic evals (reading + argument tests) | ~$0.30 |
+| `pnpm --filter @superdoc-testing/evals run eval:reading` | Run reading tool tests only | ~$0.15 |
+| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark (Model+SuperDoc vs Model-Only) | ~$1-2 |
+| `pnpm --filter @superdoc-testing/evals run eval:view` | Open Promptfoo web UI with results | Free |
+| `pnpm --filter @superdoc-testing/evals run baseline:save <label>` | Save versioned results snapshot | Free |
+
+Tool definitions are extracted from `packages/sdk/tools/` via `evals/tools/extract.mjs`. Run `pnpm run generate:all` first if SDK artifacts are missing.
+
+Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (Level 1: tool selection + argument accuracy, not execution).
+
+The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt from `examples/eval-demo/lib/agent.ts`. Update both when changing the prompt.
+
 ## Generated Artifacts
 
 These directories are produced by `pnpm run generate:all`:
 
 | Directory | In git? | What it contains |
 |-----------|---------|-----------------|
-| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `packages/document-api/generated/` | No (gitignored) | Agent artifacts, JSON schemas |
 | `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
 | `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
 | `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |
@@ -172,14 +195,39 @@ Pixel-level before/after comparison for documents that failed layout comparison.
 - Then `pnpm test:visual` to see pixel differences for changed docs
 - HTML report output in `devtools/visual-testing/results/`
 
+### Uploading Test Documents to Corpus
+
+Test documents for layout and visual tests are stored in R2. Rendering tests auto-discover all `.docx` files in the corpus — just upload a file and it becomes a test case.
+
+**Interactive** (prompts for issue ID and description):
+```bash
+pnpm corpus:upload ~/Downloads/my-file.docx
+```
+
+**Non-interactive** (for scripts and agents):
+```bash
+pnpm corpus:upload ~/Downloads/my-file.docx --issue SD-1234 --description short-kebab-desc
+```
+
+Files are uploaded to `rendering/<issue-id>-<description>.docx`. After uploading:
+```bash
+pnpm corpus:pull    # sync the new file locally
+pnpm test:visual    # verify it renders
+```
+
+One-time setup: `npx wrangler login` (for R2 access). If the token expires, run it again. Note: wrangler may write to `~/.wrangler/config/` while the corpus scripts read from `~/Library/Preferences/.wrangler/config/` — copy the token if you get auth errors after a fresh login.
+
 ## Brand & Design System
 
-Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.
+Brand guidelines, voice, and design tokens live in `brand/`.
+Token contract source is `packages/superdoc/src/assets/styles/helpers/variables.css` (`:root` defaults).
+Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpers/themes.css`.
 
 **When creating or modifying UI components:**
-- Use `--sd-*` CSS custom properties — never hardcode hex values. See `tokens.css` for all available variables.
-- Tokens follow three tiers: primitive (`--sd-color-blue-500`) → semantic (`--sd-action-primary`) → component (`--sd-comment-bg`). Components reference semantic or component-level variables.
-- Expose component-specific variables as `--sd-{component}-*` so consumers can customize via CSS.
-- Document component CSS variables in `apps/docs/ui-components/` (Mintlify docs).
+- Use `--sd-*` CSS custom properties — never hardcode hex values.
+- Treat `variables.css` as the canonical token contract; add new tokens there.
+- Keep preset themes in `themes.css` (`.sd-theme-*`) and override only the tokens that need theme-specific values.
+- Tokens are organized by layers: primitive (`--sd-color-blue-500`) → UI/document tokens (`--sd-ui-*`, `--sd-comments-*`, etc.) → component usage.
+- Expose UI component-specific variables as `--sd-ui-{component}-*` so consumers can customize via CSS.
 
-**When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).
+**When writing copy or content:** see `brand.md` for the full brand identity — strategy, voice, and visual guidelines. Product name is always **SuperDoc** (capital S, capital D).

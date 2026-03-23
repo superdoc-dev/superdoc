@@ -1,0 +1,720 @@
+# Customer workflow tests — validates real-world AI use cases from production customers.
+#
+# Mapped from: Clauze (contract review), AcuityMD (medical devices), Irys (SaaS terms),
+# Athena (investment memos), Torke (citations), Lighthouse (corporate docs),
+# Orbital (leases), Tryal (clinical trials), Reavant (SDK mutations).
+#
+# Each test exercises a documented customer workflow against a domain-specific DOCX fixture.
+# Assertions validate document content + tool execution trace.
+
+# =============================================================================
+# A. NDA / CONTRACT REVIEW & MODIFICATION (Clauze, Irys)
+# Customers: Clauze (clause modification, risk ID), Irys (entity rename, rewrite)
+# =============================================================================
+
+- description: 'NDA: modify indemnification from mutual to one-way'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'In the Indemnification section, change "Each Party shall mutually indemnify" to "The Receiving Party shall indemnify the Disclosing Party". Remove the word "mutually" from that section.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Receiving Party shall indemnify the Disclosing Party'))
+          return { pass: false, score: 0, reason: 'Indemnification not modified' };
+        if (t.includes('mutually indemnify'))
+          return { pass: false, score: 0, reason: 'Still says mutually indemnify' };
+        return { pass: true, score: 1, reason: 'Clause modified correctly' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'NDA: global entity name replacement (Iqidis → Irys)'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace "Iqidis Corp" with "Irys Inc." and "legal@iqidis.com" with "legal@irys.com" everywhere in the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.includes('Iqidis') || t.includes('iqidis'))
+          return { pass: false, score: 0, reason: 'Old entity name still present' };
+        if (!t.includes('Irys Inc.') || !t.includes('legal@irys.com'))
+          return { pass: false, score: 0, reason: 'New names not found' };
+        if (!t.includes('TechVentures'))
+          return { pass: false, score: 0, reason: 'Collateral: other party name removed' };
+        return { pass: true, score: 1, reason: 'Entity names replaced correctly' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'NDA: fill signature placeholders'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace "[Party A Signature]" with "Jane Smith, CEO" and "[Date]" with "March 20, 2025".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Jane Smith, CEO') || t.includes('[Party A Signature]'))
+          return { pass: false, score: 0, reason: 'Signature not replaced' };
+        if (!t.includes('March 20, 2025'))
+          return { pass: false, score: 0, reason: 'Date not filled in' };
+        return { pass: true, score: 1, reason: 'Placeholders filled' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+
+- description: 'NDA: change governing law'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Change the governing law from "State of Delaware" to "State of California".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('State of California'))
+          return { pass: false, score: 0, reason: 'California not found' };
+        if (t.includes('State of Delaware'))
+          return { pass: false, score: 0, reason: 'Delaware still present' };
+        return { pass: true, score: 1, reason: 'Governing law changed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+
+- description: 'NDA: add bullet to obligations list'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'In the Obligations of Receiving Party section, add a new bullet point at the end of the list that says "Return or destroy all Confidential Information upon termination of this Agreement."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Return or destroy'))
+          return { pass: false, score: 0, reason: 'New bullet not added' };
+        return { pass: true, score: 1, reason: 'Bullet added to obligations' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'NDA: increase liability cap'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace the liability cap of "$500,000" with "$1,000,000" in the Indemnification section.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$1,000,000'))
+          return { pass: false, score: 0, reason: '$1M not found' };
+        if (t.includes('$500,000'))
+          return { pass: false, score: 0, reason: '$500K still present' };
+        return { pass: true, score: 1, reason: 'Liability cap updated' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+
+# =============================================================================
+# B. DOCUMENT Q&A / COMPREHENSION (AcuityMD, Orbital)
+# Customers: Orbital (lease Q&A), AcuityMD (doc Q&A), Tryal (study Q&A)
+# =============================================================================
+
+- description: 'Lease: Q&A about assignment rights'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'Can the tenant assign or sublet part of the lease? Search the document and tell me what the lease says.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Assignment and Subletting'))
+          return { pass: false, score: 0, reason: 'Document missing assignment section' };
+        return { pass: true, score: 1, reason: 'Document intact, Q&A completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No search/read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Used: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+- description: 'Lease: Q&A about rent escalation'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'What is the annual rent escalation rate, and what will the monthly rent be in Year 3? Get the document text to find the answer.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+- description: 'Report: Q&A about site enrollment status'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Which clinical trial site is behind schedule on enrollment? Search the document for enrollment status.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+- description: 'Offer: Q&A about compensation package'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'What is the base salary and how many stock options are offered? Get the document text.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+# =============================================================================
+# C. DRAFTING / CONTENT GENERATION (Athena, Lighthouse, Tryal)
+# Customers: Athena (memos), Lighthouse (disclaimers), Tryal (summaries)
+# =============================================================================
+
+- description: 'NDA: generate glossary of defined terms'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a heading "GLOSSARY" at the end of the document, then add definitions for these terms found in the document: "Confidential Information", "Disclosing Party", "Receiving Party". List each term followed by its definition from the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('GLOSSARY'))
+          return { pass: false, score: 0, reason: 'Glossary heading missing' };
+        if (!t.includes('Confidential Information'))
+          return { pass: false, score: 0, reason: 'No term definitions added' };
+        return { pass: true, score: 1, reason: 'Glossary created with definitions' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Lease: add disclaimer notice at end'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'Add a heading "IMPORTANT NOTICE" at the end of the document, followed by a paragraph: "This lease agreement is subject to review by legal counsel. Terms may be modified prior to execution."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('IMPORTANT NOTICE'))
+          return { pass: false, score: 0, reason: 'Heading missing' };
+        if (!t.includes('subject to review by legal counsel'))
+          return { pass: false, score: 0, reason: 'Disclaimer text missing' };
+        return { pass: true, score: 1, reason: 'Disclaimer added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Offer: add signing bonus section'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'After the Equity section, add a new paragraph that says: "In addition, you will receive a one-time signing bonus of $15,000, payable within 30 days of your start date."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('signing bonus of $15,000'))
+          return { pass: false, score: 0, reason: 'Signing bonus not added' };
+        return { pass: true, score: 1, reason: 'Signing bonus section added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Report: add follow-up paragraph after conclusions'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Find the Conclusions section and add a paragraph after it that says: "Overall enrollment is on track for 78% of sites, with corrective actions planned for underperforming locations."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Overall enrollment is on track'))
+          return { pass: false, score: 0, reason: 'Summary not added' };
+        return { pass: true, score: 1, reason: 'Follow-up paragraph added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+# =============================================================================
+# D. COMMENTS & ANNOTATIONS (Torke)
+# Customers: Torke (insert comment, review), Lighthouse (review comments)
+# =============================================================================
+
+- description: 'NDA: add review comment on indemnification'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Search for the word "indemnify" in the Indemnification section and add a comment on it that says "Review: consider adding a per-incident liability cap."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('indemnify'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Comment operation completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasComment = tools.some(t => t.includes('comment'));
+        if (!hasComment) return { pass: false, score: 0, reason: `No comment tool called. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Comment tool used` };
+      metric: tool_usage
+
+- description: 'Lease: add review comment on notice period'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'Search for "90 days" in the Renewal Option section and add a comment on it that says "Client prefers 60 days notice period."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('90 days'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Comment added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasComment = tools.some(t => t.includes('comment'));
+        if (!hasComment) return { pass: false, score: 0, reason: `No comment tool called. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: 'Comment tool used' };
+      metric: tool_usage
+
+- description: 'Comments: list existing comments'
+  vars:
+    fixture: comments-doc.docx
+    keepFile: true
+    task: 'List all comments in this document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText)
+          return { pass: false, score: 0, reason: 'No document text' };
+        if (!d.toolCalls?.some(tc => tc.tool === 'superdoc_comment' && tc.args?.action === 'list'))
+          return { pass: false, score: 0.5, reason: 'Comment list action not called' };
+        return { pass: true, score: 1, reason: 'Comments listed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasComment = tools.some(t => t.includes('comment'));
+        if (!hasComment) return { pass: false, score: 0, reason: `No comment tool called. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: 'Comment tool used' };
+      metric: tool_usage
+
+# =============================================================================
+# E. TRACK CHANGES / REDLINING (Clauze, AcuityMD, Lighthouse, Tryal)
+# Customers: Clauze (redlining), AcuityMD (tracked edits), Lighthouse (AI redline)
+# =============================================================================
+
+- description: 'NDA: tracked change on term duration'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Using tracked changes, replace "two (2) years" with "three (3) years" in the Term and Termination section.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('NON-DISCLOSURE'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Tracked change applied' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Offer: tracked change on salary'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'Using tracked changes, replace "$185,000" with "$195,000" in the compensation section.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Senior Software Engineer'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Tracked change applied' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Lease: tracked change on rent, table untouched'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'Using tracked changes, change the base monthly rent from "$8,500" to "$7,500" in the Rent section (section 3 text only). Do not modify the rent escalation table.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('COMMERCIAL LEASE'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        if (!t.includes('$102,000'))
+          return { pass: false, score: 0, reason: 'Collateral: table data changed' };
+        return { pass: true, score: 1, reason: 'Tracked change applied, table intact' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+# =============================================================================
+# F. TABLE OPERATIONS (AcuityMD, Reavant, Tryal)
+# Customers: AcuityMD (table generation), Reavant (table mutation), Tryal (data tables)
+# =============================================================================
+
+- description: 'Report: read enrollment table data'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Get the full text of this document. I need to see the patient enrollment data.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Memorial Hospital') || !t.includes('City Medical Center') || !t.includes('University Research'))
+          return { pass: false, score: 0, reason: 'Table site data missing' };
+        return { pass: true, score: 1, reason: 'Enrollment table read' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Report: update enrollment count in table'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'In the Patient Enrollment table, replace the enrolled count for City Medical Center from "28" to "35".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        // Check "28" was replaced — it should be gone or reduced
+        // and "35" should appear near City Medical Center context
+        if (!t.includes('35'))
+          return { pass: false, score: 0, reason: 'New value 35 not found' };
+        if (!t.includes('Memorial Hospital') || !t.includes('City Medical Center'))
+          return { pass: false, score: 0, reason: 'Table data damaged' };
+        return { pass: true, score: 1, reason: 'Table cell updated' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Lease: update rent escalation table'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'In the rent escalation table (Schedule A), replace the Year 1 monthly rent "$8,500" with "$9,000" and the annual total "$102,000" with "$108,000".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$9,000') || !t.includes('$108,000'))
+          return { pass: false, score: 0, reason: 'Table values not updated' };
+        if (!t.includes('$8,755'))
+          return { pass: false, score: 0, reason: 'Collateral: Year 2 data damaged' };
+        return { pass: true, score: 1, reason: 'Table cells updated, Year 2 intact' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+
+# =============================================================================
+# G. MULTI-STEP COMPOUND OPERATIONS (Lighthouse, Athena, Irys)
+# Customers: Lighthouse (review + edit), Athena (search + insert), Irys (rename + modify)
+# =============================================================================
+
+- description: 'Offer: fill multiple placeholders'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'Replace all placeholders in the document: "[Candidate Name]" with "Alex Johnson", "[Candidate Address]" with "456 Oak Street, Austin, TX 78701", "[Response Deadline]" with "April 1, 2025", "[Hiring Manager Name]" with "Sarah Chen", and "[Title]" with "VP of Engineering".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const checks = [
+          ['Alex Johnson', '[Candidate Name]'],
+          ['456 Oak Street', '[Candidate Address]'],
+          ['April 1, 2025', '[Response Deadline]'],
+          ['Sarah Chen', '[Hiring Manager Name]'],
+        ];
+        for (const [expected, gone] of checks) {
+          if (!t.includes(expected)) return { pass: false, score: 0, reason: `Missing: ${expected}` };
+          if (t.includes(gone)) return { pass: false, score: 0, reason: `Still present: ${gone}` };
+        }
+        return { pass: true, score: 1, reason: 'All placeholders filled' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const count = d.stepCount || d.trace.length;
+        if (count > 8) return { pass: false, score: 0, reason: `${count} steps — too many for placeholder fill` };
+        return { pass: true, score: 1, reason: `${count} steps` };
+      metric: efficiency
+
+- description: 'NDA: rename entity + add confidentiality notice'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace "Iqidis Corp" with "Irys Inc." everywhere in the document, then add a heading "CONFIDENTIALITY NOTICE" at the end followed by a paragraph "This document contains proprietary information."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.includes('Iqidis'))
+          return { pass: false, score: 0, reason: 'Old name still present' };
+        if (!t.includes('Irys Inc.'))
+          return { pass: false, score: 0, reason: 'New name missing' };
+        if (!t.includes('CONFIDENTIALITY NOTICE'))
+          return { pass: false, score: 0, reason: 'Notice heading missing' };
+        if (!t.includes('proprietary information'))
+          return { pass: false, score: 0, reason: 'Notice text missing' };
+        return { pass: true, score: 1, reason: 'Both operations completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'Lease: search + comment + modify clause'
+  vars:
+    fixture: lease-agreement.docx
+    keepFile: true
+    task: 'Find the "Assignment and Subletting" section. Add a comment on "without prior written consent" saying "Consider adding a reasonableness standard." Then replace "without prior written consent" with "without prior reasonable written consent".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('reasonable written consent'))
+          return { pass: false, score: 0, reason: 'Text not modified' };
+        return { pass: true, score: 1, reason: 'Search + comment + edit completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        if (tools.length < 2) return { pass: false, score: 0, reason: `Only ${tools.length} tool call — expected search + comment + edit` };
+        return { pass: true, score: 1, reason: `${tools.length} steps: ${tools.join(' → ')}` };
+      metric: multi_step
+
+- description: 'Report: update table status + add follow-up note'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Replace "Behind Schedule" with "Recovering" in the enrollment table, then add a paragraph at the end of the document that says "Follow-up review scheduled for Q4 2025."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Recovering'))
+          return { pass: false, score: 0, reason: 'Status not updated' };
+        if (t.includes('Behind Schedule'))
+          return { pass: false, score: 0, reason: 'Old status still present' };
+        if (!t.includes('Follow-up review'))
+          return { pass: false, score: 0, reason: 'Follow-up note missing' };
+        return { pass: true, score: 1, reason: 'Both operations completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+# =============================================================================
+# H. FORMATTING (Tryal)
+# Customers: Tryal (simplify, improve writing, style changes)
+# =============================================================================
+
+- description: 'Report: replace terminology in specific section'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'In the Safety Data section, replace "adverse events" with "side effects" everywhere in that section.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('side effects'))
+          return { pass: false, score: 0, reason: 'Replacement not applied' };
+        if (t.includes('adverse events'))
+          return { pass: false, score: 0, reason: 'Old term still present' };
+        return { pass: true, score: 1, reason: 'Terminology updated' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+
+- description: 'Report: bold formatting on search result'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Search for "Compound XR-7" and make every occurrence bold.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Compound XR-7'))
+          return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Formatting operation completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasFormat = tools.some(t => t.includes('format'));
+        // Also accept superdoc_mutations with format.apply steps (equivalent)
+        const hasMutationFormat = d.toolCalls?.some(tc =>
+          tc.tool === 'superdoc_mutations' && tc.args?.steps?.some(s => s.op === 'format.apply'));
+        if (!hasFormat && !hasMutationFormat)
+          return { pass: false, score: 0, reason: `No format tool. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Format applied: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+# =============================================================================
+# I. CROSS-DOMAIN COMPOUND (Real customer multi-feature workflows)
+# =============================================================================
+
+- description: 'Offer: counter-offer workflow (salary + equity + deadline)'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'Make three changes: replace "$185,000" with "$200,000", replace "10,000 shares" with "15,000 shares", and replace "[Response Deadline]" with "April 15, 2025".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$200,000') || t.includes('$185,000'))
+          return { pass: false, score: 0, reason: 'Salary not updated' };
+        if (!t.includes('15,000 shares') || t.includes('10,000 shares'))
+          return { pass: false, score: 0, reason: 'Equity not updated' };
+        if (!t.includes('April 15, 2025') || t.includes('[Response Deadline]'))
+          return { pass: false, score: 0, reason: 'Deadline not set' };
+        return { pass: true, score: 1, reason: 'All three counter-offer changes applied' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'NDA: full contract preparation (rename + fill + add notice)'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Prepare this NDA for execution: (1) Replace "Iqidis Corp" with "Irys Inc." everywhere, (2) Replace "[Party A Signature]" with "Jane Smith, CEO", (3) Replace "[Date]" with "March 20, 2025", (4) Add a heading "EXHIBIT A" at the end followed by "List of authorized recipients to be provided separately."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.includes('Iqidis'))
+          return { pass: false, score: 0, reason: 'Entity name not replaced' };
+        if (!t.includes('Irys Inc.'))
+          return { pass: false, score: 0, reason: 'New entity name missing' };
+        if (t.includes('[Party A Signature]'))
+          return { pass: false, score: 0, reason: 'Signature placeholder not filled' };
+        if (!t.includes('Jane Smith'))
+          return { pass: false, score: 0, reason: 'Signatory name missing' };
+        if (!t.includes('EXHIBIT A'))
+          return { pass: false, score: 0, reason: 'Exhibit heading missing' };
+        return { pass: true, score: 1, reason: 'Full contract preparation completed' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog

@@ -31,25 +31,26 @@ import * as YProsemirror from 'y-prosemirror';
 import * as Yjs from 'yjs';
 
 import * as CollaborationModule from './collaboration.js';
-import * as CollaborationHelpers from './collaboration-helpers.js';
 
 const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaMap, generateCollaborationData } =
   CollaborationModule;
-const { updateYdocDocxData } = CollaborationHelpers;
 
 const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
-  let observer;
+  const observers = new Set();
   return {
     set: vi.fn((key, value) => {
       store.set(key, value);
     }),
     get: vi.fn((key) => store.get(key)),
     observe: vi.fn((fn) => {
-      observer = fn;
+      observers.add(fn);
+    }),
+    unobserve: vi.fn((fn) => {
+      observers.delete(fn);
     }),
     _trigger(keys) {
-      observer?.({ changes: { keys } });
+      observers.forEach((observer) => observer({ changes: { keys } }));
     },
     store,
   };
@@ -60,20 +61,18 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
   const metas = createYMap(initialMetaEntries);
   if (!hasDocx) metas.store.delete('docx');
   const media = createYMap();
-  const headerFooterJson = createYMap();
   const listeners = {};
   return {
     getXmlFragment: vi.fn(() => ({ fragment: true })),
     getMap: vi.fn((name) => {
       if (name === 'meta') return metas;
-      if (name === 'headerFooterJson') return headerFooterJson;
       return media;
     }),
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
     transact: vi.fn((fn, meta) => fn(meta)),
-    _maps: { metas, media, headerFooterJson },
+    _maps: { metas, media },
     _listeners: listeners,
   };
 };
@@ -84,322 +83,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe('collaboration helpers', () => {
-  it('updates docx payloads inside the ydoc meta map', async () => {
-    const ydoc = createYDocStub();
-    const metas = ydoc._maps.metas;
-    metas.store.set('docx', [{ name: 'word/document.xml', content: '<old />' }]);
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />', 'word/styles.xml': '<styles />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
-    });
-  });
-
-  it('returns early when neither explicit ydoc nor editor.options.ydoc exist', async () => {
-    const editor = {
-      options: { ydoc: null, user: { id: 'user-1' }, content: [] },
-      exportDocx: vi.fn(),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).not.toHaveBeenCalled();
-  });
-
-  it('normalizes docx arrays via toArray when meta map stores a Y.Array-like structure', async () => {
-    const docxSource = {
-      toArray: vi.fn(() => [{ name: 'word/document.xml', content: '<old />' }]),
-    };
-    const ydoc = createYDocStub({ docxValue: docxSource });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-2' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(docxSource.toArray).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-  });
-
-  it('normalizes docx payloads when meta map stores an iterable collection', async () => {
-    const docxSet = new Set([
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/numbering.xml', content: '<numbers />' },
-    ]);
-    const ydoc = createYDocStub({ docxValue: docxSet });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-3' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/numbering.xml', content: '<numbers />' },
-      { name: 'word/document.xml', content: '<new />' },
-    ]);
-  });
-
-  it('falls back to editor options content when no docx entry exists in the meta map', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<initial />' },
-      { name: 'word/footnotes.xml', content: '<foot />' },
-    ];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-4' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/footnotes.xml', content: '<foot />' },
-      { name: 'word/document.xml', content: '<updated />' },
-    ]);
-    const originalDocEntry = initialContent.find((entry) => entry.name === 'word/document.xml');
-    expect(originalDocEntry.content).toBe('<initial />');
-  });
-
-  it('prefers the explicit ydoc argument over editor options', async () => {
-    const optionsYdoc = createYDocStub();
-    const explicitYdoc = createYDocStub();
-    explicitYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old explicit />' }]);
-
-    const editor = {
-      options: { ydoc: optionsYdoc, user: { id: 'user-5' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new explicit />' }),
-    };
-
-    await updateYdocDocxData(editor, explicitYdoc);
-
-    expect(explicitYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new explicit />' },
-    ]);
-    expect(optionsYdoc._maps.metas.set).not.toHaveBeenCalled();
-  });
-
-  it('updates each target ydoc when concurrent calls use the same editor', async () => {
-    const optionsYdoc = createYDocStub();
-    const explicitYdoc = createYDocStub();
-    optionsYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old options />' }]);
-    explicitYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old explicit />' }]);
-
-    let resolveFirstExport;
-    const firstExport = new Promise((resolve) => {
-      resolveFirstExport = resolve;
-    });
-
-    const editor = {
-      options: { ydoc: optionsYdoc, user: { id: 'user-concurrent' } },
-      exportDocx: vi
-        .fn()
-        .mockReturnValueOnce(firstExport)
-        .mockResolvedValueOnce({ 'word/document.xml': '<new explicit />' }),
-    };
-
-    const optionsUpdate = updateYdocDocxData(editor);
-    const explicitUpdate = updateYdocDocxData(editor, explicitYdoc);
-
-    resolveFirstExport({ 'word/document.xml': '<new options />' });
-    await Promise.all([optionsUpdate, explicitUpdate]);
-
-    expect(optionsYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new options />' },
-    ]);
-    expect(explicitYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new explicit />' },
-    ]);
-  });
-
-  it('skips transaction when docx content has not changed', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<same />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<same />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('updates only changed files and triggers transaction', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith(
-      'docx',
-      expect.arrayContaining([
-        { name: 'word/styles.xml', content: '<styles />' },
-        { name: 'word/document.xml', content: '<new />' },
-      ]),
-    );
-  });
-
-  it('does not persist null comment xml payloads into meta.docx', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<old doc />' },
-      { name: 'word/comments.xml', content: '<old comments />' },
-      { name: 'word/commentsExtended.xml', content: '<old comments extended />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-null-comments' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new doc />',
-        'word/comments.xml': null,
-        'word/commentsExtended.xml': null,
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    const persistedDocx = metas.set.mock.calls.at(-1)?.[1] || [];
-    expect(persistedDocx.some((file) => file.name === 'word/comments.xml')).toBe(false);
-    expect(persistedDocx.some((file) => file.name === 'word/commentsExtended.xml')).toBe(false);
-    expect(persistedDocx.every((file) => typeof file.content === 'string')).toBe(true);
-  });
-
-  it('triggers transaction when new file is added', async () => {
-    const existingDocx = [{ name: 'word/document.xml', content: '<doc />' }];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-  });
-
-  it('skips transaction when multiple files all remain unchanged', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-      { name: 'word/numbering.xml', content: '<numbering />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('initializes docx metadata even when exported content matches initial content', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    // No docx entry exists in meta map (hasDocx: false)
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' }, content: initialContent },
-      // Export returns identical content to initial
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Transaction should still happen to initialize the docx metadata for collaborators
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
-  });
-
-  it('initializes docx metadata for new documents with no changes', async () => {
-    const initialContent = [{ name: 'word/document.xml', content: '<empty />' }];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'new-user' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<empty />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Even with no content changes, the metadata must be persisted for collaborators
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
-    });
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
-  });
 });
 
 describe('collaboration extension', () => {
@@ -433,7 +116,7 @@ describe('collaboration extension', () => {
       expect.objectContaining({ onFirstRender: expect.any(Function) }),
     );
     expect(provider.on).toHaveBeenCalledWith('synced', expect.any(Function));
-    expect(ydoc.on).toHaveBeenCalledWith('afterTransaction', expect.any(Function));
+    expect(provider.on).toHaveBeenCalledWith('sync', expect.any(Function));
 
     const mediaObserver = ydoc._maps.media.observe.mock.calls[0][0];
     ydoc._maps.media.get.mockReturnValue({ blob: true });
@@ -441,92 +124,29 @@ describe('collaboration extension', () => {
     expect(editor.storage.image.media['word/media/image.png']).toEqual({ blob: true });
   });
 
-  describe('debounced docx sync', () => {
-    const DEBOUNCE_DELAY_MS = 30000;
-
-    const createDebouncedSyncTestContext = () => {
-      const updateSpy = vi.spyOn(CollaborationHelpers, 'updateYdocDocxData').mockResolvedValue();
-      const ydoc = createYDocStub();
-      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
-      const editor = {
-        options: {
-          isHeadless: false,
-          ydoc,
-          collaborationProvider: provider,
-        },
-        storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: { doc: {} }, dispatch: vi.fn() },
-      };
-      const context = { editor, options: {} };
-      return { updateSpy, ydoc, editor, context };
+  it('emits collaborationReady on sync(true) when provider does not emit synced', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
     };
 
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const syncHandlers = provider.on.mock.calls.filter(([event]) => event === 'sync').map(([, handler]) => handler);
+    expect(syncHandlers.length).toBeGreaterThan(0);
 
-    it('debounces updateYdocDocxData for local non-docx transactions', () => {
-      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
-      Collaboration.config.addPmPlugins.call(context);
+    syncHandlers.forEach((handler) => handler(true));
 
-      ydoc._listeners.afterTransaction({
-        local: true,
-        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
-      });
-
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      expect(updateSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('coalesces rapid transactions into a single update', () => {
-      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
-      Collaboration.config.addPmPlugins.call(context);
-
-      const transaction = {
-        local: true,
-        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
-      };
-
-      ydoc._listeners.afterTransaction(transaction);
-      vi.advanceTimersByTime(400);
-      ydoc._listeners.afterTransaction(transaction);
-
-      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      expect(updateSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not starve docx metadata sync during sustained local edits', () => {
-      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
-      Collaboration.config.addPmPlugins.call(context);
-
-      const transaction = {
-        local: true,
-        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
-      };
-
-      const sustainedEditIntervalMs = 5000;
-      const sustainedEditDurationMs = 2 * 60 * 1000;
-
-      for (let elapsedMs = 0; elapsedMs < sustainedEditDurationMs; elapsedMs += sustainedEditIntervalMs) {
-        ydoc._listeners.afterTransaction(transaction);
-        vi.advanceTimersByTime(sustainedEditIntervalMs);
-      }
-
-      expect(updateSpy).toHaveBeenCalled();
-    });
+    expect(editor.emit).toHaveBeenCalledWith('collaborationReady', { editor, ydoc });
   });
 
   it('creates sync plugin fragment via helper', () => {
@@ -546,12 +166,25 @@ describe('collaboration extension', () => {
 
     const { onFirstRender } = YProsemirror.ySyncPlugin.mock.calls[0][1];
     onFirstRender();
-    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('docx', editor.options.content);
+    // initializeMetaMap seeds fonts and media into the ydoc maps
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('fonts', editor.options.fonts);
+    expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([1]));
   });
 
-  it('initializes meta map with content, fonts, and media', () => {
+  it('initializes meta map with fonts, bootstrap metadata, and media', () => {
     const ydoc = createYDocStub();
     const editor = {
+      state: {
+        doc: {
+          attrs: {
+            bodySectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+            },
+          },
+        },
+      },
       options: {
         content: { 'word/document.xml': '<doc />' },
         fonts: { 'font1.ttf': new Uint8Array([1]) },
@@ -562,9 +195,106 @@ describe('collaboration extension', () => {
     initializeMetaMap(ydoc, editor);
 
     const metaStore = ydoc._maps.metas.store;
-    expect(metaStore.get('docx')).toEqual(editor.options.content);
+    // initializeMetaMap no longer writes 'docx' — parts are seeded via seedPartsFromEditor
     expect(metaStore.get('fonts')).toEqual(editor.options.fonts);
+    expect(metaStore.get('bodySectPr')).toEqual(editor.state.doc.attrs.bodySectPr);
+    expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
     expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
+  });
+
+  it('applies bodySectPr from the meta map when the meta entry changes', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    ydoc._maps.metas.store.set('bodySectPr', bodySectPr);
+
+    const tr = {
+      setDocAttribute: vi.fn(() => tr),
+      setMeta: vi.fn(() => tr),
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr: null,
+          },
+        },
+        tr,
+      },
+      dispatch: vi.fn(),
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    ydoc._maps.metas._trigger(new Map([['bodySectPr', {}]]));
+
+    expect(tr.setDocAttribute).toHaveBeenCalledWith('bodySectPr', bodySectPr);
+    expect(tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
+    expect(tr.setMeta).toHaveBeenCalledWith('bodySectPrSync', true);
+    expect(editor.dispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('publishes bodySectPr changes from local transactions into the meta map', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr,
+          },
+        },
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    const bodySectPrTransactionHandler = editor.on.mock.calls.find(([event]) => event === 'transaction')?.[1];
+    expect(bodySectPrTransactionHandler).toBeTypeOf('function');
+
+    bodySectPrTransactionHandler({
+      transaction: {
+        before: {
+          attrs: {
+            bodySectPr: null,
+          },
+        },
+        getMeta: vi.fn(() => null),
+      },
+    });
+
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('bodySectPr', bodySectPr);
   });
 
   it('generates collaboration data and encodes ydoc update', async () => {
@@ -579,14 +309,12 @@ describe('collaboration extension', () => {
         mediaFiles: {},
         user: { id: 'user' },
       },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
     };
 
     const data = await generateCollaborationData(editor);
 
     expect(YProsemirror.prosemirrorToYDoc).toHaveBeenCalledWith(doc, 'supereditor');
     expect(Yjs.encodeStateAsUpdate).toHaveBeenCalledWith(ydoc);
-    expect(editor.exportDocx).toHaveBeenCalled();
     expect(data).toBeInstanceOf(Uint8Array);
   });
 
@@ -1077,10 +805,10 @@ describe('collaboration extension', () => {
       Collaboration.config.addPmPlugins.call(context);
       Collaboration.config.onCreate.call(context);
 
-      // initializeMetaMap should have been called, writing to the meta map
+      // initializeMetaMap seeds fonts, bootstrap metadata, and media
       const metaStore = ydoc._maps.metas.store;
-      expect(metaStore.get('docx')).toEqual({ 'word/document.xml': '<doc />' });
       expect(metaStore.get('fonts')).toEqual({ 'font1.ttf': new Uint8Array([1]) });
+      expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
       expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
     });
   });

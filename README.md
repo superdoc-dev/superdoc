@@ -17,8 +17,8 @@
 </div>
 
 <p align="center">
-  <strong>A JavaScript library that renders and edits DOCX files in the browser, headless on the server, and within agentic workflows.</strong><br>
-  Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
+  <strong>The document engine for DOCX files.</strong><br>
+  Renders, edits, and automates .docx files in the browser, headless on the server, and within AI agent workflows.<br>
   Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 
@@ -87,7 +87,6 @@ For all available options and events, see the [documentation](https://docs.super
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
 - **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
-- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Examples

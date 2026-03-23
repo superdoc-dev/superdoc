@@ -283,6 +283,24 @@ describe('buildFootnotesInput', () => {
       expect(result?.blocksById.size).toBe(1);
     });
 
+    it('renders the real note body when a special entry shares the same id', () => {
+      // Simulates the ID-collision scenario: continuationSeparator at id=1 (empty
+      // content) alongside a real note also at id=1 (with text).  The builder
+      // must pick the regular note.
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = {
+        footnotes: [
+          { id: '1', type: 'continuationSeparator', content: [] },
+          { id: '1', type: null, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Real note' }] }] },
+        ],
+      } as ConverterLike;
+
+      const result = buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      expect(result).not.toBeNull();
+      expect(result?.blocksById.has('1')).toBe(true);
+    });
+
     it('handles footnote ref with null id', () => {
       const editorState = {
         doc: {

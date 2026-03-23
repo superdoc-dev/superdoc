@@ -10,5 +10,8 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     }
+  },
+  "scripts": {
+    "test": "bun test"
   }
 }

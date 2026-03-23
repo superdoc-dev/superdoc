@@ -3,7 +3,6 @@ import '@superdoc/super-editor/style.css';
 import '@superdoc/common/styles/common-styles.css';
 
 import { ref, computed, onMounted } from 'vue';
-import { NMessageProvider } from 'naive-ui';
 import { SuperEditor } from '@superdoc/super-editor';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getFileObject } from '@superdoc/common/helpers/get-file-object';
@@ -223,9 +222,7 @@ const toggleLayoutEngine = () => {
           </div>
 
           <div class="dev-app__content" v-if="currentFile">
-            <n-message-provider>
-              <SuperEditor :file-source="currentFile" :options="editorOptions" />
-            </n-message-provider>
+            <SuperEditor :file-source="currentFile" :options="editorOptions" />
           </div>
         </div>
       </div>

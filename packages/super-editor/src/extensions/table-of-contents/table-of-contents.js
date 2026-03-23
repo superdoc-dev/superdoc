@@ -1,11 +1,12 @@
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 
 export const TableOfContents = Node.create({
   name: 'tableOfContents',
 
   group: 'block',
 
-  content: 'paragraph+',
+  content: 'paragraph*',
 
   inline: false,
 

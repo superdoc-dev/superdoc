@@ -954,7 +954,7 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
  * // Matches via candidate path: word/media/rId3.png
  * ```
  */
-export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string>): FlowBlock[] {
+export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string | Uint8Array>): FlowBlock[] {
   if (!mediaFiles || Object.keys(mediaFiles).length === 0) {
     return blocks;
   }
@@ -963,7 +963,9 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
   Object.entries(mediaFiles).forEach(([key, value]) => {
     const normalized = normalizeMediaKey(key);
     if (normalized) {
-      normalizedMedia.set(normalized, value);
+      // Handle Uint8Array values from persistence layers (e.g., Y.js binary encoding)
+      const stringValue = value instanceof Uint8Array ? new TextDecoder().decode(value) : value;
+      normalizedMedia.set(normalized, stringValue);
     }
   });
 

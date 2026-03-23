@@ -24,6 +24,8 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
   const firstMatch = elementsWithId[0];
   if (!firstMatch) return result;
 
+  if (!firstMatch.elements) return result;
+
   const qFormat = elementsWithId.find((el) => {
     const qFormat = el.elements.find((innerEl) => innerEl.name === 'w:qFormat');
     return qFormat;

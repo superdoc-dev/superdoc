@@ -36,6 +36,15 @@ describe('buildInstructionElements', () => {
   });
 
   describe('with instruction tokens', () => {
+    it('treats legacy string tokens as instruction text', () => {
+      const result = buildInstructionElements('XE "Term"', ['XE "Term"']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('w:instrText');
+      expect(result[0].attributes).toEqual({ 'xml:space': 'preserve' });
+      expect(result[0].elements[0].text).toBe('XE "Term"');
+    });
+
     it('creates elements from text tokens', () => {
       const tokens = [
         { type: 'text', text: 'INDEX \\e "' },

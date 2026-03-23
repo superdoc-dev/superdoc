@@ -1,6 +1,7 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { SELECTION_EDGE_NODE_TYPES } from '../types/address.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
@@ -62,6 +63,95 @@ function arraySchema(items: JsonSchema): JsonSchema {
 /** Returns a `{ $ref: '#/$defs/<name>' }` pointer for use in operation schemas. */
 function ref(name: string): JsonSchema {
   return { $ref: `#/$defs/${name}` };
+}
+
+/**
+ * Builds a `oneOf` schema that merges each TargetLocator branch with additional
+ * payload properties. This avoids the `allOf` + `additionalProperties: false`
+ * conflict where each branch would reject keys defined in the other schema.
+ */
+function targetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema(
+        {
+          target: {
+            ...ref('SelectionTarget'),
+            description:
+              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle.",
+          },
+          ...payloadProperties,
+        },
+        ['target', ...payloadRequired],
+      ),
+      objectSchema(
+        {
+          ref: {
+            type: 'string',
+            description:
+              "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
+          },
+          ...payloadProperties,
+        },
+        ['ref', ...payloadRequired],
+      ),
+    ],
+  };
+}
+
+/**
+ * Like {@link targetLocatorWithPayload}, but also allows an untargeted branch
+ * where neither `target` nor `ref` is present.
+ */
+function optionalTargetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema(
+        {
+          target: {
+            ...ref('SelectionTarget'),
+            description:
+              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}.",
+          },
+          ...payloadProperties,
+        },
+        ['target', ...payloadRequired],
+      ),
+      objectSchema(
+        {
+          ref: {
+            type: 'string',
+            description: 'Handle ref string returned by a prior search/query result.',
+          },
+          ...payloadProperties,
+        },
+        ['ref', ...payloadRequired],
+      ),
+      objectSchema({ ...payloadProperties }, [...payloadRequired]),
+    ],
+  };
+}
+
+/** Shared output/success/failure shape for ImagesMutationResult operations. */
+function imagesMutationSchemaSet(inputSchema: JsonSchema): OperationSchemaSet {
+  return {
+    input: inputSchema,
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  };
 }
 
 const nodeTypeValues = NODE_TYPES;
@@ -143,6 +233,51 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'segments'],
   ),
+
+  // -- Selection-based targeting --
+  SelectionEdgeNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...SELECTION_EDGE_NODE_TYPES] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  SelectionPoint: {
+    description:
+      "A point in the document. Use {kind:'text', blockId, offset} for character positions or {kind:'nodeEdge', node:{kind:'block', nodeType, nodeId}, edge:'before'|'after'} for block boundaries.",
+    oneOf: [
+      objectSchema({ kind: { const: 'text' }, blockId: { type: 'string' }, offset: { type: 'integer', minimum: 0 } }, [
+        'kind',
+        'blockId',
+        'offset',
+      ]),
+      objectSchema(
+        {
+          kind: { const: 'nodeEdge' },
+          node: ref('SelectionEdgeNodeAddress'),
+          edge: { enum: ['before', 'after'] },
+        },
+        ['kind', 'node', 'edge'],
+      ),
+    ],
+  } satisfies JsonSchema,
+  SelectionTarget: objectSchema(
+    {
+      kind: { const: 'selection' },
+      start: ref('SelectionPoint'),
+      end: ref('SelectionPoint'),
+    },
+    ['kind', 'start', 'end'],
+  ),
+  TargetLocator: {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget') }, ['target']),
+      objectSchema({ ref: { type: 'string' } }, ['ref']),
+    ],
+  } satisfies JsonSchema,
+  DeleteBehavior: { enum: ['selection', 'exact'] } satisfies JsonSchema,
+
   BlockNodeAddress: objectSchema(
     {
       kind: { const: 'block' },
@@ -155,6 +290,46 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'block' },
       nodeType: { enum: [...deletableBlockNodeTypeValues] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'table' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableRowAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableRow' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableCellAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableCell' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableOrRowAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: ['table', 'tableRow'] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableOrCellAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: ['table', 'tableCell'] },
       nodeId: { type: 'string' },
     },
     ['kind', 'nodeType', 'nodeId'],
@@ -249,6 +424,14 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['success'],
   ),
+  ReceiptFailure: objectSchema(
+    {
+      code: { type: 'string' },
+      message: { type: 'string' },
+      details: {},
+    },
+    ['code', 'message'],
+  ),
   TextMutationRange: objectSchema(
     {
       from: { type: 'integer' },
@@ -262,6 +445,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       target: ref('TextAddress'),
       range: ref('TextMutationRange'),
       text: { type: 'string' },
+      selectionTarget: ref('SelectionTarget'),
     },
     ['target', 'range', 'text'],
   ),
@@ -349,6 +533,51 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
   BlockAddressOrRange: {
     oneOf: [ref('BlockAddress'), ref('BlockRange')],
   },
+
+  // -- Story locator (discriminated union on storyType) --
+  StoryLocator: {
+    description:
+      "Story scope. Defaults to document body when omitted. Use {kind:'story', storyType:'body'} for body, or other storyType values for headers, footers, footnotes, endnotes.",
+    oneOf: [
+      objectSchema({ kind: { const: 'story' }, storyType: { const: 'body' } }, ['kind', 'storyType']),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterSlot' },
+          section: ref('SectionAddress'),
+          headerFooterKind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          resolution: { enum: ['effective', 'explicit'] },
+          onWrite: { enum: ['materializeIfInherited', 'editResolvedPart', 'error'] },
+        },
+        ['kind', 'storyType', 'section', 'headerFooterKind', 'variant'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterPart' },
+          refId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'refId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'footnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'endnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+    ],
+  } satisfies JsonSchema,
 };
 
 // ---------------------------------------------------------------------------
@@ -363,6 +592,10 @@ const textAddressSchema = ref('TextAddress');
 const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
 const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
+const tableAddressSchema = ref('TableAddress');
+const tableRowAddressSchema = ref('TableRowAddress');
+const tableCellAddressSchema = ref('TableCellAddress');
+const tableOrCellAddressSchema = ref('TableOrCellAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
@@ -375,6 +608,9 @@ const nodeAddressSchema = ref('NodeAddress');
 const commentAddressSchema = ref('CommentAddress');
 const trackedChangeAddressSchema = ref('TrackedChangeAddress');
 const entityAddressSchema = ref('EntityAddress');
+const selectionTargetSchema = ref('SelectionTarget');
+const targetLocatorSchema = ref('TargetLocator');
+const deleteBehaviorSchema = ref('DeleteBehavior');
 const resolvedHandleSchema = ref('ResolvedHandle');
 const pageInfoSchema = ref('PageInfo');
 const receiptSuccessSchema = ref('ReceiptSuccess');
@@ -383,6 +619,7 @@ const textMutationResolutionSchema = ref('TextMutationResolution');
 const textMutationSuccessSchema = ref('TextMutationSuccess');
 const matchRunSchema = ref('MatchRun');
 const matchBlockSchema = ref('MatchBlock');
+const storyLocatorSchema = ref('StoryLocator');
 
 // Keep these aliases for internal readability
 void positionSchema;
@@ -626,7 +863,7 @@ function listsMutateItemResultSchemaFor(operationId: OperationId): JsonSchema {
   };
 }
 
-function listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
+function _listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
   return {
     oneOf: [listsExitSuccessSchema, listsFailureSchemaFor(operationId)],
   };
@@ -659,6 +896,7 @@ const matchContextSchema = objectSchema(
     snippet: { type: 'string' },
     highlightRange: rangeSchema,
     textRanges: arraySchema(textAddressSchema),
+    target: selectionTargetSchema,
   },
   ['address', 'snippet', 'highlightRange'],
 );
@@ -674,19 +912,22 @@ const unknownNodeDiagnosticSchema = objectSchema(
 
 const textSelectorSchema = objectSchema(
   {
-    type: { const: 'text' },
-    pattern: { type: 'string' },
-    mode: { enum: ['contains', 'regex'] },
-    caseSensitive: { type: 'boolean' },
+    type: { const: 'text', description: "Must be 'text' for text pattern search." },
+    pattern: { type: 'string', description: 'Text or regex pattern to match.' },
+    mode: { enum: ['contains', 'regex'], description: "Match mode: 'contains' (substring) or 'regex'." },
+    caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
   },
   ['type', 'pattern'],
 );
 
 const nodeSelectorSchema = objectSchema(
   {
-    type: { const: 'node' },
-    nodeType: { enum: [...nodeTypeValues] },
-    kind: { enum: ['block', 'inline'] },
+    type: { const: 'node', description: "Must be 'node' for node type search." },
+    nodeType: {
+      enum: [...nodeTypeValues],
+      description: 'Block type to match (paragraph, heading, table, listItem, etc.).',
+    },
+    kind: { enum: ['block', 'inline'], description: "Filter: 'block' or 'inline'." },
   },
   ['type'],
 );
@@ -702,46 +943,136 @@ const selectSchema: JsonSchema = {
   anyOf: [textSelectorSchema, nodeSelectorSchema, selectorShorthandSchema],
 };
 
-const findInputSchema = objectSchema(
+// -- SDFindInput / SDFindResult schemas (SDM/1) --
+
+const sdTextSelectorSchema = objectSchema(
   {
-    select: selectSchema,
-    within: nodeAddressSchema,
+    type: { const: 'text' },
+    pattern: { type: 'string' },
+    mode: { enum: ['contains', 'regex'] },
+    caseSensitive: { type: 'boolean' },
+  },
+  ['type', 'pattern'],
+);
+
+const sdNodeSelectorSchema = objectSchema(
+  {
+    type: { const: 'node' },
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { type: 'string' },
+  },
+  ['type'],
+);
+
+const sdSelectorSchema: JsonSchema = {
+  oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
+};
+
+// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
+
+const sdReadOptionsSchema = objectSchema({
+  includeResolved: { type: 'boolean' },
+  includeProvenance: { type: 'boolean' },
+  includeContext: { type: 'boolean' },
+});
+
+const sdFindInputSchema = objectSchema(
+  {
+    in: storyLocatorSchema,
+    select: sdSelectorSchema,
+    within: blockNodeAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
-    require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-    includeNodes: { type: 'boolean' },
-    includeUnknown: { type: 'boolean' },
+    options: sdReadOptionsSchema,
   },
   ['select'],
 );
 
-const findItemDomainSchema = discoveryItemSchema(
+const sdNodeResultSchema = objectSchema(
   {
+    node: { type: 'object' },
     address: nodeAddressSchema,
-    node: nodeInfoSchema,
-    context: matchContextSchema,
+    context: { type: 'object' },
   },
-  ['address'],
+  ['node', 'address'],
 );
 
-const findOutputSchema: JsonSchema = {
-  ...discoveryResultSchema(findItemDomainSchema),
-  properties: {
-    ...(discoveryResultSchema(findItemDomainSchema) as { properties: Record<string, JsonSchema> }).properties,
-    diagnostics: arraySchema(unknownNodeDiagnosticSchema),
+const sdFindResultSchema = objectSchema(
+  {
+    total: { type: 'integer', minimum: 0 },
+    limit: { type: 'integer', minimum: 0 },
+    offset: { type: 'integer', minimum: 0 },
+    items: arraySchema(sdNodeResultSchema),
   },
-};
+  ['total', 'limit', 'offset', 'items'],
+);
+
+// ---------------------------------------------------------------------------
+// SDMutationReceipt schemas (for insert/replace in SDM/1 format)
+// ---------------------------------------------------------------------------
+
+const sdMutationResolutionSchema = objectSchema(
+  {
+    target: { oneOf: [textAddressSchema, blockNodeAddressSchema] },
+    range: textMutationRangeSchema,
+    selectionTarget: selectionTargetSchema,
+  },
+  ['target', 'range'],
+);
+
+const sdMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    resolution: sdMutationResolutionSchema,
+    evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+  },
+  ['success'],
+);
+
+function sdMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+      resolution: sdMutationResolutionSchema,
+      evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function sdMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [sdMutationSuccessSchema, sdMutationFailureSchemaFor(operationId)],
+  };
+}
 
 const documentInfoCountsSchema = objectSchema(
   {
     words: { type: 'integer' },
+    characters: { type: 'integer' },
     paragraphs: { type: 'integer' },
     headings: { type: 'integer' },
     tables: { type: 'integer' },
     images: { type: 'integer' },
     comments: { type: 'integer' },
+    trackedChanges: { type: 'integer' },
+    sdtFields: { type: 'integer' },
+    lists: { type: 'integer' },
+    pages: { type: 'integer' },
   },
-  ['words', 'paragraphs', 'headings', 'tables', 'images', 'comments'],
+  [
+    'words',
+    'characters',
+    'paragraphs',
+    'headings',
+    'tables',
+    'images',
+    'comments',
+    'trackedChanges',
+    'sdtFields',
+    'lists',
+  ],
 );
 
 const documentInfoOutlineItemSchema = objectSchema(
@@ -763,12 +1094,47 @@ const documentInfoCapabilitiesSchema = objectSchema(
   ['canFind', 'canGetNode', 'canComment', 'canReplace'],
 );
 
+const documentStyleInfoSchema = objectSchema(
+  {
+    styleId: { type: 'string', description: "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText')." },
+    count: { type: 'integer', description: 'Number of paragraphs using this style.' },
+    fontFamily: { type: 'string', description: 'Font family used by text in this style.' },
+    fontSize: { type: 'number', description: 'Font size in half-points used by text in this style.' },
+  },
+  ['styleId', 'count'],
+);
+
+const documentStylesSchema = objectSchema(
+  {
+    paragraphStyles: {
+      ...arraySchema(documentStyleInfoSchema),
+      description: 'Paragraph styles in use, sorted by frequency (most common first).',
+    },
+  },
+  ['paragraphStyles'],
+);
+
+const documentDefaultsSchema = objectSchema(
+  {
+    fontFamily: { type: 'string', description: 'Most common body text font family.' },
+    fontSize: { type: 'number', description: 'Most common body text font size in half-points.' },
+    styleId: { type: 'string', description: 'Most common body paragraph style ID.' },
+  },
+  [],
+);
+
 const documentInfoSchema = objectSchema(
   {
     counts: documentInfoCountsSchema,
     outline: arraySchema(documentInfoOutlineItemSchema),
     capabilities: documentInfoCapabilitiesSchema,
     revision: { type: 'string' },
+    styles: { ...documentStylesSchema, description: 'Styles currently in use in the document.' },
+    defaults: {
+      ...documentDefaultsSchema,
+      description:
+        "Document's default body text formatting. Use these values when creating new content to match existing style.",
+    },
   },
   ['counts', 'outline', 'capabilities', 'revision'],
 );
@@ -1231,15 +1597,66 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
+const tableBorderColorPattern = '^([0-9A-Fa-f]{6}|auto)$';
 
-const insertInputSchema = objectSchema(
+const tableBorderSpecSchema = objectSchema(
   {
-    target: textAddressSchema,
-    value: { type: 'string' },
-    type: { type: 'string', enum: ['text', 'markdown', 'html'] },
+    lineStyle: { type: 'string' },
+    lineWeightPt: { type: 'number', exclusiveMinimum: 0 },
+    color: { type: 'string', pattern: tableBorderColorPattern },
   },
-  ['value'],
+  ['lineStyle', 'lineWeightPt', 'color'],
 );
+
+const nullableTableBorderSpecSchema: JsonSchema = {
+  oneOf: [tableBorderSpecSchema, { type: 'null' }],
+};
+
+const sdFragmentSchema: JsonSchema = {
+  oneOf: [{ type: 'object' }, { type: 'array', items: { type: 'object' } }],
+};
+
+const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
+
+const nestingPolicySchema: JsonSchema = {
+  ...objectSchema({
+    tables: { enum: ['forbid', 'allow'] },
+  }),
+  description: "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
+};
+
+const insertInputSchema: JsonSchema = {
+  oneOf: [
+    optionalTargetLocatorWithPayload(
+      {
+        in: storyLocatorSchema,
+        value: { type: 'string', description: 'Text content to insert.' },
+        type: {
+          type: 'string',
+          enum: ['text', 'markdown', 'html'],
+          description: "Content format: 'text' (default), 'markdown', or 'html'.",
+        },
+      },
+      ['value'],
+    ),
+    objectSchema(
+      {
+        in: storyLocatorSchema,
+        target: {
+          ...blockNodeAddressSchema,
+          description: "Block address for structural insertion: {kind:'block', nodeType:'...', nodeId:'...'}.",
+        },
+        content: { ...sdFragmentSchema, description: 'Document fragment to insert (structured content).' },
+        placement: {
+          ...placementSchema,
+          description: "Where to place content relative to target: 'before', 'after', 'insideStart', or 'insideEnd'.",
+        },
+        nestingPolicy: nestingPolicySchema,
+      },
+      ['content'],
+    ),
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Table operation shared schemas
@@ -1247,38 +1664,86 @@ const insertInputSchema = objectSchema(
 
 const tableLocatorSchema: JsonSchema = {
   ...objectSchema({
-    target: blockNodeAddressSchema,
+    target: tableAddressSchema,
     nodeId: { type: 'string' },
   }),
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
 
-const _tableScopedRowLocatorSchema: JsonSchema = {
+const cellLocatorSchema: JsonSchema = {
   ...objectSchema({
-    tableTarget: blockNodeAddressSchema,
-    tableNodeId: { type: 'string' },
-    rowIndex: { type: 'integer', minimum: 0 },
+    target: tableCellAddressSchema,
+    nodeId: { type: 'string' },
   }),
-  oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+  oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
 
-const _tableScopedColumnLocatorSchema: JsonSchema = {
-  ...objectSchema(
-    {
-      tableTarget: blockNodeAddressSchema,
-      tableNodeId: { type: 'string' },
-      columnIndex: { type: 'integer', minimum: 0 },
-    },
-    ['columnIndex'],
-  ),
-  oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+/**
+ * Accepts either a direct cell locator (target/nodeId pointing at a cell)
+ * or a table-scoped cell locator (target/nodeId pointing at a table + rowIndex + columnIndex).
+ */
+const cellOrTableScopedCellLocatorSchema: JsonSchema = {
+  oneOf: [
+    cellLocatorSchema,
+    objectSchema(
+      {
+        target: tableAddressSchema,
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['target', 'rowIndex', 'columnIndex'],
+    ),
+    objectSchema(
+      {
+        nodeId: { type: 'string' },
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['nodeId', 'rowIndex', 'columnIndex'],
+    ),
+  ],
 };
+
+const tableOrCellLocatorSchema: JsonSchema = {
+  ...objectSchema({
+    target: tableOrCellAddressSchema,
+    nodeId: { type: 'string' },
+  }),
+  oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+};
+
+function rowOperationInputSchema(
+  extraProperties: Record<string, JsonSchema>,
+  required: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema({ target: tableRowAddressSchema, ...extraProperties }, ['target', ...required]),
+      objectSchema(
+        {
+          target: tableAddressSchema,
+          rowIndex: { type: 'integer', minimum: 0 },
+          ...extraProperties,
+        },
+        ['target', 'rowIndex', ...required],
+      ),
+      objectSchema(
+        {
+          nodeId: { type: 'string' },
+          rowIndex: { type: 'integer', minimum: 0 },
+          ...extraProperties,
+        },
+        ['nodeId', 'rowIndex', ...required],
+      ),
+    ],
+  };
+}
 
 const mergeRangeLocatorSchema: JsonSchema = {
   ...objectSchema(
     {
-      tableTarget: blockNodeAddressSchema,
-      tableNodeId: { type: 'string' },
+      target: tableAddressSchema,
+      nodeId: { type: 'string' },
       start: objectSchema({ rowIndex: { type: 'integer', minimum: 0 }, columnIndex: { type: 'integer', minimum: 0 } }, [
         'rowIndex',
         'columnIndex',
@@ -1290,19 +1755,8 @@ const mergeRangeLocatorSchema: JsonSchema = {
     },
     ['start', 'end'],
   ),
-  oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+  oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
-
-/**
- * oneOf constraint for operations that accept either a direct row locator
- * (target or nodeId) OR a table-scoped locator (tableTarget/tableNodeId + rowIndex).
- */
-const mixedRowLocatorOneOf = [
-  { required: ['target'] },
-  { required: ['nodeId'] },
-  { required: ['tableTarget', 'rowIndex'] },
-  { required: ['tableNodeId', 'rowIndex'] },
-];
 
 const tableCreateLocationSchema: JsonSchema = {
   oneOf: [
@@ -1318,7 +1772,7 @@ const tableCreateLocationSchema: JsonSchema = {
 const tableMutationSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
-    table: blockNodeAddressSchema,
+    table: tableAddressSchema,
     trackedChangeRefs: arraySchema(entityAddressSchema),
   },
   ['success'],
@@ -1328,7 +1782,7 @@ const tableMutationSuccessSchema: JsonSchema = objectSchema(
 const createTableSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
-    table: blockNodeAddressSchema,
+    table: tableAddressSchema,
     trackedChangeRefs: arraySchema(entityAddressSchema),
   },
   ['success', 'table'],
@@ -1400,15 +1854,11 @@ function supportsImplicitTrueValue(operationId: FormatInlineAliasOperationId): b
 const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, OperationSchemaSet> = Object.fromEntries(
   INLINE_PROPERTY_REGISTRY.map((entry) => {
     const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
-    const requiredFields = supportsImplicitTrueValue(operationId) ? ['target'] : ['target', 'value'];
+    const requiredFields = supportsImplicitTrueValue(operationId) ? [] : ['value'];
     const schema: OperationSchemaSet = {
-      input: objectSchema(
-        {
-          target: textAddressSchema,
-          value: entry.schema,
-        },
-        requiredFields,
-      ),
+      input: {
+        ...targetLocatorWithPayload({ value: entry.schema }, requiredFields),
+      },
       output: textMutationResultSchemaFor(operationId),
       success: textMutationSuccessSchema,
       failure: textMutationFailureSchemaFor(operationId),
@@ -1627,14 +2077,783 @@ const hyperlinkInfoSchema: JsonSchema = objectSchema(
   ['address', 'properties'],
 );
 
+// ---------------------------------------------------------------------------
+// Content Controls shared schemas
+// ---------------------------------------------------------------------------
+
+const contentControlTargetSchema = objectSchema(
+  {
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { const: 'sdt' },
+    nodeId: { type: 'string' },
+  },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const contentControlMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    contentControl: contentControlTargetSchema,
+    updatedRef: contentControlTargetSchema,
+  },
+  ['success', 'contentControl'],
+);
+
+const contentControlMutationFailureSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: { $ref: '#/$defs/ReceiptFailure' },
+  },
+  ['success', 'failure'],
+);
+
+function ccMutationResultSchema(): JsonSchema {
+  return { oneOf: [contentControlMutationSuccessSchema, contentControlMutationFailureSchema] };
+}
+
+const ccListResultSchema = objectSchema(
+  { items: { type: 'array', items: { type: 'object' } }, total: { type: 'integer' } },
+  ['items', 'total'],
+);
+
+const ccInfoSchema: JsonSchema = { type: 'object', description: 'ContentControlInfo' };
+
+function ccTargetInput(): JsonSchema {
+  return objectSchema({ target: contentControlTargetSchema }, ['target']);
+}
+
+/** Generates all contentControls.* schemas in one helper to keep the main map DRY. */
+type ContentControlOperationId = Extract<OperationId, 'create.contentControl' | `contentControls.${string}`>;
+
+function buildContentControlSchemas(): Record<ContentControlOperationId, OperationSchemaSet> {
+  const targetOnlyMutation: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  const targetOnlyRead: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccInfoSchema,
+  };
+
+  const ccContentMutation: OperationSchemaSet = {
+    input: objectSchema(
+      { target: contentControlTargetSchema, content: { type: 'string' }, format: { enum: ['text', 'html'] } },
+      ['target', 'content'],
+    ),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  return {
+    'create.contentControl': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          controlType: { type: 'string' },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+          content: { type: 'string' },
+        },
+        ['kind'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.list': {
+      input: objectSchema({
+        controlType: { type: 'string' },
+        tag: { type: 'string' },
+        offset: { type: 'integer' },
+        limit: { type: 'integer' },
+      }),
+      output: ccListResultSchema,
+    },
+    'contentControls.get': targetOnlyRead,
+    'contentControls.listInRange': {
+      input: objectSchema(
+        {
+          startBlockId: { type: 'string' },
+          endBlockId: { type: 'string' },
+          offset: { type: 'integer' },
+          limit: { type: 'integer' },
+        },
+        ['startBlockId', 'endBlockId'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTag': {
+      input: objectSchema({ tag: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'tag',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTitle': {
+      input: objectSchema({ title: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'title',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.listChildren': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, offset: { type: 'integer' }, limit: { type: 'integer' } },
+        ['target'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.getParent': { input: ccTargetInput(), output: { oneOf: [ccInfoSchema, { type: 'null' }] } },
+    'contentControls.wrap': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['kind', 'target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.unwrap': targetOnlyMutation,
+    'contentControls.delete': targetOnlyMutation,
+    'contentControls.copy': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.move': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.patch': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          alias: {},
+          tag: {},
+          appearance: { enum: ['boundingBox', 'tags', 'hidden'] },
+          color: { type: 'string' },
+          placeholder: { type: 'string' },
+          showingPlaceholder: { type: 'boolean' },
+          temporary: { type: 'boolean' },
+          tabIndex: { type: 'integer' },
+        },
+        ['target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setLockMode': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['target', 'lockMode'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setType': {
+      input: objectSchema({ target: contentControlTargetSchema, controlType: { type: 'string' } }, [
+        'target',
+        'controlType',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.getContent': {
+      input: ccTargetInput(),
+      output: objectSchema({ content: { type: 'string' }, format: { enum: ['text', 'html'] } }, ['content', 'format']),
+    },
+    'contentControls.replaceContent': ccContentMutation,
+    'contentControls.clearContent': targetOnlyMutation,
+    'contentControls.appendContent': ccContentMutation,
+    'contentControls.prependContent': ccContentMutation,
+    'contentControls.insertBefore': ccContentMutation,
+    'contentControls.insertAfter': ccContentMutation,
+
+    // Binding
+    'contentControls.getBinding': {
+      input: ccTargetInput(),
+      output: {
+        oneOf: [
+          objectSchema(
+            { storeItemId: { type: 'string' }, xpath: { type: 'string' }, prefixMappings: { type: 'string' } },
+            ['storeItemId', 'xpath'],
+          ),
+          { type: 'null' },
+        ],
+      },
+    },
+    'contentControls.setBinding': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          storeItemId: { type: 'string' },
+          xpath: { type: 'string' },
+          prefixMappings: { type: 'string' },
+        },
+        ['target', 'storeItemId', 'xpath'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.clearBinding': targetOnlyMutation,
+    'contentControls.getRawProperties': {
+      input: ccTargetInput(),
+      output: objectSchema({ properties: { type: 'object' } }, ['properties']),
+    },
+    'contentControls.patchRawProperties': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, patches: { type: 'array', items: { type: 'object' } } },
+        ['target', 'patches'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.validateWordCompatibility': {
+      input: ccTargetInput(),
+      output: objectSchema(
+        { compatible: { type: 'boolean' }, diagnostics: { type: 'array', items: { type: 'object' } } },
+        ['compatible', 'diagnostics'],
+      ),
+    },
+    'contentControls.normalizeWordCompatibility': targetOnlyMutation,
+    'contentControls.normalizeTagPayload': targetOnlyMutation,
+
+    // Text
+    'contentControls.text.setMultiline': {
+      input: objectSchema({ target: contentControlTargetSchema, multiline: { type: 'boolean' } }, [
+        'target',
+        'multiline',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.clearValue': targetOnlyMutation,
+
+    // Date
+    'contentControls.date.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.clearValue': targetOnlyMutation,
+    'contentControls.date.setDisplayFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setDisplayLocale': {
+      input: objectSchema({ target: contentControlTargetSchema, locale: { type: 'string' } }, ['target', 'locale']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setStorageFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setCalendar': {
+      input: objectSchema({ target: contentControlTargetSchema, calendar: { type: 'string' } }, ['target', 'calendar']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Checkbox
+    'contentControls.checkbox.getState': {
+      input: ccTargetInput(),
+      output: objectSchema({ checked: { type: 'boolean' } }, ['checked']),
+    },
+    'contentControls.checkbox.setState': {
+      input: objectSchema({ target: contentControlTargetSchema, checked: { type: 'boolean' } }, ['target', 'checked']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.checkbox.toggle': targetOnlyMutation,
+    'contentControls.checkbox.setSymbolPair': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, checkedSymbol: { type: 'object' }, uncheckedSymbol: { type: 'object' } },
+        ['target', 'checkedSymbol', 'uncheckedSymbol'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Choice list
+    'contentControls.choiceList.getItems': {
+      input: ccTargetInput(),
+      output: objectSchema({ items: { type: 'array', items: { type: 'object' } }, selectedValue: { type: 'string' } }, [
+        'items',
+      ]),
+    },
+    'contentControls.choiceList.setItems': {
+      input: objectSchema({ target: contentControlTargetSchema, items: { type: 'array', items: { type: 'object' } } }, [
+        'target',
+        'items',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.choiceList.setSelected': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Repeating section
+    'contentControls.repeatingSection.listItems': { input: ccTargetInput(), output: ccListResultSchema },
+    'contentControls.repeatingSection.insertItemBefore': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.insertItemAfter': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.cloneItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.deleteItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.setAllowInsertDelete': {
+      input: objectSchema({ target: contentControlTargetSchema, allow: { type: 'boolean' } }, ['target', 'allow']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Group
+    'contentControls.group.wrap': targetOnlyMutation,
+    'contentControls.group.ungroup': targetOnlyMutation,
+  };
+}
+// Reference namespace schema helpers
+// ---------------------------------------------------------------------------
+
+// --- Shared patterns ---
+const refListQuerySchema = objectSchema({
+  limit: { type: 'integer', minimum: 1 },
+  offset: { type: 'integer', minimum: 0 },
+});
+
+const discoveryOutputSchema: JsonSchema = { type: 'object' };
+
+const receiptFailureSchema: JsonSchema = objectSchema(
+  {
+    code: { type: 'string' },
+    message: { type: 'string' },
+    details: {},
+  },
+  ['code', 'message'],
+);
+
+/** Failure branch shared by all reference-namespace mutation results. */
+const refFailureSchema: JsonSchema = objectSchema({ success: { const: false }, failure: receiptFailureSchema }, [
+  'success',
+  'failure',
+]);
+
+/** Creates output, success, and failure schemas for a reference-namespace mutation. */
+function refMutationSchemas(
+  successProperties: Record<string, JsonSchema>,
+  requiredSuccess: string[],
+): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true }, ...successProperties }, ['success', ...requiredSuccess]);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+/** Creates output, success, and failure schemas for a config-style mutation (no address in success). */
+function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true } }, ['success']);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+// --- Bookmark schemas ---
+const bookmarkAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  ['kind', 'entityType', 'name'],
+);
+
+const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
+
+// --- Footnote schemas ---
+const footnoteAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'footnote' }, noteId: { type: 'string' } },
+  ['kind', 'entityType', 'noteId'],
+);
+
+const footnoteConfigScopeSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'document' } }, ['kind']),
+    objectSchema({ kind: { const: 'section' }, sectionId: { type: 'string' } }, ['kind', 'sectionId']),
+  ],
+};
+
+const footnoteNumberingSchema: JsonSchema = objectSchema({
+  format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter', 'symbol'] },
+  start: { type: 'integer' },
+  restartPolicy: { enum: ['continuous', 'eachSection', 'eachPage'] },
+  position: { enum: ['pageBottom', 'beneathText', 'sectionEnd', 'documentEnd'] },
+});
+
+const footnoteMutation = refMutationSchemas({ footnote: footnoteAddressSchema }, ['footnote']);
+const footnoteConfig = refConfigSchemas();
+
+// --- CrossRef schemas ---
+const crossRefAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'crossRef' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const crossRefTargetSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'bookmark' }, name: { type: 'string' } }, ['kind', 'name']),
+    objectSchema({ kind: { const: 'heading' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'note' }, noteId: { type: 'string' } }, ['kind', 'noteId']),
+    objectSchema({ kind: { const: 'caption' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'numberedItem' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema(
+      { kind: { const: 'styledParagraph' }, styleName: { type: 'string' }, direction: { enum: ['before', 'after'] } },
+      ['kind', 'styleName'],
+    ),
+  ],
+};
+
+const crossRefDisplaySchema: JsonSchema = {
+  enum: [
+    'content',
+    'pageNumber',
+    'noteNumber',
+    'labelAndNumber',
+    'aboveBelow',
+    'numberOnly',
+    'numberFullContext',
+    'styledContent',
+    'styledPageNumber',
+  ],
+};
+
+const crossRefMutation = refMutationSchemas({ crossRef: crossRefAddressSchema }, ['crossRef']);
+
+// --- Index schemas ---
+const indexAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'index' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const indexEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'indexEntry' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const indexConfigSchema: JsonSchema = objectSchema({
+  headingSeparator: { type: 'string' },
+  entryPageSeparator: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+  sequenceId: { type: 'string' },
+  columns: { type: 'integer' },
+  entryTypeFilter: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  letterRange: objectSchema({ from: { type: 'string' }, to: { type: 'string' } }, ['from', 'to']),
+  runIn: { type: 'boolean' },
+  accentedSorting: { type: 'boolean' },
+});
+
+const indexEntryDataSchema: JsonSchema = objectSchema(
+  {
+    text: { type: 'string' },
+    subEntry: { type: 'string' },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+    crossReference: { type: 'string' },
+    pageRangeBookmark: { type: 'string' },
+    entryType: { type: 'string' },
+    yomi: { type: 'string' },
+  },
+  ['text'],
+);
+
+const indexEntryPatchSchema: JsonSchema = objectSchema({
+  text: { type: 'string' },
+  subEntry: { type: 'string' },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+  crossReference: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  entryType: { type: 'string' },
+  yomi: { type: 'string' },
+});
+
+const indexMutation = refMutationSchemas({ index: indexAddressSchema }, ['index']);
+const indexEntryMutation = refMutationSchemas({ entry: indexEntryAddressSchema }, ['entry']);
+
+// --- Caption schemas ---
+const captionAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'paragraph' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const captionMutation = refMutationSchemas({ caption: captionAddressSchema }, ['caption']);
+const captionConfig = refConfigSchemas();
+
+// --- Field schemas ---
+const fieldAddressSchema: JsonSchema = objectSchema(
+  {
+    kind: { const: 'field' },
+    blockId: { type: 'string' },
+    occurrenceIndex: { type: 'integer' },
+    nestingDepth: { type: 'integer' },
+  },
+  ['kind', 'blockId', 'occurrenceIndex'],
+);
+
+const fieldMutation = refMutationSchemas({ field: fieldAddressSchema }, ['field']);
+
+// --- Citation schemas ---
+const citationAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'citation' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const citationSourceAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'citationSource' }, sourceId: { type: 'string' } },
+  ['kind', 'entityType', 'sourceId'],
+);
+
+const bibliographyAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'bibliography' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const citationMutation = refMutationSchemas({ citation: citationAddressSchema }, ['citation']);
+const citationSourceMutation = refMutationSchemas({ source: citationSourceAddressSchema }, ['source']);
+const bibliographyMutation = refMutationSchemas({ bibliography: bibliographyAddressSchema }, ['bibliography']);
+
+const citationPersonSchema: JsonSchema = objectSchema(
+  {
+    first: { type: 'string' },
+    middle: { type: 'string' },
+    last: { type: 'string' },
+  },
+  ['last'],
+);
+
+const citationSourceFieldsSchema: JsonSchema = objectSchema({
+  title: { type: 'string' },
+  authors: arraySchema(citationPersonSchema),
+  year: { type: 'string' },
+  publisher: { type: 'string' },
+  city: { type: 'string' },
+  journalName: { type: 'string' },
+  volume: { type: 'string' },
+  issue: { type: 'string' },
+  pages: { type: 'string' },
+  url: { type: 'string' },
+  doi: { type: 'string' },
+  edition: { type: 'string' },
+  editor: arraySchema(citationPersonSchema),
+  translator: arraySchema(citationPersonSchema),
+  medium: { type: 'string' },
+  shortTitle: { type: 'string' },
+  standardNumber: { type: 'string' },
+});
+
+const tocCreateLocationSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+    objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+    objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+    objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+  ],
+};
+
+// --- Authorities schemas ---
+const authoritiesAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'tableOfAuthorities' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const authorityEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'authorityEntry' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const authoritiesConfigSchema: JsonSchema = objectSchema({
+  category: { type: 'integer' },
+  entryPageSeparator: { type: 'string' },
+  usePassim: { type: 'boolean' },
+  includeHeadings: { type: 'boolean' },
+  tabLeader: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+});
+
+const authorityEntryDataSchema: JsonSchema = objectSchema(
+  {
+    longCitation: { type: 'string' },
+    shortCitation: { type: 'string' },
+    category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+  },
+  ['longCitation', 'category'],
+);
+
+const authorityEntryPatchSchema: JsonSchema = objectSchema({
+  longCitation: { type: 'string' },
+  shortCitation: { type: 'string' },
+  category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+});
+
+const authoritiesMutation = refMutationSchemas({ authorities: authoritiesAddressSchema }, ['authorities']);
+const authorityEntryMutation = refMutationSchemas({ entry: authorityEntryAddressSchema }, ['entry']);
+
+// --- Diff schemas ---
+
+const diffCoverageSchema: JsonSchema = objectSchema(
+  {
+    body: { type: 'boolean', const: true },
+    comments: { type: 'boolean' },
+    styles: { type: 'boolean' },
+    numbering: { type: 'boolean' },
+    headerFooters: { type: 'boolean', const: false },
+  },
+  ['body', 'comments', 'styles', 'numbering', 'headerFooters'],
+);
+
+const diffSummarySchema: JsonSchema = objectSchema(
+  {
+    hasChanges: { type: 'boolean' },
+    changedComponents: { type: 'array', items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering'] } },
+    body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+  },
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering'],
+);
+
+const diffSnapshotSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-snapshot/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    fingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    payload: { type: 'object', description: 'Opaque engine-owned snapshot data.' },
+  },
+  ['version', 'engine', 'fingerprint', 'coverage', 'payload'],
+);
+
+const diffPayloadSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-payload/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    payload: { type: 'object', description: 'Opaque engine-owned diff data.' },
+  },
+  ['version', 'engine', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'payload'],
+);
+
+const diffApplyResultSchema: JsonSchema = objectSchema(
+  {
+    appliedOperations: { type: 'integer' },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    diagnostics: { type: 'array', items: { type: 'string' } },
+  },
+  ['appliedOperations', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'diagnostics'],
+);
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
+  get: {
+    input: objectSchema({
+      options: objectSchema({
+        includeResolved: { type: 'boolean' },
+        includeProvenance: { type: 'boolean' },
+        includeContext: { type: 'boolean' },
+      }),
+    }),
+    output: objectSchema(
+      {
+        modelVersion: { const: 'sdm/1' },
+        body: { type: 'array' },
+      },
+      ['modelVersion', 'body'],
+    ),
+  },
   find: {
-    input: findInputSchema,
-    output: findOutputSchema,
+    input: sdFindInputSchema,
+    output: sdFindResultSchema,
   },
   getNode: {
     input: nodeAddressSchema,
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getNodeById: {
     input: objectSchema(
@@ -1644,68 +2863,185 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getText: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getMarkdown: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getHtml: {
     input: objectSchema({
-      unflattenLists: { type: 'boolean' },
+      in: storyLocatorSchema,
+      unflattenLists: {
+        type: 'boolean',
+        description: 'When true, flattens nested list structures in output. Default: false.',
+      },
     }),
     output: { type: 'string' },
+  },
+  markdownToFragment: {
+    input: objectSchema({ markdown: { type: 'string' } }, ['markdown']),
+    output: objectSchema(
+      {
+        fragment: {},
+        lossy: { type: 'boolean' },
+        diagnostics: arraySchema(
+          objectSchema(
+            {
+              code: { type: 'string' },
+              severity: { type: 'string', enum: ['error', 'warning', 'info'] },
+              message: { type: 'string' },
+              path: arraySchema({ type: 'string' }),
+            },
+            ['code', 'severity', 'message'],
+          ),
+        ),
+      },
+      ['fragment', 'lossy', 'diagnostics'],
+    ),
   },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
   },
+  clearContent: {
+    input: strictEmptyObjectSchema,
+    output: receiptResultSchemaFor('clearContent'),
+    success: receiptSuccessSchema,
+    failure: receiptFailureResultSchemaFor('clearContent'),
+  },
   insert: {
     input: insertInputSchema,
-    output: textMutationResultSchemaFor('insert'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('insert'),
+    output: sdMutationResultSchemaFor('insert'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('insert'),
   },
   replace: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
-    output: textMutationResultSchemaFor('replace'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('replace'),
+    input: {
+      oneOf: [
+        // Text replacement: TargetLocator + text
+        {
+          ...targetLocatorWithPayload(
+            {
+              in: storyLocatorSchema,
+              text: { type: 'string', description: 'Replacement text content.' },
+            },
+            ['text'],
+          ),
+        },
+        // Structural replacement: exactly one of (target | ref) + content
+        {
+          oneOf: [
+            objectSchema(
+              {
+                in: storyLocatorSchema,
+                target: {
+                  oneOf: [blockNodeAddressSchema, selectionTargetSchema],
+                  description: 'Target block or selection to replace.',
+                },
+                content: {
+                  ...sdFragmentSchema,
+                  description: 'Document fragment to replace with (structured content).',
+                },
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['target', 'content'],
+            ),
+            objectSchema(
+              {
+                in: storyLocatorSchema,
+                ref: { type: 'string', description: 'Reference handle from a previous search result.' },
+                content: {
+                  ...sdFragmentSchema,
+                  description: 'Document fragment to replace with (structured content).',
+                },
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['ref', 'content'],
+            ),
+          ],
+        },
+      ],
+    },
+    output: sdMutationResultSchemaFor('replace'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('replace'),
   },
   delete: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: {
+      ...targetLocatorWithPayload({
+        in: storyLocatorSchema,
+        behavior: { ...deleteBehaviorSchema, description: "Delete behavior: 'selection' (default) or 'exact'." },
+      }),
+    },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
   'format.apply': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        inline: buildInlineRunPatchSchema(),
-      },
-      ['target', 'inline'],
-    ),
+    input: {
+      ...targetLocatorWithPayload(
+        {
+          in: storyLocatorSchema,
+          inline: {
+            ...buildInlineRunPatchSchema(),
+            description:
+              'Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.',
+          },
+        },
+        ['inline'],
+      ),
+    },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
+  'blocks.list': {
+    input: objectSchema({
+      offset: { type: 'number', minimum: 0, description: 'Number of blocks to skip. Default: 0.' },
+      limit: { type: 'number', minimum: 1, description: 'Maximum blocks to return. Omit for all blocks.' },
+      nodeTypes: {
+        type: 'array',
+        items: { enum: [...blockNodeTypeValues] },
+        description: "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
+      },
+    }),
+    output: objectSchema(
+      {
+        total: { type: 'number' },
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string', description: 'Block ID for targeting with other tools.' },
+              nodeType: { enum: [...blockNodeTypeValues] },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              isEmpty: { type: 'boolean' },
+              styleId: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Named paragraph style.' },
+              fontFamily: { type: 'string', description: 'Font family from first text run.' },
+              fontSize: { type: 'number', description: 'Font size from first text run.' },
+              bold: { type: 'boolean', description: 'True if text is bold.' },
+              alignment: { type: 'string', description: 'Paragraph alignment.' },
+              headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+            },
+            ['ordinal', 'nodeId', 'nodeType'],
+          ),
+        },
+        revision: { type: 'string' },
+      },
+      ['total', 'blocks', 'revision'],
+    ),
+  },
   'blocks.delete': {
     input: objectSchema(
       {
@@ -1717,6 +3053,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
@@ -1724,18 +3066,79 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
   },
+  'blocks.deleteRange': {
+    input: objectSchema(
+      {
+        start: blockNodeAddressSchema,
+        end: blockNodeAddressSchema,
+      },
+      ['start', 'end'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { type: 'string' },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview'],
+          ),
+        },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: { type: 'array' },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.deleteRange'),
+  },
 
   // --- styles.paragraph.* ---
   'styles.paragraph.setStyle': {
-    input: objectSchema({ target: paragraphTargetSchema, styleId: { type: 'string', minLength: 1 } }, [
-      'target',
-      'styleId',
-    ]),
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        styleId: {
+          type: 'string',
+          minLength: 1,
+          description:
+            "Named paragraph style ID (e.g. 'Normal', 'Heading1', 'BodyText'). Use superdoc_search to find a nearby paragraph, then inspect its style to determine the correct styleId.",
+        },
+      },
+      ['target', 'styleId'],
+    ),
     output: paragraphMutationResultSchemaFor('styles.paragraph.setStyle'),
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('styles.paragraph.setStyle'),
@@ -1774,10 +3177,18 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ...objectSchema(
         {
           target: paragraphTargetSchema,
-          left: { type: 'integer', minimum: 0 },
-          right: { type: 'integer', minimum: 0 },
-          firstLine: { type: 'integer', minimum: 0 },
-          hanging: { type: 'integer', minimum: 0 },
+          left: { type: 'integer', minimum: 0, description: 'Left indentation in twips (1440 = 1 inch).' },
+          right: { type: 'integer', minimum: 0, description: 'Right indentation in twips (1440 = 1 inch).' },
+          firstLine: {
+            type: 'integer',
+            minimum: 0,
+            description: 'First line indent in twips. Cannot be combined with hanging.',
+          },
+          hanging: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Hanging indent in twips. Cannot be combined with firstLine.',
+          },
         },
         ['target'],
       ),
@@ -1799,10 +3210,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ...objectSchema(
         {
           target: paragraphTargetSchema,
-          before: { type: 'integer', minimum: 0 },
-          after: { type: 'integer', minimum: 0 },
-          line: { type: 'integer', minimum: 1 },
-          lineRule: { enum: [...LINE_RULES] },
+          before: { type: 'integer', minimum: 0, description: 'Space before paragraph in twips (20 twips = 1pt).' },
+          after: { type: 'integer', minimum: 0, description: 'Space after paragraph in twips (20 twips = 1pt).' },
+          line: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Line spacing value. Meaning depends on lineRule. Must be provided together with lineRule.',
+          },
+          lineRule: {
+            enum: [...LINE_RULES],
+            description: "Line spacing rule. Required when 'line' is set.",
+          },
         },
         ['target'],
       ),
@@ -1948,6 +3366,25 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearShading'),
   },
+  'format.paragraph.setDirection': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        direction: { type: 'string', enum: ['ltr', 'rtl'] },
+        alignmentPolicy: { type: 'string', enum: ['preserve', 'matchDirection'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setDirection'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setDirection'),
+  },
+  'format.paragraph.clearDirection': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearDirection'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearDirection'),
+  },
   'styles.apply': (() => {
     // Derived from PROPERTY_REGISTRY — no hardcoded property lists
     const runInputSchema = objectSchema(
@@ -2015,7 +3452,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   })(),
   'create.paragraph': {
     input: objectSchema({
+      in: storyLocatorSchema,
       at: {
+        description:
+          "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
         oneOf: [
           objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
           objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
@@ -2035,7 +3475,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ),
         ],
       },
-      text: { type: 'string' },
+      text: {
+        type: 'string',
+        description:
+          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+      },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -2044,8 +3488,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.heading': {
     input: objectSchema(
       {
-        level: headingLevelSchema,
+        in: storyLocatorSchema,
+        level: { ...headingLevelSchema, description: 'Heading level (1-6).' },
         at: {
+          description:
+            "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
           oneOf: [
             objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
             objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
@@ -2065,7 +3512,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             ),
           ],
         },
-        text: { type: 'string' },
+        text: { type: 'string', description: 'Heading text content.' },
       },
       ['level'],
     ),
@@ -2362,9 +3809,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'lists.insert': {
     input: objectSchema(
       {
-        target: listItemAddressSchema,
-        position: listInsertPositionSchema,
-        text: { type: 'string' },
+        target: {
+          ...listItemAddressSchema,
+          description:
+            "The target list item. For 'insert': the item to insert relative to. For 'create' with mode 'fromParagraphs': use nodeType 'paragraph' instead. Format: {kind:'block', nodeType:'listItem', nodeId:'<id>'}.",
+        },
+        position: {
+          ...listInsertPositionSchema,
+          description: "Required. Insert position relative to target: 'before' or 'after'.",
+        },
+        text: { type: 'string', description: 'Text content for the new list item.' },
       },
       ['target', 'position'],
     ),
@@ -2376,17 +3830,100 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       type: 'object',
       properties: {
-        mode: { enum: ['empty', 'fromParagraphs'] },
-        at: ref('BlockAddress'),
-        target: ref('BlockAddressOrRange'),
-        kind: listKindSchema,
-        level: { type: 'integer', minimum: 0, maximum: 8 },
+        mode: {
+          enum: ['empty', 'fromParagraphs'],
+          description:
+            "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
+        },
+        at: {
+          ...ref('BlockAddress'),
+          description:
+            "Required when mode is 'empty'. The paragraph to create the list at. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
+        },
+        target: {
+          ...ref('BlockAddressOrRange'),
+          description:
+            "Required when mode is 'fromParagraphs'. Each call converts ONE paragraph into a list item. To make a list with N items, create N separate paragraphs first, then call superdoc_list create for EACH one. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
+        },
+        kind: {
+          ...listKindSchema,
+          description: "List type: 'bullet' for bullet points, 'ordered' for numbered lists.",
+        },
+        level: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 8,
+          description: 'List nesting level (0-8). 0 is the top level.',
+        },
+        preset: {
+          enum: [
+            'decimal',
+            'decimalParenthesis',
+            'lowerLetter',
+            'upperLetter',
+            'lowerRoman',
+            'upperRoman',
+            'disc',
+            'circle',
+            'square',
+            'dash',
+          ],
+          description: "Predefined list style preset. Overrides 'kind' with a specific numbering or bullet format.",
+        },
+        style: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                  tabStopAt: { type: ['integer', 'null'] },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        sequence: {
+          oneOf: [
+            objectSchema({ mode: { const: 'new' }, startAt: { type: 'integer', minimum: 1 } }, ['mode']),
+            objectSchema({ mode: { const: 'continuePrevious' } }, ['mode']),
+          ],
+        },
       },
-      required: ['mode', 'kind'],
+      required: ['mode'],
       additionalProperties: false,
-      if: { properties: { mode: { const: 'empty' } } },
-      then: { required: ['mode', 'kind', 'at'] },
-      else: { required: ['mode', 'kind', 'target'] },
+      allOf: [
+        // mode-conditional: 'empty' requires 'at', 'fromParagraphs' requires 'target'
+        {
+          if: { properties: { mode: { const: 'empty' } } },
+          then: { required: ['mode', 'at'] },
+          else: { required: ['mode', 'target'] },
+        },
+        // continuePrevious is incompatible with preset/style
+        {
+          if: {
+            properties: { sequence: { properties: { mode: { const: 'continuePrevious' } }, required: ['mode'] } },
+            required: ['sequence'],
+          },
+          then: {
+            not: { anyOf: [{ required: ['preset'] }, { required: ['style'] }] },
+          },
+        },
+      ],
     },
     output: {
       oneOf: [
@@ -2663,6 +4200,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.applyPreset'),
   },
+  'lists.setType': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        kind: { enum: ['ordered', 'bullet'] },
+        continuity: {
+          enum: ['preserve', 'none'],
+          description: "Numbering continuity: 'preserve' keeps numbering; 'none' restarts.",
+        },
+      },
+      ['target', 'kind'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setType'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setType'),
+  },
   'lists.captureTemplate': (() => {
     const successSchema = objectSchema(
       {
@@ -2821,12 +4374,176 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
   },
 
+  // SD-2025 — User-facing list style operations
+  'lists.getStyle': (() => {
+    const listLevelTemplateSchema = objectSchema(
+      {
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numFmt: { type: 'string' },
+        lvlText: { type: 'string' },
+        start: { type: 'integer' },
+        alignment: { enum: ['left', 'center', 'right'] },
+        indents: objectSchema({
+          left: { type: 'integer' },
+          hanging: { type: 'integer' },
+          firstLine: { type: 'integer' },
+        }),
+        trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+        markerFont: { type: 'string' },
+        pictureBulletId: { type: 'integer' },
+        tabStopAt: { type: ['integer', 'null'] },
+      },
+      ['level'],
+    );
+    const styleSchema = objectSchema(
+      {
+        version: { const: 1 },
+        levels: arraySchema(listLevelTemplateSchema),
+      },
+      ['version', 'levels'],
+    );
+    const successSchema = objectSchema(
+      {
+        success: { const: true },
+        style: styleSchema,
+      },
+      ['success', 'style'],
+    );
+    return {
+      input: objectSchema(
+        {
+          target: listItemAddressSchema,
+          levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+        },
+        ['target'],
+      ),
+      output: { oneOf: [successSchema, listsFailureSchemaFor('lists.getStyle')] },
+      success: successSchema,
+      failure: listsFailureSchemaFor('lists.getStyle'),
+    };
+  })(),
+  'lists.applyStyle': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        style: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                  tabStopAt: { type: ['integer', 'null'] },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'style'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyStyle'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyStyle'),
+  },
+  'lists.restartAt': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        startAt: { type: 'integer', minimum: 1 },
+      },
+      ['target', 'startAt'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.restartAt'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.restartAt'),
+  },
+  'lists.setLevelNumberStyle': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numberStyle: { type: 'string' },
+      },
+      ['target', 'level', 'numberStyle'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelNumberStyle'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelNumberStyle'),
+  },
+  'lists.setLevelText': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        text: { type: 'string' },
+      },
+      ['target', 'level', 'text'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelText'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelText'),
+  },
+  'lists.setLevelStart': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        startAt: { type: 'integer', minimum: 1 },
+      },
+      ['target', 'level', 'startAt'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelStart'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelStart'),
+  },
+  'lists.setLevelLayout': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        layout: objectSchema({
+          alignment: { enum: ['left', 'center', 'right'] },
+          alignedAt: { type: 'integer' },
+          textIndentAt: { type: 'integer' },
+          followCharacter: { enum: ['tab', 'space', 'nothing'] },
+          tabStopAt: { type: ['integer', 'null'] },
+        }),
+      },
+      ['target', 'level', 'layout'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelLayout'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelLayout'),
+  },
+
   'comments.create': {
     input: objectSchema(
       {
-        text: { type: 'string' },
-        target: textAddressSchema,
-        parentCommentId: { type: 'string' },
+        text: { type: 'string', description: 'Comment text content.' },
+        target: {
+          ...textAddressSchema,
+          description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
+        },
+        parentCommentId: {
+          type: 'string',
+          description: 'Parent comment ID for creating a threaded reply.',
+        },
       },
       ['text'],
     ),
@@ -2838,10 +4555,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         commentId: { type: 'string' },
-        text: { type: 'string' },
+        text: { type: 'string', description: 'Updated comment text.' },
         target: textAddressSchema,
-        status: { enum: ['resolved'] },
-        isInternal: { type: 'boolean' },
+        status: { enum: ['resolved'], description: "Set comment status. Use 'resolved' to mark as resolved." },
+        isInternal: {
+          type: 'boolean',
+          description: 'When true, marks the comment as internal (hidden from external collaborators).',
+        },
       },
       ['commentId'],
     ),
@@ -2861,17 +4581,23 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'comments.list': {
     input: objectSchema({
-      includeResolved: { type: 'boolean' },
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
+      includeResolved: {
+        type: 'boolean',
+        description: 'When true, includes resolved comments in results. Default: false.',
+      },
+      limit: { type: 'integer', description: 'Maximum number of comments to return.' },
+      offset: { type: 'integer', description: 'Number of comments to skip for pagination.' },
     }),
     output: commentsListResultSchema,
   },
   'trackChanges.list': {
     input: objectSchema({
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
-      type: { enum: ['insert', 'delete', 'format'] },
+      limit: { type: 'integer', description: 'Maximum number of tracked changes to return.' },
+      offset: { type: 'integer', description: 'Number of tracked changes to skip for pagination.' },
+      type: {
+        enum: ['insert', 'delete', 'format'],
+        description: "Filter by change type: 'insert', 'delete', or 'format'.",
+      },
     }),
     output: trackChangesListResultSchema,
   },
@@ -2901,13 +4627,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'query.match': {
     input: objectSchema(
       {
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
-        require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-        mode: { enum: ['strict', 'candidates'] },
-        includeNodes: { type: 'boolean' },
-        limit: { type: 'integer', minimum: 1 },
-        offset: { type: 'integer', minimum: 0 },
+        in: storyLocatorSchema,
+        select: {
+          description:
+            "Search selector. Use {type:'text', pattern:'...'} for text search or {type:'node', nodeType:'paragraph'|'heading'|...} for node search.",
+          oneOf: [textSelectorSchema, nodeSelectorSchema],
+        },
+        within: {
+          ...blockNodeAddressSchema,
+          description: "Limit search scope to within a specific block: {kind:'block', nodeType:'...', nodeId:'...'}.",
+        },
+        require: {
+          enum: ['any', 'first', 'exactlyOne', 'all'],
+          description:
+            "Match cardinality: 'any' (all matches), 'first' (only first), 'exactlyOne' (fail if != 1), 'all' (fail if 0).",
+        },
+        mode: {
+          enum: ['strict', 'candidates'],
+          description:
+            "Search mode: 'strict' (default, exact matching) or 'candidates' (returns scored potential matches).",
+        },
+        includeNodes: {
+          type: 'boolean',
+          description: 'When true, includes full node data in results. Default: false.',
+        },
+        limit: { type: 'integer', minimum: 1, description: 'Maximum number of matches to return.' },
+        offset: { type: 'integer', minimum: 0, description: 'Number of matches to skip for pagination.' },
       },
       ['select'],
     ),
@@ -2920,12 +4665,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       const textMatchItemSchema = discoveryItemSchema(
         {
           matchKind: { const: 'text' },
-          address: nodeAddressSchema,
+          address: blockNodeAddressSchema,
+          target: selectionTargetSchema,
           snippet: { type: 'string' },
           highlightRange: rangeSchema,
           blocks: { type: 'array', items: matchBlockSchema, minItems: 1 },
         },
-        ['matchKind', 'address', 'snippet', 'highlightRange', 'blocks'],
+        ['matchKind', 'address', 'target', 'snippet', 'highlightRange', 'blocks'],
       );
 
       // Node match item: id + handle + address + empty blocks
@@ -2954,7 +4700,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne', 'all'] },
       },
       ['by', 'select', 'require'],
@@ -2964,19 +4710,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'ref', type: 'string' },
         ref: { type: 'string' },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'ref'],
     );
 
-    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema] };
+    const targetWhereSchema = objectSchema(
+      {
+        by: { const: 'target', type: 'string' },
+        target: selectionTargetSchema,
+      },
+      ['by', 'target'],
+    );
+
+    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema] };
 
     // Insert-only where (no 'all' require, no ref)
     const insertWhereSchema = objectSchema(
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne'] },
       },
       ['by', 'select', 'require'],
@@ -2987,7 +4741,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'select'],
     );
@@ -3083,7 +4837,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'text.delete', type: 'string' },
         where: stepWhereSchema,
-        args: objectSchema({}),
+        args: objectSchema({ behavior: deleteBehaviorSchema }),
       },
       ['id', 'op', 'where', 'args'],
     );
@@ -3130,15 +4884,112 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
     const mutationsInputSchema = objectSchema(
       {
-        expectedRevision: { type: 'string' },
-        atomic: { const: true, type: 'boolean' },
-        changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema(mutationStepSchema),
+        in: storyLocatorSchema,
+        expectedRevision: {
+          type: 'string',
+          description:
+            'Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.',
+        },
+        atomic: {
+          const: true,
+          type: 'boolean',
+          description: 'Must be true. All steps execute as one atomic transaction.',
+        },
+        changeMode: {
+          enum: ['direct', 'tracked'],
+          description:
+            "Required. Use 'direct' for immediate edits or 'tracked' for suggestions. Must always be provided.",
+        },
+        steps: {
+          ...arraySchema(mutationStepSchema),
+          description:
+            "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
+        },
       },
       ['atomic', 'changeMode', 'steps'],
     );
 
+    // ---------------------------------------------------------------
+    // ranges.resolve schema
+    // ---------------------------------------------------------------
+
+    const documentEdgeAnchorSchema = objectSchema(
+      {
+        kind: { const: 'document' },
+        edge: { enum: ['start', 'end'] },
+      },
+      ['kind', 'edge'],
+    );
+
+    const pointAnchorSchema = objectSchema(
+      {
+        kind: { const: 'point' },
+        point: ref('SelectionPoint'),
+      },
+      ['kind', 'point'],
+    );
+
+    const refBoundaryAnchorSchema = objectSchema(
+      {
+        kind: { const: 'ref' },
+        ref: { type: 'string', minLength: 1 },
+        boundary: { enum: ['start', 'end'] },
+      },
+      ['kind', 'ref', 'boundary'],
+    );
+
+    const rangeAnchorSchema: JsonSchema = {
+      oneOf: [documentEdgeAnchorSchema, pointAnchorSchema, refBoundaryAnchorSchema],
+    };
+
+    const rangeBlockPreviewSchema = objectSchema(
+      {
+        nodeId: { type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        textPreview: { type: 'string' },
+      },
+      ['nodeId', 'nodeType', 'textPreview'],
+    );
+
+    const rangePreviewSchema = objectSchema(
+      {
+        text: { type: 'string' },
+        truncated: { type: 'boolean' },
+        blocks: arraySchema(rangeBlockPreviewSchema),
+      },
+      ['text', 'truncated', 'blocks'],
+    );
+
+    const resolveRangeOutputSchema = objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        handle: objectSchema(
+          {
+            ref: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            refStability: { const: 'ephemeral' },
+            coversFullTarget: { type: 'boolean' },
+          },
+          ['ref', 'refStability', 'coversFullTarget'],
+        ),
+        target: selectionTargetSchema,
+        preview: rangePreviewSchema,
+      },
+      ['evaluatedRevision', 'handle', 'target', 'preview'],
+    );
+
     return {
+      'ranges.resolve': {
+        input: objectSchema(
+          {
+            start: rangeAnchorSchema,
+            end: rangeAnchorSchema,
+            expectedRevision: { type: 'string' },
+          },
+          ['start', 'end'],
+        ),
+        output: resolveRangeOutputSchema,
+      },
+
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(
@@ -3236,7 +5087,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           destination: tableCreateLocationSchema,
         },
@@ -3252,11 +5103,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
-          atRowIndex: { type: 'integer', minimum: 1 },
+          rowIndex: { type: 'integer', minimum: 1 },
         },
-        ['atRowIndex'],
+        ['rowIndex'],
       ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
@@ -3267,7 +5118,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.convertToText': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         delimiter: { enum: ['tab', 'comma', 'paragraph'] },
       }),
@@ -3282,7 +5133,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setLayout': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         preferredWidth: { type: 'number' },
         alignment: { enum: ['left', 'center', 'right'] },
@@ -3299,56 +5150,31 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- tables: row structure ---
   'tables.insertRow': {
-    input: {
-      ...objectSchema(
-        {
-          target: blockNodeAddressSchema,
-          nodeId: { type: 'string' },
-          tableTarget: blockNodeAddressSchema,
-          tableNodeId: { type: 'string' },
-          rowIndex: { type: 'integer', minimum: 0 },
-          position: { enum: ['above', 'below'] },
-          count: { type: 'integer', minimum: 1 },
-        },
-        ['position'],
-      ),
-      oneOf: mixedRowLocatorOneOf,
-    },
+    input: rowOperationInputSchema(
+      {
+        position: { enum: ['above', 'below'] },
+        count: { type: 'integer', minimum: 1 },
+      },
+      ['position'],
+    ),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
   'tables.deleteRow': {
-    input: {
-      ...objectSchema({
-        target: blockNodeAddressSchema,
-        nodeId: { type: 'string' },
-        tableTarget: blockNodeAddressSchema,
-        tableNodeId: { type: 'string' },
-        rowIndex: { type: 'integer', minimum: 0 },
-      }),
-      oneOf: mixedRowLocatorOneOf,
-    },
+    input: rowOperationInputSchema({}),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
   'tables.setRowHeight': {
-    input: {
-      ...objectSchema(
-        {
-          target: blockNodeAddressSchema,
-          nodeId: { type: 'string' },
-          tableTarget: blockNodeAddressSchema,
-          tableNodeId: { type: 'string' },
-          rowIndex: { type: 'integer', minimum: 0 },
-          heightPt: { type: 'number', exclusiveMinimum: 0 },
-          rule: { enum: ['atLeast', 'exact', 'auto'] },
-        },
-        ['heightPt', 'rule'],
-      ),
-      oneOf: mixedRowLocatorOneOf,
-    },
+    input: rowOperationInputSchema(
+      {
+        heightPt: { type: 'number', exclusiveMinimum: 0 },
+        rule: { enum: ['atLeast', 'exact', 'auto'] },
+      },
+      ['heightPt', 'rule'],
+    ),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -3360,18 +5186,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.setRowOptions': {
-    input: {
-      ...objectSchema({
-        target: blockNodeAddressSchema,
-        nodeId: { type: 'string' },
-        tableTarget: blockNodeAddressSchema,
-        tableNodeId: { type: 'string' },
-        rowIndex: { type: 'integer', minimum: 0 },
-        allowBreakAcrossPages: { type: 'boolean' },
-        repeatHeader: { type: 'boolean' },
-      }),
-      oneOf: mixedRowLocatorOneOf,
-    },
+    input: rowOperationInputSchema({
+      allowBreakAcrossPages: { type: 'boolean' },
+      repeatHeader: { type: 'boolean' },
+    }),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -3382,15 +5200,15 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          tableTarget: blockNodeAddressSchema,
-          tableNodeId: { type: 'string' },
+          target: tableAddressSchema,
+          nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
           position: { enum: ['left', 'right'] },
           count: { type: 'integer', minimum: 1 },
         },
         ['columnIndex', 'position'],
       ),
-      oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
@@ -3400,13 +5218,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          tableTarget: blockNodeAddressSchema,
-          tableNodeId: { type: 'string' },
+          target: tableAddressSchema,
+          nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
         },
         ['columnIndex'],
       ),
-      oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
@@ -3416,14 +5234,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          tableTarget: blockNodeAddressSchema,
-          tableNodeId: { type: 'string' },
+          target: tableAddressSchema,
+          nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
           widthPt: { type: 'number', exclusiveMinimum: 0 },
         },
         ['columnIndex', 'widthPt'],
       ),
-      oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
@@ -3432,7 +5250,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.distributeColumns': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         columnRange: objectSchema({ start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 0 } }, [
           'start',
@@ -3451,7 +5269,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           mode: { enum: ['shiftRight', 'shiftDown'] },
         },
@@ -3467,7 +5285,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           mode: { enum: ['shiftLeft', 'shiftUp'] },
         },
@@ -3486,7 +5304,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.unmergeCells': {
-    input: tableLocatorSchema,
+    input: cellOrTableScopedCellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -3495,7 +5313,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           rows: { type: 'integer', minimum: 1 },
           columns: { type: 'integer', minimum: 1 },
@@ -3511,7 +5329,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setCellProperties': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableCellAddressSchema,
         nodeId: { type: 'string' },
         preferredWidthPt: { type: 'number' },
         verticalAlign: { enum: ['top', 'center', 'bottom'] },
@@ -3530,7 +5348,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           keys: arraySchema(
             objectSchema(
@@ -3554,7 +5372,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setAltText': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         title: { type: 'string' },
         description: { type: 'string' },
@@ -3571,7 +5389,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           styleId: { type: 'string' },
         },
@@ -3593,9 +5411,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
-          flag: { enum: ['headerRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'] },
+          flag: {
+            enum: ['headerRow', 'lastRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'],
+          },
           enabled: { type: 'boolean' },
         },
         ['flag', 'enabled'],
@@ -3610,7 +5430,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
           lineStyle: { type: 'string' },
@@ -3629,7 +5449,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
         },
@@ -3645,7 +5465,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           preset: { enum: ['box', 'all', 'none', 'grid', 'custom'] },
         },
@@ -3661,7 +5481,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
         },
@@ -3674,7 +5494,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.clearShading': {
-    input: tableLocatorSchema,
+    input: tableOrCellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -3683,7 +5503,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           topPt: { type: 'number', minimum: 0 },
           rightPt: { type: 'number', minimum: 0 },
@@ -3702,7 +5522,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           topPt: { type: 'number', minimum: 0 },
           rightPt: { type: 'number', minimum: 0 },
@@ -3721,7 +5541,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           spacingPt: { type: 'number', minimum: 0 },
         },
@@ -3740,6 +5560,96 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
 
+  // --- tables.* convenience operations (SD-2129) ---
+
+  'tables.applyStyle': {
+    input: {
+      ...objectSchema({
+        target: blockNodeAddressSchema,
+        nodeId: { type: 'string' },
+        styleId: { type: 'string' },
+        styleOptions: objectSchema({
+          headerRow: { type: 'boolean' },
+          lastRow: { type: 'boolean' },
+          totalRow: { type: 'boolean' },
+          firstColumn: { type: 'boolean' },
+          lastColumn: { type: 'boolean' },
+          bandedRows: { type: 'boolean' },
+          bandedColumns: { type: 'boolean' },
+        }),
+      }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.setBorders': {
+    input: {
+      oneOf: [
+        {
+          ...objectSchema(
+            {
+              target: blockNodeAddressSchema,
+              nodeId: { type: 'string' },
+              mode: { const: 'applyTo' },
+              applyTo: {
+                enum: ['all', 'outside', 'inside', 'top', 'bottom', 'left', 'right', 'insideH', 'insideV'],
+              },
+              border: nullableTableBorderSpecSchema,
+            },
+            ['mode', 'applyTo', 'border'],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+        },
+        {
+          ...objectSchema(
+            {
+              target: blockNodeAddressSchema,
+              nodeId: { type: 'string' },
+              mode: { const: 'edges' },
+              edges: objectSchema({
+                top: nullableTableBorderSpecSchema,
+                bottom: nullableTableBorderSpecSchema,
+                left: nullableTableBorderSpecSchema,
+                right: nullableTableBorderSpecSchema,
+                insideH: nullableTableBorderSpecSchema,
+                insideV: nullableTableBorderSpecSchema,
+              }),
+            },
+            ['mode', 'edges'],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+        },
+      ],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.setTableOptions': {
+    input: {
+      ...objectSchema({
+        target: blockNodeAddressSchema,
+        nodeId: { type: 'string' },
+        defaultCellMargins: objectSchema(
+          {
+            topPt: { type: 'number', minimum: 0 },
+            rightPt: { type: 'number', minimum: 0 },
+            bottomPt: { type: 'number', minimum: 0 },
+            leftPt: { type: 'number', minimum: 0 },
+          },
+          ['topPt', 'rightPt', 'bottomPt', 'leftPt'],
+        ),
+        cellSpacingPt: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+      }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+
   // --- tables.* reads (B4 ref handoff) ---
 
   'tables.get': {
@@ -3747,7 +5657,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: objectSchema(
       {
         nodeId: { type: 'string' },
-        address: blockNodeAddressSchema,
+        address: tableAddressSchema,
         rows: { type: 'integer', minimum: 0 },
         columns: { type: 'integer', minimum: 0 },
       },
@@ -3757,7 +5667,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.getCells': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         rowIndex: { type: 'integer', minimum: 0 },
         columnIndex: { type: 'integer', minimum: 0 },
@@ -3766,22 +5676,24 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     },
     output: objectSchema(
       {
-        tableNodeId: { type: 'string' },
+        nodeId: { type: 'string' },
+        address: tableAddressSchema,
         cells: {
           type: 'array',
           items: objectSchema(
             {
               nodeId: { type: 'string' },
+              address: tableCellAddressSchema,
               rowIndex: { type: 'integer', minimum: 0 },
               columnIndex: { type: 'integer', minimum: 0 },
               colspan: { type: 'integer', minimum: 1 },
               rowspan: { type: 'integer', minimum: 1 },
             },
-            ['nodeId', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
+            ['nodeId', 'address', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
           ),
         },
       },
-      ['tableNodeId', 'cells'],
+      ['nodeId', 'address', 'cells'],
     ),
   },
   'tables.getProperties': {
@@ -3789,6 +5701,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: objectSchema(
       {
         nodeId: { type: 'string' },
+        address: tableAddressSchema,
         styleId: { type: 'string' },
         alignment: { enum: ['left', 'center', 'right'] },
         direction: { enum: ['ltr', 'rtl'] },
@@ -3796,14 +5709,29 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         autoFitMode: { enum: ['fixedWidth', 'fitContents', 'fitWindow'] },
         styleOptions: objectSchema({
           headerRow: { type: 'boolean' },
-          totalRow: { type: 'boolean' },
+          lastRow: { type: 'boolean' },
           firstColumn: { type: 'boolean' },
           lastColumn: { type: 'boolean' },
           bandedRows: { type: 'boolean' },
           bandedColumns: { type: 'boolean' },
         }),
+        borders: objectSchema({
+          top: nullableTableBorderSpecSchema,
+          bottom: nullableTableBorderSpecSchema,
+          left: nullableTableBorderSpecSchema,
+          right: nullableTableBorderSpecSchema,
+          insideH: nullableTableBorderSpecSchema,
+          insideV: nullableTableBorderSpecSchema,
+        }),
+        defaultCellMargins: objectSchema({
+          topPt: { type: 'number' },
+          rightPt: { type: 'number' },
+          bottomPt: { type: 'number' },
+          leftPt: { type: 'number' },
+        }),
+        cellSpacingPt: { type: 'number' },
       },
-      ['nodeId'],
+      ['nodeId', 'address'],
     ),
   },
   'tables.getStyles': {
@@ -4103,6 +6031,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.image': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         src: { type: 'string' },
         alt: { type: 'string' },
         title: { type: 'string' },
@@ -4340,8 +6269,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['success', 'failure'],
     ),
   },
-  'images.setZOrder': {
-    input: objectSchema(
+  'images.setZOrder': imagesMutationSchemaSet(
+    objectSchema(
       {
         imageId: { type: 'string' },
         zOrder: objectSchema(
@@ -4357,21 +6286,104 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['imageId', 'zOrder'],
     ),
-    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
-    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
-    failure: objectSchema(
+  ),
+
+  // --- SD-2100: Geometry ---
+
+  'images.scale': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, factor: { type: 'number', exclusiveMinimum: 0 } }, [
+      'imageId',
+      'factor',
+    ]),
+  ),
+
+  'images.setLockAspectRatio': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, locked: { type: 'boolean' } }, ['imageId', 'locked']),
+  ),
+
+  'images.rotate': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, angle: { type: 'number', minimum: 0, maximum: 360 } }, [
+      'imageId',
+      'angle',
+    ]),
+  ),
+
+  'images.flip': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, horizontal: { type: 'boolean' }, vertical: { type: 'boolean' } }, [
+      'imageId',
+    ]),
+  ),
+
+  'images.crop': imagesMutationSchemaSet(
+    objectSchema(
       {
-        success: { const: false },
-        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+        imageId: { type: 'string' },
+        crop: objectSchema(
+          {
+            left: { type: 'number', minimum: 0, maximum: 100 },
+            top: { type: 'number', minimum: 0, maximum: 100 },
+            right: { type: 'number', minimum: 0, maximum: 100 },
+            bottom: { type: 'number', minimum: 0, maximum: 100 },
+          },
+          [], // All fields optional; omitted edges default to 0 at runtime
+        ),
       },
-      ['success', 'failure'],
+      ['imageId', 'crop'],
     ),
-  },
+  ),
+
+  'images.resetCrop': imagesMutationSchemaSet(objectSchema({ imageId: { type: 'string' } }, ['imageId'])),
+
+  // --- SD-2100: Content replacement ---
+
+  'images.replaceSource': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, src: { type: 'string' }, resetSize: { type: 'boolean' } }, [
+      'imageId',
+      'src',
+    ]),
+  ),
+
+  // --- SD-2100: Semantic metadata ---
+
+  'images.setAltText': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, description: { type: 'string' } }, ['imageId', 'description']),
+  ),
+
+  'images.setDecorative': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, decorative: { type: 'boolean' } }, ['imageId', 'decorative']),
+  ),
+
+  'images.setName': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, name: { type: 'string' } }, ['imageId', 'name']),
+  ),
+
+  'images.setHyperlink': imagesMutationSchemaSet(
+    objectSchema(
+      {
+        imageId: { type: 'string' },
+        url: { type: ['string', 'null'] },
+        tooltip: { type: 'string' },
+      },
+      ['imageId', 'url'],
+    ),
+  ),
+
+  // --- SD-2100: Caption lifecycle ---
+
+  'images.insertCaption': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, text: { type: 'string' } }, ['imageId', 'text']),
+  ),
+
+  'images.updateCaption': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, text: { type: 'string' } }, ['imageId', 'text']),
+  ),
+
+  'images.removeCaption': imagesMutationSchemaSet(objectSchema({ imageId: { type: 'string' } }, ['imageId'])),
 
   // --- hyperlinks.* ---
   'hyperlinks.list': {
     input: objectSchema({
-      within: nodeAddressSchema,
+      within: blockNodeAddressSchema,
       hrefPattern: { type: 'string' },
       anchor: { type: 'string' },
       textPattern: { type: 'string' },
@@ -4411,6 +6423,657 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: hyperlinkMutationSuccessSchema,
     failure: hyperlinkMutationFailureSchema,
   },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      section: sectionAddressSchema,
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          section: sectionAddressSchema,
+          sectionIndex: { type: 'integer', minimum: 0 },
+          kind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          refId: { type: ['string', 'null'] },
+          isExplicit: { type: 'boolean' },
+        },
+        ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+      ),
+    ),
+  },
+  'headerFooters.get': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        section: sectionAddressSchema,
+        sectionIndex: { type: 'integer', minimum: 0 },
+        kind: { enum: ['header', 'footer'] },
+        variant: { enum: ['default', 'first', 'even'] },
+        refId: { type: ['string', 'null'] },
+        isExplicit: { type: 'boolean' },
+      },
+      ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+    ),
+  },
+  'headerFooters.resolve': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ status: { const: 'explicit' }, refId: { type: 'string' }, section: sectionAddressSchema }, [
+          'status',
+          'refId',
+          'section',
+        ]),
+        objectSchema(
+          {
+            status: { const: 'inherited' },
+            refId: { type: 'string' },
+            resolvedFromSection: sectionAddressSchema,
+            resolvedVariant: { enum: ['default', 'first', 'even'] },
+          },
+          ['status', 'refId', 'resolvedFromSection', 'resolvedVariant'],
+        ),
+        objectSchema({ status: { const: 'none' } }, ['status']),
+      ],
+    },
+  },
+  'headerFooters.refs.set': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        refId: { type: 'string', minLength: 1 },
+      },
+      ['target', 'refId'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.set'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.set'),
+  },
+  'headerFooters.refs.clear': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.clear'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.clear'),
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        linked: { type: 'boolean' },
+      },
+      ['target', 'linked'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+  },
+  'headerFooters.parts.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          refId: { type: 'string' },
+          kind: { enum: ['header', 'footer'] },
+          partPath: { type: 'string' },
+          referencedBySections: arraySchema(sectionAddressSchema),
+        },
+        ['refId', 'kind', 'partPath', 'referencedBySections'],
+      ),
+    ),
+  },
+  'headerFooters.parts.create': {
+    input: objectSchema(
+      {
+        kind: { enum: ['header', 'footer'] },
+        sourceRefId: { type: 'string', minLength: 1 },
+      },
+      ['kind'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'headerFooters.parts.delete': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterPart' },
+            refId: { type: 'string', minLength: 1 },
+          },
+          ['kind', 'refId'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+      },
+      ['success', 'failure'],
+    ),
+  },
+
+  // =========================================================================
+  // Content Controls (SD-2070) — schemas
+  // =========================================================================
+  ...buildContentControlSchemas(),
+  // -------------------------------------------------------------------------
+  // Bookmarks
+  // -------------------------------------------------------------------------
+  'bookmarks.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'bookmarks.get': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'bookmarks.insert': {
+    input: objectSchema(
+      {
+        name: { type: 'string' },
+        at: textTargetSchema,
+        tableColumn: objectSchema({ colFirst: { type: 'integer' }, colLast: { type: 'integer' } }, [
+          'colFirst',
+          'colLast',
+        ]),
+      },
+      ['name', 'at'],
+    ),
+    ...bookmarkMutation,
+  },
+  'bookmarks.rename': {
+    input: objectSchema({ target: bookmarkAddressSchema, newName: { type: 'string' } }, ['target', 'newName']),
+    ...bookmarkMutation,
+  },
+  'bookmarks.remove': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    ...bookmarkMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Footnotes
+  // -------------------------------------------------------------------------
+  'footnotes.list': {
+    input: objectSchema({
+      type: { enum: ['footnote', 'endnote'] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'footnotes.get': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'footnotes.insert': {
+    input: objectSchema(
+      { at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
+      ['at', 'type', 'content'],
+    ),
+    ...footnoteMutation,
+  },
+  'footnotes.update': {
+    input: objectSchema({ target: footnoteAddressSchema, patch: objectSchema({ content: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...footnoteMutation,
+  },
+  'footnotes.remove': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    ...footnoteMutation,
+  },
+  'footnotes.configure': {
+    input: objectSchema(
+      {
+        type: { enum: ['footnote', 'endnote'] },
+        scope: footnoteConfigScopeSchema,
+        numbering: footnoteNumberingSchema,
+      },
+      ['type', 'scope'],
+    ),
+    ...footnoteConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-References
+  // -------------------------------------------------------------------------
+  'crossRefs.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'crossRefs.get': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'crossRefs.insert': {
+    input: objectSchema({ at: textTargetSchema, target: crossRefTargetSchema, display: crossRefDisplaySchema }, [
+      'at',
+      'target',
+      'display',
+    ]),
+    ...crossRefMutation,
+  },
+  'crossRefs.rebuild': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+  'crossRefs.remove': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Index
+  // -------------------------------------------------------------------------
+  'index.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'index.get': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, config: indexConfigSchema }, ['at']),
+    ...indexMutation,
+  },
+  'index.configure': {
+    input: objectSchema({ target: indexAddressSchema, patch: indexConfigSchema }, ['target', 'patch']),
+    ...indexMutation,
+  },
+  'index.rebuild': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+  'index.remove': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+
+  // --- Index entries ---
+  'index.entries.list': {
+    input: objectSchema({ entryType: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'index.entries.get': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.entries.insert': {
+    input: objectSchema({ at: textTargetSchema, entry: indexEntryDataSchema }, ['at', 'entry']),
+    ...indexEntryMutation,
+  },
+  'index.entries.update': {
+    input: objectSchema({ target: indexEntryAddressSchema, patch: indexEntryPatchSchema }, ['target', 'patch']),
+    ...indexEntryMutation,
+  },
+  'index.entries.remove': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    ...indexEntryMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Captions
+  // -------------------------------------------------------------------------
+  'captions.list': {
+    input: objectSchema({ label: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'captions.get': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'captions.insert': {
+    input: objectSchema(
+      {
+        adjacentTo: blockNodeAddressSchema,
+        position: { enum: ['above', 'below'] },
+        label: { type: 'string' },
+        text: { type: 'string' },
+      },
+      ['adjacentTo', 'position', 'label'],
+    ),
+    ...captionMutation,
+  },
+  'captions.update': {
+    input: objectSchema({ target: captionAddressSchema, patch: objectSchema({ text: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...captionMutation,
+  },
+  'captions.remove': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    ...captionMutation,
+  },
+  'captions.configure': {
+    input: objectSchema(
+      {
+        label: { type: 'string' },
+        format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter'] },
+        includeChapter: { type: 'boolean' },
+        chapterStyle: { type: 'string' },
+      },
+      ['label'],
+    ),
+    ...captionConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Fields
+  // -------------------------------------------------------------------------
+  'fields.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'fields.get': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'fields.insert': {
+    input: objectSchema({ mode: { const: 'raw' }, at: textTargetSchema, instruction: { type: 'string' } }, [
+      'mode',
+      'at',
+      'instruction',
+    ]),
+    ...fieldMutation,
+  },
+  'fields.rebuild': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    ...fieldMutation,
+  },
+  'fields.remove': {
+    input: objectSchema({ mode: { const: 'raw' }, target: fieldAddressSchema }, ['mode', 'target']),
+    ...fieldMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations
+  // -------------------------------------------------------------------------
+  'citations.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'citations.get': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.insert': {
+    input: objectSchema({ at: textTargetSchema, sourceIds: { type: 'array', items: { type: 'string' } } }, [
+      'at',
+      'sourceIds',
+    ]),
+    ...citationMutation,
+  },
+  'citations.update': {
+    input: objectSchema(
+      {
+        target: citationAddressSchema,
+        patch: objectSchema({ sourceIds: { type: 'array', items: { type: 'string' } } }),
+      },
+      ['target', 'patch'],
+    ),
+    ...citationMutation,
+  },
+  'citations.remove': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    ...citationMutation,
+  },
+
+  // --- Citations: sources ---
+  'citations.sources.list': {
+    input: objectSchema({ type: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'citations.sources.get': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.sources.insert': {
+    input: objectSchema(
+      {
+        type: {
+          enum: [
+            'book',
+            'journalArticle',
+            'conferenceProceedings',
+            'report',
+            'website',
+            'patent',
+            'case',
+            'statute',
+            'thesis',
+            'film',
+            'interview',
+            'misc',
+          ],
+        },
+        fields: citationSourceFieldsSchema,
+      },
+      ['type', 'fields'],
+    ),
+    ...citationSourceMutation,
+  },
+  'citations.sources.update': {
+    input: objectSchema({ target: citationSourceAddressSchema, patch: citationSourceFieldsSchema }, [
+      'target',
+      'patch',
+    ]),
+    ...citationSourceMutation,
+  },
+  'citations.sources.remove': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    ...citationSourceMutation,
+  },
+
+  // --- Citations: bibliography ---
+  'citations.bibliography.get': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.bibliography.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, style: { type: 'string' } }, ['at']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.rebuild': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.configure': {
+    input: objectSchema({ target: bibliographyAddressSchema, style: { type: 'string' } }, ['target', 'style']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.remove': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities
+  // -------------------------------------------------------------------------
+  'authorities.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'authorities.get': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, config: authoritiesConfigSchema }, ['at']),
+    ...authoritiesMutation,
+  },
+  'authorities.configure': {
+    input: objectSchema({ target: authoritiesAddressSchema, patch: authoritiesConfigSchema }, ['target', 'patch']),
+    ...authoritiesMutation,
+  },
+  'authorities.rebuild': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+  'authorities.remove': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+
+  // --- Authorities: entries ---
+  'authorities.entries.list': {
+    input: objectSchema({
+      category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'authorities.entries.get': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.entries.insert': {
+    input: objectSchema({ at: textTargetSchema, entry: authorityEntryDataSchema }, ['at', 'entry']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.update': {
+    input: objectSchema({ target: authorityEntryAddressSchema, patch: authorityEntryPatchSchema }, ['target', 'patch']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.remove': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    ...authorityEntryMutation,
+  },
+
+  // --- diff.* ---
+  'diff.capture': {
+    input: objectSchema({}),
+    output: diffSnapshotSchema,
+  },
+  'diff.compare': {
+    input: objectSchema({ targetSnapshot: diffSnapshotSchema }, ['targetSnapshot']),
+    output: diffPayloadSchema,
+  },
+  'diff.apply': {
+    input: objectSchema({ diff: diffPayloadSchema }, ['diff']),
+    output: diffApplyResultSchema,
+    success: diffApplyResultSchema,
+    failure: { type: 'object' },
+  },
 };
 
 /**
@@ -4423,7 +7086,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
  * @throws {Error} If any operation is missing a schema or an unknown operation is found.
  */
 export function buildInternalContractSchemas(): InternalContractSchemas {
-  const operations = { ...operationSchemas };
+  // Cast is safe — the runtime loops below verify completeness against OPERATION_IDS.
+  const operations = { ...operationSchemas } as unknown as Record<OperationId, OperationSchemaSet>;
 
   for (const operationId of OPERATION_IDS) {
     if (!operations[operationId]) {

@@ -15,10 +15,12 @@ import { bookmarkStartNodeHandlerEntity } from './bookmarkStartImporter.js';
 import { bookmarkEndNodeHandlerEntity } from './bookmarkEndImporter.js';
 import { alternateChoiceHandler } from './alternateChoiceImporter.js';
 import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
+import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
-import { importFootnoteData } from './documentFootnotesImporter.js';
+import { buildTrackedChangeIdMap } from './trackedChangeIdMapper.js';
+import { importFootnoteData, importEndnoteData } from './documentFootnotesImporter.js';
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
@@ -26,6 +28,7 @@ import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
+import { bibliographyHandlerEntity } from './bibliographyImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -148,8 +151,10 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
+    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
+    const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
 
     const translatedLinkedStyles = translateStyleDefinitions(docx);
     const translatedNumbering = translateNumberingDefinitions(docx);
@@ -201,6 +206,7 @@ export const createDocumentJson = (docx, converter, editor) => {
       ),
       comments,
       footnotes,
+      endnotes,
       inlineDocumentFonts,
       linkedStyles: getStyleDefinitions(docx, converter, editor),
       translatedLinkedStyles,
@@ -234,9 +240,11 @@ export const defaultNodeListHandler = () => {
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
+    bibliographyHandlerEntity,
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
+    documentStatFieldHandlerEntity,
     pageReferenceEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
@@ -759,12 +767,11 @@ const importHeadersFooters = (docx, converter, mainEditor, numbering, translated
 };
 
 const findSectPr = (obj, result = []) => {
-  for (const key in obj) {
-    if (obj[key] === 'w:sectPr') {
-      result.push(obj);
-    } else if (typeof obj[key] === 'object') {
-      findSectPr(obj[key], result);
-    }
+  if (obj && obj.name === 'w:sectPr') {
+    result.push(obj);
+  }
+  if (obj && obj.elements) {
+    obj.elements.forEach((el) => findSectPr(el, result));
   }
   return result;
 };

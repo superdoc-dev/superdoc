@@ -1,0 +1,74 @@
+.sd-theme-neon-night {
+  /* UI base */
+  --sd-ui-font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+  --sd-ui-text: #e7f7ff;
+  --sd-ui-text-muted: #9bd8ff;
+  --sd-ui-text-disabled: #5a89a8;
+  --sd-ui-bg: #07111f;
+  --sd-ui-hover-bg: #0e1d33;
+  --sd-ui-active-bg: #152949;
+  --sd-ui-border: #2d4e76;
+  --sd-ui-action: #15e3ff;
+  --sd-ui-action-hover: #7cf7ff;
+  --sd-ui-shadow: 0 0 0 1px #1f3a5a, 0 10px 28px rgba(0, 0, 0, 0.5);
+
+  /* Toolbar / dropdown / context */
+  --sd-ui-toolbar-bg: #061327;
+  --sd-ui-toolbar-button-text: #d8eeff;
+  --sd-ui-toolbar-button-hover-bg: #12325a;
+  --sd-ui-toolbar-button-active-bg: #1a4a84;
+  --sd-ui-dropdown-bg: #0a1a30;
+  --sd-ui-dropdown-border: #36659a;
+  --sd-ui-dropdown-text: #d8eeff;
+  --sd-ui-dropdown-hover-text: #e9fbff;
+  --sd-ui-dropdown-selected-text: #e9fbff;
+  --sd-ui-dropdown-hover-bg: #12325a;
+  --sd-ui-dropdown-active-bg: #1a4a84;
+  --sd-ui-dropdown-shadow: 0 0 0 1px #2e547f, 0 14px 34px rgba(0, 0, 0, 0.58);
+  --sd-ui-menu-bg: #0a1a30;
+  --sd-ui-menu-text: #d8eeff;
+  --sd-ui-menu-border: #36659a;
+  --sd-ui-menu-item-hover-bg: #133862;
+  --sd-ui-menu-item-active-bg: #1a4a84;
+  --sd-ui-menu-item-active-text: #e9fbff;
+  --sd-ui-menu-shadow: 0 0 0 1px #2e547f, 0 14px 34px rgba(0, 0, 0, 0.58);
+  --sd-ui-tooltip-bg: #001018;
+  --sd-ui-tooltip-text: #cfffff;
+
+  /* Layout */
+  --sd-layout-page-bg: #ffffff;
+  --sd-layout-page-shadow: 0 0 0 1px #1c3758, 0 20px 50px rgba(0, 0, 0, 0.46);
+
+  /* Comments panel */
+  --sd-ui-comments-card-bg: #0b1f39;
+  --sd-ui-comments-card-hover-bg: #10274a;
+  --sd-ui-comments-card-active-bg: #15315a;
+  --sd-ui-comments-card-resolved-bg: #0c2441;
+  --sd-ui-comments-card-active-border: #4a82be;
+  --sd-ui-comments-card-shadow: 0 0 0 1px #2f5f96, 0 14px 30px rgba(0, 0, 0, 0.54);
+  --sd-ui-comments-separator: #2f5f96;
+  --sd-ui-comments-author-text: #e7f7ff;
+  --sd-ui-comments-timestamp-text: #8fc4ef;
+  --sd-ui-comments-body-text: #d6ecff;
+  --sd-ui-comments-input-bg: #0e1d33;
+  --sd-ui-comments-input-border: #4a82be;
+  --sd-ui-comments-dropdown-bg: #0a1a30;
+  --sd-ui-comments-dropdown-border: #36659a;
+  --sd-ui-comments-dropdown-shadow: 0 0 0 1px #2e547f, 0 14px 34px rgba(0, 0, 0, 0.58);
+  --sd-ui-comments-option-text: #d6ecff;
+  --sd-ui-comments-option-hover-text: #e9fbff;
+  --sd-ui-comments-option-selected-text: #e9fbff;
+  --sd-ui-comments-option-hover-bg: #12325a;
+
+  /* Comments highlights */
+  --sd-comments-highlight-external-base: #ff2fa3;
+  --sd-comments-highlight-external: #ff2fa340;
+  --sd-comments-highlight-external-active: #ff2fa366;
+  --sd-comments-highlight-external-faded: #ff2fa320;
+  --sd-comments-highlight-external-nested-border: #ff2fa399;
+  --sd-comments-highlight-internal-base: #00e2b8;
+  --sd-comments-highlight-internal: #00e2b840;
+  --sd-comments-highlight-internal-active: #00e2b866;
+  --sd-comments-highlight-internal-faded: #00e2b820;
+  --sd-comments-highlight-internal-nested-border: #00e2b899;
+}

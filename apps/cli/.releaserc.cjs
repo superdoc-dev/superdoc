@@ -5,6 +5,8 @@
  * commits touching any of them. This shared helper patches git-log-parser to
  * expand path coverage. It REPLACES semantic-release-commit-filter — do not
  * use both (the filter restricts to CWD, which undoes the expansion).
+ *
+ * Keep in sync with .github/workflows/release-cli.yml paths: trigger.
  */
 require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'apps/cli',
@@ -15,19 +17,31 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
+  'pnpm-workspace.yaml',
 ]);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
+const branches = [
+  { name: 'stable', channel: 'latest' },
+  { name: 'main', prerelease: 'next', channel: 'next' },
+];
+
+const isPrerelease = branches.some(
+  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
+);
+
+// Use AI-powered notes for stable releases, conventional generator for prereleases
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }];
+
 const config = {
-  branches: [
-    { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
-  ],
+  branches,
   tagFormat: 'cli-v${version}',
   plugins: [
     '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
+    notesPlugin,
     ['@semantic-release/npm', { npmPublish: false }],
     [
       '@semantic-release/exec',
@@ -38,10 +52,6 @@ const config = {
     ],
   ],
 };
-
-const isPrerelease = config.branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
-);
 
 if (!isPrerelease) {
   config.plugins.push([

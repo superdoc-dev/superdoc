@@ -6,8 +6,6 @@ description: Extract the plain-text content of the document.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Extract the plain-text content of the document.
@@ -26,12 +24,19 @@ Returns the full plain-text content of the document as a string.
 
 ## Input fields
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
 ```json
-{}
+{
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  }
+}
 ```
 
 ## Output fields
@@ -46,7 +51,11 @@ _No fields._
 
 ## Pre-apply throws
 
-- None
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -58,7 +67,11 @@ _No fields._
 ```json
 {
   "additionalProperties": false,
-  "properties": {},
+  "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    }
+  },
   "type": "object"
 }
 ```

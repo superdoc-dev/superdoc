@@ -3,6 +3,7 @@ import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'v
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
+import { PresentationEditor } from '@superdoc/super-editor';
 import { superdocIcons } from '@superdoc/icons.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
@@ -30,7 +31,14 @@ const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
 /* Comments store refs */
-const { addComment, cancelComment, deleteComment, removePendingComment } = commentsStore;
+const {
+  addComment,
+  cancelComment,
+  deleteComment,
+  removePendingComment,
+  requestInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
+} = commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
@@ -81,15 +89,6 @@ const isPendingNewComment = computed(() => {
   return pendingComment.value && pendingComment.value.commentId === props.comment.commentId;
 });
 
-const showButtons = computed(() => {
-  return (
-    !getConfig.readOnly &&
-    isActiveComment.value &&
-    !props.comment.resolvedTime &&
-    editingCommentId.value !== props.comment.commentId
-  );
-});
-
 const showSeparator = computed(() => (index) => {
   const visible = visibleComments.value;
   if (showInputSection.value && index === visible.length - 1) return true;
@@ -97,12 +96,7 @@ const showSeparator = computed(() => (index) => {
 });
 
 const showInputSection = computed(() => {
-  return (
-    !getConfig.readOnly &&
-    isActiveComment.value &&
-    !props.comment.resolvedTime &&
-    editingCommentId.value !== props.comment.commentId
-  );
+  return !getConfig.readOnly && isActiveComment.value && !props.comment.resolvedTime && !isEditingAnyComment.value;
 });
 
 // Reply pill → expanded editor toggle
@@ -268,6 +262,11 @@ const isInternalDropdownDisabled = computed(() => {
 
 const isEditingThisComment = computed(() => (comment) => editingCommentId.value === comment.commentId);
 
+const isEditingAnyComment = computed(() => {
+  if (!editingCommentId.value) return false;
+  return comments.value.some((c) => c.commentId === editingCommentId.value);
+});
+
 const shouldShowInternalExternal = computed(() => {
   if (!proxy.$superdoc.config.isInternal) return false;
   return !suppressInternalExternal.value && !props.comment.trackedChange;
@@ -279,21 +278,43 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
-
-  // Only set as active if not resolved (resolved comments can't be edited)
-  if (!props.comment.resolvedTime) {
-    activeComment.value = props.comment.commentId;
-    props.comment.setActive(proxy.$superdoc);
+  const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
+  const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
+  if (willChangeActiveThread) {
+    requestInstantSidebarAlignment(targetClientY);
+  } else {
+    clearInstantSidebarAlignment();
   }
 
-  // Always allow scrolling to the comment location, even for resolved comments
+  // Update Vue store immediately for responsive UI
+  if (!props.comment.resolvedTime) {
+    activeComment.value = props.comment.commentId;
+  }
+
+  // Move cursor to the comment location and set active comment in a single PM
+  // transaction. This prevents a race where position-based comment detection in the
+  // plugin clears the activeThreadId before the setActiveComment meta is processed.
   if (editor) {
-    // For resolved comments, use commentId since prepareCommentsForImport rewrites
-    // commentRangeStart/End nodes' w:id to the internal commentId (not importedId)
     const cursorId = props.comment.resolvedTime
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
-    editor.commands?.setCursorById(cursorId);
+    if (props.comment.resolvedTime) {
+      editor.commands?.setCursorById(cursorId);
+    } else {
+      const activeCommentId = props.comment.commentId;
+      const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
+      if (!didScroll) {
+        editor.commands?.setActiveComment({ commentId: activeCommentId });
+      }
+    }
+    const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
+    if (presentation && Number.isFinite(targetClientY)) {
+      const fallbackThreadId = props.comment.commentId;
+      const scrolled = presentation.scrollThreadAnchorToClientY(cursorId, targetClientY, { behavior: 'auto' });
+      if (!scrolled && fallbackThreadId && fallbackThreadId !== cursorId) {
+        presentation.scrollThreadAnchorToClientY(fallbackThreadId, targetClientY, { behavior: 'auto' });
+      }
+    }
   }
 };
 
@@ -301,7 +322,7 @@ const handleClickOutside = (e) => {
   const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
   const clickedIgnoredTarget = targetElement?.closest?.(
     [
-      '.n-dropdown-option-body__label',
+      '.comments-dropdown__option-label',
       '.superdoc-comment-highlight',
       '.sd-editor-comment-highlight',
       '.sd-editor-tracked-change-highlight',
@@ -349,6 +370,8 @@ const handleAddComment = () => {
 
   const comment = commentsStore.getPendingComment(options);
   addComment({ superdoc: proxy.$superdoc, comment });
+  isReplying.value = false;
+  nextTick(() => emit('resize'));
 };
 
 const handleReject = () => {
@@ -377,6 +400,7 @@ const handleReject = () => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
     commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+    proxy.$superdoc.focus?.();
   });
 };
 
@@ -404,6 +428,7 @@ const handleResolve = () => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
     commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+    proxy.$superdoc.focus?.();
   });
 };
 
@@ -411,7 +436,7 @@ const handleOverflowSelect = (value, comment) => {
   switch (value) {
     case 'edit':
       currentCommentText.value = comment?.commentText?.value ?? comment?.commentText ?? '';
-      activeComment.value = comment.commentId;
+      activeComment.value = props.comment.commentId;
       editingCommentId.value = comment.commentId;
       commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
       nextTick(() => {
@@ -441,7 +466,7 @@ const handleInternalExternalSelect = (value) => {
 const getSidebarCommentStyle = computed(() => {
   const style = {};
 
-  if (isActiveComment.value || isPendingNewComment.value) {
+  if (isActiveComment.value || isPendingNewComment.value || isEditingAnyComment.value) {
     style.zIndex = 50;
   }
 
@@ -455,6 +480,7 @@ const getProcessedDate = (timestamp) => {
 
 const handleCancel = (comment) => {
   editingCommentId.value = null;
+  isReplying.value = false;
   cancelComment(proxy.$superdoc);
 };
 
@@ -590,7 +616,15 @@ watch(editingCommentId, (commentId) => {
             :class="{ 'is-truncated': shouldTruncate && index === 0 }"
             :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
           >
-            <div v-if="comment.trackedChangeType === 'trackFormat'">
+            <div v-if="comment.trackedChangeDisplayType === 'hyperlinkAdded'">
+              <span class="change-type">Added hyperlink </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
+              <span class="change-type">Changed hyperlink to </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
               <span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
             </div>
@@ -639,17 +673,26 @@ watch(editingCommentId, (commentId) => {
               editorCommentPositions[comment.importedId !== undefined ? comment.importedId : comment.commentId]?.bounds
             }}
           </div>
-          <div v-else class="comment-editing">
-            <CommentInput
-              :ref="setEditCommentInputRef(comment.commentId)"
-              :users="usersFiltered"
-              :config="getConfig"
-              :include-header="false"
-              :comment="comment"
-            />
-            <div class="comment-footer">
-              <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
-              <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
+          <div v-else class="reply-expanded">
+            <div class="reply-input-wrapper">
+              <CommentInput
+                :ref="setEditCommentInputRef(comment.commentId)"
+                :users="usersFiltered"
+                :config="getConfig"
+                :include-header="false"
+                :comment="comment"
+              />
+            </div>
+            <div class="reply-actions">
+              <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel(comment)">Cancel</button>
+              <button
+                class="sd-button primary reply-btn-primary"
+                @click.stop.prevent="handleCommentUpdate(comment)"
+                :disabled="!hasTextContent"
+                :class="{ 'is-disabled': !hasTextContent }"
+              >
+                Update
+              </button>
             </div>
           </div>
           <div
@@ -721,51 +764,53 @@ watch(editingCommentId, (commentId) => {
 .comments-dialog {
   display: flex;
   flex-direction: column;
-  padding: var(--sd-comment-padding, 16px);
-  border-radius: var(--sd-comment-radius, 12px);
-  background-color: var(--sd-comment-bg, #f3f6fd);
+  padding: var(--sd-ui-comments-card-padding, 16px);
+  border-radius: var(--sd-ui-comments-card-radius, 12px);
+  background-color: var(--sd-ui-comments-card-bg, #f3f6fd);
   border: 1px solid transparent;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
-  font-size: var(--sd-comment-body-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  transition: var(--sd-comment-transition, all 200ms ease);
+  transition: var(--sd-ui-comments-transition, all 200ms ease);
   box-shadow: none;
   z-index: 5;
-  max-width: var(--sd-comment-max-width, 300px);
-  min-width: var(--sd-comment-min-width, 200px);
+  max-width: 300px;
+  min-width: 200px;
   width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .comments-dialog:not(.is-active) {
   cursor: pointer;
 }
 .comments-dialog:not(.is-active):not(.is-resolved):hover {
-  background-color: var(--sd-comment-bg-hover, #f3f6fd);
+  background-color: var(--sd-ui-comments-card-hover-bg, #f3f6fd);
 }
 .comments-dialog:not(.is-resolved):hover :deep(.overflow-menu) {
   opacity: 1;
   pointer-events: auto;
 }
 .comments-dialog.is-active {
-  background-color: var(--sd-comment-bg-active, #ffffff);
-  border-color: var(--sd-comment-border-active, #e0e0e0);
-  box-shadow: var(--sd-comment-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
+  background-color: var(--sd-ui-comments-card-active-bg, #ffffff);
+  border-color: var(--sd-ui-comments-card-active-border, #e0e0e0);
+  box-shadow: var(--sd-ui-comments-card-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
   z-index: 10;
 }
 .comments-dialog.is-resolved {
-  background-color: var(--sd-comment-bg-resolved, #f0f0f0);
+  background-color: var(--sd-ui-comments-card-resolved-bg, #f0f0f0);
 }
 
 .comment-separator {
-  background-color: var(--sd-comment-separator, #e0e0e0);
+  background-color: var(--sd-ui-comments-separator, #e0e0e0);
   height: 1px;
   width: 100%;
   margin: 10px 0;
 }
 
 .comment {
-  font-size: var(--sd-comment-body-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  color: var(--sd-comment-author-color, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
   margin: 4px 0 0 0;
 }
 .comment :deep(p) {
@@ -773,22 +818,22 @@ watch(editingCommentId, (commentId) => {
 }
 
 .tracked-change {
-  font-size: var(--sd-comment-body-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  color: var(--sd-comment-author-color, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
   margin: 4px 0 0 0;
 }
 .change-type {
-  color: var(--sd-comment-author-color, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
 }
 .tracked-change-text {
-  color: var(--sd-comment-author-color, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
 }
 .tracked-change-text.is-deleted {
-  color: var(--sd-comment-tc-delete-color, #cb0e47);
+  color: var(--sd-ui-comments-delete-text, #cb0e47);
 }
 .tracked-change-text.is-inserted {
-  color: var(--sd-comment-tc-insert-color, #00853d);
+  color: var(--sd-ui-comments-insert-text, #00853d);
   font-weight: 500;
 }
 
@@ -799,7 +844,7 @@ watch(editingCommentId, (commentId) => {
   gap: 4px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--sd-color-green-500, #00853d);
+  color: var(--sd-ui-comments-resolved-text, #00853d);
   margin-bottom: 4px;
 }
 .resolved-badge__icon {
@@ -823,7 +868,7 @@ watch(editingCommentId, (commentId) => {
 }
 .show-more-toggle {
   font-size: 12px;
-  color: var(--sd-action-primary, #1355ff);
+  color: var(--sd-ui-action, #1355ff);
   cursor: pointer;
   font-weight: 500;
   margin-top: 4px;
@@ -840,7 +885,7 @@ watch(editingCommentId, (commentId) => {
   gap: 6px;
   padding: 8px 0;
   font-size: 12px;
-  color: var(--sd-action-primary, #1355ff);
+  color: var(--sd-ui-action, #1355ff);
   font-weight: 500;
   cursor: pointer;
   user-select: none;
@@ -855,7 +900,7 @@ watch(editingCommentId, (commentId) => {
   --sd-comment-avatar-size: 20px;
   --sd-comment-avatar-font-size: 8px;
   margin-left: -4px;
-  border: 2px solid var(--sd-comment-bg-active, #ffffff);
+  border: 2px solid var(--sd-ui-comments-card-active-bg, #ffffff);
 }
 .collapsed-avatars .mini-avatar:first-child {
   margin-left: 0;
@@ -863,10 +908,10 @@ watch(editingCommentId, (commentId) => {
 
 /* ── New comment input ── */
 .new-comment-input-wrapper {
-  border: 1.5px solid var(--sd-border-default, #dbdbdb);
+  border: 1.5px solid var(--sd-ui-comments-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: var(--sd-surface-card, #ffffff);
+  background: var(--sd-ui-comments-input-bg, #ffffff);
   margin-top: 4px;
   max-height: 150px;
   overflow-y: auto;
@@ -910,10 +955,10 @@ watch(editingCommentId, (commentId) => {
   margin-top: 10px;
 }
 .reply-input-wrapper {
-  border: 1.5px solid var(--sd-border-default, #dbdbdb);
+  border: 1.5px solid var(--sd-ui-comments-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: var(--sd-surface-card, #ffffff);
+  background: var(--sd-ui-comments-input-bg, #ffffff);
   max-height: 150px;
   overflow-y: auto;
 }
@@ -948,21 +993,21 @@ watch(editingCommentId, (commentId) => {
   border: none;
   font-size: 13px;
   font-weight: 500;
-  color: var(--sd-color-gray-700, #666666);
+  color: var(--sd-ui-text-muted, #666666);
   cursor: pointer;
   padding: 0;
   font-family: inherit;
   transition: color 150ms;
 }
 .reply-btn-cancel:hover {
-  color: var(--sd-color-gray-900, #212121);
+  color: var(--sd-ui-text, #212121);
 }
 .reply-btn-primary {
-  background: var(--sd-action-primary, #1355ff);
+  background: var(--sd-ui-action, #1355ff);
   border: none;
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--sd-ui-action-text, #ffffff);
   cursor: pointer;
   padding: 6px 16px;
   border-radius: 9999px;
@@ -970,7 +1015,7 @@ watch(editingCommentId, (commentId) => {
   transition: background 150ms;
 }
 .reply-btn-primary:hover {
-  background: var(--sd-action-primary-hover, #0f44cc);
+  background: var(--sd-ui-action-hover, #0f44cc);
 }
 .reply-btn-primary.is-disabled {
   background: var(--sd-color-gray-400, #dbdbdb);
@@ -983,24 +1028,7 @@ watch(editingCommentId, (commentId) => {
   margin-bottom: 10px;
 }
 
-.comment-footer {
-  margin: 5px 0 5px;
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-}
-.comment-footer .sd-button {
-  font-size: 12px;
-  margin-left: 5px;
-}
-
 .internal-dropdown {
   display: inline-block;
-}
-.comment-editing {
-  padding-bottom: 10px;
-}
-.comment-editing button {
-  margin-left: 5px;
 }
 </style>

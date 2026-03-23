@@ -2,11 +2,13 @@ import path from 'node:path';
 import {
   camelCase,
   createOperationTree,
+  filterOperationsBySurface,
   loadContract,
   pascalCase,
   resolveRef,
   REPO_ROOT,
   sanitizeOperationId,
+  stripBoundParams,
   toNodeType,
   writeGeneratedFile,
 } from './shared.mjs';
@@ -164,11 +166,19 @@ function generateResultType(operationId, operation, $defs) {
 }
 
 // ---------------------------------------------------------------------------
-// String-envelope unwrapping
+// Response-envelope unwrapping
 // ---------------------------------------------------------------------------
 
-// Operations whose CLI response wraps a plain string inside
-// `{ document, <key>: "..." }`. The SDK unwraps to return the string directly.
+// Operations whose CLI response wraps payloads inside
+// `{ document, <key>: <value> }`. The SDK unwraps to return `<value>`.
+const ENVELOPE_KEY_BY_OPERATION_ID = {
+  'doc.find': 'result',
+  'doc.getText': 'text',
+  'doc.getMarkdown': 'markdown',
+  'doc.getHtml': 'html',
+};
+
+// Subset of envelope-wrapped operations that should be unwrapped as strings.
 const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
   'doc.getText': 'text',
   'doc.getMarkdown': 'markdown',
@@ -188,9 +198,12 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
       const resultTypeName = resultTypeMap.get(op.id);
       const hasRequired = (op.params ?? []).some((p) => p.required);
       const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
-      const envelopeKey = STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[op.id];
       if (envelopeKey) {
-        return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+        if (STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id]) {
+          return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+        }
+        return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapEnvelope<${resultTypeName}>(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
       }
       return `${indent}${camelCase(key)}: (${paramsArg}, options?: InvokeOptions) => runtime.invoke<${resultTypeName}>(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options),`;
     }
@@ -203,17 +216,76 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
 }
 
 // ---------------------------------------------------------------------------
+// Bound param interface generation (strips doc and sessionId)
+// ---------------------------------------------------------------------------
+
+function generateBoundParamInterface(operationId, operation, $defs) {
+  const name = `Doc${pascalCase(sanitizeOperationId(operationId))}BoundParams`;
+  const boundParams = stripBoundParams(operation.params);
+  const lines = [`export interface ${name} {`];
+
+  for (const param of boundParams) {
+    const opt = param.required ? '' : '?';
+    let paramType;
+    if (param.type === 'json' && param.schema) {
+      paramType = toTsType(param.schema, '  ', $defs);
+    } else {
+      paramType = toNodeType(param.type);
+    }
+    lines.push(`  ${param.name}${opt}: ${paramType};`);
+  }
+
+  lines.push('}');
+  return { name, source: lines.join('\n') };
+}
+
+// ---------------------------------------------------------------------------
+// Bound tree rendering (same as raw but uses bound param types)
+// ---------------------------------------------------------------------------
+
+function renderBoundTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') {
+  const entries = Object.entries(treeNode);
+  const rendered = entries.map(([key, value]) => {
+    if (value.__operation) {
+      const op = value.__operation;
+      const typeName = paramTypeMap.get(op.id);
+      const resultTypeName = resultTypeMap.get(op.id);
+      const boundParams = stripBoundParams(op.params ?? []);
+      const hasRequired = boundParams.some((p) => p.required);
+      const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
+      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      if (envelopeKey) {
+        if (STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id]) {
+          return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+        }
+        return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapEnvelope<${resultTypeName}>(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+      }
+      return `${indent}${camelCase(key)}: (${paramsArg}, options?: InvokeOptions) => runtime.invoke<${resultTypeName}>(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options),`;
+    }
+
+    const nested = renderBoundTreeNode(value, paramTypeMap, resultTypeMap, `${indent}  `);
+    return `${indent}${camelCase(key)}: {\n${nested}\n${indent}},`;
+  });
+
+  return rendered.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // client.ts generation
 // ---------------------------------------------------------------------------
 
 function generateClientTs(contract) {
   const $defs = contract.$defs;
+  const allOperations = contract.operations;
+  const documentOperations = filterOperationsBySurface(allOperations, 'document');
+
+  // Raw param/result types for all operations (used by internal raw API)
   const paramInterfaces = [];
   const resultTypes = [];
   const paramTypeMap = new Map();
   const resultTypeMap = new Map();
 
-  for (const [operationId, operation] of Object.entries(contract.operations)) {
+  for (const [operationId, operation] of Object.entries(allOperations)) {
     const { name: pName, source: pSource } = generateParamInterface(operationId, operation, $defs);
     paramTypeMap.set(operationId, pName);
     paramInterfaces.push(pSource);
@@ -223,37 +295,86 @@ function generateClientTs(contract) {
     resultTypes.push(rSource);
   }
 
-  const tree = createOperationTree(contract.operations);
-  const treeSource = renderTreeNode(tree, paramTypeMap, resultTypeMap);
+  // Bound param types for document-surface operations only (strip doc/sessionId)
+  const boundParamInterfaces = [];
+  const boundParamTypeMap = new Map();
+
+  for (const [operationId, operation] of Object.entries(documentOperations)) {
+    const { name: bpName, source: bpSource } = generateBoundParamInterface(operationId, operation, $defs);
+    boundParamTypeMap.set(operationId, bpName);
+    boundParamInterfaces.push(bpSource);
+  }
+
+  // Raw operation tree (all operations — internal use only)
+  const rawTree = createOperationTree(allOperations);
+  const rawTreeSource = renderTreeNode(rawTree, paramTypeMap, resultTypeMap);
+
+  // Bound operation tree (document-surface only — public document handle API)
+  const boundTree = createOperationTree(documentOperations);
+  const boundTreeSource = renderBoundTreeNode(boundTree, boundParamTypeMap, resultTypeMap);
 
   return [
     '/* eslint-disable */',
     '// Auto-generated by packages/sdk/codegen/src/generate-node.mjs',
     '',
     "import { CONTRACT } from './contract.js';",
-    "import type { SuperDocRuntime, InvokeOptions } from '../runtime/process.js';",
+    "import type { RuntimeInvoker, InvokeOptions } from '../runtime/process.js';",
+    '',
+    '/** Extract a payload value from a CLI response envelope like `{ document, result: {...} }`. */',
+    'function unwrapEnvelope<T>(value: unknown, key: string): T {',
+    '  if (typeof value === "object" && value !== null) {',
+    '    const extracted = (value as Record<string, unknown>)[key];',
+    '    if (extracted !== undefined) return extracted as T;',
+    '  }',
+    '  return value as T;',
+    '}',
     '',
     '/** Extract a string value from a CLI response envelope like `{ document, text: "..." }`. */',
     'function unwrapStringEnvelope(value: unknown, key: string): string {',
-    '  if (typeof value === "string") return value;',
-    '  if (typeof value === "object" && value !== null) {',
-    '    const extracted = (value as Record<string, unknown>)[key];',
-    '    if (typeof extracted === "string") return extracted;',
-    '  }',
-    '  return value as string;',
+    '  const extracted = unwrapEnvelope<unknown>(value, key);',
+    '  if (typeof extracted === "string") return extracted;',
+    '  return extracted as string;',
     '}',
+    '',
+    '// ---------------------------------------------------------------------------',
+    '// Raw param/result types (all operations)',
+    '// ---------------------------------------------------------------------------',
     '',
     paramInterfaces.join('\n\n'),
     '',
     resultTypes.join('\n\n'),
     '',
-    'export function createDocApi(runtime: SuperDocRuntime) {',
+    '// ---------------------------------------------------------------------------',
+    '// Bound param types (document-surface only — doc/sessionId stripped)',
+    '// ---------------------------------------------------------------------------',
+    '',
+    boundParamInterfaces.join('\n\n'),
+    '',
+    '// ---------------------------------------------------------------------------',
+    '// Raw API (all operations — internal use only)',
+    '// ---------------------------------------------------------------------------',
+    '',
+    '/** @internal Raw operation tree for SDK internals. Use createBoundDocApi for public document handles. */',
+    'export function createDocApi(runtime: RuntimeInvoker) {',
     '  return {',
-    treeSource,
+    rawTreeSource,
     '  };',
     '}',
     '',
     'export type SuperDocDocApi = ReturnType<typeof createDocApi>;',
+    '',
+    '// ---------------------------------------------------------------------------',
+    '// Bound API (document-surface only — public document handle)',
+    '// ---------------------------------------------------------------------------',
+    '',
+    '/** Bound document operation tree. The runtime injects sessionId; callers never pass doc or sessionId. */',
+    'export function createBoundDocApi(runtime: RuntimeInvoker) {',
+    '  return {',
+    boundTreeSource,
+    '  };',
+    '}',
+    '',
+    'export type BoundDocApi = ReturnType<typeof createBoundDocApi>;',
     '',
   ].join('\n');
 }

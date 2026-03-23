@@ -1,3 +1,174 @@
+## [1.18.2](https://github.com/superdoc-dev/superdoc/compare/v1.18.1...v1.18.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* **anchor-nav:** use correct scroll container for sub-page bookmark navigation ([a300536](https://github.com/superdoc-dev/superdoc/commit/a300536111890565c6b53b0842551a5c2f4c191a)), closes [#scrollContainer](https://github.com/superdoc-dev/superdoc/issues/scrollContainer)
+* **rendering:** show comment highlight on text with Word highlight formatting ([f6d956e](https://github.com/superdoc-dev/superdoc/commit/f6d956ec38f12ff0ee3440f153edf1fa69406f2d))
+* **toc:** correct zoom scaling and rect.top bug in anchor scroll ([16c768f](https://github.com/superdoc-dev/superdoc/commit/16c768f1b81672c5126833cc1ffbe948a2c11ebd))
+
+## [1.18.1](https://github.com/superdoc-dev/superdoc/compare/v1.18.0...v1.18.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* **export:** prevent DOCX corruption from UTF-16 XML parts and schema violations (SD-2170) ([#2349](https://github.com/superdoc-dev/superdoc/issues/2349)) ([f6dbb40](https://github.com/superdoc-dev/superdoc/commit/f6dbb404ad998e502a49df7e0ffded9f2a236321))
+# [1.18.0](https://github.com/superdoc-dev/superdoc/compare/v1.17.0...v1.18.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* add type definitions for PresentationEditor ([#2271](https://github.com/superdoc-dev/superdoc/issues/2271)) ([5402196](https://github.com/superdoc-dev/superdoc/commit/5402196e73997b83ddd1d4f270c82e3a85c3365f))
+* **document-api:** fix markdown to image ([bf0e664](https://github.com/superdoc-dev/superdoc/commit/bf0e6647820c3987b4100f8f9804e413cfb33511))
+* **document-api:** make lists.setType preserve sequence continuity ([#2304](https://github.com/superdoc-dev/superdoc/issues/2304)) ([da09826](https://github.com/superdoc-dev/superdoc/commit/da0982647cd57b4e775794af52e1a23b3d6f2afe))
+* **editor:** prevent focus loss when typing in header/footer editors (SD-1993) ([#2238](https://github.com/superdoc-dev/superdoc/issues/2238)) ([e1b8007](https://github.com/superdoc-dev/superdoc/commit/e1b80074377b221873158ce5befc8fa2a908d1a8)), closes [PresentationEditor.#flushRerenderQueue](https://github.com/PresentationEditor./issues/flushRerenderQueue)
+* **export:** sync document XML before numbering pruning to preserve list definitions ([36058c3](https://github.com/superdoc-dev/superdoc/commit/36058c3640d12eeba8a3cf671d4cb2b46786d1d1))
+* **format:** route format.caps through textTransform so w:caps persists on export ([#2297](https://github.com/superdoc-dev/superdoc/issues/2297)) ([8e771e2](https://github.com/superdoc-dev/superdoc/commit/8e771e2d2ea75d4bc72bc7f589fd9279f8027478))
+* handle Uint8Array media values from persistence layers ([#2298](https://github.com/superdoc-dev/superdoc/issues/2298)) ([0d4505c](https://github.com/superdoc-dev/superdoc/commit/0d4505c77ac1c44939e8f7874a08f827a7a8e08c))
+* harden markdown image conversion ([4ba1c25](https://github.com/superdoc-dev/superdoc/commit/4ba1c254c77aaa37f552f2ad9fd06ec55e802b23))
+* **link-popover:** mount external popovers outside overflow:hidden container (SD-2148) ([#2308](https://github.com/superdoc-dev/superdoc/issues/2308)) ([ea4be68](https://github.com/superdoc-dev/superdoc/commit/ea4be68fb6deea669140d4af5934ba17a6a6571b))
+* make expected revision optional, update docs ([#2265](https://github.com/superdoc-dev/superdoc/issues/2265)) ([250bb5b](https://github.com/superdoc-dev/superdoc/commit/250bb5b6131fd68a83a3d0959dc0a5808fb5f152))
+* **painter-dom:** prevent scroll acceleration feedback loop in virtualization ([#2291](https://github.com/superdoc-dev/superdoc/issues/2291)) ([fb3d25e](https://github.com/superdoc-dev/superdoc/commit/fb3d25e809019407b1298c28f8c10ac184e1dc73))
+* portrait orientation in document-api ([dafab76](https://github.com/superdoc-dev/superdoc/commit/dafab76af5f249c49936a0250e4e54ae4719b305))
+* **sdk:** keep sdk sessions alive in non collab ([#2289](https://github.com/superdoc-dev/superdoc/issues/2289)) ([c634ee8](https://github.com/superdoc-dev/superdoc/commit/c634ee87bb6ac29b14b0f02d6080b2420cfe3dc6))
+* **super-editor:** align image resize handles with actual image position ([#2293](https://github.com/superdoc-dev/superdoc/issues/2293)) ([217bdce](https://github.com/superdoc-dev/superdoc/commit/217bdcef86d736825b0bfe55880ac57620d1b4d3))
+* **test:** stabilize flaky cleanUpParagraphWithAnnotations tests ([#2262](https://github.com/superdoc-dev/superdoc/issues/2262)) ([7bafb7f](https://github.com/superdoc-dev/superdoc/commit/7bafb7f9e0fcc0109a0a976d1a01e9ee408f7291))
+* **virtualization:** compute scrollY relative to scroll container, not viewport ([#2263](https://github.com/superdoc-dev/superdoc/issues/2263)) ([370ca5e](https://github.com/superdoc-dev/superdoc/commit/370ca5ea025bd5fb57f1dfe9b79871afbcdfd9b5))
+
+
+### Features
+
+* **document-api:** add getHtml operation, fix HTML insert and SDK tool selection ([#2264](https://github.com/superdoc-dev/superdoc/issues/2264)) ([c554678](https://github.com/superdoc-dev/superdoc/commit/c554678b425c7b97670aff5d7389bbbdfe8a5c04))
+* **document-api:** clear content command ([#2300](https://github.com/superdoc-dev/superdoc/issues/2300)) ([46b5261](https://github.com/superdoc-dev/superdoc/commit/46b5261f34b6793d41ab6452fb117e0f81b7437a))
+* **document-api:** hyperlinks commands ([#2294](https://github.com/superdoc-dev/superdoc/issues/2294)) ([4d3bebd](https://github.com/superdoc-dev/superdoc/commit/4d3bebd6c89dd1cbd5c143e61c71beca45daba1b))
+* **document-api:** initial image commands ([#2290](https://github.com/superdoc-dev/superdoc/issues/2290)) ([d624231](https://github.com/superdoc-dev/superdoc/commit/d624231a97872af746d93de70129ac734cd363b8))
+* **document-api:** insert table adds extra separator to match ms word ([#2301](https://github.com/superdoc-dev/superdoc/issues/2301)) ([5e49613](https://github.com/superdoc-dev/superdoc/commit/5e496130249a8fc5403f201c667106c5da4961fb))
+* **document-api:** make styles.apply registry-driven with schema/validation ([#2267](https://github.com/superdoc-dev/superdoc/issues/2267)) ([cab54ba](https://github.com/superdoc-dev/superdoc/commit/cab54badc20e7002ce82be6f4e02f84e71802717))
+* **document-api:** more image commands ([#2295](https://github.com/superdoc-dev/superdoc/issues/2295)) ([4fbbbc9](https://github.com/superdoc-dev/superdoc/commit/4fbbbc987e2469b8fd70c1a07a79dacc801f6733))
+* **document-api:** more lists commands ([#2288](https://github.com/superdoc-dev/superdoc/issues/2288)) ([eb48bf1](https://github.com/superdoc-dev/superdoc/commit/eb48bf1cf72da0c780998cf033e851aadc144206))
+* **links:** convert pasted hyperlinks into real docx links ([#2270](https://github.com/superdoc-dev/superdoc/issues/2270)) ([7d75522](https://github.com/superdoc-dev/superdoc/commit/7d7552203f0bbc6779149656e447432d50eb2697))
+* **markdown:** import images from markdown ([#2303](https://github.com/superdoc-dev/superdoc/issues/2303)) ([b2f6a1a](https://github.com/superdoc-dev/superdoc/commit/b2f6a1ad5692153b60edb5b88347b5c8e37191f7))
+* support TIFF images in DOCX rendering ([#2284](https://github.com/superdoc-dev/superdoc/issues/2284)) ([6436d86](https://github.com/superdoc-dev/superdoc/commit/6436d861efbdb52d592a0069fc84a1f5d830f358)), closes [#2064](https://github.com/superdoc-dev/superdoc/issues/2064)
+* **tracked-changes:** allow partial tracked change resolution ([#2252](https://github.com/superdoc-dev/superdoc/issues/2252)) ([988598d](https://github.com/superdoc-dev/superdoc/commit/988598d7f20e263e81715a2f0195abc2ecffe75b))
+* **web-view:** new layout engine based web view ([#2100](https://github.com/superdoc-dev/superdoc/issues/2100)) ([a353b82](https://github.com/superdoc-dev/superdoc/commit/a353b82a3c0404db13cda8ab72f7500b2aae8e09))
+
+# [1.18.0](https://github.com/superdoc-dev/superdoc/compare/v1.17.0...v1.18.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* add type definitions for PresentationEditor ([#2271](https://github.com/superdoc-dev/superdoc/issues/2271)) ([5402196](https://github.com/superdoc-dev/superdoc/commit/5402196e73997b83ddd1d4f270c82e3a85c3365f))
+* **document-api:** fix markdown to image ([bf0e664](https://github.com/superdoc-dev/superdoc/commit/bf0e6647820c3987b4100f8f9804e413cfb33511))
+* **document-api:** make lists.setType preserve sequence continuity ([#2304](https://github.com/superdoc-dev/superdoc/issues/2304)) ([da09826](https://github.com/superdoc-dev/superdoc/commit/da0982647cd57b4e775794af52e1a23b3d6f2afe))
+* **editor:** prevent focus loss when typing in header/footer editors (SD-1993) ([#2238](https://github.com/superdoc-dev/superdoc/issues/2238)) ([e1b8007](https://github.com/superdoc-dev/superdoc/commit/e1b80074377b221873158ce5befc8fa2a908d1a8)), closes [PresentationEditor.#flushRerenderQueue](https://github.com/PresentationEditor./issues/flushRerenderQueue)
+* **export:** sync document XML before numbering pruning to preserve list definitions ([36058c3](https://github.com/superdoc-dev/superdoc/commit/36058c3640d12eeba8a3cf671d4cb2b46786d1d1))
+* **format:** route format.caps through textTransform so w:caps persists on export ([#2297](https://github.com/superdoc-dev/superdoc/issues/2297)) ([8e771e2](https://github.com/superdoc-dev/superdoc/commit/8e771e2d2ea75d4bc72bc7f589fd9279f8027478))
+* handle Uint8Array media values from persistence layers ([#2298](https://github.com/superdoc-dev/superdoc/issues/2298)) ([0d4505c](https://github.com/superdoc-dev/superdoc/commit/0d4505c77ac1c44939e8f7874a08f827a7a8e08c))
+* harden markdown image conversion ([4ba1c25](https://github.com/superdoc-dev/superdoc/commit/4ba1c254c77aaa37f552f2ad9fd06ec55e802b23))
+* **link-popover:** mount external popovers outside overflow:hidden container (SD-2148) ([#2308](https://github.com/superdoc-dev/superdoc/issues/2308)) ([ea4be68](https://github.com/superdoc-dev/superdoc/commit/ea4be68fb6deea669140d4af5934ba17a6a6571b))
+* make expected revision optional, update docs ([#2265](https://github.com/superdoc-dev/superdoc/issues/2265)) ([250bb5b](https://github.com/superdoc-dev/superdoc/commit/250bb5b6131fd68a83a3d0959dc0a5808fb5f152))
+* **painter-dom:** prevent scroll acceleration feedback loop in virtualization ([#2291](https://github.com/superdoc-dev/superdoc/issues/2291)) ([fb3d25e](https://github.com/superdoc-dev/superdoc/commit/fb3d25e809019407b1298c28f8c10ac184e1dc73))
+* portrait orientation in document-api ([dafab76](https://github.com/superdoc-dev/superdoc/commit/dafab76af5f249c49936a0250e4e54ae4719b305))
+* **sdk:** keep sdk sessions alive in non collab ([#2289](https://github.com/superdoc-dev/superdoc/issues/2289)) ([c634ee8](https://github.com/superdoc-dev/superdoc/commit/c634ee87bb6ac29b14b0f02d6080b2420cfe3dc6))
+* **super-editor:** align image resize handles with actual image position ([#2293](https://github.com/superdoc-dev/superdoc/issues/2293)) ([217bdce](https://github.com/superdoc-dev/superdoc/commit/217bdcef86d736825b0bfe55880ac57620d1b4d3))
+* **test:** stabilize flaky cleanUpParagraphWithAnnotations tests ([#2262](https://github.com/superdoc-dev/superdoc/issues/2262)) ([7bafb7f](https://github.com/superdoc-dev/superdoc/commit/7bafb7f9e0fcc0109a0a976d1a01e9ee408f7291))
+* **virtualization:** compute scrollY relative to scroll container, not viewport ([#2263](https://github.com/superdoc-dev/superdoc/issues/2263)) ([370ca5e](https://github.com/superdoc-dev/superdoc/commit/370ca5ea025bd5fb57f1dfe9b79871afbcdfd9b5))
+
+
+### Features
+
+* **document-api:** add getHtml operation, fix HTML insert and SDK tool selection ([#2264](https://github.com/superdoc-dev/superdoc/issues/2264)) ([c554678](https://github.com/superdoc-dev/superdoc/commit/c554678b425c7b97670aff5d7389bbbdfe8a5c04))
+* **document-api:** clear content command ([#2300](https://github.com/superdoc-dev/superdoc/issues/2300)) ([46b5261](https://github.com/superdoc-dev/superdoc/commit/46b5261f34b6793d41ab6452fb117e0f81b7437a))
+* **document-api:** hyperlinks commands ([#2294](https://github.com/superdoc-dev/superdoc/issues/2294)) ([4d3bebd](https://github.com/superdoc-dev/superdoc/commit/4d3bebd6c89dd1cbd5c143e61c71beca45daba1b))
+* **document-api:** initial image commands ([#2290](https://github.com/superdoc-dev/superdoc/issues/2290)) ([d624231](https://github.com/superdoc-dev/superdoc/commit/d624231a97872af746d93de70129ac734cd363b8))
+* **document-api:** insert table adds extra separator to match ms word ([#2301](https://github.com/superdoc-dev/superdoc/issues/2301)) ([5e49613](https://github.com/superdoc-dev/superdoc/commit/5e496130249a8fc5403f201c667106c5da4961fb))
+* **document-api:** make styles.apply registry-driven with schema/validation ([#2267](https://github.com/superdoc-dev/superdoc/issues/2267)) ([cab54ba](https://github.com/superdoc-dev/superdoc/commit/cab54badc20e7002ce82be6f4e02f84e71802717))
+* **document-api:** more image commands ([#2295](https://github.com/superdoc-dev/superdoc/issues/2295)) ([4fbbbc9](https://github.com/superdoc-dev/superdoc/commit/4fbbbc987e2469b8fd70c1a07a79dacc801f6733))
+* **document-api:** more lists commands ([#2288](https://github.com/superdoc-dev/superdoc/issues/2288)) ([eb48bf1](https://github.com/superdoc-dev/superdoc/commit/eb48bf1cf72da0c780998cf033e851aadc144206))
+* **links:** convert pasted hyperlinks into real docx links ([#2270](https://github.com/superdoc-dev/superdoc/issues/2270)) ([7d75522](https://github.com/superdoc-dev/superdoc/commit/7d7552203f0bbc6779149656e447432d50eb2697))
+* **markdown:** import images from markdown ([#2303](https://github.com/superdoc-dev/superdoc/issues/2303)) ([b2f6a1a](https://github.com/superdoc-dev/superdoc/commit/b2f6a1ad5692153b60edb5b88347b5c8e37191f7))
+* support TIFF images in DOCX rendering ([#2284](https://github.com/superdoc-dev/superdoc/issues/2284)) ([6436d86](https://github.com/superdoc-dev/superdoc/commit/6436d861efbdb52d592a0069fc84a1f5d830f358)), closes [#2064](https://github.com/superdoc-dev/superdoc/issues/2064)
+* **tracked-changes:** allow partial tracked change resolution ([#2252](https://github.com/superdoc-dev/superdoc/issues/2252)) ([988598d](https://github.com/superdoc-dev/superdoc/commit/988598d7f20e263e81715a2f0195abc2ecffe75b))
+* **web-view:** new layout engine based web view ([#2100](https://github.com/superdoc-dev/superdoc/issues/2100)) ([a353b82](https://github.com/superdoc-dev/superdoc/commit/a353b82a3c0404db13cda8ab72f7500b2aae8e09))
+
+# [1.18.0](https://github.com/superdoc-dev/superdoc/compare/v1.17.0...v1.18.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* add type definitions for PresentationEditor ([#2271](https://github.com/superdoc-dev/superdoc/issues/2271)) ([5402196](https://github.com/superdoc-dev/superdoc/commit/5402196e73997b83ddd1d4f270c82e3a85c3365f))
+* **document-api:** fix markdown to image ([bf0e664](https://github.com/superdoc-dev/superdoc/commit/bf0e6647820c3987b4100f8f9804e413cfb33511))
+* **document-api:** make lists.setType preserve sequence continuity ([#2304](https://github.com/superdoc-dev/superdoc/issues/2304)) ([da09826](https://github.com/superdoc-dev/superdoc/commit/da0982647cd57b4e775794af52e1a23b3d6f2afe))
+* **editor:** prevent focus loss when typing in header/footer editors (SD-1993) ([#2238](https://github.com/superdoc-dev/superdoc/issues/2238)) ([e1b8007](https://github.com/superdoc-dev/superdoc/commit/e1b80074377b221873158ce5befc8fa2a908d1a8)), closes [PresentationEditor.#flushRerenderQueue](https://github.com/PresentationEditor./issues/flushRerenderQueue)
+* **export:** sync document XML before numbering pruning to preserve list definitions ([36058c3](https://github.com/superdoc-dev/superdoc/commit/36058c3640d12eeba8a3cf671d4cb2b46786d1d1))
+* **format:** route format.caps through textTransform so w:caps persists on export ([#2297](https://github.com/superdoc-dev/superdoc/issues/2297)) ([8e771e2](https://github.com/superdoc-dev/superdoc/commit/8e771e2d2ea75d4bc72bc7f589fd9279f8027478))
+* handle Uint8Array media values from persistence layers ([#2298](https://github.com/superdoc-dev/superdoc/issues/2298)) ([0d4505c](https://github.com/superdoc-dev/superdoc/commit/0d4505c77ac1c44939e8f7874a08f827a7a8e08c))
+* harden markdown image conversion ([4ba1c25](https://github.com/superdoc-dev/superdoc/commit/4ba1c254c77aaa37f552f2ad9fd06ec55e802b23))
+* **link-popover:** mount external popovers outside overflow:hidden container (SD-2148) ([#2308](https://github.com/superdoc-dev/superdoc/issues/2308)) ([ea4be68](https://github.com/superdoc-dev/superdoc/commit/ea4be68fb6deea669140d4af5934ba17a6a6571b))
+* make expected revision optional, update docs ([#2265](https://github.com/superdoc-dev/superdoc/issues/2265)) ([250bb5b](https://github.com/superdoc-dev/superdoc/commit/250bb5b6131fd68a83a3d0959dc0a5808fb5f152))
+* **painter-dom:** prevent scroll acceleration feedback loop in virtualization ([#2291](https://github.com/superdoc-dev/superdoc/issues/2291)) ([fb3d25e](https://github.com/superdoc-dev/superdoc/commit/fb3d25e809019407b1298c28f8c10ac184e1dc73))
+* portrait orientation in document-api ([dafab76](https://github.com/superdoc-dev/superdoc/commit/dafab76af5f249c49936a0250e4e54ae4719b305))
+* **sdk:** keep sdk sessions alive in non collab ([#2289](https://github.com/superdoc-dev/superdoc/issues/2289)) ([c634ee8](https://github.com/superdoc-dev/superdoc/commit/c634ee87bb6ac29b14b0f02d6080b2420cfe3dc6))
+* **super-editor:** align image resize handles with actual image position ([#2293](https://github.com/superdoc-dev/superdoc/issues/2293)) ([217bdce](https://github.com/superdoc-dev/superdoc/commit/217bdcef86d736825b0bfe55880ac57620d1b4d3))
+* **test:** stabilize flaky cleanUpParagraphWithAnnotations tests ([#2262](https://github.com/superdoc-dev/superdoc/issues/2262)) ([7bafb7f](https://github.com/superdoc-dev/superdoc/commit/7bafb7f9e0fcc0109a0a976d1a01e9ee408f7291))
+* **virtualization:** compute scrollY relative to scroll container, not viewport ([#2263](https://github.com/superdoc-dev/superdoc/issues/2263)) ([370ca5e](https://github.com/superdoc-dev/superdoc/commit/370ca5ea025bd5fb57f1dfe9b79871afbcdfd9b5))
+
+
+### Features
+
+* **document-api:** add getHtml operation, fix HTML insert and SDK tool selection ([#2264](https://github.com/superdoc-dev/superdoc/issues/2264)) ([c554678](https://github.com/superdoc-dev/superdoc/commit/c554678b425c7b97670aff5d7389bbbdfe8a5c04))
+* **document-api:** clear content command ([#2300](https://github.com/superdoc-dev/superdoc/issues/2300)) ([46b5261](https://github.com/superdoc-dev/superdoc/commit/46b5261f34b6793d41ab6452fb117e0f81b7437a))
+* **document-api:** hyperlinks commands ([#2294](https://github.com/superdoc-dev/superdoc/issues/2294)) ([4d3bebd](https://github.com/superdoc-dev/superdoc/commit/4d3bebd6c89dd1cbd5c143e61c71beca45daba1b))
+* **document-api:** initial image commands ([#2290](https://github.com/superdoc-dev/superdoc/issues/2290)) ([d624231](https://github.com/superdoc-dev/superdoc/commit/d624231a97872af746d93de70129ac734cd363b8))
+* **document-api:** insert table adds extra separator to match ms word ([#2301](https://github.com/superdoc-dev/superdoc/issues/2301)) ([5e49613](https://github.com/superdoc-dev/superdoc/commit/5e496130249a8fc5403f201c667106c5da4961fb))
+* **document-api:** make styles.apply registry-driven with schema/validation ([#2267](https://github.com/superdoc-dev/superdoc/issues/2267)) ([cab54ba](https://github.com/superdoc-dev/superdoc/commit/cab54badc20e7002ce82be6f4e02f84e71802717))
+* **document-api:** more image commands ([#2295](https://github.com/superdoc-dev/superdoc/issues/2295)) ([4fbbbc9](https://github.com/superdoc-dev/superdoc/commit/4fbbbc987e2469b8fd70c1a07a79dacc801f6733))
+* **document-api:** more lists commands ([#2288](https://github.com/superdoc-dev/superdoc/issues/2288)) ([eb48bf1](https://github.com/superdoc-dev/superdoc/commit/eb48bf1cf72da0c780998cf033e851aadc144206))
+* **links:** convert pasted hyperlinks into real docx links ([#2270](https://github.com/superdoc-dev/superdoc/issues/2270)) ([7d75522](https://github.com/superdoc-dev/superdoc/commit/7d7552203f0bbc6779149656e447432d50eb2697))
+* **markdown:** import images from markdown ([#2303](https://github.com/superdoc-dev/superdoc/issues/2303)) ([b2f6a1a](https://github.com/superdoc-dev/superdoc/commit/b2f6a1ad5692153b60edb5b88347b5c8e37191f7))
+* support TIFF images in DOCX rendering ([#2284](https://github.com/superdoc-dev/superdoc/issues/2284)) ([6436d86](https://github.com/superdoc-dev/superdoc/commit/6436d861efbdb52d592a0069fc84a1f5d830f358)), closes [#2064](https://github.com/superdoc-dev/superdoc/issues/2064)
+* **tracked-changes:** allow partial tracked change resolution ([#2252](https://github.com/superdoc-dev/superdoc/issues/2252)) ([988598d](https://github.com/superdoc-dev/superdoc/commit/988598d7f20e263e81715a2f0195abc2ecffe75b))
+* **web-view:** new layout engine based web view ([#2100](https://github.com/superdoc-dev/superdoc/issues/2100)) ([a353b82](https://github.com/superdoc-dev/superdoc/commit/a353b82a3c0404db13cda8ab72f7500b2aae8e09))
+
+# [1.18.0](https://github.com/superdoc-dev/superdoc/compare/v1.17.0...v1.18.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* add type definitions for PresentationEditor ([#2271](https://github.com/superdoc-dev/superdoc/issues/2271)) ([5402196](https://github.com/superdoc-dev/superdoc/commit/5402196e73997b83ddd1d4f270c82e3a85c3365f))
+* **document-api:** fix markdown to image ([bf0e664](https://github.com/superdoc-dev/superdoc/commit/bf0e6647820c3987b4100f8f9804e413cfb33511))
+* **document-api:** make lists.setType preserve sequence continuity ([#2304](https://github.com/superdoc-dev/superdoc/issues/2304)) ([da09826](https://github.com/superdoc-dev/superdoc/commit/da0982647cd57b4e775794af52e1a23b3d6f2afe))
+* **editor:** prevent focus loss when typing in header/footer editors (SD-1993) ([#2238](https://github.com/superdoc-dev/superdoc/issues/2238)) ([e1b8007](https://github.com/superdoc-dev/superdoc/commit/e1b80074377b221873158ce5befc8fa2a908d1a8)), closes [PresentationEditor.#flushRerenderQueue](https://github.com/PresentationEditor./issues/flushRerenderQueue)
+* **export:** sync document XML before numbering pruning to preserve list definitions ([36058c3](https://github.com/superdoc-dev/superdoc/commit/36058c3640d12eeba8a3cf671d4cb2b46786d1d1))
+* **format:** route format.caps through textTransform so w:caps persists on export ([#2297](https://github.com/superdoc-dev/superdoc/issues/2297)) ([8e771e2](https://github.com/superdoc-dev/superdoc/commit/8e771e2d2ea75d4bc72bc7f589fd9279f8027478))
+* handle Uint8Array media values from persistence layers ([#2298](https://github.com/superdoc-dev/superdoc/issues/2298)) ([0d4505c](https://github.com/superdoc-dev/superdoc/commit/0d4505c77ac1c44939e8f7874a08f827a7a8e08c))
+* harden markdown image conversion ([4ba1c25](https://github.com/superdoc-dev/superdoc/commit/4ba1c254c77aaa37f552f2ad9fd06ec55e802b23))
+* **link-popover:** mount external popovers outside overflow:hidden container (SD-2148) ([#2308](https://github.com/superdoc-dev/superdoc/issues/2308)) ([ea4be68](https://github.com/superdoc-dev/superdoc/commit/ea4be68fb6deea669140d4af5934ba17a6a6571b))
+* make expected revision optional, update docs ([#2265](https://github.com/superdoc-dev/superdoc/issues/2265)) ([250bb5b](https://github.com/superdoc-dev/superdoc/commit/250bb5b6131fd68a83a3d0959dc0a5808fb5f152))
+* **painter-dom:** prevent scroll acceleration feedback loop in virtualization ([#2291](https://github.com/superdoc-dev/superdoc/issues/2291)) ([fb3d25e](https://github.com/superdoc-dev/superdoc/commit/fb3d25e809019407b1298c28f8c10ac184e1dc73))
+* portrait orientation in document-api ([dafab76](https://github.com/superdoc-dev/superdoc/commit/dafab76af5f249c49936a0250e4e54ae4719b305))
+* **sdk:** keep sdk sessions alive in non collab ([#2289](https://github.com/superdoc-dev/superdoc/issues/2289)) ([c634ee8](https://github.com/superdoc-dev/superdoc/commit/c634ee87bb6ac29b14b0f02d6080b2420cfe3dc6))
+* **super-editor:** align image resize handles with actual image position ([#2293](https://github.com/superdoc-dev/superdoc/issues/2293)) ([217bdce](https://github.com/superdoc-dev/superdoc/commit/217bdcef86d736825b0bfe55880ac57620d1b4d3))
+* **test:** stabilize flaky cleanUpParagraphWithAnnotations tests ([#2262](https://github.com/superdoc-dev/superdoc/issues/2262)) ([7bafb7f](https://github.com/superdoc-dev/superdoc/commit/7bafb7f9e0fcc0109a0a976d1a01e9ee408f7291))
+* **virtualization:** compute scrollY relative to scroll container, not viewport ([#2263](https://github.com/superdoc-dev/superdoc/issues/2263)) ([370ca5e](https://github.com/superdoc-dev/superdoc/commit/370ca5ea025bd5fb57f1dfe9b79871afbcdfd9b5))
+
+
+### Features
+
+* **document-api:** add getHtml operation, fix HTML insert and SDK tool selection ([#2264](https://github.com/superdoc-dev/superdoc/issues/2264)) ([c554678](https://github.com/superdoc-dev/superdoc/commit/c554678b425c7b97670aff5d7389bbbdfe8a5c04))
+* **document-api:** clear content command ([#2300](https://github.com/superdoc-dev/superdoc/issues/2300)) ([46b5261](https://github.com/superdoc-dev/superdoc/commit/46b5261f34b6793d41ab6452fb117e0f81b7437a))
+* **document-api:** hyperlinks commands ([#2294](https://github.com/superdoc-dev/superdoc/issues/2294)) ([4d3bebd](https://github.com/superdoc-dev/superdoc/commit/4d3bebd6c89dd1cbd5c143e61c71beca45daba1b))
+* **document-api:** initial image commands ([#2290](https://github.com/superdoc-dev/superdoc/issues/2290)) ([d624231](https://github.com/superdoc-dev/superdoc/commit/d624231a97872af746d93de70129ac734cd363b8))
+* **document-api:** insert table adds extra separator to match ms word ([#2301](https://github.com/superdoc-dev/superdoc/issues/2301)) ([5e49613](https://github.com/superdoc-dev/superdoc/commit/5e496130249a8fc5403f201c667106c5da4961fb))
+* **document-api:** make styles.apply registry-driven with schema/validation ([#2267](https://github.com/superdoc-dev/superdoc/issues/2267)) ([cab54ba](https://github.com/superdoc-dev/superdoc/commit/cab54badc20e7002ce82be6f4e02f84e71802717))
+* **document-api:** more image commands ([#2295](https://github.com/superdoc-dev/superdoc/issues/2295)) ([4fbbbc9](https://github.com/superdoc-dev/superdoc/commit/4fbbbc987e2469b8fd70c1a07a79dacc801f6733))
+* **document-api:** more lists commands ([#2288](https://github.com/superdoc-dev/superdoc/issues/2288)) ([eb48bf1](https://github.com/superdoc-dev/superdoc/commit/eb48bf1cf72da0c780998cf033e851aadc144206))
+* **links:** convert pasted hyperlinks into real docx links ([#2270](https://github.com/superdoc-dev/superdoc/issues/2270)) ([7d75522](https://github.com/superdoc-dev/superdoc/commit/7d7552203f0bbc6779149656e447432d50eb2697))
+* **markdown:** import images from markdown ([#2303](https://github.com/superdoc-dev/superdoc/issues/2303)) ([b2f6a1a](https://github.com/superdoc-dev/superdoc/commit/b2f6a1ad5692153b60edb5b88347b5c8e37191f7))
+* support TIFF images in DOCX rendering ([#2284](https://github.com/superdoc-dev/superdoc/issues/2284)) ([6436d86](https://github.com/superdoc-dev/superdoc/commit/6436d861efbdb52d592a0069fc84a1f5d830f358)), closes [#2064](https://github.com/superdoc-dev/superdoc/issues/2064)
+* **tracked-changes:** allow partial tracked change resolution ([#2252](https://github.com/superdoc-dev/superdoc/issues/2252)) ([988598d](https://github.com/superdoc-dev/superdoc/commit/988598d7f20e263e81715a2f0195abc2ecffe75b))
+* **web-view:** new layout engine based web view ([#2100](https://github.com/superdoc-dev/superdoc/issues/2100)) ([a353b82](https://github.com/superdoc-dev/superdoc/commit/a353b82a3c0404db13cda8ab72f7500b2aae8e09))
+
 # [1.17.0](https://github.com/superdoc-dev/superdoc/compare/v1.16.0...v1.17.0) (2026-03-03)
 
 

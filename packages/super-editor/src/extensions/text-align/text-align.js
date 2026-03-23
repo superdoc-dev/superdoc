@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 
 /**
  * Configuration options for TextAlign

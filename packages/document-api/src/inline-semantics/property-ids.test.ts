@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   CORE_PROPERTY_IDS,
   CORE_PROPERTY_ID_SET,

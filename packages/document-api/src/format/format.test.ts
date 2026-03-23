@@ -1,10 +1,20 @@
-import { describe, expect, it, vi, assertType } from 'vitest';
-import type { FormatAdapter, FormatInlineAliasInput, StyleApplyInput } from './format.js';
+import { describe, expect, it, mock } from 'bun:test';
+import type { FormatInlineAliasInput, StyleApplyInput } from './format.js';
+
+/** Type-only assertion — validates at compile time, no-op at runtime. */
+function assertType<T>(_value: T): void {}
+
 import { executeStyleApply, executeInlineAlias } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
+import type { SelectionMutationAdapter } from '../selection-mutation.js';
+import type { SelectionTarget } from '../types/address.js';
 
-const TARGET = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 5 } };
+const TARGET: SelectionTarget = {
+  kind: 'selection',
+  start: { kind: 'text', blockId: 'p1', offset: 0 },
+  end: { kind: 'text', blockId: 'p1', offset: 5 },
+};
 
 function makeReceipt(): TextMutationReceipt {
   return {
@@ -19,9 +29,9 @@ function makeReceipt(): TextMutationReceipt {
   };
 }
 
-function makeAdapter(): FormatAdapter & Record<string, ReturnType<typeof vi.fn>> {
+function makeAdapter(): SelectionMutationAdapter & Record<string, ReturnType<typeof mock>> {
   return {
-    apply: vi.fn(() => makeReceipt()),
+    execute: mock(() => makeReceipt()),
   };
 }
 
@@ -42,13 +52,13 @@ describe('executeStyleApply validation', () => {
   it('rejects missing target', () => {
     const adapter = makeAdapter();
     const input = { inline: { bold: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('requires a target');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('either "target" or "ref"');
   });
 
   it('rejects invalid target', () => {
     const adapter = makeAdapter();
     const input = { target: 'not-an-address', inline: { bold: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('SelectionTarget');
   });
 
   it('accepts valid target', () => {
@@ -79,7 +89,7 @@ describe('executeStyleApply validation', () => {
   it('rejects unknown inline keys', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { superscript: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline style key "superscript"');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline property: "superscript".');
   });
 
   it('rejects invalid boolean payload type', () => {
@@ -99,7 +109,10 @@ describe('executeStyleApply validation', () => {
     const input: StyleApplyInput = { target: TARGET, inline: { bold: null, italic: false } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({ changeMode: 'direct' }));
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { bold: null, italic: false } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
   });
 
   it('accepts numeric and object inline properties in one call', () => {
@@ -119,7 +132,10 @@ describe('executeStyleApply validation', () => {
     const adapter = makeAdapter();
     const input: StyleApplyInput = { target: TARGET, inline: { color: '00AA00' } };
     executeStyleApply(adapter, input, { changeMode: 'tracked', dryRun: true });
-    expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'tracked', dryRun: true });
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { color: '00AA00' } },
+      { changeMode: 'tracked', dryRun: true },
+    );
   });
 });
 
@@ -130,8 +146,8 @@ describe('executeInlineAlias', () => {
   it('format.bold accepts omitted value (defaults to true)', () => {
     const adapter = makeAdapter();
     executeInlineAlias(adapter, 'bold', { target: TARGET });
-    expect(adapter.apply).toHaveBeenCalledWith(
-      { target: TARGET, inline: { bold: true } },
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { bold: true } },
       expect.objectContaining({ changeMode: 'direct' }),
     );
   });
@@ -139,8 +155,8 @@ describe('executeInlineAlias', () => {
   it('format.underline accepts omitted value (defaults to true)', () => {
     const adapter = makeAdapter();
     executeInlineAlias(adapter, 'underline', { target: TARGET });
-    expect(adapter.apply).toHaveBeenCalledWith(
-      { target: TARGET, inline: { underline: true } },
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { underline: true } },
       expect.objectContaining({ changeMode: 'direct' }),
     );
   });
@@ -169,8 +185,37 @@ describe('executeInlineAlias', () => {
   it('format.color accepts explicit value', () => {
     const adapter = makeAdapter();
     executeInlineAlias(adapter, 'color', { target: TARGET, value: 'FF0000' });
-    expect(adapter.apply).toHaveBeenCalledWith(
-      { target: TARGET, inline: { color: 'FF0000' } },
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { color: 'FF0000' } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+});
+
+describe('executeInlineAlias: format.caps', () => {
+  it('format.caps accepts omitted value (defaults to true)', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET });
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { caps: true } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.caps accepts explicit false', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET, value: false });
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { caps: false } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.caps accepts null to clear', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET, value: null });
+    expect(adapter.execute).toHaveBeenCalledWith(
+      { kind: 'format', target: TARGET, ref: undefined, inline: { caps: null } },
       expect.objectContaining({ changeMode: 'direct' }),
     );
   });

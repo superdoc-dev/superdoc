@@ -19,14 +19,21 @@ vi.mock('./document-section/DocumentSectionView.js', async () => {
 });
 
 // Minimal shims for Node.create / Attribute.mergeAttributes
-vi.mock('@core/index.js', async () => {
+vi.mock('@core/Node.js', async (importOriginal) => {
+  const actual = await importOriginal();
   return {
-    Node: {
-      create(spec) {
+    ...actual,
+    Node: class Node extends actual.Node {
+      static create(spec) {
         // Return spec so addCommands/parseDOM/etc are available
         return spec;
-      },
+      }
     },
+  };
+});
+
+vi.mock('@core/Attribute.js', async () => {
+  return {
     Attribute: {
       mergeAttributes(a, b) {
         return { ...(a || {}), ...(b || {}) };

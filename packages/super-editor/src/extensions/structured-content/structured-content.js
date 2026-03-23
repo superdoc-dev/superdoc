@@ -1,7 +1,8 @@
-import { Node, Attribute } from '@core/index';
-import { StructuredContentInlineView } from './StructuredContentInlineView';
-import { createStructuredContentLockPlugin } from './structured-content-lock-plugin';
-import { createStructuredContentSelectPlugin } from './structured-content-select-plugin';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
+import { StructuredContentInlineView } from './StructuredContentInlineView.js';
+import { createStructuredContentLockPlugin } from './structured-content-lock-plugin.js';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin.js';
 
 export const structuredContentClass = 'sd-structured-content';
 export const structuredContentInnerClass = 'sd-structured-content__content';
@@ -93,6 +94,34 @@ export const StructuredContent = Node.create({
           if (!attrs.lockMode || attrs.lockMode === 'unlocked') return {};
           return { 'data-lock-mode': attrs.lockMode };
         },
+      },
+
+      controlType: {
+        default: null,
+        parseDOM: (elem) => elem.getAttribute('data-control-type'),
+        renderDOM: (attrs) => {
+          if (!attrs.controlType) return {};
+          return { 'data-control-type': attrs.controlType };
+        },
+      },
+
+      type: {
+        default: null,
+        rendered: false,
+      },
+
+      appearance: {
+        default: null,
+        parseDOM: (elem) => elem.getAttribute('data-appearance'),
+        renderDOM: (attrs) => {
+          if (!attrs.appearance) return {};
+          return { 'data-appearance': attrs.appearance };
+        },
+      },
+
+      placeholder: {
+        default: null,
+        rendered: false,
       },
 
       sdtPr: {

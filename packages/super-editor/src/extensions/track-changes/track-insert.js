@@ -1,4 +1,5 @@
-import { Mark, Attribute } from '@core/index.js';
+import { Mark } from '@core/Mark.js';
+import { Attribute } from '@core/Attribute.js';
 import { TrackInsertMarkName } from './constants.js';
 
 const trackInsertClass = 'track-insert';
@@ -73,6 +74,11 @@ export const TrackInsert = Mark.create({
             'data-date': attrs.date,
           };
         },
+      },
+
+      sourceId: {
+        default: '',
+        rendered: false,
       },
 
       importedAuthor: {

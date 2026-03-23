@@ -1,4 +1,4 @@
-import { Attribute } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
 import { twipsToPixels } from '@converter/helpers.js';
 import { extractParagraphContext, calculateTabStyle } from '../tab/helpers/tabDecorations.js';
 import { resolveRunProperties, encodeCSSFromRPr, encodeCSSFromPPr } from '@converter/styles.js';

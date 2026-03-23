@@ -40,13 +40,18 @@ describe('updateToolbarState', () => {
   let mockGetQuickFormatList;
   let mockCollectTrackedChanges;
   let mockIsTrackedChangeActionAllowed;
+  let mockFindParentNode;
+  let mockCalculateResolvedParagraphProperties;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     mockEditor = {
       state: {
-        selection: { from: 1, to: 1 },
+        selection: { from: 1, to: 1, empty: true },
+        doc: {
+          resolve: vi.fn().mockReturnValue({}),
+        },
       },
       commands: {
         setFieldAnnotationsFontSize: vi.fn(),
@@ -60,6 +65,7 @@ describe('updateToolbarState', () => {
         getDocumentDefaultStyles: vi.fn(() => ({ typeface: 'Arial', fontSizePt: 12 })),
         linkedStyles: [],
         docHiglightColors: new Set(['#ff0000', '#00ff00']),
+        convertedXml: {},
       },
       options: {
         mode: 'docx',
@@ -79,6 +85,13 @@ describe('updateToolbarState', () => {
     const { collectTrackedChanges, isTrackedChangeActionAllowed } = await import(
       '@extensions/track-changes/permission-helpers.js'
     );
+    const helpersModule = await import('@helpers/index.js');
+    mockFindParentNode = helpersModule.findParentNode;
+    mockFindParentNode.mockImplementation(() => vi.fn().mockReturnValue(null));
+    const resolvedPropsModule = await import('@extensions/paragraph/resolvedPropertiesCache.js');
+    mockCalculateResolvedParagraphProperties = vi
+      .spyOn(resolvedPropsModule, 'calculateResolvedParagraphProperties')
+      .mockReturnValue({});
 
     getActiveFormatting.mockImplementation(mockGetActiveFormatting);
     isInTable.mockImplementation(mockIsInTable);
@@ -154,6 +167,7 @@ describe('updateToolbarState', () => {
         setDisabled: vi.fn(),
         defaultLabel: { value: '' },
         allowWithoutEditor: { value: false },
+        active: { value: false },
       },
       {
         name: { value: 'lineHeight' },
@@ -193,6 +207,10 @@ describe('updateToolbarState', () => {
 
     toolbar.activeEditor = mockEditor;
     toolbar.documentMode = 'editing';
+  });
+
+  afterEach(() => {
+    mockCalculateResolvedParagraphProperties?.mockRestore?.();
   });
 
   describe('document mode dropdown sync', () => {
@@ -506,6 +524,79 @@ describe('updateToolbarState', () => {
     const fontFamilyItem = toolbar.toolbarItems.find((item) => item.name.value === 'fontFamily');
     expect(fontFamilyItem.activate).toHaveBeenCalledWith({ fontFamily: 'Roboto' });
     expect(fontFamilyItem.activate).not.toHaveBeenCalledWith({ fontFamily: 'Arial' });
+  });
+
+  it('falls back to paragraph runProperties font family for empty paragraph with collapsed selection', () => {
+    const paragraphParent = {
+      node: {
+        content: { size: 0 },
+        attrs: { paragraphProperties: {} },
+      },
+      pos: 5,
+    };
+
+    mockFindParentNode.mockImplementation(() => () => paragraphParent);
+    const paragraphFontFamily = 'Fancy Font, serif';
+    mockCalculateResolvedParagraphProperties.mockReturnValue({
+      runProperties: { fontFamily: { 'w:ascii': paragraphFontFamily } },
+    });
+    mockGetActiveFormatting.mockReturnValue([]);
+
+    toolbar.updateToolbarState();
+
+    const fontFamilyItem = toolbar.toolbarItems.find((item) => item.name.value === 'fontFamily');
+    expect(mockCalculateResolvedParagraphProperties).toHaveBeenCalled();
+    expect(fontFamilyItem.activate).toHaveBeenCalledWith({ fontFamily: paragraphFontFamily });
+  });
+
+  it('does not fallback to paragraph font when paragraph already contains text', () => {
+    const paragraphParent = {
+      node: {
+        content: { size: 1 },
+        attrs: { paragraphProperties: {} },
+      },
+      pos: 5,
+    };
+
+    mockFindParentNode.mockImplementation(() => () => paragraphParent);
+    mockCalculateResolvedParagraphProperties.mockReturnValue({
+      runProperties: { fontFamily: { 'w:ascii': 'Never Used' } },
+    });
+    mockGetActiveFormatting.mockReturnValue([]);
+
+    toolbar.updateToolbarState();
+
+    const fontFamilyItem = toolbar.toolbarItems.find((item) => item.name.value === 'fontFamily');
+    expect(fontFamilyItem.activate).not.toHaveBeenCalled();
+  });
+
+  it('keeps linked style font family over paragraph fallback in empty paragraphs', () => {
+    const paragraphParent = {
+      node: {
+        content: { size: 0 },
+        attrs: { paragraphProperties: {} },
+      },
+      pos: 5,
+    };
+
+    mockFindParentNode.mockImplementation(() => () => paragraphParent);
+    mockCalculateResolvedParagraphProperties.mockReturnValue({
+      styleId: 'test-style',
+      runProperties: { fontFamily: { 'w:ascii': 'Paragraph Font, serif' } },
+    });
+    mockEditor.converter.linkedStyles = [
+      {
+        id: 'test-style',
+        definition: { styles: { 'font-family': 'Linked Style Font' } },
+      },
+    ];
+    mockGetActiveFormatting.mockReturnValue([]);
+
+    toolbar.updateToolbarState();
+
+    const fontFamilyItem = toolbar.toolbarItems.find((item) => item.name.value === 'fontFamily');
+    expect(fontFamilyItem.activate).toHaveBeenCalledWith({ fontFamily: 'Linked Style Font' });
+    expect(fontFamilyItem.activate).not.toHaveBeenCalledWith({ fontFamily: 'Paragraph Font, serif' });
   });
 
   it('should prioritize active mark over linked styles (font size)', () => {

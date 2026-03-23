@@ -3,6 +3,7 @@ import type { Mock } from 'vitest';
 import { PresentationEditor } from '../PresentationEditor.js';
 import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
+import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -25,6 +26,8 @@ const {
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
+  mockFlowBlockCacheInstances,
+  MockFlowBlockCache,
 } = vi.hoisted(() => {
   const createDefaultConverter = () => ({
     headers: {
@@ -106,6 +109,19 @@ const {
   };
 
   const editors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
+  const mockFlowBlockCacheInstances: Array<{
+    clear: ReturnType<typeof vi.fn>;
+    setHasExternalChanges: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  class MockFlowBlockCache {
+    clear = vi.fn();
+    setHasExternalChanges = vi.fn();
+
+    constructor() {
+      mockFlowBlockCacheInstances.push(this);
+    }
+  }
 
   return {
     createDefaultConverter,
@@ -145,6 +161,8 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
+    mockFlowBlockCacheInstances,
+    MockFlowBlockCache,
   };
 });
 
@@ -219,6 +237,7 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   return {
     ...actual,
     toFlowBlocks: mockToFlowBlocks,
+    FlowBlockCache: MockFlowBlockCache,
   };
 });
 
@@ -289,10 +308,6 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -319,6 +334,7 @@ describe('PresentationEditor', () => {
     };
     mockEditorConverterStore.mediaFiles = {};
     createdSectionEditors.length = 0;
+    mockFlowBlockCacheInstances.length = 0;
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -2073,6 +2089,200 @@ describe('PresentationEditor', () => {
       boundingSpy.mockRestore();
     });
 
+    it('re-emits live header/footer child editor updates and transactions', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      expect(sourceEditor).toBeDefined();
+
+      const transaction = { docChanged: true };
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 9 });
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'header',
+          headerId: 'rId-header-default',
+          sectionType: 'default',
+        }),
+      );
+      expect(transactionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'header',
+          headerId: 'rId-header-default',
+          sectionType: 'default',
+          transaction,
+          duration: 9,
+        }),
+      );
+    });
+
+    it('stops re-emitting header/footer child editor events after exiting edit mode', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      const transaction = { docChanged: true };
+
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 9 });
+
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).not.toBe(sourceEditor));
+
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 11 });
+
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-emits live footer child editor updates and transactions', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      expect(sourceEditor).toBeDefined();
+
+      const transaction = { docChanged: true };
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 12 });
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'footer',
+          headerId: 'rId-footer-default',
+          sectionType: 'default',
+        }),
+      );
+      expect(transactionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'footer',
+          headerId: 'rId-footer-default',
+          sectionType: 'default',
+          transaction,
+          duration: 12,
+        }),
+      );
+    });
+
     it('clears leftover footer transform when entering footer editing with non-negative minY', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
 
@@ -2404,6 +2614,76 @@ describe('PresentationEditor', () => {
       expect(layoutUpdatedCount).toBeGreaterThan(afterDocUpdate);
     });
 
+    it('clears flow-block cache when stylesDefaultsChanged event fires', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.clear.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const stylesDefaultsChangedCall = onCalls.mock.calls.find((call) => call[0] === 'stylesDefaultsChanged');
+      expect(stylesDefaultsChangedCall).toBeDefined();
+
+      const handleStylesDefaultsChanged = stylesDefaultsChangedCall![1] as () => void;
+      handleStylesDefaultsChanged();
+
+      expect(flowBlockCache!.clear).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks the flow-block cache dirty for history undo and redo updates', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.setHasExternalChanges.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
+      expect(updateCall).toBeDefined();
+
+      const handleUpdate = updateCall![1] as (payload: { transaction: { docChanged: boolean; getMeta: Mock } }) => void;
+      const makeTransaction = (inputType: string) => ({
+        docChanged: true,
+        getMeta: vi.fn((key: string) => (key === 'inputType' ? inputType : undefined)),
+        mapping: {
+          appendMapping: vi.fn(),
+          slice: vi.fn(() => ({
+            appendMapping: vi.fn(),
+          })),
+        },
+      });
+
+      handleUpdate({ transaction: makeTransaction('historyUndo') });
+      handleUpdate({ transaction: makeTransaction('historyRedo') });
+
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenCalledTimes(2);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(1, true);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(2, true);
+    });
+
     it('should remove pageStyleUpdate listener on destroy', () => {
       editor = new PresentationEditor({
         element: container,
@@ -2425,6 +2705,168 @@ describe('PresentationEditor', () => {
       expect(pageStyleUpdateOffCall![1]).toBeTypeOf('function');
 
       editor = null as unknown as PresentationEditor;
+    });
+  });
+
+  describe('partChanged event listener', () => {
+    const buildLayoutResult = () => ({
+      layout: {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            numberText: '1',
+            size: { w: 612, h: 792 },
+            fragments: [],
+            margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: { default: 'rId-footer-default' },
+            },
+          },
+        ],
+      },
+      measures: [],
+      headers: [
+        {
+          kind: 'header',
+          type: 'default',
+          layout: {
+            height: 36,
+            pages: [{ number: 1, fragments: [] }],
+          },
+          blocks: [],
+          measures: [],
+        },
+      ],
+      footers: [
+        {
+          kind: 'footer',
+          type: 'default',
+          layout: {
+            height: 36,
+            pages: [{ number: 1, fragments: [] }],
+          },
+          blocks: [],
+          measures: [],
+        },
+      ],
+    });
+
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
+      rafSpy = null;
+    });
+
+    const waitForLayoutUpdate = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    };
+
+    it('refreshes header/footer structure and rerenders when document relationships change', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      const refreshSpy = vi.spyOn(HeaderFooterEditorManager.prototype, 'refresh');
+      const invalidateAllSpy = vi.spyOn(HeaderFooterLayoutAdapter.prototype, 'invalidateAll');
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const initialRefreshCalls = refreshSpy.mock.calls.length;
+      const initialInvalidateAllCalls = invalidateAllSpy.mock.calls.length;
+
+      mockIncrementalLayout.mockClear();
+
+      let layoutUpdatedCount = 0;
+      editor.onLayoutUpdated(() => {
+        layoutUpdatedCount++;
+      });
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const partChangedCall = onCalls.mock.calls.find((call) => call[0] === 'partChanged');
+      expect(partChangedCall).toBeDefined();
+
+      const handlePartChanged = partChangedCall![1] as (payload: {
+        parts: Array<{ partId: string; operation: string; changedPaths: string[]; sectionId?: string }>;
+        source: string;
+      }) => void;
+
+      handlePartChanged({
+        source: 'test',
+        parts: [{ partId: 'word/_rels/document.xml.rels', operation: 'mutate', changedPaths: [] }],
+      });
+
+      await waitForLayoutUpdate();
+
+      expect(refreshSpy.mock.calls.length).toBeGreaterThan(initialRefreshCalls);
+      expect(invalidateAllSpy.mock.calls.length).toBeGreaterThan(initialInvalidateAllCalls);
+      expect(layoutUpdatedCount).toBeGreaterThan(0);
+    });
+
+    it('invalidates the changed header/footer ref and rerenders when a header/footer part changes', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      const invalidateSpy = vi.spyOn(HeaderFooterLayoutAdapter.prototype, 'invalidate');
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      mockIncrementalLayout.mockClear();
+
+      let layoutUpdatedCount = 0;
+      editor.onLayoutUpdated(() => {
+        layoutUpdatedCount++;
+      });
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const partChangedCall = onCalls.mock.calls.find((call) => call[0] === 'partChanged');
+      expect(partChangedCall).toBeDefined();
+
+      const handlePartChanged = partChangedCall![1] as (payload: {
+        parts: Array<{ partId: string; operation: string; changedPaths: string[]; sectionId?: string }>;
+        source: string;
+      }) => void;
+
+      handlePartChanged({
+        source: 'test',
+        parts: [
+          {
+            partId: 'word/header1.xml',
+            operation: 'mutate',
+            changedPaths: [],
+            sectionId: 'rId-header-default',
+          },
+        ],
+      });
+
+      await waitForLayoutUpdate();
+
+      expect(invalidateSpy).toHaveBeenCalledWith('rId-header-default');
+      expect(layoutUpdatedCount).toBeGreaterThan(0);
     });
   });
 

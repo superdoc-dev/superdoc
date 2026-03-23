@@ -80,6 +80,21 @@ const createCommentSchema = () => {
       toDOM: (mark) => [TrackFormatMarkName, mark.attrs],
       parseDOM: [{ tag: TrackFormatMarkName }],
     },
+    underline: {
+      attrs: {},
+      inclusive: false,
+      toDOM: () => ['underline', 0],
+      parseDOM: [{ tag: 'underline' }],
+    },
+    link: {
+      attrs: {
+        href: { default: null },
+        text: { default: null },
+      },
+      inclusive: false,
+      toDOM: (mark) => ['a', mark.attrs, 0],
+      parseDOM: [{ tag: 'a' }],
+    },
   };
 
   return new Schema({ nodes, marks });
@@ -383,6 +398,36 @@ describe('CommentsPlugin commands', () => {
     expect(editor.view.focus).not.toHaveBeenCalled();
   });
 
+  it('sets the active thread without focusing the hidden view when requested', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-10', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { commands } = createEditorEnvironment(schema, doc);
+
+    const tr = {
+      setSelection: vi.fn(),
+      setMeta: vi.fn(),
+    };
+    const editor = {
+      view: { focus: vi.fn() },
+    };
+
+    const result = commands.setCursorById('c-10', { activeCommentId: 'thread-1' })({ state: { doc, tr }, editor });
+
+    expect(result).toBe(true);
+    expect(tr.setSelection).toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith(
+      CommentsPluginKey,
+      expect.objectContaining({
+        type: 'setActiveComment',
+        activeThreadId: 'thread-1',
+        forceUpdate: true,
+      }),
+    );
+    expect(editor.view.focus).not.toHaveBeenCalled();
+  });
+
   describe('addCommentReply', () => {
     it('emits commentsUpdate event with parentCommentId', () => {
       const schema = createCommentSchema();
@@ -609,7 +654,6 @@ describe('CommentsPlugin state', () => {
 
     const pluginState = CommentsPluginKey.getState(view.state);
     expect(pluginState.activeThreadId).toBe('thread-1');
-    expect(pluginState.changedActiveThread).toBe(true);
   });
 
   it('stores decorations provided through metadata', () => {
@@ -679,6 +723,24 @@ describe('CommentsPlugin state', () => {
         }),
       }),
     );
+  });
+
+  it('preserves the preferred tracked-change thread when cursor lands on overlapping comment text', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1', internal: true });
+    const trackedMark = schema.marks[TrackInsertMarkName].create({ id: 'tracked-1' });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark, trackedMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { view } = createPluginStateEnvironment({ schema, doc });
+
+    const tr = view.state.tr
+      .setSelection(TextSelection.create(doc, 2))
+      .setMeta(CommentsPluginKey, { type: 'setCursorById', preferredActiveThreadId: 'tracked-1' });
+
+    view.dispatch(tr);
+
+    const pluginState = CommentsPluginKey.getState(view.state);
+    expect(pluginState.activeThreadId).toBe('tracked-1');
   });
 });
 
@@ -901,6 +963,37 @@ describe('internal helper functions', () => {
     );
   });
 
+  it('handleTrackedChangeTransaction emits event for deletion-only tracked changes when step nodes are empty', () => {
+    const schema = createCommentSchema();
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'change-delete-only',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const deletedNode = schema.text('Removed', [deleteMark]);
+    const paragraph = schema.node('paragraph', null, [deletedNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      insertedMark: null,
+      deletionMark: deleteMark,
+      formatMark: null,
+      deletionNodes: [deletedNode],
+      step: { slice: { content: { content: [] } } },
+    };
+
+    const trackedChanges = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    expect(trackedChanges['change-delete-only']).toMatchObject({ deletion: 'change-delete-only' });
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({ event: comments_module_events.ADD, changeId: 'change-delete-only' }),
+    );
+  });
+
   it('handleTrackedChangeTransaction returns original state when no marks provided', () => {
     const schema = createCommentSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Text')])]);
@@ -949,6 +1042,7 @@ describe('internal helper functions', () => {
       isDeletionInsertion: false,
     });
     expect(formatResult.trackedChangeText).toBe('italic, removed bold');
+    expect(formatResult.trackedChangeDisplayType).toBeNull();
 
     const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
       id: 'format-2',
@@ -963,6 +1057,25 @@ describe('internal helper functions', () => {
     });
     expect(deltaFormatResult.trackedChangeText).toContain('bold');
     expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
+
+    const hyperlinkFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-3',
+      before: [],
+      after: [
+        { type: 'underline', attrs: {} },
+        { type: 'link', attrs: { href: 'https://example.com', text: 'website' } },
+      ],
+    });
+    const hyperlinkFormatResult = getTrackedChangeText({
+      nodes: [schema.text('website', [hyperlinkFormatMark, schema.marks.link.create({ href: 'https://example.com' })])],
+      mark: hyperlinkFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(hyperlinkFormatResult).toMatchObject({
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
 
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],
@@ -1057,6 +1170,81 @@ describe('internal helper functions', () => {
       documentId: 'doc-1',
     });
     expect(emptyPayload).toBeUndefined();
+  });
+
+  it('createOrUpdateTrackedChangeComment preserves hyperlink-specific display metadata for format changes', () => {
+    const schema = createCommentSchema();
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [
+        { type: 'underline', attrs: {} },
+        { type: 'link', attrs: { href: 'https://example.com', text: 'website' } },
+      ],
+    });
+    const nodes = [schema.text('website', [formatMark])];
+    const state = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, nodes)]),
+    });
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: null, deletionMark: null, formatMark },
+      deletionNodes: [],
+      nodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload).toMatchObject({
+      trackedChangeType: TrackFormatMarkName,
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
+  });
+
+  it('createOrUpdateTrackedChangeComment prefers the live format mark when transaction meta is stale', () => {
+    const schema = createCommentSchema();
+    const staleFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-2',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [{ type: 'underline', attrs: {} }],
+    });
+    const liveFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-2',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [{ type: 'underline', attrs: {} }],
+    });
+    const nodes = [schema.text('website', [liveFormatMark, schema.marks.link.create({ href: 'https://example.com' })])];
+    const state = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, nodes)]),
+    });
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: null, deletionMark: null, formatMark: staleFormatMark },
+      deletionNodes: [],
+      nodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload).toMatchObject({
+      trackedChangeType: TrackFormatMarkName,
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
   });
 
   it('findRangeById returns ranges for comment and tracked marks', () => {
@@ -1310,5 +1498,64 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
 
     // Should complete without loop — max 2-3 dispatches (selection + addComment + maybe decoration)
     expect(dispatchCount).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('Headless mode plugin behavior', () => {
+  it('creates a state-only plugin in headless mode (no props or view)', () => {
+    const editor = {
+      options: { isHeadless: true, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeUndefined();
+    expect(plugins[0].spec.view).toBeUndefined();
+    // State spec should exist
+    expect(plugins[0].spec.state).toBeDefined();
+    expect(plugins[0].spec.state.init).toBeDefined();
+    expect(plugins[0].spec.state.apply).toBeDefined();
+  });
+
+  it('creates a full plugin in browser mode (with props and view)', () => {
+    const editor = {
+      options: { isHeadless: false, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeDefined();
+    expect(plugins[0].spec.view).toBeDefined();
+  });
+
+  it('provides valid plugin state via CommentsPluginKey in headless mode', () => {
+    const schema = createCommentSchema();
+    const editor = {
+      options: { isHeadless: true, comments: { highlightColors: { external: '#aaa', internal: '#bbb' } } },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Hello')])]);
+    const state = EditorState.create({ schema, doc, plugins });
+    const pluginState = CommentsPluginKey.getState(state);
+
+    expect(pluginState).toBeDefined();
+    expect(pluginState.trackedChanges).toEqual({});
+    expect(pluginState.activeThreadId).toBeNull();
+    expect(pluginState.allCommentPositions).toEqual({});
+    expect(pluginState.externalColor).toBe('#aaa');
+    expect(pluginState.internalColor).toBe('#bbb');
   });
 });

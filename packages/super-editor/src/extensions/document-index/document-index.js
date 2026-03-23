@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 
 export const DocumentIndex = Node.create({
   name: 'index',

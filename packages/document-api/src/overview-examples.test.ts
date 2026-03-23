@@ -6,22 +6,26 @@
  * If any of these tests break, the corresponding documentation example is wrong
  * and must be updated to match.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { createDocumentApi } from './index.js';
+import { describe, expect, it, mock } from 'bun:test';
+import { createDocumentApi, type DocumentApiAdapters } from './index.js';
 import type { DocumentApiCapabilities } from './capabilities/capabilities.js';
-import type { TextAddress } from './types/index.js';
+import type { SelectionTarget } from './types/index.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock-adapter factories (mirrors index.test.ts patterns)
 // ---------------------------------------------------------------------------
 
-const TEXT_TARGET: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+const SELECTION_TARGET: SelectionTarget = {
+  kind: 'selection',
+  start: { kind: 'text', blockId: 'p1', offset: 0 },
+  end: { kind: 'text', blockId: 'p1', offset: 3 },
+};
 
-function makeTextMutationReceipt(target = TEXT_TARGET) {
+function makeTextMutationReceipt() {
   return {
     success: true as const,
     resolution: {
-      target,
+      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } },
       range: { from: 1, to: 4 },
       text: 'foo',
     },
@@ -31,15 +35,41 @@ function makeTextMutationReceipt(target = TEXT_TARGET) {
 
 function makeFindAdapter() {
   return {
-    find: vi.fn(() => ({
+    find: mock(() => ({
       evaluatedRevision: '',
       total: 1,
       items: [
         {
           id: 'p1',
-          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'node' as const },
+          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'text' as const },
+          matchKind: 'text' as const,
           address: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
-          context: { textRanges: [TEXT_TARGET] },
+          target: SELECTION_TARGET,
+          snippet: 'foo',
+          highlightRange: { start: 0, end: 3 },
+          blocks: [
+            {
+              blockId: 'p1',
+              nodeType: 'paragraph',
+              range: { start: 0, end: 3 },
+              text: 'foo',
+              ref: 'ref:block-1',
+              runs: [
+                {
+                  range: { start: 0, end: 3 },
+                  text: 'foo',
+                  styles: {
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    strike: false,
+                  },
+                  ref: 'ref:run-1',
+                },
+              ],
+            },
+          ],
+          context: { target: SELECTION_TARGET, textRanges: [SELECTION_TARGET] },
         },
       ],
       page: { limit: 1, offset: 0, returned: 1 },
@@ -49,35 +79,61 @@ function makeFindAdapter() {
 
 function makeGetNodeAdapter() {
   return {
-    getNode: vi.fn(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
-    getNodeById: vi.fn(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
+    getNode: mock(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
+    getNodeById: mock(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
   };
 }
 
 function makeGetTextAdapter() {
-  return { getText: vi.fn(() => 'hello') };
+  return { getText: mock(() => 'hello') };
 }
 
 function makeInfoAdapter() {
   return {
-    info: vi.fn(() => ({
-      counts: { words: 0, paragraphs: 0, headings: 0, tables: 0, images: 0, comments: 0 },
+    info: mock(() => ({
+      counts: {
+        words: 0,
+        characters: 0,
+        paragraphs: 0,
+        headings: 0,
+        tables: 0,
+        images: 0,
+        comments: 0,
+        trackedChanges: 0,
+        sdtFields: 0,
+        lists: 0,
+      },
       outline: [],
       capabilities: { canFind: true, canGetNode: true, canComment: true, canReplace: true },
+      revision: '0',
     })),
+  };
+}
+
+function makeSDMutationReceipt() {
+  return {
+    success: true as const,
+    resolution: {
+      target: {
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 3 },
+      },
+    },
   };
 }
 
 function makeWriteAdapter() {
   return {
-    write: vi.fn(() => makeTextMutationReceipt()),
-    insertStructured: vi.fn(() => makeTextMutationReceipt()),
+    write: mock(() => makeTextMutationReceipt()),
+    insertStructured: mock(() => makeSDMutationReceipt()),
+    replaceStructured: mock(() => makeSDMutationReceipt()),
   };
 }
 
-function makeFormatAdapter() {
+function makeSelectionMutationAdapter() {
   return {
-    apply: vi.fn(() => makeTextMutationReceipt()),
+    execute: mock(() => makeTextMutationReceipt()),
   };
 }
 
@@ -89,46 +145,46 @@ function makeParagraphsAdapter() {
   });
 
   return {
-    setStyle: vi.fn(ok),
-    clearStyle: vi.fn(ok),
-    resetDirectFormatting: vi.fn(ok),
-    setAlignment: vi.fn(ok),
-    clearAlignment: vi.fn(ok),
-    setIndentation: vi.fn(ok),
-    clearIndentation: vi.fn(ok),
-    setSpacing: vi.fn(ok),
-    clearSpacing: vi.fn(ok),
-    setKeepOptions: vi.fn(ok),
-    setOutlineLevel: vi.fn(ok),
-    setFlowOptions: vi.fn(ok),
-    setTabStop: vi.fn(ok),
-    clearTabStop: vi.fn(ok),
-    clearAllTabStops: vi.fn(ok),
-    setBorder: vi.fn(ok),
-    clearBorder: vi.fn(ok),
-    setShading: vi.fn(ok),
-    clearShading: vi.fn(ok),
+    setStyle: mock(ok),
+    clearStyle: mock(ok),
+    resetDirectFormatting: mock(ok),
+    setAlignment: mock(ok),
+    clearAlignment: mock(ok),
+    setIndentation: mock(ok),
+    clearIndentation: mock(ok),
+    setSpacing: mock(ok),
+    clearSpacing: mock(ok),
+    setKeepOptions: mock(ok),
+    setOutlineLevel: mock(ok),
+    setFlowOptions: mock(ok),
+    setTabStop: mock(ok),
+    clearTabStop: mock(ok),
+    clearAllTabStops: mock(ok),
+    setBorder: mock(ok),
+    clearBorder: mock(ok),
+    setShading: mock(ok),
+    clearShading: mock(ok),
   };
 }
 
 function makeCommentsAdapter() {
   return {
-    add: vi.fn(() => ({ success: true as const })),
-    edit: vi.fn(() => ({ success: true as const })),
-    reply: vi.fn(() => ({ success: true as const })),
-    move: vi.fn(() => ({ success: true as const })),
-    resolve: vi.fn(() => ({ success: true as const })),
-    remove: vi.fn(() => ({ success: true as const })),
-    setInternal: vi.fn(() => ({ success: true as const })),
-    setActive: vi.fn(() => ({ success: true as const })),
-    goTo: vi.fn(() => ({ success: true as const })),
-    get: vi.fn(() => ({
+    add: mock(() => ({ success: true as const })),
+    edit: mock(() => ({ success: true as const })),
+    reply: mock(() => ({ success: true as const })),
+    move: mock(() => ({ success: true as const })),
+    resolve: mock(() => ({ success: true as const })),
+    remove: mock(() => ({ success: true as const })),
+    setInternal: mock(() => ({ success: true as const })),
+    setActive: mock(() => ({ success: true as const })),
+    goTo: mock(() => ({ success: true as const })),
+    get: mock(() => ({
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c1' },
       commentId: 'c1',
       status: 'open' as const,
       text: 'Review this section.',
     })),
-    list: vi.fn(() => ({
+    list: mock(() => ({
       evaluatedRevision: 'r1',
       total: 1,
       items: [
@@ -148,27 +204,27 @@ function makeCommentsAdapter() {
 
 function makeTrackChangesAdapter() {
   return {
-    list: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
-    get: vi.fn((input: { id: string }) => ({
+    list: mock(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+    get: mock((input: { id: string }) => ({
       address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: input.id },
       id: input.id,
       type: 'insert' as const,
     })),
-    accept: vi.fn(() => ({ success: true as const })),
-    reject: vi.fn(() => ({ success: true as const })),
-    acceptAll: vi.fn(() => ({ success: true as const })),
-    rejectAll: vi.fn(() => ({ success: true as const })),
+    accept: mock(() => ({ success: true as const })),
+    reject: mock(() => ({ success: true as const })),
+    acceptAll: mock(() => ({ success: true as const })),
+    rejectAll: mock(() => ({ success: true as const })),
   };
 }
 
 function makeCreateAdapter() {
   return {
-    paragraph: vi.fn(() => ({
+    paragraph: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'new-p' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-p', range: { start: 0, end: 0 } },
     })),
-    heading: vi.fn(() => ({
+    heading: mock(() => ({
       success: true as const,
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
@@ -183,7 +239,7 @@ function makeListsAdapter() {
   });
 
   return {
-    list: vi.fn(() => ({
+    list: mock(() => ({
       evaluatedRevision: 'r1',
       total: 1,
       items: [
@@ -198,60 +254,60 @@ function makeListsAdapter() {
       ],
       page: { limit: 1, offset: 0, returned: 1 },
     })),
-    get: vi.fn(() => ({
+    get: mock(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
       listId: 'list-1',
       kind: 'ordered' as const,
       level: 0,
       text: 'List item',
     })),
-    insert: vi.fn(() => ({
+    insert: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    indent: vi.fn(mutateResult),
-    outdent: vi.fn(mutateResult),
-    create: vi.fn(() => ({
+    indent: mock(mutateResult),
+    outdent: mock(mutateResult),
+    create: mock(() => ({
       success: true as const,
       listId: 'list-new',
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-new' },
     })),
-    attach: vi.fn(mutateResult),
-    detach: vi.fn(() => ({
+    attach: mock(mutateResult),
+    detach: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
-    join: vi.fn(() => ({ success: true as const, listId: 'list-1' })),
-    canJoin: vi.fn(() => ({ canJoin: true })),
-    separate: vi.fn(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
-    setLevel: vi.fn(mutateResult),
-    setValue: vi.fn(mutateResult),
-    continuePrevious: vi.fn(mutateResult),
-    canContinuePrevious: vi.fn(() => ({ canContinue: true })),
-    setLevelRestart: vi.fn(mutateResult),
-    convertToText: vi.fn(() => ({
+    join: mock(() => ({ success: true as const, listId: 'list-1' })),
+    canJoin: mock(() => ({ canJoin: true })),
+    separate: mock(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
+    setLevel: mock(mutateResult),
+    setValue: mock(mutateResult),
+    continuePrevious: mock(mutateResult),
+    canContinuePrevious: mock(() => ({ canContinue: true })),
+    setLevelRestart: mock(mutateResult),
+    convertToText: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
-    applyTemplate: vi.fn(mutateResult),
-    applyPreset: vi.fn(mutateResult),
-    captureTemplate: vi.fn(() => ({
+    applyTemplate: mock(mutateResult),
+    applyPreset: mock(mutateResult),
+    captureTemplate: mock(() => ({
       success: true as const,
       template: { version: 1, levels: [] },
     })),
-    setLevelNumbering: vi.fn(mutateResult),
-    setLevelBullet: vi.fn(mutateResult),
-    setLevelPictureBullet: vi.fn(mutateResult),
-    setLevelAlignment: vi.fn(mutateResult),
-    setLevelIndents: vi.fn(mutateResult),
-    setLevelTrailingCharacter: vi.fn(mutateResult),
-    setLevelMarkerFont: vi.fn(mutateResult),
-    clearLevelOverrides: vi.fn(mutateResult),
+    setLevelNumbering: mock(mutateResult),
+    setLevelBullet: mock(mutateResult),
+    setLevelPictureBullet: mock(mutateResult),
+    setLevelAlignment: mock(mutateResult),
+    setLevelIndents: mock(mutateResult),
+    setLevelTrailingCharacter: mock(mutateResult),
+    setLevelMarkerFont: mock(mutateResult),
+    clearLevelOverrides: mock(mutateResult),
   };
 }
 
-function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
+function makeCapabilitiesAdapter(): { get: ReturnType<typeof mock> } {
   const caps: DocumentApiCapabilities = {
     global: {
       trackChanges: { enabled: true },
@@ -302,10 +358,10 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
     },
   };
-  return { get: vi.fn(() => caps) };
+  return { get: mock(() => caps) };
 }
 
-function makeApi() {
+function makeApi(overrides: Partial<DocumentApiAdapters> = {}) {
   return createDocumentApi({
     find: makeFindAdapter(),
     getNode: makeGetNodeAdapter(),
@@ -314,13 +370,13 @@ function makeApi() {
     capabilities: makeCapabilitiesAdapter(),
     comments: makeCommentsAdapter(),
     write: makeWriteAdapter(),
-    format: makeFormatAdapter(),
+    selectionMutation: makeSelectionMutationAdapter(),
     paragraphs: makeParagraphsAdapter(),
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),
     query: {
-      match: vi.fn(() => ({
+      match: mock(() => ({
         evaluatedRevision: 'r1',
         total: 1,
         items: [
@@ -337,6 +393,7 @@ function makeApi() {
               nodeType: 'paragraph' as const,
               nodeId: 'p1',
             },
+            target: SELECTION_TARGET,
             snippet: 'foo',
             highlightRange: { start: 0, end: 3 },
             blocks: [
@@ -367,8 +424,8 @@ function makeApi() {
       })),
     },
     mutations: {
-      preview: vi.fn(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
-      apply: vi.fn(() => ({
+      preview: mock(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
+      apply: mock(() => ({
         success: true as const,
         revision: { before: 'r1', after: 'r2' },
         steps: [],
@@ -376,6 +433,7 @@ function makeApi() {
         timing: { totalMs: 0 },
       })),
     },
+    ...overrides,
   });
 }
 
@@ -482,7 +540,7 @@ describe('overview.mdx examples', () => {
       }
 
       expect(target).toBeDefined();
-      expect(target?.kind).toBe('text');
+      expect(target?.kind).toBe('selection');
     });
   });
 
@@ -504,7 +562,7 @@ describe('overview.mdx examples', () => {
       const doc = makeApi();
 
       const caps = doc.capabilities();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+      const target = SELECTION_TARGET;
 
       if (caps.operations['format.apply'].available) {
         doc.format.apply({ target, inline: { bold: true } });
@@ -524,16 +582,122 @@ describe('overview.mdx examples', () => {
     // Mirrors the exact code block from overview.mdx § "Dry-run preview"
     it('insert with dryRun true', () => {
       const doc = makeApi();
-      const target = TEXT_TARGET;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
-      // preview.resolution shows the resolved target range
+      // preview.resolution shows the resolved target (TextAddress)
 
       expect(preview).toHaveProperty('success');
       expect(preview).toHaveProperty('resolution');
       expect(preview.resolution).toHaveProperty('target');
-      expect(preview.resolution).toHaveProperty('range');
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// common-workflows.mdx — "Find text and insert at position"
+// ---------------------------------------------------------------------------
+
+describe('common-workflows.mdx: Find text and insert at position', () => {
+  it('query.match → create.paragraph with at: after', () => {
+    const doc = makeApi();
+
+    // Step 1: Find the heading by text content
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    // Step 2: Insert a paragraph after the heading
+    const result = doc.create.paragraph({
+      at: { kind: 'after', target: address },
+      text: 'New section content goes here.',
+    });
+
+    expect(address.kind).toBe('block');
+    expect(result.success).toBe(true);
+  });
+
+  it('query.match → create.paragraph with tracked changes', () => {
+    const doc = makeApi();
+
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    const result = doc.create.paragraph(
+      { at: { kind: 'after', target: address }, text: 'Suggested addition.' },
+      { changeMode: 'tracked' },
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('query.match accepts flat TextSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass TextSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'text', pattern: 'Materials and methods' });
+
+    expect(match.items).toBeDefined();
+  });
+
+  it('query.match accepts flat NodeSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass NodeSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'node', nodeType: 'paragraph' });
+
+    expect(match.items).toBeDefined();
+  });
+
+  it('query.match promotes flat query options out of shorthand selectors', () => {
+    const queryMatch = mock(() => ({
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 0, offset: 0, returned: 0 },
+      meta: { effectiveResolved: true },
+    }));
+    const doc = makeApi({ query: { match: queryMatch } as DocumentApiAdapters['query'] });
+
+    doc.query.match({ type: 'text', pattern: 'Materials and methods', require: 'first', limit: 1 } as any);
+
+    expect(queryMatch).toHaveBeenCalledWith({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+      limit: 1,
+    });
+  });
+
+  it('query.match promotes query options out of type-less node shorthand', () => {
+    const queryMatch = mock(() => ({
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 0, offset: 0, returned: 0 },
+      meta: { effectiveResolved: true },
+    }));
+    const doc = makeApi({ query: { match: queryMatch } as DocumentApiAdapters['query'] });
+
+    doc.query.match({ nodeType: 'paragraph', require: 'first', limit: 1 } as any);
+
+    expect(queryMatch).toHaveBeenCalledWith({
+      select: { type: 'node', nodeType: 'paragraph' },
+      require: 'first',
+      limit: 1,
     });
   });
 });
@@ -548,8 +712,12 @@ describe('src/README.md workflow examples', () => {
     it('find then replace', () => {
       const doc = makeApi();
 
-      const result = doc.find({ type: 'text', pattern: 'foo' });
-      const target = result.items[0]?.context?.textRanges?.[0];
+      const match = doc.query.match({
+        select: { type: 'text', pattern: 'foo' },
+        require: 'first',
+      });
+
+      const target = match.items?.[0]?.target;
       if (target) {
         doc.replace({ target, text: 'bar' });
       }
@@ -564,13 +732,12 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
-      // receipt.resolution.target contains the resolved insertion point
-      // receipt.inserted contains TrackedChangeAddress entries for the new change
+      // receipt.resolution.target contains the resolved insertion point (TextAddress)
+      // receipt.success tells you whether the tracked insert applied
 
-      expect(receipt.resolution.target).toBeDefined();
-      if (receipt.success) {
-        expect(receipt.inserted).toBeDefined();
-      }
+      expect(receipt.resolution).toBeDefined();
+      expect(receipt.resolution!.target).toBeDefined();
+      expect(receipt.success).toBe(true);
     });
   });
 
@@ -579,10 +746,9 @@ describe('src/README.md workflow examples', () => {
     it('create comment, reply, then resolve', () => {
       const doc = makeApi();
 
-      // Simulate having a find result in scope (the example assumes `result` exists)
-      const result = doc.find({ type: 'text', pattern: 'something' });
-      const target = result.items[0]?.context?.textRanges?.[0];
-      const createReceipt = doc.comments.create({ target: target!, text: 'Review this section.' });
+      // Simulate having a comment target
+      const target = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } };
+      const createReceipt = doc.comments.create({ target, text: 'Review this section.' });
       // Use the comment ID from the receipt to reply
       const comments = doc.comments.list();
       const thread = comments.items[0];
@@ -617,7 +783,7 @@ describe('src/README.md workflow examples', () => {
     // Mirrors the exact code block from src/README.md § "Workflow: Capabilities-Aware Branching"
     it('branch on per-operation capabilities', () => {
       const doc = makeApi();
-      const target = TEXT_TARGET;
+      const target = SELECTION_TARGET;
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {

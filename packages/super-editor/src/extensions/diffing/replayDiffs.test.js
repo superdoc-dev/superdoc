@@ -536,6 +536,26 @@ describe('investigate replay issues', () => {
 });
 
 describe('parts-aware replay', () => {
+  it('does not emit partsDiff for legacy compareDocuments callers without a compare editor', async () => {
+    const beforeEditor = await getEditorFromFixture('diff_before19.docx');
+    const afterEditor = await getEditorFromFixture('diff_after19.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+      );
+
+      expect(diff.docDiffs.length).toBeGreaterThan(0);
+      expect(diff.partsDiff).toBeNull();
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
   it('populates body media when replaying direct diffs with a compare editor', async () => {
     await expectDirectReplayPopulatesBodyMedia('diff_before6.docx', 'diff_after6.docx');
   });

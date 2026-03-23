@@ -1,2 +1,21 @@
-// Re-exports the shared useDarkMode from super-editor so both packages share the same ref instance
-export { useDarkMode } from '@superdoc/super-editor/composables/use-dark-mode';
+import { ref } from 'vue';
+
+const isDarkMode = ref(false);
+
+if (typeof document !== 'undefined') {
+  document.body?.classList.toggle('dark-mode', isDarkMode.value);
+}
+
+export function useDarkMode() {
+  const setDarkMode = (value) => {
+    isDarkMode.value = value;
+    if (typeof document !== 'undefined') {
+      document.body?.classList.toggle('dark-mode', value);
+    }
+  };
+
+  return {
+    isDarkMode,
+    setDarkMode,
+  };
+}

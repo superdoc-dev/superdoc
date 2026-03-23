@@ -1253,8 +1253,8 @@ export class SuperDoc extends EventEmitter {
     } else if (item.command === 'setZoom') {
       this.superdocStore.activeZoom = argument;
     } else if (item.command === 'toggleDarkMode') {
-      const { isDarkMode, setDarkMode } = useDarkMode();
-      setDarkMode(!isDarkMode.value);
+      const { isDarkMode, setDarkMode: applyDarkMode } = useDarkMode();
+      applyDarkMode(!isDarkMode.value);
       item.active.value = isDarkMode.value;
       document.body.classList.toggle('dark-mode', isDarkMode.value);
     }
@@ -1744,8 +1744,8 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   setDarkMode(isDark) {
-    const { setDarkMode } = useDarkMode();
-    setDarkMode(isDark);
+    const { setDarkMode: applyDarkMode } = useDarkMode();
+    applyDarkMode(isDark);
   }
 
   setHighContrastMode(isHighContrast) {

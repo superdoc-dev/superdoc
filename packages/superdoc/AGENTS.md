@@ -135,10 +135,10 @@ Docs: https://docs.superdoc.dev/document-engine/overview
 | Import DOCX | Pass URL, File, or Blob to `document` option |
 | Export DOCX | `const blob = await superdoc.export({ isFinalDoc: true })` |
 | Track changes | Set `documentMode: 'suggesting'` or use SDK with `defaultChangeMode: 'tracked'` |
-| Add comments | `editor.commands.addComment({ content: 'text' })` |
+| Add comments | `superdoc.activeEditor.commands.addComment({ content: 'text' })` |
 | Real-time collab | Configure `modules.collaboration` with a Yjs provider |
-| Custom toolbar | Use `modules.toolbar.customItems` array |
-| Listen to events | `superdoc.on('content-changed', callback)` |
+| Custom toolbar | Use `modules.toolbar.customButtons` array |
+| Listen to events | `superdoc.on('ready', ({ superdoc }) => { ... })` |
 
 ## Knowledge corrections
 

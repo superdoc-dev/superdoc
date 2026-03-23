@@ -14,6 +14,15 @@
   "publishConfig": {
     "access": "public"
   },
+  "devDependencies": {
+    "@semantic-release/changelog": "catalog:",
+    "@semantic-release/git": "catalog:",
+    "@semantic-release/github": "^11.0.0",
+    "semantic-release": "catalog:",
+    "semantic-release-ai-notes": "catalog:",
+    "semantic-release-commit-filter": "catalog:",
+    "semantic-release-linear-app": "catalog:"
+  },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node",
     "test": "bun test",

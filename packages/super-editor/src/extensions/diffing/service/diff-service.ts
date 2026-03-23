@@ -13,7 +13,8 @@ import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/st
 import type { DiffSnapshot, DiffPayload, DiffApplyResult, DiffCoverage } from '@superdoc/document-api';
 import type { CommentInput } from '../algorithm/comment-diffing';
 import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
-import type { PartsDiff } from '../algorithm/parts-diffing';
+import type { PartsDiff, PartsState } from '../algorithm/parts-diffing';
+import { capturePartsState } from '../algorithm/parts-diffing';
 import { captureHeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { DiffResult } from '../computeDiff';
 import { computeDiff } from '../computeDiff';
@@ -101,6 +102,10 @@ function getEditorHeaderFooters(editor: DiffServiceEditor): HeaderFooterState {
   return captureHeaderFooterState(editor);
 }
 
+function getEditorPartsState(editor: DiffServiceEditor, headerFooters: HeaderFooterState | null): PartsState {
+  return capturePartsState(editor, headerFooters);
+}
+
 /**
  * Builds the canonical fingerprint input for one coverage profile.
  *
@@ -141,6 +146,7 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
   const styles = getEditorStyles(editor);
   const numbering = getEditorNumbering(editor);
   const headerFooters = getEditorHeaderFooters(editor);
+  const partsState = getEditorPartsState(editor, headerFooters);
 
   const canonical = buildCanonicalStateForCoverage(doc, comments, styles, numbering, headerFooters, V2_COVERAGE);
   const fingerprint = computeFingerprint(canonical);
@@ -159,7 +165,7 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
       styles: styles as unknown as Record<string, unknown> | null,
       numbering: numbering as unknown as Record<string, unknown> | null,
       headerFooters: headerFooters as unknown as Record<string, unknown>,
-      partsState: null,
+      partsState: partsState as unknown as Record<string, unknown>,
     }),
   };
 }
@@ -188,6 +194,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const targetStyles = targetSnapshot.payload.styles as StylesDocumentProperties | null;
   const targetNumbering = targetSnapshot.payload.numbering as NumberingProperties | null;
   const targetHeaderFooters = (targetSnapshot.payload.headerFooters ?? null) as HeaderFooterState | null;
+  const targetPartsState = (targetSnapshot.payload.partsState ?? null) as PartsState | null;
   const targetDoc = parseDocPayload(editor.state.schema, targetSnapshot.payload.doc);
 
   // Re-derive target fingerprint from payload to guard against tampered wrappers.
@@ -225,6 +232,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
   const baseHeaderFooters = targetCoverage.headerFooters ? getEditorHeaderFooters(editor) : null;
+  const basePartsState = targetCoverage.headerFooters ? getEditorPartsState(editor, baseHeaderFooters) : null;
   const baseCanonical = buildCanonicalStateForCoverage(
     baseDoc,
     baseComments,
@@ -252,6 +260,8 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       targetNumbering,
       baseHeaderFooters,
       targetHeaderFooters,
+      basePartsState,
+      targetPartsState,
     );
   } catch (err) {
     if (err instanceof DiffServiceError) throw err;

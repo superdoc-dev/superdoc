@@ -2,7 +2,7 @@ import type { Node as PMNode, Schema } from 'prosemirror-model';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing';
 import { diffHeaderFooters, type HeaderFooterState, type HeaderFootersDiff } from './algorithm/header-footer-diffing';
-import { diffParts, type PartsDiff } from './algorithm/parts-diffing';
+import { diffParts, type PartsDiff, type PartsState } from './algorithm/parts-diffing';
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing';
 import { diffStyles, type StylesDiff } from './algorithm/styles-diffing';
 import { diffNumbering, type NumberingDiff } from './algorithm/numbering-diffing';
@@ -60,13 +60,16 @@ export function computeDiff(
   newNumbering: NumberingProperties | null | undefined = null,
   oldHeaderFooters: HeaderFooterState | null | undefined = null,
   newHeaderFooters: HeaderFooterState | null | undefined = null,
+  oldPartsState: PartsState | null | undefined = null,
+  newPartsState: PartsState | null | undefined = null,
 ): DiffResult {
+  const headerFootersDiff = diffHeaderFooters(oldHeaderFooters, newHeaderFooters, schema);
   return {
     docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
     commentDiffs: diffComments(oldComments, newComments, schema),
     stylesDiff: diffStyles(oldStyles, newStyles),
     numberingDiff: diffNumbering(oldNumbering, newNumbering),
-    headerFootersDiff: diffHeaderFooters(oldHeaderFooters, newHeaderFooters, schema),
-    partsDiff: diffParts(),
+    headerFootersDiff,
+    partsDiff: diffParts(headerFootersDiff, oldPartsState, newPartsState),
   };
 }

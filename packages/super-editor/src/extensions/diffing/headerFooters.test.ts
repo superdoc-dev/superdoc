@@ -75,6 +75,10 @@ function seedPart(
         {
           type: 'element',
           name: kind === 'header' ? 'w:hdr' : 'w:ftr',
+          attributes: {
+            'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+          },
           elements: [],
         },
       ],
@@ -123,6 +127,52 @@ function seedPart(
       elements: [],
     });
   }
+}
+
+function seedPartDependency(
+  editor: Editor,
+  params: {
+    partPath: string;
+    relationshipId: string;
+    target: string;
+    targetPath: string;
+    mediaContent: string;
+  },
+): void {
+  const { partPath, relationshipId, target, targetPath, mediaContent } = params;
+  const fileName = partPath.split('/').pop();
+  if (!fileName) {
+    throw new Error(`Invalid partPath: ${partPath}`);
+  }
+
+  editor.converter!.convertedXml![`word/_rels/${fileName}.rels`] = {
+    type: 'element',
+    name: 'document',
+    elements: [
+      {
+        type: 'element',
+        name: 'Relationships',
+        attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+        elements: [
+          {
+            type: 'element',
+            name: 'Relationship',
+            attributes: {
+              Id: relationshipId,
+              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+              Target: target,
+            },
+            elements: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  editor.options.mediaFiles ??= {};
+  editor.options.mediaFiles[targetPath] = mediaContent;
+  (editor.storage.image as { media?: Record<string, unknown> }).media ??= {};
+  (editor.storage.image as { media?: Record<string, unknown> }).media![targetPath] = mediaContent;
 }
 
 /**
@@ -258,6 +308,44 @@ describe('Header/footer diffing', () => {
           ]),
         }),
       );
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('captures and replays header part dependencies through partsDiff', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultHeader(afterEditor, 'Header with image');
+      seedPartDependency(afterEditor, {
+        partPath: 'word/header1.xml',
+        relationshipId: 'rIdImage1',
+        target: 'media/header-logo.png',
+        targetPath: 'word/media/header-logo.png',
+        mediaContent: 'data:image/png;base64,aGVhZGVy',
+      });
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.partsDiff).not.toBeNull();
+      expect(diff.partsDiff?.upserts['word/_rels/header1.xml.rels']).toBeTruthy();
+      expect(diff.partsDiff?.upserts['word/media/header-logo.png']).toBeTruthy();
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(beforeEditor.converter?.convertedXml?.['word/_rels/header1.xml.rels']).toBeTruthy();
+      expect(
+        (beforeEditor.storage.image as { media?: Record<string, unknown> }).media?.['word/media/header-logo.png'],
+      ).toBe('data:image/png;base64,aGVhZGVy');
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();

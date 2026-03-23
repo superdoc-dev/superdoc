@@ -3,6 +3,7 @@ import { Extension } from '@core/Extension.js';
 import { computeDiff } from './computeDiff.ts';
 import { replayDiffs } from './replayDiffs.ts';
 import { captureHeaderFooterState } from './algorithm/header-footer-diffing.ts';
+import { capturePartsState } from './algorithm/parts-diffing.ts';
 
 export const Diffing = Extension.create({
   name: 'documentDiffing',
@@ -35,12 +36,17 @@ export const Diffing = Extension.create({
           const currentNumbering = this.editor.converter?.translatedNumbering ?? null;
           const nextNumbering = updatedNumbering === undefined ? currentNumbering : updatedNumbering;
           const currentHeaderFooters = captureHeaderFooterState(this.editor);
+          const currentPartsState = capturePartsState(this.editor, currentHeaderFooters);
           const nextHeaderFooters =
             updatedHeaderFooters === undefined
               ? currentHeaderFooters
               : updatedHeaderFooters?.state && updatedHeaderFooters?.converter
                 ? captureHeaderFooterState(updatedHeaderFooters)
                 : updatedHeaderFooters;
+          const nextPartsState =
+            updatedHeaderFooters?.state && updatedHeaderFooters?.converter
+              ? capturePartsState(updatedHeaderFooters, nextHeaderFooters)
+              : null;
           const diffs = computeDiff(
             state.doc,
             updatedDocument,
@@ -53,6 +59,8 @@ export const Diffing = Extension.create({
             nextNumbering,
             currentHeaderFooters,
             nextHeaderFooters,
+            currentPartsState,
+            nextPartsState,
           );
           return diffs;
         },

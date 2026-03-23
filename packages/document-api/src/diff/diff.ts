@@ -66,6 +66,9 @@ function validateSnapshotWrapper(snapshot: unknown): asserts snapshot is DiffSna
   if (typeof snapshot.fingerprint !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'targetSnapshot.fingerprint must be a string.');
   }
+  if (snapshot.version === 'sd-diff-snapshot/v2' && typeof snapshot.partsFingerprint !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'targetSnapshot.partsFingerprint must be a string.');
+  }
   if (!isRecord(snapshot.coverage)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'targetSnapshot.coverage must be an object.');
   }
@@ -92,6 +95,12 @@ function validateDiffPayloadWrapper(diff: unknown): asserts diff is DiffPayload 
   }
   if (typeof diff.targetFingerprint !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'diff.targetFingerprint must be a string.');
+  }
+  if (diff.version === 'sd-diff-payload/v2' && typeof diff.basePartsFingerprint !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'diff.basePartsFingerprint must be a string.');
+  }
+  if (diff.version === 'sd-diff-payload/v2' && typeof diff.targetPartsFingerprint !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'diff.targetPartsFingerprint must be a string.');
   }
   if (!isRecord(diff.coverage)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'diff.coverage must be an object.');

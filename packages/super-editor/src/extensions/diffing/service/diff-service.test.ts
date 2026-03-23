@@ -352,6 +352,7 @@ describe('diff-service tracked apply', () => {
           targetEditor.converter?.translatedLinkedStyles ?? null,
           targetEditor.converter?.translatedNumbering ?? null,
           null,
+          null,
         ),
       );
 
@@ -385,6 +386,7 @@ describe('diff-service tracked apply', () => {
           targetEditor.converter?.comments ?? [],
           targetEditor.converter?.translatedLinkedStyles ?? null,
           targetEditor.converter?.translatedNumbering ?? null,
+          null,
           null,
         ),
       );
@@ -466,6 +468,52 @@ describe('diff-service tracked apply', () => {
         commentText: 'New comment',
         textJson: buildCommentTextJson('New nested'),
       });
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('rejects apply when semantic state matches but parts state differs', async () => {
+    const baseEditor = await openFixtureDocument('diff_before19.docx');
+    const targetEditor = await openFixtureDocument('diff_after19.docx');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const baseSnapshot = captureSnapshot(baseEditor);
+      expect(baseSnapshot.fingerprint).toBe(diff.baseFingerprint);
+      expect(baseSnapshot.partsFingerprint).toBe(diff.basePartsFingerprint);
+
+      const relsPart = baseEditor.converter?.convertedXml?.['word/_rels/document.xml.rels'] as
+        | {
+            elements?: Array<{
+              name?: string;
+              elements?: Array<{ name?: string; attributes?: Record<string, string> }>;
+            }>;
+          }
+        | undefined;
+      const relsRoot = relsPart?.elements?.find((entry) => entry.name === 'Relationships');
+      relsRoot?.elements?.push({
+        name: 'Relationship',
+        attributes: {
+          Id: 'rId999',
+          Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+          Target: 'media/unexpected-image.png',
+        },
+      });
+      baseEditor.options.mediaFiles ??= {};
+      baseEditor.storage.image.media ??= {};
+      baseEditor.options.mediaFiles['word/media/unexpected-image.png'] = 'base64-unexpected';
+      baseEditor.storage.image.media['word/media/unexpected-image.png'] = 'base64-unexpected';
+
+      const mutatedSnapshot = captureSnapshot(baseEditor);
+      expect(mutatedSnapshot.fingerprint).toBe(baseSnapshot.fingerprint);
+      expect(mutatedSnapshot.partsFingerprint).not.toBe(baseSnapshot.partsFingerprint);
+
+      expect(() => applyDiffPayload(baseEditor, diff, { changeMode: 'direct' })).toThrowError(
+        /parts fingerprint mismatch/i,
+      );
     } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();

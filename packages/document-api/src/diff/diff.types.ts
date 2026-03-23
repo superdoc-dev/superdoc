@@ -35,6 +35,7 @@ export interface DiffSnapshot {
   version: 'sd-diff-snapshot/v1' | 'sd-diff-snapshot/v2';
   engine: DiffEngineId;
   fingerprint: string;
+  partsFingerprint?: string;
   coverage: DiffCoverage;
   /** Opaque engine-owned snapshot data. Do not inspect or modify. */
   payload: Record<string, unknown>;
@@ -62,6 +63,8 @@ export interface DiffPayload {
   engine: DiffEngineId;
   baseFingerprint: string;
   targetFingerprint: string;
+  basePartsFingerprint?: string;
+  targetPartsFingerprint?: string;
   coverage: DiffCoverage;
   summary: DiffSummary;
   /** Opaque engine-owned diff data. Do not inspect or modify. */
@@ -73,6 +76,8 @@ export interface DiffApplyResult {
   appliedOperations: number;
   baseFingerprint: string;
   targetFingerprint: string;
+  basePartsFingerprint?: string;
+  targetPartsFingerprint?: string;
   coverage: DiffCoverage;
   summary: DiffSummary;
   diagnostics: string[];

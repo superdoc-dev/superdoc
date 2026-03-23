@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { CanonicalDiffableState } from './canonicalize';
 import { computeFingerprint } from './fingerprint';
 
+const STABLE_CANONICAL_STATE_HASH = '6fe514692e04f502d7a18b8bb9f2b23a15943d44abe8b270640cb0efb2254cb0';
+
 describe('computeFingerprint', () => {
   it('matches the expected SHA-256 for a stable canonical state', () => {
     const state: CanonicalDiffableState = {
@@ -10,9 +12,11 @@ describe('computeFingerprint', () => {
       comments: [],
       styles: null,
       numbering: null,
+      headerFooters: null,
+      partsState: null,
     };
 
-    expect(computeFingerprint(state)).toBe('66a5174811bcb593a6927a09fa130a40705a453407a6fc7777d9d3bcede7892e');
+    expect(computeFingerprint(state)).toBe(STABLE_CANONICAL_STATE_HASH);
   });
 
   it('changes when comment body content changes', () => {
@@ -21,12 +25,16 @@ describe('computeFingerprint', () => {
       comments: [{ commentId: 'c1', textJson: { type: 'doc', content: [{ type: 'text', text: 'A' }] } }],
       styles: null,
       numbering: null,
+      headerFooters: null,
+      partsState: null,
     };
     const changedState: CanonicalDiffableState = {
       body: { type: 'doc' },
       comments: [{ commentId: 'c1', textJson: { type: 'doc', content: [{ type: 'text', text: 'B' }] } }],
       styles: null,
       numbering: null,
+      headerFooters: null,
+      partsState: null,
     };
 
     expect(computeFingerprint(baseState)).not.toBe(computeFingerprint(changedState));
@@ -38,12 +46,16 @@ describe('computeFingerprint', () => {
       comments: [{ commentId: 'c1', textJson: { type: 'doc', content: [{ type: 'text', text: 'Same' }] } }],
       styles: null,
       numbering: null,
+      headerFooters: null,
+      partsState: null,
     };
     const changedState: CanonicalDiffableState = {
       body: { type: 'doc' },
       comments: [{ commentId: 'c2', textJson: { type: 'doc', content: [{ type: 'text', text: 'Same' }] } }],
       styles: null,
       numbering: null,
+      headerFooters: null,
+      partsState: null,
     };
 
     expect(computeFingerprint(baseState)).not.toBe(computeFingerprint(changedState));

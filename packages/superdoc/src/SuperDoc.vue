@@ -36,6 +36,7 @@ import AiLayer from './components/AiLayer/AiLayer.vue';
 import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
+import { useDarkMode } from './composables/use-dark-mode';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
@@ -98,6 +99,7 @@ const { proxy } = getCurrentInstance();
 commentsStore.proxy = proxy;
 
 const { isHighContrastMode } = useHighContrastMode();
+const { isDarkMode } = useDarkMode();
 const { uiFontFamily } = useUiFontFamily();
 
 const isViewingMode = () => proxy?.$superdoc?.config?.documentMode === 'viewing';
@@ -1028,6 +1030,7 @@ const getPDFViewer = () => {
       'superdoc--with-sidebar': showCommentsSidebar,
       'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
       'high-contrast': isHighContrastMode,
+      'dark-mode': isDarkMode,
     }"
     :style="superdocStyleVars"
   >

@@ -76,6 +76,7 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/core/components/AIWriter.vue') },
     { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
+    { find: '@superdoc/super-editor/composables/use-dark-mode', replacement: path.resolve(__dirname, '../super-editor/src/composables/use-dark-mode.js') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
 
     // Map @superdoc/<name> to ./src/<name> for internal paths

@@ -17,6 +17,7 @@ import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
 import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
+import { useDarkMode } from '../composables/use-dark-mode.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -836,6 +837,11 @@ export class SuperDoc extends EventEmitter {
       this.setDocumentMode(argument);
     } else if (item.command === 'setZoom') {
       this.superdocStore.activeZoom = argument;
+    } else if (item.command === 'toggleDarkMode') {
+      const { isDarkMode, setDarkMode } = useDarkMode();
+      setDarkMode(!isDarkMode.value);
+      item.active.value = isDarkMode.value;
+      document.body.classList.toggle('dark-mode', isDarkMode.value);
     }
   }
 
@@ -1301,6 +1307,11 @@ export class SuperDoc extends EventEmitter {
    * @param {boolean} isHighContrast
    * @returns {void}
    */
+  setDarkMode(isDark) {
+    const { setDarkMode } = useDarkMode();
+    setDarkMode(isDark);
+  }
+
   setHighContrastMode(isHighContrast) {
     if (!this.activeEditor) return;
     this.activeEditor.setHighContrastMode(isHighContrast);

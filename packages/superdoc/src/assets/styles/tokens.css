@@ -110,3 +110,31 @@
   --sd-comment-group-size: 51px;
   --sd-comment-group-expanded-size: 300px;
 }
+
+.dark-mode {
+  /* ─── Semantic: Surfaces ─── */
+  --sd-surface-page: #1e1e1e;
+  --sd-surface-canvas: #121212;
+  --sd-surface-card: #2a2a2a;
+  --sd-surface-muted: #2a2a2a;
+  --sd-surface-hover: #3a3a3a;
+  --sd-surface-selected: #1a2a4a;
+
+  /* ─── Semantic: Text ─── */
+  --sd-text-primary: #e8e8e8;
+  --sd-text-secondary: #b0b0b0;
+  --sd-text-muted: #888888;
+  --sd-text-placeholder: #666666;
+
+  /* ─── Semantic: Borders ─── */
+  --sd-border-default: #444444;
+  --sd-border-subtle: #333333;
+
+  /* ─── Component: Comment Dialog ─── */
+  --sd-comment-bg: #2a2a3a;
+  --sd-comment-bg-hover: #2a2a3a;
+  --sd-comment-bg-active: #2a2a2a;
+  --sd-comment-bg-resolved: #222222;
+  --sd-comment-shadow: 0px 4px 12px 0px rgba(0, 0, 0, 0.4);
+  --sd-comment-group-bg: #1a2a4a;
+}

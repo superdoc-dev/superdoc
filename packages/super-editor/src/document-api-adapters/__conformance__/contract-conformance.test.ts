@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -42,6 +42,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from '../plan-engine/paragraphs-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
@@ -82,6 +84,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
@@ -166,6 +171,14 @@ import {
   listsSetLevelTrailingCharacterWrapper,
   listsSetLevelMarkerFontWrapper,
   listsClearLevelOverridesWrapper,
+  listsGetStyleWrapper,
+  listsApplyStyleWrapper,
+  listsRestartAtWrapper,
+  listsSetLevelNumberStyleWrapper,
+  listsSetLevelTextWrapper,
+  listsSetLevelStartWrapper,
+  listsSetLevelLayoutWrapper,
+  registerSetValueDelegate,
 } from '../plan-engine/lists-formatting-wrappers.js';
 import * as listSequenceHelpers from '../helpers/list-sequence-helpers.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
@@ -336,6 +349,7 @@ const refResolverMocks = vi.hoisted(() => ({
   // Index (block + entry)
   findAllIndexNodes: vi.fn(() => []),
   resolveIndexTarget: vi.fn(),
+  resolvePostMutationIndexId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractIndexInfo: vi.fn(),
   buildIndexDiscoveryItem: vi.fn(),
   findAllIndexEntries: vi.fn(() => []),
@@ -359,6 +373,7 @@ const refResolverMocks = vi.hoisted(() => ({
   buildCitationDiscoveryItem: vi.fn(),
   findAllBibliographies: vi.fn(() => []),
   resolveBibliographyTarget: vi.fn(),
+  resolvePostMutationBibliographyId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractBibliographyInfo: vi.fn(),
   buildBibliographyDiscoveryItem: vi.fn(),
   getSourcesFromConverter: vi.fn(() => []),
@@ -366,6 +381,7 @@ const refResolverMocks = vi.hoisted(() => ({
   // Authority (block + entry)
   findAllAuthorities: vi.fn(() => []),
   resolveAuthorityTarget: vi.fn(),
+  resolvePostMutationAuthorityId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractAuthorityInfo: vi.fn(),
   buildAuthorityDiscoveryItem: vi.fn(),
   findAllAuthorityEntries: vi.fn(() => []),
@@ -400,6 +416,7 @@ vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
   return {
     findAllIndexNodes: refResolverMocks.findAllIndexNodes,
     resolveIndexTarget: refResolverMocks.resolveIndexTarget,
+    resolvePostMutationIndexId: refResolverMocks.resolvePostMutationIndexId,
     extractIndexInfo: refResolverMocks.extractIndexInfo,
     buildIndexDiscoveryItem: refResolverMocks.buildIndexDiscoveryItem,
     findAllIndexEntries: refResolverMocks.findAllIndexEntries,
@@ -431,10 +448,12 @@ vi.mock('../helpers/citation-resolver.js', () => ({
   buildCitationDiscoveryItem: refResolverMocks.buildCitationDiscoveryItem,
   findAllBibliographies: refResolverMocks.findAllBibliographies,
   resolveBibliographyTarget: refResolverMocks.resolveBibliographyTarget,
+  resolvePostMutationBibliographyId: refResolverMocks.resolvePostMutationBibliographyId,
   extractBibliographyInfo: refResolverMocks.extractBibliographyInfo,
   buildBibliographyDiscoveryItem: refResolverMocks.buildBibliographyDiscoveryItem,
   getSourcesFromConverter: refResolverMocks.getSourcesFromConverter,
   resolveSourceTarget: refResolverMocks.resolveSourceTarget,
+  syncBibliographyStyleToConverter: vi.fn(),
 }));
 
 vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
@@ -442,6 +461,7 @@ vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
   return {
     findAllAuthorities: refResolverMocks.findAllAuthorities,
     resolveAuthorityTarget: refResolverMocks.resolveAuthorityTarget,
+    resolvePostMutationAuthorityId: refResolverMocks.resolvePostMutationAuthorityId,
     extractAuthorityInfo: refResolverMocks.extractAuthorityInfo,
     buildAuthorityDiscoveryItem: refResolverMocks.buildAuthorityDiscoveryItem,
     findAllAuthorityEntries: refResolverMocks.findAllAuthorityEntries,
@@ -1575,6 +1595,9 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.setCellPadding',
   'tables.setCellSpacing',
   'tables.clearCellSpacing',
+  'tables.applyStyle',
+  'tables.setBorders',
+  'tables.setTableOptions',
   'tables.getStyles',
   'tables.setDefaultStyle',
   'tables.clearDefaultStyle',
@@ -1588,7 +1611,11 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  * pattern. mutations.apply returns PlanReceipt (always success: true) or throws.
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
-const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set(['history.undo', 'history.redo'] as OperationId[]);
+const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
+  'history.undo',
+  'history.redo',
+  'diff.apply',
+] as OperationId[]);
 
 /**
  * Content-control operations whose handlers always return `true` because they
@@ -2040,6 +2067,34 @@ const paragraphMutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return paragraphsClearShadingWrapper(editor, { target: PARAGRAPH_TARGET });
     },
   },
+  'format.paragraph.setDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+  },
+  'format.paragraph.clearDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
 };
 
 const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -2226,6 +2281,26 @@ const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'format.paragraph.clearShading': () => {
     const { editor, dispatch } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
     const result = paragraphsClearShadingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetDirectionWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, direction: 'rtl' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor({ rightToLeft: true });
+    const result = paragraphsClearDirectionWrapper(
       editor,
       { target: PARAGRAPH_TARGET },
       { changeMode: 'direct', dryRun: true },
@@ -2532,8 +2607,8 @@ const MISSING_SDT_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, n
 const RS_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'rs-1' };
 
 /** Create an SDT editor whose commands return false — triggers NO_OP failure. */
-function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
-  const editor = makeSdtEditor(overrideAttrs);
+function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent = 'SDT content'): Editor {
+  const editor = makeSdtEditor(overrideAttrs, textContent);
   (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
   (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
   (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
@@ -2550,7 +2625,7 @@ function makeNoOpSdtEditorWithRepeatingSectionItems(): Editor {
   return editor;
 }
 
-function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
+function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent = 'SDT content'): Editor {
   const sdtAttrs = {
     id: 'sdt-1',
     tag: 'test-tag',
@@ -2562,7 +2637,7 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
     ...overrideAttrs,
   };
 
-  const textNode = createNode('text', [], { text: 'SDT content' });
+  const textNode = createNode('text', [], { text: textContent });
   const innerParagraph = createNode('paragraph', [textNode], {
     attrs: { sdBlockId: 'inner-p' },
     isBlock: true,
@@ -3716,15 +3791,28 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
       bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'tracked' }),
     applyCase: () =>
       withAppliedReceipt(() =>
-        bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+        bibliographyInsertWrapper(
+          makeRefEditor(),
+          { at: { kind: 'documentEnd' }, style: 'APA' },
+          { changeMode: 'direct' },
+        ),
       ),
   },
   'citations.bibliography.configure': {
-    throwCase: () => bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'tracked' }),
+    throwCase: () =>
+      bibliographyConfigureWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+        { changeMode: 'tracked' },
+      ),
     applyCase: () => {
-      refResolverMocks.findAllBibliographies.mockReturnValueOnce([{ nodeId: 'bib-1' }]);
+      refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
       return withAppliedReceipt(() =>
-        bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'direct' }),
+        bibliographyConfigureWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+          { changeMode: 'direct' },
+        ),
       );
     },
   },
@@ -5462,6 +5550,224 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
   },
+  // SD-2025 user-centric list formatting operations
+  'lists.applyStyle': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyStyleWrapper(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          style: { version: 1, levels: [] },
+        },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 99 as any, levels: [] },
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
+      const result = listsApplyStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 1, levels: [{ level: 0, numFmt: 'upperRoman', lvlText: '%1.' }] },
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.restartAt': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsRestartAtWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, startAt: 5 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsRestartAtWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        startAt: 0,
+      });
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsRestartAtWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        startAt: 5,
+      });
+      firstInSeqSpy.mockRestore();
+      overrideSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelNumberStyle': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberStyleWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, numberStyle: 'upperRoman' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numberStyle: 'bullet',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberStyle').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelNumberStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numberStyle: 'upperRoman',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelText': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTextWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, text: '%1.' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        text: '%1.',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelText').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        text: '%1.',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelStart': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelStartWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, startAt: 5 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelStartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        startAt: 0,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const readSpy = vi
+        .spyOn(LevelFormattingHelpers, 'readLevelProperties')
+        .mockReturnValue({ numFmt: 'decimal' } as any);
+      const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelStart').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelStartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        startAt: 5,
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      readSpy.mockRestore();
+      findSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelLayout': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelLayoutWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, layout: { alignment: 'left' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelLayoutWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        layout: { alignment: 'left' },
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelLayout').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return { changed: true };
+      });
+      const result = listsSetLevelLayoutWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        layout: { alignment: 'left' },
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
   'comments.create': {
     throwCase: () => {
       const editor = makeCommentsEditor([], { addComment: undefined });
@@ -5654,19 +5960,19 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.insertRow': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'missing', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'missing', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
@@ -5674,15 +5980,15 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.deleteRow': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'missing', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'missing', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
   },
   'tables.setRowHeight': {
@@ -5690,7 +5996,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'missing', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'missing', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5698,7 +6004,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5706,7 +6012,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5732,7 +6038,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'missing', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'missing', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5740,7 +6046,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5748,7 +6054,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5762,7 +6068,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'missing', columnIndex: 0, position: 'right' },
+        { nodeId: 'missing', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5770,7 +6076,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+        { nodeId: 'table-1', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5778,7 +6084,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+        { nodeId: 'table-1', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5786,15 +6092,15 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.deleteColumn': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'missing', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'missing', columnIndex: 0 }, { changeMode: 'direct' });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
     },
   },
   'tables.setColumnWidth': {
@@ -5802,7 +6108,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'missing', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'missing', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5810,7 +6116,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5818,7 +6124,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5870,7 +6176,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'missing', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'missing', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -5878,7 +6184,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -5886,7 +6192,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -5963,16 +6269,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.split': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'missing', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'missing', rowIndex: 1 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      // atRowIndex: 0 is invalid (must be >= 1).
+      // rowIndex: 0 is invalid (must be >= 1).
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 0 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 1 }, { changeMode: 'direct' });
     },
   },
   'tables.convertToText': {
@@ -6233,6 +6539,87 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const editor = makeTableEditor();
       return tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.applyStyle': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'missing', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.setBorders': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'missing',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'tables.setTableOptions': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'missing', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
     },
   },
   'tables.setDefaultStyle': {
@@ -7147,8 +7534,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.appendContent({ target: MISSING_SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
-      return adapter.appendContent({ target: SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.appendContent({ target: SDT_TARGET, content: '' }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const adapter = createContentControlsAdapter(makeSdtEditor());
@@ -7365,7 +7752,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.clearContent({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      const adapter = createContentControlsAdapter(makeSdtEditor({}, ''));
       return adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7623,8 +8010,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.prependContent({ target: MISSING_SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
-      return adapter.prependContent({ target: SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.prependContent({ target: SDT_TARGET, content: '' }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const adapter = createContentControlsAdapter(makeSdtEditor());
@@ -7716,7 +8103,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.replaceContent({ target: MISSING_SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      const adapter = createContentControlsAdapter(makeSdtEditor({}, 'replaced'));
       return adapter.replaceContent({ target: SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7781,7 +8168,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.text.clearValue({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }, ''));
       return adapter.text.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7809,7 +8196,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.text.setValue({ target: MISSING_SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }, 'hello'));
       return adapter.text.setValue({ target: SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -8790,6 +9177,88 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
   },
+  // SD-2025 user-centric list formatting — dryRun vectors
+  'lists.applyStyle': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsApplyStyleWrapper(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    return result;
+  },
+  'lists.restartAt': () => {
+    registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsRestartAtWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, startAt: 5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'lists.setLevelNumberStyle': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelNumberStyleWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, numberStyle: 'upperRoman' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelText': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelTextWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, text: '%1.' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelStart': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const readSpy = vi
+      .spyOn(LevelFormattingHelpers, 'readLevelProperties')
+      .mockReturnValue({ numFmt: 'decimal' } as any);
+    const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelStartWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, startAt: 5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    readSpy.mockRestore();
+    findSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelLayout': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelLayoutWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, layout: { alignment: 'left' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
 
   // -------------------------------------------------------------------------
   // Table operations — dryRun vectors
@@ -8854,7 +9323,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'tables.insertRow': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
-    const result = tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+    const result = tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
       changeMode: 'direct',
       dryRun: true,
     });
@@ -8864,7 +9333,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'tables.deleteRow': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
-    const result = tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, {
+    const result = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
       changeMode: 'direct',
       dryRun: true,
     });
@@ -8876,7 +9345,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetRowHeightWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+      { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8894,7 +9363,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetRowOptionsWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+      { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8905,7 +9374,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesInsertColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+      { nodeId: 'table-1', columnIndex: 0, position: 'right' },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8916,7 +9385,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesDeleteColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0 },
+      { nodeId: 'table-1', columnIndex: 0 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8927,7 +9396,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetColumnWidthWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+      { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8970,7 +9439,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesMergeCellsWrapper(
       editor,
-      { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+      { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -9020,7 +9489,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
-      { nodeId: 'table-1', atRowIndex: 1 },
+      { nodeId: 'table-1', rowIndex: 1 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -9164,6 +9633,44 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.applyStyle': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesApplyStyleWrapper(
+      editor,
+      { nodeId: 'table-1', styleId: 'TableGrid' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setBorders': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetBordersWrapper(
+      editor,
+      {
+        nodeId: 'table-1',
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setTableOptions': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetTableOptionsWrapper(
+      editor,
+      { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+      { changeMode: 'direct', dryRun: true },
+    );
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
@@ -9906,13 +10413,504 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+
+  // ---- Bookmarks ----
+  'bookmarks.insert': () => {
+    const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+    try {
+      return bookmarksInsertWrapper(
+        makeRefEditor(),
+        { name: 'bm1', at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+        { changeMode: 'direct', dryRun: true },
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  },
+  'bookmarks.rename': () => {
+    refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+      mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+    );
+    return bookmarksRenameWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' }, newName: 'bm2' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'bookmarks.remove': () => {
+    refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+      mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+    );
+    return bookmarksRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Footnotes ----
+  'footnotes.insert': () => {
+    return footnotesInsertWrapper(
+      makeRefEditor(),
+      {
+        type: 'footnote',
+        content: 'x',
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.update': () => {
+    refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+      noteId: 'fn-1',
+      type: 'footnote',
+    });
+    return footnotesUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' }, patch: { content: 'Updated' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.remove': () => {
+    refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+      noteId: 'fn-1',
+      type: 'footnote',
+    });
+    return footnotesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.configure': () => {
+    return footnotesConfigureWrapper(
+      makeRefEditor(),
+      { type: 'footnote', scope: { kind: 'document' }, numbering: { format: 'decimal' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Cross-References ----
+  'crossRefs.insert': () => {
+    return crossRefsInsertWrapper(
+      makeRefEditor(),
+      {
+        target: { kind: 'bookmark', name: 'bm1' },
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        display: 'content',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'crossRefs.rebuild': () => {
+    refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+    refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'crossRef',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return crossRefsRebuildWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'crossRefs.remove': () => {
+    refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+    refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'crossRef',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return crossRefsRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Index (block) ----
+  'index.insert': () => {
+    return indexInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct', dryRun: true });
+  },
+  'index.configure': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.rebuild': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.remove': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Index entries (inline) ----
+  'index.entries.insert': () => {
+    return indexEntriesInsertWrapper(
+      makeRefEditor(),
+      { entry: { text: 'Test' }, at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.entries.update': () => {
+    refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'xe-1', 'indexEntry'));
+    refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return indexEntriesUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { text: 'Updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.entries.remove': () => {
+    refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'xe-1', 'indexEntry'));
+    refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return indexEntriesRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Captions ----
+  'captions.insert': () => {
+    return captionsInsertWrapper(
+      makeRefEditor(),
+      { label: 'Figure', adjacentTo: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, position: 'below' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.update': () => {
+    refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+    return captionsUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' }, patch: { text: 'Updated' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.remove': () => {
+    refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+    return captionsRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.configure': () => {
+    return captionsConfigureWrapper(
+      makeRefEditor(),
+      { label: 'Figure', format: 'decimal' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Fields ----
+  'fields.insert': () => {
+    return fieldsInsertWrapper(
+      makeRefEditor(),
+      {
+        mode: 'raw',
+        instruction: 'DATE',
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'fields.rebuild': () => {
+    refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'f-1', 'field'),
+      blockId: 'p1',
+      occurrenceIndex: 0,
+      nestingDepth: 0,
+    });
+    return fieldsRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'fields.remove': () => {
+    refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'f-1', 'field'),
+      blockId: 'p1',
+      occurrenceIndex: 0,
+      nestingDepth: 0,
+    });
+    return fieldsRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 }, mode: 'raw' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Citations (inline) ----
+  'citations.insert': () => {
+    return citationsInsertWrapper(
+      makeRefEditor(),
+      { sourceIds: ['src-1'], at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.update': () => {
+    refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+    refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'citation',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return citationsUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { sourceIds: ['src-2'] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.remove': () => {
+    refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+    refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'citation',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return citationsRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Citation sources (out-of-band) ----
+  'citations.sources.insert': () => {
+    return citationSourcesInsertWrapper(
+      makeRefEditor(),
+      { type: 'book', fields: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.sources.update': () => {
+    refResolverMocks.resolveSourceTarget.mockReturnValueOnce({ tag: 'src-1', type: 'book', fields: {} });
+    return citationSourcesUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.sources.remove': () => {
+    refResolverMocks.resolveSourceTarget.mockReturnValueOnce({ tag: 'src-1', type: 'book', fields: {} });
+    return citationSourcesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Bibliography (block) ----
+  'citations.bibliography.insert': () => {
+    return bibliographyInsertWrapper(
+      makeRefEditor(),
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.configure': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.rebuild': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.remove': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Authorities (block) ----
+  'authorities.insert': () => {
+    return authoritiesInsertWrapper(
+      makeRefEditor(),
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.configure': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.rebuild': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.remove': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Authority entries (inline) ----
+  'authorities.entries.insert': () => {
+    return authorityEntriesInsertWrapper(
+      makeRefEditor(),
+      {
+        entry: { longCitation: 'Test v. Case', shortCitation: 'Test', category: 1 },
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.entries.update': () => {
+    refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ta-1', 'authorityEntry'));
+    refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'authorityEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return authorityEntriesUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { longCitation: 'Updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.entries.remove': () => {
+    refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ta-1', 'authorityEntry'));
+    refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'authorityEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return authorityEntriesRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
 };
 
-beforeEach(() => {
+beforeAll(() => {
   registerBuiltInExecutors();
   registerPartDescriptor(numberingPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(stylesPartDescriptor);
+});
+
+afterAll(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
+
+const resetMocks = () => {
   vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
@@ -9938,11 +10936,10 @@ beforeEach(() => {
   refResolverMocks.getSourcesFromConverter.mockImplementation(() => []);
   refResolverMocks.findAllAuthorities.mockImplementation(() => []);
   refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
-});
+};
 
-afterEach(() => {
-  clearPartDescriptors();
-  clearInvalidationHandlers();
+beforeEach(() => {
+  resetMocks();
 });
 
 describe('document-api adapter conformance', () => {
@@ -10146,17 +11143,34 @@ describe('document-api adapter conformance', () => {
     }
   });
 
-  it('returns stable cell ids from tables.getCells using table-map resolved absolute positions', () => {
+  it('rejects row nodeId combined with rowIndex as over-specified input', () => {
+    const editor = makeTableEditor();
+    expect(() =>
+      tablesInsertRowWrapper(editor, { nodeId: 'row-1', rowIndex: 0, position: 'below' } as any, {
+        changeMode: 'direct',
+      }),
+    ).toThrow(/rowIndex must not be provided when target is a row node/);
+  });
+
+  it('returns stable cell ids and mutation-ready addresses from tables.getCells', () => {
     const editor = makeTableEditor();
     const result = tablesGetCellsAdapter(editor, { nodeId: 'table-1' });
 
-    expect(result.tableNodeId).toBe('table-1');
+    expect(result.nodeId).toBe('table-1');
     expect(result.cells.map((cell) => cell.nodeId)).toEqual(
       expect.arrayContaining(['cell-1', 'cell-2', 'cell-3', 'cell-4']),
     );
 
     const topLeft = result.cells.find((cell) => cell.rowIndex === 0 && cell.columnIndex === 0);
     expect(topLeft?.nodeId).toBe('cell-1');
+
+    // Each cell address mirrors nodeId and is ready for mutation handoff.
+    expect(topLeft?.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: 'cell-1' });
+
+    // All cells carry a well-formed address.
+    for (const cell of result.cells) {
+      expect(cell.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: cell.nodeId });
+    }
   });
 
   it('reads tables.getProperties from nested tableProperties', () => {
@@ -10190,7 +11204,7 @@ describe('document-api adapter conformance', () => {
       autoFitMode: 'fixedWidth',
       styleOptions: {
         headerRow: true,
-        totalRow: false,
+        lastRow: false,
         bandedRows: true,
         bandedColumns: false,
       },
@@ -10249,6 +11263,9 @@ describe('document-api adapter conformance', () => {
       'tables.setCellPadding',
       'tables.setCellSpacing',
       'tables.clearCellSpacing',
+      'tables.applyStyle',
+      'tables.setBorders',
+      'tables.setTableOptions',
       'tables.insertCell',
       'tables.deleteCell',
       'tables.setDefaultStyle',
@@ -10289,13 +11306,13 @@ describe('document-api adapter conformance', () => {
     // tables.insertRow with tracked mode
     const insertRowResult = tablesInsertRowWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any,
+      { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any,
       { changeMode: 'tracked' },
     );
     expect(insertRowResult.success).toBe(true);
 
     // tables.deleteRow with tracked mode
-    const deleteRowResult = tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, {
+    const deleteRowResult = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
       changeMode: 'tracked',
     });
     expect(deleteRowResult.success).toBe(true);
@@ -10303,7 +11320,7 @@ describe('document-api adapter conformance', () => {
     // tables.insertColumn with tracked mode
     const insertColResult = tablesInsertColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+      { nodeId: 'table-1', columnIndex: 0, position: 'right' },
       { changeMode: 'tracked' },
     );
     expect(insertColResult.success).toBe(true);
@@ -10311,7 +11328,7 @@ describe('document-api adapter conformance', () => {
     // tables.deleteColumn with tracked mode
     const deleteColResult = tablesDeleteColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0 },
+      { nodeId: 'table-1', columnIndex: 0 },
       { changeMode: 'tracked' },
     );
     expect(deleteColResult.success).toBe(true);
@@ -10396,20 +11413,20 @@ describe('document-api adapter conformance', () => {
       op: 'tables.insertRow',
       ref: 'table-1',
       args: { rowIndex: 0, position: 'below' },
-      wrapperFn: (e) => tablesInsertRowWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any),
+      wrapperFn: (e) => tablesInsertRowWrapper(e, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any),
     },
     {
       op: 'tables.deleteRow',
       ref: 'table-1',
       args: { rowIndex: 0 },
-      wrapperFn: (e) => tablesDeleteRowWrapper(e, { tableNodeId: 'table-1', rowIndex: 0 } as any),
+      wrapperFn: (e) => tablesDeleteRowWrapper(e, { nodeId: 'table-1', rowIndex: 0 } as any),
     },
     {
       op: 'tables.setRowHeight',
       ref: 'table-1',
       args: { rowIndex: 0, heightPt: 20, rule: 'atLeast' },
       wrapperFn: (e) =>
-        tablesSetRowHeightWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any),
+        tablesSetRowHeightWrapper(e, { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any),
     },
     {
       op: 'tables.distributeRows',
@@ -10422,27 +11439,26 @@ describe('document-api adapter conformance', () => {
       ref: 'table-1',
       args: { rowIndex: 0, allowBreakAcrossPages: true },
       wrapperFn: (e) =>
-        tablesSetRowOptionsWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any),
+        tablesSetRowOptionsWrapper(e, { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any),
     },
     // Column ops
     {
       op: 'tables.insertColumn',
       ref: 'table-1',
       args: { columnIndex: 0, position: 'right' },
-      wrapperFn: (e) =>
-        tablesInsertColumnWrapper(e, { tableNodeId: 'table-1', columnIndex: 0, position: 'right' } as any),
+      wrapperFn: (e) => tablesInsertColumnWrapper(e, { nodeId: 'table-1', columnIndex: 0, position: 'right' } as any),
     },
     {
       op: 'tables.deleteColumn',
       ref: 'table-1',
       args: { columnIndex: 0 },
-      wrapperFn: (e) => tablesDeleteColumnWrapper(e, { tableNodeId: 'table-1', columnIndex: 0 } as any),
+      wrapperFn: (e) => tablesDeleteColumnWrapper(e, { nodeId: 'table-1', columnIndex: 0 } as any),
     },
     {
       op: 'tables.setColumnWidth',
       ref: 'table-1',
       args: { columnIndex: 0, widthPt: 100 },
-      wrapperFn: (e) => tablesSetColumnWidthWrapper(e, { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 } as any),
+      wrapperFn: (e) => tablesSetColumnWidthWrapper(e, { nodeId: 'table-1', columnIndex: 0, widthPt: 100 } as any),
     },
     {
       op: 'tables.distributeColumns',
@@ -10469,7 +11485,7 @@ describe('document-api adapter conformance', () => {
       args: { start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
       wrapperFn: (e) =>
         tablesMergeCellsWrapper(e, {
-          tableNodeId: 'table-1',
+          nodeId: 'table-1',
           start: { rowIndex: 0, columnIndex: 0 },
           end: { rowIndex: 1, columnIndex: 1 },
         } as any),
@@ -10512,8 +11528,8 @@ describe('document-api adapter conformance', () => {
     {
       op: 'tables.split',
       ref: 'table-1',
-      args: { atRowIndex: 1 },
-      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', atRowIndex: 1 } as any),
+      args: { rowIndex: 1 },
+      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', rowIndex: 1 } as any),
     },
     {
       op: 'tables.convertToText',
@@ -10606,6 +11622,9 @@ describe('document-api adapter conformance', () => {
       args: {},
       wrapperFn: (e) => tablesClearCellSpacingWrapper(e, { nodeId: 'table-1' }),
     },
+    // Note: tables.applyStyle, tables.setBorders, tables.setTableOptions are
+    // intentionally excluded from parity tests — they are not yet in the
+    // step-op catalog and do not support mutations.apply (SD-2129 scope).
     // create.table (ref is a dummy target — executor ignores targets for create ops)
     {
       op: 'create.table',

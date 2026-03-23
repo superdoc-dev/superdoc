@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import {
   executeStylesApply,
   type StylesAdapter,
@@ -14,7 +14,7 @@ import { DocumentApiValidationError } from '../errors.js';
 
 function makeAdapter(receipt?: Partial<StylesApplyReceipt>): StylesAdapter {
   return {
-    apply: vi.fn(
+    apply: mock(
       (): StylesApplyReceipt => ({
         success: true,
         changed: true,

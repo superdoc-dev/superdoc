@@ -9,6 +9,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { TocSwitchConfig } from '@superdoc/document-api';
 import { parseTcInstruction } from '../../core/super-converter/field-references/shared/tc-switches.js';
 import { getHeadingLevel } from './node-address-resolver.js';
+import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 
 // ---------------------------------------------------------------------------
 // Source types
@@ -158,7 +159,7 @@ export interface EntryParagraphJson {
  * Each entry gets:
  * - Paragraph style: TOC{level}
  * - tocSourceId paragraph attribute (source heading/TC field's sdBlockId)
- * - Link mark with anchor pointing to source sdBlockId (when \h is set)
+ * - Link mark with anchor pointing to a `_Toc`-prefixed bookmark name (when \h is set)
  * - Page number placeholder "0" with tocPageNumber mark
  * - Separator: custom (\p switch) or default tab
  */
@@ -192,7 +193,7 @@ function buildEntryParagraph(source: TocSource, config: TocSwitchConfig): EntryP
       {
         type: 'link',
         attrs: {
-          anchor: source.sdBlockId,
+          anchor: generateTocBookmarkName(source.sdBlockId),
           rId: null,
           history: true,
         },

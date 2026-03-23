@@ -72,6 +72,10 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/converter/internal', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter') },
     { find: '@superdoc/super-editor/converter', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter/SuperConverter.js') },
     { find: '@superdoc/super-editor/editor', replacement: path.resolve(__dirname, '../super-editor/src/core/Editor.ts') },
+    { find: '@superdoc/super-editor/blank-docx', replacement: path.resolve(__dirname, '../super-editor/src/core/blank-docx.ts') },
+    { find: '@superdoc/super-editor/document-api-adapters', replacement: path.resolve(__dirname, '../super-editor/src/document-api-adapters/index.ts') },
+    { find: '@superdoc/super-editor/markdown', replacement: path.resolve(__dirname, '../super-editor/src/core/helpers/markdown/index.ts') },
+    { find: '@superdoc/super-editor/parts-runtime', replacement: path.resolve(__dirname, '../super-editor/src/core/parts/init-parts-runtime.ts') },
     { find: '@superdoc/super-editor/super-input', replacement: path.resolve(__dirname, '../super-editor/src/components/SuperInput.vue') },
     { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/core/components/AIWriter.vue') },
     { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
@@ -102,6 +106,11 @@ export default defineConfig(({ mode, command }) => {
     !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
       outDir: 'dist',
+      // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
+      // tree, but we do not use this build as the authoritative type-check gate.
+      // Keep declaration generation enabled and silence the plugin's diagnostic
+      // logger so build:es stays clean while postbuild validates emitted entries.
+      logLevel: 'silent',
     }),
     copy({
       targets: [

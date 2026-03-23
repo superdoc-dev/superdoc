@@ -1,4 +1,6 @@
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
+import { generateParagraphProperties } from '../../p/helpers/generate-paragraph-properties.js';
+import { translator as pTranslator } from '../../p/index.js';
 
 /**
  * Translate a document part object node to its XML representation.
@@ -27,7 +29,41 @@ export function translateDocumentPartObj(params) {
     elements: nodeElements,
   };
 
-  return result;
+  if (!attrs.wrapperParagraph) {
+    return result;
+  }
+
+  return wrapDocumentPartInParagraph(result, attrs.wrapperParagraph);
+}
+
+function wrapDocumentPartInParagraph(sdtNode, wrapperParagraphAttrs) {
+  const elements = [];
+  const pPr = generateParagraphProperties({
+    node: {
+      type: 'paragraph',
+      attrs: wrapperParagraphAttrs,
+    },
+  });
+
+  if (pPr) {
+    elements.push(pPr);
+  }
+  elements.push(sdtNode);
+
+  const attributes = {
+    ...extractRawParagraphXmlAttributes(wrapperParagraphAttrs),
+    ...pTranslator.decodeAttributes({ node: { attrs: wrapperParagraphAttrs } }),
+  };
+
+  return {
+    name: 'w:p',
+    elements,
+    ...(Object.keys(attributes).length ? { attributes } : {}),
+  };
+}
+
+function extractRawParagraphXmlAttributes(attrs = {}) {
+  return Object.fromEntries(Object.entries(attrs).filter(([key]) => key.includes(':')));
 }
 
 function sanitizeId(id) {

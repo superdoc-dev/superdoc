@@ -311,10 +311,11 @@ superdoc info ./contract.docx --pretty
 
 ## Input payload flags
 
-- `--query-json`, `--query-file`
-- `--address-json`, `--address-file`
-- `--target-json`, `--target-file`
-- `--at-json`, `--at-file` (for `create paragraph`)
+- `--query-json`, `--query-file` (`find`, `lists list`)
+- `--address-json`, `--address-file` (`get-node`, `lists get`)
+- `--target-json` (mutation commands — no `--target-file` counterpart; use flat flags `--block-id`/`--start`/`--end` as alternative)
+- `--input-json`, `--input-file` (`call`, `create paragraph`)
+- `--at-json`, `--at-file` (`create paragraph`)
 
 ## Stdin support
 
@@ -367,7 +368,7 @@ Error:
 
 ## Part of SuperDoc
 
-This CLI is part of the [SuperDoc](https://github.com/superdoc-dev/superdoc) project — an open source document editor bringing Microsoft Word to the web. Use it alongside the editor, or standalone for document automation.
+This CLI is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

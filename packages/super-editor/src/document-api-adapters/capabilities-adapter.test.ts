@@ -370,7 +370,18 @@ describe('getDocumentApiCapabilities', () => {
             underline: { create: vi.fn(() => ({ type: 'underline' })) },
             strike: { create: vi.fn(() => ({ type: 'strike' })) },
             highlight: { create: vi.fn(() => ({ type: 'highlight' })) },
-            textStyle: { create: vi.fn(() => ({ type: 'textStyle' })) },
+            textStyle: {
+              create: vi.fn(() => ({ type: 'textStyle' })),
+              attrs: {
+                color: { default: null },
+                fontSize: { default: null },
+                fontFamily: { default: null },
+                letterSpacing: { default: null },
+                vertAlign: { default: null },
+                position: { default: null },
+                textTransform: { default: null },
+              },
+            },
             [TrackFormatMarkName]: { create: vi.fn(() => ({ type: TrackFormatMarkName })) },
             ...overrides.marks,
           },
@@ -399,6 +410,33 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.format.supportedInlineProperties.fontSize.available).toBe(false);
       expect(capabilities.format.supportedInlineProperties.color.available).toBe(false);
       expect(capabilities.format.supportedInlineProperties.bold.available).toBe(true);
+    });
+
+    it('reports a textStyle-backed property as unavailable when its attr is missing from textStyle (SD-2074)', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({
+          marks: {
+            textStyle: {
+              create: vi.fn(() => ({ type: 'textStyle' })),
+              attrs: {
+                color: { default: null },
+                fontSize: { default: null },
+                fontFamily: { default: null },
+                vertAlign: { default: null },
+                position: { default: null },
+                textTransform: { default: null },
+                // letterSpacing deliberately omitted — simulates missing LetterSpacing extension
+              },
+            },
+          },
+        }),
+      );
+      expect(capabilities.format.supportedInlineProperties.letterSpacing.available).toBe(false);
+      expect(capabilities.operations['format.letterSpacing'].available).toBe(false);
+      expect(capabilities.operations['format.letterSpacing'].reasons).toContain('OPERATION_UNAVAILABLE');
+      // Other textStyle-backed properties remain available
+      expect(capabilities.format.supportedInlineProperties.color.available).toBe(true);
+      expect(capabilities.format.supportedInlineProperties.fontSize.available).toBe(true);
     });
 
     it('reports run-attribute properties as unavailable when the run node is missing', () => {

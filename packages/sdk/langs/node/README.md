@@ -36,20 +36,26 @@ import { createSuperDocClient } from '@superdoc-dev/sdk';
 const client = createSuperDocClient();
 await client.connect();
 
-await client.doc.open({ doc: './contract.docx' });
+const doc = await client.open({ doc: './contract.docx' });
 
-const info = await client.doc.info();
+const info = await doc.info();
 console.log(info.counts);
 
-const results = await client.doc.find({ type: 'text', pattern: 'termination' });
-
-await client.doc.replace({
-  target: results.items[0].context.textRanges[0],
-  text: 'expiration',
+const match = await doc.query.match({
+  select: { type: 'text', pattern: 'termination' },
+  require: 'first',
 });
 
-await client.doc.save({ inPlace: true });
-await client.doc.close();
+const target = match.items?.[0]?.target;
+if (target) {
+  await doc.replace({
+    target,
+    text: 'expiration',
+  });
+}
+
+await doc.save({ inPlace: true });
+await doc.close();
 await client.dispose();
 ```
 
@@ -65,59 +71,70 @@ await client.connect();    // start the host process
 await client.dispose();    // shut down gracefully
 ```
 
-All document operations are on `client.doc`:
+Open documents from the client, then operate on the returned handle:
 
 ```ts
-client.doc.open(params)
-client.doc.find(params)
-client.doc.insert(params)
-// ... etc
+const doc = await client.open(params)
+await doc.find(params)
+await doc.insert(params)
+await doc.save(params)
+await doc.close(params)
 ```
 
 ### Operations
 
 | Category | Operations |
 |----------|-----------|
-| **Query** | `find`, `getNode`, `getNodeById`, `info` |
+| **Query** | `find`, `query.match`, `getNode`, `getNodeById`, `info` |
 | **Mutation** | `insert`, `replace`, `delete` |
-| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
+| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strike` |
 | **Create** | `create.paragraph` |
 | **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.setLevel`, `lists.setValue`, `lists.continuePrevious`, `lists.setLevelRestart`, `lists.convertToText`, `lists.canJoin`, `lists.canContinuePrevious` |
 | **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
 | **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
-| **Lifecycle** | `open`, `save`, `close` |
-| **Session** | `session.list`, `session.save`, `session.close`, `session.setDefault` |
-| **Introspection** | `status`, `describe`, `describeCommand` |
+| **Lifecycle** | `client.open`, `doc.save`, `doc.close` |
+| **Client** | `client.describe`, `client.describeCommand` |
 
 ### AI Tool Integration
 
-The SDK includes built-in support for exposing document operations as AI tool definitions:
+The SDK includes built-in support for exposing grouped intent tools as AI tool definitions:
 
 ```ts
-import { chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+import {
+  chooseTools,
+  dispatchSuperDocTool,
+  getToolCatalog,
+} from '@superdoc-dev/sdk';
 
-// Get tool definitions for your AI provider, filtered by group
-const { tools, selected } = await chooseTools({
+// Get the full grouped tool set for your AI provider
+const { tools, meta } = await chooseTools({
   provider: 'openai',  // 'openai' | 'anthropic' | 'vercel' | 'generic'
-  groups: ['core', 'format', 'comments'],  // core is always auto-included
 });
 
+// Optional: inspect the generated tool catalog
+const catalog = await getToolCatalog();
+
 // Dispatch a tool call from the AI model
-const result = await dispatchSuperDocTool(client, toolName, args);
+const doc = await client.open({ doc: './contract.docx' });
+const result = await dispatchSuperDocTool(doc, toolName, args);
 ```
+
+The current catalog contains 9 grouped tools:
+`superdoc_get_content`, `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`, `superdoc_track_changes`, `superdoc_search`, and `superdoc_mutations`.
+
+Multi-action tools use an `action` field to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
 
 | Function | Description |
 |----------|-------------|
-| `chooseTools(input)` | Select tools filtered by group for a provider |
+| `chooseTools(input)` | Load grouped tool definitions for a provider |
 | `listTools(provider)` | List all tool definitions for a provider |
-| `dispatchSuperDocTool(client, toolName, args)` | Execute a tool call against a client |
-| `resolveToolOperation(toolName)` | Map a tool name to its operation ID |
-| `getToolCatalog()` | Load the full tool catalog |
-| `getAvailableGroups()` | List all available tool groups |
+| `dispatchSuperDocTool(doc, toolName, args)` | Execute a tool call against a bound document handle |
+| `getToolCatalog()` | Load the grouped tool catalog with metadata |
+| `getSystemPrompt()` | Read the bundled system prompt for intent tools |
 
 ## Part of SuperDoc
 
-This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — an open source document editor bringing Microsoft Word to the web.
+This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

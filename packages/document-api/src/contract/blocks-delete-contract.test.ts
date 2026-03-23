@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { executeBlocksDelete, type BlocksAdapter } from '../blocks/blocks.js';
 import type { BlocksDeleteResult } from '../types/blocks.types.js';
 import { DocumentApiValidationError } from '../errors.js';

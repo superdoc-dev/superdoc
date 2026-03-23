@@ -71,6 +71,7 @@ perf-baseline-results.json
 .claude
 plans/
 
+tests/layout-snapshots
 tests/layout/candidate/
 tests/layout/reference/
 tests/layout/reports/
@@ -89,6 +90,8 @@ venv/
 packages/sdk/langs/python/platforms/**/*.egg-info/
 # Generated python packaging metadata (do not commit)
 packages/sdk/langs/python/**/*.egg-info/
+# Generated Node SDK platform binaries staged during release/publish
+packages/sdk/langs/node/platforms/sdk-*/bin/
 
 # Local runtime state for collaboration examples
 examples/collaboration/fastapi/.superdoc-state/
@@ -102,3 +105,5 @@ packages/sdk/langs/python/superdoc/generated/
 packages/sdk/tools/*.json
 # Note: apps/docs/document-api/reference/ stays committed because Mintlify
 # deploys directly from git with no pre-build hook support.
+
+.playwright-cli/

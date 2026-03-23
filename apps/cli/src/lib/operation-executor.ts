@@ -1,4 +1,4 @@
-import { getActiveSessionId } from './context';
+import { resolveSessionId } from './context';
 import { CliError } from './errors';
 import { isRecord } from './guards';
 import { hasNonEmptyString } from './input-readers';
@@ -172,10 +172,27 @@ async function preflightCallContext(
     return;
   }
 
-  const activeSessionId = await getActiveSessionId();
-  if (!hasNonEmptyString(activeSessionId)) {
-    throw new CliError('NO_ACTIVE_DOCUMENT', `call: ${operationId} requires an active session or input.sessionId.`);
+  // Delegates to the centralized resolver: host mode hard-fails without an
+  // explicit session id; oneshot mode falls back to the active-session file.
+  await resolveSessionId(undefined, context.executionMode);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy input normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps legacy parameter names to their canonical replacements before schema
+ * validation. Keeps backward compat for both wrapper flags and `call --input-json`.
+ */
+function normalizeLegacyInput(operationId: string, input: Record<string, unknown>): Record<string, unknown> {
+  // SD-2132: tables.split renamed atRowIndex → rowIndex.
+  if (operationId === 'doc.tables.split' && input.atRowIndex !== undefined) {
+    const { atRowIndex, ...rest } = input;
+    // When both are present, prefer the canonical rowIndex; otherwise migrate.
+    return rest.rowIndex !== undefined ? rest : { ...rest, rowIndex: atRowIndex };
   }
+  return input;
 }
 
 export async function executeOperation(request: ExecuteOperationRequest): Promise<CommandExecution> {
@@ -209,6 +226,7 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
     input = (pruneUndefinedDeep(request.input) ?? {}) as Record<string, unknown>;
   }
 
+  input = normalizeLegacyInput(request.operationId, input);
   validateOperationInputData(request.operationId, input, commandName);
   await preflightCallContext(request.operationId, input, baseContext);
   const effectiveContext = applySessionInputToContext(baseContext, input);

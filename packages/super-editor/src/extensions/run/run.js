@@ -1,6 +1,7 @@
 // @ts-nocheck
 
-import { Attribute, OxmlNode } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
+import { OxmlNode } from '@core/OxmlNode.js';
 import { splitRunToParagraph, splitRunAtCursor } from './commands/index.js';
 import { cleanupEmptyRunsPlugin } from './cleanupEmptyRunsPlugin.js';
 import { wrapTextInRunsPlugin } from './wrapTextInRunsPlugin.js';

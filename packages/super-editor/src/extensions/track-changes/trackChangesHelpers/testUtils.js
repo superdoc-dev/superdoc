@@ -17,3 +17,21 @@ export function findTextPos(docNode, exactText) {
   });
   return found;
 }
+
+/**
+ * Find the start and end positions of the first paragraph node in a document.
+ * @param {import('prosemirror-model').Node} doc - Document node to search
+ * @returns {{ paraStart: number, paraEnd: number }}
+ */
+export function findFirstParagraphRange(doc) {
+  let paraStart = null;
+  let paraEnd = null;
+  doc.forEach((node, offset) => {
+    if (paraStart === null && node.type.name === 'paragraph') {
+      paraStart = offset;
+      paraEnd = offset + node.nodeSize;
+    }
+  });
+  if (paraStart === null) throw new Error('No paragraph found');
+  return { paraStart, paraEnd };
+}

@@ -13,6 +13,11 @@ vi.mock('./../../../../v2/importer/markImporter.js', () => ({
   parseMarks: vi.fn(() => []),
 }));
 
+vi.mock('../build-complex-field-runs.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return actual;
+});
+
 describe('sd:totalPageNumber translator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,8 +60,25 @@ describe('sd:totalPageNumber translator', () => {
         type: 'total-page-number',
         attrs: {
           marksAsAttrs: marks,
+          importedCachedText: null,
         },
       });
+    });
+
+    it('preserves importedCachedText from preprocessor attributes', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+
+      const result = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: { importedCachedText: '5' },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(result.attrs.importedCachedText).toBe('5');
     });
 
     it('falls back to an empty rPr object when run properties are missing', () => {
@@ -75,101 +97,89 @@ describe('sd:totalPageNumber translator', () => {
   });
 
   describe('decode', () => {
-    it('decodes a total-page-number node back into the NUMPAGES field structure', () => {
-      const processedMarks = [{ name: 'w:u' }];
-      vi.mocked(processOutputMarks).mockReturnValue(processedMarks);
+    it('marks NUMPAGES dirty when no cache map is provided (non-paginated)', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([{ name: 'w:u' }]);
 
       const node = {
         type: 'total-page-number',
-        attrs: {
-          marksAsAttrs: [{ type: 'underline' }],
-        },
+        attrs: { marksAsAttrs: [{ type: 'underline' }] },
+        content: [{ type: 'text', text: '5' }],
       };
 
       const result = config.decode({ node });
 
-      expect(processOutputMarks).toHaveBeenCalledTimes(1);
-      expect(processOutputMarks).toHaveBeenCalledWith(node.attrs.marksAsAttrs);
-      expect(result).toEqual([
-        {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:rPr',
-              elements: processedMarks,
-            },
-            {
-              name: 'w:fldChar',
-              attributes: {
-                'w:fldCharType': 'begin',
-              },
-            },
-          ],
-        },
-        {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:rPr',
-              elements: processedMarks,
-            },
-            {
-              name: 'w:instrText',
-              attributes: {
-                'xml:space': 'preserve',
-              },
-              elements: [
-                {
-                  type: 'text',
-                  text: ' NUMPAGES',
-                },
-              ],
-            },
-          ],
-        },
-        {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:rPr',
-              elements: processedMarks,
-            },
-            {
-              name: 'w:fldChar',
-              attributes: {
-                'w:fldCharType': 'separate',
-              },
-            },
-          ],
-        },
-        {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:rPr',
-              elements: processedMarks,
-            },
-            {
-              name: 'w:fldChar',
-              attributes: {
-                'w:fldCharType': 'end',
-              },
-            },
-          ],
-        },
-      ]);
+      expect(result).toHaveLength(5);
+      expect(result[0].elements[1].attributes).toEqual({
+        'w:fldCharType': 'begin',
+        'w:dirty': 'true',
+      });
+      // Cached text from node content
+      expect(result[3].elements[1].elements[0].text).toBe('5');
     });
 
-    it('passes an empty marks array to processOutputMarks when marks are missing', () => {
-      config.decode({
+    it('omits w:dirty when cache map has a fresh NUMPAGES value (paginated)', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const cacheMap = new Map([['NUMPAGES', '12']]);
+      const node = {
+        type: 'total-page-number',
+        attrs: {},
+        content: [{ type: 'text', text: '5' }],
+      };
+
+      const result = config.decode({ node, statFieldCacheMap: cacheMap });
+
+      expect(result).toHaveLength(5);
+      // Begin run should NOT have w:dirty
+      expect(result[0].elements[1].attributes).toEqual({
+        'w:fldCharType': 'begin',
+      });
+      // Cached text should come from the cache map, not node content
+      expect(result[3].elements[1].elements[0].text).toBe('12');
+    });
+
+    it('falls back to resolvedText when cache map is absent', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const node = {
+        type: 'total-page-number',
+        attrs: { resolvedText: '8', importedCachedText: '3' },
+      };
+
+      const result = config.decode({ node });
+
+      // resolvedText takes priority over importedCachedText
+      expect(result[3].elements[1].elements[0].text).toBe('8');
+    });
+
+    it('falls back to importedCachedText when no resolvedText or cache map', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const node = {
+        type: 'total-page-number',
+        attrs: { importedCachedText: '3' },
+      };
+
+      const result = config.decode({ node });
+
+      expect(result[3].elements[1].elements[0].text).toBe('3');
+    });
+
+    it('produces a valid 5-run structure with empty text when all fallbacks are empty', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const result = config.decode({
         node: {
           type: 'total-page-number',
           attrs: {},
         },
       });
 
-      expect(processOutputMarks).toHaveBeenCalledTimes(1);
-      expect(processOutputMarks).toHaveBeenCalledWith([]);
+      expect(result).toHaveLength(5);
+      expect(result[0].elements[1].attributes['w:fldCharType']).toBe('begin');
+      expect(result[3].elements[1].name).toBe('w:t');
+      expect(result[3].elements[1].elements[0].text).toBe('');
+      expect(result[4].elements[1].attributes['w:fldCharType']).toBe('end');
     });
   });
 });

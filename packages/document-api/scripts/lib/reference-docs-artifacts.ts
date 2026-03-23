@@ -319,6 +319,38 @@ function collectConstDiscriminators(
   return discriminators;
 }
 
+function hasTopLevelUnion(schema: JsonSchema): boolean {
+  return (
+    (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) || (Array.isArray(schema.anyOf) && schema.anyOf.length > 0)
+  );
+}
+
+function preferredDiscriminator(
+  discriminators: Array<{ path: string; value: unknown }>,
+): { path: string; value: unknown } | undefined {
+  if (discriminators.length === 0) return undefined;
+
+  const priorities = [/^success$/u, /(^|\.)nodeType$/u, /(^|\.)(type|kind|mode|channel)$/u];
+  for (const pattern of priorities) {
+    const match = discriminators.find((entry) => pattern.test(entry.path));
+    if (match) return match;
+  }
+
+  return discriminators[0];
+}
+
+function combineVariantTitles(parentTitle: string, childTitle?: string): string {
+  if (!childTitle) return parentTitle;
+
+  const parentMatch = /^Variant (\d+)(.*)$/u.exec(parentTitle);
+  const childMatch = /^Variant (\d+)(.*)$/u.exec(childTitle);
+  if (parentMatch && childMatch) {
+    return `Variant ${parentMatch[1]}.${childMatch[1]}${childMatch[2]}`;
+  }
+
+  return `${parentTitle} / ${childTitle}`;
+}
+
 /**
  * If `schema` contains an `allOf` array, merge all members' properties and
  * required fields into a single flat object schema. Recursively resolves
@@ -407,23 +439,69 @@ function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
   const { resolved } = resolveRef(schema, $defs);
   // Flatten allOf first — the merged schema may itself contain oneOf/anyOf.
   const flat = flattenAllOf(resolved, $defs);
+  const sharedProperties = (flat.properties as Record<string, JsonSchema> | undefined) ?? undefined;
+  const sharedRequired = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
 
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = flat[keyword];
     if (!Array.isArray(variants) || variants.length === 0) continue;
 
-    return variants.map((variant, index) => {
-      const variantSchema = resolveRef(variant as JsonSchema, $defs).resolved;
+    return variants.flatMap((variant, index) => {
+      const resolvedVariant = flattenAllOf(resolveRef(variant as JsonSchema, $defs).resolved, $defs);
+      const variantProperties = (resolvedVariant.properties as Record<string, JsonSchema> | undefined) ?? undefined;
+      const variantRequired = Array.isArray(resolvedVariant.required) ? (resolvedVariant.required as string[]) : [];
+      const variantRequiredSet = new Set<string>(variantRequired);
+      const hasOwnProperties = !!variantProperties && Object.keys(variantProperties).length > 0;
+      const hiddenFields = new Set<string>();
+      if (sharedProperties && !hasOwnProperties) {
+        for (let otherIndex = 0; otherIndex < variants.length; otherIndex++) {
+          if (otherIndex === index) continue;
+          const otherRequired = Array.isArray((variants[otherIndex] as JsonSchema).required)
+            ? ((variants[otherIndex] as JsonSchema).required as string[])
+            : [];
+          for (const field of otherRequired) {
+            if (!variantRequiredSet.has(field)) hiddenFields.add(field);
+          }
+        }
+      }
+      const visibleSharedProperties = sharedProperties
+        ? Object.fromEntries(Object.entries(sharedProperties).filter(([field]) => !hiddenFields.has(field)))
+        : undefined;
+      const mergedRequired = new Set<string>(variantRequired);
+      for (const field of sharedRequired) mergedRequired.add(field);
+      const variantSchema: JsonSchema =
+        visibleSharedProperties || variantProperties
+          ? {
+              ...resolvedVariant,
+              type: 'object',
+              properties: {
+                ...(visibleSharedProperties ?? {}),
+                ...(variantProperties ?? {}),
+              },
+              additionalProperties: resolvedVariant.additionalProperties ?? flat.additionalProperties ?? false,
+              ...(mergedRequired.size > 0 ? { required: [...mergedRequired] } : {}),
+            }
+          : resolvedVariant;
+      const variantOnlyRequired = variantRequired.filter((field) => !sharedRequired.has(field));
       const discriminators = collectConstDiscriminators(variantSchema, $defs);
-      const preferred =
-        discriminators.find((entry) => /(^|\.)(type|kind|mode|channel)$/u.test(entry.path)) ?? discriminators[0];
-      const label = preferred
-        ? `Variant ${index + 1} (${preferred.path}=${JSON.stringify(preferred.value)})`
-        : `Variant ${index + 1}`;
+      const preferred = preferredDiscriminator(discriminators);
+      const variantLabelSuffix = preferred
+        ? `${preferred.path}=${JSON.stringify(preferred.value)}`
+        : variantOnlyRequired.length > 0
+          ? `required: ${variantOnlyRequired.join(', ')}`
+          : undefined;
+      const label = variantLabelSuffix ? `Variant ${index + 1} (${variantLabelSuffix})` : `Variant ${index + 1}`;
+      if (hasTopLevelUnion(variantSchema)) {
+        return buildFieldSections(variantSchema, $defs).map((section) => ({
+          title: combineVariantTitles(label, section.title),
+          rows: section.rows,
+        }));
+      }
 
+      const rows = buildFieldRows(variantSchema, $defs);
       return {
         title: label,
-        rows: buildFieldRows(variantSchema, $defs),
+        rows,
       };
     });
   }
@@ -572,13 +650,41 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'object' && schema.properties) {
     const properties = schema.properties as Record<string, JsonSchema>;
     const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+
+    // When oneOf/anyOf is present, pick ONE variant and exclude properties
+    // that are exclusive to other variants. This prevents generating examples
+    // that violate the oneOf constraint (e.g., showing both target AND nodeId).
+    const excludedByVariant = new Set<string>();
     for (const keyword of ['oneOf', 'anyOf'] as const) {
       const variants = schema[keyword];
       if (!Array.isArray(variants) || variants.length === 0) continue;
-      const firstVariant = variants[0] as JsonSchema;
-      if (Array.isArray(firstVariant.required)) {
-        for (const requiredField of firstVariant.required as string[]) {
-          requiredSet.add(requiredField);
+
+      // Collect required fields from all variants
+      const allVariantRequired: string[][] = (variants as JsonSchema[]).map((v) =>
+        Array.isArray(v.required) ? (v.required as string[]) : [],
+      );
+
+      // Pick the simplest variant (fewest required fields).
+      // e.g., { required: ['nodeId'] } over { required: ['target'] }
+      let chosenIdx = -1;
+      for (let i = 0; i < allVariantRequired.length; i++) {
+        const reqs = allVariantRequired[i];
+        if (reqs.length === 0) continue;
+        if (chosenIdx === -1 || reqs.length < allVariantRequired[chosenIdx].length) {
+          chosenIdx = i;
+        }
+      }
+
+      if (chosenIdx >= 0) {
+        const chosenRequired = new Set(allVariantRequired[chosenIdx]);
+        for (const req of chosenRequired) requiredSet.add(req);
+
+        // Exclude properties required by OTHER variants but not the chosen one
+        for (let i = 0; i < allVariantRequired.length; i++) {
+          if (i === chosenIdx) continue;
+          for (const req of allVariantRequired[i]) {
+            if (!chosenRequired.has(req)) excludedByVariant.add(req);
+          }
         }
       }
       break;
@@ -586,9 +692,10 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
 
     const result: Record<string, unknown> = {};
     const keys = Object.keys(properties);
-    // Include required properties + up to 2 optional
+    // Include required properties + up to 2 optional (skip variant-excluded)
     let optionalCount = 0;
     for (const key of keys) {
+      if (excludedByVariant.has(key)) continue;
       if (requiredSet.has(key)) {
         result[key] = generateExample(properties[key], $defs, key, depth + 1);
       } else if (optionalCount < 2) {
@@ -640,6 +747,233 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   return {};
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function makeExampleBlockAddress(nodeType: string): Record<string, unknown> {
+  return {
+    kind: 'block',
+    nodeId: 'node-def456',
+    nodeType,
+  };
+}
+
+function normalizeExampleBlockAddress(input: unknown, fallbackNodeType: string): Record<string, unknown> {
+  if (!isObjectRecord(input)) {
+    return makeExampleBlockAddress(fallbackNodeType);
+  }
+
+  return {
+    kind: input.kind === 'block' ? 'block' : 'block',
+    nodeId: typeof input.nodeId === 'string' ? input.nodeId : 'node-def456',
+    nodeType: typeof input.nodeType === 'string' ? input.nodeType : fallbackNodeType,
+  };
+}
+
+function isTableReferenceOperation(operationId: ContractOperationSnapshot['operationId']): boolean {
+  return operationId === 'create.table' || operationId.startsWith('tables.');
+}
+
+function normalizeTableOperationInputExample(
+  operationId: ContractOperationSnapshot['operationId'],
+  input: unknown,
+): unknown {
+  if (!isTableReferenceOperation(operationId) || operationId === 'create.table' || !isObjectRecord(input)) {
+    return input;
+  }
+
+  const clone = structuredClone(input) as Record<string, unknown>;
+
+  if (isObjectRecord(clone.tableTarget)) {
+    clone.target = normalizeExampleBlockAddress(clone.tableTarget, 'table');
+    delete clone.tableTarget;
+    delete clone.tableNodeId;
+    delete clone.nodeId;
+    return clone;
+  }
+
+  if (isObjectRecord(clone.target)) {
+    clone.target = normalizeExampleBlockAddress(clone.target, 'table');
+    delete clone.nodeId;
+  }
+
+  return clone;
+}
+
+function normalizeTableOperationOutputExample(
+  operationId: ContractOperationSnapshot['operationId'],
+  output: unknown,
+): unknown {
+  if (!isTableReferenceOperation(operationId) || !isObjectRecord(output)) {
+    return output;
+  }
+
+  const clone = structuredClone(output) as Record<string, unknown>;
+  if (isObjectRecord(clone.table)) {
+    clone.table = makeExampleBlockAddress('table');
+  }
+  return clone;
+}
+
+function schemaHasTopLevelField(schema: JsonSchema, $defs: Defs, fieldName: string, depth = 0): boolean {
+  if (depth > 8) return false;
+
+  const { resolved } = resolveRef(schema, $defs);
+  const flat = flattenAllOf(resolved, $defs);
+  const properties = flat.properties as Record<string, JsonSchema> | undefined;
+  if (properties && Object.prototype.hasOwnProperty.call(properties, fieldName)) {
+    return true;
+  }
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = flat[keyword];
+    if (!Array.isArray(variants)) continue;
+    for (const variant of variants as JsonSchema[]) {
+      if (schemaHasTopLevelField(variant, $defs, fieldName, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function renderTableResultNote(operation: ContractOperationSnapshot, $defs: Defs): string {
+  if (
+    !isTableReferenceOperation(operation.operationId) ||
+    !schemaHasTopLevelField(operation.schemas.output, $defs, 'table')
+  ) {
+    return '';
+  }
+
+  if (operation.operationId === 'create.table') {
+    return `<Tip>
+On success, \`result.table\` is the created table address. Reuse \`result.table.nodeId\` for follow-up table operations in the same session.
+</Tip>`;
+  }
+
+  return `<Tip>
+When present, \`result.table\` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass \`result.table.nodeId\` to the next table operation instead of re-running \`find()\`. Destructive operations may omit \`table\`.
+</Tip>`;
+}
+
+function buildCapabilitiesOutputExample(snapshot: ReturnType<typeof buildContractSnapshot>): unknown {
+  const operation = snapshot.operations.find((entry) => entry.operationId === 'capabilities.get');
+  if (!operation) return {};
+
+  const generic = generateExample(operation.schemas.output, snapshot.$defs);
+  if (!isObjectRecord(generic)) return generic;
+
+  return {
+    ...generic,
+    global: {
+      trackChanges: { enabled: true },
+      comments: { enabled: true },
+      lists: { enabled: true },
+      dryRun: { enabled: true },
+      history: { enabled: true },
+    },
+    operations: Object.fromEntries(
+      snapshot.operations.map((entry) => [
+        entry.operationId,
+        {
+          available: true,
+          tracked: entry.metadata.supportsTrackedMode,
+          dryRun: entry.metadata.supportsDryRun,
+        },
+      ]),
+    ),
+  };
+}
+
+function getOperationExamples(
+  operation: ContractOperationSnapshot,
+  snapshot: ReturnType<typeof buildContractSnapshot>,
+): { input: unknown; output: unknown } {
+  const inputOverrides: Partial<Record<ContractOperationSnapshot['operationId'], unknown>> = {
+    insert: {
+      target: {
+        kind: 'block',
+        nodeId: 'node-def456',
+        nodeType: 'paragraph',
+      },
+      content: {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'example' }],
+      },
+      placement: 'after',
+    },
+    replace: {
+      target: {
+        kind: 'selection',
+        start: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          offset: 0,
+        },
+        end: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          offset: 12,
+        },
+      },
+      text: 'Hello, world.',
+    },
+  };
+
+  const outputOverrides: Partial<Record<ContractOperationSnapshot['operationId'], unknown>> = {
+    'capabilities.get': buildCapabilitiesOutputExample(snapshot),
+    insert: {
+      success: true,
+      evaluatedRevision: {
+        before: 'rev-001',
+        after: 'rev-002',
+      },
+      resolution: {
+        target: {
+          kind: 'block',
+          nodeId: 'node-def456',
+          nodeType: 'paragraph',
+        },
+        range: {
+          from: 42,
+          to: 42,
+        },
+      },
+    },
+    replace: {
+      success: true,
+      evaluatedRevision: {
+        before: 'rev-001',
+        after: 'rev-002',
+      },
+      resolution: {
+        target: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          range: {
+            start: 0,
+            end: 12,
+          },
+        },
+        range: {
+          from: 0,
+          to: 12,
+        },
+      },
+    },
+  };
+
+  const input = inputOverrides[operation.operationId] ?? generateExample(operation.schemas.input, snapshot.$defs);
+  const output = outputOverrides[operation.operationId] ?? generateExample(operation.schemas.output, snapshot.$defs);
+
+  return {
+    input: normalizeTableOperationInputExample(operation.operationId, input),
+    output: normalizeTableOperationOutputExample(operation.operationId, output),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Collapsible raw schema rendering
 // ---------------------------------------------------------------------------
@@ -689,7 +1023,11 @@ function buildOperationGroups(operations: ContractOperationSnapshot[]): Operatio
   });
 }
 
-function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs): string {
+function renderOperationPage(
+  operation: ContractOperationSnapshot,
+  snapshot: ReturnType<typeof buildContractSnapshot>,
+): string {
+  const $defs = snapshot.$defs;
   const title = operation.operationId;
   const metadata = operation.metadata;
   const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
@@ -699,9 +1037,9 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
 
   const inputFields = renderFieldSections(operation.schemas.input, $defs);
   const outputFields = renderFieldSections(operation.schemas.output, $defs);
+  const tableResultNote = renderTableResultNote(operation, $defs);
 
-  const inputExample = generateExample(operation.schemas.input, $defs);
-  const outputExample = generateExample(operation.schemas.output, $defs);
+  const { input: inputExample, output: outputExample } = getOperationExamples(operation, snapshot);
   const stepOpsSection = renderStepOpsSection(operation);
   const expectedResultSection = `${escapedExpectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
 
@@ -723,8 +1061,6 @@ description: ${yamlQuote(description)}
 ---
 
 ${GENERATED_MARKER}
-
-> Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
 
@@ -754,7 +1090,7 @@ ${stableStringify(inputExample)}
 
 ## Output fields
 
-${outputFields}
+${outputFields}${tableResultNote ? `\n\n${tableResultNote}` : ''}
 
 ### Example response
 
@@ -808,11 +1144,17 @@ description: ${group.definition.title} operation reference from the canonical Do
 
 ${GENERATED_MARKER}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 [Back to full reference](${toRelativeDocHref(group.pagePath, REFERENCE_INDEX_PATH)})
 
-${group.definition.description}
+${group.definition.description}${
+    group.definition.key === 'tables'
+      ? `
+
+<Tip>
+For non-destructive table-targeted mutations, reuse \`result.table.nodeId\` from the previous success result instead of re-running \`find()\`. Cell-targeted border/shading calls may still return a \`tableCell\` address.
+</Tip>`
+      : ''
+  }
 
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
@@ -877,7 +1219,6 @@ description: Operation reference from the canonical Document API contract.
 ${GENERATED_MARKER}
 
 This reference is sourced from \`packages/document-api/src/contract/*\`.
-Document API is currently alpha and subject to breaking changes.
 
 <style>{\`
   table th,
@@ -977,7 +1318,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
 
   const operationFiles = snapshot.operations.map((operation) => ({
     path: toOperationDocPath(operation.operationId),
-    content: renderOperationPage(operation, snapshot.$defs),
+    content: renderOperationPage(operation, snapshot),
   }));
 
   const groupFiles = groups.map((group) => ({

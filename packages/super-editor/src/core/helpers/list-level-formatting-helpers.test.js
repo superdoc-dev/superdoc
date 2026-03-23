@@ -406,6 +406,170 @@ describe('clearLevelOverride', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// materializeLevelFormattingOverride
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('materializeLevelFormattingOverride', () => {
+  it('moves lvlOverride formatting into the abstract while preserving startOverride', () => {
+    const editor = makeEditor();
+    const numDef = editor.converter.numbering.definitions[10];
+    numDef.elements.push({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [
+        { type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } },
+        makeLvlElement(0, {
+          lvlText: '(%1)',
+          alignment: 'center',
+          left: 1440,
+          hanging: 1080,
+          suff: 'tab',
+        }),
+      ],
+    });
+
+    const before = LevelFormattingHelpers.captureEffectiveStyle(editor, 1, 10, [0]);
+
+    const changed = LevelFormattingHelpers.materializeLevelFormattingOverride(editor, 1, 10, 0);
+
+    expect(changed).toBe(true);
+    expect(LevelFormattingHelpers.captureEffectiveStyle(editor, 1, 10, [0])).toEqual(before);
+
+    const lvl0 = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
+    expect(lvl0.elements.find((e) => e.name === 'w:lvlText').attributes['w:val']).toBe('(%1)');
+    expect(lvl0.elements.find((e) => e.name === 'w:lvlJc').attributes['w:val']).toBe('center');
+    const ind = lvl0.elements.find((e) => e.name === 'w:pPr').elements.find((e) => e.name === 'w:ind');
+    expect(ind.attributes['w:left']).toBe('1440');
+    expect(ind.attributes['w:hanging']).toBe('1080');
+
+    const remainingOverride = numDef.elements.find((e) => e.name === 'w:lvlOverride');
+    expect(remainingOverride).toBeDefined();
+    expect(remainingOverride.elements).toEqual([
+      { type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } },
+    ]);
+  });
+
+  it('returns false when only startOverride exists', () => {
+    const editor = makeEditor();
+    const numDef = editor.converter.numbering.definitions[10];
+    numDef.elements.push({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [{ type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } }],
+    });
+
+    const changed = LevelFormattingHelpers.materializeLevelFormattingOverride(editor, 1, 10, 0);
+
+    expect(changed).toBe(false);
+    expect(numDef.elements).toHaveLength(2);
+  });
+
+  it('preserves instance lvlRestart when materializing formatting overrides', () => {
+    const editor = makeEditor();
+    const numDef = editor.converter.numbering.definitions[10];
+    numDef.elements.push({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [
+        makeLvlElement(0, {
+          lvlText: '(%1)',
+        }),
+      ],
+    });
+    numDef.elements[1].elements[0].elements.push({
+      type: 'element',
+      name: 'w:lvlRestart',
+      attributes: { 'w:val': '1' },
+    });
+
+    const changed = LevelFormattingHelpers.materializeLevelFormattingOverride(editor, 1, 10, 0);
+
+    expect(changed).toBe(true);
+    const remainingOverride = numDef.elements.find((e) => e.name === 'w:lvlOverride');
+    expect(remainingOverride).toBeDefined();
+    expect(remainingOverride.elements).toEqual([
+      {
+        type: 'element',
+        name: 'w:lvl',
+        attributes: { 'w:ilvl': '0' },
+        elements: [{ type: 'element', name: 'w:lvlRestart', attributes: { 'w:val': '1' } }],
+      },
+    ]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// cloneAbstractIntoNum
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('cloneAbstractIntoNum', () => {
+  it('retargets the existing num to a cloned abstract and preserves startOverride', () => {
+    const editor = makeEditor();
+    const numDef = editor.converter.numbering.definitions[10];
+    numDef.elements.push({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [{ type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } }],
+    });
+
+    const { newAbstractNumId } = LevelFormattingHelpers.cloneAbstractIntoNum(editor, 1, 10);
+
+    expect(newAbstractNumId).toBe(2);
+    expect(
+      Object.keys(editor.converter.numbering.abstracts)
+        .map(Number)
+        .sort((a, b) => a - b),
+    ).toEqual([1, 2]);
+    expect(Object.keys(editor.converter.numbering.definitions).map(Number)).toEqual([10]);
+
+    const abstractNumIdEl = numDef.elements.find((e) => e.name === 'w:abstractNumId');
+    expect(abstractNumIdEl.attributes['w:val']).toBe('2');
+
+    const override = numDef.elements.find((e) => e.name === 'w:lvlOverride');
+    expect(override).toBeDefined();
+    expect(override.elements).toEqual([{ type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } }]);
+  });
+});
+
+describe('copySequenceStateOverrides', () => {
+  it('copies startOverride to the cloned num without restoring formatting overrides', () => {
+    const editor = makeEditor();
+    editor.converter.numbering.definitions[11] = {
+      type: 'element',
+      name: 'w:num',
+      attributes: { 'w:numId': '11' },
+      elements: [{ type: 'element', name: 'w:abstractNumId', attributes: { 'w:val': '1' } }],
+    };
+
+    const sourceNum = editor.converter.numbering.definitions[10];
+    sourceNum.elements.push({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [
+        { type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } },
+        makeLvlElement(0, { lvlText: '(%1)' }),
+      ],
+    });
+
+    const changed = LevelFormattingHelpers.copySequenceStateOverrides(editor, 10, 11, [0]);
+
+    expect(changed).toBe(true);
+    const targetOverride = editor.converter.numbering.definitions[11].elements.find((e) => e.name === 'w:lvlOverride');
+    expect(targetOverride).toEqual({
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': '0' },
+      elements: [{ type: 'element', name: 'w:startOverride', attributes: { 'w:val': '7' } }],
+    });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // captureTemplate
 // ──────────────────────────────────────────────────────────────────────────────
 

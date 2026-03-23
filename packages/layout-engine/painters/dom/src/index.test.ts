@@ -3546,6 +3546,61 @@ describe('DomPainter', () => {
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
     });
 
+    it('applies paragraph rtl direction inside footer content', () => {
+      const footerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'footer-rtl',
+        runs: [
+          { text: 'الإصدار', fontFamily: 'Arial', fontSize: 12 },
+          { text: ' ', fontFamily: 'Arial', fontSize: 12 },
+          { text: '<1.0>', fontFamily: 'Arial', fontSize: 12 },
+        ],
+        attrs: {
+          alignment: 'center',
+          direction: 'rtl',
+          rtl: true,
+        },
+      };
+      const footerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 5,
+            width: 120,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 10,
+          },
+        ],
+        totalHeight: 10,
+      };
+      const footerFragment = {
+        kind: 'para' as const,
+        blockId: 'footer-rtl',
+        fromLine: 0,
+        toLine: 1,
+        x: 0,
+        y: 0,
+        width: 200,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, footerBlock],
+        measures: [measure, footerMeasure],
+        footerProvider: () => ({ fragments: [footerFragment], height: 14 }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 2 }] }, mount);
+
+      const footerFragmentEl = mount.querySelector('.superdoc-page-footer .superdoc-fragment') as HTMLElement;
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.getAttribute('dir')).toBe('rtl');
+      expect(footerFragmentEl.style.direction).toBe('rtl');
+    });
+
     it('renders page-relative behindDoc header media at absolute page Y', () => {
       const headerImageBlock: FlowBlock = {
         kind: 'image',
@@ -3597,7 +3652,7 @@ describe('DomPainter', () => {
       expect(behindDocEl.style.left).toBe('42px');
     });
 
-    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+    it('renders footer page-relative media using normalized band-local coordinates', () => {
       const footerImageBlock: FlowBlock = {
         kind: 'image',
         id: 'footer-page-relative-img',
@@ -3613,6 +3668,8 @@ describe('DomPainter', () => {
         width: 20,
         height: 20,
       };
+      // fragment.y = 25 represents a footer-band-local coordinate
+      // (produced by normalizeFragmentsForRegion in the layout engine)
       const footerFragment: Fragment = {
         kind: 'image',
         blockId: 'footer-page-relative-img',
@@ -3623,7 +3680,7 @@ describe('DomPainter', () => {
         isAnchored: true,
       };
 
-      const footerOffset = 350;
+      const footerOffset = 400;
       const footerHeight = 80;
       const footerContentHeight = 30;
 
@@ -3638,15 +3695,31 @@ describe('DomPainter', () => {
         }),
       });
 
-      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+      painter.paint(
+        {
+          ...layout,
+          pages: [
+            {
+              ...layout.pages[0],
+              number: 1,
+              margins: { left: 0, right: 0, bottom: 100, footer: 20 },
+            },
+          ],
+        },
+        mount,
+      );
 
       const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
       const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
 
       expect(footerFragmentEl).toBeTruthy();
-      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      // Footer container is at effectiveOffset (400px)
+      expect(footerEl.style.top).toBe(`${footerOffset}px`);
+      // Fragment uses band-local Y + container offset from band origin
+      // The exact top depends on getDecorationAnchorPageOriginY, but the
+      // key invariant is that the absolute page position is correct.
       const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
-      expect(renderedPageTop).toBe(footerFragment.y);
+      expect(renderedPageTop).toBe(footerOffset + footerFragment.y);
     });
 
     it('preserves bold styling on page number tokens in DOM', () => {

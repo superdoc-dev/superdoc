@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { run } from '../index';
 import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
+import { writeListDocWithoutParaIds } from './unstable-list-fixture';
 
 type RunResult = {
   code: number;
@@ -41,6 +42,15 @@ type ErrorEnvelope = {
     message: string;
   };
 };
+
+type MutationReceiptEnvelope = SuccessEnvelope<{
+  receipt: {
+    success: boolean;
+    resolution?: {
+      target: TextRange;
+    };
+  };
+}>;
 
 const TEST_DIR = join(import.meta.dir, 'fixtures-cli');
 const STATE_DIR = join(TEST_DIR, 'state');
@@ -103,8 +113,8 @@ function hasPrettyProperties(node: unknown): boolean {
 }
 
 async function firstTextRange(args: string[]): Promise<TextRange> {
-  // SDM/1: find returns SDNodeResult with SDAddress. For text searches,
-  // the address is content-level (the containing block). We extract the
+  // SDM/1: find returns SDNodeResult with NodeAddress. For text searches,
+  // the address is block-level (the containing block). We extract the
   // blockId and find the pattern position within the node's text content.
   const result = await runCli(args);
   expect(result.code).toBe(0);
@@ -665,7 +675,7 @@ describe('superdoc CLI', () => {
     expect(envelope.error.message).toContain('query.include');
   });
 
-  test('find text queries return content addresses with node projections', async () => {
+  test('find text queries return block addresses with node projections', async () => {
     const result = await runCli([
       'find',
       SAMPLE_DOC,
@@ -682,7 +692,7 @@ describe('superdoc CLI', () => {
         result: {
           items?: Array<{
             node?: { kind?: string };
-            address?: { kind?: string; nodeId?: string };
+            address?: { kind?: string; nodeType?: string; nodeId?: string };
           }>;
         };
       }>
@@ -690,7 +700,8 @@ describe('superdoc CLI', () => {
 
     const firstItem = envelope.data.result.items?.[0];
     expect(firstItem).toBeDefined();
-    expect(firstItem?.address?.kind).toBe('content');
+    expect(firstItem?.address?.kind).toBe('block');
+    expect(firstItem?.address?.nodeType).toBeDefined();
     expect(firstItem?.address?.nodeId).toBeDefined();
     expect(firstItem?.node?.kind).toBeDefined();
   });
@@ -710,8 +721,7 @@ describe('superdoc CLI', () => {
     const address = findEnvelope.data.result.items[0]?.address;
     expect(address).toBeDefined();
 
-    // SDM/1 addresses use kind: 'content' for block-level nodes
-    // getNode still accepts the old NodeAddress format, so we construct one
+    // find returns NodeAddress with kind: 'block' for block-level nodes
     const nodeId = address?.nodeId as string;
     expect(nodeId).toBeDefined();
 
@@ -776,13 +786,13 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          items: Array<{ node: { kind: string }; address: { kind: string; nodeId: string } }>;
+          items: Array<{ node: { kind: string }; address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
     const firstItem = findEnvelope.data.result.items[0];
-    expect(firstItem.address.kind).toBe('content');
+    expect(firstItem.address.kind).toBe('block');
 
     const getByIdResult = await runCli([
       'get-node-by-id',
@@ -806,13 +816,13 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          items: Array<{ node: { kind: string }; address: { kind: string; nodeId: string } }>;
+          items: Array<{ node: { kind: string }; address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
     const firstItem = findEnvelope.data.result.items[0];
-    expect(firstItem.address.kind).toBe('content');
+    expect(firstItem.address.kind).toBe('block');
 
     const prettyResult = await runCli([
       'get-node-by-id',
@@ -947,19 +957,13 @@ describe('superdoc CLI', () => {
 
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli([
       'find',
@@ -1002,21 +1006,14 @@ describe('superdoc CLI', () => {
     ]);
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
 
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    const anchor = insertEnvelope.data.receipt.resolution?.target.anchor;
-    expect(anchor?.start.offset).toBe(0);
-    expect(anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli([
       'find',
@@ -1031,7 +1028,42 @@ describe('superdoc CLI', () => {
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
   });
 
-  test('insert with --block-id and --offset targets a specific block position', async () => {
+  test('insert with --block-id and --offset targets a specific block position (legacy compat)', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-legacy-offset-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-legacy-offset-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--offset',
+      '0',
+      '--value',
+      'CLI_BLOCKID_LEGACY_OFFSET_INSERT',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const verifyResult = await runCli([
+      'find',
+      insertOut,
+      '--type',
+      'text',
+      '--pattern',
+      'CLI_BLOCKID_LEGACY_OFFSET_INSERT',
+    ]);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id and --start/--end targets a specific block position', async () => {
     const insertSource = join(TEST_DIR, 'insert-blockid-offset-source.docx');
     const insertOut = join(TEST_DIR, 'insert-blockid-offset-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
@@ -1044,7 +1076,9 @@ describe('superdoc CLI', () => {
       insertSource,
       '--block-id',
       target.blockId,
-      '--offset',
+      '--start',
+      '0',
+      '--end',
       '0',
       '--value',
       'CLI_BLOCKID_OFFSET_INSERT_1597',
@@ -1067,7 +1101,7 @@ describe('superdoc CLI', () => {
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
   });
 
-  test('insert with --block-id alone defaults offset to 0', async () => {
+  test('insert with --block-id alone defaults start/end to 0', async () => {
     const insertSource = join(TEST_DIR, 'insert-blockid-only-source.docx');
     const insertOut = join(TEST_DIR, 'insert-blockid-only-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
@@ -1087,31 +1121,28 @@ describe('superdoc CLI', () => {
 
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     // blockId alone → offset defaults to 0 → collapsed range at start
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const resolvedTarget = insertEnvelope.data.receipt.resolution?.target;
+    expect(resolvedTarget?.kind).toBe('text');
+    expect(resolvedTarget?.range.start).toBe(0);
+    expect(resolvedTarget?.range.end).toBe(0);
   });
 
-  test('insert with --offset but no --block-id returns INVALID_ARGUMENT', async () => {
+  test('insert with --start but no --block-id returns validation error', async () => {
     const insertSource = join(TEST_DIR, 'insert-offset-no-blockid-source.docx');
     const insertOut = join(TEST_DIR, 'insert-offset-no-blockid-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
 
+    // --start/--end without --block-id are not normalized into a target.
+    // They pass through as unknown fields and are rejected by validation.
     const result = await runCli([
       'insert',
       insertSource,
-      '--offset',
+      '--start',
+      '5',
+      '--end',
       '5',
       '--value',
       'should-fail',
@@ -1120,9 +1151,6 @@ describe('superdoc CLI', () => {
     ]);
 
     expect(result.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(result);
-    expect(envelope.error.code).toBe('INVALID_ARGUMENT');
-    expect(envelope.error.message).toContain('Unknown field');
   });
 
   test('insert with --type html inserts HTML content into the document', async () => {
@@ -1227,6 +1255,55 @@ describe('superdoc CLI', () => {
       }>
     >(getResult);
     expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+  });
+
+  test('lists list/get keep list item addresses stable for docs without paraIds in stateless mode', async () => {
+    const source = join(TEST_DIR, 'lists-no-paraids-stateless.docx');
+    await writeListDocWithoutParaIds(source);
+
+    const address = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
+
+    const getResult = await runCli(['lists', 'get', source, '--address-json', JSON.stringify(address)]);
+    expect(getResult.code).toBe(0);
+
+    const getEnvelope = parseJsonOutput<
+      SuccessEnvelope<{
+        address: ListItemAddress;
+        item: { address: ListItemAddress };
+      }>
+    >(getResult);
+    expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+
+    const secondAddress = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
+    expect(secondAddress.nodeId).toBe(address.nodeId);
+  });
+
+  test('lists list/get keep list item addresses stable for docs without paraIds in stateful mode', async () => {
+    const source = join(TEST_DIR, 'lists-no-paraids-stateful.docx');
+    await writeListDocWithoutParaIds(source);
+
+    try {
+      const openResult = await runCli(['open', source]);
+      expect(openResult.code).toBe(0);
+
+      const address = await firstListItemAddress(['lists', 'list', '--limit', '1']);
+
+      const getResult = await runCli(['lists', 'get', '--address-json', JSON.stringify(address)]);
+      expect(getResult.code).toBe(0);
+
+      const getEnvelope = parseJsonOutput<
+        SuccessEnvelope<{
+          address: ListItemAddress;
+          item: { address: ListItemAddress };
+        }>
+      >(getResult);
+      expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+
+      const secondAddress = await firstListItemAddress(['lists', 'list', '--limit', '1']);
+      expect(secondAddress.nodeId).toBe(address.nodeId);
+    } finally {
+      await runCli(['close', '--discard']);
+    }
   });
 
   test('lists list pretty prints list rows', async () => {
@@ -1793,19 +1870,13 @@ describe('superdoc CLI', () => {
     const insertResult = await runCli(['insert', '--value', 'STATEFUL_DEFAULT_INSERT_1597']);
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli(['find', '--type', 'text', '--pattern', 'STATEFUL_DEFAULT_INSERT_1597']);
     expect(verifyResult.code).toBe(0);

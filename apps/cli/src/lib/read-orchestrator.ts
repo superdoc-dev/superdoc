@@ -169,5 +169,6 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
       }
     },
     context.sessionId,
+    context.executionMode,
   );
 }

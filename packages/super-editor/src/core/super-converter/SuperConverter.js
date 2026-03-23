@@ -20,6 +20,10 @@ import {
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
+import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
+import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
+import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../document-api-adapters/document-settings.js';
 import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
@@ -47,6 +51,7 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
+const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -620,7 +625,7 @@ class SuperConverter {
     return SuperConverter.getStoredCustomProperty(docx, 'SuperdocVersion');
   }
 
-  static setStoredSuperdocVersion(docx = this.convertedXml, version = __APP_VERSION__) {
+  static setStoredSuperdocVersion(docx = this.convertedXml, version = CURRENT_APP_VERSION) {
     return SuperConverter.setStoredCustomProperty(docx, 'SuperdocVersion', version, false);
   }
 
@@ -1137,6 +1142,19 @@ class SuperConverter {
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );
 
+    // Compute the stat-field cache map once from the main body editor.
+    // This same map is reused for header/footer exports so all parts
+    // see document-level counts, not sub-editor-local counts.
+    let statFieldCacheMap;
+    try {
+      if (editor) {
+        statFieldCacheMap = refreshAllStatFields(editor);
+      }
+    } catch {
+      // Non-critical — translators will fall back to node attrs
+    }
+    this._currentStatFieldCacheMap = statFieldCacheMap;
+
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
@@ -1147,6 +1165,7 @@ class SuperConverter {
       editor,
       fieldsHighlightColor,
       preserveSdtWrappers,
+      statFieldCacheMap,
     });
 
     // Keep convertedXml's document part in sync with the current export tree
@@ -1213,6 +1232,7 @@ class SuperConverter {
     }
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
+    this._currentStatFieldCacheMap = undefined; // cleanup after export cycle
 
     // Update the rels table
     this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
@@ -1238,6 +1258,9 @@ class SuperConverter {
       SuperConverter.setStoredCustomProperty(this.convertedXml, 'DocumentGuid', this.documentGuid, true);
     }
 
+    // Flush document statistics into app.xml and settings.xml.
+    this.#exportStatFieldMetadata(editor);
+
     // Update the numbering.xml
     this.#exportNumberingFile(params);
 
@@ -1255,8 +1278,24 @@ class SuperConverter {
     isHeaderFooter = false,
     fieldsHighlightColor = null,
     preserveSdtWrappers = false,
+    statFieldCacheMap = undefined,
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
+
+    // Use the pre-computed cache map (from exportToDocx) when available.
+    // This ensures header/footer exports use main-body statistics, not
+    // sub-editor-local counts. Falls back to computing from the current
+    // editor for standalone calls.
+    let resolvedCacheMap = statFieldCacheMap ?? this._currentStatFieldCacheMap;
+    if (!resolvedCacheMap) {
+      try {
+        if (editor) {
+          resolvedCacheMap = refreshAllStatFields(editor);
+        }
+      } catch {
+        // Non-critical — translators will fall back to node attrs
+      }
+    }
 
     const [result, params] = exportSchemaToJson({
       node: data,
@@ -1275,6 +1314,7 @@ class SuperConverter {
       isHeaderFooter,
       fieldsHighlightColor,
       preserveSdtWrappers,
+      statFieldCacheMap: resolvedCacheMap,
     });
 
     return { result, params };
@@ -1282,6 +1322,82 @@ class SuperConverter {
 
   getBibliographyPartExportPaths() {
     return getBibliographyPartExportPaths(this.bibliographyPart);
+  }
+
+  /**
+   * Writes document-statistic metadata into docProps/app.xml and
+   * word/settings.xml as part of the export pipeline.
+   *
+   * Only upserts targeted elements — all unrelated metadata is preserved.
+   */
+  #exportStatFieldMetadata(editor) {
+    if (!editor) return;
+
+    try {
+      // docProps/app.xml is document-scoped metadata. When export runs from a
+      // linked child editor (for example a header/footer editor), compute the
+      // statistics from the main body editor so package-level counts stay
+      // aligned with Word's document-level stat-field semantics.
+      const statsEditor = resolveMainBodyEditor(editor);
+      const stats = getWordStatistics(statsEditor);
+      writeAppStatistics(this.convertedXml, stats);
+
+      // Only set w:updateFields when the document actually contains a
+      // total-page-number node AND pagination is unavailable. This is the
+      // only scenario where the cached NUMPAGES result is definitively stale.
+      // Setting w:updateFields unconditionally would cause Word to recalculate
+      // ALL fields on open (TOC, cross-references, etc.) — a side effect the
+      // plan explicitly warns against.
+      const settingsPart = this.convertedXml['word/settings.xml'];
+      if (settingsPart && stats.pages == null) {
+        const hasNumPagesNode = this.#anyPartContainsNodeType('total-page-number', editor);
+        if (hasNumPagesNode) {
+          const settingsRoot = ensureSettingsRoot(settingsPart);
+          if (!hasUpdateFields(settingsRoot)) {
+            setUpdateFields(settingsRoot, true);
+          }
+        }
+      }
+    } catch {
+      // Non-critical — export should not fail if stats cannot be computed
+    }
+  }
+
+  /**
+   * Checks whether any document part (body + all header/footer editors)
+   * contains at least one node of the given type.
+   */
+  #anyPartContainsNodeType(typeName, mainEditor) {
+    // Check main body
+    if (mainEditor && this.#docContainsNodeType(mainEditor.state.doc, typeName)) {
+      return true;
+    }
+    // Check all header editors
+    for (const entry of this.headerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    // Check all footer editors
+    for (const entry of this.footerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #docContainsNodeType(doc, typeName) {
+    let found = false;
+    doc.descendants((node) => {
+      if (found) return false;
+      if (node.type.name === typeName) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
   }
 
   #exportNumberingFile() {
@@ -1573,152 +1689,6 @@ class SuperConverter {
       converter: this,
       numbering: this.numbering,
     });
-  }
-
-  /**
-   * Creates a default empty header for the specified variant.
-   *
-   * This method programmatically creates a new header section with an empty ProseMirror
-   * document. The header is added to the converter's data structures and will be included
-   * in subsequent DOCX exports.
-   *
-   * @param {('default' | 'first' | 'even' | 'odd')} variant - The header variant to create
-   * @returns {string} The relationship ID of the created header
-   *
-   * @throws {Error} If variant is invalid or header already exists for this variant
-   *
-   * @example
-   * ```javascript
-   * const headerId = converter.createDefaultHeader('default');
-   * // headerId: 'rId-header-default'
-   * // converter.headers['rId-header-default'] contains empty PM doc
-   * // converter.headerIds.default === 'rId-header-default'
-   * ```
-   */
-  createDefaultHeader(variant = 'default') {
-    // Validate variant type
-    if (typeof variant !== 'string') {
-      throw new TypeError(`variant must be a string, received ${typeof variant}`);
-    }
-
-    // Validate variant value
-    const validVariants = ['default', 'first', 'even', 'odd'];
-    if (!validVariants.includes(variant)) {
-      throw new Error(`Invalid header variant: ${variant}. Must be one of: ${validVariants.join(', ')}`);
-    }
-
-    // Check if header already exists for this variant
-    if (this.headerIds[variant]) {
-      console.warn(`[SuperConverter] Header already exists for variant '${variant}': ${this.headerIds[variant]}`);
-      return this.headerIds[variant];
-    }
-
-    // Generate relationship ID
-    const rId = `rId-header-${variant}`;
-
-    // Create empty ProseMirror document
-    const emptyDoc = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [],
-        },
-      ],
-    };
-
-    // Add to headers map
-    this.headers[rId] = emptyDoc;
-
-    // Update headerIds for the variant
-    this.headerIds[variant] = rId;
-
-    // Add to ids array if it exists
-    if (!this.headerIds.ids) {
-      this.headerIds.ids = [];
-    }
-    if (!this.headerIds.ids.includes(rId)) {
-      this.headerIds.ids.push(rId);
-    }
-
-    this.headerFooterModified = true;
-    // Mark document as modified
-    this.documentModified = true;
-
-    return rId;
-  }
-
-  /**
-   * Creates a default empty footer for the specified variant.
-   *
-   * This method programmatically creates a new footer section with an empty ProseMirror
-   * document. The footer is added to the converter's data structures and will be included
-   * in subsequent DOCX exports.
-   *
-   * @param {('default' | 'first' | 'even' | 'odd')} variant - The footer variant to create
-   * @returns {string} The relationship ID of the created footer
-   *
-   * @throws {Error} If variant is invalid or footer already exists for this variant
-   *
-   * @example
-   * ```javascript
-   * const footerId = converter.createDefaultFooter('default');
-   * // footerId: 'rId-footer-default'
-   * // converter.footers['rId-footer-default'] contains empty PM doc
-   * // converter.footerIds.default === 'rId-footer-default'
-   * ```
-   */
-  createDefaultFooter(variant = 'default') {
-    // Validate variant type
-    if (typeof variant !== 'string') {
-      throw new TypeError(`variant must be a string, received ${typeof variant}`);
-    }
-
-    // Validate variant value
-    const validVariants = ['default', 'first', 'even', 'odd'];
-    if (!validVariants.includes(variant)) {
-      throw new Error(`Invalid footer variant: ${variant}. Must be one of: ${validVariants.join(', ')}`);
-    }
-
-    // Check if footer already exists for this variant
-    if (this.footerIds[variant]) {
-      console.warn(`[SuperConverter] Footer already exists for variant '${variant}': ${this.footerIds[variant]}`);
-      return this.footerIds[variant];
-    }
-
-    // Generate relationship ID
-    const rId = `rId-footer-${variant}`;
-
-    // Create empty ProseMirror document
-    const emptyDoc = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [],
-        },
-      ],
-    };
-
-    // Add to footers map
-    this.footers[rId] = emptyDoc;
-
-    // Update footerIds for the variant
-    this.footerIds[variant] = rId;
-
-    // Add to ids array if it exists
-    if (!this.footerIds.ids) {
-      this.footerIds.ids = [];
-    }
-    if (!this.footerIds.ids.includes(rId)) {
-      this.footerIds.ids.push(rId);
-    }
-
-    this.headerFooterModified = true;
-    // Mark document as modified
-    this.documentModified = true;
-
-    return rId;
   }
 
   // Deprecated methods for backward compatibility

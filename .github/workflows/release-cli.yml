@@ -9,6 +9,8 @@ on:
       - main
       - stable
     paths:
+      # Keep in sync with apps/cli/.releaserc.cjs includePaths (patch-commit-filter).
+      # Workflow paths trigger CI; includePaths control semantic-release commit analysis.
       - 'apps/cli/**'
       - 'packages/document-api/**'
       - 'packages/superdoc/**'
@@ -86,5 +88,6 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         working-directory: apps/cli
         run: pnpx semantic-release

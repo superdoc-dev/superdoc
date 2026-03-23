@@ -5,19 +5,22 @@
  * string from discovery APIs (`query.match`, `find`).
  */
 
-import type { SelectionTarget, DeleteBehavior } from '../types/address.js';
+import type { SelectionTarget, DeleteBehavior, TargetLocator } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { MutationOptions } from '../types/mutation-plan.types.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
+import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 // ---------------------------------------------------------------------------
 // Public input type
 // ---------------------------------------------------------------------------
 
-export interface DeleteInput {
+export type DeleteInput = TargetLocator & {
   /** Explicit selection target. Exactly one of `target` or `ref` is required. */
   target?: SelectionTarget;
   /** Mutation-ready ref from `query.match` or `find`. */
@@ -28,13 +31,15 @@ export interface DeleteInput {
    * - `'exact'`: delete only the exact resolved range.
    */
   behavior?: DeleteBehavior;
-}
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
+};
 
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
-const DELETE_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'behavior']);
+const DELETE_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'behavior', 'in']);
 const VALID_BEHAVIORS: ReadonlySet<string> = new Set(['selection', 'exact']);
 
 function validateDeleteInput(input: unknown): asserts input is DeleteInput {
@@ -43,6 +48,7 @@ function validateDeleteInput(input: unknown): asserts input is DeleteInput {
   }
 
   assertNoUnknownFields(input, DELETE_INPUT_ALLOWED_KEYS, 'delete');
+  validateStoryLocator(input.in, 'in');
 
   const { target, ref, behavior } = input;
 
@@ -71,8 +77,8 @@ function validateDeleteInput(input: unknown): asserts input is DeleteInput {
     });
   }
 
-  if (hasRef && typeof ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof ref !== 'string' || ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: ref,
     });
@@ -97,14 +103,9 @@ export function executeDelete(
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateDeleteInput(input);
+  const request = input.target
+    ? { kind: 'delete' as const, target: input.target, behavior: input.behavior ?? 'selection', in: input.in }
+    : { kind: 'delete' as const, ref: input.ref!, behavior: input.behavior ?? 'selection', in: input.in };
 
-  return adapter.execute(
-    {
-      kind: 'delete',
-      target: input.target,
-      ref: input.ref,
-      behavior: input.behavior ?? 'selection',
-    },
-    options,
-  );
+  return adapter.execute(request, normalizeMutationOptions(options));
 }

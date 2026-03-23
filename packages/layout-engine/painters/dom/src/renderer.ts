@@ -294,7 +294,7 @@ type PageDecorationPayload = {
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
-  headerId?: string;
+  headerFooterRefId?: string;
   sectionType?: string;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };
@@ -591,11 +591,25 @@ const LIST_MARKER_GAP = 8;
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-const COMMENT_EXTERNAL_COLOR = '#B1124B';
-const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
-const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
-const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
+import { cssToken } from './css-token.js';
+import type { CssToken } from './css-token.js';
+
+type CommentHighlightToken = CssToken;
+
+const COMMENT_HIGHLIGHT_EXTERNAL = cssToken('--sd-comments-highlight-external', '#B1124B40');
+const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE = cssToken('--sd-comments-highlight-external-active', '#B1124B66');
+const COMMENT_HIGHLIGHT_EXTERNAL_FADED = cssToken('--sd-comments-highlight-external-faded', '#B1124B20');
+const COMMENT_HIGHLIGHT_INTERNAL = cssToken('--sd-comments-highlight-internal', '#07838340');
+const COMMENT_HIGHLIGHT_INTERNAL_ACTIVE = cssToken('--sd-comments-highlight-internal-active', '#07838366');
+const COMMENT_HIGHLIGHT_INTERNAL_FADED = cssToken('--sd-comments-highlight-internal-faded', '#07838320');
+const COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-external-nested-border',
+  '#B1124B99',
+);
+const COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-internal-nested-border',
+  '#07838399',
+);
 
 type LinkRenderData = {
   href?: string;
@@ -2151,7 +2165,12 @@ export class DomPainter {
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
 
-  private isPageRelativeVerticalAnchorFragment(fragment: Fragment): boolean {
+  /**
+   * Check if an anchored fragment has vRelativeFrom === 'page'.
+   * Used to determine special Y positioning for page-relative anchored media
+   * in header/footer decoration sections.
+   */
+  private isPageRelativeAnchoredFragment(fragment: Fragment): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
@@ -2164,6 +2183,42 @@ export class DomPainter {
       return false;
     }
     return block.anchor?.vRelativeFrom === 'page';
+  }
+
+  /**
+   * Header/footer layout emits normalized anchor Y coordinates:
+   * - headers: local to the header container origin
+   * - footers: local to the top of the footer band (pageHeight - bottomMargin)
+   *
+   * Footer containers can grow upward when content overflows the reserved footer
+   * band, so their top edge is not always the same as the footer band origin.
+   * This helper returns the page-space origin that normalized anchor Y values
+   * are measured from.
+   */
+  private getDecorationAnchorPageOriginY(
+    pageEl: HTMLElement,
+    page: Page,
+    kind: 'header' | 'footer',
+    effectiveOffset: number,
+  ): number {
+    if (kind === 'header') {
+      return effectiveOffset;
+    }
+
+    const bottomMargin = page.margins?.bottom;
+    if (bottomMargin == null) {
+      return effectiveOffset;
+    }
+
+    const footnoteReserve = page.footnoteReserved ?? 0;
+    const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
+    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
+    const pageHeight =
+      page.size?.h ??
+      this.currentLayout?.pageSize?.h ??
+      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+
+    return Math.max(0, pageHeight - adjustedBottomMargin);
   }
 
   private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
@@ -2216,6 +2271,15 @@ export class DomPainter {
     // In OOXML, headers and footers can extend past their allocated margin space
     // into the body region, similar to how body content can have negative indents.
     container.style.overflow = 'visible';
+
+    // Footer page-relative anchors carry normalized Y coordinates (band-local,
+    // computed from real page geometry). Compute the page-space origin so the
+    // painter can convert them back to absolute page / container-local positions.
+    // Header page-relative anchors use raw inner-layout Y and are handled with
+    // the simpler effectiveOffset subtraction (unchanged from the baseline).
+    const footerAnchorPageOriginY =
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+    const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container
     // Fragments are absolutely positioned, so we need to adjust their y values
@@ -2280,12 +2344,19 @@ export class DomPainter {
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
       const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
-      // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
-      // container offsets would shift them twice and can push header art into body content.
-      const pageY = isPageRelativeVertical
-        ? fragment.y
-        : effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+
+      let pageY: number;
+      if (isPageRelative && kind === 'footer') {
+        // Footer page-relative: fragment.y is normalized to band-local coords
+        pageY = footerAnchorPageOriginY + fragment.y;
+      } else if (isPageRelative) {
+        // Header page-relative: fragment.y is raw inner-layout absolute Y
+        pageY = fragment.y;
+      } else {
+        pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      }
+
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
@@ -2297,17 +2368,20 @@ export class DomPainter {
     // Render normal fragments in the header/footer container
     normalFragments.forEach(({ fragment, originalIndex }) => {
       const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
-      if (isPageRelativeVertical) {
-        // Convert absolute page Y back to decoration-container local coordinates.
-        // Container top is applied separately, so we subtract it here to avoid a second offset.
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+
+      if (isPageRelative && kind === 'footer') {
+        // Footer page-relative: fragment.y is normalized to band-local coords
+        fragEl.style.top = `${fragment.y + footerAnchorContainerOffsetY}px`;
+      } else if (isPageRelative) {
+        // Header page-relative: convert raw inner-layout Y to container-local
         fragEl.style.top = `${fragment.y - effectiveOffset}px`;
-      }
-      // Apply footer offset to push content to bottom
-      if (footerYOffset > 0 && !isPageRelativeVertical) {
+      } else if (footerYOffset > 0) {
+        // Non-anchored footer content: push to bottom of container
         const currentTop = parseFloat(fragEl.style.top) || fragment.y;
         fragEl.style.top = `${currentTop + footerYOffset}px`;
       }
+
       container.appendChild(fragEl);
     });
 
@@ -2595,7 +2669,7 @@ export class DomPainter {
       const base = this.options.pageStyles ?? {};
       return {
         ...base,
-        background: base.background ?? '#fff',
+        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',
@@ -4605,14 +4679,23 @@ export class DomPainter {
     const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
     if (commentHighlight.color && hasAnyComment) {
-      (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
-      // Add thin visual indicator for nested comments when outer comment is selected
-      // Use box-shadow instead of border to avoid affecting text layout
-      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
-        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
-        (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
+      const runElement = elem as HTMLElement;
+      const previousBackgroundColor = runElement.style.backgroundColor;
+      runElement.style.backgroundColor = commentHighlight.color.css;
+      // jsdom may drop var() values for inline style properties.
+      // Fall back to concrete color to keep rendering/tests stable.
+      if (!runElement.style.backgroundColor || runElement.style.backgroundColor === previousBackgroundColor) {
+        runElement.style.backgroundColor = commentHighlight.color.fallback;
+      }
+      // Add thin visual indicator for nested comments when outer comment is selected.
+      // Use box-shadow instead of border to avoid affecting text layout.
+      if (commentHighlight.hasNestedComments && commentHighlight.nestedBorderColor) {
+        runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.css}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.css}`;
+        if (!runElement.style.boxShadow) {
+          runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.fallback}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.fallback}`;
+        }
       } else {
-        (elem as HTMLElement).style.boxShadow = '';
+        runElement.style.boxShadow = '';
       }
     }
     // We still need to preserve the comment ids
@@ -5232,11 +5315,13 @@ export class DomPainter {
     el.classList.add(CLASS_NAMES.line);
     applyStyles(el, lineStyles(line.lineHeight));
     el.dataset.layoutEpoch = String(this.layoutEpoch);
-    const styleId = (block.attrs as ParagraphAttrs | undefined)?.styleId;
+    const paragraphAttrs = (block.attrs as ParagraphAttrs | undefined) ?? {};
+    const styleId = paragraphAttrs.styleId;
     if (styleId) {
       el.setAttribute('styleid', styleId);
     }
-    const alignment = (block.attrs as ParagraphAttrs | undefined)?.alignment;
+    applyParagraphDirection(el, paragraphAttrs);
+    const alignment = paragraphAttrs.alignment;
 
     // Apply text-align for center/right immediately.
     // For justify, we keep 'left' and apply spacing via word-spacing.
@@ -6958,8 +7043,8 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
 };
 
 interface CommentHighlightResult {
-  color?: string;
-  baseColor?: string;
+  color?: CommentHighlightToken;
+  nestedBorderColor?: CommentHighlightToken;
   hasNestedComments?: boolean;
 }
 
@@ -7000,27 +7085,25 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
       matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
     );
     if (activeComment) {
-      const base = activeComment.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-      // Check if there are OTHER comments besides the active one (nested comments)
       const nestedComments = comments.filter(
         (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
       );
       return {
-        color: `${base}${COMMENT_ACTIVE_ALPHA}`,
-        baseColor: base,
+        color: activeComment.internal ? COMMENT_HIGHLIGHT_INTERNAL_ACTIVE : COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE,
+        nestedBorderColor: activeComment.internal
+          ? COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER
+          : COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER,
         hasNestedComments: nestedComments.length > 0,
       };
     }
     // Active comment is set but this run does not belong to it - show faded highlight.
     const fadedPrimary = comments[0];
-    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
+    return { color: fadedPrimary.internal ? COMMENT_HIGHLIGHT_INTERNAL_FADED : COMMENT_HIGHLIGHT_EXTERNAL_FADED };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)
   const primary = comments[0];
-  const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+  return { color: primary.internal ? COMMENT_HIGHLIGHT_INTERNAL : COMMENT_HIGHLIGHT_EXTERNAL };
 };
 
 /**
@@ -7053,11 +7136,34 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
+const resolveParagraphDirection = (attrs?: ParagraphAttrs): 'ltr' | 'rtl' | undefined => {
+  if (attrs?.direction) {
+    return attrs.direction;
+  }
+  if (attrs?.rtl === true) {
+    return 'rtl';
+  }
+  if (attrs?.rtl === false) {
+    return 'ltr';
+  }
+  return undefined;
+};
+
+const applyParagraphDirection = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
+  const direction = resolveParagraphDirection(attrs);
+  if (!direction) {
+    return;
+  }
+  element.setAttribute('dir', direction);
+  element.style.direction = direction;
+};
+
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
+  applyParagraphDirection(element, attrs);
   if (attrs.alignment) {
     // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
     element.style.textAlign = attrs.alignment === 'justify' ? 'left' : attrs.alignment;

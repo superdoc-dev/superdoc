@@ -1,0 +1,95 @@
+---
+title: Upgrade to Collaboration
+sidebarTitle: Upgrade Later
+keywords: "upgrade to collaboration, runtime collaboration, late collaboration, yjs room promotion, superdoc upgradeToCollaboration"
+---
+
+Use `superdoc.upgradeToCollaboration()` when you want to render a document locally first and turn that same SuperDoc instance into a collaborative room later.
+
+This is useful for flows like:
+
+- A user opens a document privately, then clicks `Share`
+- You only provision collaboration infrastructure when someone requests it
+- You want the document visible immediately, then enable real-time editing on demand
+
+<Warning>
+  `upgradeToCollaboration()` promotes the current local document into the target
+  room. It seeds the room with the current document state, comments, and lock
+  state. Use it to create a new shared room from local state, not to join an
+  existing room you need to preserve as-is.
+</Warning>
+
+## Before you start
+
+- Wait until the SuperDoc instance is ready
+- Call it only on a local instance that is not already collaborative
+- The current implementation supports a single DOCX document
+- Provide a matching `{ ydoc, provider }` pair for the room you want to create
+- You do not need to wait for provider sync yourself; SuperDoc waits internally
+
+## Example
+
+This example starts with a local editor and upgrades it when the user clicks a button.
+
+```javascript
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: file,
+  user: {
+    name: 'John Smith',
+    email: 'john@example.com',
+  },
+});
+
+superdoc.on('ready', () => {
+  document.querySelector('#share-button').addEventListener('click', async () => {
+    const roomId = `document-${crypto.randomUUID()}`;
+    const ydoc = new Y.Doc();
+    const provider = new WebsocketProvider('wss://collab.example.com', roomId, ydoc);
+
+    try {
+      await superdoc.upgradeToCollaboration({ ydoc, provider });
+      console.log('Collaboration enabled:', roomId);
+    } catch (error) {
+      provider.destroy();
+      ydoc.destroy();
+      throw error;
+    }
+  });
+});
+```
+
+## What happens during the upgrade
+
+1. SuperDoc waits for the collaboration provider to connect and sync
+2. The current local document state is written into the target room
+3. Comments and lock state are copied into the room
+4. The editor runtime is rebuilt in collaboration mode
+5. The same `superdoc` instance continues running, now backed by Yjs
+
+## Constructor-time collaboration vs late upgrade
+
+<CardGroup cols={2}>
+  <Card title="Start collaborative immediately" href="/modules/collaboration/quickstart">
+    Create the provider first, then pass `{ ydoc, provider }` in
+    `modules.collaboration` when you construct `SuperDoc`.
+  </Card>
+  <Card title="Start local, upgrade later" href="/core/superdoc/methods">
+    Create a local `SuperDoc` first, then call
+    `superdoc.upgradeToCollaboration({ ydoc, provider })` when you want to
+    create a shared room.
+  </Card>
+</CardGroup>
+
+## Related docs
+
+- [Collaboration quickstart](/modules/collaboration/quickstart)
+- [Collaboration configuration](/modules/collaboration/configuration)
+- [SuperDoc methods](/core/superdoc/methods)
+- [Liveblocks guide](/guides/collaboration/liveblocks)
+- [SuperDoc Yjs guide](/guides/collaboration/superdoc-yjs)

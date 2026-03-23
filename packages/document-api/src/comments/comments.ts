@@ -159,7 +159,7 @@ const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId'
  */
 function validateCreateCommentInput(input: unknown): asserts input is CommentsCreateInput {
   if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.create input must be a non-null object.');
+    throw new DocumentApiValidationError('INVALID_INPUT', 'comments.create input must be a non-null object.');
   }
 
   assertNoUnknownFields(input, CREATE_COMMENT_ALLOWED_KEYS, 'comments.create');
@@ -169,7 +169,7 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
   const isReply = parentCommentId !== undefined;
 
   if (typeof text !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `text must be a string, got ${typeof text}.`, {
+    throw new DocumentApiValidationError('INVALID_INPUT', `text must be a string, got ${typeof text}.`, {
       field: 'text',
       value: text,
     });
@@ -178,14 +178,14 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
   // Replies only need parentCommentId + text — skip target validation
   if (isReply) {
     if (typeof parentCommentId !== 'string' || parentCommentId.length === 0) {
-      throw new DocumentApiValidationError('INVALID_TARGET', 'parentCommentId must be a non-empty string.', {
+      throw new DocumentApiValidationError('INVALID_INPUT', 'parentCommentId must be a non-empty string.', {
         field: 'parentCommentId',
         value: parentCommentId,
       });
     }
     if (hasTarget) {
       throw new DocumentApiValidationError(
-        'INVALID_TARGET',
+        'INVALID_INPUT',
         'Cannot combine parentCommentId with target. Replies do not take a target.',
         { fields: ['parentCommentId', 'target'] },
       );
@@ -215,7 +215,7 @@ const PATCH_COMMENT_ALLOWED_KEYS = new Set(['commentId', 'target', 'text', 'stat
  */
 function validatePatchCommentInput(input: unknown): asserts input is CommentsPatchInput {
   if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.patch input must be a non-null object.');
+    throw new DocumentApiValidationError('INVALID_INPUT', 'comments.patch input must be a non-null object.');
   }
 
   assertNoUnknownFields(input, PATCH_COMMENT_ALLOWED_KEYS, 'comments.patch');
@@ -224,7 +224,7 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
   const hasTarget = target !== undefined;
 
   if (typeof commentId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `commentId must be a string, got ${typeof commentId}.`, {
+    throw new DocumentApiValidationError('INVALID_INPUT', `commentId must be a string, got ${typeof commentId}.`, {
       field: 'commentId',
       value: commentId,
     });
@@ -248,11 +248,26 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
     );
   }
 
-  const { status } = input;
+  const { text, status, isInternal } = input;
+
+  if (text !== undefined && typeof text !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `text must be a string, got ${typeof text}.`, {
+      field: 'text',
+      value: text,
+    });
+  }
+
   if (status !== undefined && status !== 'resolved') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `status must be "resolved", got "${String(status)}".`, {
+    throw new DocumentApiValidationError('INVALID_INPUT', `status must be "resolved", got "${String(status)}".`, {
       field: 'status',
       value: status,
+    });
+  }
+
+  if (isInternal !== undefined && typeof isInternal !== 'boolean') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `isInternal must be a boolean, got ${typeof isInternal}.`, {
+      field: 'isInternal',
+      value: isInternal,
     });
   }
 
@@ -272,6 +287,10 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
 /**
  * Execute `comments.create` — routes to `adapter.add` or `adapter.reply`
  * depending on whether `parentCommentId` is provided.
+ *
+ * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
+ * comments route to specialized adapter methods (add/edit/reply/move/resolve/remove)
+ * outside the plan engine, so changeMode and dryRun are not applicable.
  */
 export function executeCommentsCreate(
   adapter: CommentsAdapter,
@@ -290,6 +309,10 @@ export function executeCommentsCreate(
 /**
  * Execute `comments.patch` — routes to exactly one adapter method based on
  * the single mutation field provided. Validation enforces one-field-per-call.
+ *
+ * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
+ * comments route to specialized adapter methods (add/edit/reply/move/resolve/remove)
+ * outside the plan engine, so changeMode and dryRun are not applicable.
  */
 export function executeCommentsPatch(
   adapter: CommentsAdapter,
@@ -311,8 +334,23 @@ export function executeCommentsPatch(
     return adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
   }
 
-  // Unreachable after validation, but satisfies the return type.
-  return { success: true };
+  // Unreachable after validation — throw if we somehow get here.
+  throw new DocumentApiValidationError(
+    'INTERNAL_ERROR',
+    'comments.patch: no mutation field matched after validation. This is a bug.',
+  );
+}
+
+function validateCommentIdInput(input: unknown, operationName: string): asserts input is { commentId: string } {
+  if (!isRecord(input)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} input must be a non-null object.`);
+  }
+  if (typeof input.commentId !== 'string' || input.commentId.length === 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} commentId must be a non-empty string.`, {
+      field: 'commentId',
+      value: input.commentId,
+    });
+  }
 }
 
 /**
@@ -323,26 +361,18 @@ export function executeCommentsDelete(
   input: CommentsDeleteInput,
   options?: RevisionGuardOptions,
 ): Receipt {
+  validateCommentIdInput(input, 'comments.delete');
   return adapter.remove({ commentId: input.commentId }, options);
 }
 
-// Internal-use execute wrappers (setActive, goTo remain for adapter consumers)
-export function executeSetCommentActive(
-  adapter: CommentsAdapter,
-  input: SetCommentActiveInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.setActive(input, options);
-}
-
-export function executeGoToComment(adapter: CommentsAdapter, input: GoToCommentInput): Receipt {
-  return adapter.goTo(input);
-}
-
 export function executeGetComment(adapter: CommentsAdapter, input: GetCommentInput): CommentInfo {
+  validateCommentIdInput(input, 'comments.get');
   return adapter.get(input);
 }
 
 export function executeListComments(adapter: CommentsAdapter, query?: CommentsListQuery): CommentsListResult {
+  if (query !== undefined && !isRecord(query)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'comments.list query must be an object if provided.');
+  }
   return adapter.list(query);
 }

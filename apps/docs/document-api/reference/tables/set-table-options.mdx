@@ -1,0 +1,331 @@
+---
+title: tables.setTableOptions
+sidebarTitle: tables.setTableOptions
+description: Set table-level default cell margins and/or cell spacing.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Set table-level default cell margins and/or cell spacing.
+
+- Operation ID: `tables.setTableOptions`
+- API member path: `editor.doc.tables.setTableOptions(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the provided values already match current direct formatting.
+
+## Input fields
+
+### Variant 1 (target.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cellSpacingPt` | number \\| null | no | One of: number, null |
+| `defaultCellMargins` | object | no |  |
+| `defaultCellMargins.bottomPt` | number | no |  |
+| `defaultCellMargins.leftPt` | number | no |  |
+| `defaultCellMargins.rightPt` | number | no |  |
+| `defaultCellMargins.topPt` | number | no |  |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 2 (required: nodeId)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cellSpacingPt` | number \\| null | no | One of: number, null |
+| `defaultCellMargins` | object | no |  |
+| `defaultCellMargins.bottomPt` | number | no |  |
+| `defaultCellMargins.leftPt` | number | no |  |
+| `defaultCellMargins.rightPt` | number | no |  |
+| `defaultCellMargins.topPt` | number | no |  |
+| `nodeId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "cellSpacingPt": 12.5,
+  "defaultCellMargins": {
+    "bottomPt": 12.5,
+    "leftPt": 12.5,
+    "rightPt": 12.5,
+    "topPt": 12.5
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | TableAddress | no | TableAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
+### Example response
+
+```json
+{
+  "success": true,
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "cellSpacingPt": {
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "defaultCellMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottomPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "leftPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "rightPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "topPt": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "topPt",
+        "rightPt",
+        "bottomPt",
+        "leftPt"
+      ],
+      "type": "object"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/TableAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/TableAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

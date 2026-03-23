@@ -9,7 +9,13 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
-export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type { DiffAdapter, DiffApi } from './diff/diff.js';
+export * from './diff/diff.types.js';
+export type {
+  SelectionMutationAdapter,
+  SelectionMutationRequest,
+  SelectionInsertRequest,
+} from './selection-mutation.js';
 export type {
   RangeAnchor,
   DocumentEdgeAnchor,
@@ -35,7 +41,10 @@ export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './his
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
+  DocumentDefaults,
   DocumentInfo,
+  DocumentStyles,
+  DocumentStyleInfo,
   MutationsApplyInput,
   MutationsPreviewInput,
   MutationsPreviewOutput,
@@ -45,6 +54,8 @@ import type {
   Query,
   QueryMatchInput,
   QueryMatchOutput,
+  TextSelector,
+  NodeSelector,
   FindOutput,
   Receipt,
   Selector,
@@ -96,6 +107,7 @@ import type { SDDocument } from './types/fragment.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
+import { validateStoryLocator } from './validation/story-validator.js';
 import {
   executeMarkdownToFragment,
   type MarkdownToFragmentAdapter,
@@ -155,6 +167,14 @@ import type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 import {
   executeListsGet,
@@ -186,6 +206,13 @@ import {
   executeListsSetLevelMarkerFont,
   executeListsClearLevelOverrides,
   executeListsSetType,
+  executeListsGetStyle,
+  executeListsApplyStyle,
+  executeListsRestartAt,
+  executeListsSetLevelNumberStyle,
+  executeListsSetLevelText,
+  executeListsSetLevelStart,
+  executeListsSetLevelLayout,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -246,6 +273,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -282,7 +312,26 @@ import { buildDispatchTable } from './invoke/invoke.js';
 import type { HistoryAdapter, HistoryApi } from './history/history.js';
 import type { HistoryState, HistoryActionResult } from './history/history.types.js';
 import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
-import { executeTableOperation } from './tables/tables.js';
+import type { DiffAdapter, DiffApi } from './diff/diff.js';
+import { executeDiffCapture, executeDiffCompare, executeDiffApply } from './diff/diff.js';
+import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from './diff/diff.types.js';
+import {
+  executeTableLocatorOp,
+  executeRowLocatorOp,
+  executeCellOrTableScopedCellLocatorOp,
+  executeDocumentLevelTableOp,
+  normalizeTablesSplitInput,
+  executeTablesApplyStyle,
+  executeTablesSetBorders,
+  executeTablesSetTableOptions,
+} from './tables/tables.js';
 import type {
   ParagraphsAdapter,
   ParagraphFormatApi,
@@ -306,6 +355,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
   ParagraphMutationResult,
 } from './paragraphs/paragraphs.js';
 import {
@@ -328,6 +379,8 @@ import {
   executeParagraphsClearBorder,
   executeParagraphsSetShading,
   executeParagraphsClearShading,
+  executeParagraphsSetDirection,
+  executeParagraphsClearDirection,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
@@ -805,7 +858,6 @@ export type { GetHtmlAdapter, GetHtmlInput } from './get-html/get-html.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
-  FormatAdapter,
   FormatInlineAliasApi,
   FormatInlineAliasInput,
   FormatBoldInput,
@@ -1133,6 +1185,10 @@ export type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
+  ParagraphDirection,
+  AlignmentPolicy,
 } from './paragraphs/paragraphs.js';
 export {
   PARAGRAPH_ALIGNMENTS,
@@ -1141,6 +1197,8 @@ export {
   BORDER_SIDES,
   CLEAR_BORDER_SIDES,
   LINE_RULES,
+  PARAGRAPH_DIRECTIONS,
+  ALIGNMENT_POLICIES,
 } from './paragraphs/paragraphs.js';
 export type {
   BlockAddress,
@@ -1198,6 +1256,18 @@ export type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListStyle,
+  ListLevelStyle,
+  ListLevelLayout,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsGetStyleSuccessResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 export {
   LIST_KINDS,
@@ -1274,10 +1344,11 @@ export type {
   SetCommentActiveInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
-export { DocumentApiValidationError, toSDError } from './errors.js';
-export { textReceiptToSDReceipt } from './receipt-bridge.js';
-export { isSDAddress, isValidTarget } from './validation-primitives.js';
-export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export { DocumentApiValidationError } from './errors.js';
+export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
+export type { StructuralReceiptParams } from './receipt-bridge.js';
+export { isBlockNodeAddress } from './validation-primitives.js';
+export type { InsertInput, InsertContentType, TextInsertInput, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
@@ -1321,6 +1392,9 @@ export interface TablesApi {
   setCellPadding(input: TablesSetCellPaddingInput, options?: MutationOptions): TableMutationResult;
   setCellSpacing(input: TablesSetCellSpacingInput, options?: MutationOptions): TableMutationResult;
   clearCellSpacing(input: TablesClearCellSpacingInput, options?: MutationOptions): TableMutationResult;
+  applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
+  setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
+  setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -1342,7 +1416,10 @@ export interface CapabilitiesApi {
 }
 
 export interface QueryApi {
+  /** Canonical nested input. */
   match(input: QueryMatchInput): QueryMatchOutput;
+  /** TS shorthand: pass a TextSelector or NodeSelector directly (normalized to `{ select: ... }` internally). */
+  match(selector: TextSelector | NodeSelector): QueryMatchOutput;
 }
 
 export interface MutationsApi {
@@ -1412,7 +1489,7 @@ export interface DocumentApi {
    */
   markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult;
   /**
-   * Return document summary info used by `doc.info`.
+   * Return document summary info including document counts and capabilities.
    */
   info(input: InfoInput): DocumentInfo;
   /**
@@ -1533,6 +1610,10 @@ export interface DocumentApi {
    */
   mutations: MutationsApi;
   /**
+   * Snapshot-based document comparison and replay.
+   */
+  diff: DiffApi;
+  /**
    * History operations (undo/redo) scoped to the active editor instance.
    * Session-scoped — reflects the runtime undo/redo stack, not persistent state.
    */
@@ -1597,6 +1678,7 @@ export interface DocumentApiAdapters {
   ranges: RangesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
+  diff: DiffAdapter;
   history: HistoryAdapter;
 }
 
@@ -1622,6 +1704,66 @@ export interface DocumentApiAdapters {
  * }
  * ```
  */
+/**
+ * Validates and normalizes query.match input — accepts canonical QueryMatchInput
+ * or a flat TextSelector/NodeSelector shorthand.
+ */
+function executeQueryMatch(
+  adapter: { match(input: QueryMatchInput): QueryMatchOutput },
+  input: QueryMatchInput | TextSelector | NodeSelector,
+): QueryMatchOutput {
+  if (!input || typeof input !== 'object') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'query.match requires a QueryMatchInput or selector object.',
+      { value: input },
+    );
+  }
+  const rawInput = input as Record<string, unknown> &
+    Partial<QueryMatchInput> &
+    Partial<TextSelector> &
+    Partial<NodeSelector>;
+  const isFlatNodeShorthand =
+    rawInput.type === 'node' ||
+    (rawInput.type === undefined && (rawInput.nodeType !== undefined || rawInput.kind !== undefined));
+  const normalized: QueryMatchInput =
+    'select' in input
+      ? input
+      : rawInput.type === 'text'
+        ? {
+            select: {
+              type: 'text',
+              pattern: rawInput.pattern as string,
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as TextSelector['mode'] } : {}),
+              ...(rawInput.caseSensitive !== undefined ? { caseSensitive: rawInput.caseSensitive as boolean } : {}),
+            },
+            ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+            ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+            ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+            ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+            ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+            ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+          }
+        : isFlatNodeShorthand
+          ? {
+              select: {
+                type: 'node',
+                ...(rawInput.nodeType !== undefined ? { nodeType: rawInput.nodeType as NodeSelector['nodeType'] } : {}),
+                ...(rawInput.kind !== undefined ? { kind: rawInput.kind as NodeSelector['kind'] } : {}),
+              },
+              ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+              ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+              ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as QueryMatchInput['mode'] } : {}),
+              ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+              ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+              ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+            }
+          : { select: input };
+  validateStoryLocator(normalized.in, 'in');
+  return adapter.match(normalized);
+}
+
 function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
   if (!adapter) {
     throw new DocumentApiValidationError(
@@ -1724,7 +1866,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
-      return executeInsert(adapters.write, input, options);
+      return executeInsert(adapters.selectionMutation, adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.selectionMutation, adapters.write, input, options);
@@ -1795,6 +1937,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearShading(adapters.paragraphs, input, options);
         },
+        setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetDirection(adapters.paragraphs, input, options);
+        },
+        clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearDirection(adapters.paragraphs, input, options);
+        },
       },
     },
     styles: {
@@ -1858,7 +2006,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     capabilities,
     images: {
       list(input?: ImagesListInput): ImagesListResult {
-        return executeImagesList(adapters.images, input ?? {});
+        return executeImagesList(adapters.images, input);
       },
       get(input: ImagesGetInput): ImageSummary {
         return executeImagesGet(adapters.images, input);
@@ -2037,6 +2185,29 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetType(adapters.lists, input, options);
       },
+
+      // SD-2025 user-facing operations
+      getStyle(input: ListsGetStyleInput): ListsGetStyleResult {
+        return executeListsGetStyle(adapters.lists, input);
+      },
+      applyStyle(input: ListsApplyStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyStyle(adapters.lists, input, options);
+      },
+      restartAt(input: ListsRestartAtInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsRestartAt(adapters.lists, input, options);
+      },
+      setLevelNumberStyle(input: ListsSetLevelNumberStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelNumberStyle(adapters.lists, input, options);
+      },
+      setLevelText(input: ListsSetLevelTextInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelText(adapters.lists, input, options);
+      },
+      setLevelStart(input: ListsSetLevelStartInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelStart(adapters.lists, input, options);
+      },
+      setLevelLayout(input: ListsSetLevelLayoutInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelLayout(adapters.lists, input, options);
+      },
     },
     sections: {
       list(query?: SectionsListQuery): SectionsListResult {
@@ -2102,7 +2273,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     tables: {
       convertFromText(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.convertFromText',
           adapters.tables.convertFromText.bind(adapters.tables),
           input,
@@ -2110,10 +2281,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       delete(input, options?) {
-        return executeTableOperation('tables.delete', adapters.tables.delete.bind(adapters.tables), input, options);
+        return executeTableLocatorOp('tables.delete', adapters.tables.delete.bind(adapters.tables), input, options);
       },
       clearContents(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.clearContents',
           adapters.tables.clearContents.bind(adapters.tables),
           input,
@@ -2121,13 +2292,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       move(input, options?) {
-        return executeTableOperation('tables.move', adapters.tables.move.bind(adapters.tables), input, options);
+        return executeTableLocatorOp('tables.move', adapters.tables.move.bind(adapters.tables), input, options);
       },
       split(input, options?) {
-        return executeTableOperation('tables.split', adapters.tables.split.bind(adapters.tables), input, options);
+        const normalized = normalizeTablesSplitInput(input);
+        return executeRowLocatorOp('tables.split', adapters.tables.split.bind(adapters.tables), normalized, options);
       },
       convertToText(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.convertToText',
           adapters.tables.convertToText.bind(adapters.tables),
           input,
@@ -2135,7 +2307,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setLayout(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setLayout',
           adapters.tables.setLayout.bind(adapters.tables),
           input,
@@ -2143,23 +2315,13 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertRow(input, options?) {
-        return executeTableOperation(
-          'tables.insertRow',
-          adapters.tables.insertRow.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeRowLocatorOp('tables.insertRow', adapters.tables.insertRow.bind(adapters.tables), input, options);
       },
       deleteRow(input, options?) {
-        return executeTableOperation(
-          'tables.deleteRow',
-          adapters.tables.deleteRow.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeRowLocatorOp('tables.deleteRow', adapters.tables.deleteRow.bind(adapters.tables), input, options);
       },
       setRowHeight(input, options?) {
-        return executeTableOperation(
+        return executeRowLocatorOp(
           'tables.setRowHeight',
           adapters.tables.setRowHeight.bind(adapters.tables),
           input,
@@ -2167,7 +2329,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       distributeRows(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.distributeRows',
           adapters.tables.distributeRows.bind(adapters.tables),
           input,
@@ -2175,7 +2337,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setRowOptions(input, options?) {
-        return executeTableOperation(
+        return executeRowLocatorOp(
           'tables.setRowOptions',
           adapters.tables.setRowOptions.bind(adapters.tables),
           input,
@@ -2183,7 +2345,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertColumn(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.insertColumn',
           adapters.tables.insertColumn.bind(adapters.tables),
           input,
@@ -2191,7 +2353,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       deleteColumn(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.deleteColumn',
           adapters.tables.deleteColumn.bind(adapters.tables),
           input,
@@ -2199,7 +2361,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setColumnWidth(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setColumnWidth',
           adapters.tables.setColumnWidth.bind(adapters.tables),
           input,
@@ -2207,7 +2369,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       distributeColumns(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.distributeColumns',
           adapters.tables.distributeColumns.bind(adapters.tables),
           input,
@@ -2215,7 +2377,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertCell(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.insertCell',
           adapters.tables.insertCell.bind(adapters.tables),
           input,
@@ -2223,7 +2385,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       deleteCell(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.deleteCell',
           adapters.tables.deleteCell.bind(adapters.tables),
           input,
@@ -2231,7 +2393,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       mergeCells(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.mergeCells',
           adapters.tables.mergeCells.bind(adapters.tables),
           input,
@@ -2239,7 +2401,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       unmergeCells(input, options?) {
-        return executeTableOperation(
+        return executeCellOrTableScopedCellLocatorOp(
           'tables.unmergeCells',
           adapters.tables.unmergeCells.bind(adapters.tables),
           input,
@@ -2247,7 +2409,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       splitCell(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.splitCell',
           adapters.tables.splitCell.bind(adapters.tables),
           input,
@@ -2255,7 +2417,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setCellProperties(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setCellProperties',
           adapters.tables.setCellProperties.bind(adapters.tables),
           input,
@@ -2263,10 +2425,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       sort(input, options?) {
-        return executeTableOperation('tables.sort', adapters.tables.sort.bind(adapters.tables), input, options);
+        return executeTableLocatorOp('tables.sort', adapters.tables.sort.bind(adapters.tables), input, options);
       },
       setAltText(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setAltText',
           adapters.tables.setAltText.bind(adapters.tables),
           input,
@@ -2274,10 +2436,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setStyle(input, options?) {
-        return executeTableOperation('tables.setStyle', adapters.tables.setStyle.bind(adapters.tables), input, options);
+        return executeTableLocatorOp('tables.setStyle', adapters.tables.setStyle.bind(adapters.tables), input, options);
       },
       clearStyle(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.clearStyle',
           adapters.tables.clearStyle.bind(adapters.tables),
           input,
@@ -2285,7 +2447,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setStyleOption(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setStyleOption',
           adapters.tables.setStyleOption.bind(adapters.tables),
           input,
@@ -2293,7 +2455,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setBorder(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setBorder',
           adapters.tables.setBorder.bind(adapters.tables),
           input,
@@ -2301,7 +2463,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       clearBorder(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.clearBorder',
           adapters.tables.clearBorder.bind(adapters.tables),
           input,
@@ -2309,7 +2471,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       applyBorderPreset(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.applyBorderPreset',
           adapters.tables.applyBorderPreset.bind(adapters.tables),
           input,
@@ -2317,7 +2479,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setShading(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setShading',
           adapters.tables.setShading.bind(adapters.tables),
           input,
@@ -2325,7 +2487,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       clearShading(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.clearShading',
           adapters.tables.clearShading.bind(adapters.tables),
           input,
@@ -2333,7 +2495,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setTablePadding(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setTablePadding',
           adapters.tables.setTablePadding.bind(adapters.tables),
           input,
@@ -2341,7 +2503,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setCellPadding(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setCellPadding',
           adapters.tables.setCellPadding.bind(adapters.tables),
           input,
@@ -2349,7 +2511,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setCellSpacing(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.setCellSpacing',
           adapters.tables.setCellSpacing.bind(adapters.tables),
           input,
@@ -2357,9 +2519,33 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       clearCellSpacing(input, options?) {
-        return executeTableOperation(
+        return executeTableLocatorOp(
           'tables.clearCellSpacing',
           adapters.tables.clearCellSpacing.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyStyle(input, options?) {
+        return executeTablesApplyStyle(
+          'tables.applyStyle',
+          adapters.tables.applyStyle.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setBorders(input, options?) {
+        return executeTablesSetBorders(
+          'tables.setBorders',
+          adapters.tables.setBorders.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setTableOptions(input, options?) {
+        return executeTablesSetTableOptions(
+          'tables.setTableOptions',
+          adapters.tables.setTableOptions.bind(adapters.tables),
           input,
           options,
         );
@@ -2377,10 +2563,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return adapters.tables.getStyles(input);
       },
       setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions) {
-        return adapters.tables.setDefaultStyle(input, options);
+        return executeDocumentLevelTableOp(adapters.tables.setDefaultStyle.bind(adapters.tables), input, options);
       },
       clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions) {
-        return adapters.tables.clearDefaultStyle(input, options);
+        return executeDocumentLevelTableOp(adapters.tables.clearDefaultStyle.bind(adapters.tables), input, options);
       },
     },
     toc: {
@@ -2472,90 +2658,179 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     contentControls: {
-      list: (query) => executeContentControlsList(adapters.contentControls, query),
-      get: (input) => executeContentControlsGet(adapters.contentControls, input),
-      listInRange: (input) => executeContentControlsListInRange(adapters.contentControls, input),
-      selectByTag: (input) => executeContentControlsSelectByTag(adapters.contentControls, input),
-      selectByTitle: (input) => executeContentControlsSelectByTitle(adapters.contentControls, input),
-      listChildren: (input) => executeContentControlsListChildren(adapters.contentControls, input),
-      getParent: (input) => executeContentControlsGetParent(adapters.contentControls, input),
-      wrap: (input, options) => executeContentControlsWrap(adapters.contentControls, input, options),
-      unwrap: (input, options) => executeContentControlsUnwrap(adapters.contentControls, input, options),
-      delete: (input, options) => executeContentControlsDelete(adapters.contentControls, input, options),
-      copy: (input, options) => executeContentControlsCopy(adapters.contentControls, input, options),
-      move: (input, options) => executeContentControlsMove(adapters.contentControls, input, options),
-      patch: (input, options) => executeContentControlsPatch(adapters.contentControls, input, options),
-      setLockMode: (input, options) => executeContentControlsSetLockMode(adapters.contentControls, input, options),
-      setType: (input, options) => executeContentControlsSetType(adapters.contentControls, input, options),
-      getContent: (input) => executeContentControlsGetContent(adapters.contentControls, input),
-      replaceContent: (input, options) =>
-        executeContentControlsReplaceContent(adapters.contentControls, input, options),
-      clearContent: (input, options) => executeContentControlsClearContent(adapters.contentControls, input, options),
-      appendContent: (input, options) => executeContentControlsAppendContent(adapters.contentControls, input, options),
-      prependContent: (input, options) =>
-        executeContentControlsPrependContent(adapters.contentControls, input, options),
-      insertBefore: (input, options) => executeContentControlsInsertBefore(adapters.contentControls, input, options),
-      insertAfter: (input, options) => executeContentControlsInsertAfter(adapters.contentControls, input, options),
-      getBinding: (input) => executeContentControlsGetBinding(adapters.contentControls, input),
-      setBinding: (input, options) => executeContentControlsSetBinding(adapters.contentControls, input, options),
-      clearBinding: (input, options) => executeContentControlsClearBinding(adapters.contentControls, input, options),
-      getRawProperties: (input) => executeContentControlsGetRawProperties(adapters.contentControls, input),
-      patchRawProperties: (input, options) =>
-        executeContentControlsPatchRawProperties(adapters.contentControls, input, options),
-      validateWordCompatibility: (input) =>
-        executeContentControlsValidateWordCompatibility(adapters.contentControls, input),
-      normalizeWordCompatibility: (input, options) =>
-        executeContentControlsNormalizeWordCompatibility(adapters.contentControls, input, options),
-      normalizeTagPayload: (input, options) =>
-        executeContentControlsNormalizeTagPayload(adapters.contentControls, input, options),
+      list(query) {
+        return executeContentControlsList(adapters.contentControls, query);
+      },
+      get(input) {
+        return executeContentControlsGet(adapters.contentControls, input);
+      },
+      listInRange(input) {
+        return executeContentControlsListInRange(adapters.contentControls, input);
+      },
+      selectByTag(input) {
+        return executeContentControlsSelectByTag(adapters.contentControls, input);
+      },
+      selectByTitle(input) {
+        return executeContentControlsSelectByTitle(adapters.contentControls, input);
+      },
+      listChildren(input) {
+        return executeContentControlsListChildren(adapters.contentControls, input);
+      },
+      getParent(input) {
+        return executeContentControlsGetParent(adapters.contentControls, input);
+      },
+      wrap(input, options) {
+        return executeContentControlsWrap(adapters.contentControls, input, options);
+      },
+      unwrap(input, options) {
+        return executeContentControlsUnwrap(adapters.contentControls, input, options);
+      },
+      delete(input, options) {
+        return executeContentControlsDelete(adapters.contentControls, input, options);
+      },
+      copy(input, options) {
+        return executeContentControlsCopy(adapters.contentControls, input, options);
+      },
+      move(input, options) {
+        return executeContentControlsMove(adapters.contentControls, input, options);
+      },
+      patch(input, options) {
+        return executeContentControlsPatch(adapters.contentControls, input, options);
+      },
+      setLockMode(input, options) {
+        return executeContentControlsSetLockMode(adapters.contentControls, input, options);
+      },
+      setType(input, options) {
+        return executeContentControlsSetType(adapters.contentControls, input, options);
+      },
+      getContent(input) {
+        return executeContentControlsGetContent(adapters.contentControls, input);
+      },
+      replaceContent(input, options) {
+        return executeContentControlsReplaceContent(adapters.contentControls, input, options);
+      },
+      clearContent(input, options) {
+        return executeContentControlsClearContent(adapters.contentControls, input, options);
+      },
+      appendContent(input, options) {
+        return executeContentControlsAppendContent(adapters.contentControls, input, options);
+      },
+      prependContent(input, options) {
+        return executeContentControlsPrependContent(adapters.contentControls, input, options);
+      },
+      insertBefore(input, options) {
+        return executeContentControlsInsertBefore(adapters.contentControls, input, options);
+      },
+      insertAfter(input, options) {
+        return executeContentControlsInsertAfter(adapters.contentControls, input, options);
+      },
+      getBinding(input) {
+        return executeContentControlsGetBinding(adapters.contentControls, input);
+      },
+      setBinding(input, options) {
+        return executeContentControlsSetBinding(adapters.contentControls, input, options);
+      },
+      clearBinding(input, options) {
+        return executeContentControlsClearBinding(adapters.contentControls, input, options);
+      },
+      getRawProperties(input) {
+        return executeContentControlsGetRawProperties(adapters.contentControls, input);
+      },
+      patchRawProperties(input, options) {
+        return executeContentControlsPatchRawProperties(adapters.contentControls, input, options);
+      },
+      validateWordCompatibility(input) {
+        return executeContentControlsValidateWordCompatibility(adapters.contentControls, input);
+      },
+      normalizeWordCompatibility(input, options) {
+        return executeContentControlsNormalizeWordCompatibility(adapters.contentControls, input, options);
+      },
+      normalizeTagPayload(input, options) {
+        return executeContentControlsNormalizeTagPayload(adapters.contentControls, input, options);
+      },
       text: {
-        setMultiline: (input, options) =>
-          executeContentControlsTextSetMultiline(adapters.contentControls, input, options),
-        setValue: (input, options) => executeContentControlsTextSetValue(adapters.contentControls, input, options),
-        clearValue: (input, options) => executeContentControlsTextClearValue(adapters.contentControls, input, options),
+        setMultiline(input, options) {
+          return executeContentControlsTextSetMultiline(adapters.contentControls, input, options);
+        },
+        setValue(input, options) {
+          return executeContentControlsTextSetValue(adapters.contentControls, input, options);
+        },
+        clearValue(input, options) {
+          return executeContentControlsTextClearValue(adapters.contentControls, input, options);
+        },
       },
       date: {
-        setValue: (input, options) => executeContentControlsDateSetValue(adapters.contentControls, input, options),
-        clearValue: (input, options) => executeContentControlsDateClearValue(adapters.contentControls, input, options),
-        setDisplayFormat: (input, options) =>
-          executeContentControlsDateSetDisplayFormat(adapters.contentControls, input, options),
-        setDisplayLocale: (input, options) =>
-          executeContentControlsDateSetDisplayLocale(adapters.contentControls, input, options),
-        setStorageFormat: (input, options) =>
-          executeContentControlsDateSetStorageFormat(adapters.contentControls, input, options),
-        setCalendar: (input, options) =>
-          executeContentControlsDateSetCalendar(adapters.contentControls, input, options),
+        setValue(input, options) {
+          return executeContentControlsDateSetValue(adapters.contentControls, input, options);
+        },
+        clearValue(input, options) {
+          return executeContentControlsDateClearValue(adapters.contentControls, input, options);
+        },
+        setDisplayFormat(input, options) {
+          return executeContentControlsDateSetDisplayFormat(adapters.contentControls, input, options);
+        },
+        setDisplayLocale(input, options) {
+          return executeContentControlsDateSetDisplayLocale(adapters.contentControls, input, options);
+        },
+        setStorageFormat(input, options) {
+          return executeContentControlsDateSetStorageFormat(adapters.contentControls, input, options);
+        },
+        setCalendar(input, options) {
+          return executeContentControlsDateSetCalendar(adapters.contentControls, input, options);
+        },
       },
       checkbox: {
-        getState: (input) => executeContentControlsCheckboxGetState(adapters.contentControls, input),
-        setState: (input, options) => executeContentControlsCheckboxSetState(adapters.contentControls, input, options),
-        toggle: (input, options) => executeContentControlsCheckboxToggle(adapters.contentControls, input, options),
-        setSymbolPair: (input, options) =>
-          executeContentControlsCheckboxSetSymbolPair(adapters.contentControls, input, options),
+        getState(input) {
+          return executeContentControlsCheckboxGetState(adapters.contentControls, input);
+        },
+        setState(input, options) {
+          return executeContentControlsCheckboxSetState(adapters.contentControls, input, options);
+        },
+        toggle(input, options) {
+          return executeContentControlsCheckboxToggle(adapters.contentControls, input, options);
+        },
+        setSymbolPair(input, options) {
+          return executeContentControlsCheckboxSetSymbolPair(adapters.contentControls, input, options);
+        },
       },
       choiceList: {
-        getItems: (input) => executeContentControlsChoiceListGetItems(adapters.contentControls, input),
-        setItems: (input, options) =>
-          executeContentControlsChoiceListSetItems(adapters.contentControls, input, options),
-        setSelected: (input, options) =>
-          executeContentControlsChoiceListSetSelected(adapters.contentControls, input, options),
+        getItems(input) {
+          return executeContentControlsChoiceListGetItems(adapters.contentControls, input);
+        },
+        setItems(input, options) {
+          return executeContentControlsChoiceListSetItems(adapters.contentControls, input, options);
+        },
+        setSelected(input, options) {
+          return executeContentControlsChoiceListSetSelected(adapters.contentControls, input, options);
+        },
       },
       repeatingSection: {
-        listItems: (input) => executeContentControlsRepeatingSectionListItems(adapters.contentControls, input),
-        insertItemBefore: (input, options) =>
-          executeContentControlsRepeatingSectionInsertItemBefore(adapters.contentControls, input, options),
-        insertItemAfter: (input, options) =>
-          executeContentControlsRepeatingSectionInsertItemAfter(adapters.contentControls, input, options),
-        cloneItem: (input, options) =>
-          executeContentControlsRepeatingSectionCloneItem(adapters.contentControls, input, options),
-        deleteItem: (input, options) =>
-          executeContentControlsRepeatingSectionDeleteItem(adapters.contentControls, input, options),
-        setAllowInsertDelete: (input, options) =>
-          executeContentControlsRepeatingSectionSetAllowInsertDelete(adapters.contentControls, input, options),
+        listItems(input) {
+          return executeContentControlsRepeatingSectionListItems(adapters.contentControls, input);
+        },
+        insertItemBefore(input, options) {
+          return executeContentControlsRepeatingSectionInsertItemBefore(adapters.contentControls, input, options);
+        },
+        insertItemAfter(input, options) {
+          return executeContentControlsRepeatingSectionInsertItemAfter(adapters.contentControls, input, options);
+        },
+        cloneItem(input, options) {
+          return executeContentControlsRepeatingSectionCloneItem(adapters.contentControls, input, options);
+        },
+        deleteItem(input, options) {
+          return executeContentControlsRepeatingSectionDeleteItem(adapters.contentControls, input, options);
+        },
+        setAllowInsertDelete(input, options) {
+          return executeContentControlsRepeatingSectionSetAllowInsertDelete(adapters.contentControls, input, options);
+        },
       },
       group: {
-        wrap: (input, options) => executeContentControlsGroupWrap(adapters.contentControls, input, options),
-        ungroup: (input, options) => executeContentControlsGroupUngroup(adapters.contentControls, input, options),
+        wrap(input, options) {
+          return executeContentControlsGroupWrap(adapters.contentControls, input, options);
+        },
+        ungroup(input, options) {
+          return executeContentControlsGroupUngroup(adapters.contentControls, input, options);
+        },
       },
     },
 
@@ -2776,8 +3051,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     query: {
-      match(input: QueryMatchInput): QueryMatchOutput {
-        return adapters.query.match(input);
+      match(input: QueryMatchInput | TextSelector | NodeSelector): QueryMatchOutput {
+        return executeQueryMatch(adapters.query, input);
       },
     },
     ranges: {
@@ -2791,6 +3066,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       apply(input: MutationsApplyInput): PlanReceipt {
         return adapters.mutations.apply(input);
+      },
+    },
+    diff: {
+      capture(): DiffSnapshot {
+        return executeDiffCapture(adapters.diff);
+      },
+      compare(input: DiffCompareInput): DiffPayload {
+        return executeDiffCompare(adapters.diff, input);
+      },
+      apply(input: DiffApplyInput, options?: DiffApplyOptions): DiffApplyResult {
+        return executeDiffApply(adapters.diff, input, options);
       },
     },
     history: {

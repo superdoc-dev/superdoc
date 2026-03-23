@@ -20,7 +20,8 @@ export interface ContractOperationSnapshot {
     typeof buildInternalContractSchemas
   >['operations']];
   skipAsATool?: boolean;
-  essential?: boolean;
+  intentGroup?: string;
+  intentAction?: string;
 }
 
 export interface ContractSnapshot {
@@ -43,7 +44,12 @@ export function buildContractSnapshot(): ContractSnapshot {
     metadata: COMMAND_CATALOG[operationId],
     schemas: internalSchemas.operations[operationId],
     ...(OPERATION_DEFINITIONS[operationId]?.skipAsATool ? { skipAsATool: true } : {}),
-    ...(OPERATION_DEFINITIONS[operationId]?.essential ? { essential: true } : {}),
+    ...(OPERATION_DEFINITIONS[operationId]?.intentGroup
+      ? { intentGroup: OPERATION_DEFINITIONS[operationId]!.intentGroup }
+      : {}),
+    ...(OPERATION_DEFINITIONS[operationId]?.intentAction
+      ? { intentAction: OPERATION_DEFINITIONS[operationId]!.intentAction }
+      : {}),
   }));
 
   const sourcePayload = {

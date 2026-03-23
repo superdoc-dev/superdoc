@@ -297,6 +297,31 @@ const resolveAndOpenPopover = (detail, surface) => {
   openDefaultPopover(position);
 };
 
+/**
+ * Open a hyperlink when the editor is in viewing mode.
+ * Internal document anchors stay within the document; other URLs use browser navigation.
+ *
+ * @param {Object} detail - Event detail from superdoc-link-click
+ */
+const openLinkInViewingMode = (detail) => {
+  const href = detail.href ?? '';
+  if (!href) return;
+
+  if (href.startsWith('#') && href.length > 1) {
+    const presentationEditor = props.editor?.presentationEditor ?? null;
+    presentationEditor?.goToAnchor?.(href);
+    return;
+  }
+
+  const target = detail.target || '_self';
+  const relTokens = String(detail.rel ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+  const features = ['noopener', 'noreferrer'].filter((token) => relTokens.includes(token)).join(',');
+
+  window.open(href, target, features || undefined);
+};
+
 // ─── Link click handler ─────────────────────────────────────────────────────
 
 /**
@@ -326,6 +351,11 @@ const handleLinkClick = (event) => {
   }
 
   if (!props.editor || !props.editor.state) {
+    return;
+  }
+
+  if (props.editor.options?.documentMode === 'viewing') {
+    openLinkInViewingMode(detail);
     return;
   }
 

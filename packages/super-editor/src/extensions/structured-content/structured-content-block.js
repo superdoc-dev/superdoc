@@ -1,5 +1,6 @@
-import { Node, Attribute } from '@core/index';
-import { StructuredContentBlockView } from './StructuredContentBlockView';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
+import { StructuredContentBlockView } from './StructuredContentBlockView.js';
 
 export const structuredContentBlockClass = 'sd-structured-content-block';
 export const structuredContentBlockInnerClass = 'sd-structured-content-block__content';

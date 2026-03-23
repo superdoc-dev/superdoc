@@ -16,6 +16,7 @@ import type {
   CreateHeadingResult,
   CreateHeadingSuccessResult,
   MutationOptions,
+  StoryLocator,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { type BlockCandidate } from '../helpers/node-address-resolver.js';
@@ -23,7 +24,7 @@ import { resolveCreateAnchor } from './create-insertion.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutation-helpers.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 
 // ---------------------------------------------------------------------------
 // Command types (internal to the wrapper)
@@ -99,6 +100,7 @@ function resolveCreatedBlock(editor: Editor, nodeType: string, blockId: string):
 function buildParagraphCreateSuccess(
   paragraphNodeId: string,
   trackedChangeRefs?: CreateParagraphSuccessResult['trackedChangeRefs'],
+  story?: StoryLocator,
 ): CreateParagraphSuccessResult {
   return {
     success: true,
@@ -106,11 +108,13 @@ function buildParagraphCreateSuccess(
       kind: 'block',
       nodeType: 'paragraph',
       nodeId: paragraphNodeId,
+      ...(story && { story }),
     },
     insertionPoint: {
       kind: 'text',
       blockId: paragraphNodeId,
       range: { start: 0, end: 0 },
+      ...(story && { story }),
     },
     trackedChangeRefs,
   };
@@ -119,6 +123,7 @@ function buildParagraphCreateSuccess(
 function buildHeadingCreateSuccess(
   headingNodeId: string,
   trackedChangeRefs?: CreateHeadingSuccessResult['trackedChangeRefs'],
+  story?: StoryLocator,
 ): CreateHeadingSuccessResult {
   return {
     success: true,
@@ -126,11 +131,13 @@ function buildHeadingCreateSuccess(
       kind: 'block',
       nodeType: 'heading',
       nodeId: headingNodeId,
+      ...(story && { story }),
     },
     insertionPoint: {
       kind: 'text',
       blockId: headingNodeId,
       range: { start: 0, end: 0 },
+      ...(story && { story }),
     },
     trackedChangeRefs,
   };
@@ -145,26 +152,88 @@ export function createParagraphWrapper(
   input: CreateParagraphInput,
   options?: MutationOptions,
 ): CreateParagraphResult {
-  const insertParagraphAt = requireEditorCommand(
-    editor.commands?.insertParagraphAt,
-    'create.paragraph',
-  ) as InsertParagraphAtCommand;
-  const mode = options?.changeMode ?? 'direct';
+  const runtime = resolveWriteStoryRuntime(editor, input.in);
+  const storyEditor = runtime.editor;
 
-  if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: 'create.paragraph' });
-  }
+  try {
+    const insertParagraphAt = requireEditorCommand(
+      storyEditor.commands?.insertParagraphAt,
+      'create.paragraph',
+    ) as InsertParagraphAtCommand;
+    const mode = options?.changeMode ?? 'direct';
 
-  const insertAt = resolveCreateInsertPosition(editor, input.at);
+    if (mode === 'tracked') {
+      ensureTrackedCapability(storyEditor, { operation: 'create.paragraph' });
+    }
 
-  if (options?.dryRun) {
-    const canInsert = editor.can().insertParagraphAt?.({
-      pos: insertAt,
-      text: input.text,
-      tracked: mode === 'tracked',
-    });
+    const insertAt = resolveCreateInsertPosition(storyEditor, input.at);
 
-    if (!canInsert) {
+    if (options?.dryRun) {
+      const canInsert = storyEditor.can().insertParagraphAt?.({
+        pos: insertAt,
+        text: input.text,
+        tracked: mode === 'tracked',
+      });
+
+      if (!canInsert) {
+        return {
+          success: false,
+          failure: {
+            code: 'INVALID_TARGET',
+            message: 'Paragraph creation could not be applied at the requested location.',
+          },
+        };
+      }
+
+      return {
+        success: true,
+        paragraph: {
+          kind: 'block',
+          nodeType: 'paragraph',
+          nodeId: '(dry-run)',
+        },
+        insertionPoint: {
+          kind: 'text',
+          blockId: '(dry-run)',
+          range: { start: 0, end: 0 },
+        },
+      };
+    }
+
+    const paragraphId = uuidv4();
+    let canonicalId = paragraphId;
+    let trackedChangeRefs: CreateParagraphSuccessResult['trackedChangeRefs'] | undefined;
+
+    const receipt = executeDomainCommand(
+      storyEditor,
+      () => {
+        const didApply = insertParagraphAt({
+          pos: insertAt,
+          text: input.text,
+          sdBlockId: paragraphId,
+          tracked: mode === 'tracked',
+        });
+        if (didApply) {
+          clearIndexCache(storyEditor);
+          try {
+            const paragraph = resolveCreatedBlock(storyEditor, 'paragraph', paragraphId);
+            canonicalId = paragraph.nodeId;
+            if (mode === 'tracked') {
+              trackedChangeRefs = collectTrackInsertRefsInRange(storyEditor, paragraph.pos, paragraph.end);
+            }
+          } catch (e) {
+            // Post-insertion resolution is best-effort — the block was created but may not
+            // be immediately resolvable (e.g., index timing). Only suppress known resolution
+            // failures; rethrow unexpected errors.
+            if (!(e instanceof DocumentApiAdapterError)) throw e;
+          }
+        }
+        return didApply;
+      },
+      { expectedRevision: options?.expectedRevision },
+    );
+
+    if (receipt.steps[0]?.effect !== 'changed') {
       return {
         success: false,
         failure: {
@@ -174,65 +243,12 @@ export function createParagraphWrapper(
       };
     }
 
-    return {
-      success: true,
-      paragraph: {
-        kind: 'block',
-        nodeType: 'paragraph',
-        nodeId: '(dry-run)',
-      },
-      insertionPoint: {
-        kind: 'text',
-        blockId: '(dry-run)',
-        range: { start: 0, end: 0 },
-      },
-    };
+    if (runtime.commit) runtime.commit(editor);
+    const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
+    return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  const paragraphId = uuidv4();
-  let canonicalId = paragraphId;
-  let trackedChangeRefs: CreateParagraphSuccessResult['trackedChangeRefs'] | undefined;
-
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const didApply = insertParagraphAt({
-        pos: insertAt,
-        text: input.text,
-        sdBlockId: paragraphId,
-        tracked: mode === 'tracked',
-      });
-      if (didApply) {
-        clearIndexCache(editor);
-        try {
-          const paragraph = resolveCreatedBlock(editor, 'paragraph', paragraphId);
-          canonicalId = paragraph.nodeId;
-          if (mode === 'tracked') {
-            trackedChangeRefs = collectTrackInsertRefsInRange(editor, paragraph.pos, paragraph.end);
-          }
-        } catch (e) {
-          // Post-insertion resolution is best-effort — the block was created but may not
-          // be immediately resolvable (e.g., index timing). Only suppress known resolution
-          // failures; rethrow unexpected errors.
-          if (!(e instanceof DocumentApiAdapterError)) throw e;
-        }
-      }
-      return didApply;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return {
-      success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Paragraph creation could not be applied at the requested location.',
-      },
-    };
-  }
-
-  return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,27 +260,87 @@ export function createHeadingWrapper(
   input: CreateHeadingInput,
   options?: MutationOptions,
 ): CreateHeadingResult {
-  const insertHeadingAt = requireEditorCommand(
-    editor.commands?.insertHeadingAt,
-    'create.heading',
-  ) as InsertHeadingAtCommand;
-  const mode = options?.changeMode ?? 'direct';
+  const runtime = resolveWriteStoryRuntime(editor, input.in);
+  const storyEditor = runtime.editor;
 
-  if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: 'create.heading' });
-  }
+  try {
+    const insertHeadingAt = requireEditorCommand(
+      storyEditor.commands?.insertHeadingAt,
+      'create.heading',
+    ) as InsertHeadingAtCommand;
+    const mode = options?.changeMode ?? 'direct';
 
-  const insertAt = resolveCreateInsertPosition(editor, input.at);
+    if (mode === 'tracked') {
+      ensureTrackedCapability(storyEditor, { operation: 'create.heading' });
+    }
 
-  if (options?.dryRun) {
-    const canInsert = editor.can().insertHeadingAt?.({
-      pos: insertAt,
-      level: input.level,
-      text: input.text,
-      tracked: mode === 'tracked',
-    });
+    const insertAt = resolveCreateInsertPosition(storyEditor, input.at);
 
-    if (!canInsert) {
+    if (options?.dryRun) {
+      const canInsert = storyEditor.can().insertHeadingAt?.({
+        pos: insertAt,
+        level: input.level,
+        text: input.text,
+        tracked: mode === 'tracked',
+      });
+
+      if (!canInsert) {
+        return {
+          success: false,
+          failure: {
+            code: 'INVALID_TARGET',
+            message: 'Heading creation could not be applied at the requested location.',
+          },
+        };
+      }
+
+      return {
+        success: true,
+        heading: {
+          kind: 'block',
+          nodeType: 'heading',
+          nodeId: '(dry-run)',
+        },
+        insertionPoint: {
+          kind: 'text',
+          blockId: '(dry-run)',
+          range: { start: 0, end: 0 },
+        },
+      };
+    }
+
+    const headingId = uuidv4();
+    let canonicalId = headingId;
+    let trackedChangeRefs: CreateHeadingSuccessResult['trackedChangeRefs'] | undefined;
+
+    const receipt = executeDomainCommand(
+      storyEditor,
+      () => {
+        const didApply = insertHeadingAt({
+          pos: insertAt,
+          level: input.level,
+          text: input.text,
+          sdBlockId: headingId,
+          tracked: mode === 'tracked',
+        });
+        if (didApply) {
+          clearIndexCache(storyEditor);
+          try {
+            const heading = resolveCreatedBlock(storyEditor, 'heading', headingId);
+            canonicalId = heading.nodeId;
+            if (mode === 'tracked') {
+              trackedChangeRefs = collectTrackInsertRefsInRange(storyEditor, heading.pos, heading.end);
+            }
+          } catch (e) {
+            if (!(e instanceof DocumentApiAdapterError)) throw e;
+          }
+        }
+        return didApply;
+      },
+      { expectedRevision: options?.expectedRevision },
+    );
+
+    if (receipt.steps[0]?.effect !== 'changed') {
       return {
         success: false,
         failure: {
@@ -274,61 +350,10 @@ export function createHeadingWrapper(
       };
     }
 
-    return {
-      success: true,
-      heading: {
-        kind: 'block',
-        nodeType: 'heading',
-        nodeId: '(dry-run)',
-      },
-      insertionPoint: {
-        kind: 'text',
-        blockId: '(dry-run)',
-        range: { start: 0, end: 0 },
-      },
-    };
+    if (runtime.commit) runtime.commit(editor);
+    const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
+    return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  const headingId = uuidv4();
-  let canonicalId = headingId;
-  let trackedChangeRefs: CreateHeadingSuccessResult['trackedChangeRefs'] | undefined;
-
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const didApply = insertHeadingAt({
-        pos: insertAt,
-        level: input.level,
-        text: input.text,
-        sdBlockId: headingId,
-        tracked: mode === 'tracked',
-      });
-      if (didApply) {
-        clearIndexCache(editor);
-        try {
-          const heading = resolveCreatedBlock(editor, 'heading', headingId);
-          canonicalId = heading.nodeId;
-          if (mode === 'tracked') {
-            trackedChangeRefs = collectTrackInsertRefsInRange(editor, heading.pos, heading.end);
-          }
-        } catch (e) {
-          if (!(e instanceof DocumentApiAdapterError)) throw e;
-        }
-      }
-      return didApply;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return {
-      success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Heading creation could not be applied at the requested location.',
-      },
-    };
-  }
-
-  return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs);
 }

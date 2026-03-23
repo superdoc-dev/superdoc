@@ -683,6 +683,7 @@ export function balancePageColumns(
   columns: { count: number; gap: number; width: number },
   margins: { left: number },
   topMargin: number,
+  availableHeight: number,
   measureMap: Map<string, MeasureData>,
 ): void {
   // Skip balancing for single-column layouts or empty pages
@@ -720,9 +721,29 @@ export function balancePageColumns(
 
   // Calculate total content height by summing max height of each row
   let totalHeight = 0;
+  const contentBlocks: BalancingBlock[] = [];
   for (const [, rowFragments] of sortedRows) {
     const maxHeight = Math.max(...rowFragments.map((f) => f.height));
     totalHeight += maxHeight;
+    contentBlocks.push({
+      blockId: rowFragments[0]?.fragment.blockId ?? `row-${contentBlocks.length}`,
+      measuredHeight: maxHeight,
+      canBreak: false,
+      keepWithNext: false,
+      keepTogether: true,
+    });
+  }
+
+  if (
+    shouldSkipBalancing({
+      columnCount: columns.count,
+      columnWidth: columns.width,
+      columnGap: columns.gap,
+      availableHeight,
+      contentBlocks,
+    })
+  ) {
+    return;
   }
 
   // Calculate target height per column for balanced distribution

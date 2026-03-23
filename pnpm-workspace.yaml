@@ -9,6 +9,10 @@ packages:
   - packages/**/*
   - shared/*
   - examples/*
+  - examples/*/*
+  - demos/*
+  - demos/*/*
+  - evals
 
 catalog:
   '@commitlint/cli': ^19.8.1
@@ -95,6 +99,7 @@ catalog:
   rollup-plugin-copy: ^3.5.0
   rollup-plugin-visualizer: ^5.12.0
   semantic-release: ^24.2.7
+  semantic-release-ai-notes: ^0.2.3
   semantic-release-commit-filter: ^1.0.2
   semantic-release-linear-app: ^0.7.1
   sirv: ^3.0.2
@@ -130,5 +135,4 @@ onlyBuiltDependencies:
   - vue-demi
 
 patchedDependencies:
-  # readable-stream requires 'string_decoder/' with trailing slash; Rolldown treats it as a directory path
   readable-stream@3.6.2: patches/readable-stream@3.6.2.patch

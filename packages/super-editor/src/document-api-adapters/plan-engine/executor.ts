@@ -507,7 +507,7 @@ function applyRunAttributePatch(
   if (overlappingRuns.length === 0) return false;
 
   if (Object.prototype.hasOwnProperty.call(updates, 'fontFamily')) {
-    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, [{ key: 'fontFamily', preferExisting: true }]);
   }
 
   let changed = false;
@@ -630,6 +630,16 @@ function applyInlinePatchToRange(
   if (inline.caps !== undefined) {
     textStylePatch.textTransform = capsToTextTransform(inline.caps ?? null);
   }
+  // When fontFamily is being set (not cleared) via the textStyle mark path,
+  // tell the calculateInlineRunPropertiesPlugin to preserve the mark-derived
+  // fontFamily rather than re-deriving it through the encodeMarksFromRPr
+  // comparison (which can incorrectly drop it due to theme font normalization).
+  // Only for non-null values — clearing fontFamily must not trigger preservation,
+  // otherwise the plugin would copy the old value back from existingRunProperties.
+  if (textStylePatch.fontFamily != null) {
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+  }
+
   if (applyTextStylePatch(tr, schema.marks.textStyle, absFrom, absTo, textStylePatch)) {
     changed = true;
   }

@@ -18,6 +18,7 @@ import type {
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { resolvePublicReferenceBlockNodeId } from './reference-block-node-id.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +28,7 @@ export interface ResolvedIndex {
   node: ProseMirrorNode;
   pos: number;
   nodeId: string;
+  commandNodeId?: string;
 }
 
 export interface ResolvedIndexEntry {
@@ -42,10 +44,13 @@ export interface ResolvedIndexEntry {
 
 export function findAllIndexNodes(doc: ProseMirrorNode): ResolvedIndex[] {
   const results: ResolvedIndex[] = [];
+  let occurrenceIndex = 0;
   doc.descendants((node, pos) => {
     if (node.type.name === 'documentIndex' || node.type.name === 'index') {
-      const nodeId = (node.attrs?.sdBlockId as string) ?? `index-${pos}`;
-      results.push({ node, pos, nodeId });
+      const commandNodeId = node.attrs?.sdBlockId as string | undefined;
+      const nodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+      occurrenceIndex += 1;
+      results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }
     return true;
@@ -55,24 +60,30 @@ export function findAllIndexNodes(doc: ProseMirrorNode): ResolvedIndex[] {
 
 export function resolveIndexTarget(doc: ProseMirrorNode, target: IndexAddress): ResolvedIndex {
   const all = findAllIndexNodes(doc);
-  const found = all.find((i) => i.nodeId === target.nodeId);
+  const found = all.find((i) => i.nodeId === target.nodeId || i.commandNodeId === target.nodeId);
   if (!found) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Index with nodeId "${target.nodeId}" not found.`);
   }
   return found;
 }
 
-export function extractIndexInfo(node: ProseMirrorNode): IndexInfo {
-  const instruction = (node.attrs?.instruction as string) ?? '';
+export function resolvePostMutationIndexId(doc: ProseMirrorNode, sdBlockId: string): string {
+  const all = findAllIndexNodes(doc);
+  const found = all.find((node) => node.commandNodeId === sdBlockId);
+  return found?.nodeId ?? sdBlockId;
+}
+
+export function extractIndexInfo(resolved: ResolvedIndex): IndexInfo {
+  const instruction = (resolved.node.attrs?.instruction as string) ?? '';
   return {
     address: {
       kind: 'block',
       nodeType: 'index',
-      nodeId: (node.attrs?.sdBlockId as string) ?? '',
+      nodeId: resolved.nodeId,
     },
     instruction,
     config: parseIndexInstruction(instruction),
-    entryCount: node.childCount,
+    entryCount: resolved.node.childCount,
   };
 }
 

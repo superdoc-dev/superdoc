@@ -12,13 +12,20 @@ import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 import { EditorState as PmEditorState } from 'prosemirror-state';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
-import { helpers } from '@core/index.js';
+import * as helpers from './helpers/index.js';
 import { EventEmitter } from './EventEmitter.js';
 import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
-import { Commands, Editable, EditorFocus, Keymap, PositionTrackerExtension } from './extensions/index.js';
+import {
+  Commands,
+  Editable,
+  EditorFocus,
+  Keymap,
+  PositionTrackerExtension,
+  SelectionHandleExtension,
+} from './extensions/index.js';
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
@@ -59,14 +66,26 @@ import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
-import type { DocumentApi } from '@superdoc/document-api';
+import type { DocumentApi, ResolveRangeOutput } from '@superdoc/document-api';
 import { createDocumentApi } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
+import {
+  resolveCurrentEditorSelectionRange,
+  resolveEffectiveEditorSelectionRange,
+  selectCurrentPmSelection,
+  selectEffectivePmSelection,
+  resolvePmSelectionToRange,
+} from '../document-api-adapters/helpers/selection-range-resolver.js';
+import { captureSelectionHandle, resolveHandleToSelection, releaseSelectionHandle } from './selection-state.js';
+import type { SelectionHandle } from './selection-state.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
-declare const __APP_VERSION__: string;
+declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
+
+const CURRENT_APP_VERSION =
+  (typeof __APP_VERSION__ === 'string' && __APP_VERSION__) || (typeof version === 'string' && version) || '0.0.0';
 
 /**
  * Constants for layout calculations
@@ -74,6 +93,19 @@ declare const version: string | undefined;
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+
+/**
+ * Given a table cell node, returns the total cell content width in pixels.
+ * Sums all colwidth values and subtracts left/right cell margins (padding).
+ */
+function getCellContentWidthPx(cellNode: PmNode): number {
+  const colwidth: number[] = cellNode.attrs?.colwidth ?? [];
+  const totalWidth = colwidth.reduce((sum: number, w: number) => sum + (w || 0), 0);
+  const margins = cellNode.attrs?.cellMargins;
+  const leftMargin = margins?.left ?? 0;
+  const rightMargin = margins?.right ?? 0;
+  return Math.max(totalWidth - leftMargin - rightMargin, 0);
+}
 
 /**
  * Image storage structure used by the image extension
@@ -802,27 +834,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Blank document (source is undefined or null)
         // For docx mode without pre-parsed content, load the blank.docx template
         const shouldLoadBlankDocx =
-          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown;
 
         if (shouldLoadBlankDocx) {
-          // Decode base64 blank.docx without fetch
-          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
-          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
-          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
-          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
-          const uint8Array = new Uint8Array(arrayBuffer);
-          let fileSource: File | Blob | Buffer;
-          if (canUseBuffer) {
-            fileSource = Buffer.from(uint8Array);
-          } else if (typeof Blob !== 'undefined') {
-            fileSource = new Blob([uint8Array as BlobPart]);
-          } else {
-            throw new Error('Blob is not available to create blank DOCX');
-          }
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
-          resolvedOptions.content = docx;
-          resolvedOptions.mediaFiles = mediaFiles;
-          resolvedOptions.fonts = fonts;
+          const { content, mediaFiles, fonts, fileSource } = await this.#loadBlankDocxTemplate();
+          resolvedOptions.content = content;
+          resolvedOptions.mediaFiles = {
+            ...mediaFiles,
+            ...(options?.mediaFiles ?? {}),
+          };
+          resolvedOptions.fonts = {
+            ...fonts,
+            ...(options?.fonts ?? {}),
+          };
           resolvedOptions.fileSource = fileSource;
           resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
@@ -1285,6 +1309,124 @@ export class Editor extends EventEmitter<EditorEventMap> {
     return this.#documentApi;
   }
 
+  // -------------------------------------------------------------------
+  // Selection bridge — tracked handles + snapshot convenience
+  // -------------------------------------------------------------------
+
+  /**
+   * Infers the default capture surface for this editor instance.
+   *
+   * Body editors report `body`. Header/footer child editors created by the
+   * pagination helpers persist their concrete surface kind in
+   * `options.headerFooterType`, allowing direct calls on
+   * `presentationEditor.getActiveEditor()` to produce handles with the
+   * correct surface label without requiring every caller to pass it manually.
+   */
+  #getDefaultSelectionHandleSurface(): 'body' | 'header' | 'footer' {
+    const explicitType = this.options.headerFooterType;
+    return explicitType === 'header' || explicitType === 'footer' ? explicitType : 'body';
+  }
+
+  /**
+   * Capture the live PM selection as a tracked handle.
+   *
+   * The handle's bookmark is automatically mapped through every subsequent
+   * transaction, so it always reflects the current document. When ready,
+   * call {@link resolveSelectionHandle} to get a fresh `ResolveRangeOutput`.
+   *
+   * Use this for deferred UI flows (AI, confirmation dialogs, async chains)
+   * where a delay exists between selection capture and mutation.
+   *
+   * Local-only — captures from **this** editor's `state.selection`.
+   */
+  captureCurrentSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle {
+    this.#assertState('ready', 'saving');
+    const selection = selectCurrentPmSelection(this);
+    return captureSelectionHandle(this, selection, surface ?? this.#getDefaultSelectionHandleSurface());
+  }
+
+  /**
+   * Capture the "effective" selection as a tracked handle.
+   *
+   * Uses the same fallback chain as {@link getEffectiveSelectionRange}:
+   * live non-collapsed → preserved → live. The resulting bookmark is then
+   * mapped through every subsequent transaction.
+   *
+   * Local-only — captures from **this** editor.
+   */
+  captureEffectiveSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle {
+    this.#assertState('ready', 'saving');
+    const selection = selectEffectivePmSelection(this);
+    return captureSelectionHandle(this, selection, surface ?? this.#getDefaultSelectionHandleSurface());
+  }
+
+  /**
+   * Resolve a previously captured handle into a fresh `ResolveRangeOutput`.
+   *
+   * The handle's bookmark has been mapped through all intervening transactions
+   * in the owning editor's plugin state, so the returned target reflects the
+   * current document — no revision plumbing needed.
+   *
+   * The handle is always resolved against its owning editor (the one that
+   * captured it), regardless of which editor is currently active. This
+   * ensures correct behavior when header/footer sessions change.
+   *
+   * Returns `null` when:
+   * - the handle was released
+   * - a previously non-empty selection collapsed (content was deleted)
+   *
+   * Always release handles when done via {@link releaseSelectionHandle}.
+   */
+  resolveSelectionHandle(handle: SelectionHandle): ResolveRangeOutput | null {
+    this.#assertState('ready', 'saving');
+    const selection = resolveHandleToSelection(handle);
+    if (!selection) return null;
+    // Use the owning editor for range resolution, not `this`. The bookmark
+    // positions are relative to the owner's document — interpreting them
+    // against a different editor's doc would produce wrong results.
+    return resolvePmSelectionToRange(handle._owner as Editor, selection);
+  }
+
+  /**
+   * Release a tracked selection handle, removing it from plugin state.
+   *
+   * Always call this when the handle is no longer needed to avoid
+   * unbounded accumulation of bookmarks.
+   */
+  releaseSelectionHandle(handle: SelectionHandle): void {
+    this.#assertState('ready', 'saving');
+    releaseSelectionHandle(handle);
+  }
+
+  /**
+   * Snapshot convenience: resolve the live PM `state.selection` into a
+   * canonical Document API range immediately.
+   *
+   * Equivalent to `captureCurrentSelectionHandle()` + `resolveSelectionHandle()`
+   * in one call. Use this for immediate mutations where no delay exists
+   * between reading the selection and acting on it.
+   *
+   * Local-only — always resolves against **this** editor.
+   */
+  getCurrentSelectionRange(): ResolveRangeOutput {
+    this.#assertState('ready', 'saving');
+    return resolveCurrentEditorSelectionRange(this);
+  }
+
+  /**
+   * Snapshot convenience: resolve the "effective" selection into a
+   * canonical Document API range immediately.
+   *
+   * Uses the same fallback chain as `captureEffectiveSelectionHandle`:
+   * live non-collapsed → preserved → live.
+   *
+   * Local-only — always resolves against **this** editor.
+   */
+  getEffectiveSelectionRange(): ResolveRangeOutput {
+    this.#assertState('ready', 'saving');
+    return resolveEffectiveEditorSelectionRange(this);
+  }
+
   /**
    * Get extension helpers.
    */
@@ -1689,7 +1831,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #createExtensionService(): void {
     const allowedExtensions = ['extension', 'node', 'mark'];
 
-    const coreExtensions = [Editable, Commands, EditorFocus, Keymap, PositionTrackerExtension];
+    const coreExtensions = [
+      Editable,
+      Commands,
+      EditorFocus,
+      Keymap,
+      PositionTrackerExtension,
+      SelectionHandleExtension,
+    ];
     const externalExtensions = this.options.externalExtensions || [];
 
     const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {
@@ -1728,6 +1877,49 @@ export class Editor extends EventEmitter<EditorEventMap> {
         isNewFile: this.options.isNewFile ?? false,
       });
     }
+  }
+
+  async #loadBlankDocxTemplate(): Promise<{
+    content: DocxFileEntry[];
+    mediaFiles: Record<string, unknown>;
+    fonts: Record<string, unknown>;
+    fileSource: File | Blob | Buffer;
+  }> {
+    const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+    const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+    const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    let fileSource: File | Blob | Buffer;
+    if (canUseBuffer) {
+      fileSource = Buffer.from(uint8Array);
+    } else if (typeof Blob !== 'undefined') {
+      fileSource = new Blob([uint8Array as BlobPart]);
+    } else {
+      throw new Error('Blob is not available to create blank DOCX');
+    }
+
+    const [content, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+    return { content, mediaFiles, fonts, fileSource };
+  }
+
+  async #getBaseDocxEntriesForExport(): Promise<DocxFileEntry[]> {
+    if (Array.isArray(this.options.content)) {
+      return this.options.content as DocxFileEntry[];
+    }
+
+    const blankDocx = await this.#loadBlankDocxTemplate();
+    this.options.content = blankDocx.content;
+    this.options.mediaFiles = {
+      ...blankDocx.mediaFiles,
+      ...(this.options.mediaFiles ?? {}),
+    };
+    this.options.fonts = {
+      ...blankDocx.fonts,
+      ...(this.options.fonts ?? {}),
+    };
+
+    return blankDocx.content;
   }
 
   /**
@@ -2067,8 +2259,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size based on page dimensions and margins
-   * @returns Size object with width and height in pixels, or empty object if no page size
+   * Get the maximum content size based on page dimensions and margins.
+   *
+   * When the cursor is inside a table cell, the max width is constrained to that
+   * cell's width (derived from `colwidth` minus cell margins) so that newly inserted
+   * images are never wider than their containing cell.
+   *
+   * @returns Size object with width and height in pixels, or empty object if no page size.
    * @note In web layout mode, returns empty object to skip content constraints.
    *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
@@ -2099,6 +2296,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
     const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
     const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
+
+    // When the cursor is inside a table cell, constrain width to the cell's content
+    // width so images inserted into a cell are never wider than that cell.
+    const { $head } = this.state.selection;
+    for (let d = $head.depth; d > 0; d--) {
+      const node = $head.node(d);
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        const cellWidth = getCellContentWidthPx(node);
+        if (cellWidth > 0) {
+          return { width: cellWidth, height: maxHeight };
+        }
+        break;
+      }
+    }
+
     return {
       width: maxWidth,
       height: maxHeight,
@@ -2722,6 +2934,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
 
+      const appXmlData = this.converter.convertedXml['docProps/app.xml'];
+      const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
+
       // Export core.xml (contains dcterms:created timestamp)
       const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
       const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
@@ -2734,6 +2949,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/numbering.xml': String(numbering),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),
         ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
@@ -2783,6 +2999,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           media,
           true,
           updatedDocs,
+          this.options.fonts,
         );
 
         // Reconcile package-level singleton metadata (content-type overrides
@@ -2801,8 +3018,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
         return updatedDocs;
       }
 
+      const baseDocxEntries =
+        !this.options.fileSource && !Array.isArray(this.options.content)
+          ? await this.#getBaseDocxEntriesForExport()
+          : this.options.content;
+
       const result = await zipper.updateZip({
-        docx: this.options.content,
+        docx: baseDocxEntries,
         updatedDocs: updatedDocs,
         originalDocxFile: this.options.fileSource,
         media,
@@ -3214,7 +3436,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Process collaboration migrations
    */
   processCollaborationMigrations(): unknown | void {
-    console.debug('[checkVersionMigrations] Current editor version', __APP_VERSION__);
+    console.debug('[checkVersionMigrations] Current editor version', CURRENT_APP_VERSION);
     if (!this.options.ydoc) return;
 
     const metaMap = (this.options.ydoc as { getMap: (name: string) => Map<string, unknown> }).getMap('meta');

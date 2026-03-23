@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { VectorShapeView } from './VectorShapeView';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 

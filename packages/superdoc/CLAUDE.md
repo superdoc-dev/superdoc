@@ -55,6 +55,28 @@ Uses `layout-engine` for virtualized rendering with pagination.
 `PresentationEditor.ts` bridges state between modes.
 See `super-editor/src/core/presentation-editor/` for implementation.
 
+## Theming
+
+SuperDoc UI is themed via `--sd-*` CSS variables. Use `createTheme()` for JS-based theming or set variables directly in CSS.
+
+```javascript
+import { createTheme } from 'superdoc';
+
+const theme = createTheme({
+  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b', border: '#e2e8f0' },
+  font: 'Inter, sans-serif',
+  vars: { '--sd-ui-toolbar-bg': '#f8fafc' }, // escape hatch for any --sd-* variable
+});
+
+document.documentElement.classList.add(theme);
+```
+
+- `createTheme()` / `buildTheme()` — `src/core/theme/create-theme.js`
+- CSS variable defaults — `src/assets/styles/helpers/variables.css`
+- Preset themes — `src/assets/styles/helpers/themes.css`
+- Backward-compat aliases — `src/assets/styles/helpers/compat.css`
+- Consumer-facing agent guide — `AGENTS.md` (ships with npm package)
+
 ## Testing
 
 - Unit tests: `src/SuperDoc.test.js`

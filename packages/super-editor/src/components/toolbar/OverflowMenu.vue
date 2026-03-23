@@ -72,24 +72,27 @@ onBeforeUnmount(() => {
 <style lang="postcss" scoped>
 .overflow-menu {
   position: relative;
+
   &_items {
     position: absolute;
     width: 200px;
     top: calc(100% + 3px);
     right: 0;
     padding: 4px 8px;
-    background-color: #fff;
-    border-radius: 8px;
+    background-color: var(--sd-ui-dropdown-bg, #fff);
+    border-radius: var(--sd-ui-radius, 6px);
     z-index: 100;
-    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.25);
+    box-shadow: var(--sd-ui-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.16));
     box-sizing: border-box;
   }
 }
+
 .superdoc-toolbar-overflow {
   min-width: auto !important;
   max-width: 200px;
   flex-wrap: wrap;
 }
+
 @media (max-width: 300px) {
   .overflow-menu_items {
     right: auto;

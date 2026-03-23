@@ -1,6 +1,13 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import type { BlockNodeAddress, TableLocator, TableCreateLocation } from '@superdoc/document-api';
+import type {
+  BlockNodeAddress,
+  TableAddress,
+  TableCellAddress,
+  TableCreateLocation,
+  TableLocator,
+  TableOrRowAddress,
+} from '@superdoc/document-api';
 import { TableMap } from 'prosemirror-tables';
 import { getBlockIndex } from './index-cache.js';
 import { findBlockById, findBlockByNodeIdOnly, toBlockAddress, type BlockCandidate } from './node-address-resolver.js';
@@ -11,20 +18,24 @@ import { DocumentApiAdapterError } from '../errors.js';
  */
 export interface ResolvedTable {
   candidate: BlockCandidate;
-  address: BlockNodeAddress;
+  address: TableAddress;
 }
 
 /**
- * Resolves a {@link TableLocator} to a table {@link BlockCandidate}.
+ * Validates a `target`/`nodeId` locator and resolves it to a {@link BlockCandidate}.
  *
- * Accepts either `target` (a full {@link BlockNodeAddress}) or a bare
- * `nodeId` string. Validates that the resolved candidate is a table node.
+ * This is the shared first step for all table locator resolution: validate
+ * exactly one of `target`/`nodeId` is present, look up the candidate in the
+ * block index, and verify it exists. Callers then apply their own node-type check.
  *
  * @throws {DocumentApiAdapterError} `INVALID_TARGET` if both or neither locator fields are provided.
  * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if the node cannot be found.
- * @throws {DocumentApiAdapterError} `INVALID_TARGET` if the resolved node is not a table.
  */
-export function resolveTableLocator(editor: Editor, locator: TableLocator, operationName: string): ResolvedTable {
+function resolveLocatorToCandidate(
+  editor: Editor,
+  locator: { target?: BlockNodeAddress; nodeId?: string },
+  operationName: string,
+): BlockCandidate {
   const hasTarget = locator.target != null;
   const hasNodeId = locator.nodeId != null;
 
@@ -43,19 +54,29 @@ export function resolveTableLocator(editor: Editor, locator: TableLocator, opera
   }
 
   const index = getBlockIndex(editor);
-
-  let candidate: BlockCandidate | undefined;
-  if (hasTarget) {
-    candidate = findBlockById(index, locator.target!);
-  } else {
-    candidate = findBlockByNodeIdOnly(index, locator.nodeId!);
-  }
+  const candidate = hasTarget ? findBlockById(index, locator.target!) : findBlockByNodeIdOnly(index, locator.nodeId!);
 
   if (!candidate) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: table target was not found.`, {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: target was not found.`, {
       target: hasTarget ? locator.target : locator.nodeId,
     });
   }
+
+  return candidate;
+}
+
+/**
+ * Resolves a {@link TableLocator} to a table {@link BlockCandidate}.
+ *
+ * Accepts either `target` (a full {@link BlockNodeAddress}) or a bare
+ * `nodeId` string. Validates that the resolved candidate is a table node.
+ *
+ * @throws {DocumentApiAdapterError} `INVALID_TARGET` if both or neither locator fields are provided.
+ * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if the node cannot be found.
+ * @throws {DocumentApiAdapterError} `INVALID_TARGET` if the resolved node is not a table.
+ */
+export function resolveTableLocator(editor: Editor, locator: TableLocator, operationName: string): ResolvedTable {
+  const candidate = resolveLocatorToCandidate(editor, locator, operationName);
 
   if (candidate.nodeType !== 'table') {
     throw new DocumentApiAdapterError(
@@ -65,7 +86,7 @@ export function resolveTableLocator(editor: Editor, locator: TableLocator, opera
     );
   }
 
-  return { candidate, address: toBlockAddress(candidate) };
+  return { candidate, address: toBlockAddress(candidate) as TableAddress };
 }
 
 /**
@@ -129,85 +150,65 @@ function findLastCandidate(
 }
 
 /**
- * Resolves a row within a table using the mixed locator pattern shared by
- * most row operations.
+ * Resolves a row within a table using the unified locator pattern.
  *
- * Accepts either:
- * - Direct row address via `target`/`nodeId` pointing at a tableRow
- * - Table-scoped: `tableTarget`/`tableNodeId` + `rowIndex`
+ * Uses node-type detection to determine addressing mode:
+ * - If `target`/`nodeId` resolves to a `tableRow` → direct row locator mode.
+ * - If `target`/`nodeId` resolves to a `table` → table-scoped mode (`rowIndex` required).
  *
  * @throws {DocumentApiAdapterError} Various target/validation errors.
  */
 export function resolveRowLocator(
   editor: Editor,
   input: {
-    target?: BlockNodeAddress;
+    target?: TableOrRowAddress;
     nodeId?: string;
-    tableTarget?: BlockNodeAddress;
-    tableNodeId?: string;
     rowIndex?: number;
   },
   operationName: string,
 ): ResolvedRow {
-  const hasDirectTarget = input.target != null || input.nodeId != null;
-  const hasTableScope = input.tableTarget != null || input.tableNodeId != null;
+  const candidate = resolveLocatorToCandidate(editor, input, operationName);
 
-  if (hasDirectTarget && hasTableScope) {
-    throw new DocumentApiAdapterError(
-      'INVALID_TARGET',
-      `${operationName}: cannot combine direct row locator (target/nodeId) with table-scoped locator (tableTarget/tableNodeId).`,
-    );
-  }
-
-  // Direct row address
-  if (hasDirectTarget) {
-    const index = getBlockIndex(editor);
-    const candidate =
-      input.target != null ? findBlockById(index, input.target) : findBlockByNodeIdOnly(index, input.nodeId!);
-
-    if (!candidate) {
-      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: row target was not found.`);
-    }
-    if (candidate.nodeType !== 'tableRow') {
+  // Direct row locator: target/nodeId points at a row node
+  if (candidate.nodeType === 'tableRow') {
+    if (input.rowIndex != null) {
       throw new DocumentApiAdapterError(
         'INVALID_TARGET',
-        `${operationName}: target resolved to "${candidate.nodeType}", expected "tableRow".`,
+        `${operationName}: rowIndex must not be provided when target is a row node. ` +
+          `Either pass a table nodeId with rowIndex, or pass a row nodeId without rowIndex.`,
       );
     }
 
-    // Find the parent table
-    const tableCandidate = findParentTable(index, candidate);
+    const blockIndex = getBlockIndex(editor);
+    const tableCandidate = findParentTable(blockIndex, candidate);
     if (!tableCandidate) {
       throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: parent table for row was not found.`);
     }
 
     const rowIdx = getRowIndex(tableCandidate, candidate.pos);
     return {
-      table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) },
+      table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) as TableAddress },
       rowNode: candidate.node,
       rowPos: candidate.pos,
       rowIndex: rowIdx,
     };
   }
 
-  // Table-scoped row by index
-  if (!hasTableScope) {
+  // Table-scoped row locator: target/nodeId points at a table, rowIndex selects the row
+  if (candidate.nodeType !== 'table') {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',
-      `${operationName}: requires either a row target/nodeId or tableTarget/tableNodeId + rowIndex.`,
+      `${operationName}: target resolved to "${candidate.nodeType}", expected "table" or "tableRow".`,
+      { actualNodeType: candidate.nodeType, nodeId: candidate.nodeId },
     );
   }
 
-  const tableLocator: TableLocator = {};
-  if (input.tableTarget != null) tableLocator.target = input.tableTarget;
-  if (input.tableNodeId != null) tableLocator.nodeId = input.tableNodeId;
-
-  const table = resolveTableLocator(editor, tableLocator, operationName);
+  const table: ResolvedTable = { candidate, address: toBlockAddress(candidate) as TableAddress };
 
   if (input.rowIndex == null) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',
-      `${operationName}: rowIndex is required when using table-scoped locator.`,
+      `${operationName}: rowIndex is required when target is a table.`,
     );
   }
 
@@ -287,37 +288,10 @@ export interface ResolvedCell {
  */
 export function resolveCellLocator(
   editor: Editor,
-  locator: { target?: BlockNodeAddress; nodeId?: string },
+  locator: { target?: TableCellAddress; nodeId?: string },
   operationName: string,
 ): ResolvedCell {
-  const hasTarget = locator.target != null;
-  const hasNodeId = locator.nodeId != null;
-
-  if (hasTarget && hasNodeId) {
-    throw new DocumentApiAdapterError(
-      'INVALID_TARGET',
-      `${operationName}: cannot combine target and nodeId. Use exactly one locator mode.`,
-    );
-  }
-
-  if (!hasTarget && !hasNodeId) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', `${operationName}: requires either target or nodeId.`);
-  }
-
-  const index = getBlockIndex(editor);
-
-  let candidate: BlockCandidate | undefined;
-  if (hasTarget) {
-    candidate = findBlockById(index, locator.target!);
-  } else {
-    candidate = findBlockByNodeIdOnly(index, locator.nodeId!);
-  }
-
-  if (!candidate) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: cell target was not found.`, {
-      target: hasTarget ? locator.target : locator.nodeId,
-    });
-  }
+  const candidate = resolveLocatorToCandidate(editor, locator, operationName);
 
   if (candidate.nodeType !== 'tableCell') {
     throw new DocumentApiAdapterError(
@@ -329,9 +303,10 @@ export function resolveCellLocator(
 
   // Find the parent table by scanning from the end so nested tables (which
   // appear later in depth-first traversal) are preferred over outer tables.
+  const blockIndex = getBlockIndex(editor);
   const tableCandidate = findLastCandidate(
-    index.candidates,
-    (c) => c.nodeType === 'table' && c.pos < candidate!.pos && c.end >= candidate!.end,
+    blockIndex.candidates,
+    (c) => c.nodeType === 'table' && c.pos < candidate.pos && c.end >= candidate.end,
   );
 
   if (!tableCandidate) {
@@ -347,7 +322,7 @@ export function resolveCellLocator(
   const columnIndex = mapIndex % map.width;
 
   return {
-    table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) },
+    table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) as TableAddress },
     cellNode: candidate.node,
     cellPos: candidate.pos,
     rowIndex: rowIndex >= 0 ? rowIndex : 0,
@@ -363,18 +338,14 @@ export function resolveCellLocator(
 export function resolveMergeRangeLocator(
   editor: Editor,
   input: {
-    tableTarget?: BlockNodeAddress;
-    tableNodeId?: string;
+    target?: TableAddress;
+    nodeId?: string;
     start: { rowIndex: number; columnIndex: number };
     end: { rowIndex: number; columnIndex: number };
   },
   operationName: string,
 ): { table: ResolvedTable; startRow: number; startCol: number; endRow: number; endCol: number } {
-  const tableLocator: TableLocator = {};
-  if (input.tableTarget != null) tableLocator.target = input.tableTarget;
-  if (input.tableNodeId != null) tableLocator.nodeId = input.tableNodeId;
-
-  const table = resolveTableLocator(editor, tableLocator, operationName);
+  const table = resolveTableLocator(editor, input, operationName);
   const map = TableMap.get(table.candidate.node);
 
   const startRow = Math.min(input.start.rowIndex, input.end.rowIndex);
@@ -390,6 +361,64 @@ export function resolveMergeRangeLocator(
   }
 
   return { table, startRow, startCol, endRow, endCol };
+}
+
+/**
+ * Resolves a table-scoped cell locator (table target/nodeId + rowIndex + columnIndex)
+ * to a {@link ResolvedCell}.
+ *
+ * If the requested coordinates land inside a merged cell, the returned
+ * `rowIndex`/`columnIndex` are canonicalized to the merged cell's **anchor**
+ * (top-left) coordinates. This is critical for callers like `unmergeCells`
+ * that pass coordinates into `expandMergedCellIntoSingles`.
+ *
+ * @throws {DocumentApiAdapterError} Various target/validation errors.
+ */
+export function resolveTableScopedCellLocator(
+  editor: Editor,
+  input: {
+    target?: TableAddress;
+    nodeId?: string;
+    rowIndex: number;
+    columnIndex: number;
+  },
+  operationName: string,
+): ResolvedCell {
+  const table = resolveTableLocator(editor, input, operationName);
+  const map = TableMap.get(table.candidate.node);
+
+  if (input.rowIndex < 0 || input.rowIndex >= map.height || input.columnIndex < 0 || input.columnIndex >= map.width) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `${operationName}: cell (${input.rowIndex}, ${input.columnIndex}) is out of bounds (table is ${map.height}×${map.width}).`,
+    );
+  }
+
+  // Look up the cell offset from the table map. For merged cells, multiple
+  // map indices share the same offset — the anchor is the first occurrence.
+  const requestedIndex = input.rowIndex * map.width + input.columnIndex;
+  const cellOffset = map.map[requestedIndex];
+  const anchorIndex = map.map.indexOf(cellOffset);
+  const anchorRow = Math.floor(anchorIndex / map.width);
+  const anchorCol = anchorIndex % map.width;
+
+  const cellPos = table.candidate.pos + 1 + cellOffset;
+  const cellNode = table.candidate.node.nodeAt(cellOffset);
+
+  if (!cellNode) {
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `${operationName}: cell at (${input.rowIndex}, ${input.columnIndex}) could not be resolved.`,
+    );
+  }
+
+  return {
+    table,
+    cellNode,
+    cellPos,
+    rowIndex: anchorRow,
+    columnIndex: anchorCol,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,17 +442,13 @@ export interface ResolvedColumn {
 export function resolveColumnLocator(
   editor: Editor,
   input: {
-    tableTarget?: BlockNodeAddress;
-    tableNodeId?: string;
+    target?: TableAddress;
+    nodeId?: string;
     columnIndex: number;
   },
   operationName: string,
 ): ResolvedColumn {
-  const tableLocator: TableLocator = {};
-  if (input.tableTarget != null) tableLocator.target = input.tableTarget;
-  if (input.tableNodeId != null) tableLocator.nodeId = input.tableNodeId;
-
-  const table = resolveTableLocator(editor, tableLocator, operationName);
+  const table = resolveTableLocator(editor, input, operationName);
   const columnCount = getTableColumnCount(table.candidate.node);
 
   if (input.columnIndex < 0 || input.columnIndex >= columnCount) {
@@ -448,6 +473,43 @@ export function getTableColumnCount(tableNode: ProseMirrorNode): number {
     count += (cell.attrs as { colspan?: number }).colspan ?? 1;
   }
   return count;
+}
+
+// ---------------------------------------------------------------------------
+// Post-mutation re-resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-resolves a table's address after a mutation has been dispatched.
+ *
+ * Uses transaction position mapping as the primary strategy, with
+ * nodeId-based fallback for DOCX tables with stable primary IDs.
+ *
+ * Returns `undefined` if the table cannot be re-resolved — callers
+ * should NOT fall back to the pre-mutation address.
+ */
+export function resolvePostMutationTableAddress(
+  editor: Editor,
+  preMutationPos: number,
+  preMutationNodeId: string,
+  tr: { mapping: { map(pos: number, assoc?: number): number } },
+): TableAddress | undefined {
+  const index = getBlockIndex(editor);
+
+  // Strategy 1: Map pre-mutation position through the transaction.
+  const mappedPos = tr.mapping.map(preMutationPos);
+  const candidate = index.candidates.find((c) => c.pos === mappedPos && c.nodeType === 'table');
+  if (candidate) return toBlockAddress(candidate) as TableAddress;
+
+  // Strategy 2: Look up by pre-mutation nodeId (works for DOCX tables with stable paraId).
+  try {
+    const found = findBlockByNodeIdOnly(index, preMutationNodeId);
+    if (found.nodeType === 'table') return toBlockAddress(found) as TableAddress;
+  } catch {
+    // Not found or ambiguous — fall through.
+  }
+
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

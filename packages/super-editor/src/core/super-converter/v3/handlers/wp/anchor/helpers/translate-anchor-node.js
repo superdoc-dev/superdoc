@@ -68,6 +68,11 @@ export function translateAnchorNode(params) {
 
   const nodeElements = translateImageNode(params);
 
+  // Guard: bail out if translateImageNode produced a non-drawing result (e.g. text fallback).
+  if (!nodeElements?.elements?.some((el) => el?.name === 'wp:extent')) {
+    return nodeElements;
+  }
+
   const inlineAttrs = {
     ...(attrs.originalAttributes || {}),
     ...(nodeElements.attributes || {}),

@@ -21,8 +21,14 @@ export const CORPUS_ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
 
 const WRANGLER_CONFIG_PATHS =
   process.platform === 'darwin'
-    ? [path.join(os.homedir(), 'Library/Preferences/.wrangler/config/default.toml')]
-    : [path.join(os.homedir(), '.config/.wrangler/config/default.toml')];
+    ? [
+        path.join(os.homedir(), 'Library/Preferences/.wrangler/config/default.toml'),
+        path.join(os.homedir(), '.wrangler/config/default.toml'),
+      ]
+    : [
+        path.join(os.homedir(), '.config/.wrangler/config/default.toml'),
+        path.join(os.homedir(), '.wrangler/config/default.toml'),
+      ];
 
 const ACCOUNT_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID'];
 const ACCESS_KEY_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCESS_KEY_ID', 'SD_TESTING_R2_ACCESS_KEY_ID'];

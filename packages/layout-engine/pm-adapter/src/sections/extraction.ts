@@ -50,6 +50,7 @@ type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' 
 interface SectionElement {
   name: string;
   attributes?: Record<string, unknown>;
+  elements?: SectionElement[];
 }
 
 /**
@@ -208,17 +209,38 @@ function extractPageNumbering(elements: SectionElement[]):
 /**
  * Extract columns from <w:cols> element.
  */
-function extractColumns(elements: SectionElement[]): { count: number; gap: number } | undefined {
+function extractColumns(
+  elements: SectionElement[],
+): { count: number; gap: number; widths?: number[]; equalWidth?: boolean } | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
   const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
-  const gapInches = parseColumnGap(cols.attributes['w:space'] as string | number | undefined);
+  const equalWidthRaw = cols.attributes['w:equalWidth'];
+  const equalWidth =
+    equalWidthRaw === '0' || equalWidthRaw === 0 || equalWidthRaw === false
+      ? false
+      : equalWidthRaw === '1' || equalWidthRaw === 1 || equalWidthRaw === true
+        ? true
+        : undefined;
+  const columnChildren = Array.isArray(cols.elements) ? cols.elements.filter((child) => child?.name === 'w:col') : [];
+  const gapTwips =
+    cols.attributes['w:space'] ??
+    columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.['w:space'];
+  const gapInches = parseColumnGap(gapTwips as string | number | undefined);
+  const widths = columnChildren
+    .map((child) => Number(child.attributes?.['w:w']))
+    .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
+    .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
 
-  return {
+  const result = {
     count,
     gap: gapInches * PX_PER_INCH,
+    ...(widths.length > 0 ? { widths } : {}),
+    ...(equalWidth !== undefined ? { equalWidth } : {}),
   };
+
+  return result;
 }
 
 /**
@@ -286,7 +308,7 @@ export function extractSectionData(para: PMNode): {
   type?: SectionType;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
-  columnsPx?: { count: number; gap: number };
+  columnsPx?: { count: number; gap: number; widths?: number[]; equalWidth?: boolean };
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;

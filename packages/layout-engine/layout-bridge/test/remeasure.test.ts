@@ -815,6 +815,61 @@ describe('remeasureParagraph', () => {
       expect(measure.lines.length).toBeGreaterThanOrEqual(1);
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
+
+    it('does not split a borderline narrow list word during remeasure', () => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      expect(ctx).not.toBeNull();
+      const originalMeasureText = ctx!.measureText.bind(ctx);
+      const widthMap = new Map<string, number>([
+        ['Terms', 48.9],
+        ['Term', 39.125],
+        ['Ter', 30],
+        ['Te', 20],
+        ['T', 10],
+        ['e', 8.5],
+        ['r', 5.8],
+        ['m', 14.825],
+        ['s', 8.8984375],
+        ['1.', 13.34375],
+      ]);
+
+      ctx!.measureText = ((text: string) => {
+        const mappedWidth = widthMap.get(text);
+        if (mappedWidth != null) {
+          return { width: mappedWidth } as TextMetrics;
+        }
+        return originalMeasureText(text);
+      }) as typeof ctx.measureText;
+
+      const block = createBlock([textRun('Terms', { bold: true, fontFamily: 'Arial, sans-serif', fontSize: 16 })], {
+        indent: { left: 24, hanging: 23.933333333333334 },
+        wordLayout: {
+          indentLeftPx: 24,
+          hangingPx: 23.933333333333334,
+          textStartPx: 24,
+          marker: {
+            markerText: '1.',
+            markerBoxWidthPx: 23.933333333333334,
+            textStartX: 24,
+            gutterWidthPx: 8,
+            suffix: 'tab',
+            run: {
+              fontFamily: 'Arial, sans-serif',
+              fontSize: 16,
+              bold: true,
+            },
+          },
+        },
+      } as ParagraphBlock['attrs']);
+
+      try {
+        const measure = remeasureParagraph(block, 72.26666666666667);
+        expect(measure.lines).toHaveLength(1);
+        expect(measure.lines[0]?.toChar).toBe(5);
+      } finally {
+        ctx!.measureText = originalMeasureText as typeof ctx.measureText;
+      }
+    });
   });
 
   describe('Complex Scenarios', () => {

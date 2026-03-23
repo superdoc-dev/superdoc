@@ -1,4 +1,4 @@
-import { Node } from '@core/index.js';
+import { Node } from '@core/Node.js';
 
 /**
  * Configuration options for Text

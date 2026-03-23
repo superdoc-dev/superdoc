@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { parseSizeUnit, minMax } from '@core/utilities/index.js';
 
 /**

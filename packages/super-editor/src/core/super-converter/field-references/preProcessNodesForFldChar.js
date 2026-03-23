@@ -32,6 +32,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   const processedNodes = [];
   let collectedNodesStack = [];
   let rawCollectedNodesStack = [];
+  let fieldRunRPrStack = [];
   let currentFieldStack = [];
   let unpairedEnd = null;
   let collecting = false;
@@ -45,12 +46,14 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     if (collecting) {
       const collectedNodes = collectedNodesStack.pop().filter((n) => n !== null);
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
+      const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
       const combinedResult = _processCombinedNodesForFldChar(
         collectedNodes,
         currentField.instrText.trim(),
         docx,
         currentField.instructionTokens,
+        fieldRunRPr,
       );
       const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
       if (collectedNodesStack.length === 0) {
@@ -141,6 +144,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       rawCollectedNodesStack.push(rawStack);
       rawNodeSourceTokens.set(rawNode, rawSourceToken);
       capturedRawNodes.add(rawNode);
+      fieldRunRPrStack.push(extractFieldRunRPr(node));
       currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
       return;
     }
@@ -152,6 +156,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         const instructionTokens = extractInstructionTokensFromNode(node);
         if (instructionTokens.length > 0) {
           captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
+          const fieldRunRPr = extractFieldRunRPr(node);
+          if (fieldRunRPr) {
+            fieldRunRPrStack[fieldRunRPrStack.length - 1] = fieldRunRPr;
+          }
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
           if (instrTextValue != null) {
@@ -175,6 +183,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     } else if (fldType === 'separate') {
       if (collecting) {
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
+        const fieldRunRPr = extractFieldRunRPr(node);
+        if (fieldRunRPr) {
+          fieldRunRPrStack[fieldRunRPrStack.length - 1] = fieldRunRPr;
+        }
         const currentField = currentFieldStack[currentFieldStack.length - 1];
         if (currentField) {
           currentField.afterSeparate = true;
@@ -256,15 +268,35 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @param {OpenXmlNode[]} [nodesToCombine=[]] - The nodes to combine.
  * @param {string} instrText - The instruction text associated with the field.
  * @param {import('../v2/docxHelper').ParsedDocx} [docx] - The docx object.
- * @returns {OpenXmlNode[]} The processed nodes.
+ * @param {Array<{type: string, text?: string}>} [instructionTokens] - Raw instruction tokens.
+ * @param {OpenXmlNode | null} [fieldRunRPr] - The w:rPr captured from field sequence runs.
+ * @returns {{ nodes: OpenXmlNode[], handled: boolean }} The processed nodes and whether a preprocessor handled them.
  */
-const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens) => {
+const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens, fieldRunRPr) => {
   const instructionType = instrText.trim().split(' ')[0];
   const instructionPreProcessor = getInstructionPreProcessor(instructionType);
   if (instructionPreProcessor) {
-    return { nodes: instructionPreProcessor(nodesToCombine, instrText, docx, instructionTokens), handled: true };
+    return {
+      nodes: instructionPreProcessor(nodesToCombine, instrText, docx, instructionTokens, fieldRunRPr),
+      handled: true,
+    };
   }
   return { nodes: nodesToCombine, handled: false };
+};
+
+/**
+ * Returns a styled w:rPr node from a field-sequence run, or null when none exists.
+ * We only keep non-empty rPr nodes so empty formatting stubs do not mask later runs.
+ *
+ * @param {OpenXmlNode} node
+ * @returns {OpenXmlNode | null}
+ */
+const extractFieldRunRPr = (node) => {
+  const rPrNode = node?.elements?.find((el) => el.name === 'w:rPr');
+  if (!rPrNode?.elements?.length) {
+    return null;
+  }
+  return rPrNode;
 };
 
 /**

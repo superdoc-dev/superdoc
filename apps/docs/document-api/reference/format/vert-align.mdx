@@ -6,8 +6,6 @@ description: "Set or clear the `vertAlign` inline run property on the target tex
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set or clear the `vertAlign` inline run property on the target text range.
@@ -26,13 +24,21 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `ref` | string | no |  |
-| `target` | SelectionTarget | no | SelectionTarget |
-| `target.end` | SelectionPoint | no | SelectionPoint |
-| `target.kind` | `"selection"` | no | Constant: `"selection"` |
-| `target.start` | SelectionPoint | no | SelectionPoint |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `value` | enum \\| null | yes | One of: enum, null |
+
+### Variant 2 (required: ref, value)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
 | `value` | enum \\| null | yes | One of: enum, null |
 
 ### Example request
@@ -58,7 +64,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -88,7 +94,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -183,6 +189,11 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -193,13 +204,14 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 <Accordion title="Raw input schema">
 ```json
 {
-  "allOf": [
-    {
-      "$ref": "#/$defs/TargetLocator"
-    },
+  "oneOf": [
     {
       "additionalProperties": false,
       "properties": {
+        "target": {
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
+        },
         "value": {
           "oneOf": [
             {
@@ -216,6 +228,35 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
         }
       },
       "required": [
+        "target",
+        "value"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
+          "type": "string"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "enum": [
+                "superscript",
+                "subscript",
+                "baseline"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ref",
         "value"
       ],
       "type": "object"

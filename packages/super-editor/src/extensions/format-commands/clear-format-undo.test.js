@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 
@@ -16,8 +16,15 @@ import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpe
  * each explicitly, avoiding RemoveMarkSteps for container-node marks.
  */
 describe('SD-1771: Clear format + undo mark restoration', () => {
+  let editor = null;
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+  });
+
   it('should restore textStyle mark attrs after clear format + undo (simple doc)', () => {
-    const { editor } = initTestEditor({
+    ({ editor } = initTestEditor({
       loadFromSchema: true,
       content: {
         type: 'doc',
@@ -53,7 +60,7 @@ describe('SD-1771: Clear format + undo mark restoration', () => {
           },
         ],
       },
-    });
+    }));
 
     const from = 2;
     const to = 2 + 'Hello World'.length;
@@ -74,7 +81,7 @@ describe('SD-1771: Clear format + undo mark restoration', () => {
 
   it('should restore textStyle marks correctly after clear format + undo (real DOCX)', async () => {
     const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('sdpr.docx');
-    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+    ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
 
     // Find first paragraph with styled text (textStyle marks with real values)
     let targetFrom = null;

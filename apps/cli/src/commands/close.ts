@@ -31,8 +31,6 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
     'close',
     async ({ metadata, paths }) => {
       const effectiveMetadata = metadata;
-      const activeSessionId = await getActiveSessionId();
-      const wasDefaultSession = activeSessionId === effectiveMetadata.contextId;
 
       if (effectiveMetadata.dirty && !mode.discard) {
         throw new CliError(
@@ -42,6 +40,15 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
             revision: effectiveMetadata.revision,
           },
         );
+      }
+
+      // Only read/clear the project-global active-session pointer in oneshot
+      // (CLI) mode. Host mode must never touch this file — it causes
+      // cross-document contamination between SDK clients.
+      let wasDefaultSession = false;
+      if (context.executionMode !== 'host') {
+        const activeSessionId = await getActiveSessionId();
+        wasDefaultSession = activeSessionId === effectiveMetadata.contextId;
       }
 
       const result = {
@@ -74,5 +81,6 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
       return result;
     },
     context.sessionId,
+    context.executionMode,
   );
 }

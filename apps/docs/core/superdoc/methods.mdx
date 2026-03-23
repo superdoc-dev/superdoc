@@ -130,6 +130,77 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
+## Collaboration methods
+
+### `upgradeToCollaboration`
+
+Promote a local SuperDoc instance into collaboration without creating a new instance.
+
+<Warning>
+  This is a promotion flow, not a passive join flow. SuperDoc seeds the target
+  room with the current local document state, comments, and lock state.
+</Warning>
+
+<ParamField path="options" type="Object" required>
+  Upgrade configuration
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="ydoc" type="Y.Doc" required>
+      The Yjs document for the target room
+    </ParamField>
+    <ParamField path="provider" type="Object" required>
+      The collaboration provider connected to the same room as `ydoc`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<void>`
+
+**Requirements:**
+
+- The SuperDoc instance must already be ready
+- The instance must not already be collaborative
+- The current instance must contain a single DOCX document
+- You must provide a matching `{ ydoc, provider }` pair
+
+<Note>
+  SuperDoc waits for provider sync internally. You do not need to wait for the
+  provider's `sync` event before calling this method.
+</Note>
+
+<CodeGroup>
+
+```javascript Usage
+await superdoc.upgradeToCollaboration({ ydoc, provider });
+```
+
+```javascript Full Example
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: file,
+  user: {
+    name: 'John Smith',
+    email: 'john@example.com',
+  },
+});
+
+superdoc.on('ready', async () => {
+  const ydoc = new Y.Doc();
+  const provider = new WebsocketProvider('wss://collab.example.com', 'document-123', ydoc);
+
+  await superdoc.upgradeToCollaboration({ ydoc, provider });
+});
+```
+
+</CodeGroup>
+
+See [Upgrade to Collaboration](/modules/collaboration/upgrade-to-collaboration) for the full workflow guide.
+
 ## Mode control
 
 ### `setDocumentMode`
@@ -566,6 +637,61 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     superdoc.removeCommentsList();
+  },
+});
+```
+
+</CodeGroup>
+
+### `scrollToComment`
+
+Scroll to a comment in the document and set it as active.
+
+<ParamField path="commentId" type="string" required>
+  The comment ID to scroll to
+</ParamField>
+
+<ParamField path="options" type="object">
+  Scroll behavior options
+  <Expandable>
+    <ParamField path="behavior" type="ScrollBehavior" default="smooth">
+      Scroll behavior — `"smooth"`, `"instant"`, or `"auto"`
+    </ParamField>
+    <ParamField path="block" type="ScrollLogicalPosition" default="start">
+      Vertical alignment — `"start"`, `"center"`, `"end"`, or `"nearest"`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `boolean` — `true` if the comment was found, `false` otherwise.
+
+<CodeGroup>
+
+```javascript Usage
+// Get a comment ID from the document API
+const { items } = superdoc.editor.doc.comments.list();
+const commentId = items[0].id;
+
+// Scroll to it
+superdoc.scrollToComment(commentId);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  modules: { comments: {} },
+  onReady: (superdoc) => {
+    const { items } = superdoc.editor.doc.comments.list();
+    if (items.length > 0) {
+      superdoc.scrollToComment(items[0].id, {
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
   },
 });
 ```

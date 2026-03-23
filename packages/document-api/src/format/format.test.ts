@@ -1,5 +1,9 @@
-import { describe, expect, it, vi, assertType } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import type { FormatInlineAliasInput, StyleApplyInput } from './format.js';
+
+/** Type-only assertion — validates at compile time, no-op at runtime. */
+function assertType<T>(_value: T): void {}
+
 import { executeStyleApply, executeInlineAlias } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
@@ -25,9 +29,9 @@ function makeReceipt(): TextMutationReceipt {
   };
 }
 
-function makeAdapter(): SelectionMutationAdapter & Record<string, ReturnType<typeof vi.fn>> {
+function makeAdapter(): SelectionMutationAdapter & Record<string, ReturnType<typeof mock>> {
   return {
-    execute: vi.fn(() => makeReceipt()),
+    execute: mock(() => makeReceipt()),
   };
 }
 
@@ -85,7 +89,7 @@ describe('executeStyleApply validation', () => {
   it('rejects unknown inline keys', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { superscript: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline style key "superscript"');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline property: "superscript".');
   });
 
   it('rejects invalid boolean payload type', () => {

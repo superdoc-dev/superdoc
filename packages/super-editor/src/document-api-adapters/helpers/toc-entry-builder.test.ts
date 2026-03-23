@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildTocEntryParagraphs, type TocSource } from './toc-entry-builder.js';
+import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 import type { TocSwitchConfig } from '@superdoc/document-api';
 
 const BASE_SOURCE: TocSource = {
@@ -18,6 +19,37 @@ function makeConfig(display: TocSwitchConfig['display'] = {}): TocSwitchConfig {
 }
 
 describe('buildTocEntryParagraphs', () => {
+  describe('hyperlink anchors', () => {
+    it('uses a _Toc bookmark name as the hyperlink anchor, not the raw sdBlockId', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
+      const textNode = paragraphs[0]!.content[0] as { marks?: Array<{ type: string; attrs: Record<string, unknown> }> };
+      const linkMark = textNode.marks?.find((m) => m.type === 'link');
+
+      expect(linkMark).toBeDefined();
+      expect(linkMark!.attrs.anchor).toMatch(/^_Toc[a-zA-Z0-9_]+$/);
+      expect(linkMark!.attrs.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
+      expect(linkMark!.attrs.anchor).not.toBe(BASE_SOURCE.sdBlockId);
+    });
+
+    it('produces the same anchor for the same sdBlockId across calls', () => {
+      const first = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
+      const second = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
+
+      const getAnchor = (paragraphs: typeof first) => {
+        const node = paragraphs[0]!.content[0] as { marks?: Array<{ attrs: Record<string, unknown> }> };
+        return node.marks?.[0]?.attrs.anchor;
+      };
+
+      expect(getAnchor(first)).toBe(getAnchor(second));
+    });
+
+    it('does not add link mark when hyperlinks display option is false', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: false }));
+      const textNode = paragraphs[0]!.content[0] as { marks?: unknown[] };
+      expect(textNode.marks).toBeUndefined();
+    });
+  });
+
   describe('rightAlignPageNumbers', () => {
     it('adds a right-aligned tab stop when rightAlignPageNumbers is true', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ rightAlignPageNumbers: true }));

@@ -23,15 +23,21 @@ vi.mock('prosemirror-state', () => ({
 
 describe('LinkClickHandler', () => {
   let mockEditor;
+  let mockPresentationEditor;
   let mockOpenPopover;
   let mockClosePopover;
   let mockSurfaceElement;
+  let windowOpenSpy;
 
   beforeEach(() => {
     // Reset all mocks before each test
     vi.clearAllMocks();
 
     // Create mock editor with state
+    mockPresentationEditor = {
+      goToAnchor: vi.fn(),
+    };
+
     mockEditor = {
       state: {
         selection: {
@@ -63,6 +69,7 @@ describe('LinkClickHandler', () => {
         focus: vi.fn(),
       },
       dispatch: vi.fn(),
+      presentationEditor: mockPresentationEditor,
       options: {
         documentMode: 'editing',
         onException: vi.fn(),
@@ -86,6 +93,7 @@ describe('LinkClickHandler', () => {
 
     // Setup getEditorSurfaceElement mock to return the surface element
     getEditorSurfaceElement.mockReturnValue(mockSurfaceElement);
+    windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -612,6 +620,76 @@ describe('LinkClickHandler', () => {
 
     // Should only dispatch once (second event was debounced)
     expect(mockEditor.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should open external hyperlinks in viewing mode instead of showing the popover', async () => {
+    mockEditor.options.documentMode = 'viewing';
+
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.dataset.pmStart = '10';
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: 'https://example.com',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(windowOpenSpy).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer');
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
+    expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+  });
+
+  it('should navigate internal anchors in viewing mode via editor.goToAnchor', async () => {
+    mockEditor.options.documentMode = 'viewing';
+
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.dataset.pmStart = '10';
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: '#section-1',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(mockPresentationEditor.goToAnchor).toHaveBeenCalledWith('#section-1');
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
   });
 
   // =========================================================================

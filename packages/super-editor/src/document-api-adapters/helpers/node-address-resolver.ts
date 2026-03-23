@@ -5,6 +5,7 @@ import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@su
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
 import { resolvePublicTocNodeId } from './toc-node-id.js';
+import { buildFallbackBlockNodeId, isVolatileRuntimeBlockId } from './deterministic-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
@@ -35,6 +36,8 @@ export type BlockIndex = {
   byId: Map<string, BlockCandidate>;
   ambiguous: ReadonlySet<string>;
 };
+
+type TraversalPath = readonly number[];
 
 // Keep in sync with BlockNodeType in document-api/types/node.ts
 const SUPPORTED_BLOCK_NODE_TYPES: ReadonlySet<BlockNodeType> = new Set<BlockNodeType>([
@@ -110,13 +113,75 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
   }
 }
 
-export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType: BlockNodeType): string | undefined {
+function resolveLegacyTableIdentity(attrs: BlockIdAttrs): string | undefined {
+  return toId(attrs.paraId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+}
+
+/**
+ * Resolves a runtime block identity for **table-like** nodes.
+ *
+ * Non-volatile sdBlockId is preferred; otherwise a deterministic fallback
+ * (hashed from nodeType + traversal path) is used. This is correct for tables
+ * because they keep a stable nodeType across mutations — their sdBlockId may
+ * change when ProseMirror replaces the node during property edits.
+ */
+function resolveTableRuntimeIdentity(
+  nodeType: BlockNodeType,
+  attrs: BlockIdAttrs,
+  pos: number,
+  path?: TraversalPath,
+): string | undefined {
+  const sdBlockId = toId(attrs.sdBlockId);
+  if (sdBlockId && !isVolatileRuntimeBlockId(sdBlockId)) {
+    return sdBlockId;
+  }
+  return buildFallbackBlockNodeId(nodeType, pos, path);
+}
+
+/**
+ * Resolves a runtime block identity for **paragraph-like** nodes
+ * (paragraph, heading, listItem).
+ *
+ * Always prefers sdBlockId — even a volatile (UUID-like) one — because the
+ * deterministic fallback hashes nodeType + traversal path, both of which shift
+ * during ordinary edits: sibling inserts/moves change the path, and restyles
+ * (paragraph → heading/listItem) change the nodeType. The sdBlockId stays
+ * stable for the session lifetime.
+ */
+function resolveParagraphRuntimeIdentity(
+  nodeType: BlockNodeType,
+  attrs: BlockIdAttrs,
+  pos: number,
+  path?: TraversalPath,
+): string | undefined {
+  return toId(attrs.sdBlockId) ?? buildFallbackBlockNodeId(nodeType, pos, path);
+}
+
+/**
+ * Resolves the public document-api nodeId for a block-level ProseMirror node.
+ *
+ * ID resolution strategy varies by block family:
+ * - **Paragraphs**: paraId → sdBlockId → deterministic fallback
+ * - **Tables/cells**: legacy attrs → non-volatile sdBlockId → deterministic fallback
+ * - **Other blocks**: blockId → id → paraId → uuid → sdBlockId
+ *
+ * @param node - The ProseMirror node.
+ * @param pos - Absolute document position of the node.
+ * @param nodeType - The mapped block node type.
+ * @param path - Optional traversal path for deterministic fallback IDs.
+ * @returns The resolved nodeId, or `undefined` if none could be determined.
+ */
+export function resolveBlockNodeId(
+  node: ProseMirrorNode,
+  pos: number,
+  nodeType: BlockNodeType,
+  path?: TraversalPath,
+): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
-    // paraId (imported from DOCX) is the primary identity for paragraphs. This
-    // preserves historical IDs across DOCX round-trips, while sdBlockId remains
-    // a fallback for freshly created nodes.
-    return toId(attrs?.paraId) ?? toId(attrs?.sdBlockId);
+    // paraId (imported from DOCX) is the primary identity for paragraphs —
+    // preserves historical IDs across DOCX round-trips.
+    return toId(attrs?.paraId) ?? resolveParagraphRuntimeIdentity(nodeType, (attrs ?? {}) as BlockIdAttrs, pos, path);
   }
 
   if (nodeType === 'tableOfContents') {
@@ -126,11 +191,18 @@ export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType:
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
   const typeName = node.type.name;
 
-  // Table nodes prefer paraId (preserved across DOCX roundtrips) over
-  // sdBlockId (regenerated on every document open). sdBlockId is still the
-  // fallback for programmatically created tables before their first export.
-  if (typeName === 'table' || typeName === 'tableRow' || typeName === 'tableCell' || typeName === 'tableHeader') {
+  // Table rows legitimately carry w14:paraId in DOCX, so prefer it when
+  // present and fall back to sdBlockId for newly created rows.
+  if (typeName === 'tableRow') {
     return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+  }
+
+  // Older SuperDoc exports also stored paraId on tables/cells. Keep honoring
+  // those legacy IDs when we encounter them. When only a runtime-generated
+  // UUID sdBlockId exists, expose a deterministic fallback instead so session
+  // addresses remain reusable across fresh document opens.
+  if (typeName === 'table' || typeName === 'tableCell' || typeName === 'tableHeader') {
+    return resolveLegacyTableIdentity(attrs) ?? resolveTableRuntimeIdentity(nodeType, attrs, pos, path);
   }
 
   // NOTE: Migration surface for the stable-addresses plan.
@@ -193,6 +265,9 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   const candidates: BlockCandidate[] = [];
   const byId = new Map<string, BlockCandidate>();
   const ambiguous = new Set<string>();
+  const pathByNode = new WeakMap<ProseMirrorNode, TraversalPath>();
+
+  pathByNode.set(editor.state.doc, []);
 
   function registerKey(key: string, candidate: BlockCandidate): void {
     if (byId.has(key)) {
@@ -206,10 +281,18 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   // This traversal is a hot path for adapter workflows (for example find ->
   // getNode). Keep this pure snapshot builder so a transaction-invalidated
   // cache can be layered on later without API changes.
-  editor.state.doc.descendants((node, pos) => {
+  editor.state.doc.descendants((node, pos, parent, index) => {
+    const parentPath = parent ? (pathByNode.get(parent) ?? []) : [];
+    const path =
+      typeof index === 'number' && Number.isInteger(index) && index >= 0 ? [...parentPath, index] : undefined;
+
+    if (path) {
+      pathByNode.set(node, path);
+    }
+
     const nodeType = mapBlockNodeType(node);
     if (!nodeType) return;
-    const nodeId = resolveBlockNodeId(node, pos, nodeType);
+    const nodeId = resolveBlockNodeId(node, pos, nodeType, path);
     if (!nodeId) return;
 
     const candidate: BlockCandidate = {
@@ -278,9 +361,41 @@ export function findBlockByIdStrict(index: BlockIndex, address: BlockNodeAddress
 }
 
 /**
+ * Resolves a nodeId against alias entries in the block index (e.g., sdBlockId
+ * registered as an alias for a deterministic primary ID).
+ *
+ * @param index - The block index to search.
+ * @param nodeId - The node ID to resolve via alias lookup.
+ * @returns The single matching candidate, or `undefined` if no alias matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` when multiple blocks share the alias.
+ */
+export function resolveBlockAlias(index: BlockIndex, nodeId: string): BlockCandidate | undefined {
+  if (!index.byId) return undefined;
+
+  const aliasMatches = new Map<string, BlockCandidate>();
+  for (const [key, candidate] of index.byId) {
+    if (!key.endsWith(`:${nodeId}`)) continue;
+    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
+  }
+
+  if (aliasMatches.size > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
+      nodeId,
+      count: aliasMatches.size,
+      matches: Array.from(aliasMatches.values()).map((candidate) => ({
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+      })),
+    });
+  }
+
+  return aliasMatches.size === 1 ? Array.from(aliasMatches.values())[0] : undefined;
+}
+
+/**
  * Finds a block candidate by raw nodeId without requiring a nodeType.
  *
- * This is needed for create operations that position relative to _any_ block type.
+ * Falls back to alias resolution when no primary match exists.
  *
  * @param index - The block index to search.
  * @param nodeId - The node ID to resolve.
@@ -301,26 +416,8 @@ export function findBlockByNodeIdOnly(index: BlockIndex, nodeId: string): BlockC
   }
 
   // No primary match — check alias entries (e.g., sdBlockId for paragraph-like nodes).
-  const aliasMatches = new Map<string, BlockCandidate>();
-  for (const [key, candidate] of index.byId) {
-    if (!key.endsWith(`:${nodeId}`)) continue;
-    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
-  }
-
-  if (aliasMatches.size === 1) {
-    return Array.from(aliasMatches.values())[0]!;
-  }
-
-  if (aliasMatches.size > 1) {
-    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
-      nodeId,
-      count: aliasMatches.size,
-      matches: Array.from(aliasMatches.values()).map((candidate) => ({
-        nodeType: candidate.nodeType,
-        nodeId: candidate.nodeId,
-      })),
-    });
-  }
+  const alias = resolveBlockAlias(index, nodeId);
+  if (alias) return alias;
 
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block with nodeId "${nodeId}" was not found.`, { nodeId });
 }

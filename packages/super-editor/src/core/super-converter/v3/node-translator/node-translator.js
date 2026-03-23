@@ -34,6 +34,7 @@ export const TranslatorTypes = Object.freeze({
  * @property {Comment[]} [comments]
  * @property {'external' | 'clean'} [commentsExportType]
  * @property {any[]} [exportedCommentDefs]
+ * @property {Map<string, string>} [statFieldCacheMap]
  * @property {Record<string, any>} [extraParams]
  * @property {import('../../../Editor.js').Editor} [editor]
  */

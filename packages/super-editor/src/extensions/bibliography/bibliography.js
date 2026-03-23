@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 
 export const Bibliography = Node.create({
   name: 'bibliography',
@@ -22,6 +23,10 @@ export const Bibliography = Node.create({
         rendered: false,
       },
       sdBlockId: {
+        default: null,
+        rendered: false,
+      },
+      style: {
         default: null,
         rendered: false,
       },

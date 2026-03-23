@@ -13,7 +13,6 @@
 
 import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
-import { selectionToRects } from '@superdoc/layout-bridge';
 
 import type { Editor } from '../../Editor.js';
 import type {
@@ -41,7 +40,14 @@ import {
   type HeaderFooterIdentifier,
   type HeaderFooterLayoutResult,
   type MultiSectionHeaderFooterIdentifier,
+  type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
+import { deduplicateOverlappingRects } from '../dom/DomSelectionGeometry.js';
+import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
+import {
+  ensureExplicitHeaderFooterSlot,
+  normalizeVariant,
+} from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
 
 // =============================================================================
 // Types
@@ -100,13 +106,7 @@ export type HeaderFooterInput = {
   footerBlocks?: unknown;
   headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
   footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-  constraints: {
-    width: number;
-    height: number;
-    pageWidth: number;
-    margins: { left: number; right: number };
-    overflowBaseHeight?: number;
-  };
+  constraints: HeaderFooterConstraints;
 } | null;
 
 /**
@@ -158,6 +158,22 @@ export type SessionManagerCallbacks = {
   onAnnounce?: (message: string) => void;
   /** Called to update awareness session */
   onUpdateAwarenessSession?: (session: HeaderFooterSession) => void;
+  /** Called when the active header/footer editor emits an update */
+  onSurfaceUpdate?: (data: {
+    sourceEditor: Editor;
+    surface: 'header' | 'footer';
+    headerId?: string | null;
+    sectionType?: string | null;
+  }) => void;
+  /** Called when the active header/footer editor emits a transaction */
+  onSurfaceTransaction?: (data: {
+    sourceEditor: Editor;
+    surface: 'header' | 'footer';
+    headerId?: string | null;
+    sectionType?: string | null;
+    transaction: unknown;
+    duration?: number;
+  }) => void;
 };
 
 // =============================================================================
@@ -198,6 +214,7 @@ export class HeaderFooterSessionManager {
   // Session state
   #session: HeaderFooterSession = { mode: 'body' };
   #activeEditor: Editor | null = null;
+  #activeEditorEventCleanup: (() => void) | null = null;
 
   // Hover UI elements (passed in, not owned)
   #hoverOverlay: HTMLElement | null = null;
@@ -269,6 +286,36 @@ export class HeaderFooterSessionManager {
   /** Header/footer manager */
   get manager(): HeaderFooterEditorManager | null {
     return this.#headerFooterManager;
+  }
+
+  /**
+   * Refresh header/footer structure after relationship-level changes.
+   *
+   * This is needed when header/footer parts are added or removed outside the
+   * interactive header/footer UI, for example through document-api commands.
+   * We refresh the descriptor registry and clear all derived FlowBlock caches
+   * so the next layout pass sees the new structure immediately.
+   */
+  refreshStructure(): void {
+    this.#headerFooterManager?.refresh();
+    this.#headerFooterAdapter?.invalidateAll();
+  }
+
+  /**
+   * Invalidate cached layout blocks for specific header/footer refs.
+   *
+   * Content-only changes do not require a full registry refresh. Invalidating
+   * the affected refs is enough for the next render to pick up the new PM JSON.
+   */
+  invalidateLayoutForRefs(refIds: readonly string[]): void {
+    const adapter = this.#headerFooterAdapter;
+    if (!adapter) {
+      return;
+    }
+
+    refIds.forEach((refId) => {
+      adapter.invalidate(refId);
+    });
   }
 
   /** Editor overlay manager */
@@ -415,6 +462,7 @@ export class HeaderFooterSessionManager {
       resetSession: () => {
         this.#managerCleanups = [];
         this.#session = { mode: 'body' };
+        this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
         this.#deps?.notifyInputBridgeTargetChanged();
       },
@@ -462,11 +510,16 @@ export class HeaderFooterSessionManager {
       }
     }
 
+    // Resolve section projections to map sectionIndex → sectionId
+    const sectionIdBySectionIndex = this.#buildSectionIdMap();
+
     const defaultMargins = this.#options.defaultMargins;
 
     layout.pages.forEach((page, pageIndex) => {
       const margins = page.margins ?? layoutOptions.margins ?? defaultMargins;
       const actualPageHeight = page.size?.h ?? pageHeight;
+      const sectionIndex = page.sectionIndex ?? 0;
+      const sectionId = sectionIdBySectionIndex.get(sectionIndex) ?? `section-${sectionIndex}`;
 
       // Header region
       const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
@@ -475,9 +528,11 @@ export class HeaderFooterSessionManager {
 
       this.#headerRegions.set(pageIndex, {
         kind: 'header',
-        headerId: headerPayload?.headerId,
+        headerFooterRefId: headerPayload?.headerFooterRefId,
         sectionType:
           headerPayload?.sectionType ?? this.#computeExpectedSectionType('header', page, sectionFirstPageNumbers),
+        sectionId,
+        sectionIndex,
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
@@ -493,9 +548,11 @@ export class HeaderFooterSessionManager {
       const footerBox = this.#computeDecorationBox('footer', footerBoxMargins, actualPageHeight);
       this.#footerRegions.set(pageIndex, {
         kind: 'footer',
-        headerId: footerPayload?.headerId,
+        headerFooterRefId: footerPayload?.headerFooterRefId,
         sectionType:
           footerPayload?.sectionType ?? this.#computeExpectedSectionType('footer', page, sectionFirstPageNumbers),
+        sectionId,
+        sectionIndex,
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
@@ -507,6 +564,35 @@ export class HeaderFooterSessionManager {
         minY: footerPayload?.minY,
       });
     });
+
+    // Debug-mode assertion: every region must have concrete section identity
+    if (this.#options.isDebug) {
+      for (const [, region] of this.#headerRegions) {
+        if (!region.sectionId) console.error('[HeaderFooterSessionManager] Header region missing sectionId', region);
+      }
+      for (const [, region] of this.#footerRegions) {
+        if (!region.sectionId) console.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
+      }
+    }
+  }
+
+  /**
+   * Build a map from section index → section ID using section projections.
+   * Falls back gracefully if projections cannot be resolved.
+   */
+  #buildSectionIdMap(): Map<number, string> {
+    const map = new Map<number, string>();
+    try {
+      const projections = resolveSectionProjections(this.#options.editor);
+      for (let i = 0; i < projections.length; i++) {
+        map.set(i, projections[i].sectionId);
+      }
+    } catch {
+      // Section projection may fail on very early layout passes before
+      // the document is fully initialized. The fallback `section-${index}`
+      // in rebuildRegions handles this.
+    }
+    return map;
   }
 
   /**
@@ -583,13 +669,22 @@ export class HeaderFooterSessionManager {
 
   /**
    * Resolve the header/footer descriptor for a given region.
-   * Looks up by headerId first, then by sectionType, then falls back to first descriptor.
+   *
+   * Lookup order:
+   * 1. By concrete `headerFooterRefId` — always correct when present.
+   * 2. By `sectionType` (variant) — used only when the decoration provider
+   *    did not attach a concrete refId. This is safe in single-section
+   *    documents. In multi-section documents, regions are now populated
+   *    with concrete refIds by the per-rId decoration path, so this
+   *    branch is unreachable for multi-section cases once layout completes.
+   * 3. No blind fallback — returns null, triggering materialization in
+   *    `#enterMode` for the correct section.
    */
   resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
     const manager = this.#headerFooterManager;
     if (!manager) return null;
-    if (region.headerId) {
-      const descriptor = manager.getDescriptorById(region.headerId);
+    if (region.headerFooterRefId) {
+      const descriptor = manager.getDescriptorById(region.headerFooterRefId);
       if (descriptor) return descriptor;
     }
     if (region.sectionType) {
@@ -597,12 +692,7 @@ export class HeaderFooterSessionManager {
       const match = descriptors.find((entry) => entry.variant === region.sectionType);
       if (match) return match;
     }
-    const descriptors = manager.getDescriptors(region.kind);
-    if (!descriptors.length) {
-      console.warn('[HeaderFooterSessionManager] No descriptor found for region:', region);
-      return null;
-    }
-    return descriptors[0];
+    return null;
   }
 
   #pointInRegion(region: HeaderFooterRegion, x: number, localY: number): boolean {
@@ -633,13 +723,14 @@ export class HeaderFooterSessionManager {
   exitMode(): void {
     if (this.#session.mode === 'body') return;
 
-    // Capture headerId before clearing session - needed for cache invalidation
-    const editedHeaderId = this.#session.headerId;
+    // Capture headerFooterRefId before clearing session - needed for cache invalidation
+    const editedHeaderId = this.#session.headerFooterRefId;
 
     if (this.#activeEditor) {
       this.#activeEditor.setEditable(false);
       this.#activeEditor.setOptions({ documentMode: 'viewing' });
     }
+    this.#teardownActiveEditorEventBridge();
 
     this.#overlayManager?.hideEditingOverlay();
     this.#overlayManager?.showSelectionOverlay();
@@ -687,14 +778,36 @@ export class HeaderFooterSessionManager {
           this.#activeEditor.setEditable(false);
           this.#activeEditor.setOptions({ documentMode: 'viewing' });
         }
+        this.#teardownActiveEditorEventBridge();
         this.#overlayManager.hideEditingOverlay();
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
       }
 
-      const descriptor = this.#resolveDescriptorForRegion(region);
+      let descriptor = this.#resolveDescriptorForRegion(region);
+
+      // If no descriptor found and region has section identity, materialize
+      // the slot through the real parts system (not converter-only defaults).
+      if (!descriptor && region.sectionId) {
+        const materializationResult = ensureExplicitHeaderFooterSlot(this.#options.editor, {
+          sectionId: region.sectionId,
+          kind: region.kind,
+          variant: normalizeVariant(region.sectionType ?? 'default'),
+        });
+        if (materializationResult) {
+          // Refresh registry so the new refId is discoverable
+          this.#headerFooterManager.refresh();
+          // Look up descriptor by the returned refId directly — no dependency
+          // on rebuildRegions or pagination timing.
+          descriptor = this.#headerFooterManager.getDescriptorById(materializationResult.refId) ?? null;
+        }
+      }
+
       if (!descriptor) {
-        console.warn('[HeaderFooterSessionManager] No descriptor found for region:', region);
+        console.warn(
+          '[HeaderFooterSessionManager] No descriptor found for region after materialization attempt:',
+          region,
+        );
         this.clearHover();
         return;
       }
@@ -807,6 +920,26 @@ export class HeaderFooterSessionManager {
         editor.setEditable(true);
         editor.setOptions({ documentMode: 'editing' });
 
+        // Ensure the header/footer editor receives focus on user interaction.
+        // Without this, subsequent clicks in newly-activated editors may not
+        // update ProseMirror selection because the view never regains focus.
+        try {
+          const editorView = editor.view;
+          if (editorView && editorHost) {
+            const focusHandler = () => {
+              try {
+                editorView.focus();
+              } catch {
+                // Ignore focus errors; selection updates will still work when possible.
+              }
+            };
+            editorHost.addEventListener('mousedown', focusHandler);
+            this.#managerCleanups.push(() => editorHost.removeEventListener('mousedown', focusHandler));
+          }
+        } catch {
+          // Best-effort: if we can't wire the focus handler, continue without it.
+        }
+
         // Move caret to end of content
         try {
           const doc = editor.state?.doc;
@@ -829,14 +962,12 @@ export class HeaderFooterSessionManager {
         return;
       }
 
-      // Hide layout selection overlay
-      this.#overlayManager.hideSelectionOverlay();
-
       this.#activeEditor = editor;
+      this.#setupActiveEditorEventBridge(editor);
       this.#session = {
         mode: region.kind,
         kind: region.kind,
-        headerId: descriptor.id,
+        headerFooterRefId: descriptor.id,
         sectionType: descriptor.variant ?? region.sectionType ?? null,
         pageIndex: region.pageIndex,
         pageNumber: region.pageNumber,
@@ -861,6 +992,7 @@ export class HeaderFooterSessionManager {
         this.#overlayManager?.hideEditingOverlay();
         this.#overlayManager?.showSelectionOverlay();
         this.clearHover();
+        this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
       } catch (cleanupError) {
@@ -886,8 +1018,8 @@ export class HeaderFooterSessionManager {
 
   #resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
     if (!this.#headerFooterManager) return null;
-    if (region.headerId) {
-      const descriptor = this.#headerFooterManager.getDescriptorById(region.headerId);
+    if (region.headerFooterRefId) {
+      const descriptor = this.#headerFooterManager.getDescriptorById(region.headerFooterRefId);
       if (descriptor) return descriptor;
     }
     if (region.sectionType) {
@@ -895,12 +1027,11 @@ export class HeaderFooterSessionManager {
       const match = descriptors.find((entry) => entry.variant === region.sectionType);
       if (match) return match;
     }
-    const descriptors = this.#headerFooterManager.getDescriptors(region.kind);
-    if (!descriptors.length) {
-      console.warn('[HeaderFooterSessionManager] No descriptor found for region:', region);
-      return null;
-    }
-    return descriptors[0];
+    // Return null instead of falling back to the first descriptor — a blind
+    // fallback is not section-aware and can open the wrong header/footer in
+    // multi-section documents. #enterMode handles null by materializing the
+    // correct section-specific slot via ensureExplicitHeaderFooterSlot.
+    return null;
   }
 
   // ===========================================================================
@@ -917,7 +1048,7 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onEditingContext?.({
       kind: this.#session.mode,
       editor,
-      headerId: this.#session.headerId,
+      headerId: this.#session.headerFooterRefId,
       sectionType: this.#session.sectionType,
     });
 
@@ -926,6 +1057,50 @@ export class HeaderFooterSessionManager {
         ? 'Exited header/footer edit mode.'
         : `Editing ${this.#session.kind === 'header' ? 'Header' : 'Footer'} (${this.#session.sectionType ?? 'default'})`;
     this.#callbacks.onAnnounce?.(message);
+  }
+
+  #setupActiveEditorEventBridge(editor: Editor): void {
+    this.#teardownActiveEditorEventBridge();
+
+    const emitSurfaceUpdate = () => {
+      if (this.#session.mode !== 'header' && this.#session.mode !== 'footer') return;
+      this.#callbacks.onSurfaceUpdate?.({
+        sourceEditor: editor,
+        surface: this.#session.mode,
+        headerId: this.#session.headerFooterRefId ?? null,
+        sectionType: this.#session.sectionType ?? null,
+      });
+    };
+
+    const emitSurfaceTransaction = ({ transaction, duration }: { transaction: unknown; duration?: number }) => {
+      if (this.#session.mode !== 'header' && this.#session.mode !== 'footer') return;
+      this.#callbacks.onSurfaceTransaction?.({
+        sourceEditor: editor,
+        surface: this.#session.mode,
+        headerId: this.#session.headerFooterRefId ?? null,
+        sectionType: this.#session.sectionType ?? null,
+        transaction,
+        duration,
+      });
+    };
+
+    editor.on('update', emitSurfaceUpdate);
+    editor.on('transaction', emitSurfaceTransaction);
+
+    this.#activeEditorEventCleanup = () => {
+      editor.off?.('update', emitSurfaceUpdate);
+      editor.off?.('transaction', emitSurfaceTransaction);
+    };
+  }
+
+  #teardownActiveEditorEventBridge(): void {
+    try {
+      this.#activeEditorEventCleanup?.();
+    } catch (error) {
+      console.warn('[HeaderFooterSessionManager] Failed to clean up active editor bridge:', error);
+    } finally {
+      this.#activeEditorEventCleanup = null;
+    }
   }
 
   #updateModeBanner(): void {
@@ -1079,7 +1254,14 @@ export class HeaderFooterSessionManager {
       width: measurementWidth,
       height,
       pageWidth: pageSize.w,
-      margins: { left: marginLeft, right: marginRight },
+      pageHeight: pageSize.h,
+      margins: {
+        left: marginLeft,
+        right: marginRight,
+        top: marginTop,
+        bottom: marginBottom,
+        header: headerMargin,
+      },
       overflowBaseHeight,
     };
   }
@@ -1194,8 +1376,30 @@ export class HeaderFooterSessionManager {
 
   /**
    * Compute selection rectangles in header/footer mode.
+   *
+   * This method intentionally does NOT use layout-engine geometry. Header/footer
+   * editing is driven by a dedicated ProseMirror editor instance mounted inside
+   * an overlay host. For selection, we rely on the browser's native DOM selection
+   * rectangles from that editor and then remap them into layout coordinates using
+   * the current region and body page height.
+   *
+   * Selection rectangles are therefore derived from:
+   * - Native ProseMirror selection → DOM Range → client rects
+   * - Header/footer region → pageIndex / local offset
    */
   computeSelectionRects(from: number, to: number): LayoutRect[] {
+    // Guard: must be in header/footer mode with an active editor and region context.
+    if (this.#session.mode === 'body') {
+      return [];
+    }
+    const activeEditor = this.#activeEditor;
+    if (!activeEditor?.view) {
+      return [];
+    }
+
+    const view = activeEditor.view;
+
+    // Resolve layout context for the active header/footer region.
     const context = this.getContext();
     if (!context) {
       console.warn('[HeaderFooterSessionManager] Header/footer context unavailable for selection rects', {
@@ -1205,20 +1409,82 @@ export class HeaderFooterSessionManager {
       return [];
     }
 
-    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
-    const rects = selectionToRects(context.layout, context.blocks, context.measures, from, to, undefined) ?? [];
-    const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
+    const region = context.region;
+    const pageIndex = region.pageIndex;
 
-    return rects.map((rect: LayoutRect) => {
-      const headerLocalY = rect.y - rect.pageIndex * headerPageHeight;
-      return {
-        pageIndex: context.region.pageIndex,
-        x: rect.x + context.region.localX,
-        y: context.region.pageIndex * bodyPageHeight + context.region.localY + headerLocalY,
-        width: rect.width,
-        height: rect.height,
-      };
-    });
+    // Compute DOM-based rectangles local to the editor host. We intentionally
+    // ignore the numeric from/to arguments and any cached ProseMirror
+    // selection, and instead rely solely on the live DOM selection inside the
+    // active header/footer editor. This avoids stale selection state when
+    // switching between multiple header/footer editors.
+    const domSelection = view.dom.ownerDocument?.getSelection?.();
+    let domRectList: DOMRect[] = [];
+
+    if (domSelection && domSelection.rangeCount > 0) {
+      for (let i = 0; i < domSelection.rangeCount; i += 1) {
+        const range = domSelection.getRangeAt(i);
+        if (!range) continue;
+        const rangeRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
+        domRectList.push(...rangeRects);
+      }
+
+      // Normalize to a minimal set of rects. Browsers often return both a
+      // line-box rect and a text-content rect on the same line; without
+      // deduplication this produces overlapping highlights that look like
+      // intersecting selections.
+      domRectList = deduplicateOverlappingRects(domRectList);
+    }
+
+    if (!domRectList.length) {
+      return [];
+    }
+
+    // Map DOM client rects to layout coordinates.
+    //
+    // Range.getClientRects() measures in viewport pixels after PresentationEditor
+    // applies scale(zoom). Region coordinates, page offsets, and the rest of the
+    // selection pipeline use unscaled layout coordinates, so the DOM-derived
+    // deltas and sizes must be converted back out of zoom space here.
+    const editorDom = view.dom as HTMLElement;
+    const editorHostRect = editorDom.getBoundingClientRect();
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const toLayoutUnits = (viewportPixels: number): number => viewportPixels / zoom;
+    const layoutRects: LayoutRect[] = [];
+
+    for (const clientRect of domRectList) {
+      // Ignore rects that do not intersect the active editor host. This
+      // prevents stale DOM selections from other header/footer editors (or the
+      // body editor) from contributing rectangles when switching between hosts.
+      const horizontallyOverlaps = clientRect.right > editorHostRect.left && clientRect.left < editorHostRect.right;
+      const verticallyOverlaps = clientRect.bottom > editorHostRect.top && clientRect.top < editorHostRect.bottom;
+      if (!horizontallyOverlaps || !verticallyOverlaps) {
+        continue;
+      }
+
+      const localX = toLayoutUnits(clientRect.left - editorHostRect.left);
+      const localY = toLayoutUnits(clientRect.top - editorHostRect.top);
+      const width = toLayoutUnits(clientRect.width);
+      const height = toLayoutUnits(clientRect.height);
+
+      if (!Number.isFinite(localX) || !Number.isFinite(localY) || width <= 0 || height <= 0) {
+        continue;
+      }
+
+      layoutRects.push({
+        pageIndex,
+        x: region.localX + localX,
+        y: pageIndex * bodyPageHeight + region.localY + localY,
+        width,
+        height,
+      });
+    }
+
+    return layoutRects;
   }
 
   /**
@@ -1283,40 +1549,6 @@ export class HeaderFooterSessionManager {
       return 1;
     }
     return context.layout.pageSize?.h ?? context.region.height ?? 1;
-  }
-
-  // ===========================================================================
-  // Default Creation
-  // ===========================================================================
-
-  /**
-   * Create a default header/footer when none exists.
-   */
-  createDefault(region: HeaderFooterRegion): void {
-    const converter = (this.#options.editor as EditorWithConverter).converter;
-
-    if (!converter) {
-      return;
-    }
-
-    const variant = region.sectionType ?? 'default';
-
-    if (region.kind === 'header' && typeof converter.createDefaultHeader === 'function') {
-      converter.createDefaultHeader(variant);
-    } else if (region.kind === 'footer' && typeof converter.createDefaultFooter === 'function') {
-      converter.createDefaultFooter(variant);
-    }
-
-    // Update legacy identifier
-    this.#headerFooterIdentifier = extractIdentifierFromConverter(converter);
-  }
-
-  /**
-   * Update the header/footer identifier from converter.
-   */
-  updateIdentifierFromConverter(): void {
-    const converter = (this.#options.editor as Editor & { converter?: unknown }).converter;
-    this.#headerFooterIdentifier = extractIdentifierFromConverter(converter);
   }
 
   /**
@@ -1444,7 +1676,7 @@ export class HeaderFooterSessionManager {
               offset: metrics.offset,
               marginLeft: box.x,
               contentWidth: effectiveWidth,
-              headerId: sectionRId,
+              headerFooterRefId: sectionRId,
               sectionType: headerFooterType,
               minY: layoutMinY,
               box: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
@@ -1491,7 +1723,7 @@ export class HeaderFooterSessionManager {
         offset: metrics.offset,
         marginLeft: box.x,
         contentWidth: box.width,
-        headerId: finalHeaderId,
+        headerFooterRefId: finalHeaderId,
         sectionType: headerFooterType,
         minY: layoutMinY,
         box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
@@ -1537,6 +1769,8 @@ export class HeaderFooterSessionManager {
    * Clean up all resources.
    */
   destroy(): void {
+    this.#teardownActiveEditorEventBridge();
+
     // Run cleanup functions
     this.#managerCleanups.forEach((fn) => {
       try {

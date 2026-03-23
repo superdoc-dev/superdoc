@@ -1,7 +1,7 @@
 import type { DocumentApiAdapters } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getAdapter } from './get-adapter.js';
-import { sdFindAdapter, findLegacyAdapter } from './find-adapter.js';
+import { sdFindAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getMarkdownAdapter } from './get-markdown-adapter.js';
@@ -38,6 +38,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
@@ -81,12 +83,21 @@ import {
   listsSetLevelTrailingCharacterWrapper,
   listsSetLevelMarkerFontWrapper,
   listsClearLevelOverridesWrapper,
+  listsGetStyleWrapper,
+  listsApplyStyleWrapper,
+  listsRestartAtWrapper,
+  listsSetLevelNumberStyleWrapper,
+  listsSetLevelTextWrapper,
+  listsSetLevelStartWrapper,
+  listsSetLevelLayoutWrapper,
+  registerSetValueDelegate,
 } from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
+import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
 import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
@@ -152,6 +163,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from './plan-engine/tables-wrappers.js';
 import {
   tablesGetAdapter,
@@ -162,6 +176,7 @@ import {
   tablesClearDefaultStyleAdapter,
 } from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
+import { createDiffAdapter } from './diff-adapter.js';
 import {
   tocListWrapper,
   tocGetWrapper,
@@ -319,6 +334,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+  initStoryRevisionStore(editor);
   registerPartDescriptor(stylesPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(relsPartDescriptor);
@@ -326,13 +342,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
 
   const ccAdapter = createContentControlsAdapter(editor);
 
+  // Register the setValue delegate for the restartAt wrapper
+  registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+
   return {
     get: {
       get: (input) => getAdapter(editor, input),
     },
     find: {
       find: (input) => sdFindAdapter(editor, input),
-      findLegacy: (query) => findLegacyAdapter(editor, query),
     },
     getNode: {
       getNode: (address) => getNodeAdapter(editor, address),
@@ -391,6 +409,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
       setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
       clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
+      setDirection: (input, options) => paragraphsSetDirectionWrapper(editor, input, options),
+      clearDirection: (input, options) => paragraphsClearDirectionWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),
@@ -444,6 +464,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
       clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
       setType: (input, options) => listsSetTypeWrapper(editor, input, options),
+
+      // SD-2025 user-facing operations
+      getStyle: (input) => listsGetStyleWrapper(editor, input),
+      applyStyle: (input, options) => listsApplyStyleWrapper(editor, input, options),
+      restartAt: (input, options) => listsRestartAtWrapper(editor, input, options),
+      setLevelNumberStyle: (input, options) => listsSetLevelNumberStyleWrapper(editor, input, options),
+      setLevelText: (input, options) => listsSetLevelTextWrapper(editor, input, options),
+      setLevelStart: (input, options) => listsSetLevelStartWrapper(editor, input, options),
+      setLevelLayout: (input, options) => listsSetLevelLayoutWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),
@@ -502,6 +531,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setCellPadding: (input, options) => tablesSetCellPaddingWrapper(editor, input, options),
       setCellSpacing: (input, options) => tablesSetCellSpacingWrapper(editor, input, options),
       clearCellSpacing: (input, options) => tablesClearCellSpacingWrapper(editor, input, options),
+      applyStyle: (input, options) => tablesApplyStyleWrapper(editor, input, options),
+      setBorders: (input, options) => tablesSetBordersWrapper(editor, input, options),
+      setTableOptions: (input, options) => tablesSetTableOptionsWrapper(editor, input, options),
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
@@ -677,6 +709,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    diff: createDiffAdapter(editor),
     history: createHistoryAdapter(editor),
   };
 }

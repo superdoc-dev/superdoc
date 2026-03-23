@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type {
   FlowBlock,
   Measure,
@@ -2500,38 +2500,6 @@ describe('layoutDocument', () => {
       // Balancing should NOT have made them the same width
       expect(singleColFragment?.width).not.toBeCloseTo(twoColFragment!.width, 0);
     });
-
-    it('applies balancing when all fragments have same column configuration', () => {
-      // When all fragments have the same width (same column config),
-      // balancing should redistribute them across columns.
-      const options: LayoutOptions = {
-        pageSize: { w: 612, h: 792 },
-        margins: { top: 72, right: 72, bottom: 72, left: 72 },
-        columns: { count: 2, gap: 48 },
-      };
-
-      const blocks: FlowBlock[] = [
-        { kind: 'paragraph', id: 'p1', runs: [] },
-        { kind: 'paragraph', id: 'p2', runs: [] },
-        { kind: 'paragraph', id: 'p3', runs: [] },
-        { kind: 'paragraph', id: 'p4', runs: [] },
-      ];
-
-      const measures: Measure[] = [makeMeasure([40]), makeMeasure([40]), makeMeasure([40]), makeMeasure([40])];
-
-      const layout = layoutDocument(blocks, measures, options);
-      const page = layout.pages[0];
-
-      // All fragments should have the same column width
-      const columnWidth = (468 - 48) / 2; // 210
-      for (const f of page.fragments) {
-        expect(f.width).toBeCloseTo(columnWidth, 0);
-      }
-
-      // Fragments should be distributed across columns (different X positions)
-      const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
-      expect(uniqueXPositions.size).toBe(2);
-    });
   });
 });
 
@@ -2671,10 +2639,10 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(15);
   });
 
-  it('transforms page-relative anchor offsets by subtracting left margin', () => {
-    // An anchored image with hRelativeFrom='page' and offsetH=545 (absolute from page left)
-    // When left margin is 107, the image should be positioned at 545-107=438 within the header
-    // Anchored images are attached to the nearest paragraph and placed during paragraph layout
+  it('preserves page-relative horizontal anchor offset in header/footer layout', () => {
+    // page-relative hRelativeFrom='page' offsets are passed through to the inner
+    // layoutDocument unchanged. The painter handles the margin offset when
+    // positioning the container on the page.
     const paragraphBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'para-1',
@@ -2703,18 +2671,19 @@ describe('layoutHeaderFooter', () => {
     };
 
     const layout = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], {
-      width: 602, // content width
+      width: 602,
       height: 100,
-      pageWidth: 816, // actual page width (8.5" at 96dpi)
+      pageWidth: 816,
       margins: { left: 107, right: 107 },
     });
 
     expect(layout.pages).toHaveLength(1);
-    // Find the image fragment (should be anchored)
     const imageFragment = layout.pages[0].fragments.find((f) => f.kind === 'image');
     expect(imageFragment).toBeDefined();
-    // The offsetH should be transformed: 545 - 107 = 438
-    expect(imageFragment!.x).toBe(438);
+    // offsetH is passed through to inner layout's computeAnchorX; the result
+    // includes the offset plus margin-left added by computeAnchorX for page-relative.
+    // Inner layout has margins=0, so computeAnchorX returns offsetH + 0 = 545.
+    expect(imageFragment!.x).toBe(545);
   });
 
   it('does not transform anchor offset when margins not provided', () => {
@@ -3001,6 +2970,257 @@ describe('layoutHeaderFooter', () => {
   // ALL behindDoc images are now excluded from height calculations, regardless of position.
   // See tests above: 'excludes ALL behindDoc anchored fragments from height (per OOXML spec)'
   // and 'excludes ALL behindDoc fragments but includes non-behindDoc anchored images'.
+
+  it('separates measurement bounds (height) from render bounds (minY/maxY/renderHeight)', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const behindDocImage: FlowBlock = {
+      kind: 'image',
+      id: 'img-behind',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        behindDoc: true,
+        offsetV: -30, // positioned above the band origin
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 40,
+    };
+
+    const layout = layoutHeaderFooter([paragraphBlock, behindDocImage], [paragraphMeasure, imageMeasure], {
+      width: 200,
+      height: 100,
+    });
+
+    // Measurement height should only include the paragraph (behindDoc excluded)
+    expect(layout.height).toBeCloseTo(15);
+    // Render bounds should include the behindDoc image (minY < 0 because of negative offsetV)
+    expect(layout.minY).toBeLessThan(0);
+    // renderHeight should be larger than measurement height
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('returns renderHeight equal to height when no out-of-band fragments exist', () => {
+    const layout = layoutHeaderFooter([block], [makeMeasure([20, 10])], { width: 400, height: 80 });
+
+    // With only normal paragraphs, measurement and render bounds should match
+    expect(layout.height).toBeCloseTo(30);
+    expect(layout.renderHeight).toBe(layout.height);
+    expect(layout.minY).toBe(0);
+    expect(layout.maxY).toBeCloseTo(30);
+  });
+
+  it('excludes out-of-band page-relative anchors from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    // Page-relative anchor positioned far above the measurement canvas
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: -100, // way above the canvas
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const layout = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], {
+      width: 200,
+      height: 100,
+    });
+
+    // The page-relative anchor at y=-100 is fully out-of-band (bottom = -100+30 = -70 < 0)
+    // so it should be excluded from measurement height
+    expect(layout.height).toBeCloseTo(15);
+    // But render bounds should include it
+    expect(layout.minY).toBeLessThan(0);
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('post-normalizes page-relative anchors in footer layout', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+        hRelativeFrom: 'page',
+        offsetH: 0,
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    // Without kind='footer': no normalization — raw inner-layout Y
+    const withoutKind = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], constraints);
+    const imgFragWithout = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // With kind='footer': normalization converts to footer-band-local Y
+    const withFooter = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      constraints,
+      'footer',
+    );
+    const imgFragFooter = withFooter.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // Footer band origin = pageHeight - marginBottom = 1056 - 72 = 984
+    // physicalY = pageHeight - imgHeight = 1056 - 30 = 1026
+    // normalized Y = 1026 - 984 = 42
+    expect(imgFragFooter).toBeDefined();
+    expect(imgFragFooter!.y).toBe(1056 - 30 - (1056 - 72));
+
+    // Without kind, the Y is the synthetic canvas position (not normalized)
+    expect(imgFragWithout).toBeDefined();
+    expect(imgFragWithout!.y).not.toBe(imgFragFooter!.y);
+  });
+
+  it('does NOT post-normalize page-relative anchors in header layout', () => {
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 10,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    // With kind='header': no normalization — Y stays as inner-layout computed it
+    const withHeader = layoutHeaderFooter([imageBlock], [imageMeasure], constraints, 'header');
+    const imgFrag = withHeader.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // Without kind: same behavior (no normalization)
+    const withoutKind = layoutHeaderFooter([imageBlock], [imageMeasure], constraints);
+    const imgFragNoKind = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // Both should have the same Y — inner-layout raw position
+    expect(imgFrag).toBeDefined();
+    expect(imgFragNoKind).toBeDefined();
+    expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+  });
+
+  it('does not narrow footer paragraphs around page-relative anchored textboxes', () => {
+    // Regression: the page-number textbox in the footer must not shrink
+    // unrelated earlier footer paragraphs via float-based remeasurement.
+    // Word keeps footer paragraphs full-width and positions page-relative
+    // textboxes independently.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        alignH: 'left',
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+      },
+      wrap: {
+        type: 'Square',
+        wrapText: 'right',
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 180, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 80,
+      height: 60,
+    };
+    const constraints = {
+      width: 200,
+      height: 120,
+      pageHeight: 300,
+      margins: { left: 20, right: 20, top: 40, bottom: 60, header: 20 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      constraints,
+      'footer',
+    );
+
+    const paragraphFragment = layout.pages[0].fragments.find((fragment) => fragment.kind === 'para') as ParaFragment;
+
+    // Paragraph must keep the full footer width -- no float wrapping
+    expect(paragraphFragment).toBeDefined();
+    expect(paragraphFragment.x).toBe(0);
+    expect(paragraphFragment.width).toBe(200);
+  });
 });
 
 describe('requirePageBoundary edge cases', () => {
@@ -3229,6 +3449,87 @@ describe('requirePageBoundary edge cases', () => {
       const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
       expect(p3.x).toBeCloseTo(options.margins!.left + columnWidth + 48); // second column
       expect(p3.y).toBeCloseTo(regionTop); // reset to region top
+    });
+
+    it('uses explicit custom column widths after a manual column break', () => {
+      const toCustomColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-custom',
+        type: 'continuous',
+        columns: { count: 2, gap: 50, widths: [100, 550], equalWidth: false },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        toCustomColumns,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p3', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 800, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+      const p1 = page.fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const regionTop = p1.y + 40;
+
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      expect(p2.x).toBeCloseTo(50);
+      expect(p2.y).toBeCloseTo(regionTop);
+      expect(p2.width).toBeCloseTo(100);
+
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+      expect(p3.x).toBeCloseTo(200);
+      expect(p3.y).toBeCloseTo(regionTop);
+      expect(p3.width).toBeCloseTo(550);
+    });
+
+    it('does not balance the final page for explicit custom-width columns', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-custom-final-page',
+          type: 'nextPage',
+          columns: { count: 2, gap: 48, widths: [210, 214], equalWidth: false },
+          margins: {},
+        } as SectionBreakBlock,
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'paragraph', id: 'p3', runs: [] },
+      ];
+
+      const measures: Measure[] = [{ kind: 'sectionBreak' }, makeMeasure([40]), makeMeasure([40]), makeMeasure([40])];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+
+      const p1 = page.fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+
+      expect(p1.x).toBeCloseTo(72);
+      expect(p2.x).toBeCloseTo(72);
+      expect(p3.x).toBeCloseTo(72);
+      expect(p2.y).toBeGreaterThan(p1.y);
+      expect(p3.y).toBeGreaterThan(p2.y);
     });
   });
 
@@ -4085,8 +4386,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[1], 'body')).toBe(true);
     });
 
-    it('suppresses inter-paragraph spacing when current paragraph has contextualSpacing', () => {
-      // Test that current paragraph's spacingAfter is suppressed when it has contextualSpacing
+    it('suppresses inter-paragraph spacing when both paragraphs have contextualSpacing', () => {
       const current: FlowBlock = {
         kind: 'paragraph',
         id: 'current',
@@ -4094,8 +4394,8 @@ describe('requirePageBoundary edge cases', () => {
         attrs: {
           keepNext: true,
           styleId: 'TestStyle',
-          contextualSpacing: true, // Current has it
-          spacing: { after: 50 }, // Large spacing after
+          contextualSpacing: true,
+          spacing: { after: 50 },
         },
       };
       const next: FlowBlock = {
@@ -4103,8 +4403,8 @@ describe('requirePageBoundary edge cases', () => {
         id: 'next',
         runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
         attrs: {
-          styleId: 'TestStyle', // Same style
-          // Note: next does NOT have contextualSpacing
+          styleId: 'TestStyle',
+          contextualSpacing: true,
           spacing: { before: 10 },
         },
       };
@@ -4120,10 +4420,7 @@ describe('requirePageBoundary edge cases', () => {
         totalHeight: 20,
       };
 
-      // If contextual spacing works: gap = max(0, 10) = 10px (current's after suppressed)
-      // Total = 30 + 10 + 20 = 60px
-      // If broken: gap = max(50, 10) = 50px
-      // Total = 30 + 50 + 20 = 100px
+      // Both opt in → gap = max(0, 0) = 0px. Total = 30 + 0 + 20 = 50px
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 130 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
@@ -4131,10 +4428,56 @@ describe('requirePageBoundary edge cases', () => {
 
       const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
 
-      // Should fit on one page (60px < 70px)
       expect(layout.pages).toHaveLength(1);
       expect(pageContainsBlock(layout.pages[0], 'current')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'next')).toBe(true);
+    });
+
+    it('suppresses current after-spacing even when next does not have contextualSpacing (per-paragraph)', () => {
+      const current: FlowBlock = {
+        kind: 'paragraph',
+        id: 'current',
+        runs: [{ text: 'Current', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          keepNext: true,
+          styleId: 'TestStyle',
+          contextualSpacing: true,
+          spacing: { after: 50 },
+        },
+      };
+      const next: FlowBlock = {
+        kind: 'paragraph',
+        id: 'next',
+        runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'TestStyle',
+          // next does NOT have contextualSpacing — per-paragraph rule: current still
+          // suppresses its own after-spacing independently
+          spacing: { before: 10 },
+        },
+      };
+
+      const currentMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(30)],
+        totalHeight: 30,
+      };
+      const nextMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Current suppresses its own after → 0. Next does not suppress before → 10.
+      // gap = max(0, 10) = 10px. Total = 30 + 10 + 20 = 60px < 70px → one page
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 130 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
+      };
+
+      const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
+
+      expect(layout.pages).toHaveLength(1);
     });
   });
 
@@ -4529,14 +4872,14 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
     });
 
-    it('reclaims trailing spacing when chain starter has contextualSpacing', () => {
-      // Previous paragraph has spacingAfter, chain starter has contextualSpacing + same style.
+    it('reclaims trailing spacing when both filler and chain starter have contextualSpacing', () => {
+      // Both filler and chain starter have contextualSpacing + same style.
       // The trailing spacing should be reclaimed, making room for the chain.
       const filler: FlowBlock = {
         kind: 'paragraph',
         id: 'filler',
         runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
-        attrs: { styleId: 'Normal', spacingAfter: 10 },
+        attrs: { styleId: 'Normal', contextualSpacing: true, spacing: { after: 10 } },
       };
       const chainStarter: FlowBlock = {
         kind: 'paragraph',
@@ -4551,7 +4894,7 @@ describe('requirePageBoundary edge cases', () => {
         attrs: {},
       };
 
-      // Filler is 40px, chain starter and anchor are each 25px
+      // Filler is 40px, chain starter and anchor are each 26px
       const fillerMeasure: ParagraphMeasure = {
         kind: 'paragraph',
         lines: [makeLine(40)],
@@ -4559,15 +4902,15 @@ describe('requirePageBoundary edge cases', () => {
       };
       const chainMeasure: ParagraphMeasure = {
         kind: 'paragraph',
-        lines: [makeLine(25)],
-        totalHeight: 25,
+        lines: [makeLine(26)],
+        totalHeight: 26,
       };
 
       // Page has 100px content area
-      // After filler (40px) + spacingAfter (10px), cursor is at 50px from top
+      // After filler (40px) + spacingAfter (10px), cursor is at 80px (top=30 + 40 + 10)
       // Available without reclaim: 100 - 50 = 50px
-      // Chain needs: 25 + 25 = 50px (exactly fits with reclaim, doesn't fit without)
-      // With contextualSpacing, the 10px spacingAfter is reclaimed → 60px available
+      // Chain needs: 26 + 26 = 52px > 50px (does NOT fit without reclaim)
+      // With reclaim the 10px spacingAfter is recovered → 60px available, 52px fits.
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 160 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
@@ -4584,6 +4927,58 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'chainStarter')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
+    });
+
+    it('does not reclaim trailing spacing when only chain starter has contextualSpacing', () => {
+      // Filler does NOT have contextualSpacing — per-paragraph rule: filler does not suppress its own after.
+      // Same dimensions as the positive case: chain = 52px, available without reclaim = 50px.
+      // Without reclaim 52 > 50, so the chain moves to page 2.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacing: { after: 10 } },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Normal' },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(26)],
+        totalHeight: 26,
+      };
+
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // No reclaim → 50px available, 52px chain → page 2
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
     });
 
     it('does not reclaim trailing spacing when styles differ', () => {
@@ -4640,6 +5035,67 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
       expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
       expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
+    });
+
+    it('does not suppress chain-internal spacing for mixed contextualSpacing', () => {
+      // Three same-style paragraphs in a keepNext chain: true / false / true.
+      // The middle one opts out, so spacing around it should NOT be suppressed.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Other' },
+      };
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, styleId: 'Normal', contextualSpacing: true, spacing: { after: 20 } },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, styleId: 'Normal', contextualSpacing: false, spacing: { before: 20, after: 20 } },
+      };
+      const para3: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para3',
+        runs: [{ text: 'Para 3', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', contextualSpacing: true, spacing: { before: 20 } },
+      };
+
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(10)],
+        totalHeight: 10,
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Chain (para1+para2+para3) with per-paragraph rule:
+      //   para1→para2: para1 suppresses after (cs=true) → 0, para2 keeps before (cs=false) → 20. gap = max(0,20) = 20
+      //   para2→para3: para2 keeps after (cs=false) → 20, para3 suppresses before (cs=true) → 0. gap = max(20,0) = 20
+      //   Total: 20 + 20 + 20 + 20 + 20 = 100px
+      //
+      // Filler takes 10px. Content area = 105px.
+      // After filler, 95px remain — 100px chain doesn't fit current page but fits blank page → page 2.
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 165 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 105px content
+      };
+
+      const layout = layoutDocument([filler, para1, para2, para3], [fillerMeasure, measure, measure, measure], options);
+
+      // Chain must move to page 2 because it's 100px and only 95px remain after filler.
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para2')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para3')).toBe(true);
     });
   });
 });

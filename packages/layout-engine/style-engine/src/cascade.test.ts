@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { combineProperties, combineRunProperties, combineIndentProperties } from './cascade.js';
 
 describe('cascade - combineProperties', () => {

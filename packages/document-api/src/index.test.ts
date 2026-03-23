@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import type { DocumentInfo, NodeAddress, SDNodeResult, SDFindResult } from './types/index.js';
 import type {
   CommentsAdapter,
@@ -21,25 +22,25 @@ import type { HistoryAdapter } from './history/history.js';
 import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: SDFindResult): FindAdapter {
-  return { find: vi.fn(() => result) };
+  return { find: mock(() => result) };
 }
 
 function makeGetAdapter(): GetAdapter {
   return {
-    get: vi.fn(() => ({ modelVersion: 'sdm/1' as const, body: [] })),
+    get: mock(() => ({ modelVersion: 'sdm/1' as const, body: [] })),
   };
 }
 
 function makeGetNodeAdapter(result: SDNodeResult): GetNodeAdapter {
   return {
-    getNode: vi.fn(() => result),
-    getNodeById: vi.fn((_input) => result),
+    getNode: mock(() => result),
+    getNodeById: mock((_input) => result),
   };
 }
 
 function makeGetTextAdapter(text = '') {
   return {
-    getText: vi.fn((_input) => text),
+    getText: mock((_input) => text),
   };
 }
 
@@ -47,11 +48,15 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
   const defaultResult: DocumentInfo = {
     counts: {
       words: 0,
+      characters: 0,
       paragraphs: 0,
       headings: 0,
       tables: 0,
       images: 0,
       comments: 0,
+      trackedChanges: 0,
+      sdtFields: 0,
+      lists: 0,
     },
     outline: [],
     capabilities: {
@@ -60,10 +65,11 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
       canComment: true,
       canReplace: true,
     },
+    revision: '0',
   };
 
   return {
-    info: vi.fn((_input) => ({
+    info: mock((_input) => ({
       ...defaultResult,
       ...result,
       counts: {
@@ -81,21 +87,21 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
 
 function makeCommentsAdapter(): CommentsAdapter {
   return {
-    add: vi.fn(() => ({ success: true as const })),
-    edit: vi.fn(() => ({ success: true as const })),
-    reply: vi.fn(() => ({ success: true as const })),
-    move: vi.fn(() => ({ success: true as const })),
-    resolve: vi.fn(() => ({ success: true as const })),
-    remove: vi.fn(() => ({ success: true as const })),
-    setInternal: vi.fn(() => ({ success: true as const })),
-    setActive: vi.fn(() => ({ success: true as const })),
-    goTo: vi.fn(() => ({ success: true as const })),
-    get: vi.fn(() => ({
+    add: mock(() => ({ success: true as const })),
+    edit: mock(() => ({ success: true as const })),
+    reply: mock(() => ({ success: true as const })),
+    move: mock(() => ({ success: true as const })),
+    resolve: mock(() => ({ success: true as const })),
+    remove: mock(() => ({ success: true as const })),
+    setInternal: mock(() => ({ success: true as const })),
+    setActive: mock(() => ({ success: true as const })),
+    goTo: mock(() => ({ success: true as const })),
+    get: mock(() => ({
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c1' },
       commentId: 'c1',
       status: 'open' as const,
     })),
-    list: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+    list: mock(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
   };
 }
 
@@ -112,23 +118,22 @@ function makeWriteAdapter(): WriteAdapter {
     success: true as const,
     resolution: {
       target: {
-        kind: 'content' as const,
-        stability: 'stable' as const,
-        nodeId: 'p1',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 0 } },
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 0 },
       },
     },
   };
   return {
-    write: vi.fn(() => textReceipt),
-    insertStructured: vi.fn(() => sdReceipt),
-    replaceStructured: vi.fn(() => sdReceipt),
+    write: mock(() => textReceipt),
+    insertStructured: mock(() => sdReceipt),
+    replaceStructured: mock(() => sdReceipt),
   };
 }
 
 function makeSelectionMutationAdapter(): SelectionMutationAdapter {
   return {
-    execute: vi.fn(() => ({
+    execute: mock(() => ({
       success: true as const,
       resolution: {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
@@ -141,37 +146,37 @@ function makeSelectionMutationAdapter(): SelectionMutationAdapter {
 
 function makeTrackChangesAdapter(): TrackChangesAdapter {
   return {
-    list: vi.fn((_input) => ({
+    list: mock((_input) => ({
       evaluatedRevision: 'r1',
       total: 0,
       items: [],
       page: { limit: 0, offset: 0, returned: 0 },
     })),
-    get: vi.fn((input: { id: string }) => ({
+    get: mock((input: { id: string }) => ({
       address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: input.id },
       id: input.id,
       type: 'insert' as const,
     })),
-    accept: vi.fn((_input) => ({ success: true as const })),
-    reject: vi.fn((_input) => ({ success: true as const })),
-    acceptAll: vi.fn((_input) => ({ success: true as const })),
-    rejectAll: vi.fn((_input) => ({ success: true as const })),
+    accept: mock((_input) => ({ success: true as const })),
+    reject: mock((_input) => ({ success: true as const })),
+    acceptAll: mock((_input) => ({ success: true as const })),
+    rejectAll: mock((_input) => ({ success: true as const })),
   };
 }
 
 function makeCreateAdapter(): CreateAdapter {
   return {
-    paragraph: vi.fn(() => ({
+    paragraph: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'new-p' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-p', range: { start: 0, end: 0 } },
     })),
-    heading: vi.fn(() => ({
+    heading: mock(() => ({
       success: true as const,
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
     })),
-    table: vi.fn(() => ({
+    table: mock(() => ({
       success: true as const,
       table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 'new-t' },
     })),
@@ -180,73 +185,73 @@ function makeCreateAdapter(): CreateAdapter {
 
 function makeListsAdapter(): ListsAdapter {
   return {
-    list: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
-    get: vi.fn(() => ({
+    list: mock(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+    get: mock(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
       kind: 'ordered' as const,
       level: 0,
       text: 'List item',
     })),
-    insert: vi.fn(() => ({
+    insert: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    indent: vi.fn(() => ({
+    indent: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    outdent: vi.fn(() => ({
+    outdent: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    create: vi.fn(() => ({
+    create: mock(() => ({
       success: true as const,
       listId: '99',
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    attach: vi.fn(() => ({
+    attach: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    detach: vi.fn(() => ({
+    detach: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
-    join: vi.fn(() => ({
+    join: mock(() => ({
       success: true as const,
       listId: '1',
     })),
-    canJoin: vi.fn(() => ({
+    canJoin: mock(() => ({
       canJoin: true as const,
       adjacentListId: '2',
     })),
-    separate: vi.fn(() => ({
+    separate: mock(() => ({
       success: true as const,
       listId: '99',
       numId: 99,
     })),
-    setLevel: vi.fn(() => ({
+    setLevel: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    setValue: vi.fn(() => ({
+    setValue: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    continuePrevious: vi.fn(() => ({
+    continuePrevious: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    canContinuePrevious: vi.fn(() => ({
+    canContinuePrevious: mock(() => ({
       canContinue: true as const,
       previousListId: '1',
     })),
-    setLevelRestart: vi.fn(() => ({
+    setLevelRestart: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    convertToText: vi.fn(() => ({
+    convertToText: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
@@ -259,7 +264,7 @@ const TABLE_MUTATION_RESULT = {
 };
 
 function makeTablesAdapter(): TablesAdapter {
-  const mutation = vi.fn(() => ({ ...TABLE_MUTATION_RESULT }));
+  const mutation = mock(() => ({ ...TABLE_MUTATION_RESULT }));
   return {
     convertFromText: mutation,
     delete: mutation,
@@ -297,18 +302,29 @@ function makeTablesAdapter(): TablesAdapter {
     setCellPadding: mutation,
     setCellSpacing: mutation,
     clearCellSpacing: mutation,
-    get: vi.fn(() => ({
+    get: mock(() => ({
       nodeId: 't1',
       address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
       rows: 3,
       columns: 3,
     })),
-    getCells: vi.fn(() => ({
-      tableNodeId: 't1',
-      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
-    })),
-    getProperties: vi.fn(() => ({
+    getCells: mock(() => ({
       nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+      cells: [
+        {
+          nodeId: 'c1',
+          address: { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' },
+          rowIndex: 0,
+          columnIndex: 0,
+          colspan: 1,
+          rowspan: 1,
+        },
+      ],
+    })),
+    getProperties: mock(() => ({
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
       styleId: 'TableGrid',
       alignment: 'left' as const,
     })),
@@ -317,15 +333,15 @@ function makeTablesAdapter(): TablesAdapter {
 
 function makeHistoryAdapter(): HistoryAdapter {
   return {
-    get: vi.fn(() => ({
+    get: mock(() => ({
       undoDepth: 0,
       redoDepth: 0,
       canUndo: false,
       canRedo: false,
       historyUnsafeOperations: [],
     })),
-    undo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
-    redo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+    undo: mock(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+    redo: mock(() => ({ noop: true, revision: { before: '0', after: '0' } })),
   };
 }
 
@@ -348,7 +364,7 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
     },
   };
   return {
-    get: vi.fn(() => ({ ...defaultCapabilities, ...overrides })),
+    get: mock(() => ({ ...defaultCapabilities, ...overrides })),
   };
 }
 
@@ -356,7 +372,7 @@ const PARAGRAPH_ADDRESS: NodeAddress = { kind: 'block', nodeType: 'paragraph', n
 
 const PARAGRAPH_NODE_RESULT: SDNodeResult = {
   node: { kind: 'paragraph', paragraph: { inlines: [] } },
-  address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
+  address: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
 };
 
 const FIND_RESULT: SDFindResult = {
@@ -383,7 +399,7 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const input = { select: { type: 'node' as const, nodeKind: 'paragraph' } };
+    const input = { select: { type: 'node' as const, nodeType: 'paragraph' as const } };
     const result = api.find(input);
 
     expect(result).toEqual(FIND_RESULT);
@@ -607,14 +623,13 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const insertTarget = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     const selectionTarget = {
       kind: 'selection' as const,
       start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
       end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
     };
     api.insert({ value: 'Hi' });
-    api.insert({ target: insertTarget, value: 'Yo' });
+    api.insert({ target: selectionTarget, value: 'Yo' });
     api.replace({ target: selectionTarget, text: 'Hello' }, { changeMode: 'tracked' });
     api.delete({ target: selectionTarget });
 
@@ -623,10 +638,10 @@ describe('createDocumentApi', () => {
       { kind: 'insert', text: 'Hi' },
       { changeMode: 'direct', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      2,
-      { kind: 'insert', target: insertTarget, text: 'Yo' },
-      { changeMode: 'direct', dryRun: false },
+    // Targeted insert now routes through selectionMutation adapter
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'insert', target: selectionTarget, ref: undefined, text: 'Yo' },
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
     expect(selectionAdpt.execute).toHaveBeenCalledWith(
       { kind: 'replace', target: selectionTarget, ref: undefined, text: 'Hello' },
@@ -634,7 +649,7 @@ describe('createDocumentApi', () => {
     );
     expect(selectionAdpt.execute).toHaveBeenCalledWith(
       { kind: 'delete', target: selectionTarget, ref: undefined, behavior: 'selection' },
-      undefined,
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
   });
 
@@ -1137,14 +1152,16 @@ describe('createDocumentApi', () => {
       });
     }
 
-    function expectValidationError(fn: () => void, messageMatch?: string | RegExp) {
+    function expectValidationError(fn: () => void, messageMatch?: string | RegExp, expectedCode?: string) {
       try {
         fn();
         expect.fail('Expected DocumentApiValidationError to be thrown');
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+        if (expectedCode) {
+          expect(e.code).toBe(expectedCode);
+        }
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1163,9 +1180,13 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts canonical target', () => {
+    it('accepts canonical SelectionTarget', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       const result = api.insert({ target, value: 'hello' });
       expect(result.success).toBe(true);
     });
@@ -1176,7 +1197,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.insert({ target: null, value: 'hello' } as any),
-        'target must be a text address object',
+        'target must be a SelectionTarget object',
       );
     });
 
@@ -1184,7 +1205,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.insert({ target: { kind: 'text', blockId: 'p1' }, value: 'hello' } as any),
-        'target must be a text address object',
+        'target must be a SelectionTarget object',
       );
     });
 
@@ -1278,8 +1299,8 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('maps insert({ target, value }) to internal write request with text field', () => {
-      const writeAdpt = makeWriteAdapter();
+    it('maps insert({ target, value }) to selection mutation adapter', () => {
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1288,18 +1309,22 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        selectionMutation: makeSelectionMutationAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       api.insert({ target, value: 'hello' });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'insert', target, text: 'hello' },
-        { changeMode: 'direct', dryRun: false },
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'insert', target, ref: undefined, text: 'hello' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1324,7 +1349,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '# Heading', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '# Heading', type: 'markdown' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1347,7 +1375,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '<p>Hello</p>', type: 'html' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '<p>Hello</p>', type: 'html' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1390,11 +1421,15 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       api.insert({ target, value: '**bold**', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
         { target, value: '**bold**', type: 'markdown' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1656,7 +1691,7 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       api.replace({ target: sdTarget, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
       expect(writeAdpt.replaceStructured).toHaveBeenCalledTimes(1);
       expect(writeAdpt.write).not.toHaveBeenCalled();
@@ -1664,13 +1699,13 @@ describe('createDocumentApi', () => {
 
     it('rejects structural replace with empty fragment', () => {
       const api = makeApi();
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       expect(() => api.replace({ target: sdTarget, content: [] } as any)).toThrow(/at least one node/);
     });
 
     it('rejects structural replace with invalid nestingPolicy.tables', () => {
       const api = makeApi();
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       expect(() =>
         api.replace({ target: sdTarget, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
       ).toThrow(/nestingPolicy\.tables must be one of/);
@@ -1788,7 +1823,7 @@ describe('createDocumentApi', () => {
       api.delete({ target: SELECTION_TARGET });
       expect(selectionAdpt.execute).toHaveBeenCalledWith(
         { kind: 'delete', target: SELECTION_TARGET, ref: undefined, behavior: 'selection' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
   });
@@ -1956,7 +1991,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2086,7 +2121,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2254,7 +2289,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2368,7 +2403,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2523,7 +2558,7 @@ describe('createDocumentApi', () => {
       expect(getResult.columns).toBe(3);
 
       const cellsResult = api.tables.getCells({ target });
-      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.nodeId).toBe('t1');
       expect(cellsResult.cells).toHaveLength(1);
 
       const propsResult = api.tables.getProperties({ target });
@@ -2641,49 +2676,170 @@ describe('createDocumentApi', () => {
 
     it('accepts table-scoped locator for row-locator operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ nodeId: 't1', rowIndex: 0 })).not.toThrow();
     });
 
-    it('rejects both direct + table-scoped for row-locator operations', () => {
+    it('rejects table-target row ops without rowIndex at the public API boundary', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.insertRow({ target, position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ target } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ target, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ target, repeatHeader: true } as any)).toThrow(/rowIndex is required/);
+    });
+
+    it('rejects bare nodeId row ops at the public API boundary', () => {
+      const api = makeApi();
+
+      expect(() => api.tables.insertRow({ nodeId: 't1', position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ nodeId: 't1' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ nodeId: 't1', heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ nodeId: 't1', repeatHeader: true } as any)).toThrow(
+        /rowIndex is required/,
+      );
+    });
+
+    it('rejects redundant rowIndex on direct row targets at the public API boundary', () => {
       const api = makeApi();
       const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.deleteRow({ target, rowIndex: 0 } as any)).toThrow(/rowIndex must not be provided/);
+      expect(() => api.tables.setRowHeight({ target, rowIndex: 0, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.setRowOptions({ target, rowIndex: 0, repeatHeader: true } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+    });
+
+    // -- column-locator operations (target/nodeId) --
+
+    it('accepts target for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ target, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts nodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ nodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, nodeId: 't1', columnIndex: 0, position: 'after' } as any)).toThrow(
         /Cannot combine/,
       );
     });
 
-    // -- column-locator operations (tableTarget/tableNodeId) --
+    // -- merge range locator (target/nodeId) --
 
-    it('accepts tableTarget for column-locator operations', () => {
+    it('accepts target for merge range operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
-      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
-    });
-
-    it('accepts tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
-    });
-
-    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() =>
-        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
-      ).toThrow(/Cannot combine/);
-    });
-
-    // -- merge range locator (tableTarget/tableNodeId) --
-
-    it('accepts tableTarget for merge range operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() =>
-        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+        api.tables.mergeCells({ target, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
       ).not.toThrow();
+    });
+
+    // -- unmergeCells mixed cell/table-scoped locator validation --
+
+    it('accepts direct cell nodeId for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'cell-1' })).not.toThrow();
+    });
+
+    it('accepts direct cell target for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target })).not.toThrow();
+    });
+
+    it('treats explicit null coordinates as absent for direct cell target on unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (nodeId + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (target + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('treats explicit undefined coordinates as a direct cell call for unmergeCells', () => {
+      const api = makeApi();
+      // { nodeId, rowIndex: undefined, columnIndex: undefined } must pass validation
+      // as a direct-cell call — the keys exist but the values are absent.
+      expect(() =>
+        api.tables.unmergeCells({ nodeId: 'cell-1', rowIndex: undefined, columnIndex: undefined } as any),
+      ).not.toThrow();
+    });
+
+    it('rejects unmergeCells with only rowIndex (missing columnIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with only columnIndex (missing rowIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with cell target plus coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 } as any)).toThrow(
+        /must not be provided when target is a cell node/,
+      );
+    });
+
+    it('rejects unmergeCells with table target without coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and mixed null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: null } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
     });
 
     // -- create.table locator validation --

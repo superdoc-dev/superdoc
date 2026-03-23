@@ -55,3 +55,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

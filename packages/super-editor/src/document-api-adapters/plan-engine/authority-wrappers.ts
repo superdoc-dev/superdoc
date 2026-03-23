@@ -29,6 +29,7 @@ import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllAuthorities,
   resolveAuthorityTarget,
+  resolvePostMutationAuthorityId,
   extractAuthorityInfo,
   buildAuthorityDiscoveryItem,
   findAllAuthorityEntries,
@@ -142,8 +143,7 @@ export function authoritiesInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return toaFailure('NO_OP', 'Insert produced no change.');
-  const insertedNode = editor.state.doc.nodeAt(pos);
-  const resolvedNodeId = (insertedNode?.attrs?.sdBlockId as string) ?? `toa-${pos}`;
+  const resolvedNodeId = resolvePostMutationAuthorityId(editor.state.doc, requestedNodeId);
   return toaSuccess({ kind: 'block', nodeType: 'tableOfAuthorities', nodeId: resolvedNodeId });
 }
 

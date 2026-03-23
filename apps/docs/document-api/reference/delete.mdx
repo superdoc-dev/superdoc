@@ -6,8 +6,6 @@ description: Delete content at a contiguous document selection. Accepts a Select
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.
@@ -26,20 +24,34 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `behavior` | DeleteBehavior | no | DeleteBehavior |
-| `ref` | string | no |  |
-| `target` | SelectionTarget | no | SelectionTarget |
-| `target.end` | SelectionPoint | no | SelectionPoint |
-| `target.kind` | `"selection"` | no | Constant: `"selection"` |
-| `target.start` | SelectionPoint | no | SelectionPoint |
+| `in` | StoryLocator | no | StoryLocator |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+
+### Variant 2 (required: ref)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `in` | StoryLocator | no | StoryLocator |
+| `ref` | string | yes |  |
 
 ### Example request
 
 ```json
 {
   "behavior": "selection",
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "target": {
     "end": {
       "blockId": "block-abc123",
@@ -58,7 +70,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -88,7 +100,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -183,6 +195,11 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -193,17 +210,45 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw input schema">
 ```json
 {
-  "allOf": [
+  "oneOf": [
     {
-      "$ref": "#/$defs/TargetLocator"
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
+        },
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
+        },
+        "target": {
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/DeleteBehavior"
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
+        },
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
+        },
+        "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
+          "type": "string"
         }
       },
+      "required": [
+        "ref"
+      ],
       "type": "object"
     }
   ]

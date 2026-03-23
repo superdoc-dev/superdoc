@@ -2,6 +2,7 @@ export type CliErrorCode =
   | 'INVALID_ARGUMENT'
   | 'SESSION_ID_INVALID'
   | 'SESSION_NOT_FOUND'
+  | 'SESSION_REQUIRED'
   | 'UNKNOWN_COMMAND'
   | 'VALIDATION_ERROR'
   | 'MISSING_REQUIRED'
@@ -42,7 +43,8 @@ export type CliErrorCode =
   | 'PAGE_NUMBERS_NOT_MATERIALIZED'
   | 'CAPABILITY_UNAVAILABLE'
   | 'INVALID_TARGET'
-  | 'AMBIGUOUS_TARGET';
+  | 'AMBIGUOUS_TARGET'
+  | 'CAPABILITY_UNSUPPORTED';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

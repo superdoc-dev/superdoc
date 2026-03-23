@@ -1,16 +1,14 @@
 ---
 title: create.paragraph
 sidebarTitle: create.paragraph
-description: Create a new paragraph at the target position.
+description: Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
-Create a new paragraph at the target position.
+Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.
 
 - Operation ID: `create.paragraph`
 - API member path: `editor.doc.create.paragraph(...)`
@@ -29,6 +27,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator | no | StoryLocator |
 | `text` | string | no |  |
 
 ### Example request
@@ -38,13 +37,16 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
   "at": {
     "kind": "documentStart"
   },
-  "text": "Hello, world."
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (paragraph.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -105,6 +107,11 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `AMBIGUOUS_TARGET`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -118,6 +125,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
   "additionalProperties": false,
   "properties": {
     "at": {
+      "description": "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -177,7 +185,11 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
         }
       ]
     },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "text": {
+      "description": "Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.",
       "type": "string"
     }
   },

@@ -48,6 +48,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
 } from '@superdoc/document-api';
 
 import type { CompiledPlan } from './compiler.js';
@@ -92,6 +95,9 @@ import {
   tablesSetCellPaddingAdapter,
   tablesSetCellSpacingAdapter,
   tablesClearCellSpacingAdapter,
+  tablesApplyStyleAdapter,
+  tablesSetBordersAdapter,
+  tablesSetTableOptionsAdapter,
 } from '../tables-adapter.js';
 
 // ---------------------------------------------------------------------------
@@ -472,4 +478,32 @@ export function tablesClearCellSpacingWrapper(
   options?: MutationOptions,
 ): TableMutationResult {
   return executeTableCommand(editor, 'tables.clearCellSpacing', tablesClearCellSpacingAdapter, input, options);
+}
+
+// ---------------------------------------------------------------------------
+// Convenience operations (SD-2129)
+// ---------------------------------------------------------------------------
+
+export function tablesApplyStyleWrapper(
+  editor: Editor,
+  input: TablesApplyStyleInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  return executeTableCommand(editor, 'tables.applyStyle', tablesApplyStyleAdapter, input, options);
+}
+
+export function tablesSetBordersWrapper(
+  editor: Editor,
+  input: TablesSetBordersInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  return executeTableCommand(editor, 'tables.setBorders', tablesSetBordersAdapter, input, options);
+}
+
+export function tablesSetTableOptionsWrapper(
+  editor: Editor,
+  input: TablesSetTableOptionsInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  return executeTableCommand(editor, 'tables.setTableOptions', tablesSetTableOptionsAdapter, input, options);
 }

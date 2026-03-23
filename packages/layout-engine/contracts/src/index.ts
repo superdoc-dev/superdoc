@@ -25,6 +25,8 @@ export {
 } from './clip-path-inset.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
+export type { NormalizedColumnLayout } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -932,6 +934,7 @@ export type SectionBreakBlock = {
   columns?: {
     count: number;
     gap: number;
+    widths?: number[];
     equalWidth?: boolean;
   };
   /**
@@ -1419,6 +1422,8 @@ export type FlowBlock =
 export type ColumnLayout = {
   count: number;
   gap: number;
+  widths?: number[];
+  equalWidth?: boolean;
 };
 
 /** A measured line within a block, output by the measurer. */
@@ -1805,9 +1810,14 @@ export type HeaderFooterPage = {
 };
 
 export type HeaderFooterLayout = {
+  /** Measurement height for pagination — excludes out-of-band fragments. */
   height: number;
+  /** Minimum y of all rendered fragments (including out-of-band). */
   minY?: number;
+  /** Maximum y + fragmentHeight of all rendered fragments. */
   maxY?: number;
+  /** Full visual extent of all rendered fragments (renderMaxY - renderMinY). */
+  renderHeight?: number;
   pages: HeaderFooterPage[];
 };
 

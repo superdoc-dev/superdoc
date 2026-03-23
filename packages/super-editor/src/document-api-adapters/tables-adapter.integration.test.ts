@@ -112,7 +112,7 @@ describe('tables adapter DOCX integration', () => {
     );
     const tableNodeId = resolveTableNodeId(createResult);
 
-    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, atRowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
+    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, rowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
     expect(splitResult.success).toBe(true);
 
     const exportedFiles = await exportDocxFiles(editor);
@@ -121,5 +121,25 @@ describe('tables adapter DOCX integration', () => {
     expect(documentXml).toBeTruthy();
     expect(documentXml).not.toMatch(/<\/w:tbl>\s*<w:tbl>/);
     expect(documentXml).toMatch(/<\/w:tbl>\s*<w:p\b[^>]*(?:\/>|>[\s\S]*?<\/w:p>)\s*<w:tbl>/);
+  });
+
+  it('exports row paraIds without writing invalid table or cell w14 identity attrs', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    createTableAdapter(editor, { rows: 2, columns: 2, at: { kind: 'documentEnd' } }, DIRECT_MUTATION_OPTIONS);
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+
+    expect(documentXml).toBeTruthy();
+    expect(documentXml).toMatch(/<w:tr\b[^>]*\bw14:paraId=/);
+    expect(documentXml).not.toMatch(/<w:tbl\b[^>]*\bw14:(?:paraId|textId)=/);
+    expect(documentXml).not.toMatch(/<w:tc\b[^>]*\bw14:(?:paraId|textId)=/);
   });
 });

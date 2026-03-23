@@ -7,8 +7,10 @@ import {
   twipsToLines,
   eighthPointsToPixels,
   linesToTwips,
+  isValidHexColor,
+  getHexColorFromDocxSystem,
+  normalizeHexColor,
 } from '@converter/helpers.js';
-import { isValidHexColor, getHexColorFromDocxSystem } from '@converter/helpers';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.js';
 import {
@@ -97,7 +99,9 @@ export function encodeMarksFromRPr(runProperties, docx) {
         });
         break;
       case 'styleId':
-        textStyleAttrs[key] = value;
+        if (value != null) {
+          textStyleAttrs[key] = value;
+        }
         break;
       case 'fontSize':
         // case 'fontSizeCs':
@@ -616,6 +620,11 @@ export function decodeRPrFromMarks(marks) {
               }
               break;
             }
+            case 'styleId':
+              if (value != null) {
+                runProperties.styleId = value;
+              }
+              break;
           }
         });
         break;
@@ -663,11 +672,35 @@ function getFontFamilyValue(attributes, docx) {
  * @returns {string|null} Hex color string, 'transparent', or null when unsupported.
  */
 function getHighLightValue(attributes) {
-  const fill = attributes['w:fill'];
-  if (fill && fill !== 'auto') return `#${fill}`;
-  if (attributes?.['w:val'] === 'none') return 'transparent';
-  if (isValidHexColor(attributes?.['w:val'])) return `#${attributes['w:val']}`;
-  return getHexColorFromDocxSystem(attributes?.['w:val']) || null;
+  const fill = normalizeHighlightHex(attributes?.['w:fill']);
+  if (fill) return `#${fill}`;
+
+  const value = attributes?.['w:val'];
+  if (value === 'none') return 'transparent';
+
+  const normalizedValue = normalizeHighlightHex(value);
+  if (normalizedValue) return `#${normalizedValue}`;
+
+  return getHexColorFromDocxSystem(value) || null;
+}
+
+/**
+ * Normalize a highlight token to a 6-digit hex string without a leading hash.
+ * Returns null for non-hex values such as DOCX system color keywords.
+ *
+ * @param {unknown} rawValue
+ * @returns {string|null}
+ */
+function normalizeHighlightHex(rawValue) {
+  if (typeof rawValue !== 'string') return null;
+
+  const trimmedValue = rawValue.trim();
+  if (!trimmedValue || trimmedValue.toLowerCase() === 'auto') return null;
+
+  const normalizedValue = normalizeHexColor(trimmedValue);
+  if (!normalizedValue || !isValidHexColor(normalizedValue)) return null;
+
+  return normalizedValue;
 }
 
 /**

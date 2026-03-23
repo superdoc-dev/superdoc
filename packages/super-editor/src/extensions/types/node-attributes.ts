@@ -159,6 +159,7 @@ export interface ParagraphProperties {
   tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
+  rightToLeft?: boolean;
 }
 
 /** List rendering metadata computed at runtime */
@@ -279,9 +280,9 @@ export interface TableAttrs extends TableNodeAttributes {
   tableGrid: TableGrid | null;
   /** Table properties */
   tableProperties: TableProperties | null;
-  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  /** Legacy imported identity preserved for backwards compatibility */
   paraId?: string | null;
-  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  /** Legacy imported text identifier preserved for backwards compatibility */
   textId?: string | null;
 }
 
@@ -367,9 +368,9 @@ export interface CellBackground {
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
-  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  /** Legacy imported identity preserved for backwards compatibility */
   paraId?: string | null;
-  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  /** Legacy imported text identifier preserved for backwards compatibility */
   textId?: string | null;
   /** Number of columns this cell spans */
   colspan: number;
@@ -1069,6 +1070,8 @@ export interface DocumentPartObjectAttrs extends BlockNodeAttributes {
   docPartGallery?: unknown;
   /** Whether document part is unique */
   docPartUnique?: boolean;
+  /** @internal Original wrapper paragraph attrs for export preservation */
+  wrapperParagraph?: unknown;
 }
 
 // ============================================

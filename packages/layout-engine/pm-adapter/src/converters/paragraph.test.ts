@@ -13,6 +13,7 @@ import {
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
+  getLastParagraphFont,
 } from './paragraph.js';
 import { isInlineImage, imageNodeToRun } from './inline-converters/image.js';
 import type {
@@ -217,6 +218,141 @@ const paragraphToFlowBlocks = (
     enableComments: true,
   });
 };
+
+describe('getLastParagraphFont', () => {
+  it('returns undefined when blocks is empty', () => {
+    expect(getLastParagraphFont([])).toBeUndefined();
+  });
+
+  it('returns undefined when blocks has no paragraph', () => {
+    const blocks: FlowBlock[] = [
+      { kind: 'sectionBreak', id: '0-sectionBreak', attrs: { type: 'nextPage' } },
+      { kind: 'pageBreak', id: '1-pageBreak', attrs: { source: 'pageBreakBefore' } },
+    ];
+    expect(getLastParagraphFont(blocks)).toBeUndefined();
+  });
+
+  it('returns font from last paragraph block when first run has fontFamily and fontSize', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Hello',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 16,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'Arial, sans-serif', fontSize: 16 });
+  });
+
+  it('returns the last paragraph font when there are multiple paragraphs', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'First',
+            fontFamily: 'FirstFont',
+            fontSize: 12,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Second',
+            fontFamily: 'SecondFont, sans-serif',
+            fontSize: 14,
+            pmStart: 0,
+            pmEnd: 6,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'SecondFont, sans-serif', fontSize: 14 });
+  });
+
+  it('skips last paragraph when its first run has no fontFamily and returns previous paragraph font', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Valid',
+            fontFamily: 'ValidFont',
+            fontSize: 11,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [{ kind: 'text', text: '', fontSize: 16, pmStart: 0, pmEnd: 0 } as TextRun],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'ValidFont', fontSize: 11 });
+  });
+
+  it('returns undefined when last paragraph has no runs', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [],
+        attrs: {},
+      },
+    ];
+    expect(getLastParagraphFont(blocks)).toBeUndefined();
+  });
+
+  it('returns undefined when last paragraph first run has invalid fontSize (not a number)', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'x',
+            fontFamily: 'SomeFont',
+            fontSize: 'large' as unknown as number,
+            pmStart: 0,
+            pmEnd: 1,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toBeUndefined();
+  });
+});
 
 describe('paragraph converters', () => {
   describe('mergeAdjacentRuns', () => {
@@ -2773,7 +2909,152 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext);
+        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext, undefined);
+      });
+
+      describe('previousParagraphFont', () => {
+        const emptyNumberedPara: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+            },
+          },
+        };
+
+        it('uses previousParagraphFont for default run when paragraph has numbering and no explicit run properties', () => {
+          const previousFont = { fontFamily: 'CustomFont, sans-serif', fontSize: 14 };
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: {},
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          expect(blocks[0].kind).toBe('paragraph');
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs).toHaveLength(1);
+          expect(paraBlock.runs[0].fontFamily).toBe(previousFont.fontFamily);
+          expect(paraBlock.runs[0].fontSize).toBe(previousFont.fontSize);
+        });
+
+        it('uses extracted default font when previousParagraphFont is not provided', () => {
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: {},
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs[0].fontFamily).toBeDefined();
+          expect(paraBlock.runs[0].fontSize).toBeDefined();
+          // Should come from extractDefaultFontProperties (converterContext/docDefaults), not previous
+          expect(paraBlock.runs[0].fontFamily).not.toBe('CustomFont, sans-serif');
+        });
+
+        it('ignores previousParagraphFont when paragraph has explicit run properties', () => {
+          const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          const paraWithExplicitRunProps: PMNode = {
+            ...emptyNumberedPara,
+            attrs: {
+              paragraphProperties: {
+                numberingProperties: { numId: 1, ilvl: 0 },
+                runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+              },
+            },
+          };
+
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: paraWithExplicitRunProps,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          // Should use resolved run properties, not previousParagraphFont
+          expect(paraBlock.runs[0].fontFamily).toContain('ExplicitFont');
+          expect(paraBlock.runs[0].fontSize).not.toBe(10);
+        });
+
+        it('uses previousParagraphFont when run properties are only inherited from styles', () => {
+          const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: { fontFamily: { ascii: 'StyledFont' }, fontSize: 24 },
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs[0].fontFamily).toBe(previousFont.fontFamily);
+          expect(paraBlock.runs[0].fontSize).toBe(previousFont.fontSize);
+        });
       });
 
       it('should clone paragraph attrs for each paragraph block', () => {

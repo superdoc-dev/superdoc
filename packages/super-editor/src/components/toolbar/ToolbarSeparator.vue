@@ -15,7 +15,7 @@ const { isDarkMode } = useDarkMode();
 const getSeparatorColor = () => {
   if (isHighContrastMode.value) return '#000';
   if (isDarkMode.value) return '#555';
-  return '#dbdbdb';
+    return 'var(--sd-ui-border, #dbdbdb)';
 };
 </script>
 
@@ -27,13 +27,13 @@ const getSeparatorColor = () => {
 
 <style scoped>
 .toolbar-separator {
-  height: 32px;
-  border-radius: 6px;
+  height: var(--sd-ui-toolbar-height, 32px);
+  border-radius: var(--sd-ui-radius, 6px);
   text-overflow: ellipsis;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #dbdbdb;
+  color: var(--sd-ui-border, #dbdbdb);
   transition: all 0.2s ease-out;
   user-select: none;
   overflow: hidden;
@@ -41,14 +41,5 @@ const getSeparatorColor = () => {
 .toolbar-separator .separator-inner {
   width: 1.5px;
   height: 20px;
-}
-
-.toolbar-button:hover {
-  color: black;
-  background-color: #d8dee5;
-}
-.toolbar-button:active,
-.active {
-  background-color: #c8d0d8;
 }
 </style>

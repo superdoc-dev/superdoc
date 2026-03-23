@@ -10,11 +10,11 @@
  *   TargetSelector → target-resolver → placement-resolver → insertion position
  */
 
-import type { SDFragment, SDContentNode, NestingPolicy, Placement, TextAddress } from '@superdoc/document-api';
+import type { SDFragment, SDContentNode, NestingPolicy, Placement } from '@superdoc/document-api';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { materializeFragment, type SDWriteOp } from './node-materializer.js';
-import { resolveInsertTarget, resolveReplaceTarget } from './target-resolver.js';
+import { resolveInsertTarget, resolveReplaceTarget, type StructuralTarget } from './target-resolver.js';
 import { resolvePlacement } from './placement-resolver.js';
 import { enforceNestingPolicy } from './nesting-guard.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
@@ -28,7 +28,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 
 /** Options for structural insert. */
 export interface StructuralInsertOptions {
-  target?: TextAddress;
+  target?: StructuralTarget;
   content: SDFragment;
   placement?: Placement;
   nestingPolicy?: NestingPolicy;
@@ -40,7 +40,7 @@ export interface StructuralInsertOptions {
 
 /** Options for structural replace. */
 export interface StructuralReplaceOptions {
-  target: TextAddress;
+  target: StructuralTarget;
   content: SDFragment;
   nestingPolicy?: NestingPolicy;
   /** Tracked or direct mode. When 'tracked', the transaction carries tracked-change metadata. */

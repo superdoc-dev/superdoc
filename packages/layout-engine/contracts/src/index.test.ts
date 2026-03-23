@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractHeaderFooterSpace } from './index.js';
+import { cloneColumnLayout, extractHeaderFooterSpace, normalizeColumnLayout, widthsEqual } from './index.js';
 import type { FlowBlock, Layout, PainterDOM, PainterPDF } from './index.js';
 
 describe('contracts', () => {
@@ -91,5 +91,15 @@ describe('contracts', () => {
     const zeroSpacing = extractHeaderFooterSpace();
     expect(zeroSpacing.headerSpace).toBe(0);
     expect(zeroSpacing.footerSpace).toBe(0);
+  });
+
+  it('re-exports column layout helpers from the package entrypoint', () => {
+    expect(widthsEqual([72, 144], [72, 144])).toBe(true);
+    expect(cloneColumnLayout({ count: 2, gap: 18, widths: [72, 144] })).toEqual({
+      count: 2,
+      gap: 18,
+      widths: [72, 144],
+    });
+    expect(normalizeColumnLayout({ count: 2, gap: 24 }, 624).widths).toEqual([300, 300]);
   });
 });

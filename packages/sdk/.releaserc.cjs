@@ -20,18 +20,26 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
+const branches = [
+  { name: 'stable', channel: 'latest' },
+  { name: 'main', prerelease: 'next', channel: 'next' },
+];
+
+const isPrerelease = branches.some(
+  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
+);
+
+// Use AI-powered notes for stable releases, conventional generator for prereleases
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }];
+
 const config = {
-  branches: [
-    // Semantic-release requires at least one non-prerelease release branch.
-    { name: 'stable', channel: 'latest' },
-    // SDK auto-release runs from main and should publish alpha prereleases
-    // on the latest dist-tag (no next channel).
-    { name: 'main', prerelease: 'alpha', channel: 'latest' },
-  ],
+  branches,
   tagFormat: 'sdk-v${version}',
   plugins: [
     '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
+    notesPlugin,
     // Version bump only — actual publishing is handled by exec
     ['@semantic-release/npm', { npmPublish: false }],
     [
@@ -46,17 +54,25 @@ const config = {
           'pnpm --prefix langs/node run build',
           'node scripts/sdk-validate.mjs',
         ].join(' && '),
-        // Publish: build artifacts + publish npm packages (PyPI handled by workflow)
-        publishCmd:
-          'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only',
+        // publishCmd is set dynamically below based on branch (prerelease vs stable)
+        publishCmd: null,
       },
     ],
   ],
 };
 
-const isPrerelease = config.branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
+// On prerelease (main), PyPI is handled by GHA OIDC — keep --npm-only.
+// On stable (local release), sdk-release-publish.mjs uploads to PyPI via twine.
+const execPlugin = config.plugins.find(
+  (p) => Array.isArray(p) && p[0] === '@semantic-release/exec',
 );
+if (isPrerelease) {
+  execPlugin[1].publishCmd =
+    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
+} else {
+  execPlugin[1].publishCmd =
+    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"}';
+}
 
 if (!isPrerelease) {
   config.plugins.push([

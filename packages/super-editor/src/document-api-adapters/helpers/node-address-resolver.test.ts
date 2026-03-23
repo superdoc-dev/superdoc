@@ -36,9 +36,10 @@ function makeNode(
     attrs,
     nodeSize,
     isBlock,
-    descendants(callback: (node: ProseMirrorNode, pos: number) => void) {
-      for (const child of children) {
-        callback(child.node, child.offset);
+    descendants(callback: (node: ProseMirrorNode, pos: number, parent?: ProseMirrorNode, index?: number) => void) {
+      for (let index = 0; index < children.length; index += 1) {
+        const child = children[index]!;
+        callback(child.node, child.offset, this as unknown as ProseMirrorNode, index);
       }
     },
   } as unknown as ProseMirrorNode;
@@ -296,13 +297,64 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('p1');
     });
 
-    it('skips paragraph candidates when no explicit id attrs exist', () => {
+    it('assigns deterministic fallback id to paragraphs with no explicit id attrs', () => {
       const index = indexFromNodes({
         typeName: 'paragraph',
         attrs: {},
         offset: 7,
       });
-      expect(index.candidates).toHaveLength(0);
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeId).toMatch(/^para-auto-[0-9a-f]{8}$/);
+    });
+
+    it('keeps volatile sdBlockId as primary id for session stability', () => {
+      // Volatile (UUID-like) sdBlockIds are preferred over deterministic
+      // fallback IDs because the fallback hashes nodeType + traversal path,
+      // which shifts when siblings are inserted/moved or a paragraph is
+      // restyled to heading/list-item. The UUID stays stable for the session.
+      const volatileUuid = '7701a615-4ad8-45b5-922c-2a32114df4c8';
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: volatileUuid },
+        offset: 7,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeId).toBe(volatileUuid);
+    });
+
+    it('keeps non-volatile sdBlockId as primary id for paragraphs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: 'my-stable-id' },
+        offset: 7,
+      });
+      expect(index.candidates[0].nodeId).toBe('my-stable-id');
+    });
+  });
+
+  describe('ID resolution — heading fallback', () => {
+    it('assigns deterministic fallback id to headings with no explicit id attrs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { paragraphProperties: { styleId: 'Heading1' } },
+        offset: 5,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeType).toBe('heading');
+      expect(index.candidates[0].nodeId).toMatch(/^heading-auto-[0-9a-f]{8}$/);
+    });
+  });
+
+  describe('ID resolution — listItem fallback', () => {
+    it('assigns deterministic fallback id to listItems with no explicit id attrs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+        offset: 5,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeType).toBe('listItem');
+      expect(index.candidates[0].nodeId).toMatch(/^list-auto-[0-9a-f]{8}$/);
     });
   });
 
@@ -368,7 +420,7 @@ describe('buildBlockIndex', () => {
       expect(index.byId.get('table:sd-t1')).toBeDefined();
     });
 
-    it('does not register alias when sdBlockId is the primary (no paraId)', () => {
+    it('keeps a descriptive sdBlockId as the primary table id when no better persisted id exists', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { sdBlockId: 'sd-t1' },
@@ -376,6 +428,17 @@ describe('buildBlockIndex', () => {
       });
       expect(index.candidates[0].nodeId).toBe('sd-t1');
       expect(index.byId.get('table:sd-t1')).toBeDefined();
+    });
+
+    it('registers a UUID-like sdBlockId as an alias when table fallback ids are used', () => {
+      const index = indexFromNodes({
+        typeName: 'table',
+        attrs: { sdBlockId: '7701a615-4ad8-45b5-922c-2a32114df4c8' },
+        offset: 0,
+      });
+
+      expect(index.candidates[0].nodeId).toMatch(/^table-auto-/);
+      expect(index.byId.get('table:7701a615-4ad8-45b5-922c-2a32114df4c8')).toBeDefined();
     });
   });
 
@@ -389,13 +452,31 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('p1');
     });
 
-    it('uses sdBlockId when paraId is absent', () => {
+    it('uses a descriptive sdBlockId when paraId is absent', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { sdBlockId: 'sd1' },
         offset: 0,
       });
       expect(index.candidates[0].nodeId).toBe('sd1');
+    });
+
+    it('uses deterministic fallback ids for tables when only a UUID-like sdBlockId exists', () => {
+      const index = indexFromNodes({
+        typeName: 'table',
+        attrs: { sdBlockId: '7701a615-4ad8-45b5-922c-2a32114df4c8' },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeId).toMatch(/^table-auto-/);
+    });
+
+    it('uses deterministic fallback ids for table cells when only a UUID-like sdBlockId exists', () => {
+      const index = indexFromNodes({
+        typeName: 'tableCell',
+        attrs: { sdBlockId: 'e488acbb-54ee-4ee8-b40b-2b9b9b062e49' },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeId).toMatch(/^cell-auto-/);
     });
 
     it('falls back to blockId when paraId and sdBlockId are absent', () => {
@@ -434,13 +515,13 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('u1');
     });
 
-    it('skips non-paragraph candidates when no id attrs exist', () => {
+    it('builds deterministic fallback ids for tables with no explicit identity attrs', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: {},
         offset: 3,
       });
-      expect(index.candidates).toHaveLength(0);
+      expect(index.candidates[0]?.nodeId).toMatch(/^table-auto-/);
     });
 
     it('ignores empty string attrs', () => {

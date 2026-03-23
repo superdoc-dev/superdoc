@@ -37,7 +37,7 @@ export const getTextFromNode = (node) => {
  * @param {string} name The name of the file in the test data folder
  * @returns {Promise<ArrayBuffer>} The test data as abuffer
  */
-const getTestDataAsBuffer = async (name) => {
+export const getTestDataAsBuffer = async (name) => {
   try {
     const basePath = join(__dirname, '../../data', name);
     return await readFile(basePath);

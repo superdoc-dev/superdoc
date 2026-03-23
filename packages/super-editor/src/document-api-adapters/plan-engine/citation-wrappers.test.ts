@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'bib-runtime'),
+}));
+
 vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => ({
     steps: [{ effect: handler() ? 'changed' : 'noop' }],
@@ -36,14 +40,17 @@ vi.mock('../helpers/citation-resolver.js', () => ({
   buildCitationDiscoveryItem: vi.fn(),
   findAllBibliographies: vi.fn(() => []),
   resolveBibliographyTarget: vi.fn(),
+  resolvePostMutationBibliographyId: vi.fn((_doc, sdBlockId: string) => sdBlockId),
   extractBibliographyInfo: vi.fn(),
   buildBibliographyDiscoveryItem: vi.fn(),
   getSourcesFromConverter: vi.fn(() => []),
   resolveSourceTarget: vi.fn(),
+  syncBibliographyStyleToConverter: vi.fn(),
 }));
 
 import { citationsInsertWrapper } from './citation-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
+import { resolvePostMutationBibliographyId } from '../helpers/citation-resolver.js';
 
 type MockPmNode = {
   type: { name: string };
@@ -160,5 +167,59 @@ describe('citationsInsertWrapper', () => {
     expect(result.citation.anchor.start.blockId).toBe('p-citations');
     expect(result.citation.anchor.start.offset).toBe(13);
     expect(result.citation.anchor.end.offset).toBe(14);
+  });
+});
+
+describe('bibliographyInsertWrapper', () => {
+  it('forwards style into bibliography node attrs and returns the resolved node id', async () => {
+    const { bibliographyInsertWrapper } = await import('./citation-wrappers.js');
+
+    vi.mocked(resolvePostMutationBibliographyId).mockReturnValueOnce('bib-runtime');
+
+    const tr = {
+      insert: vi.fn((_pos: number, _node: unknown) => tr),
+    };
+
+    const createBibliography = vi.fn((attrs: Record<string, unknown>) => ({
+      type: { name: 'bibliography' },
+      attrs,
+      nodeSize: 2,
+    }));
+
+    const editor = {
+      state: {
+        doc: {},
+        tr,
+      },
+      schema: {
+        nodes: {
+          bibliography: { create: createBibliography },
+          paragraph: { create: vi.fn(() => ({ type: { name: 'paragraph' }, nodeSize: 2 })) },
+        },
+      },
+      dispatch: vi.fn(),
+    } as unknown as Editor;
+
+    const result = bibliographyInsertWrapper(
+      editor,
+      {
+        at: { kind: 'documentEnd' },
+        style: 'APA',
+      },
+      { changeMode: 'direct' } as never,
+    );
+
+    expect(result).toEqual({
+      success: true,
+      bibliography: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-runtime' },
+    });
+    expect(createBibliography).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'BIBLIOGRAPHY',
+        sdBlockId: 'bib-runtime',
+        style: 'APA',
+      }),
+      expect.anything(),
+    );
   });
 });

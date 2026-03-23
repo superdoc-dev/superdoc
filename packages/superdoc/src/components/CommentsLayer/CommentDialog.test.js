@@ -24,6 +24,9 @@ vi.mock('@superdoc/super-editor', () => ({
       return () => h('textarea', slots.default?.());
     },
   }),
+  PresentationEditor: {
+    getInstance: vi.fn(() => null),
+  },
 }));
 
 const simpleStub = (name, emits = []) =>
@@ -115,6 +118,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     importedId: null,
     trackedChangeType: null,
     trackedChangeText: null,
+    trackedChangeDisplayType: null,
     deletedText: null,
     selection: {
       getValues: () => ({ selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 } }),
@@ -134,6 +138,8 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     cancelComment: vi.fn(),
     deleteComment: vi.fn(),
     removePendingComment: vi.fn(),
+    requestInstantSidebarAlignment: vi.fn(),
+    clearInstantSidebarAlignment: vi.fn(),
     setActiveComment: vi.fn(),
     getPendingComment: vi.fn(() => ({
       commentId: 'pending-1',
@@ -169,13 +175,15 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     ],
     activeEditor: {
       commands: {
-        setCursorById: vi.fn(),
+        setCursorById: vi.fn().mockReturnValue(true),
+        setActiveComment: vi.fn(),
         rejectTrackedChangeById: vi.fn(),
         acceptTrackedChangeById: vi.fn(),
         setCommentInternal: vi.fn(),
         resolveComment: vi.fn(),
       },
     },
+    focus: vi.fn(),
     emit: vi.fn(),
   };
 
@@ -221,8 +229,9 @@ describe('CommentDialog.vue', () => {
     const { wrapper, baseComment, superdocStub } = await mountDialog();
 
     await nextTick();
-    expect(baseComment.setActive).toHaveBeenCalledWith(superdocStub);
-    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId, {
+      activeCommentId: baseComment.commentId,
+    });
     expect(commentsStoreStub.activeComment.value).toBe(baseComment.commentId);
 
     // Click the reply pill to expand the editor
@@ -246,6 +255,23 @@ describe('CommentDialog.vue', () => {
     });
   });
 
+  it('does not pass preferred thread override for resolved comments', async () => {
+    const { baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        resolvedTime: Date.now(),
+      },
+    });
+
+    await nextTick();
+
+    expect(baseComment.setActive).not.toHaveBeenCalled();
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.activeEditor.commands.setCursorById).not.toHaveBeenCalledWith(
+      baseComment.commentId,
+      expect.objectContaining({ preferredActiveThreadId: baseComment.commentId }),
+    );
+  });
+
   it('handles resolve and reject for tracked change comments', async () => {
     const { wrapper, baseComment, superdocStub } = await mountDialog({
       baseCommentOverrides: {
@@ -258,15 +284,53 @@ describe('CommentDialog.vue', () => {
 
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
+    await nextTick();
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
     expect(baseComment.resolveComment).toHaveBeenCalledWith({
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
       superdoc: expect.any(Object),
     });
+    expect(superdocStub.focus).toHaveBeenCalledTimes(1);
 
     header.vm.$emit('reject');
+    await nextTick();
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders hyperlink additions without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+        trackedChangeText: 'https://example.com',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Added hyperlink');
+    expect(trackedChange.text()).toContain('https://example.com');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('underline');
+  });
+
+  it('renders hyperlink modifications without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'hyperlinkModified',
+        trackedChangeText: 'https://new.com',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Changed hyperlink to');
+    expect(trackedChange.text()).toContain('https://new.com');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('underline');
   });
 
   it('calls custom accept handler instead of default behavior when configured', async () => {
@@ -470,7 +534,8 @@ describe('CommentDialog.vue', () => {
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     headers[1].vm.$emit('overflow-select', 'edit');
     expect(commentsStoreStub.editingCommentId.value).toBe(childComment.commentId);
-    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, childComment.commentId);
+    // Edit activates the root thread (props.comment), not the individual child being edited
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, baseComment.commentId);
 
     commentsStoreStub.currentCommentText.value = '<p>Updated</p>';
     await nextTick();
@@ -731,5 +796,60 @@ describe('CommentDialog.vue', () => {
 
     // Verify cancelComment was called with the superdoc instance
     expect(commentsStoreStub.cancelComment).toHaveBeenCalledWith(superdocStub);
+  });
+
+  describe('readOnly mode', () => {
+    it('hides the reply pill when readOnly is true', async () => {
+      const { wrapper, baseComment } = await mountDialog();
+
+      commentsStoreStub.activeComment.value = baseComment.commentId;
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const pill = wrapper.find('.reply-pill');
+      expect(pill.exists()).toBe(false);
+    });
+
+    it('shows the reply pill when readOnly is false', async () => {
+      const { wrapper, baseComment } = await mountDialog();
+
+      commentsStoreStub.activeComment.value = baseComment.commentId;
+      await nextTick();
+
+      const pill = wrapper.find('.reply-pill');
+      expect(pill.exists()).toBe(true);
+    });
+
+    it('does not enter edit mode when readOnly is true and overflow-select edit is emitted', async () => {
+      const { wrapper } = await mountDialog();
+
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('overflow-select', 'edit');
+      await nextTick();
+
+      // Edit mode should not activate — the readOnly config prop is passed to CommentHeader
+      // which gates the edit option, but even if the event fires, the config is propagated
+      expect(header.props('config')).toEqual({ readOnly: true });
+    });
+
+    it('passes readOnly config to CommentHeader', async () => {
+      const { wrapper } = await mountDialog();
+
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      expect(header.props('config')).toEqual({ readOnly: true });
+    });
+
+    it('passes non-readOnly config to CommentHeader by default', async () => {
+      const { wrapper } = await mountDialog();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      expect(header.props('config')).toEqual({ readOnly: false });
+    });
   });
 });

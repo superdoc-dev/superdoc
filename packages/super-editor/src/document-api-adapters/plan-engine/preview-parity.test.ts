@@ -188,6 +188,83 @@ function makeCompiledPlan(overrides: Partial<CompiledPlan> = {}): CompiledPlan {
   };
 }
 
+function makeTextStyleEditor(textStyleAttrNames: string[]): {
+  editor: Editor;
+  dispatch: ReturnType<typeof vi.fn>;
+  tr: {
+    addMark: ReturnType<typeof vi.fn>;
+    removeMark: ReturnType<typeof vi.fn>;
+  };
+} {
+  const textStyleAttrs = Object.fromEntries(textStyleAttrNames.map((name) => [name, { default: null }]));
+  const textStyle = {
+    spec: { attrs: textStyleAttrs },
+    attrs: textStyleAttrs,
+    create: vi.fn((input: Record<string, unknown> = {}) => ({
+      type: { name: 'textStyle' },
+      attrs: Object.fromEntries(
+        Object.entries(input).filter(([key]) => Object.prototype.hasOwnProperty.call(textStyleAttrs, key)),
+      ),
+      eq: (other: any) => JSON.stringify(other?.attrs) === JSON.stringify(input),
+    })),
+  };
+
+  const textNode = { isText: true, nodeSize: 5, marks: [] as unknown[] };
+  const doc = {
+    textContent: 'Hello',
+    textBetween: vi.fn(() => 'Hello'),
+    nodesBetween: vi.fn((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
+      callback(textNode, 1);
+    }),
+    descendants: vi.fn(),
+    nodeAt: vi.fn(() => null),
+  };
+  const tr = {
+    replaceWith: vi.fn(),
+    delete: vi.fn(),
+    insert: vi.fn(),
+    addMark: vi.fn(),
+    removeMark: vi.fn(),
+    setMeta: vi.fn(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc: {
+      resolve: () => ({ marks: () => [] }),
+      textContent: 'Hello',
+      descendants: vi.fn(),
+      textBetween: vi.fn(() => 'Hello'),
+      nodesBetween: doc.nodesBetween,
+      nodeAt: doc.nodeAt,
+    },
+  };
+  tr.replaceWith.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.insert.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+  tr.removeMark.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+
+  const editor = {
+    state: {
+      doc,
+      tr,
+      schema: {
+        marks: { textStyle },
+        nodes: {},
+      },
+    },
+    schema: {
+      marks: { textStyle },
+      nodes: {},
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, dispatch, tr };
+}
+
 // ---------------------------------------------------------------------------
 // T6.1 — Preview does not dispatch or change revision
 // ---------------------------------------------------------------------------
@@ -381,5 +458,38 @@ describe('previewPlan: success/failure shape parity', () => {
     expect(result.evaluatedRevision).toBeTruthy();
     // The mutation step + assert step should be in results
     expect(result.steps.length).toBeGreaterThan(0);
+  });
+
+  it('execute-phase capability failures are reported when textStyle attrs are missing', () => {
+    const { editor, dispatch, tr } = makeTextStyleEditor([
+      'color',
+      'fontSize',
+      'fontFamily',
+      'vertAlign',
+      'position',
+      'textTransform',
+    ]);
+    const step: StyleApplyStep = {
+      id: 'step-letter-spacing',
+      op: 'format.apply',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { inline: { letterSpacing: 0.5 } },
+    };
+
+    mockedDeps.compilePlan.mockReturnValue(
+      makeCompiledPlan({
+        mutationSteps: [{ step, targets: [makeTarget({ stepId: step.id, op: step.op })] }],
+      }),
+    );
+
+    const result = previewPlan(editor, { steps: [step] });
+
+    expect(result.valid).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures![0].code).toBe('CAPABILITY_UNAVAILABLE');
+    expect(result.failures![0].phase).toBe('execute');
+    expect(result.failures![0].message).toContain('letterSpacing');
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

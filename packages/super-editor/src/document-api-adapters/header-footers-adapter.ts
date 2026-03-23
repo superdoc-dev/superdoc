@@ -37,6 +37,7 @@ import {
 } from './helpers/header-footer-refs-mutation.js';
 import { createHeaderFooterPart, type ConverterWithHeaderFooterParts } from './helpers/header-footer-parts.js';
 import { rejectTrackedMode } from './helpers/mutation-helpers.js';
+import { getStoryRuntimeCache } from './story-runtime/resolve-story-runtime.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -67,6 +68,23 @@ function requireConverter(editor: Editor, operationName: string): ConverterWithH
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Invalidates all cached header/footer *slot* runtimes after a ref-only
+ * mutation (set, clear, setLinkedToPrevious). These operations retarget
+ * which part a slot resolves to without touching the part itself, so the
+ * generic `partChanged` event never fires for a header/footer part. The
+ * cached slot runtimes would keep serving the old part's editor otherwise.
+ */
+function invalidateSlotRuntimesAfterRefChange(
+  editor: Editor,
+  result: SectionMutationResult,
+  options?: MutationOptions,
+): void {
+  if (!result.success || options?.dryRun) return;
+  const cache = getStoryRuntimeCache(editor);
+  if (cache) cache.invalidateByPrefix('hf:slot:');
+}
 
 function effectiveLimitOf(limit: number | undefined, total: number): number {
   return limit ?? total;
@@ -204,7 +222,7 @@ export function headerFootersRefsSetAdapter(
   const { section, headerFooterKind, variant } = input.target;
   const sectionTarget = { target: section };
 
-  return sectionMutationBySectPr(
+  const result = sectionMutationBySectPr(
     editor,
     sectionTarget,
     options,
@@ -222,6 +240,8 @@ export function headerFootersRefsSetAdapter(
       );
     },
   );
+  invalidateSlotRuntimesAfterRefChange(editor, result, options);
+  return result;
 }
 
 export function headerFootersRefsClearAdapter(
@@ -232,7 +252,7 @@ export function headerFootersRefsClearAdapter(
   const { section, headerFooterKind, variant } = input.target;
   const sectionTarget = { target: section };
 
-  return sectionMutationBySectPr(
+  const result = sectionMutationBySectPr(
     editor,
     sectionTarget,
     options,
@@ -242,6 +262,8 @@ export function headerFootersRefsClearAdapter(
       clearHeaderFooterRefMutation(sectPr, headerFooterKind, variant, converter, dryRun);
     },
   );
+  invalidateSlotRuntimesAfterRefChange(editor, result, options);
+  return result;
 }
 
 export function headerFootersRefsSetLinkedToPreviousAdapter(
@@ -252,7 +274,7 @@ export function headerFootersRefsSetLinkedToPreviousAdapter(
   const { section, headerFooterKind, variant } = input.target;
   const sectionTarget = { target: section };
 
-  return sectionMutationBySectPr(
+  const result = sectionMutationBySectPr(
     editor,
     sectionTarget,
     options,
@@ -271,6 +293,8 @@ export function headerFootersRefsSetLinkedToPreviousAdapter(
       );
     },
   );
+  invalidateSlotRuntimesAfterRefChange(editor, result, options);
+  return result;
 }
 
 // ---------------------------------------------------------------------------

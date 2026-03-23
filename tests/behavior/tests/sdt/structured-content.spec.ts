@@ -272,3 +272,91 @@ test.describe('viewing mode hides SDT affordances', () => {
     await superdoc.snapshot('inline SDT viewing mode');
   });
 });
+
+// ==========================================================================
+// Stacking Context Regression (SD-2015)
+// ==========================================================================
+
+test.describe('SD-2015: SDT labels must not paint above the toolbar', () => {
+  test('layout container isolates SDT z-indices from the toolbar', async ({ superdoc }) => {
+    // Insert an SDT so the relevant DOM nodes exist.
+    await insertBlockSdt(superdoc.page, 'Stacking Test', 'SDT content');
+    await superdoc.waitForStable();
+
+    // Verify the stacking-context fix: the layout container must have
+    // isolation: isolate, which scopes all child z-indices (including the
+    // z-index: 9999999 hover boost) so they cannot escape above the toolbar.
+    const layoutIsolation = await superdoc.page.evaluate(() => {
+      const layout = document.querySelector('.superdoc-layout');
+      return layout ? getComputedStyle(layout).isolation : 'not-found';
+    });
+    expect(layoutIsolation).toBe('isolate');
+
+    // Verify the toolbar establishes its own stacking context above the
+    // document surface.
+    const toolbarStyles = await superdoc.page.evaluate(() => {
+      const toolbar = document.querySelector('.superdoc-toolbar');
+      if (!toolbar) return null;
+      const cs = getComputedStyle(toolbar);
+      return { position: cs.position, zIndex: cs.zIndex };
+    });
+    expect(toolbarStyles).not.toBeNull();
+    expect(toolbarStyles!.position).toBe('relative');
+    expect(Number(toolbarStyles!.zIndex)).toBeGreaterThan(0);
+
+    // Activate the hover boost on the SDT, then force the SDT element to
+    // overlay the toolbar via CSS. This creates the exact stacking conflict
+    // from the bug (z-index: 9999999 inside the document vs toolbar z-index)
+    // without depending on the harness scroll setup.
+    const hitTag = await superdoc.page.evaluate(
+      ({ sdtSel, labelSel }) => {
+        const sdt = document.querySelector(sdtSel) as HTMLElement | null;
+        const label = document.querySelector(labelSel) as HTMLElement | null;
+        const probe = document.querySelector('.superdoc-toolbar [data-item="btn-undo"]') as HTMLElement | null;
+        if (!sdt || !probe) throw new Error('SDT or toolbar probe not found');
+
+        // Activate the hover boost (z-index: 9999999).
+        sdt.classList.remove('ProseMirror-selectednode');
+        sdt.classList.add('sdt-hover');
+        if (label) label.style.display = 'inline-flex';
+
+        // Confirm the boost is active.
+        const boost = getComputedStyle(sdt).zIndex;
+        if (Number(boost) < 9999999) return `z-index-not-active:${boost}`;
+
+        // Force the SDT to overlap the toolbar probe via fixed positioning.
+        const probeRect = probe.getBoundingClientRect();
+        const origPosition = sdt.style.position;
+        const origZIndex = sdt.style.zIndex;
+        const origTop = sdt.style.top;
+        const origLeft = sdt.style.left;
+        sdt.style.position = 'fixed';
+        sdt.style.top = `${probeRect.top}px`;
+        sdt.style.left = `${probeRect.left}px`;
+        sdt.style.zIndex = '9999999';
+
+        // Hit-test: the toolbar should still win because isolation: isolate
+        // on the layout container scopes the SDT's z-index.
+        const x = probeRect.left + probeRect.width / 2;
+        const y = probeRect.top + probeRect.height / 2;
+        const hit = document.elementFromPoint(x, y);
+
+        // Restore the SDT's original styles.
+        sdt.style.position = origPosition;
+        sdt.style.zIndex = origZIndex;
+        sdt.style.top = origTop;
+        sdt.style.left = origLeft;
+
+        if (!hit) return 'null';
+        if (hit.closest('.superdoc-toolbar')) return 'toolbar';
+        if (hit.closest(sdtSel)) return 'sdt';
+        return hit.tagName.toLowerCase();
+      },
+      { sdtSel: BLOCK_SDT, labelSel: BLOCK_LABEL },
+    );
+
+    expect(hitTag).toBe('toolbar');
+
+    await superdoc.snapshot('SD-2015 toolbar above SDT');
+  });
+});

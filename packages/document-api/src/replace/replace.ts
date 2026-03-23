@@ -6,27 +6,28 @@
  * - Structural replacement (`content` field): continues through WriteAdapter.replaceStructured.
  *
  * Text path accepts `SelectionTarget` or `ref`. Structural path accepts
- * `SDAddress`, `SelectionTarget`, or `ref`.
+ * `BlockNodeAddress`, `SelectionTarget`, or `ref`.
  */
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
-import type { SelectionTarget } from '../types/address.js';
+import type { SelectionTarget, TargetLocator } from '../types/address.js';
 import type { SDMutationReceipt } from '../types/sd-contract.js';
 import type { SDReplaceInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import type { WriteAdapter } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
-  isSDAddress,
-  isTextAddress,
+  isBlockNodeAddress,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 
 // ---------------------------------------------------------------------------
@@ -34,11 +35,13 @@ import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 // ---------------------------------------------------------------------------
 
 /** Text replacement input — uses SelectionTarget / ref. */
-export interface TextReplaceInput {
+export type TextReplaceInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   text: string;
-}
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
+};
 
 // ---------------------------------------------------------------------------
 // Discriminated union: text shape OR structural SDFragment shape
@@ -55,8 +58,8 @@ export type ReplaceInput = TextReplaceInput | SDReplaceInput;
 // Allowlists
 // ---------------------------------------------------------------------------
 
-const TEXT_REPLACE_ALLOWED_KEYS = new Set(['text', 'target', 'ref']);
-const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'ref', 'nestingPolicy']);
+const TEXT_REPLACE_ALLOWED_KEYS = new Set(['text', 'target', 'ref', 'in']);
+const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'ref', 'nestingPolicy', 'in']);
 
 // ---------------------------------------------------------------------------
 // Shape discrimination
@@ -96,8 +99,8 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
     });
   }
 
-  if (hasRef && typeof input.ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof input.ref !== 'string' || input.ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: input.ref,
     });
@@ -129,6 +132,8 @@ function validateReplaceInput(input: unknown): asserts input is ReplaceInput {
       fields: ['text', 'content'],
     });
   }
+
+  validateStoryLocator(input.in, 'in');
 
   if (hasContent) {
     validateStructuralReplaceInput(input);
@@ -180,12 +185,11 @@ function validateStructuralReplaceInput(input: Record<string, unknown>): void {
     });
   }
 
-  if (hasTarget && !isSDAddress(target) && !isTextAddress(target) && !isSelectionTarget(target)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'target must be a valid address (SDAddress, TextAddress, or SelectionTarget).',
-      { field: 'target', value: target },
-    );
+  if (hasTarget && !isBlockNodeAddress(target) && !isSelectionTarget(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a BlockNodeAddress or SelectionTarget.', {
+      field: 'target',
+      value: target,
+    });
   }
 
   if (hasRef && typeof refValue !== 'string') {
@@ -213,19 +217,14 @@ export function executeReplace(
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralReplaceInput(input)) {
-    return writeAdapter.replaceStructured(input as unknown as ReplaceInput, options);
+    return writeAdapter.replaceStructured(input as unknown as ReplaceInput, normalizeMutationOptions(options));
   }
 
   // Text replacement path — route through SelectionMutationAdapter
   const textInput = input as TextReplaceInput;
-  const textReceipt = selectionAdapter.execute(
-    {
-      kind: 'replace',
-      target: textInput.target,
-      ref: textInput.ref,
-      text: textInput.text,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = textInput.target
+    ? { kind: 'replace' as const, target: textInput.target, text: textInput.text, in: textInput.in }
+    : { kind: 'replace' as const, ref: textInput.ref!, text: textInput.text, in: textInput.in };
+  const textReceipt = selectionAdapter.execute(request, normalizeMutationOptions(options));
   return textReceiptToSDReceipt(textReceipt);
 }

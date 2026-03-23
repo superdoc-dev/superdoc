@@ -321,6 +321,41 @@ describe('diff-service tracked apply', () => {
     }
   });
 
+  it('does not produce header/footer removal diffs when comparing against a v1 snapshot', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Updated document.');
+
+    try {
+      // Base editor has a real header — v1 snapshot does not cover headers,
+      // so the diff must NOT treat existing headers as "removed".
+      seedDefaultHeader(baseEditor, 'Existing header');
+
+      const snapshot = captureSnapshot(targetEditor);
+      const legacySnapshot = structuredClone(snapshot);
+      legacySnapshot.version = 'sd-diff-snapshot/v1';
+      legacySnapshot.coverage = { ...V1_COVERAGE };
+      delete (legacySnapshot.payload as Record<string, unknown>).headerFooters;
+      legacySnapshot.fingerprint = computeFingerprint(
+        buildCanonicalDiffableState(
+          targetEditor.state.doc,
+          targetEditor.converter?.comments ?? [],
+          targetEditor.converter?.translatedLinkedStyles ?? null,
+          targetEditor.converter?.translatedNumbering ?? null,
+          null,
+        ),
+      );
+
+      const diff = compareToSnapshot(baseEditor, legacySnapshot);
+
+      expect(diff.version).toBe('sd-diff-payload/v1');
+      expect(diff.payload.headerFootersDiff).toBeNull();
+      expect(diff.summary.headerFooters.hasChanges).toBe(false);
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
   it('commits headerFooterModified after applyDiffPayload replays header changes', async () => {
     const baseEditor = await openBlankDocxWithText('Base document.');
     const targetEditor = await openBlankDocxWithText('Base document.');

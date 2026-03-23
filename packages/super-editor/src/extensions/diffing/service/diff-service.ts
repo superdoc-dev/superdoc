@@ -216,7 +216,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const baseComments = getEditorComments(editor);
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
-  const baseHeaderFooters = getEditorHeaderFooters(editor);
+  const baseHeaderFooters = targetCoverage.headerFooters ? getEditorHeaderFooters(editor) : null;
   const baseCanonical = buildCanonicalStateForCoverage(
     baseDoc,
     baseComments,

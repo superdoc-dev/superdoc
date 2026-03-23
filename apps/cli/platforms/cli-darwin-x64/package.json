@@ -1,10 +1,6 @@
 {
   "name": "@superdoc-dev/cli-darwin-x64",
-<<<<<<< HEAD
-  "version": "0.3.1",
-=======
   "version": "0.3.2",
->>>>>>> origin/stable
   "os": [
     "darwin"
   ],

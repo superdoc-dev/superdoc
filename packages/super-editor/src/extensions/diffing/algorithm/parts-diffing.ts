@@ -287,14 +287,16 @@ function getPartBaseDir(partPath: string): string {
 }
 
 function toRelsPathForPart(partPath: string): string | null {
-  if (partPath === DOCUMENT_RELS_PATH) {
+  if (partPath === DOCUMENT_RELS_PATH || partPath.endsWith('.rels')) {
     return null;
   }
-  const fileName = partPath.split('/').pop();
-  if (!fileName) {
+  const lastSlash = partPath.lastIndexOf('/');
+  if (lastSlash < 0 || lastSlash === partPath.length - 1) {
     return null;
   }
-  return `word/_rels/${fileName}.rels`;
+  const directory = partPath.slice(0, lastSlash);
+  const fileName = partPath.slice(lastSlash + 1);
+  return `${directory}/_rels/${fileName}.rels`;
 }
 
 function shouldCaptureBodyRelationship(type: string): boolean {

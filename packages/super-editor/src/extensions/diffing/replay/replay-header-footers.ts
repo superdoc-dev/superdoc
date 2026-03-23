@@ -107,7 +107,15 @@ export function replayHeaderFooters({
   }
 
   for (const part of headerFootersDiff.modifiedParts) {
-    const updated = applyHeaderFooterPartContent(editor.converter, schema, part.refId, part.kind, part.docDiffs);
+    const updated = applyHeaderFooterPartContent(
+      editor.converter,
+      schema,
+      part.refId,
+      part.kind,
+      part.oldPartPath,
+      part.partPath,
+      part.docDiffs,
+    );
     if (updated) {
       result.applied += 1;
       continue;
@@ -230,6 +238,8 @@ function applyHeaderFooterPartContent(
   schema: Schema,
   refId: string,
   kind: HeaderFooterKind,
+  oldPartPath: string,
+  partPath: string,
   docDiffs: import('../algorithm/generic-diffing').NodeDiff[],
 ): boolean {
   const collection = kind === 'header' ? converter.headers! : converter.footers!;
@@ -238,22 +248,27 @@ function applyHeaderFooterPartContent(
     return false;
   }
 
-  const state = EditorState.create({
-    schema,
-    doc: schema.nodeFromJSON(currentJson),
-  });
-  const partTr = state.tr;
-  const replay = replayDocDiffs({
-    tr: partTr,
-    docDiffs,
-    schema,
-  });
-  if (replay.skipped > 0) {
-    return false;
+  let nextJson = currentJson;
+  if (docDiffs.length > 0) {
+    const state = EditorState.create({
+      schema,
+      doc: schema.nodeFromJSON(currentJson),
+    });
+    const partTr = state.tr;
+    const replay = replayDocDiffs({
+      tr: partTr,
+      docDiffs,
+      schema,
+    });
+    if (replay.skipped > 0) {
+      return false;
+    }
+
+    nextJson = partTr.doc.toJSON();
+    collection[refId] = nextJson;
   }
 
-  const nextJson = partTr.doc.toJSON();
-  collection[refId] = nextJson;
+  updateHeaderFooterPartPath(converter, { refId, kind, oldPartPath, partPath });
   syncHeaderFooterPartXml(converter, schema, kind, refId, nextJson);
   return true;
 }
@@ -412,9 +427,51 @@ function deleteHeaderFooterPart(
 
   removeRelationshipEntry(converter.convertedXml!, part.refId);
   delete converter.convertedXml![part.partPath];
-  const partFileName = part.partPath.split('/').pop();
-  if (partFileName) {
-    delete converter.convertedXml![`word/_rels/${partFileName}.rels`];
+  delete converter.convertedXml![toRelsPathForPart(part.partPath)];
+}
+
+function updateHeaderFooterPartPath(
+  converter: NonNullable<ReplayHeaderFooterEditor['converter']>,
+  part: { refId: string; kind: HeaderFooterKind; oldPartPath: string; partPath: string },
+): void {
+  upsertRelationshipEntry(converter.convertedXml!, {
+    refId: part.refId,
+    kind: part.kind,
+    partPath: part.partPath,
+    content: { type: 'doc', content: [] },
+  });
+
+  if (part.oldPartPath === part.partPath) {
+    ensureXmlPartExists(converter.convertedXml!, {
+      refId: part.refId,
+      kind: part.kind,
+      partPath: part.partPath,
+      content: { type: 'doc', content: [] },
+    });
+    return;
+  }
+
+  const previousXml = converter.convertedXml![part.oldPartPath];
+  if (previousXml) {
+    converter.convertedXml![part.partPath] = previousXml;
+    delete converter.convertedXml![part.oldPartPath];
+  } else {
+    ensureXmlPartExists(converter.convertedXml!, {
+      refId: part.refId,
+      kind: part.kind,
+      partPath: part.partPath,
+      content: { type: 'doc', content: [] },
+    });
+  }
+
+  const oldRelsPath = toRelsPathForPart(part.oldPartPath);
+  const nextRelsPath = toRelsPathForPart(part.partPath);
+  if (oldRelsPath !== nextRelsPath) {
+    const previousRels = converter.convertedXml![oldRelsPath];
+    if (previousRels) {
+      converter.convertedXml![nextRelsPath] = previousRels;
+      delete converter.convertedXml![oldRelsPath];
+    }
   }
 }
 
@@ -496,6 +553,11 @@ function ensureXmlPartExists(convertedXml: Record<string, unknown>, part: Header
       },
     ],
   };
+}
+
+function toRelsPathForPart(partPath: string): string {
+  const fileName = partPath.split('/').pop();
+  return `word/_rels/${fileName}.rels`;
 }
 
 /**

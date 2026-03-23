@@ -48,6 +48,7 @@ export interface HeaderFooterState {
 export interface ModifiedHeaderFooterPart {
   refId: string;
   kind: HeaderFooterKind;
+  oldPartPath: string;
   partPath: string;
   docDiffs: NodeDiff[];
 }
@@ -124,10 +125,11 @@ export function diffHeaderFooters(
     const oldDoc = schema.nodeFromJSON(previousPart.content);
     const newDoc = schema.nodeFromJSON(nextPart.content);
     const docDiffs = diffNodes(normalizeNodes(oldDoc), normalizeNodes(newDoc));
-    if (docDiffs.length > 0) {
+    if (docDiffs.length > 0 || previousPart.partPath !== nextPart.partPath) {
       modifiedParts.push({
         refId: nextPart.refId,
         kind: nextPart.kind,
+        oldPartPath: previousPart.partPath,
         partPath: nextPart.partPath,
         docDiffs,
       });

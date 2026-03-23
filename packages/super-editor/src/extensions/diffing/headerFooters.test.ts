@@ -424,6 +424,64 @@ describe('Header/footer diffing', () => {
     }
   });
 
+  it('treats header part path changes as a real diff', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedPart(beforeEditor, {
+        kind: 'header',
+        refId: 'rIdHeader1',
+        partPath: 'word/header1.xml',
+        text: 'Same header',
+      });
+      setBodySection(beforeEditor, { headerDefault: 'rIdHeader1' });
+
+      seedPart(afterEditor, {
+        kind: 'header',
+        refId: 'rIdHeader1',
+        partPath: 'word/header2.xml',
+        text: 'Same header',
+      });
+      setBodySection(afterEditor, { headerDefault: 'rIdHeader1' });
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.headerFootersDiff?.modifiedParts).toHaveLength(1);
+      expect(diff.headerFootersDiff?.modifiedParts[0]).toMatchObject({
+        refId: 'rIdHeader1',
+        oldPartPath: 'word/header1.xml',
+        partPath: 'word/header2.xml',
+      });
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(beforeEditor.converter?.convertedXml?.['word/header1.xml']).toBeUndefined();
+      expect(beforeEditor.converter?.convertedXml?.['word/header2.xml']).toBeTruthy();
+
+      const relsRoot = (
+        beforeEditor.converter?.convertedXml?.['word/_rels/document.xml.rels'] as
+          | {
+              elements?: Array<{
+                name?: string;
+                elements?: Array<{ name?: string; attributes?: Record<string, string> }>;
+              }>;
+            }
+          | undefined
+      )?.elements?.find((entry) => entry.name === 'Relationships');
+      const relationship = relsRoot?.elements?.find((entry) => entry.name === 'Relationship');
+      expect(relationship?.attributes?.Target).toBe('header2.xml');
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
   it('compares and replays header removal', async () => {
     const beforeEditor = await createEditor();
     const afterEditor = await createEditor();

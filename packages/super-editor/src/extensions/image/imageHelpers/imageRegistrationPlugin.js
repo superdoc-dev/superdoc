@@ -256,6 +256,7 @@ export const handleNodePath = (foundImages, editor, state) => {
  * @param {import('prosemirror-view').EditorView} view - The editor view instance.
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
  * @returns {import('prosemirror-state').Transaction} - The updated transaction with image nodes replaced by placeholders and registration process initiated.
+ * @internal Exported for testing only.
  */
 export const handleBrowserPath = (foundImages, editor, view, state) => {
   if (foundImages.length === 0) return null;
@@ -362,7 +363,7 @@ const registerRelativeImages = async (images, editor, view) => {
     pendingRelativeRegistrations.add(src);
 
     try {
-      const filename = src.split('/').pop()?.split(/[?#]/)[0] || 'image.bin';
+      const filename = derivePreferredFileName(src);
       const file = await urlToFile(src, filename);
       if (!file) continue;
 
@@ -378,6 +379,11 @@ const registerRelativeImages = async (images, editor, view) => {
       existingFileNames.add(uniqueFileName);
       const mediaPath = buildMediaPath(uniqueFileName);
       mediaStore[mediaPath] = dataUrl;
+
+      if (editor.options.ydoc) {
+        const mediaMap = editor.options.ydoc.getMap('media');
+        mediaMap.set(mediaPath, dataUrl);
+      }
 
       const relPath = mediaPath.startsWith('word/') ? mediaPath.slice(5) : mediaPath;
       const rId = addImageRelationship({ editor, path: relPath });

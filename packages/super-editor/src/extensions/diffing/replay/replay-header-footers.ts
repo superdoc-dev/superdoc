@@ -143,12 +143,32 @@ export function replayHeaderFooters({
     tr.setMeta('forceUpdatePagination', true);
     editor.converter.headerFooterModified = true;
     editor.converter.documentModified = true;
-    editor.emit?.('headerFooterPartsChanged', {
-      addedParts: headerFootersDiff.addedParts.map((part) => part.refId),
-      removedParts: headerFootersDiff.removedParts.map((part) => part.refId),
-      modifiedParts: headerFootersDiff.modifiedParts.map((part) => part.refId),
-      slotChanges: headerFootersDiff.slotChanges.map((slot) => slot.sectionId),
-    });
+    const changedParts: Array<{
+      partId: string;
+      sectionId?: string;
+      operation: 'mutate' | 'create' | 'delete';
+      changedPaths: string[];
+    }> = [];
+
+    if (
+      headerFootersDiff.addedParts.length > 0 ||
+      headerFootersDiff.removedParts.length > 0 ||
+      headerFootersDiff.slotChanges.length > 0
+    ) {
+      changedParts.push({ partId: 'word/_rels/document.xml.rels', operation: 'mutate', changedPaths: [] });
+    }
+
+    for (const part of headerFootersDiff.addedParts) {
+      changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'create', changedPaths: [] });
+    }
+    for (const part of headerFootersDiff.modifiedParts) {
+      changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'mutate', changedPaths: [] });
+    }
+    for (const part of headerFootersDiff.removedParts) {
+      changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'delete', changedPaths: [] });
+    }
+
+    editor.emit?.('partChanged', { parts: changedParts, source: 'diff-replay' });
     editor.emit?.('headerFooterUpdate', { type: 'replayCompleted' });
   }
 

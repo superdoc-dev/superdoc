@@ -3316,23 +3316,6 @@ export class PresentationEditor extends EventEmitter {
       handler: handlePartChanged as (...args: unknown[]) => void,
     });
 
-    /**
-     * Refresh header/footer presentation state after converter-backed part mutations
-     * (e.g. diff replay). Delegates to refreshStructure() which rebuilds the
-     * descriptor registry and invalidates all cached FlowBlocks.
-     */
-    const handleHeaderFooterPartsChanged = () => {
-      this.#headerFooterSession?.refreshStructure();
-      this.#pendingDocChange = true;
-      this.#selectionSync.onLayoutStart();
-      this.#scheduleRerender();
-    };
-    this.#editor.on('headerFooterPartsChanged', handleHeaderFooterPartsChanged);
-    this.#editorListeners.push({
-      event: 'headerFooterPartsChanged',
-      handler: handleHeaderFooterPartsChanged as (...args: unknown[]) => void,
-    });
-
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready

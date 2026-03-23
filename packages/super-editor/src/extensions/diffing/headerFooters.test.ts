@@ -250,9 +250,12 @@ describe('Header/footer diffing', () => {
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
       expect(emitSpy).toHaveBeenCalledWith(
-        'headerFooterPartsChanged',
+        'partChanged',
         expect.objectContaining({
-          addedParts: ['rIdHeader1'],
+          source: 'diff-replay',
+          parts: expect.arrayContaining([
+            expect.objectContaining({ partId: 'word/header1.xml', sectionId: 'rIdHeader1', operation: 'create' }),
+          ]),
         }),
       );
     } finally {

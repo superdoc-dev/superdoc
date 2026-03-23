@@ -48,6 +48,7 @@ export interface HeaderFooterState {
 export interface ModifiedHeaderFooterPart {
   refId: string;
   kind: HeaderFooterKind;
+  partPath: string;
   docDiffs: NodeDiff[];
 }
 
@@ -127,6 +128,7 @@ export function diffHeaderFooters(
       modifiedParts.push({
         refId: nextPart.refId,
         kind: nextPart.kind,
+        partPath: nextPart.partPath,
         docDiffs,
       });
     }

@@ -6,8 +6,6 @@ description: Replace content at a contiguous document selection. Text path accep
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
@@ -30,33 +28,37 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `target` | SelectionTarget | yes | SelectionTarget |
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
 | `text` | string | yes |  |
 
-### Variant 1.2 (ref, text)
+### Variant 1.2 (required: ref, text)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `ref` | string | yes |  |
 | `text` | string | yes |  |
 
-### Variant 2.1 (target, content)
+### Variant 2.1 (required: target, content)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `content` | object \\| object[] | yes | One of: object, object[] |
+| `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
 
-### Variant 2.2 (ref, content)
+### Variant 2.2 (required: ref, content)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `content` | object \\| object[] | yes | One of: object, object[] |
+| `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `ref` | string | yes |  |
@@ -161,6 +163,11 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 - `RAW_MODE_REQUIRED`
 - `PRESERVE_ONLY_VIOLATION`
 - `CAPABILITY_UNSUPPORTED`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -188,10 +195,15 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
         {
           "additionalProperties": false,
           "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "target": {
-              "$ref": "#/$defs/SelectionTarget"
+              "$ref": "#/$defs/SelectionTarget",
+              "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
             },
             "text": {
+              "description": "Replacement text content.",
               "type": "string"
             }
           },
@@ -204,10 +216,15 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
         {
           "additionalProperties": false,
           "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "ref": {
+              "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
               "type": "string"
             },
             "text": {
+              "description": "Replacement text content.",
               "type": "string"
             }
           },
@@ -225,6 +242,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "content": {
+              "description": "Document fragment to replace with (structured content).",
               "oneOf": [
                 {
                   "type": "object"
@@ -237,8 +255,12 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
                 }
               ]
             },
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [
@@ -250,6 +272,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
               "type": "object"
             },
             "target": {
+              "description": "Target block or selection to replace.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/BlockNodeAddress"
@@ -270,6 +293,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "content": {
+              "description": "Document fragment to replace with (structured content).",
               "oneOf": [
                 {
                   "type": "object"
@@ -282,8 +306,12 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
                 }
               ]
             },
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [
@@ -295,6 +323,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
               "type": "object"
             },
             "ref": {
+              "description": "Reference handle from a previous search result.",
               "type": "string"
             }
           },

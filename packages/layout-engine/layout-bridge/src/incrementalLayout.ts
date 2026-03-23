@@ -934,6 +934,7 @@ export async function incrementalLayout(
         headerMeasureCache,
         HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
         undefined, // No page resolver needed for height calculation
+        'header',
       );
 
       // Extract actual content heights from each variant
@@ -960,11 +961,8 @@ export async function incrementalLayout(
           maxHeight: headerFooter.constraints.height,
         };
         const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        // Layout to get actual height
-        const layout = layoutHeaderFooter(blocks, measures, {
-          width: headerFooter.constraints.width,
-          height: headerFooter.constraints.height,
-        });
+        // Layout to get actual height — pass full constraints for page-relative normalization
+        const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'header');
         if (layout.height > 0) {
           // Store height by rId for per-page margin calculation
           headerContentHeightsByRId.set(rId, layout.height);
@@ -1047,6 +1045,7 @@ export async function incrementalLayout(
           headerMeasureCache,
           FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
           undefined, // No page resolver needed for height calculation
+          'footer',
         );
 
         // Extract actual content heights from each variant
@@ -1073,11 +1072,8 @@ export async function incrementalLayout(
             maxHeight: headerFooter.constraints.height,
           };
           const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-          // Layout to get actual height
-          const layout = layoutHeaderFooter(blocks, measures, {
-            width: headerFooter.constraints.width,
-            height: headerFooter.constraints.height,
-          });
+          // Layout to get actual height — pass full constraints for page-relative normalization
+          const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'footer');
           if (layout.height > 0) {
             // Store height by rId for per-page margin calculation
             footerContentHeightsByRId.set(rId, layout.height);
@@ -1898,6 +1894,7 @@ export async function incrementalLayout(
         headerMeasureCache,
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
+        'header',
       );
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
@@ -1909,6 +1906,7 @@ export async function incrementalLayout(
         headerMeasureCache,
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
+        'footer',
       );
       footers = serializeHeaderFooterResults('footer', footerLayouts);
     }

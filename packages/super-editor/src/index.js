@@ -19,7 +19,8 @@ import { Editor } from './core/Editor.js';
 import { PresentationEditor } from './core/presentation-editor/index.js';
 import { createZip } from './core/super-converter/zipper.js';
 import { getAllowedImageDimensions } from './extensions/image/imageHelpers/processUploadedImage.js';
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { Extension } from '@core/Extension.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Mark } from '@core/Mark.js';
@@ -40,6 +41,8 @@ import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { SectionHelpers } from '@extensions/structured-content/document-section/index.js';
 import { registeredHandlers } from './core/super-converter/v3/handlers/index.js';
 import { Decoration, DecorationSet } from 'prosemirror-view';
+import { seedEditorStateToYDoc } from './extensions/collaboration/seed-editor-to-ydoc.js';
+import { onCollaborationProviderSynced } from './core/helpers/collaboration-provider-sync.js';
 
 const Extensions = {
   Node,
@@ -118,4 +121,10 @@ export {
   isMarkType,
   defineNode,
   defineMark,
+
+  // Collaboration utilities
+  /** @internal */
+  seedEditorStateToYDoc,
+  /** @internal */
+  onCollaborationProviderSynced,
 };

@@ -527,13 +527,13 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: 50;
   width: 180px;
-  color: #47484a;
-  background: white;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0px 10px 20px rgba(0, 0, 0, 0.1);
+  color: var(--sd-ui-menu-text, #47484a);
+  background: var(--sd-ui-menu-bg, #ffffff);
+  border-radius: var(--sd-ui-menu-radius, 0);
+  overflow: hidden;
+  box-shadow: var(--sd-ui-menu-shadow, 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1));
   margin-top: 0.5rem;
-  font-size: 12px;
+  font-size: var(--sd-ui-menu-font-size, 12px);
 }
 
 /* Hide the input but keep it functional */
@@ -555,18 +555,18 @@ onBeforeUnmount(() => {
 
 .context-menu-search {
   padding: 0.5rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--sd-ui-menu-border, #eee);
 }
 
 .context-menu-search input {
   width: 100%;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--sd-ui-menu-input-border, #ddd);
   outline: none;
 }
 
 .context-menu-search input:focus {
-  border-color: #0096fd;
+  border-color: var(--sd-ui-menu-input-focus-border, #0096fd);
 }
 
 /* Remove unused group styles */
@@ -584,13 +584,13 @@ onBeforeUnmount(() => {
 }
 
 .context-menu-item:hover {
-  background: #f5f5f5;
+  background: var(--sd-ui-menu-item-hover-bg, #f5f5f5);
 }
 
 .context-menu-item.is-selected {
-  background: #edf6ff;
-  color: #0096fd;
-  fill: #0096fd;
+  background: var(--sd-ui-menu-item-active-bg, #edf6ff);
+  color: var(--sd-ui-menu-item-active-text, #0096fd);
+  fill: var(--sd-ui-menu-item-active-text, #0096fd);
 }
 
 .context-menu-item-icon {
@@ -617,17 +617,15 @@ onBeforeUnmount(() => {
 }
 
 .popover {
-  background: white;
-  border-radius: 6px;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0px 10px 20px rgba(0, 0, 0, 0.1);
+  background: var(--sd-ui-menu-bg, #ffffff);
+  border-radius: var(--sd-ui-menu-radius, 0);
+  box-shadow: var(--sd-ui-menu-shadow, 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1));
   z-index: 100;
 }
 
 .context-menu-divider {
   height: 1px;
-  background: #eee;
+  background: var(--sd-ui-menu-border, #eee);
   margin: 4px 0;
 }
 </style>

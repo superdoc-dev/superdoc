@@ -35,6 +35,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
   ParagraphAlignment,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
@@ -738,6 +740,51 @@ export function paragraphsClearShadingWrapper(
     (pPr) => {
       const result = { ...pPr };
       delete result.shading;
+      return result;
+    },
+    options,
+  );
+}
+
+export function paragraphsSetDirectionWrapper(
+  editor: Editor,
+  input: ParagraphsSetDirectionInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  rejectTrackedMode('format.paragraph.setDirection', options);
+  const candidate = resolveParagraphBlock(editor, input.target);
+  return mutateParagraphProperties(
+    editor,
+    candidate,
+    'format.paragraph.setDirection',
+    input.target,
+    (pPr) => {
+      const result = { ...pPr };
+      result.rightToLeft = input.direction === 'rtl';
+      if (input.alignmentPolicy === 'matchDirection') {
+        result.justification = input.direction === 'rtl' ? 'right' : 'left';
+      }
+      return result;
+    },
+    options,
+  );
+}
+
+export function paragraphsClearDirectionWrapper(
+  editor: Editor,
+  input: ParagraphsClearDirectionInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  rejectTrackedMode('format.paragraph.clearDirection', options);
+  const candidate = resolveParagraphBlock(editor, input.target);
+  return mutateParagraphProperties(
+    editor,
+    candidate,
+    'format.paragraph.clearDirection',
+    input.target,
+    (pPr) => {
+      const result = { ...pPr };
+      delete result.rightToLeft;
       return result;
     },
     options,

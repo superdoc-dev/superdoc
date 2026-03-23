@@ -1,4 +1,5 @@
-import { Mark, Attribute } from '@core/index.js';
+import { Mark } from '@core/Mark.js';
+import { Attribute } from '@core/Attribute.js';
 import { CommentMarkName } from './comments-constants.js';
 
 export const CommentsMark = Mark.create({

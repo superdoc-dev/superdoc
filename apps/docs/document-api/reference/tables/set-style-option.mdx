@@ -6,8 +6,6 @@ description: Toggle a conditional style option such as banded rows or first colu
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Toggle a conditional style option such as banded rows or first column.
@@ -31,18 +29,18 @@ Returns a TableMutationResult receipt; reports NO_OP if the style option already
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | yes |  |
-| `flag` | enum | yes | `"headerRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
+| `flag` | enum | yes | `"headerRow"`, `"lastRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | yes |  |
-| `flag` | enum | yes | `"headerRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
+| `flag` | enum | yes | `"headerRow"`, `"lastRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
 | `nodeId` | string | yes |  |
 
 ### Example request
@@ -142,6 +140,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     "flag": {
       "enum": [
         "headerRow",
+        "lastRow",
         "totalRow",
         "firstColumn",
         "lastColumn",

@@ -1,7 +1,9 @@
 import path from 'node:path';
-import { loadContract, REPO_ROOT, writeGeneratedFile } from './shared.mjs';
+import { readFile } from 'node:fs/promises';
+import { loadContract, REPO_ROOT, stripBoundParams, writeGeneratedFile } from './shared.mjs';
 
 const TOOLS_OUTPUT_DIR = path.join(REPO_ROOT, 'packages/sdk/tools');
+const BROWSER_SDK_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/browser/src');
 
 // ---------------------------------------------------------------------------
 // Schema sanitization — ensure JSON Schema 2020-12 compliance
@@ -44,6 +46,39 @@ function sanitizeSchema(schema) {
       result.enum = values;
     } else {
       result.oneOf = result.oneOf.map(sanitizeSchema);
+
+      // Remove empty-object branches ({}) from oneOf — they represent null/clear
+      // but are opaque to LLMs. The parent description handles the "use null to clear" guidance.
+      result.oneOf = result.oneOf.filter(
+        (branch) => !(typeof branch === 'object' && Object.keys(branch).length === 0),
+      );
+
+      // Deduplicate oneOf branches with identical simple types (string, number, boolean).
+      // Keep the one with the longer description. Don't deduplicate objects (they may have different properties).
+      const simpleSeen = new Map();
+      const deduped = [];
+      for (const branch of result.oneOf) {
+        const isSimple = branch.type && branch.type !== 'object' && branch.type !== 'array';
+        const key = isSimple ? branch.type : null;
+        if (key && simpleSeen.has(key)) {
+          const existing = simpleSeen.get(key);
+          if ((branch.description || '').length > (existing.description || '').length) {
+            deduped[deduped.indexOf(existing)] = branch;
+            simpleSeen.set(key, branch);
+          }
+        } else {
+          if (key) simpleSeen.set(key, branch);
+          deduped.push(branch);
+        }
+      }
+      result.oneOf = deduped;
+
+      // Collapse oneOf with a single branch
+      if (result.oneOf.length === 1) {
+        const only = result.oneOf[0];
+        delete result.oneOf;
+        Object.assign(result, only);
+      }
     }
   }
   if (Array.isArray(result.anyOf)) {
@@ -70,7 +105,10 @@ function buildInputSchemaFromParams(operation) {
   const properties = {};
   const required = [];
 
-  for (const param of operation.params ?? []) {
+  // Strip doc/sessionId — the document handle manages targeting.
+  const params = stripBoundParams(operation.params);
+
+  for (const param of params) {
     if (param.agentVisible === false) continue;
 
     let schema;
@@ -165,6 +203,8 @@ function buildIntentTools(contract) {
   const groups = new Map();
   for (const [operationId, operation] of Object.entries(contract.operations)) {
     if (operation.skipAsATool) continue;
+    // Tool dispatch targets a document handle — only document-surface operations qualify.
+    if (operation.sdkSurface !== 'document') continue;
     if (!operation.intentGroup) continue;
 
     const group = operation.intentGroup;
@@ -208,16 +248,22 @@ function buildIntentTools(contract) {
       };
 
       // Collect all properties across all operations (excluding action).
-      // A property is marked required only if every operation that defines it
-      // also marks it required — otherwise it's conditionally required per-action
-      // and must stay optional in the merged schema.
+      // Track which actions require each param so we can annotate descriptions.
       const allProperties = { action: actionProperty };
-      /** @type {Map<string, { total: number, requiredCount: number }>} */
+      /** @type {Map<string, { total: number, requiredCount: number, requiredBy: string[] }>} */
       const propPresence = new Map();
 
       for (const { operation } of ops) {
         const opSchema = buildInputSchemaFromParams(operation);
         const opRequired = new Set(opSchema.required ?? []);
+
+        // Also check the contract inputSchema's required array — CLI params may
+        // strip required flags (e.g. when EXTRA_CLI_PARAMS exist), but the
+        // contract schema is authoritative for which fields the operation needs.
+        const contractRequired = operation.inputSchema?.required;
+        if (Array.isArray(contractRequired)) {
+          for (const key of contractRequired) opRequired.add(key);
+        }
 
         for (const [propName, propSchema] of Object.entries(opSchema.properties ?? {})) {
           if (propName === 'action') continue;
@@ -226,22 +272,77 @@ function buildIntentTools(contract) {
             allProperties[propName] = { ...propSchema };
           }
 
-          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0 };
+          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0, requiredBy: [] };
           entry.total++;
-          if (opRequired.has(propName)) entry.requiredCount++;
+          if (opRequired.has(propName)) {
+            entry.requiredCount++;
+            entry.requiredBy.push(operation.intentAction);
+          }
           propPresence.set(propName, entry);
         }
       }
 
       // 'action' is always required; other props are required only if they
       // appear in every operation AND every operation marks them required.
-      // If a param only exists in some actions, it's conditionally required
-      // and must stay optional in the merged schema.
       const opCount = ops.length;
       const allRequired = ['action'];
       for (const [propName, { total, requiredCount }] of propPresence) {
         if (total === opCount && requiredCount === opCount) {
           allRequired.push(propName);
+        }
+      }
+
+      // Annotate descriptions so the LLM knows which params belong to which actions.
+      // Two cases:
+      //   1. Param is required by some actions → "Required for action X, Y."
+      //   2. Param only appears in a few actions (not all) → "Only for action X, Y."
+      //      This prevents the model from sending list/get params with create calls.
+      for (const [propName, { total, requiredCount, requiredBy }] of propPresence) {
+        if (!allProperties[propName]) continue;
+        const existing = allProperties[propName].description || '';
+
+        if (requiredCount > 0 && requiredCount < opCount) {
+          // Case 1: required by some actions
+          const actions = requiredBy.map((a) => `'${a}'`).join(', ');
+          const suffix = `Required for ${requiredBy.length === 1 ? 'action' : 'actions'} ${actions}.`;
+          allProperties[propName] = {
+            ...allProperties[propName],
+            description: existing ? `${existing} ${suffix}` : suffix,
+          };
+        } else if (total > 0 && total < opCount && requiredCount === 0) {
+          // Case 2: appears in some actions but required by none — annotate scope.
+          // Only annotate when the param appears in a MINORITY of actions (at most half).
+          // Params in most actions are the norm and don't need "Only for" annotations,
+          // which can cause the model to avoid them unnecessarily.
+          const presentIn = [];
+          for (const { operation } of ops) {
+            const opSchema = buildInputSchemaFromParams(operation);
+            if (opSchema.properties && propName in opSchema.properties) {
+              presentIn.push(operation.intentAction);
+            }
+          }
+          if (presentIn.length <= opCount / 2) {
+            const actions = presentIn.map((a) => `'${a}'`).join(', ');
+            const suffix = `Only for ${presentIn.length === 1 ? 'action' : 'actions'} ${actions}. Omit for other actions.`;
+            allProperties[propName] = {
+              ...allProperties[propName],
+              description: existing ? `${existing} ${suffix}` : suffix,
+            };
+          }
+        }
+      }
+
+      // Add fallback descriptions for complex undescribed params.
+      for (const [propName, propSchema] of Object.entries(allProperties)) {
+        if (propSchema.description) continue;
+        if (propName === 'target') {
+          allProperties[propName] = { ...propSchema, description: "Target address object. Use 'ref' instead if you have a search handle. Format: {kind:'text', blockId, range:{start,end}} or {kind:'block', nodeType, nodeId}." };
+        } else if (propName === 'ref') {
+          allProperties[propName] = { ...propSchema, description: "Handle ref string from superdoc_search. Pass handle.ref value directly (e.g. 'text:eyJ...'). Preferred for text-level operations." };
+        } else if (propName === 'content') {
+          allProperties[propName] = { ...propSchema, description: "Document fragment content (structured JSON)." };
+        } else if (propName === 'inline') {
+          allProperties[propName] = { ...propSchema, description: "Inline formatting to apply: {bold: true, italic: true, underline: true, ...}." };
         }
       }
 
@@ -470,7 +571,28 @@ export async function generateIntentTools(contract) {
       path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/tools/intent_dispatch_generated.py'),
       dispatchPy,
     ),
+    // Browser SDK: intent dispatch (same logic, browser-safe header)
+    writeGeneratedFile(
+      path.join(BROWSER_SDK_DIR, 'intent-dispatch.ts'),
+      dispatchTs.replace(
+        '// Auto-generated by generate-intent-tools.mjs — do not edit',
+        '// Auto-generated by generate-intent-tools.mjs — do not edit.\n// Pure logic, no Node.js dependencies. Safe for browser bundling.',
+      ),
+    ),
   ];
+
+  // Browser SDK: embed system-prompt.md as a TypeScript string constant
+  try {
+    const promptMd = await readFile(path.join(TOOLS_OUTPUT_DIR, 'system-prompt.md'), 'utf8');
+    const escaped = promptMd.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const promptTs =
+      '// Auto-generated from packages/sdk/tools/system-prompt.md\n' +
+      '// Do not edit manually — re-run generate:all to update.\n' +
+      'export const SYSTEM_PROMPT = `' + escaped + '`;\n';
+    writes.push(writeGeneratedFile(path.join(BROWSER_SDK_DIR, 'system-prompt.ts'), promptTs));
+  } catch {
+    // system-prompt.md may not exist yet during initial bootstrap
+  }
 
   for (const { formatter, file } of Object.values(providers)) {
     const providerTools = tools.map(formatter);

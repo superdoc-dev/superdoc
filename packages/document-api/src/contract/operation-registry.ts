@@ -133,6 +133,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -378,6 +380,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -613,6 +618,16 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   };
   'format.paragraph.clearShading': {
     input: ParagraphsClearShadingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setDirection': {
+    input: ParagraphsSetDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearDirection': {
+    input: ParagraphsClearDirectionInput;
     options: MutationOptions;
     output: ParagraphMutationResult;
   };
@@ -883,6 +898,13 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
   'tables.clearCellSpacing': {
     input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.applyStyle': { input: TablesApplyStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorders': { input: TablesSetBordersInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTableOptions': {
+    input: TablesSetTableOptionsInput;
     options: MutationOptions;
     output: TableMutationResult;
   };

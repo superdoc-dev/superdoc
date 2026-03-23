@@ -159,6 +159,7 @@ export interface ParagraphProperties {
   tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
+  rightToLeft?: boolean;
 }
 
 /** List rendering metadata computed at runtime */

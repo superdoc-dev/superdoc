@@ -302,6 +302,7 @@ const openPopover = (component, props, position) => {
 const tableResizeState = reactive({
   visible: false,
   tableElement: null,
+  dragging: false,
 });
 
 /**
@@ -553,6 +554,9 @@ const isNearRowBoundary = (event, tableElement) => {
  * @returns {void}
  */
 const updateTableResizeOverlay = (event) => {
+  // Don't change overlay visibility while a resize drag is active
+  if (tableResizeState.dragging) return;
+
   // Throttle: skip if called too frequently
   const now = Date.now();
   if (now - lastUpdateTableResizeTimestamp < TABLE_RESIZE_THROTTLE_MS) {
@@ -594,6 +598,17 @@ const updateTableResizeOverlay = (event) => {
  * Hide table resize overlay (on mouse leave)
  */
 const hideTableResizeOverlay = () => {
+  if (tableResizeState.dragging) return;
+  tableResizeState.visible = false;
+  tableResizeState.tableElement = null;
+};
+
+const onTableResizeStart = () => {
+  tableResizeState.dragging = true;
+};
+
+const onTableResizeEnd = () => {
+  tableResizeState.dragging = false;
   tableResizeState.visible = false;
   tableResizeState.tableElement = null;
 };
@@ -735,7 +750,12 @@ const handleOverlayUpdates = (event) => {
   } else {
     updateTableResizeOverlay(event);
   }
-  updateImageResizeOverlay(event);
+  // Don't evaluate image overlay during an active table resize drag —
+  // without the oversized table overlay, pointer events can reach images
+  // and spuriously activate the image resize overlay mid-drag.
+  if (!tableResizeState.dragging) {
+    updateImageResizeOverlay(event);
+  }
 };
 
 /**
@@ -901,6 +921,51 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     editor: activeEditor.value,
     presentationEditor: editor.value instanceof PresentationEditor ? editor.value : null,
   });
+
+  // Upgrade visual-readiness signal: during upgradeToCollaboration, SuperDoc
+  // threads this callback so it knows when the rebuilt runtime has actually
+  // painted AND collaboration is ready, not just when editors are created.
+  // For collaborative remounts the provider is already synced so the
+  // collaboration extension will emit collaborationReady after a 250ms delay.
+  // We must wait for BOTH that event AND the first layout paint before
+  // signalling that the upgrade transition can reveal the new runtime.
+  const onUpgradeVisualReady = props.options?.onUpgradeVisualReady;
+  if (typeof onUpgradeVisualReady === 'function') {
+    const hasCollabProvider = Boolean(props.options?.collaborationProvider);
+    const isPresentationEditor = editor.value instanceof PresentationEditor;
+
+    let collabReady = !hasCollabProvider; // no provider → already satisfied
+    let layoutReady = !isPresentationEditor; // no layout engine → already satisfied
+
+    const tryFire = () => {
+      if (collabReady && layoutReady) {
+        nextTick(() => onUpgradeVisualReady());
+      }
+    };
+
+    if (!collabReady) {
+      editor.value.once('collaborationReady', () => {
+        collabReady = true;
+        tryFire();
+      });
+    }
+
+    if (!layoutReady) {
+      const pe = editor.value;
+      if (pe.getPages().length > 0) {
+        layoutReady = true;
+      } else {
+        const onFirstLayout = () => {
+          pe.off('layoutUpdated', onFirstLayout);
+          layoutReady = true;
+          tryFire();
+        };
+        pe.on('layoutUpdated', onFirstLayout);
+      }
+    }
+
+    tryFire();
+  }
 
   // Attach layout-engine specific image selection listeners
   if (editor.value instanceof PresentationEditor) {
@@ -1207,6 +1272,8 @@ onBeforeUnmount(() => {
         :editor="activeEditor"
         :visible="tableResizeState.visible"
         :tableElement="tableResizeState.tableElement"
+        @resize-start="onTableResizeStart"
+        @resize-end="onTableResizeEnd"
       />
       <!-- Image resize overlay for interactive image resizing -->
       <ImageResizeOverlay
@@ -1283,6 +1350,9 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: var(--sd-ui-ruler-z-index, 10);
+  background: var(--sd-ui-ruler-bg, var(--sd-ui-bg, #ffffff));
 }
 
 .ruler {

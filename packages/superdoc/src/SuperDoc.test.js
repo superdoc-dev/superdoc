@@ -177,6 +177,7 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  syncTrackedChangePositionsWithDocument: vi.fn(),
   syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
   setActiveComment: vi.fn(),
@@ -519,6 +520,52 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
+  it('resyncs tracked-change threads on undo/redo transactions', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = (inputType) => ({
+      getMeta: vi.fn((key) => (key === 'inputType' ? inputType : undefined)),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction('historyUndo'),
+      duration: 4,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+    });
+
+    commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction('historyRedo'),
+      duration: 5,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+    });
+  });
+
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -642,6 +689,45 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.parentCommentId).toBe('parent-new');
     expect(existingComment.trackedChangeParentId).toBe('tc-parent-new');
     expect(existingComment.threadingParentCommentId).toBe('thread-parent-new');
+  });
+
+  it('updates replayed tracked-change display metadata for existing comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'tracked-change-1',
+      importedId: 'imp-tracked-change-1',
+      fileId: 'doc-1',
+      trackedChange: true,
+      trackedChangeType: 'trackFormat',
+      trackedChangeText: 'underline',
+      trackedChangeDisplayType: null,
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'tracked-change-1',
+        importedId: 'imp-tracked-change-1',
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeText: 'https://example.com',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.trackedChangeText).toBe('https://example.com');
+    expect(existingComment.trackedChangeDisplayType).toBe('hyperlinkAdded');
   });
 
   it('maps replayed isDone updates to resolved fields when explicit resolved metadata is missing', async () => {
@@ -1466,9 +1552,9 @@ describe('SuperDoc.vue', () => {
     const styleVars = wrapper.vm.superdocStyleVars;
 
     // Active insertBorder should be overridden
-    expect(styleVars['--sd-track-insert-border']).toBe('#ff0000');
+    expect(styleVars['--sd-tracked-changes-insert-border']).toBe('#ff0000');
     // deleteBackground should be inherited from base config
-    expect(styleVars['--sd-track-delete-bg']).toBe('#0000ff');
+    expect(styleVars['--sd-tracked-changes-delete-background']).toBe('#0000ff');
   });
 
   it('sets track change CSS vars from base config when no active config provided', async () => {
@@ -1486,9 +1572,9 @@ describe('SuperDoc.vue', () => {
 
     const styleVars = wrapper.vm.superdocStyleVars;
 
-    expect(styleVars['--sd-track-insert-border']).toBe('#11ff11');
-    expect(styleVars['--sd-track-delete-border']).toBe('#ff1111');
-    expect(styleVars['--sd-track-format-border']).toBe('#1111ff');
+    expect(styleVars['--sd-tracked-changes-insert-border']).toBe('#11ff11');
+    expect(styleVars['--sd-tracked-changes-delete-border']).toBe('#ff1111');
+    expect(styleVars['--sd-tracked-changes-format-border']).toBe('#1111ff');
   });
 
   it('sets comment highlight hover color CSS var', async () => {
@@ -1501,6 +1587,6 @@ describe('SuperDoc.vue', () => {
     await nextTick();
 
     const styleVars = wrapper.vm.superdocStyleVars;
-    expect(styleVars['--sd-comment-highlight-hover']).toBe('#abcdef88');
+    expect(styleVars['--sd-comments-highlight-hover']).toBe('#abcdef88');
   });
 });

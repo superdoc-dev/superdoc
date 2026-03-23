@@ -6,8 +6,6 @@ description: Insert a new list item before or after an existing list item. The n
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Insert a new list item before or after an existing list item. The new item inherits the target list context.
@@ -124,15 +122,18 @@ Returns a ListsInsertResult with the new list item address and block ID.
   "additionalProperties": false,
   "properties": {
     "position": {
+      "description": "Required. Insert position relative to target: 'before' or 'after'.",
       "enum": [
         "before",
         "after"
       ]
     },
     "target": {
-      "$ref": "#/$defs/ListItemAddress"
+      "$ref": "#/$defs/ListItemAddress",
+      "description": "The target list item. For 'insert': the item to insert relative to. For 'create' with mode 'fromParagraphs': use nodeType 'paragraph' instead. Format: {kind:'block', nodeType:'listItem', nodeId:'<id>'}."
     },
     "text": {
+      "description": "Text content for the new list item.",
       "type": "string"
     }
   },

@@ -16,6 +16,16 @@ interface CliInvocation {
   prefixArgs: string[];
 }
 
+type HandleDoc = Awaited<ReturnType<SuperDocClient['open']>>;
+
+export interface LegacyStoryClient {
+  doc: any;
+  connect(): Promise<void>;
+  dispose(): Promise<void>;
+  describe(params?: Record<string, unknown>): Promise<unknown>;
+  describeCommand(params: Record<string, unknown>): Promise<unknown>;
+}
+
 function resolveInvocation(cliBin: string): CliInvocation {
   if (cliBin.toLowerCase().endsWith('.js')) {
     return { command: 'node', prefixArgs: [cliBin] };
@@ -62,7 +72,7 @@ export function unwrap<T>(payload: any): T {
 }
 
 export interface StoryContext {
-  client: SuperDocClient;
+  client: LegacyStoryClient;
   resultsDir: string;
   /** Copy a source doc into the results dir and return its path. */
   copyDoc(source: string, name?: string): Promise<string>;
@@ -70,6 +80,8 @@ export interface StoryContext {
   outPath(name: string): string;
   /** Run a raw CLI command with the story's state dir and parse the JSON envelope. */
   runCli(args: string[], options?: { allowError?: boolean }): Promise<any>;
+  /** Create a real bound-handle SDK client that shares this story's CLI state dir. */
+  createHandleClient(options?: SuperDocClientOptions): Promise<SuperDocClient>;
 }
 
 export interface StoryHarnessOptions {
@@ -85,16 +97,11 @@ export interface StoryHarnessOptions {
 }
 
 export function useStoryHarness(storyName: string, options: StoryHarnessOptions = {}): StoryContext {
-  const sessionIds: string[] = [];
   let ctx: StoryContext | null = null;
   let hasPreparedResultsDir = false;
   const preserveResults = options.preserveResults ?? false;
   const clientOptions = options.clientOptions ?? {};
   const cliBinMode = options.cliBinMode ?? 'auto';
-
-  const original = {
-    open: undefined as any,
-  };
 
   beforeEach(async () => {
     const resultsDir = path.join(STORIES_ROOT, 'results', storyName);
@@ -115,27 +122,31 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
             );
     const stateDir = path.join(resultsDir, '.superdoc-cli-state');
 
-    const client = createSuperDocClient({
-      requestTimeoutMs: 30_000,
-      startupTimeoutMs: 30_000,
-      shutdownTimeoutMs: 30_000,
-      ...clientOptions,
-      env: {
-        ...clientOptions.env,
-        SUPERDOC_CLI_BIN: cliBin,
-        SUPERDOC_CLI_STATE_DIR: stateDir,
-      },
-    });
+    const clients: SuperDocClient[] = [];
+    const baseHandles = new Map<string, HandleDoc>();
 
-    await client.connect();
+    const createHandleClient = async (overrideOptions: SuperDocClientOptions = {}): Promise<SuperDocClient> => {
+      const client = createSuperDocClient({
+        requestTimeoutMs: 30_000,
+        startupTimeoutMs: 30_000,
+        shutdownTimeoutMs: 30_000,
+        ...clientOptions,
+        ...overrideOptions,
+        env: {
+          ...clientOptions.env,
+          ...overrideOptions.env,
+          SUPERDOC_CLI_BIN: cliBin,
+          SUPERDOC_CLI_STATE_DIR: stateDir,
+        },
+      });
 
-    // Track opened sessions for cleanup
-    original.open = client.doc.open.bind(client.doc);
-    client.doc.open = async (args: any) => {
-      const result = await original.open(args);
-      if (args.sessionId) sessionIds.push(args.sessionId);
-      return result;
+      await client.connect();
+      clients.push(client);
+      return client;
     };
+
+    const baseClient = await createHandleClient();
+    const client = createLegacyStoryClient(baseClient, baseHandles);
 
     ctx = {
       client,
@@ -176,15 +187,37 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
         }
         return envelope;
       },
+      createHandleClient,
     };
+
+    Object.defineProperty(ctx, '__storyClients', {
+      value: clients,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(ctx, '__baseHandles', {
+      value: baseHandles,
+      enumerable: false,
+      configurable: true,
+    });
   });
 
   afterEach(async () => {
     if (!ctx) return;
-    for (const sid of sessionIds.splice(0)) {
-      await ctx.client.doc.close({ sessionId: sid, discard: true }).catch(() => {});
+
+    const internalCtx = ctx as StoryContext & {
+      __storyClients?: SuperDocClient[];
+      __baseHandles?: Map<string, HandleDoc>;
+    };
+
+    for (const handle of internalCtx.__baseHandles?.values() ?? []) {
+      await handle.close({ discard: true }).catch(() => {});
     }
-    await ctx.client.dispose();
+
+    for (const client of internalCtx.__storyClients ?? []) {
+      await client.dispose().catch(() => {});
+    }
+
     ctx = null;
   });
 
@@ -204,6 +237,7 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
     copyDoc: (source: string, name?: string) => requireCtx().copyDoc(source, name),
     outPath: (name: string) => requireCtx().outPath(name),
     runCli: (args: string[], options?: { allowError?: boolean }) => requireCtx().runCli(args, options),
+    createHandleClient: (clientOptions?: SuperDocClientOptions) => requireCtx().createHandleClient(clientOptions),
   } as StoryContext;
 
   Object.defineProperty(api, 'resultsDir', {
@@ -211,4 +245,110 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
   });
 
   return api;
+}
+
+function createLegacyStoryClient(client: SuperDocClient, handles: Map<string, HandleDoc>): LegacyStoryClient {
+  return {
+    doc: createLegacyDocProxy(client, handles),
+    connect: () => client.connect(),
+    dispose: () => client.dispose(),
+    describe: (params) => client.describe(params),
+    describeCommand: (params) => client.describeCommand(params),
+  };
+}
+
+function createLegacyDocProxy(client: SuperDocClient, handles: Map<string, HandleDoc>, pathTokens: string[] = []): any {
+  return new Proxy(() => {}, {
+    get: (_target, prop) => {
+      if (typeof prop !== 'string') return undefined;
+      if (prop === 'then') return undefined;
+      return createLegacyDocProxy(client, handles, [...pathTokens, prop]);
+    },
+    apply: async (_target, _thisArg, argArray) => {
+      const [params = {}, invokeOptions] = argArray as [unknown?, unknown?];
+      if (pathTokens.length === 0) {
+        throw new Error('Legacy story client invoked with no operation path.');
+      }
+
+      const operationPath = pathTokens.join('.');
+      if (operationPath === 'open') {
+        const handle = await client.open(asParamsRecord(params, operationPath));
+        handles.set(handle.sessionId, handle);
+        return handle.openResult;
+      }
+
+      const { sessionId, payload } = splitSessionParams(params, operationPath);
+      const handle = resolveHandle(handles, sessionId, operationPath);
+
+      if (operationPath === 'close') {
+        const result = await handle.close(payload, invokeOptions as any);
+        handles.delete(handle.sessionId);
+        return result;
+      }
+
+      const method = resolveHandleMethod(handle, pathTokens, operationPath);
+      return method(payload, invokeOptions);
+    },
+  });
+}
+
+function asParamsRecord(params: unknown, operationPath: string): Record<string, unknown> {
+  if (params == null) return {};
+  if (typeof params !== 'object' || Array.isArray(params)) {
+    throw new Error(`doc.${operationPath} expected an object params payload.`);
+  }
+  return params as Record<string, unknown>;
+}
+
+function splitSessionParams(
+  params: unknown,
+  operationPath: string,
+): {
+  sessionId: string | undefined;
+  payload: Record<string, unknown>;
+} {
+  const payload = asParamsRecord(params, operationPath);
+  const { sessionId, ...rest } = payload;
+  return {
+    sessionId: typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined,
+    payload: rest,
+  };
+}
+
+function resolveHandle(
+  handles: Map<string, HandleDoc>,
+  sessionId: string | undefined,
+  operationPath: string,
+): HandleDoc {
+  if (sessionId != null) {
+    const handle = handles.get(sessionId);
+    if (handle) return handle;
+    throw new Error(`doc.${operationPath} could not find an open handle for session "${sessionId}".`);
+  }
+
+  if (handles.size === 1) {
+    return handles.values().next().value as HandleDoc;
+  }
+
+  throw new Error(`doc.${operationPath} requires an explicit sessionId in the story harness.`);
+}
+
+function resolveHandleMethod(
+  handle: HandleDoc,
+  pathTokens: string[],
+  operationPath: string,
+): (...args: unknown[]) => unknown {
+  let cursor: unknown = handle;
+  let parent: unknown = handle;
+
+  for (const token of pathTokens) {
+    parent = cursor;
+    cursor = (cursor as Record<string, unknown> | undefined)?.[token];
+  }
+
+  if (typeof cursor !== 'function') {
+    throw new Error(`doc.${operationPath} is not available on the bound document handle.`);
+  }
+
+  return cursor.bind(parent);
 }

@@ -12,6 +12,16 @@ if (!Object.getOwnPropertyDescriptor(PMNode.prototype, 'children')) {
   });
 }
 
+// Controllable mock — set mockAnnotations before each test to control return value
+let mockAnnotations = [];
+
+vi.mock('../fieldAnnotationHelpers/index.js', () => ({
+  findFieldAnnotationsByFieldId: vi.fn(() => mockAnnotations),
+}));
+
+// Import AFTER vi.mock so the command picks up the hoisted mock
+const { cleanUpParagraphWithAnnotations } = await import('./index.js');
+
 // Local helpers
 const schema = basic;
 const p = schema.nodes.paragraph;
@@ -24,27 +34,19 @@ const makeAnnotationAt = (state, pos) => {
 };
 const hardBreak = schema.nodes.hard_break;
 const textContent = (docNode) => docNode.textContent;
-const mockHelperPath = '../fieldAnnotationHelpers/index.js';
+
+beforeEach(() => {
+  mockAnnotations = [];
+});
 
 describe('cleanUpParagraphWithAnnotations - test range error crash', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
   /** Test to fix error in position out of range in original */
-  it('throws RangeError "Position … out of range" on single-paragraph doc', async () => {
+  it('throws RangeError "Position … out of range" on single-paragraph doc', () => {
     const doc = schema.node('doc', null, [p.createAndFill(null, [text('A')])]);
     const state = makeState(doc);
     const tr = state.tr;
 
-    const ann = makeAnnotationAt(state, 1);
-
-    vi.doMock('../fieldAnnotationHelpers/index.js', () => ({
-      findFieldAnnotationsByFieldId: vi.fn(() => [ann]),
-    }));
-
-    // Import AFTER mocking so the command picks up the mocked helper
-    const { cleanUpParagraphWithAnnotations } = await import('./index.js');
+    mockAnnotations = [makeAnnotationAt(state, 1)];
 
     const cmd = cleanUpParagraphWithAnnotations(['field-x']);
     const run = () => cmd({ dispatch: () => {}, tr, state });
@@ -54,11 +56,7 @@ describe('cleanUpParagraphWithAnnotations - test range error crash', () => {
 });
 
 describe('cleanUpParagraphWithAnnotations – original behavior', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
-  it('deletes a single-child paragraph (non-last) annotated node', async () => {
+  it('deletes a single-child paragraph (non-last) annotated node', () => {
     // doc: [ p("REMOVE_ME"), p("keep this") ]
     const doc = schema.node('doc', null, [
       p.createAndFill(null, [text('REMOVE_ME')]),
@@ -68,13 +66,8 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
     const tr = state.tr;
 
     // Annotate inside the first paragraph
-    const ann = makeAnnotationAt(state, 1);
+    mockAnnotations = [makeAnnotationAt(state, 1)];
 
-    vi.doMock(mockHelperPath, () => ({
-      findFieldAnnotationsByFieldId: vi.fn(() => [ann]),
-    }));
-
-    const { cleanUpParagraphWithAnnotations } = await import('./index.js');
     const cmd = cleanUpParagraphWithAnnotations(['field-x']);
 
     // no-op dispatch is fine; we inspect tr afterwards
@@ -89,20 +82,15 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
     expect(textContent(after)).not.toMatch(/REMOVE_ME/);
   });
 
-  it('no-ops when parent has >= 2 inline children (e.g., text + hardBreak + text)', async () => {
+  it('no-ops when parent has >= 2 inline children (e.g., text + hardBreak + text)', () => {
     // p("A", <br/>, "B") -> childCount >= 2 -> guard should fail -> no deletion
     const para = p.createAndFill(null, [text('A'), hardBreak.create(), text('B')]);
     const doc = schema.node('doc', null, [para]);
     const state = makeState(doc);
     const tr = state.tr;
 
-    const ann = makeAnnotationAt(state, 1);
+    mockAnnotations = [makeAnnotationAt(state, 1)];
 
-    vi.doMock(mockHelperPath, () => ({
-      findFieldAnnotationsByFieldId: vi.fn(() => [ann]),
-    }));
-
-    const { cleanUpParagraphWithAnnotations } = await import('./index.js');
     const cmd = cleanUpParagraphWithAnnotations(['field-x']);
     const run = () => cmd({ dispatch: () => {}, tr, state });
 
@@ -111,7 +99,7 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
     expect(textContent(tr.doc)).toContain('AB');
   });
 
-  it('no-ops when the annotation node does not equal the current node at mapped position', async () => {
+  it('no-ops when the annotation node does not equal the current node at mapped position', () => {
     // doc: [ p("X"), p("Y") ]
     const doc = schema.node('doc', null, [p.createAndFill(null, [text('X')]), p.createAndFill(null, [text('Y')])]);
     const state = makeState(doc);
@@ -119,13 +107,8 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
 
     // Build an "annotation" object whose node DOES NOT equal the current node at pos 1
     // We fake it by using a different node instance/type (paragraph node) so node.eq(currentNode) is false.
-    const badAnn = { pos: 1, node: state.doc.child(0) /* paragraph, not text node */ };
+    mockAnnotations = [{ pos: 1, node: state.doc.child(0) /* paragraph, not text node */ }];
 
-    vi.doMock(mockHelperPath, () => ({
-      findFieldAnnotationsByFieldId: vi.fn(() => [badAnn]),
-    }));
-
-    const { cleanUpParagraphWithAnnotations } = await import('./index.js');
     const cmd = cleanUpParagraphWithAnnotations(['field-x']);
     const run = () => cmd({ dispatch: () => {}, tr, state });
 
@@ -134,7 +117,7 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
     expect(textContent(tr.doc)).toMatch(/^XY$/);
   });
 
-  it('handles multiple annotations by queuing and deleting them in descending order', async () => {
+  it('handles multiple annotations by queuing and deleting them in descending order', () => {
     // doc: [ p("FIRST"), p("MID"), p("SECOND") ]
     // Annotate inside FIRST and SECOND (both single-child paragraphs).
     const first = p.createAndFill(null, [text('FIRST')]);
@@ -154,11 +137,8 @@ describe('cleanUpParagraphWithAnnotations – original behavior', () => {
     const ann1 = makeAnnotationAt(state, 1);
     const ann2 = makeAnnotationAt(state, secondTextPos);
 
-    vi.doMock(mockHelperPath, () => ({
-      findFieldAnnotationsByFieldId: vi.fn(() => [ann1, ann2]),
-    }));
+    mockAnnotations = [ann1, ann2];
 
-    const { cleanUpParagraphWithAnnotations } = await import('./index.js');
     const cmd = cleanUpParagraphWithAnnotations(['field-x']);
     const run = () => cmd({ dispatch: () => {}, tr, state });
 

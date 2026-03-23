@@ -9,8 +9,10 @@ packages:
   - packages/**/*
   - shared/*
   - examples/*
-  - evals
   - examples/*/*
+  - demos/*
+  - demos/*/*
+  - evals
 
 catalog:
   '@commitlint/cli': ^19.8.1

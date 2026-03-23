@@ -112,6 +112,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'passthroughInline',
   'bookmarkEnd',
   'fieldAnnotation',
+  'documentStatField',
 ]);
 
 /**

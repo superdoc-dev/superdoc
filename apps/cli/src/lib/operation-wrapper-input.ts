@@ -85,6 +85,7 @@ export async function parseWrapperOperationInput(
         { name: 'pattern', type: 'string' },
         { name: 'mode', type: 'string' },
         { name: 'case-sensitive', type: 'boolean' },
+        { name: 'select-json', type: 'string' },
         { name: 'query-json', type: 'string' },
         { name: 'query-file', type: 'string' },
         { name: 'within-json', type: 'string' },

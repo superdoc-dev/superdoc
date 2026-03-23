@@ -6,8 +6,6 @@ description: Set paragraph spacing properties (before, after, line, lineRule) in
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set paragraph spacing properties (before, after, line, lineRule) in twips.
@@ -26,28 +24,28 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 
 ## Input fields
 
-### Variant 1 (before)
+### Variant 1 (required: before)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `before` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2 (after)
+### Variant 2 (required: after)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `after` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3 (line)
+### Variant 3 (required: line)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `line` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 4 (lineRule)
+### Variant 4 (required: lineRule)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -155,18 +153,22 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
   },
   "properties": {
     "after": {
+      "description": "Space after paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "before": {
+      "description": "Space before paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "line": {
+      "description": "Line spacing value. Meaning depends on lineRule. Must be provided together with lineRule.",
       "minimum": 1,
       "type": "integer"
     },
     "lineRule": {
+      "description": "Line spacing rule. Required when 'line' is set.",
       "enum": [
         "auto",
         "exact",

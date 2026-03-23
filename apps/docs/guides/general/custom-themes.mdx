@@ -1,0 +1,331 @@
+---
+title: Custom themes
+sidebarTitle: Custom themes
+keywords: "custom theme, css variables reference, design tokens, theming guide, component styling, dark theme"
+---
+
+Full `createTheme()` API reference and CSS variable catalog. Start with the [theming overview](/getting-started/theming) if you're new to theming.
+
+## `createTheme()` options
+
+```javascript
+import { createTheme } from 'superdoc';
+
+const theme = createTheme({
+  name: 'my-brand',
+  font: 'Inter, sans-serif',
+  radius: '8px',
+  shadow: '0 2px 8px rgba(0,0,0,0.1)',
+  colors: {
+    action: '#6366f1',        // buttons, links, active states
+    actionHover: '#4f46e5',
+    actionText: '#ffffff',    // text on action buttons
+    bg: '#ffffff',             // panels, cards, dropdowns
+    hoverBg: '#f1f5f9',       // hover backgrounds
+    activeBg: '#e2e8f0',      // active/pressed backgrounds
+    disabledBg: '#f5f5f5',
+    text: '#1e293b',           // primary text
+    textMuted: '#64748b',      // secondary text
+    textDisabled: '#94a3b8',
+    border: '#e2e8f0',
+  },
+  // Escape hatch — any --sd-* CSS variable
+  vars: {
+    '--sd-ui-toolbar-bg': '#f8fafc',
+    '--sd-ui-comments-card-bg': '#f0f0ff',
+  },
+});
+
+document.documentElement.classList.add(theme);
+```
+
+<Tip>
+Start with `colors` only. Use `vars` when a specific component needs to look different.
+</Tip>
+
+## Dark theme example
+
+```javascript
+import { createTheme } from 'superdoc';
+
+const dark = createTheme({
+  name: 'dark',
+  colors: {
+    bg: '#1a1a2e',
+    hoverBg: '#2a2a3e',
+    activeBg: '#3a3a4e',
+    text: '#e2e8f0',
+    textMuted: '#94a3b8',
+    border: '#334155',
+    action: '#60a5fa',
+    actionHover: '#93c5fd',
+    actionText: '#0f172a',
+  },
+  vars: {
+    '--sd-ui-toolbar-bg': '#0f172a',
+    '--sd-ui-toolbar-button-text': '#e2e8f0',
+    '--sd-ui-comments-card-bg': '#1e293b',
+    '--sd-ui-comments-body-text': '#cbd5e1',
+  },
+});
+
+document.documentElement.classList.add(dark);
+```
+
+## Raw CSS alternative
+
+You can also write CSS directly. Apply overrides to `<html>`.
+
+```css
+.dark-theme {
+  --sd-ui-bg: #1a1a2e;
+  --sd-ui-hover-bg: #2a2a3e;
+  --sd-ui-active-bg: #3a3a4e;
+  --sd-ui-text: #e2e8f0;
+  --sd-ui-text-muted: #94a3b8;
+  --sd-ui-border: #334155;
+  --sd-ui-action: #60a5fa;
+  --sd-ui-action-hover: #93c5fd;
+  --sd-ui-action-text: #0f172a;
+
+  /* Toolbar */
+  --sd-ui-toolbar-bg: #0f172a;
+  --sd-ui-toolbar-button-text: #e2e8f0;
+  --sd-ui-toolbar-button-hover-bg: #1e293b;
+  --sd-ui-toolbar-button-active-bg: #334155;
+
+  /* Dropdowns */
+  --sd-ui-dropdown-bg: #1e293b;
+  --sd-ui-dropdown-border: #334155;
+  --sd-ui-dropdown-hover-bg: #2d3a4e;
+
+  /* Comments */
+  --sd-ui-comments-card-bg: #1e293b;
+  --sd-ui-comments-card-active-bg: #0f172a;
+  --sd-ui-comments-input-bg: #1e293b;
+  --sd-ui-comments-author-text: #e2e8f0;
+  --sd-ui-comments-body-text: #cbd5e1;
+  --sd-ui-comments-timestamp-text: #64748b;
+}
+```
+
+## Variable reference
+
+### Semantic (UI-wide)
+
+These cascade to every component. Changing one updates the entire UI.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | UI font |
+| `--sd-ui-text` | `#47484a` | Primary text |
+| `--sd-ui-text-muted` | `#666666` | Secondary text |
+| `--sd-ui-text-disabled` | `#ababab` | Disabled text |
+| `--sd-ui-bg` | `#ffffff` | Default background |
+| `--sd-ui-hover-bg` | `#dbdbdb` | Hover background |
+| `--sd-ui-active-bg` | `#c8d0d8` | Active/pressed background |
+| `--sd-ui-disabled-bg` | `#f5f5f5` | Disabled background |
+| `--sd-ui-border` | `#dbdbdb` | Default border |
+| `--sd-ui-action` | `#1355ff` | Action/accent color |
+| `--sd-ui-action-hover` | `#0f44cc` | Action hover |
+| `--sd-ui-action-text` | `#ffffff` | Text on action buttons |
+| `--sd-ui-shadow` | `0 4px 12px rgba(0,0,0,0.12)` | Default shadow |
+| `--sd-ui-radius` | `6px` | Default border radius |
+
+### Toolbar
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-toolbar-height` | `32px` | Row height |
+| `--sd-ui-toolbar-padding-x` | `16px` | Horizontal padding |
+| `--sd-ui-toolbar-padding-y` | `4px` | Vertical padding |
+| `--sd-ui-toolbar-item-gap` | `2px` | Gap between buttons |
+| `--sd-ui-toolbar-item-padding` | `5px` | Button padding |
+| `--sd-ui-toolbar-bg` | `transparent` | Background |
+| `--sd-ui-toolbar-button-text` | inherits `--sd-ui-text` | Button text/icon color |
+| `--sd-ui-toolbar-button-hover-bg` | inherits `--sd-ui-hover-bg` | Button hover |
+| `--sd-ui-toolbar-button-active-bg` | inherits `--sd-ui-active-bg` | Button active |
+
+### Dropdowns
+
+Toolbar dropdowns (font picker, style picker) and the overflow menu.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-dropdown-bg` | inherits `--sd-ui-bg` | Panel background |
+| `--sd-ui-dropdown-border` | inherits `--sd-ui-border` | Panel border |
+| `--sd-ui-dropdown-text` | inherits `--sd-ui-text` | Option text |
+| `--sd-ui-dropdown-hover-text` | inherits dropdown text | Hovered option text |
+| `--sd-ui-dropdown-selected-text` | inherits dropdown text | Selected option text |
+| `--sd-ui-dropdown-hover-bg` | inherits `--sd-ui-hover-bg` | Option hover |
+| `--sd-ui-dropdown-active-bg` | inherits `--sd-ui-active-bg` | Option active |
+| `--sd-ui-dropdown-option-radius` | `3px` | Option border radius |
+| `--sd-ui-dropdown-shadow` | `0 8px 24px rgba(0,0,0,0.16)` | Panel shadow |
+
+### Context menu
+
+The right-click menu.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-menu-bg` | inherits `--sd-ui-bg` | Background |
+| `--sd-ui-menu-text` | inherits `--sd-ui-text` | Text |
+| `--sd-ui-menu-font-size` | `12px` | Text size |
+| `--sd-ui-menu-radius` | `0` | Border radius |
+| `--sd-ui-menu-border` | inherits `--sd-ui-border` | Border |
+| `--sd-ui-menu-shadow` | `0 0 0 1px rgba(0,0,0,0.05), 0 10px 20px rgba(0,0,0,0.1)` | Shadow |
+| `--sd-ui-menu-input-border` | inherits `--sd-ui-border` | Search input border |
+| `--sd-ui-menu-input-focus-border` | inherits `--sd-ui-action` | Search input focus |
+| `--sd-ui-menu-item-hover-bg` | inherits `--sd-ui-hover-bg` | Item hover |
+| `--sd-ui-menu-item-active-bg` | inherits `--sd-ui-active-bg` | Active item |
+| `--sd-ui-menu-item-active-text` | inherits `--sd-ui-action` | Active item text |
+
+### Tooltip
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-tooltip-bg` | `#262626` | Background (intentionally dark) |
+| `--sd-ui-tooltip-text` | `#ffffff` | Text (intentionally light) |
+| `--sd-ui-tooltip-radius` | `6px` | Border radius |
+| `--sd-ui-tooltip-shadow` | `0 3px 12px rgba(0,0,0,0.28)` | Shadow |
+
+### Comments
+
+Card styling, typography, and input elements for the comments sidebar.
+
+**Card:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-card-bg` | `#f3f6fd` | Default card |
+| `--sd-ui-comments-card-hover-bg` | inherits card bg | Hovered card |
+| `--sd-ui-comments-card-active-bg` | inherits `--sd-ui-bg` | Selected card |
+| `--sd-ui-comments-card-resolved-bg` | inherits `--sd-ui-disabled-bg` | Resolved card |
+| `--sd-ui-comments-card-active-border` | inherits `--sd-ui-border` | Selected card border |
+| `--sd-ui-comments-card-radius` | `12px` | Card radius |
+| `--sd-ui-comments-card-padding` | `16px` | Card padding |
+| `--sd-ui-comments-card-shadow` | `0 4px 12px rgba(50,50,50,0.15)` | Card shadow |
+| `--sd-ui-comments-transition` | `all 200ms ease` | Animation |
+| `--sd-ui-comments-separator` | inherits `--sd-ui-border` | Divider line |
+
+**Text:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-author-text` | inherits `--sd-ui-text` | Author name |
+| `--sd-ui-comments-author-size` | `14px` | Author size |
+| `--sd-ui-comments-author-weight` | `600` | Author weight |
+| `--sd-ui-comments-timestamp-text` | inherits `--sd-ui-text-muted` | Timestamp |
+| `--sd-ui-comments-timestamp-size` | `12px` | Timestamp size |
+| `--sd-ui-comments-body-text` | inherits `--sd-ui-text` | Body text |
+| `--sd-ui-comments-body-size` | `14px` | Body size |
+
+**Input:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-input-bg` | inherits `--sd-ui-bg` | Input background |
+| `--sd-ui-comments-input-border` | inherits `--sd-ui-border` | Input border |
+
+**Status:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-resolved-text` | `#00853d` | "Resolved" badge |
+| `--sd-ui-comments-insert-text` | `#00853d` | Tracked change insert |
+| `--sd-ui-comments-delete-text` | `#cb0e47` | Tracked change delete |
+
+**Filter dropdown:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-dropdown-bg` | inherits `--sd-ui-bg` | Dropdown background |
+| `--sd-ui-comments-dropdown-border` | inherits `--sd-ui-border` | Dropdown border |
+| `--sd-ui-comments-dropdown-shadow` | `0 8px 24px rgba(0,0,0,0.12)` | Dropdown shadow |
+| `--sd-ui-comments-option-text` | inherits body text | Option text |
+| `--sd-ui-comments-option-hover-text` | inherits option text | Hovered option |
+| `--sd-ui-comments-option-hover-bg` | inherits `--sd-ui-hover-bg` | Option hover |
+| `--sd-ui-comments-option-size` | `14px` | Option size |
+
+**Visibility badges:**
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-comments-internal-bg` | `#cde6e6` | Internal badge |
+| `--sd-ui-comments-external-bg` | `#f5cfda` | External badge |
+
+### Comment highlights (in-document)
+
+Colors applied to highlighted text when comments are present. These are document-level, not UI chrome.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-comments-highlight-external` | `#b1124b40` | External highlight |
+| `--sd-comments-highlight-external-active` | `#b1124b66` | Active external |
+| `--sd-comments-highlight-external-faded` | `#b1124b20` | Faded external |
+| `--sd-comments-highlight-external-nested-border` | `#b1124b99` | Nested left border |
+| `--sd-comments-highlight-internal` | `#07838340` | Internal highlight |
+| `--sd-comments-highlight-internal-active` | `#07838366` | Active internal |
+| `--sd-comments-highlight-internal-faded` | `#07838320` | Faded internal |
+| `--sd-comments-highlight-internal-nested-border` | `#07838399` | Nested left border |
+| `--sd-comments-highlight-hover` | `#1354ff55` | Hover highlight |
+| `--sd-comments-selection-background` | `#1354ff55` | Selection highlight |
+
+### Tracked changes
+
+Insert, delete, and format change decorations in the document.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-tracked-changes-insert-background` | `#399c7222` | Insert highlight |
+| `--sd-tracked-changes-insert-border` | `#00853d` | Insert left border |
+| `--sd-tracked-changes-delete-background` | `#cb0e4722` | Delete highlight |
+| `--sd-tracked-changes-delete-border` | `#cb0e47` | Delete left border |
+| `--sd-tracked-changes-format-border` | `gold` | Format change border |
+| `--sd-tracked-changes-insert-background-focused` | `#399c7244` | Focused insert |
+| `--sd-tracked-changes-delete-background-focused` | `#cb0e4744` | Focused delete |
+| `--sd-tracked-changes-format-background-focused` | `#ffd70033` | Focused format change |
+
+### Content controls
+
+DOCX content controls (SDTs) — form fields, dropdowns, date pickers.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-content-controls-block-border` | `#629be7` | Block control border |
+| `--sd-content-controls-block-hover-bg` | inherits `--sd-ui-hover-bg` | Block hover |
+| `--sd-content-controls-inline-border` | `#629be7` | Inline control border |
+| `--sd-content-controls-inline-hover-bg` | inherits `--sd-ui-hover-bg` | Inline hover |
+| `--sd-content-controls-label-border` | `#629be7` | Label border |
+| `--sd-content-controls-label-bg` | `#629be7ee` | Label background |
+| `--sd-content-controls-label-text` | `#ffffff` | Label text |
+| `--sd-content-controls-lock-hover-bg` | `rgba(98,155,231,0.08)` | Locked control hover |
+
+### Layout
+
+Page appearance in presentation mode.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-layout-page-bg` | inherits `--sd-ui-bg` | Page background |
+| `--sd-layout-page-shadow` | `0 4px 20px rgba(15,23,42,0.08)` | Page shadow |
+
+### Tools
+
+The floating action toolbar for AI and insert actions.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-tools-gap` | `6px` | Gap between items |
+| `--sd-ui-tools-item-size` | `50px` | Button size |
+| `--sd-ui-tools-item-radius` | `12px` | Button radius |
+| `--sd-ui-tools-item-bg` | `rgba(219,219,219,0.6)` | Button background |
+| `--sd-ui-tools-icon-size` | `20px` | Icon size |
+
+## Source files
+
+Token definitions live in your `node_modules/superdoc/` package:
+
+- `src/assets/styles/helpers/variables.css` — defaults
+- `src/assets/styles/helpers/themes.css` — preset themes
+- `src/assets/styles/helpers/compat.css` — aliases for old names that map to a different concept

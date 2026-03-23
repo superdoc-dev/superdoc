@@ -8,6 +8,8 @@
  * Nothing in this file imports from leaf node-info files.
  */
 
+import type { StoryLocator } from './story.types.js';
+
 export type NodeKind = 'block' | 'inline';
 
 export const NODE_KINDS = ['block', 'inline'] as const satisfies readonly NodeKind[];
@@ -162,6 +164,8 @@ export type BlockNodeAddress = {
   kind: 'block';
   nodeType: BlockNodeType;
   nodeId: string;
+  /** Story containing this block. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type TableAddress = {
@@ -196,6 +200,8 @@ export type InlineNodeAddress = {
   kind: 'inline';
   nodeType: InlineNodeType;
   anchor: InlineAnchor;
+  /** Story containing this inline node. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type NodeAddress = BlockNodeAddress | InlineNodeAddress;

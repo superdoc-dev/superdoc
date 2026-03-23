@@ -53,7 +53,7 @@ import {
 } from '../helpers/image-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 import { resolveCreateAnchor } from './create-insertion.js';
 import { readImageDimensionsFromDataUri } from '../../core/super-converter/image-dimensions.js';
 import { generateUniqueDocPrId } from '../../extensions/image/imageHelpers/startImageUpload.js';
@@ -228,84 +228,92 @@ export function createImageWrapper(
 ): CreateImageResult {
   rejectTrackedMode('create.image', options);
 
-  if (typeof editor.commands.setImage !== 'function') {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'create.image requires the image extension (setImage command).',
-    );
-  }
+  const runtime = resolveWriteStoryRuntime(editor, input.in);
+  const storyEditor = runtime.editor;
 
-  // -- Resolve image dimensions -------------------------------------------------
-  let resolvedSize = input.size;
+  try {
+    if (typeof storyEditor.commands.setImage !== 'function') {
+      throw new DocumentApiAdapterError(
+        'CAPABILITY_UNAVAILABLE',
+        'create.image requires the image extension (setImage command).',
+      );
+    }
 
-  if (isFinitePositive(resolvedSize?.width) && isFinitePositive(resolvedSize?.height)) {
-    // Caller provided valid dimensions — use as-is.
-  } else if (input.src?.startsWith('data:')) {
-    const dims = readImageDimensionsFromDataUri(input.src);
-    if (dims) {
-      resolvedSize = dims;
+    // -- Resolve image dimensions -----------------------------------------------
+    let resolvedSize = input.size;
+
+    if (isFinitePositive(resolvedSize?.width) && isFinitePositive(resolvedSize?.height)) {
+      // Caller provided valid dimensions — use as-is.
+    } else if (input.src?.startsWith('data:')) {
+      const dims = readImageDimensionsFromDataUri(input.src);
+      if (dims) {
+        resolvedSize = dims;
+      } else {
+        return {
+          success: false,
+          failure: {
+            code: 'INVALID_INPUT',
+            message:
+              'Image dimensions could not be determined. Provide explicit size.width and size.height, or use a data URI with a supported format (PNG, JPEG, GIF, BMP, WEBP).',
+          },
+        };
+      }
     } else {
       return {
         success: false,
         failure: {
           code: 'INVALID_INPUT',
           message:
-            'Image dimensions could not be determined. Provide explicit size.width and size.height, or use a data URI with a supported format (PNG, JPEG, GIF, BMP, WEBP).',
+            'Image dimensions are required. Provide size.width and size.height (finite positive numbers), or use a data URI src so dimensions can be inferred.',
         },
       };
     }
-  } else {
-    return {
-      success: false,
-      failure: {
-        code: 'INVALID_INPUT',
-        message:
-          'Image dimensions are required. Provide size.width and size.height (finite positive numbers), or use a data URI src so dimensions can be inferred.',
-      },
-    };
-  }
 
-  // -- Assign unique drawing ID -------------------------------------------------
-  const drawingId = generateUniqueDocPrId(editor);
+    // -- Assign unique drawing ID -----------------------------------------------
+    const drawingId = generateUniqueDocPrId(storyEditor);
 
-  const sdImageId = uuidv4();
-  const insertPos = input.at ? resolveImageInsertPosition(editor, input.at) : null;
+    const sdImageId = uuidv4();
+    const insertPos = input.at ? resolveImageInsertPosition(storyEditor, input.at) : null;
 
-  if (options?.dryRun) {
+    if (options?.dryRun) {
+      return {
+        success: true,
+        image: { kind: 'inline', nodeType: 'image', nodeId: sdImageId, placement: 'inline' },
+      };
+    }
+
+    const receipt = executeDomainCommand(storyEditor, () => {
+      const attrs = {
+        src: input.src,
+        alt: input.alt,
+        title: input.title,
+        size: resolvedSize,
+        sdImageId,
+        id: drawingId,
+      };
+
+      if (insertPos !== null) {
+        // Targeted insertion — insert at the resolved position.
+        return Boolean(storyEditor.commands.insertContentAt(insertPos, { type: 'image', attrs }));
+      }
+
+      // No location specified — insert at current selection via setImage.
+      return Boolean(storyEditor.commands.setImage(attrs));
+    });
+
+    const commandSucceeded = receipt.steps[0]?.effect === 'changed';
+    if (!commandSucceeded) {
+      return { success: false, failure: { code: 'INVALID_TARGET', message: 'Image could not be created.' } };
+    }
+
+    if (runtime.commit) runtime.commit(editor);
     return {
       success: true,
       image: { kind: 'inline', nodeType: 'image', nodeId: sdImageId, placement: 'inline' },
     };
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  const receipt = executeDomainCommand(editor, () => {
-    const attrs = {
-      src: input.src,
-      alt: input.alt,
-      title: input.title,
-      size: resolvedSize,
-      sdImageId,
-      id: drawingId,
-    };
-
-    if (insertPos !== null) {
-      // Targeted insertion — insert at the resolved position.
-      return Boolean(editor.commands.insertContentAt(insertPos, { type: 'image', attrs }));
-    }
-
-    // No location specified — insert at current selection via setImage.
-    return Boolean(editor.commands.setImage(attrs));
-  });
-
-  const commandSucceeded = receipt.steps[0]?.effect === 'changed';
-  if (!commandSucceeded) {
-    return { success: false, failure: { code: 'INVALID_TARGET', message: 'Image could not be created.' } };
-  }
-
-  return {
-    success: true,
-    image: { kind: 'inline', nodeType: 'image', nodeId: sdImageId, placement: 'inline' },
-  };
 }
 
 function isFinitePositive(value: unknown): value is number {

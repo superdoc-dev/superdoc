@@ -42,6 +42,33 @@ export default defineConfig(({ mode }) => {
       globals: true,
       // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
       environment: process.env.VITEST_DOM || 'happy-dom',
+      // Override environment to 'node' for directories that don't need DOM.
+      // This avoids the cost of setting up happy-dom for pure logic tests.
+      // Override to 'node' for directories that don't need DOM, with
+      // explicit happy-dom exceptions for files that do (first match wins).
+      environmentMatchGlobs: [
+        // super-converter: all pure logic except tiff-converter (uses document.createElement)
+        ['src/core/super-converter/**/tiff-converter.test.*', 'happy-dom'],
+        ['src/core/super-converter/**', 'node'],
+        // commands: mostly pure, except deleteSelection (document.getSelection)
+        // and insertContent integration tests (Editor with DOM view)
+        ['src/core/commands/deleteSelection.test.*', 'happy-dom'],
+        ['src/core/commands/insertContent.test.*', 'happy-dom'],
+        ['src/core/commands/**', 'node'],
+        // helpers: several need DOM (HTML parsing, sanitizer, content processor)
+        ['src/core/helpers/updateDOMAttributes.test.*', 'happy-dom'],
+        ['src/core/helpers/catchAllSchema.test.*', 'happy-dom'],
+        ['src/core/helpers/contentProcessor.test.*', 'happy-dom'],
+        ['src/core/helpers/createNodeFromContent.test.*', 'happy-dom'],
+        ['src/core/helpers/getHTMLFromFragment.test.*', 'happy-dom'],
+        ['src/core/helpers/htmlSanitizer.test.*', 'happy-dom'],
+        ['src/core/helpers/**', 'node'],
+        ['src/core/parts/**', 'node'],
+        // document-api-adapters: insert-structured-wrapper needs DOM for HTML insert
+        ['src/document-api-adapters/**/insert-structured-wrapper.test.*', 'happy-dom'],
+        ['src/document-api-adapters/**', 'node'],
+        ['src/utils/**', 'node'],
+      ],
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,

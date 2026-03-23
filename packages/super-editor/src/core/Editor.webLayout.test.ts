@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { Editor } from './Editor.js';
 import { loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -175,6 +175,153 @@ describe('Editor Web Layout Mode', () => {
         expect(typeof size.width).toBe('number');
         expect(typeof size.height).toBe('number');
       });
+    });
+  });
+  describe('table cell context', () => {
+    /**
+     * Builds a minimal fake editor whose state.selection.$head walks up through
+     * ancestor nodes at the given depths. Each entry in `ancestors` becomes the
+     * node returned by $head.node(d) for d = ancestors.length down to 1.
+     *
+     * pageSize is in inches (matching the real converter shape).
+     */
+    function makeEditor({
+      ancestors,
+      pageSize = { width: 8.5, height: 11 },
+      pageMargins = { top: 1, bottom: 1, left: 1, right: 1 },
+    }: {
+      ancestors: Array<{ type: { name: string }; attrs: Record<string, unknown> }>;
+      pageSize?: { width: number; height: number };
+      pageMargins?: { top: number; bottom: number; left: number; right: number };
+    }) {
+      const $head = {
+        depth: ancestors.length,
+        node: (d: number) => ancestors[d - 1],
+      };
+
+      return {
+        converter: { pageStyles: { pageSize, pageMargins } },
+        options: { viewOptions: { layout: 'print' } },
+        state: { selection: { $head } },
+        isWebLayout() {
+          return (this as any).options.viewOptions?.layout === 'web';
+        },
+      };
+    }
+
+    it('constrains width to cell colwidth when cursor is inside a tableCell', () => {
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          { type: { name: 'tableCell' }, attrs: { colwidth: [200], cellMargins: null } },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(200);
+      // Height is still derived from the page dimensions
+      expect(size.height).toBeGreaterThan(0);
+    });
+
+    it('subtracts left and right cellMargins from the cell width', () => {
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          {
+            type: { name: 'tableCell' },
+            attrs: { colwidth: [300], cellMargins: { left: 20, right: 15 } },
+          },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(265); // 300 - 20 - 15
+    });
+
+    it('sums multiple colwidth values for spanned cells', () => {
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          {
+            type: { name: 'tableCell' },
+            attrs: { colwidth: [150, 150], cellMargins: null },
+          },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(300);
+    });
+
+    it('constrains width when cursor is inside a tableHeader', () => {
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          { type: { name: 'tableHeader' }, attrs: { colwidth: [180], cellMargins: null } },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(180);
+    });
+
+    it('falls back to page content width when not inside a table cell', () => {
+      // Standard Letter page (8.5 × 11 in) with 1 in margins on each side
+      const PIXELS_PER_INCH = 96;
+      const MAX_WIDTH_BUFFER_PX = 20;
+      const expectedWidth = (8.5 - 1 - 1) * PIXELS_PER_INCH - MAX_WIDTH_BUFFER_PX; // 6.5 in content
+
+      const editor = makeEditor({
+        ancestors: [{ type: { name: 'paragraph' }, attrs: {} }],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(expectedWidth);
+    });
+
+    it('falls back to page content width when colwidth is empty', () => {
+      const PIXELS_PER_INCH = 96;
+      const MAX_WIDTH_BUFFER_PX = 20;
+      const expectedWidth = (8.5 - 1 - 1) * PIXELS_PER_INCH - MAX_WIDTH_BUFFER_PX;
+
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          { type: { name: 'tableCell' }, attrs: { colwidth: [], cellMargins: null } },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(expectedWidth);
+    });
+
+    it('falls back to page content width when colwidth is missing', () => {
+      const PIXELS_PER_INCH = 96;
+      const MAX_WIDTH_BUFFER_PX = 20;
+      const expectedWidth = (8.5 - 1 - 1) * PIXELS_PER_INCH - MAX_WIDTH_BUFFER_PX;
+
+      const editor = makeEditor({
+        ancestors: [
+          { type: { name: 'tableRow' }, attrs: {} },
+          { type: { name: 'tableCell' }, attrs: { colwidth: null, cellMargins: null } },
+          { type: { name: 'paragraph' }, attrs: {} },
+        ],
+      });
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size.width).toBe(expectedWidth);
     });
   });
 });

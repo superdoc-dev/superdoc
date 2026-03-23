@@ -6,8 +6,6 @@ description: Set paragraph indentation properties (left, right, firstLine, hangi
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set paragraph indentation properties (left, right, firstLine, hanging) in twips.
@@ -26,28 +24,28 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
 
 ## Input fields
 
-### Variant 1 (left)
+### Variant 1 (required: left)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `left` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2 (right)
+### Variant 2 (required: right)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `right` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3 (firstLine)
+### Variant 3 (required: firstLine)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `firstLine` | integer | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 4 (hanging)
+### Variant 4 (required: hanging)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -156,18 +154,22 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
   },
   "properties": {
     "firstLine": {
+      "description": "First line indent in twips. Cannot be combined with hanging.",
       "minimum": 0,
       "type": "integer"
     },
     "hanging": {
+      "description": "Hanging indent in twips. Cannot be combined with firstLine.",
       "minimum": 0,
       "type": "integer"
     },
     "left": {
+      "description": "Left indentation in twips (1440 = 1 inch).",
       "minimum": 0,
       "type": "integer"
     },
     "right": {
+      "description": "Right indentation in twips (1440 = 1 inch).",
       "minimum": 0,
       "type": "integer"
     },

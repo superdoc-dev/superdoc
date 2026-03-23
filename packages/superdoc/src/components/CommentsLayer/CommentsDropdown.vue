@@ -176,15 +176,16 @@ onBeforeUnmount(() => {
 .comments-dropdown__menu {
   min-width: 120px;
   border-radius: 8px;
-  border: 1px solid var(--sd-border-default, #dbdbdb);
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--sd-ui-comments-dropdown-border, #dbdbdb);
+  background: var(--sd-ui-comments-dropdown-bg, #fff);
+  box-shadow: var(--sd-ui-comments-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.12));
   padding: 4px;
   box-sizing: border-box;
 }
 
 .comments-dropdown__option {
-  font-size: 14px;
+  font-size: var(--sd-ui-comments-option-size, 14px);
+  color: var(--sd-ui-comments-option-text, #212121);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -196,7 +197,8 @@ onBeforeUnmount(() => {
 }
 
 .comments-dropdown__option:hover {
-  background-color: #f3f3f5;
+  background-color: var(--sd-ui-comments-option-hover-bg, #f3f3f5);
+  color: var(--sd-ui-comments-option-hover-text, #212121);
 }
 
 .comments-dropdown__option.disabled {

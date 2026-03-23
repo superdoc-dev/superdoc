@@ -45,14 +45,51 @@ const FIELD_NODE_TYPES = new Set([
   'sequenceField',
   'tableOfAuthorities',
   'authorityEntry',
+  'documentStatField',
 ]);
+
+/**
+ * Node types that represent fields but derive their instruction synthetically
+ * rather than from an `instruction` attribute.
+ */
+const SYNTHETIC_FIELD_NODE_TYPES: Record<string, { fieldType: string; instruction: string }> = {
+  'total-page-number': { fieldType: 'NUMPAGES', instruction: 'NUMPAGES' },
+};
 
 export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
   const results: ResolvedField[] = [];
   const blockOccurrenceCounters = new Map<string, number>();
 
   doc.descendants((node, pos) => {
-    if (!FIELD_NODE_TYPES.has(node.type.name) && !node.attrs?.instruction) {
+    const typeName = node.type.name;
+
+    // Check for synthetic field node types (e.g. total-page-number → NUMPAGES)
+    const synthetic = SYNTHETIC_FIELD_NODE_TYPES[typeName];
+    if (synthetic) {
+      const blockId = resolveParentBlockId(doc, pos);
+      const counter = blockOccurrenceCounters.get(blockId) ?? 0;
+      blockOccurrenceCounters.set(blockId, counter + 1);
+
+      // Priority: text content (live NodeView value) → resolvedText (F9 update)
+      // → importedCachedText (original import fallback).
+      const textContent = node.textContent ?? '';
+      const resolvedAttr = (node.attrs?.resolvedText as string) ?? '';
+      const importedCached = (node.attrs?.importedCachedText as string) ?? '';
+      const resolvedText = textContent || resolvedAttr || importedCached;
+
+      results.push({
+        pos,
+        blockId,
+        occurrenceIndex: counter,
+        nestingDepth: 0,
+        instruction: synthetic.instruction,
+        fieldType: synthetic.fieldType,
+        resolvedText,
+      });
+      return true;
+    }
+
+    if (!FIELD_NODE_TYPES.has(typeName) && !node.attrs?.instruction) {
       return true;
     }
 
@@ -80,6 +117,33 @@ export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
   });
 
   return results;
+}
+
+/**
+ * Returns the subset of document fields whose positions intersect a range.
+ *
+ * For a collapsed selection (from === to) the field immediately at or
+ * adjacent to the cursor is matched — mirroring Word's "caret on a field"
+ * semantics. For a range selection, all fields overlapping [from, to) are
+ * returned.
+ */
+export function findFieldsInRange(doc: ProseMirrorNode, from: number, to: number): ResolvedField[] {
+  const allFields = findAllFields(doc);
+  const isCollapsed = from === to;
+
+  return allFields.filter((field) => {
+    const node = doc.nodeAt(field.pos);
+    if (!node) return false;
+    const fieldEnd = field.pos + node.nodeSize;
+
+    if (isCollapsed) {
+      // Match when cursor sits at either edge of the field node
+      return field.pos <= from && fieldEnd >= from;
+    }
+
+    // Standard range overlap: field starts before range ends AND ends after range starts
+    return field.pos < to && fieldEnd > from;
+  });
 }
 
 export function resolveFieldTarget(doc: ProseMirrorNode, target: FieldAddress): ResolvedField {

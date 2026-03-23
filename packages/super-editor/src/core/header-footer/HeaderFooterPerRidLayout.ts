@@ -1,7 +1,7 @@
 import type { FlowBlock, HeaderFooterLayout, Layout, SectionMetadata } from '@superdoc/contracts';
 import { OOXML_PCT_DIVISOR } from '@superdoc/contracts';
 import { computeDisplayPageNumber, layoutHeaderFooterWithCache } from '@superdoc/layout-bridge';
-import type { HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
+import type { HeaderFooterLayoutResult, HeaderFooterConstraints } from '@superdoc/layout-bridge';
 import { measureBlock } from '@superdoc/measuring-dom';
 
 export type HeaderFooterPerRidLayoutInput = {
@@ -9,18 +9,18 @@ export type HeaderFooterPerRidLayoutInput = {
   footerBlocks?: unknown;
   headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
   footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-  constraints: { width: number; height: number; pageWidth: number; margins: { left: number; right: number } };
+  constraints: HeaderFooterConstraints;
 };
 
-type Constraints = HeaderFooterPerRidLayoutInput['constraints'];
+type Constraints = HeaderFooterConstraints;
 
 /**
  * Compute the content width for a section, falling back to global constraints.
  */
 function buildSectionContentWidth(section: SectionMetadata, fallback: Constraints): number {
-  const pageW = section.pageSize?.w ?? fallback.pageWidth;
-  const marginL = section.margins?.left ?? fallback.margins.left;
-  const marginR = section.margins?.right ?? fallback.margins.right;
+  const pageW = section.pageSize?.w ?? fallback.pageWidth ?? 0;
+  const marginL = section.margins?.left ?? fallback.margins?.left ?? 0;
+  const marginR = section.margins?.right ?? fallback.margins?.right ?? 0;
   return pageW - marginL - marginR;
 }
 
@@ -30,19 +30,31 @@ function buildSectionContentWidth(section: SectionMetadata, fallback: Constraint
  * Word allows auto-width tables in headers/footers to extend beyond the body margins.
  */
 function buildConstraintsForSection(section: SectionMetadata, fallback: Constraints, minWidth?: number): Constraints {
-  const pageW = section.pageSize?.w ?? fallback.pageWidth;
-  const marginL = section.margins?.left ?? fallback.margins.left;
-  const marginR = section.margins?.right ?? fallback.margins.right;
+  const pageW = section.pageSize?.w ?? fallback.pageWidth ?? 0;
+  const pageH = section.pageSize?.h ?? fallback.pageHeight;
+  const marginL = section.margins?.left ?? fallback.margins?.left ?? 0;
+  const marginR = section.margins?.right ?? fallback.margins?.right ?? 0;
+  const marginT = section.margins?.top ?? fallback.margins?.top;
+  const marginB = section.margins?.bottom ?? fallback.margins?.bottom;
+  const marginHeader = section.margins?.header ?? fallback.margins?.header;
   const contentWidth = pageW - marginL - marginR;
   // Allow tables to extend beyond right margin when grid width > content width.
   // Capped at pageWidth - marginLeft to avoid going past the page edge.
   const maxWidth = pageW - marginL;
   const effectiveWidth = minWidth ? Math.min(Math.max(contentWidth, minWidth), maxWidth) : contentWidth;
+
+  // Recompute body content height if section has its own page size / vertical margins
+  const sectionMarginTop = marginT ?? 0;
+  const sectionMarginBottom = marginB ?? 0;
+  const sectionHeight = pageH != null ? Math.max(1, pageH - sectionMarginTop - sectionMarginBottom) : fallback.height;
+
   return {
     width: effectiveWidth,
-    height: fallback.height,
+    height: sectionHeight,
     pageWidth: pageW,
-    margins: { left: marginL, right: marginR },
+    pageHeight: pageH,
+    margins: { left: marginL, right: marginR, top: marginT, bottom: marginB, header: marginHeader },
+    overflowBaseHeight: fallback.overflowBaseHeight,
   };
 }
 
@@ -230,6 +242,7 @@ async function layoutBlocksByRId(
         undefined,
         undefined,
         pageResolver,
+        kind,
       );
 
       if (batchResult.default) {
@@ -349,7 +362,10 @@ async function layoutWithPerSectionConstraints(
     const tableMinWidth = resolveTableMinWidth(tableWidthSpec, contentWidth);
     const sectionConstraints = buildConstraintsForSection(section, fallbackConstraints, tableMinWidth || undefined);
     const effectiveWidth = sectionConstraints.width;
-    const groupKey = `${rId}::w${effectiveWidth}`;
+    // Include vertical geometry in the key so sections with different page heights,
+    // vertical margins, or header distance get separate layouts (page-relative anchors
+    // and header band origin resolve differently).
+    const groupKey = `${rId}::w${effectiveWidth}::ph${sectionConstraints.pageHeight ?? ''}::mt${sectionConstraints.margins?.top ?? ''}::mb${sectionConstraints.margins?.bottom ?? ''}::mh${sectionConstraints.margins?.header ?? ''}`;
 
     let group = groups.get(groupKey);
     if (!group) {
@@ -377,6 +393,7 @@ async function layoutWithPerSectionConstraints(
         undefined,
         undefined,
         pageResolver,
+        kind,
       );
 
       if (batchResult.default) {

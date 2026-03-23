@@ -105,6 +105,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.clearBorder': (input, options) => api.format.paragraph.clearBorder(input, options),
     'format.paragraph.setShading': (input, options) => api.format.paragraph.setShading(input, options),
     'format.paragraph.clearShading': (input, options) => api.format.paragraph.clearShading(input, options),
+    'format.paragraph.setDirection': (input, options) => api.format.paragraph.setDirection(input, options),
+    'format.paragraph.clearDirection': (input, options) => api.format.paragraph.clearDirection(input, options),
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
@@ -246,6 +248,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
     'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
     'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+    'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
+    'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
+    'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),

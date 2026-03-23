@@ -1,10 +1,13 @@
 import type { BlockNodeType } from '@superdoc/document-api';
 
-type TableLikeBlockNodeType = 'table' | 'tableCell';
+type FallbackEligibleBlockNodeType = 'table' | 'tableCell' | 'paragraph' | 'heading' | 'listItem';
 
-const TABLE_LIKE_PREFIX: Readonly<Record<TableLikeBlockNodeType, string>> = {
+const FALLBACK_PREFIX: Readonly<Record<FallbackEligibleBlockNodeType, string>> = {
   table: 'table-auto',
   tableCell: 'cell-auto',
+  paragraph: 'para-auto',
+  heading: 'heading-auto',
+  listItem: 'list-auto',
 };
 
 const UUID_LIKE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -19,9 +22,12 @@ function stableHash(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-function toTableLikeBlockNodeType(nodeType: BlockNodeType): TableLikeBlockNodeType | undefined {
+function toFallbackEligibleBlockNodeType(nodeType: BlockNodeType): FallbackEligibleBlockNodeType | undefined {
   if (nodeType === 'table') return 'table';
   if (nodeType === 'tableCell') return 'tableCell';
+  if (nodeType === 'paragraph') return 'paragraph';
+  if (nodeType === 'heading') return 'heading';
+  if (nodeType === 'listItem') return 'listItem';
   return undefined;
 }
 
@@ -35,7 +41,7 @@ function serializeTraversalPath(path: readonly number[] | undefined, pos: number
 /**
  * Returns true when an sdBlockId looks like a runtime-generated UUID.
  *
- * Table and table-cell sdBlockIds are frequently generated at editor startup,
+ * Block-level sdBlockIds are frequently generated at editor startup,
  * so UUID-like values are not safe to expose as public document-api node IDs.
  */
 export function isVolatileRuntimeBlockId(id: string | undefined): boolean {
@@ -43,22 +49,25 @@ export function isVolatileRuntimeBlockId(id: string | undefined): boolean {
 }
 
 /**
- * Builds a deterministic public fallback ID for table-like nodes that lack a
+ * Builds a deterministic public fallback ID for block nodes that lack a
  * schema-valid persisted identity.
  *
  * The traversal path is preferred because it stays stable across reopen of the
  * same unchanged document while remaining independent of runtime-generated
  * `sdBlockId` UUIDs.
  */
-export function buildFallbackTableNodeId(
+export function buildFallbackBlockNodeId(
   nodeType: BlockNodeType,
   pos: number,
   path?: readonly number[],
 ): string | undefined {
-  const tableLikeType = toTableLikeBlockNodeType(nodeType);
-  if (!tableLikeType) return undefined;
+  const eligibleType = toFallbackEligibleBlockNodeType(nodeType);
+  if (!eligibleType) return undefined;
 
-  const prefix = TABLE_LIKE_PREFIX[tableLikeType];
+  const prefix = FALLBACK_PREFIX[eligibleType];
   const source = serializeTraversalPath(path, pos);
-  return `${prefix}-${stableHash(`${tableLikeType}:${source}`)}`;
+  return `${prefix}-${stableHash(`${eligibleType}:${source}`)}`;
 }
+
+/** @deprecated Use {@link buildFallbackBlockNodeId} instead. */
+export const buildFallbackTableNodeId = buildFallbackBlockNodeId;

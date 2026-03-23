@@ -10,7 +10,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deepClone, normalizeFramePr, normalizeDropCap, computeParagraphAttrs, computeRunAttrs } from './paragraph.js';
+import {
+  deepClone,
+  normalizeFramePr,
+  normalizeDropCap,
+  computeParagraphAttrs,
+  computeRunAttrs,
+  hasExplicitParagraphRunProperties,
+} from './paragraph.js';
 import { twipsToPx } from '../utilities.js';
 
 type PMNode = {
@@ -90,6 +97,42 @@ describe('normalizeDropCap', () => {
 });
 
 describe('computeParagraphAttrs', () => {
+  it('treats only raw paragraph runProperties as explicit', () => {
+    expect(hasExplicitParagraphRunProperties({ runProperties: { fontSize: 24 } } as never)).toBe(true);
+    expect(hasExplicitParagraphRunProperties({ styleId: 'Heading1' } as never)).toBe(false);
+    expect(hasExplicitParagraphRunProperties({ runProperties: {} } as never)).toBe(false);
+  });
+
+  it('ignores tracked change metadata in runProperties', () => {
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: { trackInsert: { id: '1', author: 'Author', date: '2026-01-01' } },
+      } as never),
+    ).toBe(false);
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: { trackDelete: { id: '2', author: 'Author', date: '2026-01-01' } },
+      } as never),
+    ).toBe(false);
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: {
+          trackInsert: { id: '1', author: 'Author', date: '2026-01-01' },
+          trackDelete: { id: '2', author: 'Author', date: '2026-01-01' },
+        },
+      } as never),
+    ).toBe(false);
+    // Real formatting alongside tracked changes should still count as explicit
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: {
+          trackInsert: { id: '1', author: 'Author', date: '2026-01-01' },
+          fontSize: 24,
+        },
+      } as never),
+    ).toBe(true);
+  });
+
   it('normalizes spacing, indent, alignment, and tabs from paragraphProperties', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
@@ -127,6 +170,111 @@ describe('computeParagraphAttrs', () => {
     const { resolvedParagraphProperties } = computeParagraphAttrs(paragraph as never);
     expect(resolvedParagraphProperties.styleId).toBe('Heading1');
   });
+
+  it('passes previousParagraphFont to marker run when paragraph has listRendering and numbering', () => {
+    const previousFont = { fontFamily: 'MarkerFont, sans-serif', fontSize: 11 };
+
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        listRendering: {
+          markerText: '1.',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimal',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never, previousFont);
+    const markerRun = (
+      paragraphAttrs as { wordLayout?: { marker?: { run?: { fontFamily?: string; fontSize?: number } } } }
+    )?.wordLayout?.marker?.run;
+    expect(markerRun?.fontFamily).toBeDefined();
+    expect(markerRun?.fontFamily).toContain('MarkerFont');
+    expect(markerRun?.fontSize).toBe(11);
+  });
+
+  it('does not overwrite numbering marker font family with previousParagraphFont', () => {
+    const previousFont = { fontFamily: 'PrevMarkerFont, sans-serif', fontSize: 11 };
+
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        listRendering: {
+          markerText: '1.',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimal',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {
+        definitions: {
+          '1': {
+            numId: 1,
+            abstractNumId: 1,
+          },
+        },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: {
+                  fontFamily: { ascii: 'Symbol' },
+                },
+              },
+            },
+          },
+        },
+      },
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never, previousFont);
+    const markerRun = (
+      paragraphAttrs as { wordLayout?: { marker?: { run?: { fontFamily?: string; fontSize?: number } } } }
+    )?.wordLayout?.marker?.run;
+
+    expect(markerRun?.fontFamily).toContain('Symbol');
+    // Font size still inherits from previous paragraph when the paragraph has no explicit run props.
+    expect(markerRun?.fontSize).toBe(11);
+  });
+
+  it('preserves explicit paragraph bidi direction', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.direction).toBe('rtl');
+    expect(paragraphAttrs.rtl).toBe(true);
+  });
 });
 
 describe('computeRunAttrs', () => {
@@ -152,6 +300,18 @@ describe('computeRunAttrs', () => {
     const result = computeRunAttrs(runProps as never);
 
     expect(result.vanish).toBe(true);
+  });
+
+  it('uses runProps font settings when previousParagraphFont is not provided', () => {
+    const runProps = {
+      fontFamily: { ascii: 'RunFont' },
+      fontSize: 20,
+    };
+
+    const result = computeRunAttrs(runProps as never);
+
+    expect(result.fontFamily).toContain('RunFont');
+    expect(result.fontSize).toBeGreaterThan(10);
   });
 
   it('passes through vertAlign', () => {

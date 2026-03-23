@@ -29,10 +29,10 @@ from superdoc import AsyncSuperDocClient
 async def main():
     async with AsyncSuperDocClient(default_change_mode="tracked") as client:
         # Open a document
-        await client.doc.open({"doc": "./contract.docx"})
+        doc = await client.open({"doc": "./contract.docx"})
 
         # Find and replace text with query + mutation plan
-        match = await client.doc.query.match(
+        match = await doc.query.match(
             {
                 "select": {"type": "text", "pattern": "ACME Corp"},
                 "require": "first",
@@ -43,7 +43,7 @@ async def main():
         first_item = items[0] if items else {}
         ref = first_item.get("handle", {}).get("ref")
         if ref:
-            await client.doc.mutations.apply(
+            await doc.mutations.apply(
                 {
                     "expectedRevision": match["evaluatedRevision"],
                     "atomic": True,
@@ -59,8 +59,8 @@ async def main():
             )
 
         # Save and close
-        await client.doc.save({"inPlace": True})
-        await client.doc.close({})
+        await doc.save({"inPlace": True})
+        await doc.close({})
 
 
 asyncio.run(main())
@@ -68,7 +68,7 @@ asyncio.run(main())
 
 Set `default_change_mode="tracked"` to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
-The SDK also exposes a synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+The SDK also exposes a synchronous `SuperDocClient` with the same document-handle methods when you prefer non-async code paths.
 
 ### Sync
 
@@ -76,13 +76,13 @@ The SDK also exposes a synchronous `SuperDocClient` with the same `doc.*` operat
 from superdoc import SuperDocClient
 
 with SuperDocClient() as client:
-    client.doc.open({"doc": "./contract.docx"})
+    doc = client.open({"doc": "./contract.docx"})
 
-    info = client.doc.info({})
+    info = doc.info({})
     print(info["counts"])
 
-    client.doc.save({"inPlace": True})
-    client.doc.close({})
+    doc.save({"inPlace": True})
+    doc.close({})
 ```
 
 ## User identity
@@ -93,7 +93,7 @@ By default the SDK attributes edits to a generic "CLI" user. Set `user` on the c
 client = AsyncSuperDocClient(user={"name": "Review Bot", "email": "bot@example.com"})
 ```
 
-The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
+The `user` is injected into every `client.open` call. If you pass `userName` or `userEmail` on a specific `client.open`, those per-call values take precedence.
 
 ## Client lifecycle
 
@@ -104,11 +104,13 @@ The SDK uses a persistent host process for all operations. The host is started o
 ```python
 # Sync
 with SuperDocClient() as client:
-    client.doc.find({"query": "test"})
+    doc = client.open({"doc": "./test.docx"})
+    doc.find({"query": "test"})
 
 # Async
 async with AsyncSuperDocClient() as client:
-    await client.doc.find({"query": "test"})
+    doc = await client.open({"doc": "./test.docx"})
+    await doc.find({"query": "test"})
 ```
 
 The context manager calls `connect()` on entry and `dispose()` on exit (including on exception).
@@ -118,7 +120,8 @@ The context manager calls `connect()` on entry and `dispose()` on exit (includin
 ```python
 client = SuperDocClient()
 client.connect()      # Optional — first invoke() auto-connects
-result = client.doc.find({"query": "test"})
+doc = client.open({"doc": "./test.docx"})
+result = doc.find({"query": "test"})
 client.dispose()      # Shuts down the host process
 ```
 
@@ -148,7 +151,7 @@ Use this when your app already has a live collaboration room (Liveblocks, Hocusp
 
 ### Join an existing room
 
-Pass `collabUrl` and `collabDocumentId` to `doc.open`:
+Pass `collabUrl` and `collabDocumentId` to `client.open`:
 
 ```python
 import asyncio
@@ -158,12 +161,12 @@ from superdoc import AsyncSuperDocClient
 
 async def main():
     async with AsyncSuperDocClient() as client:
-        await client.doc.open({
+        doc = await client.open({
             "collabUrl": "ws://localhost:4000",
             "collabDocumentId": "my-doc-room",
         })
 
-        await client.doc.insert({
+        await doc.insert({
             "target": {"type": "end"},
             "content": "Added by the SDK",
         })
@@ -177,7 +180,7 @@ asyncio.run(main())
 If the room is empty, pass `doc` together with collaboration params:
 
 ```python
-await client.doc.open({
+doc = await client.open({
     "doc": "./starting-template.docx",
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
@@ -205,7 +208,7 @@ What happens when you pass `doc`:
 If you only want to join rooms that already exist, use `onMissing: 'error'`:
 
 ```python
-await client.doc.open({
+doc = await client.open({
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
     "onMissing": "error",
@@ -214,30 +217,30 @@ await client.doc.open({
 
 ### Check if the SDK seeded or joined
 
-`doc.open` returns bootstrap details in collaboration mode:
+`client.open` returns a bound document handle. In collaboration mode, bootstrap details are available on `doc.open_result`:
 
 ```python
-result = await client.doc.open({
+doc = await client.open({
     "doc": "./starting-template.docx",
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
 })
 
-print(result.get("bootstrap"))
+print(doc.open_result.get("bootstrap"))
 # { roomState, bootstrapApplied, bootstrapSource }
 ```
 
 ## Available operations
 
-The SDK exposes all operations from the [Document API](https://docs.superdoc.dev/document-api/overview) plus lifecycle and session commands.
+The SDK exposes all document-handle operations from the [Document API](https://docs.superdoc.dev/document-api/overview) plus client lifecycle and introspection methods.
 
 ### Lifecycle
 
 | Operation | Description |
 | --- | --- |
-| `doc.open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `client.open` | Open a document and return a bound document handle. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
 | `doc.save` | Save the current session to the original file or a new path. |
-| `doc.close` | Close the active editing session and clean up resources. |
+| `doc.close` | Close the bound editing session and clean up resources. |
 
 ### Query
 
@@ -341,22 +344,12 @@ And 30+ additional formatting operations (letter spacing, vertical alignment, sm
 | `doc.history.undo` | Undo the most recent history-safe mutation in the active editor. |
 | `doc.history.redo` | Redo the most recently undone action in the active editor. |
 
-### Session
+### Client methods
 
 | Operation | Description |
 | --- | --- |
-| `doc.session.list` | List all active editing sessions. |
-| `doc.session.save` | Persist the current session state. |
-| `doc.session.close` | Close a specific editing session by ID. |
-| `doc.session.set_default` | Set the default session for subsequent commands. |
-
-### Introspection
-
-| Operation | Description |
-| --- | --- |
-| `doc.status` | Show the current session status and document metadata. |
-| `doc.describe` | List all available CLI operations and contract metadata. |
-| `doc.describe_command` | Show detailed metadata for a single CLI operation. |
+| `client.describe` | List all available CLI operations and contract metadata. |
+| `client.describe_command` | Show detailed metadata for a single CLI operation. |
 
 ## Troubleshooting
 

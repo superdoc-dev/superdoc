@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { Mark, Attribute } from '@core/index.js';
+import { Mark } from '@core/Mark.js';
+import { Attribute } from '@core/Attribute.js';
 import { getMarkRange } from '@core/helpers/getMarkRange.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { sanitizeHref, encodeTooltip, UrlValidationConstants } from '@superdoc/url-validation';

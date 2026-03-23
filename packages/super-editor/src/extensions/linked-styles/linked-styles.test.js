@@ -135,13 +135,29 @@ describe('LinkedStyles Extension', () => {
     });
 
     describe('toggleLinkedStyle', () => {
-      it('should return false for an empty selection', () => {
+      it('should apply style with a cursor (empty) selection', () => {
         setParagraphCursor(editor.view, 0); // Cursor selection at first paragraph
         const result = editor.commands.toggleLinkedStyle(headingStyle, 'paragraph');
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
         const firstParagraph = findParagraphInfo(editor.state.doc, 0);
-        expect(getParagraphProps(firstParagraph.node).styleId).toBeUndefined();
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading1');
+      });
+
+      it('should toggle off style with a cursor (empty) selection', () => {
+        // Apply style first
+        setParagraphCursor(editor.view, 0);
+        editor.commands.setLinkedStyle(headingStyle);
+        let firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading1');
+
+        // Toggle off with cursor
+        setParagraphCursor(editor.view, 0);
+        const result = editor.commands.toggleLinkedStyle(headingStyle, 'paragraph');
+
+        expect(result).toBe(true);
+        firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe(null);
       });
 
       it('should apply style when no style is currently set', () => {

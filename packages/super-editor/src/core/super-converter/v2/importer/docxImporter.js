@@ -15,6 +15,7 @@ import { bookmarkStartNodeHandlerEntity } from './bookmarkStartImporter.js';
 import { bookmarkEndNodeHandlerEntity } from './bookmarkEndImporter.js';
 import { alternateChoiceHandler } from './alternateChoiceImporter.js';
 import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
+import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
@@ -27,6 +28,7 @@ import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
+import { bibliographyHandlerEntity } from './bibliographyImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -238,9 +240,11 @@ export const defaultNodeListHandler = () => {
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
+    bibliographyHandlerEntity,
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
+    documentStatFieldHandlerEntity,
     pageReferenceEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,

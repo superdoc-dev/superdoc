@@ -17,6 +17,7 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 // Public exports
 export { SuperDoc } from './core/SuperDoc.js';
+export { createTheme, buildTheme } from './core/theme/create-theme.ts';
 export {
   BlankDOCX,
   getFileObject,

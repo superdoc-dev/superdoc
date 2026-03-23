@@ -82,6 +82,7 @@ import {
 import type {
   HeaderFooterIdentifier,
   HeaderFooterLayoutResult,
+  HeaderFooterConstraints,
   HeaderFooterType,
   PositionHit,
   TableHitResult,
@@ -109,12 +110,16 @@ import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/ind
 import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
+import { isHeaderFooterPartId } from '../parts/adapters/header-footer-part-descriptor.js';
+import type { PartChangedEvent } from '../parts/types.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { SelectionHandle } from '../selection-state.js';
+
+const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
 
 // Types
 import type {
@@ -454,6 +459,7 @@ export class PresentationEditor extends EventEmitter {
     // This prevents screen readers from encountering duplicate or non-semantic visual elements.
     this.#viewportHost.setAttribute('aria-hidden', 'true');
     this.#viewportHost.style.position = 'relative';
+    this.#viewportHost.style.isolation = 'isolate';
     this.#viewportHost.style.width = '100%';
     // Set min-height to at least one page so the viewport is clickable before layout renders
     const pageHeight = this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
@@ -753,6 +759,7 @@ export class PresentationEditor extends EventEmitter {
 
       const beforeX = win.scrollX;
       const beforeY = win.scrollY;
+      const alreadyFocused = view.hasFocus();
       let focused = false;
 
       // Strategy 1: Try focus with preventScroll option (modern browsers)
@@ -789,6 +796,16 @@ export class PresentationEditor extends EventEmitter {
             strategy: 'original',
           });
         }
+      }
+
+      // When the editor was not focused before, the browser places the DOM selection
+      // at an arbitrary position inside the off-screen contenteditable. ProseMirror's
+      // DOMObserver would read this stale position via a selectionchange event and
+      // overwrite PM state, causing the cursor to jump. Suppress selection updates
+      // for the next 50ms so PM re-applies its own selection to the DOM instead.
+      if (!alreadyFocused) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (view as any).domObserver.suppressSelectionUpdates();
       }
 
       // Restore scroll position if any focus attempt changed it
@@ -3024,6 +3041,49 @@ export class PresentationEditor extends EventEmitter {
       handler: handleNotesPartChanged as (...args: unknown[]) => void,
     });
 
+    // Listen for header/footer part mutations that originate outside the
+    // interactive header/footer UI, such as document-api writes. These updates
+    // bypass normal body-document update events, so PresentationEditor must:
+    // 1. Refresh the header/footer registry after relationship changes
+    // 2. Invalidate cached header/footer FlowBlocks for changed refs
+    // 3. Schedule a full rerender so the new content becomes visible
+    const handlePartChanged = (event?: PartChangedEvent) => {
+      if (!event?.parts?.length) {
+        return;
+      }
+
+      const headerFooterStructureChanged = event.parts.some((part) => part.partId === DOCUMENT_RELS_PART_ID);
+      const changedHeaderFooterRefIds = Array.from(
+        new Set(
+          event.parts
+            .filter((part) => isHeaderFooterPartId(part.partId))
+            .map((part) => part.sectionId)
+            .filter((refId): refId is string => typeof refId === 'string' && refId.length > 0),
+        ),
+      );
+
+      if (!headerFooterStructureChanged && changedHeaderFooterRefIds.length === 0) {
+        return;
+      }
+
+      if (headerFooterStructureChanged) {
+        this.#headerFooterSession?.refreshStructure();
+      }
+
+      if (changedHeaderFooterRefIds.length > 0) {
+        this.#headerFooterSession?.invalidateLayoutForRefs(changedHeaderFooterRefIds);
+      }
+
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('partChanged', handlePartChanged);
+    this.#editorListeners.push({
+      event: 'partChanged',
+      handler: handlePartChanged as (...args: unknown[]) => void,
+    });
+
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready
@@ -3170,7 +3230,6 @@ export class PresentationEditor extends EventEmitter {
         this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
-      createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
       emitHeaderFooterEditBlocked: (reason: string) => this.#emitHeaderFooterEditBlocked(reason),
       findRegionForPage: (kind, pageIndex) => this.#findRegionForPage(kind, pageIndex),
       getCurrentPageIndex: () => this.#getCurrentPageIndex(),
@@ -3421,7 +3480,7 @@ export class PresentationEditor extends EventEmitter {
         this.emit('headerFooterModeChanged', {
           mode: session.mode,
           kind: session.kind,
-          headerId: session.headerId,
+          headerId: session.headerFooterRefId,
           sectionType: session.sectionType,
           pageIndex: session.pageIndex,
           pageNumber: session.pageNumber,
@@ -5102,9 +5161,15 @@ export class PresentationEditor extends EventEmitter {
     return {
       width: measurementWidth,
       height,
-      // Pass actual page dimensions for page-relative anchor positioning in headers/footers
       pageWidth: pageSize.w,
-      margins: { left: marginLeft, right: marginRight },
+      pageHeight: pageSize.h,
+      margins: {
+        left: marginLeft,
+        right: marginRight,
+        top: marginTop,
+        bottom: marginBottom,
+        header: headerMargin,
+      },
       overflowBaseHeight,
     };
   }
@@ -5123,7 +5188,7 @@ export class PresentationEditor extends EventEmitter {
       footerBlocks?: unknown;
       headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
       footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-      constraints: { width: number; height: number; pageWidth: number; margins: { left: number; right: number } };
+      constraints: HeaderFooterConstraints;
     } | null,
     layout: Layout,
     sectionMetadata: SectionMetadata[],
@@ -5188,7 +5253,7 @@ export class PresentationEditor extends EventEmitter {
     }
     awareness.setLocalStateField('layoutSession', {
       kind: session.kind,
-      headerId: session.headerId ?? null,
+      headerId: session.headerFooterRefId ?? null,
       pageNumber: session.pageNumber ?? null,
     });
   }
@@ -5239,14 +5304,6 @@ export class PresentationEditor extends EventEmitter {
 
   #resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
     return this.#headerFooterSession?.resolveDescriptorForRegion(region) ?? null;
-  }
-
-  /**
-   * Creates a default header or footer when none exists.
-   * Delegates to HeaderFooterSessionManager which handles converter API calls.
-   */
-  #createDefaultHeaderFooter(region: HeaderFooterRegion): void {
-    this.#headerFooterSession?.createDefault(region);
   }
 
   /**

@@ -28,6 +28,7 @@ import { executeDomainCommand } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -75,6 +76,9 @@ export function fieldsGetWrapper(editor: Editor, input: FieldGetInput): FieldInf
 // Mutation operations
 // ---------------------------------------------------------------------------
 
+/** Field types that use the documentStatField node representation. */
+const DOCUMENT_STAT_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS']);
+
 export function fieldsInsertWrapper(
   editor: Editor,
   input: FieldInsertInput,
@@ -95,8 +99,105 @@ export function fieldsInsertWrapper(
 
   if (options?.dryRun) return fieldSuccess(address);
 
-  // Find a field node type in the schema that accepts an instruction attribute.
-  // sequenceField is the generic raw-field container.
+  const fieldType = extractFieldType(input.instruction);
+  const resolved = resolveInlineInsertPosition(editor, input.at, 'fields.insert');
+
+  // Route insertion by field type
+  if (DOCUMENT_STAT_FIELD_TYPES.has(fieldType)) {
+    return insertDocumentStatField(editor, input, resolved, options);
+  }
+
+  if (fieldType === 'NUMPAGES') {
+    return insertNumPagesField(editor, resolved, options);
+  }
+
+  return insertRawField(editor, input, resolved, options);
+}
+
+function insertDocumentStatField(
+  editor: Editor,
+  input: FieldInsertInput,
+  resolved: { from: number },
+  options?: MutationOptions,
+): FieldMutationResult {
+  const nodeType = editor.schema.nodes.documentStatField;
+  if (!nodeType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'fields.insert: documentStatField node type not in schema.',
+    );
+  }
+
+  // Stat fields always display document-level counts. When the editor is a
+  // header/footer sub-editor, resolve the main body editor for correct scope.
+  const statsEditor = resolveMainBodyEditor(editor);
+  const stats = getWordStatistics(statsEditor);
+  const fieldType = extractFieldType(input.instruction);
+  const initialValue = resolveDocumentStatFieldValue(fieldType, stats) ?? '';
+
+  const receipt = executeDomainCommand(
+    editor,
+    (): boolean => {
+      const node = nodeType.create({
+        instruction: input.instruction,
+        resolvedText: initialValue,
+        sdBlockId: `field-${Date.now()}`,
+      });
+      const { tr } = editor.state;
+      tr.insert(resolved.from, node);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Insert produced no change.');
+  return fieldSuccess(computeFieldAddress(editor.state.doc, resolved.from));
+}
+
+function insertNumPagesField(
+  editor: Editor,
+  resolved: { from: number },
+  options?: MutationOptions,
+): FieldMutationResult {
+  // NUMPAGES insertion is restricted to headers/footers (existing product restriction).
+  const isHeaderOrFooter = Boolean((editor as any).options?.isHeaderOrFooter);
+  if (!isHeaderOrFooter) {
+    return fieldFailure('INVALID_INPUT', 'fields.insert: NUMPAGES insertion is only supported in headers/footers.');
+  }
+
+  const nodeType = editor.schema.nodes['total-page-number'];
+  if (!nodeType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'fields.insert: total-page-number node type not in schema.',
+    );
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    (): boolean => {
+      const node = nodeType.create({});
+      const { tr } = editor.state;
+      tr.insert(resolved.from, node);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Insert produced no change.');
+  return fieldSuccess(computeFieldAddress(editor.state.doc, resolved.from));
+}
+
+function insertRawField(
+  editor: Editor,
+  input: FieldInsertInput,
+  resolved: { from: number },
+  options?: MutationOptions,
+): FieldMutationResult {
   const fieldNodeType = editor.schema.nodes.sequenceField;
   if (!fieldNodeType) {
     throw new DocumentApiAdapterError(
@@ -104,8 +205,6 @@ export function fieldsInsertWrapper(
       'fields.insert: sequenceField node type not in schema.',
     );
   }
-
-  const resolved = resolveInlineInsertPosition(editor, input.at, 'fields.insert');
 
   const receipt = executeDomainCommand(
     editor,
@@ -128,7 +227,6 @@ export function fieldsInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Insert produced no change.');
-
   return fieldSuccess(computeFieldAddress(editor.state.doc, resolved.from));
 }
 
@@ -149,18 +247,110 @@ export function fieldsRebuildWrapper(
 
   if (options?.dryRun) return fieldSuccess(address);
 
-  // Rebuild triggers re-evaluation by touching the node's attrs (sets a dirty
-  // flag so the layout engine will recalculate the field result on next pass).
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found at resolved position.');
+
+  // Dispatch to the appropriate rebuild strategy based on node type
+  if (node.type.name === 'documentStatField') {
+    return rebuildDocumentStatField(editor, resolved, address, options);
+  }
+
+  if (node.type.name === 'total-page-number') {
+    return rebuildTotalPageNumber(editor, resolved, address, options);
+  }
+
+  // Default: clear resolvedNumber to force re-evaluation (sequence fields, etc.)
   const receipt = executeDomainCommand(
     editor,
     () => {
       const { tr } = editor.state;
-      const node = tr.doc.nodeAt(resolved.pos);
-      if (!node) return false;
+      const currentNode = tr.doc.nodeAt(resolved.pos);
+      if (!currentNode) return false;
       tr.setNodeMarkup(resolved.pos, undefined, {
-        ...node.attrs,
+        ...currentNode.attrs,
         resolvedNumber: '', // clear cached result to force re-evaluation
       });
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+/**
+ * Rebuilds a documentStatField by recomputing its value from the Word-statistics helper.
+ */
+function rebuildDocumentStatField(
+  editor: Editor,
+  resolved: { pos: number },
+  address: FieldAddress,
+  options?: MutationOptions,
+): FieldMutationResult {
+  // Stat fields always display document-level counts, not sub-editor counts.
+  const statsEditor = resolveMainBodyEditor(editor);
+  const stats = getWordStatistics(statsEditor);
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
+
+  const fieldType = extractFieldType((node.attrs?.instruction as string) ?? '');
+  const freshValue = resolveDocumentStatFieldValue(fieldType, stats) ?? '';
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const currentNode = tr.doc.nodeAt(resolved.pos);
+      if (!currentNode) return false;
+      tr.setNodeMarkup(resolved.pos, undefined, {
+        ...currentNode.attrs,
+        resolvedText: freshValue,
+      });
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+/**
+ * Rebuilds a total-page-number field by writing the current page count
+ * into both resolvedText and the node's text content.
+ *
+ * When pagination is unavailable, the cached value is the best we have —
+ * return success without modifying the node.
+ */
+function rebuildTotalPageNumber(
+  editor: Editor,
+  resolved: { pos: number },
+  address: FieldAddress,
+  options?: MutationOptions,
+): FieldMutationResult {
+  const statsEditor = resolveMainBodyEditor(editor);
+  const stats = getWordStatistics(statsEditor);
+
+  if (stats.pages == null) return fieldSuccess(address);
+
+  const freshValue = String(stats.pages);
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const currentNode = tr.doc.nodeAt(resolved.pos);
+      if (!currentNode) return false;
+
+      // Replace the entire node to keep text content and resolvedText in sync.
+      const textChild = freshValue ? editor.schema.text(freshValue) : null;
+      const newNode = currentNode.type.create({ ...currentNode.attrs, resolvedText: freshValue }, textChild);
+      tr.replaceWith(resolved.pos, resolved.pos + currentNode.nodeSize, newNode);
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;

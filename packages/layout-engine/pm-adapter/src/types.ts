@@ -341,6 +341,8 @@ export type ParagraphToFlowBlocksParams = {
   enableComments: boolean;
   converterContext: ConverterContext;
   stableBlockId?: string;
+  /** When set, used as default/marker font for list paragraphs that have no explicit run properties (e.g. new list item after Enter). */
+  previousParagraphFont?: ParagraphFont;
 };
 
 export type TableNodeToBlockParams = {
@@ -416,3 +418,8 @@ export interface OoxmlBorder {
  * Underline style type derived from TextRun contract
  */
 export type UnderlineStyle = NonNullable<import('@superdoc/contracts').TextRun['underline']>['style'];
+
+export type ParagraphFont = {
+  fontFamily: string;
+  fontSize: number;
+};

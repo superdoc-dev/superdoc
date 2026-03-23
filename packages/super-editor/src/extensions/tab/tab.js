@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { DecorationSet } from 'prosemirror-view';
 import { isHeadless } from '@utils/headless-helpers.js';

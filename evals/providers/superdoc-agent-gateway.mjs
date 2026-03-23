@@ -45,37 +45,37 @@ async function openDocument(sdk, docPath, stateDir) {
     },
   });
   await client.connect();
-  await client.doc.open({ doc: docPath });
-  return client;
+  const doc = await client.open({ doc: docPath });
+  return { client, doc };
 }
 
-async function closeDocument(client, { save = false } = {}) {
-  if (save) await client.doc.save().catch(() => {});
-  await client.doc.close().catch(() => {});
+async function closeDocument({ client, doc }, { save = false } = {}) {
+  if (save) await doc.save().catch(() => {});
+  await doc.close().catch(() => {});
   await client.dispose().catch(() => {});
 }
 
 // --- Tool conversion ---
 
-function convertTool(fn, sdk, client, toolLog) {
+function convertTool(fn, sdk, doc, toolLog) {
   return tool({
     description: fn.description || '',
     inputSchema: jsonSchema(fn.parameters || { type: 'object', properties: {} }),
     execute: async (args) => {
       const cleaned = cleanArgs(args);
       try {
-        const result = await sdk.dispatchSuperDocTool(client, fn.name, cleaned);
-        toolLog.push({ tool: fn.name, ok: true });
+        const result = await sdk.dispatchSuperDocTool(doc, fn.name, cleaned);
+        toolLog.push({ tool: fn.name, args: cleaned, ok: true });
         return result;
       } catch (err) {
-        toolLog.push({ tool: fn.name, ok: false });
+        toolLog.push({ tool: fn.name, args: cleaned, ok: false, error: err.message });
         return { ok: false, error: err.message };
       }
     },
   });
 }
 
-async function buildTools(sdk, client) {
+async function buildTools(sdk, doc) {
   const { tools: sdkTools } = await sdk.chooseTools({ provider: 'vercel' });
 
   const toolLog = [];
@@ -83,7 +83,7 @@ async function buildTools(sdk, client) {
 
   for (const t of sdkTools) {
     const fn = t.function;
-    if (fn?.name) tools[fn.name] = convertTool(fn, sdk, client, toolLog);
+    if (fn?.name) tools[fn.name] = convertTool(fn, sdk, doc, toolLog);
   }
 
   return { tools, toolLog };
@@ -117,9 +117,9 @@ export default class SuperDocAgentGatewayProvider {
     const evalId = context?.evaluationId || `eval-${Date.now()}`;
     const outputPath = keepFile ? resolveOutputPath(evalId, fixture, task) : null;
 
-    let client;
+    let handle;
     try {
-      client = await openDocument(sdk, docPath, stateDir);
+      handle = await openDocument(sdk, docPath, stateDir);
     } catch (err) {
       cleanupTemp(docPath, stateDir);
       return { error: `Failed to open document: ${err.message}` };
@@ -127,11 +127,11 @@ export default class SuperDocAgentGatewayProvider {
 
     let tools, toolLog;
     try {
-      const result = await buildTools(sdk, client);
+      const result = await buildTools(sdk, handle.doc);
       tools = result.tools;
       toolLog = result.toolLog;
     } catch (err) {
-      await closeDocument(client);
+      await closeDocument(handle);
       cleanupTemp(docPath, stateDir);
       return { error: `Failed to build tools: ${err.message}` };
     }
@@ -146,11 +146,27 @@ export default class SuperDocAgentGatewayProvider {
         temperature: 0,
       });
 
-      const documentText = await client.doc.getText();
-      await closeDocument(client, { save: keepFile });
+      const documentText = await handle.doc.getText();
+      await closeDocument(handle, { save: keepFile });
 
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
       cleanupTemp(docPath, stateDir);
+
+      // Build a rich trace from AI SDK steps for assertion consumption.
+      // Each step has: toolCalls[{toolName, args}], toolResults[{toolName, result}], text
+      const trace = steps.map((step, i) => ({
+        step: i,
+        toolCalls: (step.toolCalls || []).map((tc) => ({
+          tool: tc.toolName,
+          args: tc.args,
+        })),
+        toolResults: (step.toolResults || []).map((tr) => ({
+          tool: tr.toolName,
+          ok: tr.result?.ok !== false,
+        })),
+        text: step.text || null,
+        finishReason: step.finishReason,
+      }));
 
       const result = {
         output: JSON.stringify({
@@ -159,13 +175,14 @@ export default class SuperDocAgentGatewayProvider {
           toolCalls: toolLog,
           turns: toolLog.length,
           usage: totalUsage,
-          steps: steps.length,
+          stepCount: steps.length,
+          trace,
         }),
       };
       writeCache(key, result);
       return result;
     } catch (err) {
-      await closeDocument(client);
+      await closeDocument(handle);
       cleanupTemp(docPath, stateDir);
       return { error: `Agent loop failed: ${err.message}` };
     }

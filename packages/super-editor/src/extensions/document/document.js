@@ -1,6 +1,6 @@
 // @ts-check
 
-import { Node } from '@core/index.js';
+import { Node } from '@core/Node.js';
 import { setSectionPageMarginsAtSelection } from '@core/commands/setSectionPageMarginsAtSelection.js';
 
 /**

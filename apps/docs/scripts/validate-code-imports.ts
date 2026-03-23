@@ -54,6 +54,7 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'ioredis',
   'ai',
   'zod',
+  '@anthropic-ai/sdk',
 ]);
 
 const PREFIX_EXTERNAL_IMPORTS = [
@@ -70,6 +71,7 @@ const PREFIX_EXTERNAL_IMPORTS = [
   '@google-cloud/',
   '@langchain/',
   'next/',
+  'openai/',
 ];
 
 const IMPORT_REGEX = /import\s+(?:(?:[\s\S]*?)\s+from\s+)?['"]([^'"]+)['"]/g;

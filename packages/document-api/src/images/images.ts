@@ -1,5 +1,6 @@
 import type { MutationOptions } from '../types/index.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -526,5 +527,6 @@ export function executeCreateImage(
   options?: MutationOptions,
 ): CreateImageResult {
   requireString(input?.src, 'src');
+  validateStoryLocator(input?.in, 'in');
   return adapter.image(input, options);
 }

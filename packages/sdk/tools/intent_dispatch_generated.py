@@ -21,6 +21,8 @@ def dispatch_intent_tool(
             return execute('doc.getHtml', rest)
         elif action == 'info':
             return execute('doc.info', rest)
+        elif action == 'blocks':
+            return execute('doc.blocks.list', rest)
         else:
             raise SuperDocError(f'Unknown action for superdoc_get_content: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_get_content', 'action': action})
     elif tool_name == 'superdoc_edit':
@@ -51,6 +53,8 @@ def dispatch_intent_tool(
             return execute('doc.format.paragraph.setIndentation', rest)
         elif action == 'set_spacing':
             return execute('doc.format.paragraph.setSpacing', rest)
+        elif action == 'set_direction':
+            return execute('doc.format.paragraph.setDirection', rest)
         else:
             raise SuperDocError(f'Unknown action for superdoc_format: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_format', 'action': action})
     elif tool_name == 'superdoc_create':

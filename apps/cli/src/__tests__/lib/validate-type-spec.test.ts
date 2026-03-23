@@ -7,6 +7,7 @@ describe('validateValueAgainstTypeSpec – oneOf const enumeration', () => {
   const schema: CliTypeSpec = {
     oneOf: [
       { const: 'headerRow' },
+      { const: 'lastRow' },
       { const: 'totalRow' },
       { const: 'firstColumn' },
       { const: 'lastColumn' },
@@ -20,16 +21,24 @@ describe('validateValueAgainstTypeSpec – oneOf const enumeration', () => {
     expect(() => validateValueAgainstTypeSpec('bandedColumns', schema, 'flag')).not.toThrow();
   });
 
+  test('accepts lastRow as a valid flag', () => {
+    expect(() => validateValueAgainstTypeSpec('lastRow', schema, 'flag')).not.toThrow();
+  });
+
+  test('accepts totalRow as a deprecated alias', () => {
+    expect(() => validateValueAgainstTypeSpec('totalRow', schema, 'flag')).not.toThrow();
+  });
+
   test('rejects an invalid value and lists all allowed values', () => {
     try {
-      validateValueAgainstTypeSpec('lastRow', schema, 'tables set-style-option:flag');
+      validateValueAgainstTypeSpec('bogusFlag', schema, 'tables set-style-option:flag');
       throw new Error('Expected CliError to be thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(CliError);
       const cliError = error as CliError;
       expect(cliError.code).toBe('VALIDATION_ERROR');
       expect(cliError.message).toBe(
-        'tables set-style-option:flag must be one of: headerRow, totalRow, firstColumn, lastColumn, bandedRows, bandedColumns.',
+        'tables set-style-option:flag must be one of: headerRow, lastRow, totalRow, firstColumn, lastColumn, bandedRows, bandedColumns.',
       );
     }
   });
@@ -41,7 +50,7 @@ describe('validateValueAgainstTypeSpec – oneOf const enumeration', () => {
     } catch (error) {
       const cliError = error as CliError;
       const details = cliError.details as { errors: string[] };
-      expect(details.errors).toBeArrayOfSize(6);
+      expect(details.errors).toBeArrayOfSize(7);
     }
   });
 });

@@ -105,6 +105,11 @@ export default defineConfig(({ mode, command }) => {
     !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
       outDir: 'dist',
+      // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
+      // tree, but we do not use this build as the authoritative type-check gate.
+      // Keep declaration generation enabled and silence the plugin's diagnostic
+      // logger so build:es stays clean while postbuild validates emitted entries.
+      logLevel: 'silent',
     }),
     copy({
       targets: [

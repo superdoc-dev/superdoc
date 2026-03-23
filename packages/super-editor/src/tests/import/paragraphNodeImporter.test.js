@@ -3,7 +3,7 @@ import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { getTestDataByFileName } from '@tests/helpers/helpers.js';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { getExportedResult } from '../export/export-helpers/index';
-import { beforeAll, expect } from 'vitest';
+import { beforeAll, expect, vi } from 'vitest';
 import { pixelsToTwips, linesToTwips } from '@converter/helpers';
 
 const collectTexts = (paragraphNode) =>
@@ -251,6 +251,79 @@ describe('paragraph tests to check spacing', () => {
     expect(indent.right).toBe(pixelsToTwips(96));
     expect(indent.firstLine).toBe(pixelsToTwips(48));
     expect(indent.hanging).toBe(pixelsToTwips(18));
+  });
+
+  it('hoists bibliography blocks out of wrapper paragraphs', () => {
+    const paragraph = {
+      name: 'w:p',
+      elements: [
+        { name: 'w:pPr', elements: [] },
+        {
+          name: 'sd:bibliography',
+          attributes: { instruction: 'BIBLIOGRAPHY' },
+          elements: [{ name: 'w:p', elements: [] }],
+        },
+      ],
+    };
+    const handler = vi.fn(({ nodes }) => {
+      const node = nodes[0];
+      if (node.name === 'sd:bibliography') {
+        return [{ type: 'bibliography', attrs: { instruction: node.attributes.instruction }, content: [] }];
+      }
+      return [];
+    });
+
+    const result = handleParagraphNode({
+      nodes: [paragraph],
+      docx: {},
+      nodeListHandler: { handler },
+      path: [],
+    });
+
+    expect(result).toEqual({
+      nodes: [{ type: 'bibliography', attrs: { instruction: 'BIBLIOGRAPHY' }, content: [] }],
+      consumed: 1,
+    });
+  });
+
+  it('preserves paragraph text when hoisting bibliography blocks', () => {
+    const paragraph = {
+      name: 'w:p',
+      elements: [
+        { name: 'w:pPr', elements: [] },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Intro paragraph' }] }],
+        },
+        {
+          name: 'sd:bibliography',
+          attributes: { instruction: 'BIBLIOGRAPHY' },
+          elements: [{ name: 'w:p', elements: [] }],
+        },
+      ],
+    };
+    const handler = vi.fn(({ nodes }) => {
+      const node = nodes[0];
+      if (node.name === 'sd:bibliography') {
+        return [{ type: 'bibliography', attrs: { instruction: node.attributes.instruction }, content: [] }];
+      }
+      return defaultNodeListHandler().handler({ nodes, docx: {} });
+    });
+
+    const result = handleParagraphNode({
+      nodes: [paragraph],
+      docx: {},
+      nodeListHandler: { handler },
+      path: [],
+    });
+
+    expect(result.nodes).toHaveLength(2);
+    expect(result.nodes[0]?.type).toBe('paragraph');
+    expect(result.nodes[1]).toEqual({
+      type: 'bibliography',
+      attrs: { instruction: 'BIBLIOGRAPHY' },
+      content: [],
+    });
   });
 
   it('correctly parses paragraph borders', () => {

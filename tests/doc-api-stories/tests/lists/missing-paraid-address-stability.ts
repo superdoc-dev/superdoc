@@ -48,6 +48,7 @@ const LIST_FIXTURE_CANDIDATES = [
   path.join(REPO_ROOT, 'devtools/document-api-tests/fixtures/matrix-list.input.docx'),
   path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
 ];
+const ADDRESS_STABILITY_TIMEOUT_MS = 60_000;
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -209,54 +210,65 @@ beforeEach(async () => {
 });
 
 describe('document-api story: lists missing paraId address stability', () => {
-  it('keeps list item addresses stable for docs without paraIds across repeated reads and reopen', async () => {
-    const sourceDoc = await writeListFixtureWithoutParaIds(outPath('lists-without-paraids.docx'));
-    const firstSessionId = sid('lists-no-paraid-first');
-    const reopenedSessionId = sid('lists-no-paraid-reopened');
+  it(
+    'keeps list item addresses stable for docs without paraIds across repeated reads and reopen',
+    async () => {
+      const sourceDoc = await writeListFixtureWithoutParaIds(outPath('lists-without-paraids.docx'));
+      const firstSessionId = sid('lists-no-paraid-first');
+      const reopenedSessionId = sid('lists-no-paraid-reopened');
 
-    try {
-      const statelessFirstList = extractListResult(await runCli(['lists', 'list', sourceDoc, '--limit', '20']));
-      const firstAddress = expectFirstListItem(statelessFirstList);
+      try {
+        const statelessFirstList = extractListResult(await runCli(['lists', 'list', sourceDoc, '--limit', '20']));
+        const firstAddress = expectFirstListItem(statelessFirstList);
 
-      const statelessGetAddress = extractGetAddress(
-        await runCli(['lists', 'get', sourceDoc, '--address-json', JSON.stringify(firstAddress)]),
-      );
-      expect(statelessGetAddress).toEqual(firstAddress);
+        const statelessGetAddress = extractGetAddress(
+          await runCli(['lists', 'get', sourceDoc, '--address-json', JSON.stringify(firstAddress)]),
+        );
+        expect(statelessGetAddress).toEqual(firstAddress);
 
-      const statelessSecondList = extractListResult(await runCli(['lists', 'list', sourceDoc, '--limit', '20']));
-      const secondAddress = expectFirstListItem(statelessSecondList);
-      expect(secondAddress).toEqual(firstAddress);
+        const statelessSecondList = extractListResult(await runCli(['lists', 'list', sourceDoc, '--limit', '20']));
+        const secondAddress = expectFirstListItem(statelessSecondList);
+        expect(secondAddress).toEqual(firstAddress);
 
-      await runCli(['open', sourceDoc, '--session', firstSessionId]);
+        await runCli(['open', sourceDoc, '--session', firstSessionId]);
 
-      const sessionFirstList = extractListResult(
-        await runCli(['lists', 'list', '--session', firstSessionId, '--limit', '20']),
-      );
-      const sessionFirstAddress = expectFirstListItem(sessionFirstList);
-      expect(sessionFirstAddress).toEqual(firstAddress);
+        const sessionFirstList = extractListResult(
+          await runCli(['lists', 'list', '--session', firstSessionId, '--limit', '20']),
+        );
+        const sessionFirstAddress = expectFirstListItem(sessionFirstList);
+        expect(sessionFirstAddress).toEqual(firstAddress);
 
-      const sessionGetAddress = extractGetAddress(
-        await runCli(['lists', 'get', '--session', firstSessionId, '--address-json', JSON.stringify(firstAddress)]),
-      );
-      expect(sessionGetAddress).toEqual(firstAddress);
+        const sessionGetAddress = extractGetAddress(
+          await runCli(['lists', 'get', '--session', firstSessionId, '--address-json', JSON.stringify(firstAddress)]),
+        );
+        expect(sessionGetAddress).toEqual(firstAddress);
 
-      await runCli(['close', '--session', firstSessionId, '--discard']);
+        await runCli(['close', '--session', firstSessionId, '--discard']);
 
-      await runCli(['open', sourceDoc, '--session', reopenedSessionId]);
+        await runCli(['open', sourceDoc, '--session', reopenedSessionId]);
 
-      const reopenedGetAddress = extractGetAddress(
-        await runCli(['lists', 'get', '--session', reopenedSessionId, '--address-json', JSON.stringify(firstAddress)]),
-      );
-      expect(reopenedGetAddress).toEqual(firstAddress);
+        const reopenedGetAddress = extractGetAddress(
+          await runCli([
+            'lists',
+            'get',
+            '--session',
+            reopenedSessionId,
+            '--address-json',
+            JSON.stringify(firstAddress),
+          ]),
+        );
+        expect(reopenedGetAddress).toEqual(firstAddress);
 
-      const reopenedList = extractListResult(
-        await runCli(['lists', 'list', '--session', reopenedSessionId, '--limit', '20']),
-      );
-      const reopenedAddress = expectFirstListItem(reopenedList);
-      expect(reopenedAddress).toEqual(firstAddress);
-    } finally {
-      await runCli(['close', '--session', firstSessionId, '--discard'], { allowError: true });
-      await runCli(['close', '--session', reopenedSessionId, '--discard'], { allowError: true });
-    }
-  }, 30_000);
+        const reopenedList = extractListResult(
+          await runCli(['lists', 'list', '--session', reopenedSessionId, '--limit', '20']),
+        );
+        const reopenedAddress = expectFirstListItem(reopenedList);
+        expect(reopenedAddress).toEqual(firstAddress);
+      } finally {
+        await runCli(['close', '--session', firstSessionId, '--discard'], { allowError: true });
+        await runCli(['close', '--session', reopenedSessionId, '--discard'], { allowError: true });
+      }
+    },
+    ADDRESS_STABILITY_TIMEOUT_MS,
+  );
 });

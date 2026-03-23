@@ -1,6 +1,4 @@
-import { helpers } from '@core/index.js';
-
-const { findChildren } = helpers;
+import { findChildren } from '@core/helpers/findChildren.js';
 
 /**
  * Find field annotations by field ID or array of field IDs.

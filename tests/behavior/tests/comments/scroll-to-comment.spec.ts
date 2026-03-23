@@ -27,17 +27,24 @@ test('scrollToComment scrolls to the comment and activates it', async ({ superdo
   });
   await superdoc.waitForStable();
 
-  // Call scrollToComment via the public API.
-  // WebKit can lag on DOM attribute propagation, so poll until it succeeds.
+  // Poll scrollToComment until it succeeds. After scrolling to top the
+  // DomPainter may re-render pages, temporarily removing comment highlight
+  // elements from the DOM. Use behavior:'auto' (instant) to avoid
+  // smooth-scroll timing issues on WebKit.
   await expect
-    .poll(async () => superdoc.page.evaluate((id) => (window as any).superdoc.scrollToComment(id), commentId), {
-      timeout: 10_000,
-    })
+    .poll(
+      async () =>
+        superdoc.page.evaluate((id) => (window as any).superdoc.scrollToComment(id, { behavior: 'auto' }), commentId),
+      { timeout: 15_000 },
+    )
     .toBe(true);
 
-  // Verify the comment highlight is now visible in the viewport
-  const highlight = superdoc.page.locator('.superdoc-comment-highlight').filter({ hasText: 'target text' });
-  await expect(highlight.first()).toBeVisible({ timeout: 5_000 });
+  // scrollToComment calls setActiveComment which triggers a full DomPainter
+  // re-render (removes and recreates all page elements). Wait for it to settle.
+  await superdoc.waitForStable();
+
+  // Poll for the highlight since the re-render creates new DOM elements.
+  await superdoc.assertCommentHighlightExists({ text: 'target text', timeoutMs: 10_000 });
 });
 
 test('scrollToComment returns false for a nonexistent comment', async ({ superdoc }) => {

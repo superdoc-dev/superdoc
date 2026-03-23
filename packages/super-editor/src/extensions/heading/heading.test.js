@@ -56,13 +56,12 @@ describe('Heading Extension', () => {
     });
 
     describe('toggleHeading', () => {
-      it('should return false for an empty selection', () => {
+      it('should apply heading with a cursor (empty) selection', () => {
         tr.setSelection(TextSelection.create(tr.doc, 1)); // Cursor selection
         const result = editor.commands.toggleHeading({ level: 1 });
 
-        expect(result).toBe(false);
-        const styleId = editor.state.doc.content.content[0].attrs.paragraphProperties?.styleId ?? null;
-        expect(styleId).toBeNull();
+        expect(result).toBe(true);
+        expect(editor.state.doc.content.content[0].attrs.paragraphProperties?.styleId).toBe('Heading1');
       });
 
       it('should toggle heading on for a paragraph', () => {

@@ -6,8 +6,6 @@ description: Retrieve cell information for a table, optionally filtered by row o
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Retrieve cell information for a table, optionally filtered by row or column.
@@ -37,7 +35,7 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -81,6 +79,11 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
   },
   "cells": [
     {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "tableCell"
+      },
       "colspan": 1,
       "columnIndex": 1,
       "nodeId": "node-def456",
@@ -151,6 +154,9 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
       "items": {
         "additionalProperties": false,
         "properties": {
+          "address": {
+            "$ref": "#/$defs/TableCellAddress"
+          },
           "colspan": {
             "minimum": 1,
             "type": "integer"
@@ -173,6 +179,7 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
         },
         "required": [
           "nodeId",
+          "address",
           "rowIndex",
           "columnIndex",
           "colspan",

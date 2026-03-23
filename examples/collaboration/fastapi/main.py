@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     logger.info("collaboration token env: %s", COLLAB_TOKEN_ENV)
 
     async with AsyncSuperDocClient(watchdog_timeout_ms=WATCHDOG_TIMEOUT_MS) as client:
-        open_result = await client.doc.open(
+        doc = await client.open(
             {
                 "doc": str(DOC_PATH),
                 "collaboration": {
@@ -57,14 +57,14 @@ async def lifespan(app: FastAPI):
             timeout_ms=OPEN_TIMEOUT_MS,
         )
         markdown_content = MARKDOWN_PATH.read_text(encoding="utf-8")
-        await client.doc.insert({"value": markdown_content, "type": "markdown"})
+        await doc.insert({"value": markdown_content, "type": "markdown"})
 
-        app.state.client = client
-        app.state.open_result = open_result
+        app.state.doc = doc
+        app.state.open_result = doc.open_result
         try:
             yield
         finally:
-            await client.doc.close({})
+            await doc.close({})
 
 app = FastAPI(title="SuperDoc FastAPI Collaboration Demo", lifespan=lifespan)
 
@@ -84,18 +84,17 @@ def root() -> dict:
 
 @app.get("/status")
 async def status() -> dict:
-    return await app.state.client.doc.status({})
+    return {"ok": True, "sessionId": app.state.doc.session_id}
 
 
 @app.get("/insert")
 async def insert(text: str = Query(...)) -> dict:
-    return await app.state.client.doc.insert({"value": text})
+    return await app.state.doc.insert({"value": text})
 
 
 @app.get("/markdown")
 async def markdown() -> HTMLResponse:
-    doc_api = app.state.client.doc
-    markdown_result = await doc_api.get_markdown()
+    markdown_result = await app.state.doc.get_markdown()
     md = markdown_result
     if not isinstance(md, str):
         md = str(md)
@@ -112,7 +111,7 @@ pre{{background:#f5f5f5;padding:1rem;border-radius:6px;overflow-x:auto;white-spa
 @app.get("/download")
 async def download() -> FileResponse:
     DOWNLOAD_PATH.parent.mkdir(parents=True, exist_ok=True)
-    await app.state.client.doc.save({"out": str(DOWNLOAD_PATH), "force": True})
+    await app.state.doc.save({"out": str(DOWNLOAD_PATH), "force": True})
     return FileResponse(
         path=str(DOWNLOAD_PATH),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

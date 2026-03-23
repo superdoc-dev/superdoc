@@ -10,6 +10,9 @@ import type { TrackedChangesMode, FlowBlock, Layout, Measure, FlowMode, SectionM
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type * as Y from 'yjs';
 
+import type { HeaderFooterRegion } from '../header-footer/types.js';
+export type { HeaderFooterRegion } from '../header-footer/types.js';
+
 // =============================================================================
 // Public Types (exported from index.ts)
 // =============================================================================
@@ -332,8 +335,6 @@ export interface EditorWithConverter extends Editor {
     pageStyles?: { alternateHeaders?: boolean };
     headerIds?: { default?: string; first?: string; even?: string; odd?: string };
     footerIds?: { default?: string; first?: string; even?: string; odd?: string };
-    createDefaultHeader?: (variant: string) => string;
-    createDefaultFooter?: (variant: string) => string;
     footnotes?: Array<{
       id: string;
       content?: unknown[];
@@ -389,27 +390,10 @@ export type HeaderFooterMode = 'body' | 'header' | 'footer';
 export type HeaderFooterSession = {
   mode: HeaderFooterMode;
   kind?: 'header' | 'footer';
-  headerId?: string | null;
+  headerFooterRefId?: string | null;
   sectionType?: string | null;
   pageIndex?: number;
   pageNumber?: number;
-};
-
-export type HeaderFooterRegion = {
-  kind: 'header' | 'footer';
-  headerId?: string;
-  sectionType?: string;
-  pageIndex: number;
-  pageNumber: number;
-  /** Section-aware display page number (e.g. "7" when physical page is 10 due to section numbering) */
-  displayPageNumber?: string;
-  localX: number;
-  localY: number;
-  width: number;
-  height: number;
-  contentHeight?: number;
-  /** Minimum Y coordinate from layout (can be negative if content extends above y=0) */
-  minY?: number;
 };
 
 export type HeaderFooterLayoutContext = {

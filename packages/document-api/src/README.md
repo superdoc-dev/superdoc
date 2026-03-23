@@ -44,7 +44,7 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 - `find` always returns `SDFindResult` with `items: SDNodeResult[]`.
 - Each item has `{ node, address }`, where `address` is a `NodeAddress`.
 - For precise mutation targeting, use `query.match`, which returns a canonical `SelectionTarget`, block addresses, and block/range metadata.
-- `insert` accepts either legacy text input with an optional `TextAddress` target or structural content with an optional `BlockNodeAddress` target. Omitting `target` inserts at the end of the document.
+- `insert` accepts text input with an optional `SelectionTarget` or `ref`, or structural content with an optional `BlockNodeAddress` target. Omitting both `target` and `ref` appends text at the end of the document.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -241,22 +241,22 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert content into the document. Legacy string input inserts at an optional `TextAddress`. Structural content inserts relative to an optional `BlockNodeAddress` using `placement`. When `target` is omitted, content appends at the end of the document.
+Insert content into the document. Text input inserts at an optional `SelectionTarget` or `ref`, or appends at the end of the document when both are omitted. Structural content inserts relative to an optional `BlockNodeAddress` using `placement`.
 
 Supports dry-run and tracked mode.
 
-- **Input**: `InsertInput` (`{ value, type?, target?: TextAddress } | { content, target?: BlockNodeAddress, placement?, nestingPolicy? }`)
+- **Input**: `InsertInput` (`{ value, type?, target: SelectionTarget } | { value, type?, ref: string } | { value, type? } | { content, target?: BlockNodeAddress, placement?, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
 - **Idempotency**: non-idempotent
-- **Failure codes**: see the generated reference docs for the full legacy vs. structural failure surface
+- **Failure codes**: see the generated reference docs for the full text vs. structural failure surface
 
 ### `replace`
 
 Replace content at a contiguous selection. Text replacement accepts `SelectionTarget` or `ref`. Structural replacement accepts `BlockNodeAddress`, `SelectionTarget`, or `ref` with `content`. Supports dry-run and tracked mode.
 
-- **Input**: `ReplaceInput` (`{ target?: SelectionTarget, ref?: string, text } | { target?: BlockNodeAddress | SelectionTarget, ref?: string, content, nestingPolicy? }`)
+- **Input**: `ReplaceInput` (`{ target: SelectionTarget, text } | { ref: string, text } | { target: BlockNodeAddress | SelectionTarget, content, nestingPolicy? } | { ref: string, content, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
@@ -267,7 +267,7 @@ Replace content at a contiguous selection. Text replacement accepts `SelectionTa
 
 Delete content at a contiguous selection. Accepts either an explicit `SelectionTarget` or a mutation-ready `ref`. Supports dry-run and tracked mode.
 
-- **Input**: `DeleteInput` (`{ target?: SelectionTarget, ref?: string, behavior?: 'selection' | 'exact' }`)
+- **Input**: `DeleteInput` (`{ target: SelectionTarget, behavior?: 'selection' | 'exact' } | { ref: string, behavior?: 'selection' | 'exact' }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -326,7 +326,7 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 Apply explicit inline style changes (bold, italic, underline, strike) to a contiguous selection using directive semantics (`'on'`, `'off'`, `'clear'`). Accepts a `SelectionTarget` or `ref`. Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
-- **Input**: `StyleApplyInput` (`{ target?: SelectionTarget, ref?: string, inline: { bold?, italic?, underline?, strike? } }`)
+- **Input**: `StyleApplyInput` (`{ target: SelectionTarget, inline: { bold?, italic?, underline?, strike? } } | { ref: string, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes

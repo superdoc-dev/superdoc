@@ -32,6 +32,7 @@ vi.mock('../helpers/index-cache.js', () => ({
 vi.mock('../helpers/index-resolver.js', () => ({
   findAllIndexNodes: vi.fn(() => []),
   resolveIndexTarget: vi.fn(),
+  resolvePostMutationIndexId: vi.fn((_doc, sdBlockId: string) => sdBlockId),
   extractIndexInfo: vi.fn(),
   buildIndexDiscoveryItem: vi.fn(),
   findAllIndexEntries: vi.fn(() => []),

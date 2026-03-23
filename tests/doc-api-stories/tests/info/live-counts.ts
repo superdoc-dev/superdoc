@@ -8,8 +8,9 @@ import {
   PresentationEditor,
   getStarterExtensions,
 } from '../../../../packages/superdoc/dist/super-editor.es.js';
+import { corpusDoc } from '../harness';
 
-const FIXTURE_PATH = path.resolve(process.cwd(), 'test-corpus/pagination/longer-header.docx');
+const FIXTURE_PATH = corpusDoc('pagination/longer-header.docx');
 const APPEND_MARKER = 'SD2203-DOC-INFO-STORY';
 const APPENDED_PARAGRAPH = `${APPEND_MARKER} ${Array.from(
   { length: 320 },

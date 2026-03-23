@@ -18,6 +18,7 @@ import {
   replaceAroundStep,
   documentHelpers,
 } from './index.js';
+import { hasAnyMark } from '@tests/helpers/helpers.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImporter.js';
@@ -96,8 +97,8 @@ describe('trackChangesHelpers', () => {
     });
     const markedDoc = createDocWithText('abc', [insertMark]);
 
-    expect(documentHelpers.hasAnyMark(markedDoc, TrackInsertMarkName)).toBe(true);
-    expect(documentHelpers.hasAnyMark(markedDoc, TrackDeleteMarkName)).toBe(false);
+    expect(hasAnyMark(markedDoc, TrackInsertMarkName)).toBe(true);
+    expect(hasAnyMark(markedDoc, TrackDeleteMarkName)).toBe(false);
   });
 
   it('parseFormatList gracefully handles malformed input', () => {

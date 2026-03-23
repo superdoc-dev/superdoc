@@ -3,8 +3,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
-import { initTestEditor } from '@tests/helpers/helpers.js';
-import { hasAnyMark } from './trackChangesHelpers/documentHelpers.js';
+import { initTestEditor, hasAnyMark } from '@tests/helpers/helpers.js';
 
 const commands = TrackChanges.config.addCommands();
 

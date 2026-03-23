@@ -21,6 +21,7 @@ import type {
   ParagraphFrame,
 } from '@superdoc/contracts';
 import { fieldAnnotationKey } from './field-annotation-key.js';
+import { hashRunVisualMarks } from './run-visual-marks.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
 
 /**
@@ -412,23 +413,11 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
       'src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
         ? ''
         : runB.text;
-    const leftUnderline = JSON.stringify('underline' in runA ? runA.underline : undefined);
-    const rightUnderline = JSON.stringify('underline' in runB ? runB.underline : undefined);
-    const leftLink = JSON.stringify('link' in runA ? runA.link : undefined);
-    const rightLink = JSON.stringify('link' in runB ? runB.link : undefined);
 
     const mismatch =
       leftText !== rightText ||
       fieldAnnotationKey(runA) !== fieldAnnotationKey(runB) ||
-      ('bold' in runA ? runA.bold : false) !== ('bold' in runB ? runB.bold : false) ||
-      ('italic' in runA ? runA.italic : false) !== ('italic' in runB ? runB.italic : false) ||
-      leftUnderline !== rightUnderline ||
-      ('strike' in runA ? runA.strike : false) !== ('strike' in runB ? runB.strike : false) ||
-      ('color' in runA ? runA.color : undefined) !== ('color' in runB ? runB.color : undefined) ||
-      ('fontSize' in runA ? runA.fontSize : undefined) !== ('fontSize' in runB ? runB.fontSize : undefined) ||
-      ('fontFamily' in runA ? runA.fontFamily : undefined) !== ('fontFamily' in runB ? runB.fontFamily : undefined) ||
-      ('highlight' in runA ? runA.highlight : undefined) !== ('highlight' in runB ? runB.highlight : undefined) ||
-      leftLink !== rightLink ||
+      hashRunVisualMarks(runA) !== hashRunVisualMarks(runB) ||
       getTrackedChangeKey(runA) !== getTrackedChangeKey(runB) ||
       getCommentKey(runA) !== getCommentKey(runB);
 

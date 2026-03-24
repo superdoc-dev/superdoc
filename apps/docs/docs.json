@@ -97,7 +97,7 @@
           },
           {
             "group": "Document Engine",
-            "tag": "ALPHA",
+            "tag": "NEW",
             "pages": [
               "document-engine/overview",
               {
@@ -106,8 +106,7 @@
                   "document-api/overview",
                   "document-api/reference/index",
                   "document-api/common-workflows",
-                  "document-api/available-operations",
-                  "document-api/eval-results"
+                  "document-api/available-operations"
                 ]
               },
               {
@@ -121,7 +120,8 @@
                   "document-engine/ai-agents/llm-tools",
                   "document-engine/ai-agents/integrations",
                   "document-engine/ai-agents/best-practices",
-                  "document-engine/ai-agents/debugging"
+                  "document-engine/ai-agents/debugging",
+                  "document-engine/ai-agents/eval-results"
                 ]
               }
             ]
@@ -135,6 +135,7 @@
                 "pages": [
                   "modules/collaboration/overview",
                   "modules/collaboration/quickstart",
+                  "modules/collaboration/upgrade-to-collaboration",
                   "modules/collaboration/configuration"
                 ]
               },
@@ -315,15 +316,23 @@
       {
         "type": "button",
         "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "",
+        "label": "Discord",
         "icon": "discord"
       }
     ]
+  },
+  "banner": {
+    "content": "**Introducing Document Engine** — edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
+    "dismissible": true
   },
   "redirects": [
     {
       "source": "/getting-started/ai-agents",
       "destination": "/document-engine/ai-agents/llm-tools"
+    },
+    {
+      "source": "/document-api/eval-results",
+      "destination": "/document-engine/ai-agents/eval-results"
     },
     {
       "source": "/document-engine/mcp",

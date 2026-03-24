@@ -37,6 +37,7 @@ import type {
 } from '@superdoc/document-api';
 import { buildDiscoveryResult, buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import {
+  findAllBibliographies,
   findAllCitations,
   resolveCitationTarget,
   extractCitationInfo,
@@ -421,7 +422,8 @@ export function bibliographyConfigureWrapper(
   rejectTrackedMode('citations.bibliography.configure', options);
 
   const resolved = resolveBibliographyTarget(editor.state.doc, input.target);
-  const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId };
+  const stableNodeId = resolved.commandNodeId ?? resolved.nodeId;
+  const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId: stableNodeId };
 
   if (options?.dryRun) return bibSuccess(address);
 
@@ -445,7 +447,13 @@ export function bibliographyConfigureWrapper(
 
   syncBibliographyStyleToConverter(editor, input.style);
 
-  return bibSuccess(address);
+  const bibliographies = findAllBibliographies(editor.state.doc);
+  const postMutationBibliography =
+    bibliographies.find((bibliography) => bibliography.pos === resolved.pos) ??
+    bibliographies.find((bibliography) => bibliography.commandNodeId === stableNodeId);
+  const postMutationId =
+    postMutationBibliography?.nodeId ?? resolvePostMutationBibliographyId(editor.state.doc, stableNodeId);
+  return bibSuccess({ kind: 'block', nodeType: 'bibliography', nodeId: postMutationId });
 }
 
 export function bibliographyRebuildWrapper(

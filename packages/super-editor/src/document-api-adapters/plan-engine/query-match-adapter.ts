@@ -513,9 +513,13 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
       // Include a short document text preview so the model can see the actual
       // text formatting (quote style, whitespace, etc.) and retry with the
       // correct pattern instead of guessing blindly.
-      const docSize = editor.state.doc.content.size;
+      const doc = storyEditor.state?.doc;
+      const docSize = typeof doc?.content?.size === 'number' ? doc.content.size : 0;
       const previewLength = Math.min(docSize, 300);
-      const textPreview = previewLength > 0 ? editor.state.doc.textBetween(0, previewLength, '\n', '\n') : '';
+      const textPreview =
+        previewLength > 0 && typeof doc?.textBetween === 'function'
+          ? doc.textBetween(0, previewLength, '\n', '\n')
+          : '';
       throw planError(
         'MATCH_NOT_FOUND',
         `selector matched zero ranges. Document starts with: "${textPreview.slice(0, 200)}..."`,

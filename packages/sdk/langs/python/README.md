@@ -153,6 +153,8 @@ Use this when your app already has a live collaboration room (Liveblocks, Hocusp
 
 Pass `collabUrl` and `collabDocumentId` to `client.open`:
 
+> The `collabUrl` + `collabDocumentId` shorthand defaults to the `y-websocket` provider. To connect to a Hocuspocus server, pass an explicit `collaboration` object with `providerType: "hocuspocus"`.
+
 ```python
 import asyncio
 
@@ -173,6 +175,20 @@ async def main():
 
 
 asyncio.run(main())
+```
+
+### Connect to Hocuspocus explicitly
+
+Use the explicit `collaboration` object when your server speaks the Hocuspocus protocol instead of `y-websocket`:
+
+```python
+doc = await client.open({
+    "collaboration": {
+        "providerType": "hocuspocus",
+        "url": "ws://localhost:1234",
+        "documentId": "my-doc-room",
+    }
+})
 ```
 
 ### Start an empty room from a local `.docx`
@@ -199,7 +215,7 @@ What happens when you pass `doc`:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. Shorthand defaults to `y-websocket`. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
 | `doc` | `string` | — | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
@@ -386,7 +402,7 @@ pip download superdoc-sdk superdoc-sdk-cli-darwin-arm64
 
 ## Part of SuperDoc
 
-This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — an open source document editor bringing Microsoft Word to the web.
+This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

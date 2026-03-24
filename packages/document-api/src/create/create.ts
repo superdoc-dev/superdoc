@@ -22,6 +22,10 @@ import type {
   ContentControlMutationResult,
 } from '../content-controls/content-controls.types.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { isRecord, isInteger } from '../validation-primitives.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
+
+const VALID_HEADING_LEVELS: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 6]);
 
 export interface CreateApi {
   paragraph(input: CreateParagraphInput, options?: MutationOptions): CreateParagraphResult;
@@ -157,6 +161,10 @@ export function executeCreateParagraph(
   input: CreateParagraphInput,
   options?: MutationOptions,
 ): CreateParagraphResult {
+  if (!isRecord(input as unknown)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'create.paragraph input must be a non-null object.');
+  }
+  validateStoryLocator(input.in, 'in');
   const at = normalizeCreateLocation<ParagraphCreateLocation>(input.at, (loc) =>
     validateTargetOnlyCreateLocation(loc, 'create.paragraph'),
   );
@@ -177,6 +185,17 @@ export function executeCreateHeading(
   input: CreateHeadingInput,
   options?: MutationOptions,
 ): CreateHeadingResult {
+  if (!isRecord(input as unknown)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'create.heading input must be a non-null object.');
+  }
+  validateStoryLocator(input.in, 'in');
+  if (!isInteger(input.level) || !VALID_HEADING_LEVELS.has(input.level as number)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.heading level must be an integer 1–6, got ${JSON.stringify(input.level)}.`,
+      { field: 'level', value: input.level },
+    );
+  }
   const at = normalizeCreateLocation<HeadingCreateLocation>(input.at, (loc) =>
     validateTargetOnlyCreateLocation(loc, 'create.heading'),
   );
@@ -197,6 +216,23 @@ export function executeCreateTable(
   input: CreateTableInput,
   options?: MutationOptions,
 ): CreateTableResult {
+  if (!isRecord(input as unknown)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'create.table input must be a non-null object.');
+  }
+  if (!isInteger(input.rows) || (input.rows as number) < 1) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.table rows must be a positive integer, got ${JSON.stringify(input.rows)}.`,
+      { field: 'rows', value: input.rows },
+    );
+  }
+  if (!isInteger(input.columns) || (input.columns as number) < 1) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.table columns must be a positive integer, got ${JSON.stringify(input.columns)}.`,
+      { field: 'columns', value: input.columns },
+    );
+  }
   const at = normalizeCreateLocation<TableCreateLocation>(input.at, (loc) =>
     validateTargetOrNodeIdCreateLocation(loc, 'create.table'),
   );

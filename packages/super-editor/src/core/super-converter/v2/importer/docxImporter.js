@@ -28,6 +28,7 @@ import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
+import { bibliographyHandlerEntity } from './bibliographyImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -239,6 +240,7 @@ export const defaultNodeListHandler = () => {
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
+    bibliographyHandlerEntity,
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,

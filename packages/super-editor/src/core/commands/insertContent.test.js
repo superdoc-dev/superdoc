@@ -196,7 +196,7 @@ describe('insertContent (integration) list export', () => {
     helpers = await import('../../tests/helpers/helpers.js');
     cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
     exportHelpers = await import('../../tests/export/export-helpers/index.js');
-  });
+  }, 30000);
 
   const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;
@@ -368,7 +368,7 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
     vi.doUnmock('../helpers/contentProcessor.js');
     helpers = await import('../../tests/helpers/helpers.js');
     cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
-  });
+  }, 30000);
 
   const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;

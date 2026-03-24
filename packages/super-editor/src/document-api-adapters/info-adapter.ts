@@ -62,8 +62,9 @@ function extractTextFormatting(node: import('prosemirror-model').Node): { fontFa
   // to get consistent "first run" formatting rather than mixed properties.
   node.descendants((child) => {
     if (fontFamily !== undefined || fontSize !== undefined) return false;
-    if (!child.isText || child.marks.length === 0) return;
-    for (const mark of child.marks) {
+    const marks = child.marks ?? [];
+    if (!child.isText || marks.length === 0) return;
+    for (const mark of marks) {
       const attrs = mark.attrs as Record<string, unknown>;
       if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) {
         fontFamily = attrs.fontFamily;
@@ -85,6 +86,14 @@ function extractTextFormatting(node: import('prosemirror-model').Node): { fontFa
  */
 function collectDocumentStyles(editor: Editor): { styles: DocumentStyles; defaults: DocumentDefaults } {
   const headingPattern = HEADING_STYLE_PATTERN;
+  const doc = editor.state?.doc;
+
+  if (!doc?.descendants) {
+    return {
+      styles: { paragraphStyles: [] },
+      defaults: { styleId: 'Normal' },
+    };
+  }
 
   // Per-style data
   const styleData = new Map<string, { count: number; fontFamily?: string; fontSize?: number }>();
@@ -93,7 +102,7 @@ function collectDocumentStyles(editor: Editor): { styles: DocumentStyles; defaul
   const fontCounts = new Map<string, number>();
   const sizeCounts = new Map<number, number>();
 
-  editor.state.doc.descendants((node) => {
+  doc.descendants((node) => {
     if (node.type.name !== 'paragraph') return;
 
     const props = node.attrs.paragraphProperties as { styleId?: string } | undefined;

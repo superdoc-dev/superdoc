@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { DocumentApiValidationError } from '../errors.js';
-import { executeImagesSetZOrder, type ImagesAdapter } from './images.js';
+import { executeImagesSetZOrder, executeCreateImage, type ImagesAdapter } from './images.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from './z-order.js';
 
 function makeSetZOrderAdapter() {
@@ -88,5 +88,33 @@ describe('executeImagesSetZOrder', () => {
     ).toThrow('requires a "zOrder" object');
 
     expect(setZOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('executeCreateImage', () => {
+  const stubCreateAdapter = () => ({ image: mock(() => ({ success: true })) }) as any;
+
+  it('rejects invalid story locator', () => {
+    expect(() =>
+      executeCreateImage(stubCreateAdapter(), {
+        src: 'data:image/png;base64,abc',
+        in: { kind: 'story', storyType: 'bogus' } as any,
+      }),
+    ).toThrow(/StoryLocator/);
+  });
+
+  it('allows valid story locator', () => {
+    const adapter = stubCreateAdapter();
+    expect(() =>
+      executeCreateImage(adapter, {
+        src: 'data:image/png;base64,abc',
+        in: { kind: 'story', storyType: 'body' } as any,
+      }),
+    ).not.toThrow();
+  });
+
+  it('allows omitted story locator', () => {
+    const adapter = stubCreateAdapter();
+    expect(() => executeCreateImage(adapter, { src: 'data:image/png;base64,abc' })).not.toThrow();
   });
 });

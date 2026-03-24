@@ -133,11 +133,11 @@ describe('index-resolver block ids', () => {
     } as unknown as ProseMirrorNode;
   }
 
-  it('uses sdBlockId as the public id when present', () => {
+  it('uses a deterministic public id while still accepting the session-local sdBlockId', () => {
     const doc = makeIndexDoc('idx-runtime');
     const [resolved] = findAllIndexNodes(doc);
 
-    expect(resolved.nodeId).toBe('idx-runtime');
+    expect(resolved.nodeId).toMatch(/^index-auto-[0-9a-f]{8}$/);
     expect(resolveIndexTarget(doc, { kind: 'block', nodeType: 'index', nodeId: resolved.nodeId }).nodeId).toBe(
       resolved.nodeId,
     );
@@ -148,7 +148,7 @@ describe('index-resolver block ids', () => {
 
   it('re-resolves the current public id from an sdBlockId after mutation', () => {
     const doc = makeIndexDoc('idx-runtime');
-    expect(resolvePostMutationIndexId(doc, 'idx-runtime')).toBe('idx-runtime');
+    expect(resolvePostMutationIndexId(doc, 'idx-runtime')).toMatch(/^index-auto-[0-9a-f]{8}$/);
   });
 
   it('falls back to a deterministic id when sdBlockId is missing', () => {

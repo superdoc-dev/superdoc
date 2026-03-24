@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test';
-import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols } from './index.js';
+import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols, isRelativeUrl } from './index.js';
 
 describe('url-validation', () => {
   describe('sanitizeHref', () => {
@@ -11,7 +11,7 @@ describe('url-validation', () => {
       expect(result?.isExternal).toBe(true);
     });
 
-    it('rejects relative paths and bare hostnames', () => {
+    it('returns null for relative paths when window is unavailable (Node.js)', () => {
       expect(sanitizeHref('/docs/page')).toBeNull();
       expect(sanitizeHref('www.example.com')).toBeNull();
       expect(sanitizeHref('./foo')).toBeNull();
@@ -105,6 +105,82 @@ describe('url-validation', () => {
       expect(
         sanitizeHref('https://blocked.example.com/path', { redirectBlocklist: ['blocked.example.com'] }),
       ).toBeNull();
+    });
+  });
+
+  describe('Relative path sanitization (browser context)', () => {
+    const origin = 'https://localhost:3000';
+
+    beforeEach(() => {
+      globalThis.window = { location: { origin, href: `${origin}/docs/intro` } };
+    });
+
+    afterEach(() => {
+      delete globalThis.window;
+    });
+
+    it('resolves absolute paths against page origin', () => {
+      const result = sanitizeHref('/docs/page');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/docs/page`);
+      expect(result?.protocol).toBeNull();
+      expect(result?.isExternal).toBe(false);
+    });
+
+    it('resolves dot-relative paths against current page directory', () => {
+      const result = sanitizeHref('./images/chart.jpg');
+      expect(result).toBeTruthy();
+      // href is /docs/intro → directory is /docs/, so ./images/chart.jpg → /docs/images/chart.jpg
+      expect(result?.href).toBe(`${origin}/docs/images/chart.jpg`);
+    });
+
+    it('normalises path traversal', () => {
+      const result = sanitizeHref('/a/../b/page');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/b/page`);
+    });
+
+    it('rejects control characters', () => {
+      expect(sanitizeHref('/images/photo\x00.png')).toBeNull();
+      expect(sanitizeHref('/images/photo\n.png')).toBeNull();
+      expect(sanitizeHref('/images/photo\t.png')).toBeNull();
+      expect(sanitizeHref('/images/\u200bphoto.png')).toBeNull();
+    });
+
+    it('rejects paths that escape to a different origin', () => {
+      expect(sanitizeHref('//evil.com/image.png')).toBeNull();
+    });
+
+    it('applies redirect blocklist by hostname for relative paths', () => {
+      expect(
+        sanitizeHref('/docs/page', {
+          redirectBlocklist: ['localhost'],
+        }),
+      ).toBeNull();
+    });
+
+    it('applies redirect blocklist by URL prefix for relative paths', () => {
+      expect(
+        sanitizeHref('/docs/page', {
+          redirectBlocklist: ['https://localhost:3000/docs'],
+        }),
+      ).toBeNull();
+    });
+
+    it('resolves bare paths (no leading / or .)', () => {
+      const result = sanitizeHref('images/photo.png');
+      expect(result).toBeTruthy();
+      // href is /docs/intro → directory is /docs/, so images/photo.png → /docs/images/photo.png
+      expect(result?.href).toBe(`${origin}/docs/images/photo.png`);
+      expect(result?.protocol).toBeNull();
+      expect(result?.isExternal).toBe(false);
+    });
+
+    it('resolves bare nested paths against current page directory', () => {
+      const result = sanitizeHref('assets/img/logo.svg');
+      expect(result).toBeTruthy();
+      // href is /docs/intro → directory is /docs/, so assets/img/logo.svg → /docs/assets/img/logo.svg
+      expect(result?.href).toBe(`${origin}/docs/assets/img/logo.svg`);
     });
   });
 
@@ -511,6 +587,45 @@ describe('url-validation', () => {
       const specialChars = '& < > " \' @ # $ % ^ * ( ) { } [ ] | \\ / ? + = ~ `';
       const result = encodeTooltip(specialChars);
       expect(result?.text).toBe(specialChars);
+    });
+  });
+
+  describe('isRelativeUrl', () => {
+    it('recognises absolute paths', () => {
+      expect(isRelativeUrl('/path/to/file')).toBe(true);
+    });
+
+    it('recognises dot-relative paths', () => {
+      expect(isRelativeUrl('./path')).toBe(true);
+      expect(isRelativeUrl('../path')).toBe(true);
+    });
+
+    it('recognises bare paths', () => {
+      expect(isRelativeUrl('images/photo.png')).toBe(true);
+      expect(isRelativeUrl('file.txt')).toBe(true);
+    });
+
+    it('rejects absolute URLs with scheme', () => {
+      expect(isRelativeUrl('https://example.com')).toBe(false);
+      expect(isRelativeUrl('http://example.com')).toBe(false);
+      expect(isRelativeUrl('data:image/png;base64,abc')).toBe(false);
+      expect(isRelativeUrl('blob:http://localhost/uuid')).toBe(false);
+    });
+
+    it('rejects anchors', () => {
+      expect(isRelativeUrl('#anchor')).toBe(false);
+    });
+
+    it('rejects protocol-relative URLs', () => {
+      expect(isRelativeUrl('//cdn.example.com')).toBe(false);
+    });
+
+    it('rejects non-string and empty inputs', () => {
+      expect(isRelativeUrl(null)).toBe(false);
+      expect(isRelativeUrl(undefined)).toBe(false);
+      expect(isRelativeUrl(123)).toBe(false);
+      expect(isRelativeUrl('')).toBe(false);
+      expect(isRelativeUrl('   ')).toBe(false);
     });
   });
 });

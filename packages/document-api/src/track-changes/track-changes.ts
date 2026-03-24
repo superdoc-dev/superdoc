@@ -54,9 +54,7 @@ export interface TrackChangesApi {
 
 /**
  * Execute wrappers below are the canonical interception point for input
- * normalization and validation. Query-only operations currently pass through
- * directly. Mutation operations will gain validation as the API matures.
- * Keep the wrappers to preserve this extension surface.
+ * normalization and validation before delegating to the adapter.
  */
 export function executeTrackChangesList(
   adapter: TrackChangesAdapter,
@@ -66,6 +64,19 @@ export function executeTrackChangesList(
 }
 
 export function executeTrackChangesGet(adapter: TrackChangesAdapter, input: TrackChangesGetInput): TrackChangeInfo {
+  const raw = input as unknown;
+  if (typeof raw !== 'object' || raw == null) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'trackChanges.get input must be a non-null object.', {
+      value: raw,
+    });
+  }
+  const { id } = raw as Record<string, unknown>;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'trackChanges.get id must be a non-empty string.', {
+      field: 'id',
+      value: id,
+    });
+  }
   return adapter.get(input);
 }
 

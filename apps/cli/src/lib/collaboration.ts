@@ -43,6 +43,7 @@ export type CollaborationRuntime = {
   dispose(): void;
 };
 
+export const DEFAULT_SHORTHAND_COLLABORATION_PROVIDER_TYPE: CollaborationProviderType = 'y-websocket';
 const DEFAULT_SYNC_TIMEOUT_MS = 10_000;
 const SYNC_POLL_INTERVAL_MS = 25;
 const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -138,6 +139,18 @@ export function resolveCollaborationProfile(input: CollaborationInput, sessionId
     onMissing: input.onMissing,
     bootstrapSettlingMs: input.bootstrapSettlingMs,
   };
+}
+
+export function buildShorthandCollaborationInput(params: {
+  url: string;
+  documentId?: string;
+  onMissing?: string;
+  bootstrapSettlingMs?: number;
+}): CollaborationInput {
+  return parseCollaborationInput({
+    providerType: DEFAULT_SHORTHAND_COLLABORATION_PROVIDER_TYPE,
+    ...params,
+  });
 }
 
 export function resolveCollaborationToken(profile: CollaborationProfile): string | undefined {

@@ -140,6 +140,8 @@ export const StructuredContentCommands = Extension.create({
             // surrounding text. The run-split logic below prevents an outer run
             // from wrapping the SDT itself.
             const runType = schema.nodes.run;
+            // When `options.json` is used the caller already controls the full
+            // node structure, so we skip formatting inference intentionally.
             if (runType && !options.json && content.isText) {
               const formattingState = getFormattingStateAtPos(state, from, editor, {
                 storedMarks: state.storedMarks || null,

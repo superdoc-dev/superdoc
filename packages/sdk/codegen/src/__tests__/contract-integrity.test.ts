@@ -396,13 +396,25 @@ describe('Tools policy integrity', () => {
 });
 
 describe('agentVisible param annotation integrity', () => {
-  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
+  // Global params hidden across all operations that define them.
+  const GLOBALLY_HIDDEN_PARAMS = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
+
+  // Per-operation params hidden only on specific operations (generic names
+  // like "type" or "kind" must be scoped to avoid masking accidental hiding).
+  const OPERATION_SCOPED_HIDDEN: Record<string, Set<string>> = {
+    'doc.find': new Set(['type', 'nodeType', 'kind', 'pattern', 'mode', 'caseSensitive']),
+  };
+
+  function isExpectedHidden(operationId: string, paramName: string): boolean {
+    if (GLOBALLY_HIDDEN_PARAMS.has(paramName)) return true;
+    return OPERATION_SCOPED_HIDDEN[operationId]?.has(paramName) ?? false;
+  }
 
   test('expected transport-envelope params are agentVisible: false when present', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const [, op] of Object.entries(contract.operations)) {
+    for (const [id, op] of Object.entries(contract.operations)) {
       for (const param of op.params) {
-        if (EXPECTED_HIDDEN.has(param.name) && 'agentVisible' in param) {
+        if (isExpectedHidden(id, param.name) && 'agentVisible' in param) {
           expect(param.agentVisible).toBe(false);
         }
       }
@@ -411,10 +423,10 @@ describe('agentVisible param annotation integrity', () => {
 
   test('no unexpected params are marked agentVisible: false', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const [, op] of Object.entries(contract.operations)) {
+    for (const [id, op] of Object.entries(contract.operations)) {
       for (const param of op.params) {
         if (param.agentVisible === false) {
-          expect(EXPECTED_HIDDEN.has(param.name)).toBe(true);
+          expect(isExpectedHidden(id, param.name)).toBe(true);
         }
       }
     }

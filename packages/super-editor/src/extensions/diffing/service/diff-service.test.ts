@@ -515,4 +515,29 @@ describe('diff-service tracked apply', () => {
       targetEditor.destroy?.();
     }
   });
+
+  it('rejects v1 payloads that declare v2 header/footer coverage', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Updated document.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const invalidV1Diff = {
+        ...structuredClone(diff),
+        version: 'sd-diff-payload/v1' as const,
+        coverage: {
+          ...V1_COVERAGE,
+          headerFooters: true,
+        },
+      };
+
+      expect(() => applyDiffPayload(baseEditor, invalidV1Diff, { changeMode: 'direct' })).toThrowError(
+        /coverage mismatch/i,
+      );
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
 });

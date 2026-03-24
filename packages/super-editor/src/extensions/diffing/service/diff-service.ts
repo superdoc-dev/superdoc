@@ -339,6 +339,7 @@ export function applyDiffPayload(
 ): ApplyDiffResult {
   validateEngine(diffPayload.engine);
   validatePayloadVersion(diffPayload.version);
+  validateCoverageForPayloadVersion(diffPayload);
   validatePayloadFingerprints(diffPayload);
 
   // Verify base fingerprint matches current document
@@ -812,6 +813,17 @@ function validateCoverageMatch(base: DiffCoverage, target: DiffCoverage): void {
     throw new DiffServiceError(
       'INVALID_INPUT',
       `Coverage mismatch between base and target. Both must use the same coverage configuration.`,
+    );
+  }
+}
+
+function validateCoverageForPayloadVersion(diffPayload: DiffPayload): void {
+  const expectedCoverage = diffPayload.version === PAYLOAD_VERSION_V1 ? V1_COVERAGE : V2_COVERAGE;
+  if (!coverageEquals(diffPayload.coverage, expectedCoverage)) {
+    throw new DiffServiceError(
+      'INVALID_INPUT',
+      `Coverage mismatch for payload version "${diffPayload.version}". ` +
+        `Expected ${JSON.stringify(expectedCoverage)}, got ${JSON.stringify(diffPayload.coverage)}.`,
     );
   }
 }

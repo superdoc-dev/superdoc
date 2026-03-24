@@ -16,6 +16,7 @@ type ReplayPartsEditor = {
   };
   converter?: {
     convertedXml?: Record<string, unknown>;
+    documentModified?: boolean;
   } | null;
 };
 
@@ -105,6 +106,7 @@ export function replayPartsDiff({
   }
 
   if (changedParts.length > 0) {
+    editor.converter.documentModified = true;
     editor.emit?.('partChanged', { parts: changedParts, source: 'diff-replay' });
   }
 

@@ -37,7 +37,9 @@ const initSuperDoc = () => {
       url: sampleDocument,
       isNewFile: true,
     },
-    pagination: false,
+    layoutEngineOptions: {
+      flowMode: 'semantic',
+    },
     colors: USER_COLORS,
     user: generateUserInfo(),
     modules: {

@@ -195,6 +195,28 @@ Pixel-level before/after comparison for documents that failed layout comparison.
 - Then `pnpm test:visual` to see pixel differences for changed docs
 - HTML report output in `devtools/visual-testing/results/`
 
+### Uploading Test Documents to Corpus
+
+Test documents for layout and visual tests are stored in R2. Rendering tests auto-discover all `.docx` files in the corpus — just upload a file and it becomes a test case.
+
+**Interactive** (prompts for issue ID and description):
+```bash
+pnpm corpus:upload ~/Downloads/my-file.docx
+```
+
+**Non-interactive** (for scripts and agents):
+```bash
+pnpm corpus:upload ~/Downloads/my-file.docx --issue SD-1234 --description short-kebab-desc
+```
+
+Files are uploaded to `rendering/<issue-id>-<description>.docx`. After uploading:
+```bash
+pnpm corpus:pull    # sync the new file locally
+pnpm test:visual    # verify it renders
+```
+
+One-time setup: `npx wrangler login` (for R2 access). If the token expires, run it again. Note: wrangler may write to `~/.wrangler/config/` while the corpus scripts read from `~/Library/Preferences/.wrangler/config/` — copy the token if you get auth errors after a fresh login.
+
 ## Brand & Design System
 
 Brand guidelines, voice, and design tokens live in `brand/`.
@@ -208,86 +230,4 @@ Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpe
 - Tokens are organized by layers: primitive (`--sd-color-blue-500`) → UI/document tokens (`--sd-ui-*`, `--sd-comments-*`, etc.) → component usage.
 - Expose UI component-specific variables as `--sd-ui-{component}-*` so consumers can customize via CSS.
 
-**When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).
-
-## SD-2091: chooseTools() Investigation Findings (RESOLVED)
-
-### Root Cause
-
-The `chooseTools()` function wasn't returning mutation tools due to:
-
-1. **Default phase is `'read'`** — excludes `mutation`, `create`, `format` categories
-2. **Wrong budget syntax** — `budget: 100` should be `budget: { maxTools: 100 }`
-3. **Default maxTools is 12** — limits tools even when phase allows more
-
-### How chooseTools() Works
-
-**Location**: `packages/sdk/langs/node/src/tools.ts`
-
-The function filters tools based on phase, then applies budget limits:
-
-| Phase | Included Categories | Excluded Categories |
-|-------|---------------------|---------------------|
-| `read` (default) | introspection, query | mutation, create, format, comments, trackChanges, session |
-| `mutate` | query, mutation, format, comments, create | session |
-| `locate` | query | mutation, create, format, comments, trackChanges, session |
-| `review` | query, trackChanges, comments | mutation, create, format, session |
-
-**Default budgets**: intent=12, operation=16 tools max.
-
-### Correct Usage for Mutation Tools
-
-**IMPORTANT:** The npm SDK (v1.0.0-alpha.44) has a different API than local development.
-
-```typescript
-// npm SDK v1.0.0-alpha.44 API
-const { tools, selected, meta } = await chooseTools({
-  provider: 'openai',
-  mode: 'all',                          // 'essential' (default) or 'all'
-  groups: ['core', 'format', 'create'], // Additional groups to include
-  includeDiscoverTool: false,           // Whether to include discover_tools meta-tool
-});
-
-// Filter out LLM-incompatible tools manually
-const EXCLUDED = new Set(['apply_mutations', 'query_match', 'preview_mutations']);
-const filteredTools = tools.filter((t) => !EXCLUDED.has(t.function.name));
-```
-
-**Available groups:** `core`, `format`, `create`, `tables`, `sections`, `lists`, `comments`, `trackChanges`, `toc`, `images`, `history`, `session`
-
-**Note:** The local dev version has more sophisticated options (`taskContext.phase`, `budget`, `policy.forceInclude/forceExclude`) that aren't in the npm package yet.
-
-### Available Tools by Category (intent profile)
-
-| Category | Tools |
-|----------|-------|
-| mutation | `insert_content`, `replace_content`, `delete_content`, `apply_mutations` |
-| create | `create_paragraph`, `create_heading`, `create_section_break`, `create_table`, `create_table_of_contents`, `create_image` |
-| query | `find_content`, `get_node`, `get_node_by_id`, `get_document_text`, `get_document_markdown`, `get_document_html`, `get_document_info`, `query_match`, `preview_mutations` |
-| format | `format_bold`, `format_italic`, `format_underline`, + 30 more |
-
-### Tools With Complex Schemas (LLM Incompatible)
-
-These tools have discriminated union schemas that LLMs cannot construct correctly:
-
-| Tool | Issue |
-|------|-------|
-| `apply_mutations` | Complex `steps` array with discriminated union variants |
-| `query_match` | Complex `select` parameter with multiple schema variants |
-| `preview_mutations` | Same as apply_mutations |
-
-Use `forceExclude` to remove these from LLM tool sets.
-
-### Files Changed
-
-**examples/collaboration/superdoc-yjs/**
-- `agent.ts` — Fixed `chooseTools()` configuration with correct budget syntax and forceInclude/forceExclude
-- `package.json` — Uses npm packages (`superdoc@^1.18.2`, `@superdoc-dev/sdk@^1.0.0-alpha.44`)
-- `src/App.vue` — Chat sidebar for agent communication
-- `README.md` — Customer documentation
-
-### Remaining Work
-
-1. **Fix tool schema generation** for `apply_mutations` and `query_match` to be LLM-compatible
-2. **Consider adding wrapper tools** with simpler schemas for complex operations
-3. **Document chooseTools() gotchas** in SDK documentation
+**When writing copy or content:** see `brand.md` for the full brand identity — strategy, voice, and visual guidelines. Product name is always **SuperDoc** (capital S, capital D).

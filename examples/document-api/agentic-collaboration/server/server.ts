@@ -67,22 +67,12 @@ const handleLoad = async (params: CollaborationParams): Promise<Uint8Array> => {
   return encodeStateAsUpdate(ydoc);
 };
 
-const handleOnChange = async (params: CollaborationParams): Promise<void> => {
-  // Quiet - too noisy
-};
-
-const handleAutoSave = async (params: CollaborationParams): Promise<void> => {
-  // Quiet - too noisy
-};
-
 const SuperDocCollaboration = new CollaborationBuilder()
   .withName('SuperDoc Collaboration service')
   .withDebounce(2000)
   .onConfigure(handleConfig)
   .onLoad(handleLoad)
   .onAuthenticate(handleAuth)
-  .onChange(handleOnChange)
-  .onAutoSave(handleAutoSave)
   .build();
 
 // ============================================================================

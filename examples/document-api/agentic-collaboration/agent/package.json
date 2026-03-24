@@ -8,9 +8,9 @@
     "start": "tsx agent.ts"
   },
   "dependencies": {
-    "@superdoc-dev/sdk": "^1.0.0",
+    "@superdoc-dev/sdk": "^1.1.0",
     "dotenv": "^16.4.7",
-    "openai": "^4.78.0",
+    "openai": "^6.32.0",
     "ws": "^8.18.0",
     "yjs": "13.6.19"
   },

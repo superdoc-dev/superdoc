@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:agent\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"sleep 2 && npm run dev:agent\"",
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
     "dev:agent": "npm run dev --prefix agent",

@@ -9,6 +9,8 @@ type MessageHandler = (userMessage: string) => Promise<string>;
 export class Chat {
   private url: string;
   private ws!: WebSocket;
+  private processing = false;
+  private queue: string[] = [];
 
   constructor(url: string) {
     this.url = url;
@@ -26,19 +28,31 @@ export class Chat {
     this.ws.on('message', async (data) => {
       const msg = JSON.parse(data.toString());
       if (msg.type === 'message' && msg.message?.role === 'user') {
-        this.setStatus('thinking');
-        try {
-          const response = await handler(msg.message.content);
-          this.send(response);
-        } catch (err) {
-          console.error('[Agent] Error:', err);
-          this.send('Sorry, I encountered an error.');
-        }
-        this.setStatus('ready');
+        this.queue.push(msg.message.content);
+        this.processQueue(handler);
       }
     });
     this.setStatus('ready');
     return this;
+  }
+
+  private async processQueue(handler: MessageHandler): Promise<void> {
+    if (this.processing || this.queue.length === 0) return;
+
+    this.processing = true;
+    while (this.queue.length > 0) {
+      const content = this.queue.shift()!;
+      this.setStatus('thinking');
+      try {
+        const response = await handler(content);
+        this.send(response);
+      } catch (err) {
+        console.error('[Agent] Error:', err);
+        this.send('Sorry, I encountered an error.');
+      }
+    }
+    this.setStatus('ready');
+    this.processing = false;
   }
 
   send(content: string): this {

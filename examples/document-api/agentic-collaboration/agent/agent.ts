@@ -46,14 +46,16 @@ const conversationHistory: OpenAI.ChatCompletionMessageParam[] = [
   { role: 'system', content: await getSystemPrompt() },
 ];
 
+const MAX_ITERATIONS = 20;
+
 // Agent loop: process a user message and return a response
 async function processMessage(userMessage: string): Promise<string> {
   conversationHistory.push({ role: 'user', content: userMessage });
   const messages: OpenAI.ChatCompletionMessageParam[] = [...conversationHistory];
 
-  while (true) {
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages,
       tools: tools as OpenAI.ChatCompletionTool[],
     });
@@ -79,6 +81,10 @@ async function processMessage(userMessage: string): Promise<string> {
       });
     }
   }
+
+  const errorMsg = 'I ran into an issue processing your request. Please try again.';
+  conversationHistory.push({ role: 'assistant', content: errorMsg });
+  return errorMsg;
 }
 
 // Connect to chat and serve messages

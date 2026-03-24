@@ -3546,6 +3546,61 @@ describe('DomPainter', () => {
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
     });
 
+    it('applies paragraph rtl direction inside footer content', () => {
+      const footerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'footer-rtl',
+        runs: [
+          { text: 'الإصدار', fontFamily: 'Arial', fontSize: 12 },
+          { text: ' ', fontFamily: 'Arial', fontSize: 12 },
+          { text: '<1.0>', fontFamily: 'Arial', fontSize: 12 },
+        ],
+        attrs: {
+          alignment: 'center',
+          direction: 'rtl',
+          rtl: true,
+        },
+      };
+      const footerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 5,
+            width: 120,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 10,
+          },
+        ],
+        totalHeight: 10,
+      };
+      const footerFragment = {
+        kind: 'para' as const,
+        blockId: 'footer-rtl',
+        fromLine: 0,
+        toLine: 1,
+        x: 0,
+        y: 0,
+        width: 200,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, footerBlock],
+        measures: [measure, footerMeasure],
+        footerProvider: () => ({ fragments: [footerFragment], height: 14 }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 2 }] }, mount);
+
+      const footerFragmentEl = mount.querySelector('.superdoc-page-footer .superdoc-fragment') as HTMLElement;
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.getAttribute('dir')).toBe('rtl');
+      expect(footerFragmentEl.style.direction).toBe('rtl');
+    });
+
     it('renders page-relative behindDoc header media at absolute page Y', () => {
       const headerImageBlock: FlowBlock = {
         kind: 'image',
@@ -3597,7 +3652,7 @@ describe('DomPainter', () => {
       expect(behindDocEl.style.left).toBe('42px');
     });
 
-    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+    it('renders footer page-relative media using normalized band-local coordinates', () => {
       const footerImageBlock: FlowBlock = {
         kind: 'image',
         id: 'footer-page-relative-img',
@@ -3613,6 +3668,8 @@ describe('DomPainter', () => {
         width: 20,
         height: 20,
       };
+      // fragment.y = 25 represents a footer-band-local coordinate
+      // (produced by normalizeFragmentsForRegion in the layout engine)
       const footerFragment: Fragment = {
         kind: 'image',
         blockId: 'footer-page-relative-img',
@@ -3623,7 +3680,7 @@ describe('DomPainter', () => {
         isAnchored: true,
       };
 
-      const footerOffset = 350;
+      const footerOffset = 400;
       const footerHeight = 80;
       const footerContentHeight = 30;
 
@@ -3638,15 +3695,31 @@ describe('DomPainter', () => {
         }),
       });
 
-      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+      painter.paint(
+        {
+          ...layout,
+          pages: [
+            {
+              ...layout.pages[0],
+              number: 1,
+              margins: { left: 0, right: 0, bottom: 100, footer: 20 },
+            },
+          ],
+        },
+        mount,
+      );
 
       const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
       const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
 
       expect(footerFragmentEl).toBeTruthy();
-      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      // Footer container is at effectiveOffset (400px)
+      expect(footerEl.style.top).toBe(`${footerOffset}px`);
+      // Fragment uses band-local Y + container offset from band origin
+      // The exact top depends on getDecorationAnchorPageOriginY, but the
+      // key invariant is that the absolute page position is correct.
       const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
-      expect(renderedPageTop).toBe(footerFragment.y);
+      expect(renderedPageTop).toBe(footerOffset + footerFragment.y);
     });
 
     it('preserves bold styling on page number tokens in DOM', () => {
@@ -6080,6 +6153,102 @@ describe('DomPainter', () => {
       });
     });
   });
+
+  describe('RTL paragraph rendering', () => {
+    const rtlBlock = (attrs: Record<string, unknown>): FlowBlock => ({
+      kind: 'paragraph',
+      id: 'rtl-block',
+      runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: { direction: 'rtl' as const, rtl: true, ...attrs },
+    });
+
+    const rtlMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 80, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const rtlLayout: Layout = {
+      pageSize: { w: 300, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'rtl-block', fromLine: 0, toLine: 1, x: 0, y: 0, width: 200 }],
+        },
+      ],
+    };
+
+    it('sets dir="rtl" and defaults text-align to right', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({})], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('right');
+    });
+
+    it('preserves explicit left alignment on RTL paragraphs', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'left' })], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('left');
+    });
+
+    it('uses text-align right for RTL justified paragraphs', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'justify' })], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('right');
+    });
+
+    it('does not use absolute positioning for RTL lines with tab segments', () => {
+      const tabBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'rtl-block',
+        runs: [
+          { text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
+          { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: { direction: 'rtl' as const, rtl: true },
+      };
+
+      const tabMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 4,
+            width: 160,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+            segments: [
+              { runIndex: 0, fromChar: 0, toChar: 5, width: 60 },
+              { runIndex: 1, fromChar: 0, toChar: 0, width: 40, x: 60 },
+              { runIndex: 2, fromChar: 0, toChar: 4, width: 60, x: 100 },
+            ],
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const painter = createDomPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      const spans = Array.from(line.querySelectorAll('span'));
+      const hasAbsolute = spans.some((s) => s.style.position === 'absolute');
+      expect(hasAbsolute).toBe(false);
+    });
+  });
 });
 
 describe('ImageFragment (block-level images)', () => {
@@ -6314,10 +6483,10 @@ describe('URL sanitization security', () => {
     expect(sanitizeUrl('#top')).toBe('#top');
   });
 
-  it('blocks relative URLs', () => {
-    expect(sanitizeUrl('/path/to/page')).toBeNull();
-    expect(sanitizeUrl('./relative/path')).toBeNull();
-    expect(sanitizeUrl('../parent/path')).toBeNull();
+  it('resolves relative URLs against page origin', () => {
+    expect(sanitizeUrl('/path/to/page')).toBe(`${window.location.origin}/path/to/page`);
+    expect(sanitizeUrl('./relative/path')).toBe(`${window.location.origin}/relative/path`);
+    expect(sanitizeUrl('../parent/path')).toBe(`${window.location.origin}/parent/path`);
   });
 
   it('handles empty and whitespace-only URLs', () => {

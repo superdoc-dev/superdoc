@@ -26,7 +26,7 @@ const describeIfRealCanvas = usingStub ? describe.skip : describe;
 const IS_CI = Boolean(process.env.CI);
 // Full-suite parallel runs cause significant CPU contention locally;
 // CI targets (500/700/1000 ms) are the real regression gate.
-const NON_CI_LATENCY_VARIANCE_FACTOR = 4;
+const NON_CI_LATENCY_VARIANCE_FACTOR = 8;
 const LATENCY_TARGETS = IS_CI
   ? {
       // CI environments are slower and more variable; use generous buffers

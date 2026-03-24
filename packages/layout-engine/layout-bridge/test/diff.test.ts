@@ -98,6 +98,51 @@ describe('computeDirtyRegions', () => {
     expect(result.firstDirtyIndex).toBe(0);
   });
 
+  it('detects underline changes', () => {
+    const prev = [
+      {
+        kind: 'paragraph' as const,
+        id: '0-paragraph',
+        runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12, underline: { style: 'single' as const } }],
+      },
+    ];
+    const next = [
+      {
+        kind: 'paragraph' as const,
+        id: '0-paragraph',
+        runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+      },
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects hyperlink changes', () => {
+    const prev = [
+      {
+        kind: 'paragraph' as const,
+        id: '0-paragraph',
+        runs: [
+          {
+            text: 'Hello',
+            fontFamily: 'Arial',
+            fontSize: 12,
+            link: { href: 'https://example.com' } as any,
+          },
+        ],
+      },
+    ];
+    const next = [
+      {
+        kind: 'paragraph' as const,
+        id: '0-paragraph',
+        runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+      },
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
   it('treats identical fontSize and fontFamily as stable', () => {
     const prev = [
       {

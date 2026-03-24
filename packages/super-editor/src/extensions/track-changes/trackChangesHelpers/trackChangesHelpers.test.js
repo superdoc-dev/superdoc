@@ -18,6 +18,7 @@ import {
   replaceAroundStep,
   documentHelpers,
 } from './index.js';
+import { hasAnyMark } from '@tests/helpers/helpers.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImporter.js';
@@ -87,6 +88,17 @@ describe('trackChangesHelpers', () => {
 
     const inlineNodes = documentHelpers.findInlineNodes(doc, true);
     expect(inlineNodes.every(({ node }) => node.isInline)).toBe(true);
+
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-any',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const markedDoc = createDocWithText('abc', [insertMark]);
+
+    expect(hasAnyMark(markedDoc, TrackInsertMarkName)).toBe(true);
+    expect(hasAnyMark(markedDoc, TrackDeleteMarkName)).toBe(false);
   });
 
   it('parseFormatList gracefully handles malformed input', () => {
@@ -397,6 +409,26 @@ describe('trackChangesHelpers', () => {
     const meta = newTr.getMeta(TrackChangesBasePluginKey);
     expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
     expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
+  });
+
+  it('addMarkStep tracks hyperlink marks so comment summaries can identify hyperlink changes', () => {
+    const state = createState(createDocWithText('website'));
+    const linkMark = schema.marks.link.create({ href: 'https://example.com', text: 'website' });
+    const step = new AddMarkStep(1, 8, linkMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'link', attrs: linkMark.attrs }]);
   });
 
   it('addMarkStep does not include unrelated marks in before (SD-2077)', () => {

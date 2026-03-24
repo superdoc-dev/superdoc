@@ -133,6 +133,12 @@ vi.mock('../../Editor.js', () => {
           focus: function () {
             // Plain function that can be wrapped
           },
+          hasFocus: function () {
+            return domElement === domElement.ownerDocument.activeElement;
+          },
+          domObserver: {
+            suppressSelectionUpdates: vi.fn(),
+          },
           dispatch: vi.fn(),
         },
         options: {

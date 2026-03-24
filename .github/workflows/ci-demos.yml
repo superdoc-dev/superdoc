@@ -4,10 +4,50 @@ on:
   pull_request:
     paths:
       - 'demos/**'
+      - 'packages/superdoc/**'
+      - 'packages/react/**'
+      - 'packages/super-editor/**'
+      - 'packages/layout-engine/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   workflow_dispatch:
 
 jobs:
-  validate:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build superdoc
+        run: pnpm build:superdoc
+
+      - name: Install Playwright
+        working-directory: demos/__tests__
+        run: npx playwright install chromium
+
+      - name: Cache workspace
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: demos-workspace-${{ github.sha }}
+
+  smoke-test:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,21 +72,25 @@ jobs:
           - vanilla
           - vue
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
         with:
-          node-version: '20'
-
-      - name: Install demo dependencies
-        working-directory: demos/${{ matrix.demo }}
-        run: npm install
-
-      - name: Install smoke test dependencies
-        working-directory: demos/__tests__
-        run: npm install && npx playwright install chromium
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: demos-workspace-${{ github.sha }}
 
       - name: Run smoke test
         working-directory: demos/__tests__
         run: DEMO=${{ matrix.demo }} npx playwright test
+
+  validate:
+    if: always()
+    needs: [smoke-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi

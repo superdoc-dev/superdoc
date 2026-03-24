@@ -210,13 +210,13 @@ onBeforeUnmount(() => {
 }
 
 .sd-tooltip-content {
-  background-color: #262626;
-  color: #fff;
-  font-size: 14px;
+  background-color: var(--sd-ui-tooltip-bg, #262626);
+  color: var(--sd-ui-tooltip-text, #fff);
+  font-size: var(--sd-ui-font-size-400, 14px);
   line-height: 1.3;
-  border-radius: 6px;
+  border-radius: var(--sd-ui-tooltip-radius, 6px);
   padding: 8px 14px;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--sd-ui-tooltip-shadow, 0 3px 12px rgba(0, 0, 0, 0.28));
   pointer-events: auto;
   white-space: nowrap;
 }
@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
   bottom: -5px;
   width: 10px;
   height: 10px;
-  background-color: #262626;
+  background-color: var(--sd-ui-tooltip-bg, #262626);
   transform: translateX(-50%) rotate(45deg);
 }
 

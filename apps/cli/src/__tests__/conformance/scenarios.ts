@@ -2084,15 +2084,19 @@ export const SUCCESS_SCENARIOS = {
   'doc.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-insert-success');
     const docPath = await harness.copyFixtureDoc('doc-insert');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    const collapsed = { ...target, range: { start: target.range.start, end: target.range.start } };
+    const textRange = await harness.firstTextRange(docPath, stateDir);
+    const selectionTarget = {
+      kind: 'selection',
+      start: { kind: 'text', blockId: textRange.blockId, offset: textRange.range.start },
+      end: { kind: 'text', blockId: textRange.blockId, offset: textRange.range.start },
+    };
     return {
       stateDir,
       args: [
         'insert',
         docPath,
         '--target-json',
-        JSON.stringify(collapsed),
+        JSON.stringify(selectionTarget),
         '--value',
         'CONFORMANCE_INSERT',
         '--out',
@@ -2955,7 +2959,7 @@ export const SUCCESS_SCENARIOS = {
     '--destination-json',
     JSON.stringify({ kind: 'documentEnd' }),
   ]),
-  'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
+  'doc.tables.split': tableMutationScenario('tables.split', ['--row-index', '1']),
   'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
   'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
   'doc.tables.insertRow': tableMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),

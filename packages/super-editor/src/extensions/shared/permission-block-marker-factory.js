@@ -1,4 +1,4 @@
-import { Node } from '@core/index.js';
+import { Node } from '@core/Node.js';
 
 export const createPermissionBlockMarkerNode = ({ name, attributes }) =>
   Node.create({

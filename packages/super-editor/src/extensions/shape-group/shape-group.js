@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { ShapeGroupView } from './ShapeGroupView';
 
 export const ShapeGroup = Node.create({

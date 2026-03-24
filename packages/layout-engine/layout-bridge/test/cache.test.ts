@@ -941,6 +941,103 @@ describe('MeasureCache', () => {
         expect(cache.get(table2, 800, 600)).toBeUndefined();
       });
 
+      it('invalidates cache when underline changes in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-underline',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12, underline: { style: 'single' } }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-underline',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when hyperlink mark changes in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-link',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [
+                      {
+                        text: 'Hello',
+                        fontFamily: 'Arial',
+                        fontSize: 12,
+                        link: { href: 'https://example.com' } as any,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-link',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
       it('creates cache hit when table formatting is identical', () => {
         const table1: TableBlock = {
           kind: 'table',

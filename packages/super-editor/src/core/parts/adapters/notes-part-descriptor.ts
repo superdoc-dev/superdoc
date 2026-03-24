@@ -156,14 +156,29 @@ export function textToNoteOoxmlParagraphs(text: string): OoxmlElement[] {
 /**
  * Insert a footnote/endnote reference marker run as the first run of the
  * first paragraph. Word expects this marker in note content.
+ *
+ * When the content starts with a non-paragraph element (e.g. a table),
+ * the function finds the first `w:p` in the array. If no paragraph
+ * exists at all, no reference run is inserted — the content is left as-is.
  */
-function ensureFootnoteRefRun(paragraphs: OoxmlElement[], childElementName: string): void {
-  if (paragraphs.length === 0) return;
+export function ensureFootnoteRefRun(elements: OoxmlElement[], childElementName: string): void {
+  if (elements.length === 0) return;
+
+  // Find the first w:p element — may not be at index 0 if the note
+  // starts with a table or other block-level content.
+  const firstParagraph = elements.find((el) => el.name === 'w:p');
+  if (!firstParagraph) return;
+
+  if (!firstParagraph.elements) firstParagraph.elements = [];
 
   const refName = childElementName === 'w:footnote' ? 'w:footnoteRef' : 'w:endnoteRef';
   const styleName = childElementName === 'w:footnote' ? 'FootnoteReference' : 'EndnoteReference';
-  const firstParagraph = paragraphs[0];
-  if (!firstParagraph.elements) firstParagraph.elements = [];
+
+  // Check if the ref run already exists to avoid duplication
+  const alreadyHasRef = firstParagraph.elements.some(
+    (el) => el.name === 'w:r' && el.elements?.some((child) => child.name === refName),
+  );
+  if (alreadyHasRef) return;
 
   const refRun: OoxmlElement = {
     type: 'element',

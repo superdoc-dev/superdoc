@@ -6,8 +6,6 @@ description: Set keep-with-next, keep-lines-together, and widow/orphan control f
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set keep-with-next, keep-lines-together, and widow/orphan control flags.
@@ -26,21 +24,21 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1 (target, keepNext)
+### Variant 1 (required: keepNext)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `keepNext` | boolean | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2 (target, keepLines)
+### Variant 2 (required: keepLines)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `keepLines` | boolean | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3 (target, widowControl)
+### Variant 3 (required: widowControl)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

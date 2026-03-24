@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import { executeBlocksDelete, type BlocksAdapter } from './blocks.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 import { DocumentApiValidationError } from '../errors.js';
@@ -9,7 +9,7 @@ function makeAdapter(result?: BlocksDeleteResult): BlocksAdapter {
     deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
   };
   return {
-    delete: vi.fn(() => result ?? defaultResult),
+    delete: mock(() => result ?? defaultResult),
   };
 }
 

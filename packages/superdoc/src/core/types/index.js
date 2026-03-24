@@ -43,6 +43,12 @@
 /** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
 
 /**
+ * @typedef {Object} UpgradeToCollaborationOptions Options for `upgradeToCollaboration()`
+ * @property {import('yjs').Doc} ydoc The target Yjs document to seed and connect to
+ * @property {CollaborationProvider} provider The collaboration provider to use
+ */
+
+/**
  * Context passed to a link popover resolver when a link is clicked.
  * @typedef {Object} LinkPopoverContext
  * @property {Editor} editor The editor instance

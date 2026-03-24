@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackedFormatMarkNames } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { hasMatchingMark, markSnapshotMatchesStepMark, upsertMarkSnapshotByType } from './markSnapshotHelpers.js';
@@ -36,9 +36,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
     });
     newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
-
-    if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(liveMarksBeforeRemove, step.mark)) {
+    if (TrackedFormatMarkNames.includes(step.mark.type.name) && hasMatchingMark(liveMarksBeforeRemove, step.mark)) {
       const formatChangeMark = liveMarksBeforeRemove.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];

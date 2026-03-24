@@ -37,7 +37,8 @@
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 463
  */
 
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
 
 /**

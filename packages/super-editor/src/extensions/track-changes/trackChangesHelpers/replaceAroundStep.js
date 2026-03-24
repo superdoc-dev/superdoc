@@ -94,6 +94,23 @@ export const replaceAroundStep = ({
     return;
   }
 
+  // Detect node-markup-change steps (setNodeMarkup and setBlockType both
+  // produce this same ReplaceAroundStep shape — they can't be distinguished
+  // at the step level). Used here to let paragraph style changes through in
+  // suggesting mode (e.g. Normal → Heading1 via setNodeMarkup).
+  // step.insert === 1 excludes lift() operations (insert === 0).
+  // Note: setBlockType is not triggered via UI in suggesting mode, but if
+  // it were, it would also bypass tracking. SD-2191 will add proper tracked
+  // change marks for these operations.
+  const isNodeMarkupChange =
+    step.structure && step.insert === 1 && step.gapFrom === step.from + 1 && step.gapTo === step.to - 1;
+
+  if (isNodeMarkupChange) {
+    newTr.step(step);
+    map.appendMap(step.getMap());
+    return;
+  }
+
   const inputType = tr.getMeta('inputType');
   const isBackspace = inputType === 'deleteContentBackward';
 

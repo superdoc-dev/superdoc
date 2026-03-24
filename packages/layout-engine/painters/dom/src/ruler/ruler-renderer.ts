@@ -155,7 +155,7 @@ function createTickElement(tick: RulerTick, doc: Document): HTMLElement {
   `;
 
   // Add label for main ticks
-  if (tick.label !== undefined) {
+  if (tick.label !== undefined && tick.label !== 0) {
     const label = doc.createElement('span');
     label.className = RULER_CLASS_NAMES.label;
     label.textContent = String(tick.label);

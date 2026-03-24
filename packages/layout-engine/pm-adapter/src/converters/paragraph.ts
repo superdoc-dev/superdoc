@@ -8,7 +8,15 @@
  */
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock, TrackedChangeMeta } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ParagraphBlock,
+  Run,
+  TextRun,
+  SdtMetadata,
+  DrawingBlock,
+  TrackedChangeMeta,
+} from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -16,6 +24,7 @@ import type {
   ParagraphToFlowBlocksParams,
   BlockIdGenerator,
   PositionMap,
+  ParagraphFont,
 } from '../types.js';
 import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
@@ -25,7 +34,7 @@ import { trackedChangesCompatible, applyMarksToRun, collectTrackedChangeFromMark
 import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { computeRunAttrs } from '../attributes/paragraph.js';
+import { computeRunAttrs, hasExplicitParagraphRunProperties } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
@@ -507,6 +516,7 @@ export function paragraphToFlowBlocks({
   converterContext,
   enableComments = true,
   stableBlockId,
+  previousParagraphFont,
 }: ParagraphToFlowBlocksParams): FlowBlock[] {
   // Use stable ID if provided, otherwise fall back to generator
   const baseBlockId = stableBlockId ?? nextBlockId('paragraph');
@@ -522,7 +532,11 @@ export function paragraphToFlowBlocks({
     typeof para.attrs?.paragraphProperties === 'object' && para.attrs.paragraphProperties !== null
       ? (para.attrs.paragraphProperties as ParagraphProperties)
       : {};
-  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(para, converterContext);
+  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(
+    para,
+    converterContext,
+    previousParagraphFont,
+  );
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
@@ -532,7 +546,17 @@ export function paragraphToFlowBlocks({
       : undefined;
   const hasSectPr = Boolean(rawParagraphProps?.sectPr);
   const isSectPrMarker = hasSectPr || paraAttrs.pageBreakSource === 'sectPr';
-  const { defaultFont, defaultSize } = extractDefaultFontProperties(converterContext, resolvedParagraphProperties);
+
+  // Extract font data for list items
+  const extracted = extractDefaultFontProperties(converterContext, resolvedParagraphProperties);
+  const usePreviousFont =
+    previousParagraphFont != null &&
+    resolvedParagraphProperties.numberingProperties != null &&
+    !hasExplicitParagraphRunProperties(paragraphProps);
+  const defaultFont =
+    usePreviousFont && previousParagraphFont.fontFamily ? previousParagraphFont.fontFamily : extracted.defaultFont;
+  const defaultSize =
+    usePreviousFont && previousParagraphFont.fontSize ? previousParagraphFont.fontSize : extracted.defaultSize;
 
   if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
@@ -913,6 +937,32 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
 };
 
 /**
+ * Returns the font of the last paragraph block's first run in the given blocks array.
+ * Used to pass previous paragraph font into paragraphToFlowBlocks for new list items without explicit run properties.
+ *
+ * Only returns when the run has both valid fontFamily (non-empty string) and fontSize (positive finite number).
+ * If the latest paragraph's first run has partial or empty font info, the loop continues to the previous
+ * paragraph so callers never receive a partial object and can fall back to defaults consistently.
+ */
+export function getLastParagraphFont(blocks: FlowBlock[]): ParagraphFont | undefined {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
+    if (block.kind === 'paragraph') {
+      const para = block as ParagraphBlock;
+      const firstRun = para.runs?.[0];
+      if (!firstRun) continue;
+      const run = firstRun as { fontFamily?: string; fontSize?: number };
+      const fontFamily = typeof run.fontFamily === 'string' ? run.fontFamily.trim() : '';
+      const fontSize = typeof run.fontSize === 'number' && Number.isFinite(run.fontSize) ? run.fontSize : NaN;
+      if (fontFamily.length > 0 && fontSize > 0) {
+        return { fontFamily, fontSize };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Handle paragraph nodes.
  * Special handling: Emits section breaks BEFORE processing the paragraph
  * if this paragraph starts a new section.
@@ -971,6 +1021,12 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
     if (cached) {
       // Cache hit: reuse blocks with position adjustment
+      // Cache hit reuses previously-converted blocks as-is. That means we don't
+      // recompute previousParagraphFont (used for empty list items without
+      // explicit run properties). If the user changes the font on the prior
+      // paragraph (e.g. paragraph A), an empty list item (paragraph B) can keep
+      // the old font until the cache entry is invalidated. Narrow case, but
+      // avoids confusing incremental-edit behavior.
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
       applyTrackedGhostListAdjustments(node, reusedBlocks, context);
@@ -987,6 +1043,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     }
 
     // Cache miss: convert normally, then store using pre-computed nodeJson
+    const previousParagraphFont = getLastParagraphFont(blocks);
     const paragraphBlocks = paragraphToFlowBlocks({
       para: node,
       nextBlockId,
@@ -999,6 +1056,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       converterContext,
       enableComments,
       stableBlockId: prefixedStableId,
+      previousParagraphFont,
     });
     applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
 
@@ -1013,6 +1071,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     return;
   }
 
+  const previousParagraphFont = getLastParagraphFont(blocks);
   const paragraphBlocks = paragraphToFlowBlocks({
     para: node,
     nextBlockId,
@@ -1025,6 +1084,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     converterContext,
     enableComments,
     stableBlockId: prefixedStableId ?? undefined,
+    previousParagraphFont,
   });
   applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
 

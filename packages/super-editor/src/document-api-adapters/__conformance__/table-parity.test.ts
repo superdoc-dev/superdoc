@@ -15,9 +15,11 @@ import {
   tablesSetStyleAdapter,
   tablesClearStyleAdapter,
   tablesSetStyleOptionAdapter,
+  tablesApplyStyleAdapter,
   tablesSetCellSpacingAdapter,
   tablesClearCellSpacingAdapter,
   tablesSetBorderAdapter,
+  tablesSetTableOptionsAdapter,
   tablesGetPropertiesAdapter,
 } from '../tables-adapter.js';
 
@@ -451,6 +453,24 @@ describe('table setter/getter parity', () => {
     });
   });
 
+  describe('applyStyle → tblLook materialization parity', () => {
+    it('seeds Word default tblLook values before merging styleOptions onto a table with no explicit tblLook', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+
+      tablesApplyStyleAdapter(editor, { nodeId: 'table-1', styleOptions: { headerRow: false } });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook).toEqual({
+        firstRow: false,
+        lastRow: false,
+        firstColumn: true,
+        lastColumn: false,
+        noHBand: false,
+        noVBand: true,
+      });
+    });
+  });
+
   describe('setCellSpacing → canonical key', () => {
     it('writes tableCellSpacing (not tblCellSpacing)', () => {
       const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
@@ -575,16 +595,16 @@ describe('getProperties reads from tableProperties', () => {
     expect(result.autoFitMode).toBe('fitContents');
   });
 
-  it('reads styleOptions from tblLook', () => {
+  it('reads styleOptions from tblLook — emits only explicitly stored flags', () => {
     const { editor } = makeTableEditorWithProps({
       tblLook: { firstRow: true, lastRow: false, noHBand: false, noVBand: true },
     });
     const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
+    // Only flags explicitly stored in tblLook are emitted.
+    // firstColumn and lastColumn are absent from the OOXML, so they are omitted.
     expect(result.styleOptions).toEqual({
       headerRow: true,
       lastRow: false,
-      firstColumn: false,
-      lastColumn: false,
       bandedRows: true,
       bandedColumns: false,
     });
@@ -597,5 +617,52 @@ describe('getProperties reads from tableProperties', () => {
     const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
     expect(result.styleOptions).toHaveProperty('lastRow', true);
     expect(result.styleOptions).not.toHaveProperty('totalRow');
+  });
+
+  it('maps logical marginStart/marginEnd into defaultCellMargins', () => {
+    const { editor } = makeTableEditorWithProps({
+      cellMargins: {
+        marginTop: { value: 100, type: 'dxa' },
+        marginStart: { value: 200, type: 'dxa' },
+        marginEnd: { value: 300, type: 'dxa' },
+        marginBottom: { value: 400, type: 'dxa' },
+      },
+    });
+
+    const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
+
+    expect(result.defaultCellMargins).toEqual({
+      topPt: 5,
+      rightPt: 15,
+      bottomPt: 20,
+      leftPt: 10,
+    });
+  });
+
+  it('returns NO_OP from setTableOptions when logical margins already match the requested values', () => {
+    const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps({
+      cellMargins: {
+        marginTop: { value: 100, type: 'dxa' },
+        marginStart: { value: 200, type: 'dxa' },
+        marginEnd: { value: 300, type: 'dxa' },
+        marginBottom: { value: 400, type: 'dxa' },
+      },
+    });
+
+    const result = tablesSetTableOptionsAdapter(editor, {
+      nodeId: 'table-1',
+      defaultCellMargins: {
+        topPt: 5,
+        rightPt: 15,
+        bottomPt: 20,
+        leftPt: 10,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('NO_OP');
+    }
+    expect(getSetNodeMarkupCalls()).toHaveLength(0);
   });
 });

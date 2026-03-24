@@ -28,7 +28,7 @@ jobs:
           ref: ${{ github.event.inputs.ref || github.ref }}
           token: ${{ steps.generate_token.outputs.token }}
 
-      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v6
         with:

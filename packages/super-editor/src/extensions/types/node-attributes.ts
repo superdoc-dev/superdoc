@@ -159,6 +159,7 @@ export interface ParagraphProperties {
   tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
+  rightToLeft?: boolean;
 }
 
 /** List rendering metadata computed at runtime */
@@ -1069,6 +1070,8 @@ export interface DocumentPartObjectAttrs extends BlockNodeAttributes {
   docPartGallery?: unknown;
   /** Whether document part is unique */
   docPartUnique?: boolean;
+  /** @internal Original wrapper paragraph attrs for export preservation */
+  wrapperParagraph?: unknown;
 }
 
 // ============================================

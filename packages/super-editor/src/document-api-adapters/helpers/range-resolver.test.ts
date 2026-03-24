@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   encodeV3Ref: vi.fn(() => 'text:mock-encoded'),
   getRevision: vi.fn(() => '0'),
   checkRevision: vi.fn(),
+  resolveStoryRuntime: vi.fn(),
 }));
 
 vi.mock('./index-cache.js', () => ({
@@ -38,6 +39,13 @@ vi.mock('../plan-engine/revision-tracker.js', () => ({
 vi.mock('./node-address-resolver.js', () => ({
   isTextBlockCandidate: (candidate: { node: { inlineContent?: boolean; isTextblock?: boolean } }) =>
     Boolean(candidate.node?.inlineContent || candidate.node?.isTextblock),
+}));
+
+// Story runtime resolution: return a passthrough body runtime wrapping the
+// editor that was passed in. Tests that exercise non-body story targeting
+// should override this mock as needed.
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+  resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
 // ---------------------------------------------------------------------------
@@ -105,6 +113,15 @@ function encodeTestRef(rev: string, segments: Array<{ blockId: string; start: nu
   return `text:${btoa(JSON.stringify({ v: 3, rev, segments }))}`;
 }
 
+/** Encodes a V4 text ref with story key support. */
+function encodeV4TestRef(
+  rev: string,
+  storyKey: string,
+  segments: Array<{ blockId: string; start: number; end: number }>,
+): string {
+  return `text:v4:${btoa(JSON.stringify({ v: 4, rev, storyKey, scope: 'match', segments }))}`;
+}
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -161,6 +178,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getRevision.mockReturnValue('0');
   mocks.encodeV3Ref.mockReturnValue('text:mock-encoded');
+
+  // Default: resolveStoryRuntime returns a passthrough body runtime
+  // wrapping the editor that was passed in.
+  mocks.resolveStoryRuntime.mockImplementation((hostEditor: Editor) => ({
+    locator: { kind: 'story', storyType: 'body' },
+    storyKey: 'body',
+    editor: hostEditor,
+    kind: 'body',
+  }));
 });
 
 // ---------------------------------------------------------------------------
@@ -374,7 +400,7 @@ describe('resolveRange', () => {
         end: { kind: 'document', edge: 'end' },
       };
 
-      expect(() => resolveRange(editor, input)).toThrow('Invalid text ref encoding');
+      expect(() => resolveRange(editor, input)).toThrow('Only text refs');
     });
 
     it('rejects ref with no segments', () => {
@@ -395,6 +421,50 @@ describe('resolveRange', () => {
       mocks.getBlockIndex.mockReturnValue(index);
 
       const ref = encodeTestRef('5', [{ blockId: 'p1', start: 0, end: 3 }]);
+      const input: ResolveRangeInput = {
+        start: { kind: 'ref', ref, boundary: 'start' },
+        end: { kind: 'document', edge: 'end' },
+      };
+
+      expect(() => resolveRange(editor, input)).toThrow(PlanError);
+      expect(() => resolveRange(editor, input)).toThrow('REVISION_MISMATCH');
+    });
+
+    it('resolves V4 text refs (text:v4: prefix) just like V3 refs', () => {
+      const { editor, index } = singleParagraph();
+      mocks.getBlockIndex.mockReturnValue(index);
+
+      const ref = encodeV4TestRef('0', 'fn:1', [{ blockId: 'p1', start: 1, end: 4 }]);
+      mocks.resolveSelectionPointPosition
+        .mockReturnValueOnce(2) // start boundary → pos 2
+        .mockReturnValueOnce(5); // end boundary   → pos 5
+
+      const input: ResolveRangeInput = {
+        start: { kind: 'ref', ref, boundary: 'start' },
+        end: { kind: 'ref', ref, boundary: 'end' },
+      };
+
+      const result = resolveRange(editor, input);
+
+      expect(mocks.resolveSelectionPointPosition).toHaveBeenCalledWith(editor, {
+        kind: 'text',
+        blockId: 'p1',
+        offset: 1,
+      });
+      expect(mocks.resolveSelectionPointPosition).toHaveBeenCalledWith(editor, {
+        kind: 'text',
+        blockId: 'p1',
+        offset: 4,
+      });
+      expect(result.evaluatedRevision).toBe('0');
+      expect(result.target.kind).toBe('selection');
+    });
+
+    it('rejects stale V4 ref with REVISION_MISMATCH', () => {
+      const { editor, index } = singleParagraph();
+      mocks.getBlockIndex.mockReturnValue(index);
+
+      const ref = encodeV4TestRef('99', 'fn:1', [{ blockId: 'p1', start: 0, end: 3 }]);
       const input: ResolveRangeInput = {
         start: { kind: 'ref', ref, boundary: 'start' },
         end: { kind: 'document', edge: 'end' },

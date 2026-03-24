@@ -464,6 +464,23 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ styleId: 'Style1' });
   });
 
+  it('drops stale Hyperlink styleId after hyperlink marks are removed', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({}));
+    resolveRunPropertiesMock.mockImplementation(() => ({}));
+
+    const schema = makeSchema();
+    const boldMark = schema.marks.bold.create();
+    const doc = paragraphDoc(schema, { runProperties: { bold: true, styleId: 'Hyperlink' } }, [boldMark]);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, doc.textContent.length);
+
+    const tr = state.tr.removeMark(from, to, schema.marks.bold);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toBeNull();
+  });
+
   it('does not carry over mark-derived properties from existing runProperties', () => {
     decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
     resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));

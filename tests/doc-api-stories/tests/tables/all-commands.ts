@@ -263,7 +263,7 @@ describe('document-api story: all table commands', () => {
           await api.doc.tables.split({
             sessionId,
             nodeId: firstTableNodeId,
-            atRowIndex: 1,
+            rowIndex: 1,
           }),
         );
         assertMutationSuccess('tables.split', splitResult);
@@ -380,7 +380,7 @@ describe('document-api story: all table commands', () => {
         }
         splitTableBySession.delete(sessionId);
 
-        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, atRowIndex: 1 }));
+        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, rowIndex: 1 }));
       },
     },
     {
@@ -1381,16 +1381,30 @@ describe('document-api story: all table commands', () => {
     const fixture = await setupTableFixture(sessionId);
     const f = requireFixture('tables.unmergeCells', fixture);
 
-    // Target a coordinate outside the table bounds.
-    const result = await api.doc.tables.unmergeCells({
-      sessionId,
-      nodeId: f.tableNodeId,
-      rowIndex: 99,
-      columnIndex: 99,
-    });
+    const attempt = await (async () => {
+      try {
+        const result = unwrap<any>(
+          await api.doc.tables.unmergeCells({
+            sessionId,
+            nodeId: f.tableNodeId,
+            rowIndex: 99,
+            columnIndex: 99,
+          }),
+        );
 
-    // Should fail (either thrown error caught or failure result).
-    const unwrapped = result?.result ?? result;
-    expect(unwrapped?.success).not.toBe(true);
+        return { threw: false as const, result };
+      } catch (error) {
+        return { threw: true as const, error };
+      }
+    })();
+
+    if (attempt.threw) {
+      expect(attempt.error).toBeInstanceOf(Error);
+      expect(String(attempt.error)).toContain('out of bounds');
+      return;
+    }
+
+    expect(attempt.result?.success).toBe(false);
+    expect(attempt.result?.failure?.code ?? attempt.result?.receipt?.failure?.code).toBe('INVALID_TARGET');
   });
 });

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { Slice } from 'prosemirror-model';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 
 /**
@@ -375,6 +377,38 @@ describe('StructuredContentLockPlugin', () => {
 
       // Assert: should handle gracefully (exact behavior depends on schema)
       expect(newState).toBeDefined();
+    });
+
+    it('allows remote collaboration replacements that span locked SDTs', () => {
+      const doc = createDocWithSDT('sdtContentLocked', 'structuredContent');
+      const state = applyDocToEditor(doc);
+      const replacementParagraph = schema.nodes.paragraph.create(null, schema.text('Remote hello world'));
+      const replacementDoc = schema.nodes.doc.create(null, [replacementParagraph]);
+
+      const tr = state.tr
+        .replace(0, state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+        .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+
+      const result = state.applyTransaction(tr);
+
+      expect(result.state.doc.textContent).toContain('Remote hello world');
+    });
+
+    it('allows snapshot-exit replacements that span locked SDTs (no isChangeOrigin)', () => {
+      const doc = createDocWithSDT('sdtContentLocked', 'structuredContent');
+      const state = applyDocToEditor(doc);
+      const replacementParagraph = schema.nodes.paragraph.create(null, schema.text('Snapshot exit'));
+      const replacementDoc = schema.nodes.doc.create(null, [replacementParagraph]);
+
+      // y-prosemirror's unrenderSnapshot() sets { snapshot: null, prevSnapshot: null }
+      // with no isChangeOrigin flag.
+      const tr = state.tr
+        .replace(0, state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+        .setMeta(ySyncPluginKey, { snapshot: null, prevSnapshot: null });
+
+      const result = state.applyTransaction(tr);
+
+      expect(result.state.doc.textContent).toContain('Snapshot exit');
     });
   });
 

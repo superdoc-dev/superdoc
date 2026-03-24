@@ -9,6 +9,7 @@ const resolveRunProperties = vi.fn((params, inlineRunProperties, resolvedPpr, ta
 
 vi.mock('@superdoc/style-engine/ooxml', () => ({
   resolveRunProperties,
+  TABLE_STYLE_ID_TABLE_GRID: 'TableGrid',
 }));
 
 vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({

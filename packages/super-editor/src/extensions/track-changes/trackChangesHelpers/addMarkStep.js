@@ -1,4 +1,4 @@
-import { TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackedFormatMarkNames } from '../constants.js';
 import { v4 as uuidv4 } from 'uuid';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
@@ -49,10 +49,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
     const wid = existingChangeMark ? existingChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4()));
     newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
-
-    // ![TrackDeleteMarkName].includes(step.mark.type.name)
-    if (allowedMarks.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {
+    if (TrackedFormatMarkNames.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {
       const formatChangeMark = liveMarks.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];

@@ -1,4 +1,4 @@
-import { Attribute } from '@core/index';
+import { Attribute } from '@core/Attribute.js';
 import { updateDOMAttributes } from '@core/helpers/updateDOMAttributes';
 import { StructuredContentViewBase } from './StructuredContentViewBase';
 import { structuredContentClass, structuredContentInnerClass } from './structured-content';

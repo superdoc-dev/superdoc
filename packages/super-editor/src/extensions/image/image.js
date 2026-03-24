@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Attribute, Node } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
+import { Node } from '@core/Node.js';
 import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
 import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
@@ -84,6 +85,7 @@ export const Image = Node.create({
   addStorage() {
     return {
       media: {},
+      pendingRelativeRegistrations: new Set(),
     };
   },
 

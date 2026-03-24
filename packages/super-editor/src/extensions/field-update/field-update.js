@@ -1,4 +1,4 @@
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
 import {
   getWordStatistics,

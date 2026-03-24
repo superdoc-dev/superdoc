@@ -6,8 +6,6 @@ description: Convert a list to ordered or bullet and merge adjacent compatible s
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering.
@@ -105,6 +103,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list is already th
   "additionalProperties": false,
   "properties": {
     "continuity": {
+      "description": "Numbering continuity: 'preserve' keeps numbering; 'none' restarts.",
       "enum": [
         "preserve",
         "none"

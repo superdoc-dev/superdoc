@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { isRecord, isInteger, isTextAddress, assertNoUnknownFields } from './validation-primitives.js';
 import { DocumentApiValidationError } from './errors.js';
 

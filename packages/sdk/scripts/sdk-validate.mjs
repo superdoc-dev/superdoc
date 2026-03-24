@@ -330,6 +330,11 @@ async function main() {
     await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/codegen/src/__tests__/')]);
   });
 
+  // 16b. Run Node SDK helper tests (bun test)
+  await check('Node SDK helper tests pass (bun test)', async () => {
+    await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/langs/node/src/helpers/__tests__/')]);
+  });
+
   // 17. Node SDK platform package manifests exist and are well-formed
   const EXPECTED_NODE_PLATFORMS = [
     { name: '@superdoc-dev/sdk-darwin-arm64', dir: 'sdk-darwin-arm64', os: 'darwin', cpu: 'arm64' },
@@ -415,10 +420,10 @@ async function main() {
         `state_dir = ${JSON.stringify(stateDir)}`,
         'client = SuperDocClient(env={"SUPERDOC_CLI_BIN": cli_bin, "SUPERDOC_CLI_STATE_DIR": state_dir}, watchdog_timeout_ms=120_000)',
         'try:',
-        '    result = client.doc.open({"doc": doc_path}, timeout_ms=90_000)',
-        '    if result.get("active") is not True:',
-        '        raise RuntimeError(f"doc.open did not report an active session: {result!r}")',
-        '    client.doc.close({})',
+        '    doc = client.open({"doc": doc_path})',
+        '    if doc.open_result.get("active") is not True:',
+        '        raise RuntimeError(f"doc.open did not report an active session: {doc.open_result!r}")',
+        '    doc.close({})',
         'finally:',
         '    client.dispose()',
       ].join('\n');

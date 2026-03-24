@@ -59,12 +59,17 @@ export type { FlowMode } from './renderer.js';
 export type PageDecorationPayload = {
   fragments: Fragment[];
   height: number;
+  /**
+   * Decoration fragments are expressed in header/footer-local coordinates.
+   * Header/footer layout normalizes page- and margin-relative anchors before
+   * they reach the painter.
+   */
   /** Optional measured content height; when provided, footer content will be bottom-aligned within its box. */
   contentHeight?: number;
   offset?: number;
   marginLeft?: number;
   contentWidth?: number;
-  headerId?: string;
+  headerFooterRefId?: string;
   sectionType?: string;
   /** Minimum Y coordinate from layout; negative when content extends above y=0 */
   minY?: number;

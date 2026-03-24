@@ -64,15 +64,6 @@ const hasColorBar = computed(() => {
   margin-top: -3px;
 }
 
-.toolbar-button:hover {
-  color: black;
-  background-color: #d8dee5;
-}
-.toolbar-button:active,
-.active {
-  background-color: #c8d0d8;
-}
-
 .color-bar {
   border-radius: 4px;
   position: absolute;

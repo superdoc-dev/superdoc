@@ -6,8 +6,6 @@ description: Delete content at a contiguous document selection. Accepts a Select
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.
@@ -31,16 +29,18 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `in` | StoryLocator | no | StoryLocator |
 | `target` | SelectionTarget | yes | SelectionTarget |
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
 
-### Variant 2 (ref)
+### Variant 2 (required: ref)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `in` | StoryLocator | no | StoryLocator |
 | `ref` | string | yes |  |
 
 ### Example request
@@ -48,6 +48,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 ```json
 {
   "behavior": "selection",
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "target": {
     "end": {
       "blockId": "block-abc123",
@@ -191,6 +195,11 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -206,10 +215,15 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "additionalProperties": false,
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/DeleteBehavior"
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
+        },
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
         },
         "target": {
-          "$ref": "#/$defs/SelectionTarget"
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
         }
       },
       "required": [
@@ -221,9 +235,14 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "additionalProperties": false,
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/DeleteBehavior"
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
+        },
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
         },
         "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
           "type": "string"
         }
       },

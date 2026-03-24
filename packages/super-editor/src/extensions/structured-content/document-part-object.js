@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 
 export const DocumentPartObject = Node.create({
   name: 'documentPartObject',
@@ -43,7 +44,10 @@ export const DocumentPartObject = Node.create({
       id: {},
       docPartGallery: {},
       docPartUnique: {
-        default: true,
+        default: false,
+      },
+      wrapperParagraph: {
+        default: null,
       },
     };
   },

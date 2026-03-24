@@ -80,6 +80,21 @@ const createCommentSchema = () => {
       toDOM: (mark) => [TrackFormatMarkName, mark.attrs],
       parseDOM: [{ tag: TrackFormatMarkName }],
     },
+    underline: {
+      attrs: {},
+      inclusive: false,
+      toDOM: () => ['underline', 0],
+      parseDOM: [{ tag: 'underline' }],
+    },
+    link: {
+      attrs: {
+        href: { default: null },
+        text: { default: null },
+      },
+      inclusive: false,
+      toDOM: (mark) => ['a', mark.attrs, 0],
+      parseDOM: [{ tag: 'a' }],
+    },
   };
 
   return new Schema({ nodes, marks });
@@ -1027,6 +1042,7 @@ describe('internal helper functions', () => {
       isDeletionInsertion: false,
     });
     expect(formatResult.trackedChangeText).toBe('italic, removed bold');
+    expect(formatResult.trackedChangeDisplayType).toBeNull();
 
     const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
       id: 'format-2',
@@ -1041,6 +1057,25 @@ describe('internal helper functions', () => {
     });
     expect(deltaFormatResult.trackedChangeText).toContain('bold');
     expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
+
+    const hyperlinkFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-3',
+      before: [],
+      after: [
+        { type: 'underline', attrs: {} },
+        { type: 'link', attrs: { href: 'https://example.com', text: 'website' } },
+      ],
+    });
+    const hyperlinkFormatResult = getTrackedChangeText({
+      nodes: [schema.text('website', [hyperlinkFormatMark, schema.marks.link.create({ href: 'https://example.com' })])],
+      mark: hyperlinkFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(hyperlinkFormatResult).toMatchObject({
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
 
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],
@@ -1135,6 +1170,81 @@ describe('internal helper functions', () => {
       documentId: 'doc-1',
     });
     expect(emptyPayload).toBeUndefined();
+  });
+
+  it('createOrUpdateTrackedChangeComment preserves hyperlink-specific display metadata for format changes', () => {
+    const schema = createCommentSchema();
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [
+        { type: 'underline', attrs: {} },
+        { type: 'link', attrs: { href: 'https://example.com', text: 'website' } },
+      ],
+    });
+    const nodes = [schema.text('website', [formatMark])];
+    const state = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, nodes)]),
+    });
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: null, deletionMark: null, formatMark },
+      deletionNodes: [],
+      nodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload).toMatchObject({
+      trackedChangeType: TrackFormatMarkName,
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
+  });
+
+  it('createOrUpdateTrackedChangeComment prefers the live format mark when transaction meta is stale', () => {
+    const schema = createCommentSchema();
+    const staleFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-2',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [{ type: 'underline', attrs: {} }],
+    });
+    const liveFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-link-2',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+      before: [],
+      after: [{ type: 'underline', attrs: {} }],
+    });
+    const nodes = [schema.text('website', [liveFormatMark, schema.marks.link.create({ href: 'https://example.com' })])];
+    const state = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, nodes)]),
+    });
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: null, deletionMark: null, formatMark: staleFormatMark },
+      deletionNodes: [],
+      nodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload).toMatchObject({
+      trackedChangeType: TrackFormatMarkName,
+      trackedChangeText: 'https://example.com',
+      trackedChangeDisplayType: 'hyperlinkAdded',
+    });
   });
 
   it('findRangeById returns ranges for comment and tracked marks', () => {

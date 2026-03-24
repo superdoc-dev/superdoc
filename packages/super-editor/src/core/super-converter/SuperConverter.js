@@ -21,7 +21,7 @@ import {
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
-import { getWordStatistics } from '../../document-api-adapters/helpers/word-statistics.js';
+import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
 import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
 import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../document-api-adapters/document-settings.js';
 import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
@@ -1334,7 +1334,12 @@ class SuperConverter {
     if (!editor) return;
 
     try {
-      const stats = getWordStatistics(editor);
+      // docProps/app.xml is document-scoped metadata. When export runs from a
+      // linked child editor (for example a header/footer editor), compute the
+      // statistics from the main body editor so package-level counts stay
+      // aligned with Word's document-level stat-field semantics.
+      const statsEditor = resolveMainBodyEditor(editor);
+      const stats = getWordStatistics(statsEditor);
       writeAppStatistics(this.convertedXml, stats);
 
       // Only set w:updateFields when the document actually contains a
@@ -1684,152 +1689,6 @@ class SuperConverter {
       converter: this,
       numbering: this.numbering,
     });
-  }
-
-  /**
-   * Creates a default empty header for the specified variant.
-   *
-   * This method programmatically creates a new header section with an empty ProseMirror
-   * document. The header is added to the converter's data structures and will be included
-   * in subsequent DOCX exports.
-   *
-   * @param {('default' | 'first' | 'even' | 'odd')} variant - The header variant to create
-   * @returns {string} The relationship ID of the created header
-   *
-   * @throws {Error} If variant is invalid or header already exists for this variant
-   *
-   * @example
-   * ```javascript
-   * const headerId = converter.createDefaultHeader('default');
-   * // headerId: 'rId-header-default'
-   * // converter.headers['rId-header-default'] contains empty PM doc
-   * // converter.headerIds.default === 'rId-header-default'
-   * ```
-   */
-  createDefaultHeader(variant = 'default') {
-    // Validate variant type
-    if (typeof variant !== 'string') {
-      throw new TypeError(`variant must be a string, received ${typeof variant}`);
-    }
-
-    // Validate variant value
-    const validVariants = ['default', 'first', 'even', 'odd'];
-    if (!validVariants.includes(variant)) {
-      throw new Error(`Invalid header variant: ${variant}. Must be one of: ${validVariants.join(', ')}`);
-    }
-
-    // Check if header already exists for this variant
-    if (this.headerIds[variant]) {
-      console.warn(`[SuperConverter] Header already exists for variant '${variant}': ${this.headerIds[variant]}`);
-      return this.headerIds[variant];
-    }
-
-    // Generate relationship ID
-    const rId = `rId-header-${variant}`;
-
-    // Create empty ProseMirror document
-    const emptyDoc = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [],
-        },
-      ],
-    };
-
-    // Add to headers map
-    this.headers[rId] = emptyDoc;
-
-    // Update headerIds for the variant
-    this.headerIds[variant] = rId;
-
-    // Add to ids array if it exists
-    if (!this.headerIds.ids) {
-      this.headerIds.ids = [];
-    }
-    if (!this.headerIds.ids.includes(rId)) {
-      this.headerIds.ids.push(rId);
-    }
-
-    this.headerFooterModified = true;
-    // Mark document as modified
-    this.documentModified = true;
-
-    return rId;
-  }
-
-  /**
-   * Creates a default empty footer for the specified variant.
-   *
-   * This method programmatically creates a new footer section with an empty ProseMirror
-   * document. The footer is added to the converter's data structures and will be included
-   * in subsequent DOCX exports.
-   *
-   * @param {('default' | 'first' | 'even' | 'odd')} variant - The footer variant to create
-   * @returns {string} The relationship ID of the created footer
-   *
-   * @throws {Error} If variant is invalid or footer already exists for this variant
-   *
-   * @example
-   * ```javascript
-   * const footerId = converter.createDefaultFooter('default');
-   * // footerId: 'rId-footer-default'
-   * // converter.footers['rId-footer-default'] contains empty PM doc
-   * // converter.footerIds.default === 'rId-footer-default'
-   * ```
-   */
-  createDefaultFooter(variant = 'default') {
-    // Validate variant type
-    if (typeof variant !== 'string') {
-      throw new TypeError(`variant must be a string, received ${typeof variant}`);
-    }
-
-    // Validate variant value
-    const validVariants = ['default', 'first', 'even', 'odd'];
-    if (!validVariants.includes(variant)) {
-      throw new Error(`Invalid footer variant: ${variant}. Must be one of: ${validVariants.join(', ')}`);
-    }
-
-    // Check if footer already exists for this variant
-    if (this.footerIds[variant]) {
-      console.warn(`[SuperConverter] Footer already exists for variant '${variant}': ${this.footerIds[variant]}`);
-      return this.footerIds[variant];
-    }
-
-    // Generate relationship ID
-    const rId = `rId-footer-${variant}`;
-
-    // Create empty ProseMirror document
-    const emptyDoc = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [],
-        },
-      ],
-    };
-
-    // Add to footers map
-    this.footers[rId] = emptyDoc;
-
-    // Update footerIds for the variant
-    this.footerIds[variant] = rId;
-
-    // Add to ids array if it exists
-    if (!this.footerIds.ids) {
-      this.footerIds.ids = [];
-    }
-    if (!this.footerIds.ids.includes(rId)) {
-      this.footerIds.ids.push(rId);
-    }
-
-    this.headerFooterModified = true;
-    // Mark document as modified
-    this.documentModified = true;
-
-    return rId;
   }
 
   // Deprecated methods for backward compatibility

@@ -4,7 +4,7 @@
  * Each test corresponds to a numbered validation rule from the spec.
  * Tests cover both SDM/1 shapes (kind-discriminated) and legacy backward compat.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { validateSDFragment, validateDocumentFragment } from './fragment-validator.js';
 import { DocumentApiValidationError } from '../errors.js';
 

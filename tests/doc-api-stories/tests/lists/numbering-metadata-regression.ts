@@ -130,6 +130,15 @@ function countMatches(source: string, pattern: RegExp): number {
   return source.match(pattern)?.length ?? 0;
 }
 
+function getRootStartTag(xml: string, tagName: string): string {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = xml.match(new RegExp(`<${escapedTagName}\\b[^>]*>`));
+  if (!match) {
+    throw new Error(`Missing root start tag <${tagName}>.`);
+  }
+  return match[0];
+}
+
 describe('document-api story: lists.create numbering metadata regression', () => {
   it('registers numbering metadata when bullet list creation adds numbering to a numbering-less source docx', async () => {
     const resultsDir = path.join(STORIES_ROOT, 'results', 'lists', 'numbering-metadata-regression');
@@ -180,5 +189,21 @@ describe('document-api story: lists.create numbering metadata regression', () =>
       ),
     ).toBe(1);
     expect(countMatches(resultDocumentRels, /Target="numbering\.xml"/g)).toBe(1);
+
+    // SD-2252: every namespace prefix used in the numbering part must be
+    // declared on the root element, otherwise Word flags the file as
+    // unreadable. Check the actual <w:numbering ...> start tag so we do not
+    // false-pass on an xmlns declaration that appears later or in a narrower scope.
+    const numberingRootStartTag = getRootStartTag(resultNumbering, 'w:numbering');
+    const usedPrefixes = new Set([...resultNumbering.matchAll(/(?:^|[\s<])(\w+):/g)].map((m) => m[1]));
+    // xml and xmlns are built-in prefixes that never need an explicit declaration.
+    usedPrefixes.delete('xml');
+    usedPrefixes.delete('xmlns');
+
+    for (const prefix of usedPrefixes) {
+      expect(numberingRootStartTag, `missing xmlns:${prefix} declaration on <w:numbering>`).toMatch(
+        new RegExp(`xmlns:${prefix}=`),
+      );
+    }
   });
 });

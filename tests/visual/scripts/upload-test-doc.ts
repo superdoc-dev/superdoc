@@ -3,12 +3,16 @@
  *
  * Usage:
  *   pnpm docs:upload <file>
+ *   pnpm docs:upload <file> --issue SD-2190 --description docpart-first-paragraph
  *
  * Prompts for an optional Linear issue ID and a short description,
  * then uploads to rendering/<issue-id>-<description>.docx in the shared corpus.
  *
+ * When --issue and --description are provided, runs non-interactively.
+ *
  * Examples:
  *   pnpm docs:upload ~/Downloads/bug-repro.docx
+ *   pnpm docs:upload ~/Downloads/bug-repro.docx --issue SD-2190 --description docpart-first-paragraph
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -33,53 +37,98 @@ function exitIfCancelled<T>(value: T | symbol): T {
   return value;
 }
 
-async function main() {
-  const filePath = process.argv[2];
+function parseCliFlags(argv: string[]): { filePath: string; issue?: string; description?: string } {
+  let filePath = '';
+  let issue: string | undefined;
+  let description: string | undefined;
 
-  if (!filePath) {
-    console.error('Usage: pnpm docs:upload <file>');
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const next = argv[i + 1];
+    if (arg === '--issue' && next) {
+      issue = next;
+      i++;
+    } else if (arg === '--description' && next) {
+      description = next;
+      i++;
+    } else if (!arg.startsWith('--')) {
+      filePath = arg;
+    }
+  }
+
+  return { filePath, issue, description };
+}
+
+async function main() {
+  const flags = parseCliFlags(process.argv.slice(2));
+
+  if (!flags.filePath) {
+    console.error('Usage: pnpm docs:upload <file> [--issue SD-1234] [--description short-desc]');
     process.exit(1);
   }
 
-  const resolved = path.resolve(filePath);
+  const resolved = path.resolve(flags.filePath);
   if (!fs.existsSync(resolved)) {
     console.error(`File not found: ${resolved}`);
     process.exit(1);
   }
 
-  intro(`Upload: ${path.basename(resolved)}`);
+  const nonInteractive = !!(flags.issue !== undefined && flags.description);
 
-  const issueId = exitIfCancelled(
-    await text({
-      message: 'Linear issue ID',
-      placeholder: 'SD-1679 (press Enter to skip)',
-      validate: (v) => {
-        if (!v) return;
-        if (!/^[A-Za-z]{2,}-\d+$/.test(v)) return 'Format: SD-1679';
-      },
-    }),
-  );
+  let issueId: string;
+  let description: string;
 
-  const description = exitIfCancelled(
-    await text({
-      message: 'Short description',
-      placeholder: 'anchor-table-overlap',
-      validate: (v) => {
-        if (!v) return 'Description is required';
-        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v)) return 'Use kebab-case (e.g. anchor-table-overlap)';
-      },
-    }),
-  );
+  if (nonInteractive) {
+    issueId = flags.issue!;
+    description = flags.description!;
+
+    if (issueId && !/^[A-Za-z]{2,}-\d+$/.test(issueId)) {
+      console.error('Invalid issue ID format. Expected: SD-1679');
+      process.exit(1);
+    }
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(description)) {
+      console.error('Description must be kebab-case (e.g. anchor-table-overlap)');
+      process.exit(1);
+    }
+  } else {
+    intro(`Upload: ${path.basename(resolved)}`);
+
+    issueId = exitIfCancelled(
+      await text({
+        message: 'Linear issue ID',
+        placeholder: 'SD-1679 (press Enter to skip)',
+        validate: (v) => {
+          if (!v) return;
+          if (!/^[A-Za-z]{2,}-\d+$/.test(v)) return 'Format: SD-1679';
+        },
+      }),
+    ) as string;
+
+    description = exitIfCancelled(
+      await text({
+        message: 'Short description',
+        placeholder: 'anchor-table-overlap',
+        validate: (v) => {
+          if (!v) return 'Description is required';
+          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v)) return 'Use kebab-case (e.g. anchor-table-overlap)';
+        },
+      }),
+    ) as string;
+  }
 
   const parts = [issueId ? toKebab(issueId) : null, description].filter(Boolean);
   const fileName = `${parts.join('-')}.docx`;
   const targetRelativePath = `rendering/${fileName}`;
 
-  const confirmed = exitIfCancelled(await confirm({ message: `Upload as ${targetRelativePath}?` }));
+  if (nonInteractive) {
+    console.log(`Uploading as ${targetRelativePath}...`);
+  } else {
+    const confirmed = exitIfCancelled(await confirm({ message: `Upload as ${targetRelativePath}?` }));
 
-  if (!confirmed) {
-    cancel('Upload cancelled.');
-    process.exit(0);
+    if (!confirmed) {
+      cancel('Upload cancelled.');
+      process.exit(0);
+    }
   }
 
   const uploadArgs = ['run', 'corpus:push', '--', '--path', targetRelativePath, resolved];
@@ -99,11 +148,16 @@ async function main() {
     throw new Error(`Corpus upload failed with exit code ${uploadExitCode}.`);
   }
 
-  outro(
+  const nextSteps =
     `Uploaded! Next:\n` +
-      `  1. pnpm corpus:pull             # pull the new file locally\n` +
-      `  2. pnpm test:visual             # verify it renders correctly`,
-  );
+    `  1. pnpm corpus:pull             # pull the new file locally\n` +
+    `  2. pnpm test:visual             # verify it renders correctly`;
+
+  if (nonInteractive) {
+    console.log(nextSteps);
+  } else {
+    outro(nextSteps);
+  }
 }
 
 main().catch((err) => {

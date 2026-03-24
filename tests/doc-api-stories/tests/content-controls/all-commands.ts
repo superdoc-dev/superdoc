@@ -84,6 +84,7 @@ const ALL_CONTENT_CONTROL_COMMAND_IDS = [
   'contentControls.group.wrap',
   'contentControls.group.ungroup',
 ] as const;
+const COMMAND_STORY_TIMEOUT_MS = 60_000;
 
 type ContentControlsCommandId = (typeof ALL_CONTENT_CONTROL_COMMAND_IDS)[number];
 
@@ -2082,30 +2083,34 @@ describe('document-api story: all content-controls commands', () => {
   });
 
   for (const scenario of scenarios) {
-    it(`${scenario.operationId}: executes and saves source/result docs`, async () => {
-      const sessionId = makeSessionId(scenario.operationId.replace(/\./g, '-'));
+    it(
+      `${scenario.operationId}: executes and saves source/result docs`,
+      async () => {
+        const sessionId = makeSessionId(scenario.operationId.replace(/\./g, '-'));
 
-      try {
-        await openSeedDocument(sessionId, scenario.seedDoc ?? BASE_CONTENT_CONTROLS_DOC);
+        try {
+          await openSeedDocument(sessionId, scenario.seedDoc ?? BASE_CONTENT_CONTROLS_DOC);
 
-        const fixture = scenario.prepare ? await scenario.prepare(sessionId) : null;
+          const fixture = scenario.prepare ? await scenario.prepare(sessionId) : null;
 
-        await saveSource(sessionId, scenario.operationId);
+          await saveSource(sessionId, scenario.operationId);
 
-        const result = await scenario.run(sessionId, fixture);
+          const result = await scenario.run(sessionId, fixture);
 
-        if (READ_OPERATION_IDS.has(scenario.operationId)) {
-          assertReadShape(scenario.operationId, result);
-          await saveReadOutput(scenario.operationId, result);
-        } else {
-          assertMutationSuccess(scenario.operationId, result, scenario.allowNoOpFailure === true);
+          if (READ_OPERATION_IDS.has(scenario.operationId)) {
+            assertReadShape(scenario.operationId, result);
+            await saveReadOutput(scenario.operationId, result);
+          } else {
+            assertMutationSuccess(scenario.operationId, result, scenario.allowNoOpFailure === true);
+          }
+
+          await saveResult(sessionId, scenario.operationId);
+        } finally {
+          await closeSession(sessionId).catch(() => {});
         }
-
-        await saveResult(sessionId, scenario.operationId);
-      } finally {
-        await closeSession(sessionId).catch(() => {});
-      }
-    });
+      },
+      COMMAND_STORY_TIMEOUT_MS,
+    );
   }
 
   it('writes source/result artifacts for every content-controls command', async () => {

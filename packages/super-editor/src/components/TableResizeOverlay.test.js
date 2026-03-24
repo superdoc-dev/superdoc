@@ -1041,4 +1041,358 @@ describe('TableResizeOverlay', () => {
       wrapper.unmount();
     });
   });
+
+  // ==========================================================================
+  // Visual bounds during drag (SD-2094)
+  // ==========================================================================
+
+  describe('Visual bounds during drag (SD-2094)', () => {
+    /** Metadata with both column and row boundaries for cross-axis tests */
+    const metadataWithRows = {
+      columns: [
+        { i: 0, x: 0, w: 100, min: 50, r: 1 },
+        { i: 1, x: 100, w: 150, min: 50, r: 1 },
+      ],
+      rows: [
+        { i: 0, y: 0, h: 50, min: 30, r: 1 },
+        { i: 1, y: 50, h: 50, min: 30, r: 1 },
+      ],
+    };
+
+    it('should not expand overlay width during column drag', async () => {
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      // Start a column drag
+      const event = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      // Overlay width should remain at table width (350), not expanded
+      const style = wrapper.vm.overlayStyle;
+      expect(style.width).toBe('350px');
+      expect(style.height).toBe('200px');
+
+      wrapper.unmount();
+    });
+
+    it('should not expand overlay height during row drag', async () => {
+      const tableElement = createMockTableElement(metadataWithRows);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      // Start a row drag
+      const event = new MouseEvent('mousedown', { clientY: 50 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onRowHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      // Overlay height should remain at table height (200), not expanded
+      const style = wrapper.vm.overlayStyle;
+      expect(style.width).toBe('350px');
+      expect(style.height).toBe('200px');
+
+      wrapper.unmount();
+    });
+
+    it('should constrain row handle width to table width', async () => {
+      const tableElement = createMockTableElement(metadataWithRows);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const rowBoundary = wrapper.vm.resizableRowBoundaries[0];
+      const style = wrapper.vm.getRowHandleStyle(rowBoundary);
+
+      // Width should be explicit pixel value matching table width, not '100%'
+      expect(style.width).toBe('350px');
+
+      wrapper.unmount();
+    });
+
+    it('should constrain column handle fallback height to table height', async () => {
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const boundary = wrapper.vm.resizableBoundaries[0];
+      // null segment height triggers the fallback
+      const style = wrapper.vm.getSegmentHandleStyle(boundary, { y: null, h: null });
+
+      // Height should be explicit pixel value matching table height, not '100%'
+      expect(style.height).toBe('200px');
+
+      wrapper.unmount();
+    });
+
+    it('should constrain column guideline height to table height during drag', async () => {
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const event = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      const style = wrapper.vm.guidelineStyle;
+      expect(style.height).toBe('200px');
+
+      wrapper.unmount();
+    });
+
+    it('should constrain row guideline width to table width during drag', async () => {
+      const tableElement = createMockTableElement(metadataWithRows);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const event = new MouseEvent('mousedown', { clientY: 50 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onRowHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      const style = wrapper.vm.rowGuidelineStyle;
+      expect(style.width).toBe('350px');
+
+      wrapper.unmount();
+    });
+
+    it('should hide row handles during column drag', async () => {
+      const tableElement = createMockTableElement(metadataWithRows);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      // Row handles should be visible before drag
+      const rowHandlesBefore = wrapper.findAll('.resize-handle--row');
+      expect(rowHandlesBefore.length).toBeGreaterThan(0);
+      expect(rowHandlesBefore[0].element.style.display).not.toBe('none');
+
+      // Start a column drag
+      const event = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      // Row handles should be hidden (v-show sets display:none) during column drag
+      const rowHandlesDuring = wrapper.findAll('.resize-handle--row');
+      for (const handle of rowHandlesDuring) {
+        expect(handle.element.style.display).toBe('none');
+      }
+
+      wrapper.unmount();
+    });
+
+    it('should hide column handles during row drag', async () => {
+      const tableElement = createMockTableElement(metadataWithRows);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      // Column handles should be visible before drag
+      const colHandlesBefore = wrapper.findAll('.resize-handle:not(.resize-handle--row)');
+      expect(colHandlesBefore.length).toBeGreaterThan(0);
+      expect(colHandlesBefore[0].element.style.display).not.toBe('none');
+
+      // Start a row drag
+      const event = new MouseEvent('mousedown', { clientY: 50 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onRowHandleMouseDown(event, 0);
+
+      await nextTick();
+
+      // Column handles should be hidden (v-show sets display:none) during row drag
+      const colHandlesDuring = wrapper.findAll('.resize-handle:not(.resize-handle--row)');
+      for (const handle of colHandlesDuring) {
+        expect(handle.element.style.display).toBe('none');
+      }
+
+      wrapper.unmount();
+    });
+
+    it('should always emit resize-end on column drag mouseup', async () => {
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      // Start drag
+      const downEvent = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(downEvent, 0);
+
+      expect(wrapper.vm.dragState).not.toBeNull();
+
+      // Immediately release (zero delta — below MIN_RESIZE_DELTA_PX)
+      const upEvent = new MouseEvent('mouseup');
+      document.dispatchEvent(upEvent);
+
+      await nextTick();
+
+      // resize-end should still be emitted even with zero delta
+      expect(wrapper.emitted('resize-end')).toBeDefined();
+      expect(wrapper.emitted('resize-end').length).toBeGreaterThanOrEqual(1);
+
+      wrapper.unmount();
+    });
+
+    it('should cancel an active column drag on window blur', async () => {
+      const editor = createMockEditor();
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const downEvent = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(downEvent, 0);
+
+      expect(wrapper.vm.dragState).not.toBeNull();
+      expect(editor.view.dom.style.pointerEvents).toBe('none');
+
+      window.dispatchEvent(new Event('blur'));
+      await nextTick();
+
+      expect(wrapper.vm.dragState).toBeNull();
+      expect(editor.view.dom.style.pointerEvents).toBe('auto');
+      expect(wrapper.emitted('resize-end')).toBeDefined();
+
+      wrapper.unmount();
+    });
+
+    it('should cancel an active row drag when the document becomes hidden', async () => {
+      const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'hidden',
+      });
+
+      try {
+        const editor = createMockEditor();
+        const metadata = {
+          columns: [
+            { i: 0, x: 0, w: 100, min: 50, r: 1 },
+            { i: 1, x: 100, w: 150, min: 50, r: 1 },
+          ],
+          rows: [
+            { i: 0, y: 0, h: 50, min: 30, r: 1 },
+            { i: 1, y: 50, h: 50, min: 30, r: 1 },
+          ],
+        };
+        const tableElement = createMockTableElement(metadata);
+        const wrapper = mount(TableResizeOverlay, {
+          props: {
+            editor,
+            visible: true,
+            tableElement,
+          },
+        });
+
+        await nextTick();
+
+        const downEvent = new MouseEvent('mousedown', { clientY: 50 });
+        Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+        Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+        wrapper.vm.onRowHandleMouseDown(downEvent, 0);
+
+        expect(wrapper.vm.rowDragState).not.toBeNull();
+        expect(editor.view.dom.style.pointerEvents).toBe('none');
+
+        document.dispatchEvent(new Event('visibilitychange'));
+        await nextTick();
+
+        expect(wrapper.vm.rowDragState).toBeNull();
+        expect(editor.view.dom.style.pointerEvents).toBe('auto');
+        expect(wrapper.emitted('resize-end')).toBeDefined();
+
+        wrapper.unmount();
+      } finally {
+        if (originalVisibilityState) {
+          Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+        } else {
+          delete document.visibilityState;
+        }
+      }
+    });
+  });
 });

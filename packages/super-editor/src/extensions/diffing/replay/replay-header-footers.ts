@@ -50,6 +50,17 @@ type ReplayHeaderFooterEditor = {
   } | null;
 };
 
+type HeaderFooterVariantIds = Record<string, string | string[] | boolean | null | undefined> & {
+  ids?: string[];
+};
+
+type RelationshipElement = {
+  type?: string;
+  name?: string;
+  attributes?: Record<string, string>;
+  elements?: RelationshipElement[];
+};
+
 const HEADER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
 const FOOTER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
 
@@ -210,7 +221,7 @@ function createHeaderFooterPart(
   const partCollection = part.kind === 'header' ? converter.headers! : converter.footers!;
   partCollection[part.refId] = structuredClone(part.content);
 
-  const variantIds = part.kind === 'header' ? converter.headerIds! : converter.footerIds!;
+  const variantIds = (part.kind === 'header' ? converter.headerIds! : converter.footerIds!) as HeaderFooterVariantIds;
   if (!Array.isArray(variantIds.ids)) {
     variantIds.ids = [];
   }
@@ -415,7 +426,7 @@ function deleteHeaderFooterPart(
   const collection = part.kind === 'header' ? converter.headers! : converter.footers!;
   delete collection[part.refId];
 
-  const variantIds = part.kind === 'header' ? converter.headerIds! : converter.footerIds!;
+  const variantIds = (part.kind === 'header' ? converter.headerIds! : converter.footerIds!) as HeaderFooterVariantIds;
   if (Array.isArray(variantIds.ids)) {
     variantIds.ids = variantIds.ids.filter((value) => value !== part.refId);
   }
@@ -500,7 +511,6 @@ function upsertRelationshipEntry(convertedXml: Record<string, unknown>, part: He
   }
 
   relsRoot.elements!.push({
-    type: 'element',
     name: 'Relationship',
     attributes: {
       Id: part.refId,
@@ -518,9 +528,7 @@ function upsertRelationshipEntry(convertedXml: Record<string, unknown>, part: He
  * @param refId Relationship id to remove.
  */
 function removeRelationshipEntry(convertedXml: Record<string, unknown>, refId: string): void {
-  const relsPart = convertedXml['word/_rels/document.xml.rels'] as
-    | { elements?: Array<{ name?: string; elements?: Array<{ name?: string; attributes?: Record<string, string> }> }> }
-    | undefined;
+  const relsPart = convertedXml['word/_rels/document.xml.rels'] as { elements?: RelationshipElement[] } | undefined;
   const relsRoot = relsPart?.elements?.find((entry) => entry.name === 'Relationships');
   if (!relsRoot?.elements) {
     return;

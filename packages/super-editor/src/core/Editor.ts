@@ -100,12 +100,14 @@ const MAX_WIDTH_BUFFER_PX = 20;
 type ExtensionInstanceLike = {
   type?: string;
   config?: Record<string, unknown>;
-  constructor?: new (config: Record<string, unknown>) => unknown;
 };
 
-const cloneExtensionInstance = <T extends ExtensionInstanceLike>(extension: T): T => {
-  const config = extension?.config;
-  const ExtensionCtor = extension?.constructor;
+const cloneExtensionInstance = <T>(extension: T): T => {
+  const extensionLike = extension as ExtensionInstanceLike & {
+    constructor?: new (config: Record<string, unknown>) => unknown;
+  };
+  const config = extensionLike?.config;
+  const ExtensionCtor = extensionLike?.constructor;
 
   if (!config || typeof config !== 'object' || typeof ExtensionCtor !== 'function') {
     return extension;

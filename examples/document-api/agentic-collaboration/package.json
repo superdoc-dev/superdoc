@@ -8,10 +8,13 @@
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
     "dev:agent": "npm run dev --prefix agent",
-    "build": "npm run build --prefix client",
-    "install:all": "npm install && npm install --prefix client && npm install --prefix server && npm install --prefix agent"
+    "build": "npm run install:all && npm run build --prefix client",
+    "build:backend": "echo 'No build step needed - using tsx'",
+    "install:all": "npm install && npm install --prefix client && npm install --prefix server && npm install --prefix agent",
+    "start": "npx tsx start.ts"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "concurrently": "^9.0.0",
+    "tsx": "^4.20.6"
   }
 }

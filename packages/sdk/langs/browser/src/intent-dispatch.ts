@@ -18,6 +18,8 @@ export function dispatchIntentTool(
           return execute('doc.getHtml', rest);
         case 'info':
           return execute('doc.info', rest);
+        case 'blocks':
+          return execute('doc.blocks.list', rest);
         default:
           throw new Error(`Unknown action for superdoc_get_content: ${action}`);
       }

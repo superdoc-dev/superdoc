@@ -1,0 +1,50 @@
+/* eslint-env node */
+const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
+
+const branches = [
+  { name: 'stable', channel: 'latest' },
+  { name: 'main', prerelease: 'next', channel: 'next' },
+];
+
+const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
+
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }];
+
+const config = {
+  branches,
+  tagFormat: 'create-v${version}',
+  plugins: [
+    'semantic-release-commit-filter',
+    '@semantic-release/commit-analyzer',
+    notesPlugin,
+    ['@semantic-release/npm'],
+  ],
+};
+
+if (!isPrerelease) {
+  config.plugins.push([
+    '@semantic-release/git',
+    {
+      assets: ['package.json'],
+      message: 'chore(create): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
+    },
+  ]);
+}
+
+config.plugins.push(['semantic-release-linear-app', {
+  teamKeys: ['SD'],
+  addComment: true,
+  packageName: 'create',
+  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
+}]);
+
+config.plugins.push([
+  '@semantic-release/github',
+  {
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/create** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
+  }
+]);
+
+module.exports = config;

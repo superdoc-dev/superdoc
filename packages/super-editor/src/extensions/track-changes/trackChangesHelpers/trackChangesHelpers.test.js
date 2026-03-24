@@ -18,6 +18,7 @@ import {
   replaceAroundStep,
   documentHelpers,
 } from './index.js';
+import { hasAnyMark } from '@tests/helpers/helpers.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImporter.js';
@@ -87,6 +88,17 @@ describe('trackChangesHelpers', () => {
 
     const inlineNodes = documentHelpers.findInlineNodes(doc, true);
     expect(inlineNodes.every(({ node }) => node.isInline)).toBe(true);
+
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-any',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const markedDoc = createDocWithText('abc', [insertMark]);
+
+    expect(hasAnyMark(markedDoc, TrackInsertMarkName)).toBe(true);
+    expect(hasAnyMark(markedDoc, TrackDeleteMarkName)).toBe(false);
   });
 
   it('parseFormatList gracefully handles malformed input', () => {

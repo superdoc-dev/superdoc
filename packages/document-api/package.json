@@ -17,7 +17,7 @@
     }
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "bun test"
   },
   "files": [
     "src"

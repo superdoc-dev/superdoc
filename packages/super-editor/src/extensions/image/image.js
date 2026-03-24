@@ -85,6 +85,7 @@ export const Image = Node.create({
   addStorage() {
     return {
       media: {},
+      pendingRelativeRegistrations: new Set(),
     };
   },
 

@@ -59,13 +59,12 @@ async function exportDocxFiles(editor: Editor): Promise<Record<string, string>> 
 
 function findBibliographyNode(editor: Editor, nodeId?: string) {
   let found: { attrs: Record<string, unknown> } | null = null;
-  editor.state.doc.descendants((node, pos) => {
+  let occurrenceIndex = 0;
+  editor.state.doc.descendants((node) => {
     if (node.type.name !== 'bibliography') return true;
-    if (
-      nodeId !== undefined &&
-      node.attrs.sdBlockId !== nodeId &&
-      resolvePublicReferenceBlockNodeId(node, pos) !== nodeId
-    ) {
+    const publicNodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+    occurrenceIndex += 1;
+    if (nodeId !== undefined && node.attrs.sdBlockId !== nodeId && publicNodeId !== nodeId) {
       return true;
     }
     {
@@ -207,6 +206,14 @@ describe('citations export integration', () => {
     );
 
     expect(configureResult.success).toBe(true);
+    if (!configureResult.success) return;
+
+    const bibliographyInfo = editor.doc.citations.bibliography.get({
+      target: configureResult.bibliography,
+    });
+
+    expect(bibliographyInfo.style).toBe('MLA');
+    expect(bibliographyInfo.address.nodeId).toBe(configureResult.bibliography.nodeId);
     expect(findBibliographyNode(editor)?.attrs.style).toBe('MLA');
   });
 });

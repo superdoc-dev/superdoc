@@ -922,6 +922,51 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     presentationEditor: editor.value instanceof PresentationEditor ? editor.value : null,
   });
 
+  // Upgrade visual-readiness signal: during upgradeToCollaboration, SuperDoc
+  // threads this callback so it knows when the rebuilt runtime has actually
+  // painted AND collaboration is ready, not just when editors are created.
+  // For collaborative remounts the provider is already synced so the
+  // collaboration extension will emit collaborationReady after a 250ms delay.
+  // We must wait for BOTH that event AND the first layout paint before
+  // signalling that the upgrade transition can reveal the new runtime.
+  const onUpgradeVisualReady = props.options?.onUpgradeVisualReady;
+  if (typeof onUpgradeVisualReady === 'function') {
+    const hasCollabProvider = Boolean(props.options?.collaborationProvider);
+    const isPresentationEditor = editor.value instanceof PresentationEditor;
+
+    let collabReady = !hasCollabProvider; // no provider → already satisfied
+    let layoutReady = !isPresentationEditor; // no layout engine → already satisfied
+
+    const tryFire = () => {
+      if (collabReady && layoutReady) {
+        nextTick(() => onUpgradeVisualReady());
+      }
+    };
+
+    if (!collabReady) {
+      editor.value.once('collaborationReady', () => {
+        collabReady = true;
+        tryFire();
+      });
+    }
+
+    if (!layoutReady) {
+      const pe = editor.value;
+      if (pe.getPages().length > 0) {
+        layoutReady = true;
+      } else {
+        const onFirstLayout = () => {
+          pe.off('layoutUpdated', onFirstLayout);
+          layoutReady = true;
+          tryFire();
+        };
+        pe.on('layoutUpdated', onFirstLayout);
+      }
+    }
+
+    tryFire();
+  }
+
   // Attach layout-engine specific image selection listeners
   if (editor.value instanceof PresentationEditor) {
     const presentationEditor = editor.value;

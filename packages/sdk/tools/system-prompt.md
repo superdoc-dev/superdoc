@@ -129,9 +129,9 @@ To add a comment on specific text:
 
 **Only pass `action`, `text`, and `target` for creating a new comment.** Do not pass other params — they belong to different comment actions.
 
-### Resolving and reopening comments
+### Resolving comments
 
-To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: "resolved" }`. To reopen it, use `status: "open"`. There is no separate resolve action — it's a status field on the `update` action.
+To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: "resolved" }`. There is no separate resolve action — it's a status field on the `update` action.
 
 ## Important rules
 

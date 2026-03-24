@@ -44,7 +44,10 @@ export const DocumentPartObject = Node.create({
       id: {},
       docPartGallery: {},
       docPartUnique: {
-        default: true,
+        default: false,
+      },
+      wrapperParagraph: {
+        default: null,
       },
     };
   },

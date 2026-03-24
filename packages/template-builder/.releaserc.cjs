@@ -1,23 +1,30 @@
 /* eslint-env node */
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
+const branches = [
+  { name: 'stable', channel: 'latest' },
+  { name: 'main', prerelease: 'next', channel: 'next' },
+];
+
+const isPrerelease = branches.some(
+  (b) => typeof b === 'object' && b.name === branch && b.prerelease
+);
+
+// Use AI-powered notes for stable releases, conventional generator for prereleases
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }];
+
 const config = {
-  branches: [
-    { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
-  ],
+  branches,
   tagFormat: 'template-builder-v${version}',
   plugins: [
     'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
+    notesPlugin,
     ['@semantic-release/npm', { npmPublish: true }],
   ],
 };
-
-const isPrerelease = config.branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease
-);
 
 if (!isPrerelease) {
   config.plugins.push([

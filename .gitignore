@@ -90,6 +90,8 @@ venv/
 packages/sdk/langs/python/platforms/**/*.egg-info/
 # Generated python packaging metadata (do not commit)
 packages/sdk/langs/python/**/*.egg-info/
+# Generated Node SDK platform binaries staged during release/publish
+packages/sdk/langs/node/platforms/sdk-*/bin/
 
 # Local runtime state for collaboration examples
 examples/collaboration/fastapi/.superdoc-state/

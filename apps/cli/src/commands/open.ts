@@ -1,5 +1,9 @@
 import { getBooleanOption, getNumberOption, getStringOption, resolveDocArg, resolveJsonInput } from '../lib/args';
-import { parseCollaborationInput, resolveCollaborationProfile } from '../lib/collaboration';
+import {
+  buildShorthandCollaborationInput,
+  parseCollaborationInput,
+  resolveCollaborationProfile,
+} from '../lib/collaboration';
 import {
   getProjectRoot,
   createInitialContextMetadata,
@@ -105,12 +109,11 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       payload.bootstrapSettlingMs = bootstrapSettlingMs;
     collaborationInput = parseCollaborationInput(payload);
   } else if (collabUrl) {
-    collaborationInput = parseCollaborationInput({
-      providerType: 'hocuspocus',
+    collaborationInput = buildShorthandCollaborationInput({
       url: collabUrl,
       documentId: collabDocumentId,
-      ...(onMissing != null ? { onMissing } : {}),
-      ...(bootstrapSettlingMs != null ? { bootstrapSettlingMs } : {}),
+      onMissing,
+      bootstrapSettlingMs,
     });
   } else if (collabDocumentId) {
     throw new CliError('MISSING_REQUIRED', 'open: --collab-document-id requires --collab-url.');

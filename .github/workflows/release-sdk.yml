@@ -1,5 +1,6 @@
-# Auto-releases SDK on push to main (@next channel).
-# Stable releases are local-only (pnpm run release:local).
+# Auto-releases SDK on push to:
+# - main (@next channel)
+# - stable (@latest channel)
 # Also supports manual dispatch as a fallback for one-off releases.
 name: "\U0001F4E6 Release SDK"
 
@@ -7,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - stable
     paths:
       # Keep in sync with packages/sdk/.releaserc.cjs includePaths (patch-commit-filter).
       - 'packages/sdk/**'
@@ -19,6 +21,7 @@ on:
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
       - 'scripts/semantic-release/**'
+      - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:
     inputs:
@@ -43,8 +46,8 @@ permissions:
   id-token: write # PyPI trusted publishing (OIDC)
 
 concurrency:
-  group: release-sdk-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:
   # -------------------------------------------------------------------
@@ -69,6 +72,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Refresh stable branch head
+        if: github.ref_name == 'stable'
+        run: |
+          git fetch origin "${{ github.ref_name }}" --tags
+          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
 
       - uses: pnpm/action-setup@v4
 
@@ -110,6 +119,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         working-directory: packages/sdk
         run: pnpx semantic-release
 

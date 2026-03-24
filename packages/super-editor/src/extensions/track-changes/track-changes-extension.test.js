@@ -3,7 +3,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
-import { initTestEditor } from '@tests/helpers/helpers.js';
+import { initTestEditor, hasAnyMark } from '@tests/helpers/helpers.js';
 
 const commands = TrackChanges.config.addCommands();
 
@@ -664,6 +664,83 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(afterReject.doc, 'textStyle')).toBe(false);
   });
 
+  it('rejectTrackedChangesBetween removes richer after textStyle snapshots against sparse live marks', () => {
+    const suggestedTextStyle = schema.marks.textStyle.create({
+      color: '#0563C1',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-rich-after-textstyle',
+      before: [],
+      after: [
+        {
+          type: 'textStyle',
+          attrs: {
+            color: '#0563C1',
+            styleId: 'Hyperlink',
+            fontFamily: 'Calibri, sans-serif',
+            fontSize: '11pt',
+          },
+        },
+      ],
+    });
+    const doc = createDoc('Styled', [suggestedTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+    expect(markPresent(afterReject.doc, 'textStyle')).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween preserves restored textStyle when before/after attrs overlap', () => {
+    const beforeTextStyle = schema.marks.textStyle.create({
+      color: '#0563C1',
+      fontFamily: 'Times New Roman, serif',
+      fontSize: '12pt',
+    });
+    const afterTextStyle = schema.marks.textStyle.create({
+      color: '#0563C1',
+      styleId: 'Hyperlink',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-overlap-reject',
+      before: [{ type: 'textStyle', attrs: beforeTextStyle.attrs }],
+      after: [{ type: 'textStyle', attrs: afterTextStyle.attrs }],
+    });
+    const doc = createDoc('Styled', [afterTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+
+    const restoredTextStyle = afterReject.doc.nodeAt(1)?.marks.find((mark) => mark.type.name === 'textStyle');
+    expect(restoredTextStyle).toBeDefined();
+    expect(restoredTextStyle?.attrs).toEqual(beforeTextStyle.attrs);
+  });
+
   it('rejectTrackedChangesBetween restores full before snapshot across tracked mark types', () => {
     const beforeTextStyle = schema.marks.textStyle.create({
       styleId: 'Emphasis',
@@ -827,6 +904,141 @@ describe('TrackChanges extension commands', () => {
       expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
       expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
       expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejecting hyperlink suggestion removes link formatting', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Plain text</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+
+      interactionEditor.commands.setLink({ href: 'https://example.com' });
+
+      expect(hasAnyMark(interactionEditor.state.doc, 'link')).toBe(true);
+      expect(hasAnyMark(interactionEditor.state.doc, TrackFormatMarkName)).toBe(true);
+
+      const selectedRange = getFirstTextRange(interactionEditor.state.doc);
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, selectedRange.from, selectedRange.to),
+        ),
+      );
+
+      interactionEditor.commands.rejectTrackedChangeOnSelection();
+
+      expect(hasAnyMark(interactionEditor.state.doc, TrackFormatMarkName)).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'link')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'underline')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'textStyle')).toBe(false);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejecting hyperlink suggestion by tracked-change id removes link formatting', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Plain text</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+
+      interactionEditor.commands.setLink({ href: 'https://example.com' });
+
+      const trackFormatIds = new Set();
+      interactionEditor.state.doc.descendants((node) => {
+        if (!node.isText) return;
+        node.marks.forEach((mark) => {
+          if (mark.type.name === TrackFormatMarkName && mark.attrs?.id) {
+            trackFormatIds.add(mark.attrs.id);
+          }
+        });
+      });
+
+      const [trackedChangeId] = [...trackFormatIds];
+      expect(trackedChangeId).toBeDefined();
+      expect(trackFormatIds.size).toBe(1);
+
+      interactionEditor.commands.rejectTrackedChangeById(trackedChangeId);
+
+      expect(hasAnyMark(interactionEditor.state.doc, TrackFormatMarkName)).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'link')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'underline')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'textStyle')).toBe(false);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction(docx): rejecting hyperlink suggestion by tracked-change id removes link formatting', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'docx',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.commands.insertContent('Plain text');
+      interactionEditor.setDocumentMode('suggesting');
+
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+
+      interactionEditor.commands.setLink({ href: 'https://example.com' });
+
+      const trackFormatIds = new Set();
+      interactionEditor.state.doc.descendants((node) => {
+        if (!node.isText) return;
+        node.marks.forEach((mark) => {
+          if (mark.type.name === TrackFormatMarkName && mark.attrs?.id) {
+            trackFormatIds.add(mark.attrs.id);
+          }
+        });
+      });
+
+      const [trackedChangeId] = [...trackFormatIds];
+      expect(trackedChangeId).toBeDefined();
+      expect(trackFormatIds.size).toBe(1);
+
+      interactionEditor.commands.rejectTrackedChangeById(trackedChangeId);
+
+      expect(hasAnyMark(interactionEditor.state.doc, TrackFormatMarkName)).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'link')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'underline')).toBe(false);
+      expect(hasAnyMark(interactionEditor.state.doc, 'textStyle')).toBe(false);
     } finally {
       interactionEditor.destroy();
     }

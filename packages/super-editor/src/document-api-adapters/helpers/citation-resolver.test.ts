@@ -7,7 +7,7 @@ import {
   resolvePostMutationBibliographyId,
 } from './citation-resolver.js';
 
-function makeBibliographyDoc(sdBlockId: string | undefined = 'bib-runtime', style = 'APA') {
+function makeBibliographyDoc(sdBlockId: string | number | undefined = 'bib-runtime', style = 'APA') {
   return {
     descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
       cb(
@@ -24,11 +24,11 @@ function makeBibliographyDoc(sdBlockId: string | undefined = 'bib-runtime', styl
 }
 
 describe('citation-resolver bibliography ids', () => {
-  it('uses sdBlockId as the public id when present', () => {
+  it('uses a deterministic public id while still accepting the session-local sdBlockId', () => {
     const doc = makeBibliographyDoc('bib-runtime');
     const [resolved] = findAllBibliographies(doc);
 
-    expect(resolved.nodeId).toBe('bib-runtime');
+    expect(resolved.nodeId).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
     expect(
       resolveBibliographyTarget(doc, { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId }).nodeId,
     ).toBe(resolved.nodeId);
@@ -39,7 +39,7 @@ describe('citation-resolver bibliography ids', () => {
 
   it('re-resolves the current public id from an sdBlockId after mutation', () => {
     const doc = makeBibliographyDoc('bib-runtime');
-    expect(resolvePostMutationBibliographyId(doc, 'bib-runtime')).toBe('bib-runtime');
+    expect(resolvePostMutationBibliographyId(doc, 'bib-runtime')).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
   });
 
   it('falls back to a deterministic id when sdBlockId is missing', () => {
@@ -47,6 +47,27 @@ describe('citation-resolver bibliography ids', () => {
     const [resolved] = findAllBibliographies(doc);
 
     expect(resolved.nodeId).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
+  });
+
+  it('coerces a numeric sdBlockId to string in commandNodeId', () => {
+    const doc = makeBibliographyDoc(42 as unknown as string);
+    const [resolved] = findAllBibliographies(doc);
+
+    expect(typeof resolved.commandNodeId).toBe('string');
+    expect(resolved.commandNodeId).toBe('42');
+  });
+
+  it('resolves bibliography target when sdBlockId is numeric', () => {
+    const doc = makeBibliographyDoc(42 as unknown as string);
+    const [resolved] = findAllBibliographies(doc);
+
+    // Should be findable via the stringified commandNodeId
+    const found = resolveBibliographyTarget(doc, {
+      kind: 'block',
+      nodeType: 'bibliography',
+      nodeId: '42',
+    });
+    expect(found.nodeId).toBe(resolved.nodeId);
   });
 
   it('extracts bibliography info with the public address and persisted style', () => {

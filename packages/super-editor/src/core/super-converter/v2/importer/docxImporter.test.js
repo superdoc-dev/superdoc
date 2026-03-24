@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   collapseWhitespaceNextToInlinePassthrough,
+  defaultNodeListHandler,
   filterOutRootInlineNodes,
   normalizeTableBookmarksInContent,
 } from './docxImporter.js';
@@ -322,5 +323,164 @@ describe('normalizeTableBookmarksInContent', () => {
     expect(innerCellParagraphContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'n1' } });
     expect(innerCellParagraphContent[1]).toMatchObject({ type: 'text', text: 'Nested', marks: [] });
     expect(innerCellParagraphContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'n1' } });
+  });
+});
+
+describe('docPartObj paragraph import regression', () => {
+  const createEditorStub = () => ({
+    schema: {
+      nodes: {
+        run: { isInline: true, spec: { group: 'inline' } },
+        documentPartObject: { isInline: false, spec: { group: 'block' } },
+      },
+    },
+  });
+
+  it('hoists a docPartObj SDT out of paragraph inline content', () => {
+    const nodeListHandler = defaultNodeListHandler();
+    const paragraphNode = {
+      name: 'w:p',
+      attributes: { 'w:rsidRDefault': 'AAA111' },
+      elements: [
+        {
+          name: 'w:sdt',
+          elements: [
+            {
+              name: 'w:sdtPr',
+              elements: [
+                { name: 'w:id', attributes: { 'w:val': '123456789' } },
+                {
+                  name: 'w:docPartObj',
+                  elements: [
+                    { name: 'w:docPartGallery', attributes: { 'w:val': 'Table of Figures' } },
+                    { name: 'w:docPartUnique' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'w:sdtContent',
+              elements: [
+                {
+                  name: 'w:p',
+                  attributes: { 'w14:paraId': '11111111', 'w14:textId': '11111111' },
+                  elements: [
+                    {
+                      name: 'w:r',
+                      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Table of Figures' }] }],
+                    },
+                  ],
+                },
+                {
+                  name: 'w:p',
+                  attributes: { 'w14:paraId': '22222222', 'w14:textId': '22222222' },
+                  elements: [
+                    { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Figure 1' }] }] },
+                    { name: 'w:r', elements: [{ name: 'w:tab' }] },
+                    { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = nodeListHandler.handler({
+      nodes: [paragraphNode],
+      docx: {},
+      editor: createEditorStub(),
+      path: [],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('documentPartObject');
+    expect(result[0].attrs).toMatchObject({
+      id: '123456789',
+      docPartGallery: 'Table of Figures',
+      docPartUnique: true,
+    });
+    expect(result[0].content).toHaveLength(2);
+    expect(result[0].content[0].type).toBe('paragraph');
+    expect(result[0].content[1].type).toBe('paragraph');
+  });
+
+  it('splits inline text around a docPartObj SDT into sibling paragraphs', () => {
+    const nodeListHandler = defaultNodeListHandler();
+    const paragraphNode = {
+      name: 'w:p',
+      attributes: { 'w:rsidRDefault': 'BBB222' },
+      elements: [
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Before' }] }] },
+        {
+          name: 'w:sdt',
+          elements: [
+            {
+              name: 'w:sdtPr',
+              elements: [
+                { name: 'w:id', attributes: { 'w:val': '123456789' } },
+                {
+                  name: 'w:docPartObj',
+                  elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Table of Figures' } }],
+                },
+              ],
+            },
+            {
+              name: 'w:sdtContent',
+              elements: [
+                {
+                  name: 'w:p',
+                  elements: [
+                    { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Figure 1' }] }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'After' }] }] },
+      ],
+    };
+
+    const result = nodeListHandler.handler({
+      nodes: [paragraphNode],
+      docx: {},
+      editor: createEditorStub(),
+      path: [],
+    });
+
+    expect(result).toHaveLength(3);
+    expect(result[0].type).toBe('paragraph');
+    expect(result[0].content?.[0]?.type).toBe('run');
+    expect(result[0].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'Before' });
+    expect(result[1]).toMatchObject({
+      type: 'documentPartObject',
+      attrs: { id: '123456789', docPartGallery: 'Table of Figures' },
+    });
+    expect(result[2].type).toBe('paragraph');
+    expect(result[2].content?.[0]?.type).toBe('run');
+    expect(result[2].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'After' });
+  });
+
+  it('keeps normal paragraphs intact when schema metadata is unavailable', () => {
+    const nodeListHandler = defaultNodeListHandler();
+    const paragraphNode = {
+      name: 'w:p',
+      attributes: { 'w:rsidRDefault': 'CCC333' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Header text' }] }] }],
+    };
+
+    const result = nodeListHandler.handler({
+      nodes: [paragraphNode],
+      docx: {},
+      editor: {},
+      path: [],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('paragraph');
+    expect(result[0].content?.[0]?.type).toBe('run');
+    expect(result[0].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'Header text' });
   });
 });

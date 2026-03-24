@@ -1,6 +1,6 @@
 # Agentic Collaboration Demo
 
-A chat-based AI agent that edits documents using the SuperDoc SDK and OpenAI.
+A chat-based AI agent that edits documents using the SuperDoc SDK and OpenAI. See the [README](./README.md) for setup instructions.
 
 ## Architecture
 
@@ -32,8 +32,9 @@ agent/
   chat.ts              Chat WebSocket client class
   package.json         Agent dependencies (SDK, OpenAI)
 
+start.ts               Production entrypoint (spawns server + agent)
 .env                   Environment variables (OPENAI_API_KEY)
-package.json           Root scripts (dev, install:all)
+package.json           Root scripts (dev, install:all, start)
 ```
 
 ## Key Patterns
@@ -200,6 +201,8 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 | `npm run dev:server` | Run only the server |
 | `npm run dev:client` | Run only the Vue client |
 | `npm run dev:agent` | Run only the agent |
+| `npm run start` | Production: spawn server + agent via start.ts |
+| `npm run build` | Build Vue client for production |
 
 ## Common Issues
 
@@ -254,3 +257,42 @@ fastify.get('/collaboration/:documentId', { websocket: true }, (socket, request)
 ```
 
 The `onChange` and `onAutoSave` callbacks are optional and not needed for this example.
+
+## Deployment
+
+Split deployment: frontend on Cloudflare Pages, backend (server + agent) on Railway.
+
+```
+Cloudflare Pages                         Railway
+┌──────────────────┐                    ┌─────────────────────────────────┐
+│  Vue Client      │───── wss:// ──────►│  start.ts                       │
+│  (static)        │                    │  ├── server.ts (WS endpoints)   │
+│                  │                    │  └── agent.ts (SDK + OpenAI)    │
+└──────────────────┘                    └─────────────────────────────────┘
+```
+
+### Railway (Backend)
+
+1. New Project → Deploy from GitHub
+2. Configure:
+   - **Root Directory**: `examples/document-api/agentic-collaboration`
+   - **Build Command**: `npm run install:all`
+   - **Start Command**: `npm run start`
+3. Add environment variable: `OPENAI_API_KEY`
+4. Deploy → copy the generated URL (e.g., `https://xxx.up.railway.app`)
+
+### Cloudflare Pages (Frontend)
+
+1. Connect GitHub repo
+2. Configure:
+   - **Root Directory**: `examples/document-api/agentic-collaboration/client`
+   - **Build Command**: `npm install && npm run build`
+   - **Output Directory**: `dist`
+3. Add environment variable: `VITE_BACKEND_URL` = Railway URL (with `https://`)
+4. Deploy
+
+### How It Works
+
+- `start.ts` spawns server, waits for `/health` endpoint, then spawns agent
+- Client uses `VITE_BACKEND_URL` env var for WebSocket connections (falls back to `localhost:3050` for dev)
+- Agent connects to server via localhost (same Railway container)

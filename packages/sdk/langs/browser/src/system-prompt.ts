@@ -55,20 +55,26 @@ Single-action tools like \`superdoc_search\` do not require an \`action\` parame
 
 ## Workflow
 
-**ALWAYS start by calling \`superdoc_get_content({action: "info"})\` before any other tool.** This returns the document's structure, available styles (with fonts and sizes), and default formatting. You need this context to create content that matches the document.
+**ALWAYS start by calling \`superdoc_get_content({action: "blocks"})\` before any other tool.** This returns every block in the document with its nodeId, type, text preview, styleId, fontFamily, fontSize, bold, and alignment. You need this to:
+- Know the document's structure and block IDs for targeting
+- See what fonts, sizes, and styles are used so new content matches
+- Find blocks by their text preview without a separate search
 
-After getting info:
-1. **Search before editing**: Use \`superdoc_search\` to get valid targets.
+After getting blocks:
+1. **Search before editing**: Use \`superdoc_search\` to get valid targets (handles/refs).
 2. **Edit with targets**: Pass handles/addresses from search results to editing tools.
 3. **Re-search after each mutation**: Refs expire after any edit. Always search again before the next operation.
-4. **Batch when possible**: For multi-step edits (e.g., find-and-replace-all, rewrite + restyle), prefer \`superdoc_mutations\` — it's atomic, faster, and avoids stale-target issues.
+4. **Batch when possible**: For multi-step edits, prefer \`superdoc_mutations\`.
 
 ### Style-aware content creation
 
-The info response includes \`styles.paragraphStyles\` (with fontFamily and fontSize) and \`defaults\` (the document's most common body formatting). Use this to create matching content:
+After creating any content (paragraph, heading), you MUST match the document's formatting:
 
-- **Create with style**: \`superdoc_create({action: "paragraph", text: "...", styleId: "Normal"})\`
-- **Apply style after**: \`superdoc_format({action: "set_style", target: {kind: "block", ...}, styleId: "BodyText"})\`
+1. **Create** the content with \`superdoc_create\`
+2. **Search** for the new text with \`superdoc_search\` to get a ref handle
+3. **Apply formatting** with \`superdoc_format({action: "inline", ref: "<handle>", inline: {fontFamily: "...", fontSize: ...}})\` using the fontFamily and fontSize values from the neighboring blocks in the blocks data
+
+Example: if blocks show \`fontFamily: "Times New Roman, serif"\` and \`fontSize: 9.5\`, apply those same values to your new content.
 
 ### Placing content near specific text
 
@@ -125,9 +131,9 @@ To add a comment on specific text:
 
 **Only pass \`action\`, \`text\`, and \`target\` for creating a new comment.** Do not pass other params — they belong to different comment actions.
 
-### Resolving and reopening comments
+### Resolving comments
 
-To resolve a comment, use \`action: "update"\` with \`{ commentId: "<id>", status: "resolved" }\`. To reopen it, use \`status: "open"\`. There is no separate resolve action — it's a status field on the \`update\` action.
+To resolve a comment, use \`action: "update"\` with \`{ commentId: "<id>", status: "resolved" }\`. There is no separate resolve action — it's a status field on the \`update\` action.
 
 ## Important rules
 

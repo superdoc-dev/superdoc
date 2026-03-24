@@ -1,5 +1,6 @@
 import { twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
+import { isInlineNode } from '../../../helpers/is-inline-node.js';
 
 /**
  * @param {Object} options
@@ -149,7 +150,6 @@ function normalizeTableCellContent(content, editor) {
 
   const normalized = [];
   const pendingForNextBlock = [];
-  const schema = editor?.schema;
 
   const cloneBlock = (node) => {
     if (!node) return node;
@@ -169,29 +169,13 @@ function normalizeTableCellContent(content, editor) {
     return node.content;
   };
 
-  const isInlineNode = (node) => {
-    if (!node || typeof node.type !== 'string') return false;
-    if (node.type === 'text') return true;
-    if (node.type === 'bookmarkStart' || node.type === 'bookmarkEnd') return true;
-
-    const nodeType = schema?.nodes?.[node.type];
-    if (nodeType) {
-      if (typeof nodeType.isInline === 'boolean') return nodeType.isInline;
-      if (nodeType.spec?.group && typeof nodeType.spec.group === 'string') {
-        return nodeType.spec.group.split(' ').includes('inline');
-      }
-    }
-
-    return false;
-  };
-
   for (const node of content) {
     if (!node || typeof node.type !== 'string') {
       normalized.push(node);
       continue;
     }
 
-    if (!isInlineNode(node)) {
+    if (!isInlineNode(node, editor?.schema)) {
       const blockNode = cloneBlock(node);
       if (pendingForNextBlock.length) {
         const blockContent = ensureArray(blockNode);
@@ -211,7 +195,7 @@ function normalizeTableCellContent(content, editor) {
     } else {
       const lastIndex = normalized.length - 1;
       const lastNode = normalized[lastIndex];
-      if (!lastNode || typeof lastNode.type !== 'string' || isInlineNode(lastNode)) {
+      if (!lastNode || typeof lastNode.type !== 'string' || isInlineNode(lastNode, editor?.schema)) {
         pendingForNextBlock.push(node);
         continue;
       }
@@ -228,7 +212,7 @@ function normalizeTableCellContent(content, editor) {
     if (normalized.length) {
       const lastIndex = normalized.length - 1;
       const lastNode = normalized[lastIndex];
-      if (lastNode && typeof lastNode.type === 'string' && !isInlineNode(lastNode)) {
+      if (lastNode && typeof lastNode.type === 'string' && !isInlineNode(lastNode, editor?.schema)) {
         const blockContent = ensureArray(lastNode);
         blockContent.push(...pendingForNextBlock);
         pendingForNextBlock.length = 0;

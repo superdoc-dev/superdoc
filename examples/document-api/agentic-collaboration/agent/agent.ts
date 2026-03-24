@@ -50,6 +50,7 @@ const MAX_ITERATIONS = 20;
 
 // Agent loop: process a user message and return a response
 async function processMessage(userMessage: string): Promise<string> {
+  console.log(`[Agent] User message: ${userMessage}`);
   conversationHistory.push({ role: 'user', content: userMessage });
   const messages: OpenAI.ChatCompletionMessageParam[] = [...conversationHistory];
 
@@ -64,21 +65,32 @@ async function processMessage(userMessage: string): Promise<string> {
     messages.push(message);
 
     if (!message.tool_calls?.length) {
-      conversationHistory.push({ role: 'assistant', content: message.content || 'Done.' });
-      return message.content || 'Done.';
+      const response = message.content || 'Done.';
+      console.log(`[Agent] Response: ${response}`);
+      conversationHistory.push({ role: 'assistant', content: response });
+      return response;
     }
 
     for (const call of message.tool_calls) {
-      const result = await dispatchSuperDocTool(
-        doc,
-        call.function.name,
-        JSON.parse(call.function.arguments),
-      );
-      messages.push({
-        role: 'tool',
-        tool_call_id: call.id,
-        content: JSON.stringify(result),
-      });
+      const args = JSON.parse(call.function.arguments);
+      console.log(`[Agent] Tool call: ${call.function.name}`, args);
+
+      try {
+        const result = await dispatchSuperDocTool(doc, call.function.name, args);
+        console.log(`[Agent] Tool result:`, result);
+        messages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      } catch (error) {
+        console.error(`[Agent] Tool error:`, error);
+        messages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify({ error: String(error) }),
+        });
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 export const CHART_IMMUTABILITY_KEY = new PluginKey('chartImmutability');
 
@@ -122,15 +123,26 @@ export function createChartImmutabilityPlugin() {
       init(_, state) {
         return countChartNodes(state.doc);
       },
-      apply(_tr, oldCount) {
-        // filterTransaction guarantees no chart mutations passed through,
-        // so the chart count is always unchanged after init.
+      apply(tr, oldCount, _oldState, newState) {
+        // Yjs-origin transactions bypass filterTransaction, so the chart
+        // count may have changed. Recount to keep the fast-path guard
+        // (oldCount === 0) accurate after collaborative syncs.
+        if (tr.docChanged && tr.getMeta?.(ySyncPluginKey)) {
+          // When the document had no charts, only do a full recount if the
+          // incoming steps actually contain a chart node. This preserves
+          // O(step slices) cost for text-only remote edits on chart-free docs.
+          if (oldCount === 0 && !transactionInsertsChart(tr)) {
+            return 0;
+          }
+          return countChartNodes(newState.doc);
+        }
         return oldCount;
       },
     },
 
     filterTransaction(tr, state) {
       if (!tr.docChanged) return true;
+      if (tr.getMeta?.(ySyncPluginKey)) return true;
 
       const oldCount = CHART_IMMUTABILITY_KEY.getState(state) ?? 0;
       if (oldCount === 0) {

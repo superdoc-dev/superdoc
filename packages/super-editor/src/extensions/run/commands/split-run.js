@@ -191,6 +191,7 @@ export function splitBlockPatch(state, dispatch, editor) {
  */
 function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   const styleId = paragraphAttrs?.paragraphProperties?.styleId;
+  const explicitStoredMarks = state.storedMarks;
   const hasExplicitStyleReset =
     paragraphAttrs?.paragraphProperties &&
     Object.prototype.hasOwnProperty.call(paragraphAttrs.paragraphProperties, 'styleId') &&
@@ -202,10 +203,18 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   }
 
   if (!editor?.converter && !styleId) {
+    if (explicitStoredMarks !== null) {
+      tr.setStoredMarks(explicitStoredMarks);
+    }
     return;
   }
 
   try {
+    if (explicitStoredMarks !== null) {
+      tr.setStoredMarks(explicitStoredMarks);
+      return;
+    }
+
     const params = {
       docx: editor?.converter?.convertedXml ?? {},
       numbering: editor?.converter?.numbering ?? {},

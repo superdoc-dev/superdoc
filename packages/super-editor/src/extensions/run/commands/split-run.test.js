@@ -143,6 +143,23 @@ describe('splitRunToParagraph command', () => {
     expect(paragraphTexts).toEqual(['He', 'llo']);
   });
 
+  it('preserves explicit stored marks when splitting into a new paragraph', () => {
+    loadDoc(RUN_DOC);
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Hello'.length);
+
+    const bold = editor.schema.marks.bold.create();
+    editor.view.dispatch(editor.view.state.tr.setStoredMarks([bold]));
+    expect((editor.view.state.storedMarks || []).map((mark) => mark.type.name)).toContain('bold');
+
+    const handled = editor.commands.splitRunToParagraph();
+
+    expect(handled).toBe(true);
+    expect((editor.view.state.storedMarks || []).map((mark) => mark.type.name)).toContain('bold');
+  });
+
   it('splits a run at the cursor into two runs', () => {
     loadDoc(RUN_DOC);
 

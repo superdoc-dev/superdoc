@@ -78,7 +78,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
       if (!runPositions.size) return null;
 
-      const selectionPreserver = createSelectionPreserver(tr, newState.selection);
+      const selectionPreserver = createSelectionPreserver(tr, newState.selection, newState.storedMarks);
       const sortedRunPositions = Array.from(runPositions).sort((a, b) => b - a);
 
       sortedRunPositions.forEach((pos) => {
@@ -426,7 +426,7 @@ function stableStringifyInlineProps(inlineProps) {
  * @param {import('prosemirror-state').Selection} originalSelection
  * @returns {{ mapReplacement: (startPos: number, nodeSize: number, replacement: Fragment) => void, finalize: () => void }|null}
  */
-function createSelectionPreserver(tr, originalSelection) {
+function createSelectionPreserver(tr, originalSelection, originalStoredMarks = null) {
   if (!originalSelection) return null;
 
   const isTextSelection = originalSelection instanceof TextSelection;
@@ -503,6 +503,9 @@ function createSelectionPreserver(tr, originalSelection) {
     if (!tr.docChanged) return;
     if (isTextSelection && preservedAnchor != null && preservedHead != null) {
       tr.setSelection(TextSelection.create(tr.doc, preservedAnchor, preservedHead));
+      if (preservedAnchor === preservedHead && originalStoredMarks !== null) {
+        tr.setStoredMarks(originalStoredMarks);
+      }
       return;
     }
     tr.setSelection(originalSelection.map(tr.doc, tr.mapping));

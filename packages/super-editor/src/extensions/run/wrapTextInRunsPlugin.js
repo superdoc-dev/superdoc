@@ -3,6 +3,12 @@ import { decodeRPrFromMarks } from '@converter/styles.js';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 import { getFormattingStateAtPos } from '@core/helpers/getMarksFromSelection.js';
 
+const preserveStoredMarks = (state, tr) => {
+  if (!(tr.selection instanceof TextSelection) || !tr.selection.empty) return;
+  if (state.storedMarks === null) return;
+  tr.setStoredMarks(state.storedMarks);
+};
+
 // Keep collapsed selections inside run nodes so caret geometry maps to text positions.
 const normalizeSelectionIntoRun = (tr, runType) => {
   const selection = tr.selection;
@@ -95,6 +101,7 @@ const buildWrapTransaction = (state, ranges, runType, editor) => {
   const tr = state.tr;
   replacements.sort((a, b) => b.from - a.from).forEach(({ from, to, runNode }) => tr.replaceWith(from, to, runNode));
   normalizeSelectionIntoRun(tr, runType);
+  preserveStoredMarks(state, tr);
 
   return tr.docChanged ? tr : null;
 };

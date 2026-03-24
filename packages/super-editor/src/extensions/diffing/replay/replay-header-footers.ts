@@ -317,6 +317,7 @@ function applyHeaderFooterSlotChange(
 
   applySlotRefs(nextSectPr, 'header', slot.header);
   applySlotRefs(nextSectPr, 'footer', slot.footer);
+  syncVariantIdCaches(editor.converter!, slot);
 
   if (projection.target.kind === 'paragraph') {
     const paragraph = tr.doc.nodeAt(projection.target.pos);
@@ -360,6 +361,25 @@ function applySlotRefs(
     if (refs[variant]) {
       setSectPrHeaderFooterRef(sectPr, kind, variant, refs[variant]!);
     }
+  }
+}
+
+/**
+ * Keeps converter variant-id caches aligned with the applied section slot refs.
+ *
+ * @param converter Converter object mutated during replay.
+ * @param slot Slot payload that was written into the section properties.
+ */
+function syncVariantIdCaches(
+  converter: NonNullable<ReplayHeaderFooterEditor['converter']>,
+  slot: HeaderFooterSlotState,
+): void {
+  const headerIds = (converter.headerIds ??= {}) as HeaderFooterVariantIds;
+  const footerIds = (converter.footerIds ??= {}) as HeaderFooterVariantIds;
+
+  for (const variant of SLOT_VARIANTS) {
+    headerIds[variant] = slot.header[variant] ?? null;
+    footerIds[variant] = slot.footer[variant] ?? null;
   }
 }
 

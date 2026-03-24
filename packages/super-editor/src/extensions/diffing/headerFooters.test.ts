@@ -4,6 +4,8 @@ import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { captureHeaderFooterState } from './algorithm/header-footer-diffing';
+import { replayHeaderFooters } from './replay/replay-header-footers';
+import { resolveSectionProjections } from '../../document-api-adapters/helpers/sections-resolver.js';
 
 /**
  * Creates a headless editor from a DOCX fixture.
@@ -612,6 +614,51 @@ describe('Header/footer diffing', () => {
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();
+    }
+  });
+
+  it('updates converter variant ids when replay repoints a section header ref', async () => {
+    const beforeEditor = await createEditor();
+
+    try {
+      seedPart(beforeEditor, {
+        kind: 'header',
+        refId: 'rIdHeader1',
+        partPath: 'word/header1.xml',
+        text: 'Original default header',
+      });
+      setBodySection(beforeEditor, { headerDefault: 'rIdHeader1' });
+      beforeEditor.converter!.headerIds = {
+        ...(beforeEditor.converter!.headerIds ?? {}),
+        default: 'rIdHeader1',
+        ids: ['rIdHeader1'],
+      };
+      const sectionId = resolveSectionProjections(beforeEditor as never)[0]?.sectionId;
+      expect(sectionId).toBeTruthy();
+
+      const tr = beforeEditor.state.tr;
+      replayHeaderFooters({
+        tr,
+        schema: beforeEditor.schema,
+        editor: beforeEditor,
+        headerFootersDiff: {
+          addedParts: [],
+          modifiedParts: [],
+          removedParts: [],
+          slotChanges: [
+            {
+              sectionId,
+              titlePg: false,
+              header: { default: 'rIdHeader2', first: null, even: null, odd: null },
+              footer: { default: null, first: null, even: null, odd: null },
+            },
+          ],
+        },
+      });
+
+      expect(beforeEditor.converter?.headerIds?.default).toBe('rIdHeader2');
+    } finally {
+      beforeEditor.destroy?.();
     }
   });
 });

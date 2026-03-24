@@ -1,10 +1,8 @@
-import { findNearbyMarks } from '../helpers/findNearbyMarks.js';
-
 /**
  * Insert a heading node at an absolute document position.
  *
- * Copies text marks (fontFamily, color) from the nearest heading
- * or body paragraph so new headings match the document's font.
+ * Internally, headings are paragraph nodes with a heading styleId
+ * (`Heading1` through `Heading6`) set on `paragraphProperties`.
  *
  * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
@@ -27,24 +25,7 @@ export const insertHeadingAt =
       },
     };
     const normalizedText = typeof text === 'string' ? text : '';
-
-    let textNode = null;
-    if (normalizedText.length > 0) {
-      const rawMarks = findNearbyMarks(state.doc, pos, { prefer: 'heading' });
-      // Strip fontSize from copied marks — headings should keep their style-level size.
-      const marks = rawMarks.map((mark) => {
-        if (mark.type.name === 'textStyle' && mark.attrs.fontSize != null) {
-          const rest = Object.fromEntries(Object.entries(mark.attrs).filter(([k]) => k !== 'fontSize'));
-          return mark.type.create(rest);
-        }
-        return mark;
-      });
-      const meaningful = marks.filter(
-        (m) => m.type.name !== 'textStyle' || Object.values(m.attrs).some((v) => v != null),
-      );
-      textNode =
-        meaningful.length > 0 ? state.schema.text(normalizedText, meaningful) : state.schema.text(normalizedText);
-    }
+    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
 
     let paragraphNode;
     try {

@@ -370,6 +370,47 @@ describe('Header/footer diffing', () => {
     }
   });
 
+  it('emits partChanged for parts replayed from diff payloads', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultHeader(afterEditor, 'Header with image');
+      seedPartDependency(afterEditor, {
+        partPath: 'word/header1.xml',
+        relationshipId: 'rIdImage1',
+        target: 'media/header-logo.png',
+        targetPath: 'word/media/header-logo.png',
+        mediaContent: 'data:image/png;base64,aGVhZGVy',
+      });
+
+      const emitSpy = vi.spyOn(beforeEditor, 'emit');
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(emitSpy).toHaveBeenCalledWith(
+        'partChanged',
+        expect.objectContaining({
+          source: 'diff-replay',
+          parts: expect.arrayContaining([
+            expect.objectContaining({ partId: 'word/_rels/header1.xml.rels' }),
+            expect.objectContaining({ partId: 'word/media/header-logo.png' }),
+          ]),
+        }),
+      );
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
   it('exports a valid header part after replay adds a new header', async () => {
     const beforeEditor = await createEditor();
     const afterEditor = await createEditor();

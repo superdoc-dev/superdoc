@@ -2,6 +2,7 @@ import { ReplayResult } from './replay-types';
 import type { PartsDiff } from '../algorithm/parts-diffing';
 
 type ReplayPartsEditor = {
+  emit?: (event: string, payload?: unknown) => void;
   options?: {
     mediaFiles?: Record<string, unknown>;
   };
@@ -49,14 +50,26 @@ export function replayPartsDiff({
     (editor.options ??= {}).mediaFiles ?? ((editor.options.mediaFiles = {}), editor.options.mediaFiles);
   const storageImage = (editor.storage ??= {}).image ?? ((editor.storage.image = {}), editor.storage.image);
   const storageMediaStore = storageImage.media ?? ((storageImage.media = {}), storageImage.media);
+  const changedParts: Array<{
+    partId: string;
+    operation: 'mutate' | 'create' | 'delete';
+    changedPaths: string[];
+  }> = [];
 
   for (const [partPath, snapshot] of Object.entries(partsDiff.upserts)) {
     if (snapshot.kind === 'xml') {
+      const operation = partPath in editor.converter.convertedXml ? 'mutate' : 'create';
       editor.converter.convertedXml[partPath] = structuredClone(snapshot.content);
+      changedParts.push({ partId: partPath, operation, changedPaths: [] });
     } else {
+      const operation =
+        partPath in optionMediaStore || partPath in storageMediaStore || partPath in editor.converter.convertedXml
+          ? 'mutate'
+          : 'create';
       const value = structuredClone(snapshot.content);
       optionMediaStore[partPath] = value;
       storageMediaStore[partPath] = structuredClone(value);
+      changedParts.push({ partId: partPath, operation, changedPaths: [] });
     }
     result.applied += 1;
   }
@@ -64,6 +77,7 @@ export function replayPartsDiff({
   for (const partPath of partsDiff.deletes) {
     if (partPath in editor.converter.convertedXml) {
       delete editor.converter.convertedXml[partPath];
+      changedParts.push({ partId: partPath, operation: 'delete', changedPaths: [] });
       result.applied += 1;
       continue;
     }
@@ -76,8 +90,13 @@ export function replayPartsDiff({
       delete storageMediaStore[partPath];
     }
     if (hadOptionMedia || hadStorageMedia) {
+      changedParts.push({ partId: partPath, operation: 'delete', changedPaths: [] });
       result.applied += 1;
     }
+  }
+
+  if (changedParts.length > 0) {
+    editor.emit?.('partChanged', { parts: changedParts, source: 'diff-replay' });
   }
 
   return {

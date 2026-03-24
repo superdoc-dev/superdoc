@@ -2,7 +2,7 @@ import { createClient, type BaseUserMeta, type JsonObject, type Room } from '@li
 import { LiveblocksYjsProvider } from '@liveblocks/yjs';
 import WS from 'ws';
 import { Doc as YDoc } from 'yjs';
-import { CliError } from '../errors';
+import { CliError, type CliErrorCode } from '../errors';
 import { isRecord } from '../guards';
 import { DEFAULT_SYNC_TIMEOUT_MS } from './runtime';
 import type { CollaborationRuntime, LiveblocksCollaborationProfile } from './types';
@@ -146,6 +146,59 @@ function buildAuthEndpointCallback(
 }
 
 // ---------------------------------------------------------------------------
+// Liveblocks WebSocket close code classification
+// ---------------------------------------------------------------------------
+//
+// Liveblocks WebsocketCloseCodes range semantics (from @liveblocks/core):
+//   40xx → terminal disconnect (no retry)
+//   41xx → token expired, reauthorize
+//   4999 → explicit close-without-retry
+//
+// In the CLI there is no interactive re-auth flow, so 41xx codes are also
+// terminal. We classify each well-known code into the most specific CLI error
+// code so that callers get actionable remediation guidance.
+
+type RoomErrorClassification = {
+  errorCode: CliErrorCode;
+  label: string;
+};
+
+const LIVEBLOCKS_CLOSE_CODE_MAP: Record<number, RoomErrorClassification> = {
+  // 40xx — terminal disconnect
+  4000: { errorCode: 'COLLABORATION_CONNECTION_FAILED', label: 'invalid message format' },
+  4001: { errorCode: 'COLLABORATION_AUTH_FAILED', label: 'not allowed (forbidden)' },
+  4003: { errorCode: 'COLLABORATION_CAPACITY_EXCEEDED', label: 'max concurrent connections (account)' },
+  4005: { errorCode: 'COLLABORATION_CAPACITY_EXCEEDED', label: 'max concurrent connections (room)' },
+  4006: { errorCode: 'COLLABORATION_CONNECTION_FAILED', label: 'room ID was updated' },
+
+  // 41xx — reauthorize (terminal in CLI context)
+  4100: { errorCode: 'COLLABORATION_AUTH_FAILED', label: 'kicked from room' },
+  4109: { errorCode: 'COLLABORATION_AUTH_FAILED', label: 'token expired' },
+
+  // Explicit no-retry sentinel
+  4999: { errorCode: 'COLLABORATION_CONNECTION_FAILED', label: 'server closed without retry' },
+};
+
+export function classifyLiveblocksCloseCode(code: number): RoomErrorClassification | null {
+  const known = LIVEBLOCKS_CLOSE_CODE_MAP[code];
+  if (known) return known;
+
+  // Catch-all for any 40xx code not individually mapped — Liveblocks treats
+  // the entire 4000-4099 range as "disconnect, do not retry".
+  if (code >= 4000 && code < 4100) {
+    return { errorCode: 'COLLABORATION_CONNECTION_FAILED', label: 'terminal room error' };
+  }
+
+  // -1 is a connection-level failure surfaced by the Liveblocks client.
+  if (code === -1) {
+    return { errorCode: 'COLLABORATION_CONNECTION_FAILED', label: 'connection failed' };
+  }
+
+  // Anything else (1xxx transient, unknown) — not terminal, let timeout handle it.
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Custom waitForSync for Liveblocks
 // ---------------------------------------------------------------------------
 
@@ -174,31 +227,22 @@ function waitForLiveblocksSync(provider: LiveblocksYjsProvider, room: Room, time
     provider.on('sync', onSync);
     cleanup.push(() => provider.off('sync', onSync));
 
-    // Listen for room errors (terminal auth/permission failures)
+    // Listen for room errors — classify and fail fast on terminal codes
     const unsubError = room.subscribe('error', (error) => {
-      const code = error.code;
-      // Liveblocks error codes 4001, 4003, 4005 indicate auth/permission failures
-      if (code === 4001 || code === 4003 || code === 4005) {
-        finish(
-          new CliError('COLLABORATION_AUTH_FAILED', `Liveblocks room error (${code}): ${error.message}`, {
-            providerType: 'liveblocks',
-            errorCode: code,
-          }),
-        );
-      } else if (code === 4004) {
-        // Room not found / permanently deleted
-        finish(
-          new CliError('COLLABORATION_CONNECTION_FAILED', `Liveblocks room error (${code}): ${error.message}`, {
-            providerType: 'liveblocks',
-            errorCode: code,
-          }),
-        );
-      }
-      // Other codes are transient — let timeout catch them
+      const classification = classifyLiveblocksCloseCode(error.code);
+      if (!classification) return; // Transient — let timeout handle it
+
+      finish(
+        new CliError(
+          classification.errorCode,
+          `Liveblocks room error (${error.code}, ${classification.label}): ${error.message}`,
+          { providerType: 'liveblocks', errorCode: error.code },
+        ),
+      );
     });
     cleanup.push(() => unsubError());
 
-    // Sync timeout as fallback
+    // Sync timeout as fallback for transient errors
     const timer = setTimeout(() => {
       finish(
         new CliError('COLLABORATION_SYNC_TIMEOUT', `Collaboration sync timed out after ${timeoutMs}ms.`, {

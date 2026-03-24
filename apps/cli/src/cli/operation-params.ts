@@ -931,11 +931,30 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             },
             {
               type: 'object',
-              description: 'Liveblocks collaboration.',
+              description: 'Liveblocks collaboration with a public API key.',
               properties: {
                 providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'roomId', 'publicApiKey'],
+            },
+            {
+              type: 'object',
+              description: 'Liveblocks collaboration with a custom auth endpoint.',
+              properties: {
+                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },
                 authHeadersEnv: {
                   type: 'string',
@@ -952,7 +971,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
                   description: 'Time (ms) to wait for bootstrap claim propagation.',
                 },
               },
-              required: ['providerType', 'roomId'],
+              required: ['providerType', 'roomId', 'authEndpoint'],
             },
           ],
         } as CliTypeSpec,

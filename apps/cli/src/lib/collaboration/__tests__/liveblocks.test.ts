@@ -35,7 +35,7 @@ mock.module('@liveblocks/yjs', () => ({
 }));
 
 // Import after mocking
-const { createLiveblocksRuntime } = await import('../liveblocks');
+const { createLiveblocksRuntime, classifyLiveblocksCloseCode } = await import('../liveblocks');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -294,5 +294,72 @@ describe('auth endpoint response validation', () => {
     } finally {
       server.stop();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Close code classification
+// ---------------------------------------------------------------------------
+
+describe('classifyLiveblocksCloseCode', () => {
+  test('4001 (NOT_ALLOWED) → COLLABORATION_AUTH_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4001);
+    expect(result?.errorCode).toBe('COLLABORATION_AUTH_FAILED');
+  });
+
+  test('4109 (TOKEN_EXPIRED) → COLLABORATION_AUTH_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4109);
+    expect(result?.errorCode).toBe('COLLABORATION_AUTH_FAILED');
+  });
+
+  test('4100 (KICKED) → COLLABORATION_AUTH_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4100);
+    expect(result?.errorCode).toBe('COLLABORATION_AUTH_FAILED');
+  });
+
+  test('4003 (MAX_CONCURRENT_CONNECTIONS) → COLLABORATION_CAPACITY_EXCEEDED', () => {
+    const result = classifyLiveblocksCloseCode(4003);
+    expect(result?.errorCode).toBe('COLLABORATION_CAPACITY_EXCEEDED');
+  });
+
+  test('4005 (MAX_CONCURRENT_CONNECTIONS_PER_ROOM) → COLLABORATION_CAPACITY_EXCEEDED', () => {
+    const result = classifyLiveblocksCloseCode(4005);
+    expect(result?.errorCode).toBe('COLLABORATION_CAPACITY_EXCEEDED');
+  });
+
+  test('4006 (ROOM_ID_UPDATED) → COLLABORATION_CONNECTION_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4006);
+    expect(result?.errorCode).toBe('COLLABORATION_CONNECTION_FAILED');
+  });
+
+  test('4999 (CLOSE_WITHOUT_RETRY) → COLLABORATION_CONNECTION_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4999);
+    expect(result?.errorCode).toBe('COLLABORATION_CONNECTION_FAILED');
+  });
+
+  test('4000 (INVALID_MESSAGE_FORMAT) → COLLABORATION_CONNECTION_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(4000);
+    expect(result?.errorCode).toBe('COLLABORATION_CONNECTION_FAILED');
+  });
+
+  test('-1 (connection failure) → COLLABORATION_CONNECTION_FAILED', () => {
+    const result = classifyLiveblocksCloseCode(-1);
+    expect(result?.errorCode).toBe('COLLABORATION_CONNECTION_FAILED');
+  });
+
+  test('unmapped 40xx code falls through to terminal catch-all', () => {
+    const result = classifyLiveblocksCloseCode(4042);
+    expect(result?.errorCode).toBe('COLLABORATION_CONNECTION_FAILED');
+    expect(result?.label).toBe('terminal room error');
+  });
+
+  test('1xxx transient codes return null (not terminal)', () => {
+    expect(classifyLiveblocksCloseCode(1006)).toBeNull();
+    expect(classifyLiveblocksCloseCode(1013)).toBeNull();
+  });
+
+  test('unknown codes return null', () => {
+    expect(classifyLiveblocksCloseCode(9999)).toBeNull();
+    expect(classifyLiveblocksCloseCode(0)).toBeNull();
   });
 });

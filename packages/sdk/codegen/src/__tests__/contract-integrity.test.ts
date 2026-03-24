@@ -41,6 +41,7 @@ type Contract = {
       intentGroup?: string;
       intentAction?: string;
       sdkSurface?: 'client' | 'document' | 'internal' | string;
+      responseEnvelopeKey?: string | null;
     }
   >;
 };
@@ -395,13 +396,25 @@ describe('Tools policy integrity', () => {
 });
 
 describe('agentVisible param annotation integrity', () => {
-  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
+  // Global params hidden across all operations that define them.
+  const GLOBALLY_HIDDEN_PARAMS = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
+
+  // Per-operation params hidden only on specific operations (generic names
+  // like "type" or "kind" must be scoped to avoid masking accidental hiding).
+  const OPERATION_SCOPED_HIDDEN: Record<string, Set<string>> = {
+    'doc.find': new Set(['type', 'nodeType', 'kind', 'pattern', 'mode', 'caseSensitive']),
+  };
+
+  function isExpectedHidden(operationId: string, paramName: string): boolean {
+    if (GLOBALLY_HIDDEN_PARAMS.has(paramName)) return true;
+    return OPERATION_SCOPED_HIDDEN[operationId]?.has(paramName) ?? false;
+  }
 
   test('expected transport-envelope params are agentVisible: false when present', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const [, op] of Object.entries(contract.operations)) {
+    for (const [id, op] of Object.entries(contract.operations)) {
       for (const param of op.params) {
-        if (EXPECTED_HIDDEN.has(param.name) && 'agentVisible' in param) {
+        if (isExpectedHidden(id, param.name) && 'agentVisible' in param) {
           expect(param.agentVisible).toBe(false);
         }
       }
@@ -410,12 +423,161 @@ describe('agentVisible param annotation integrity', () => {
 
   test('no unexpected params are marked agentVisible: false', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const [, op] of Object.entries(contract.operations)) {
+    for (const [id, op] of Object.entries(contract.operations)) {
       for (const param of op.params) {
         if (param.agentVisible === false) {
-          expect(EXPECTED_HIDDEN.has(param.name)).toBe(true);
+          expect(isExpectedHidden(id, param.name)).toBe(true);
         }
       }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Response envelope key integrity
+// ---------------------------------------------------------------------------
+
+describe('Response envelope key integrity', () => {
+  const NODE_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated/client.ts');
+  const PYTHON_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/generated/client.py');
+
+  test('every document-surface operation has a responseEnvelopeKey field', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.sdkSurface !== 'document') continue;
+      expect('responseEnvelopeKey' in op).toBe(true);
+    }
+  });
+
+  test('responseEnvelopeKey is either a non-empty string or null', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (!('responseEnvelopeKey' in op)) continue;
+      const key = op.responseEnvelopeKey;
+      if (key !== null) {
+        expect(typeof key).toBe('string');
+        expect(key!.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  test('generated Node client unwraps every operation that has a non-null envelope key', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const clientSource = await readFile(NODE_CLIENT_PATH, 'utf8');
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.sdkSurface !== 'document') continue;
+      const key = op.responseEnvelopeKey;
+      if (key == null) continue;
+
+      // The generated client should call unwrapEnvelope or unwrapStringEnvelope
+      // with this operation's ID and the correct key.
+      const opPattern = `CONTRACT.operations["${id}"]`;
+      const unwrapPattern = `unwrapEnvelope`;
+      const stringUnwrapPattern = `unwrapStringEnvelope`;
+      const keyPattern = `"${key}"`;
+
+      // Find lines referencing this operation
+      const opLines = clientSource.split('\n').filter((line) => line.includes(opPattern));
+      expect(opLines.length).toBeGreaterThan(0);
+
+      // Every reference to this operation should use unwrapping with the correct key
+      for (const line of opLines) {
+        const hasUnwrap = line.includes(unwrapPattern) || line.includes(stringUnwrapPattern);
+        const hasKey = line.includes(keyPattern);
+        expect(hasUnwrap).toBe(true);
+        expect(hasKey).toBe(true);
+      }
+    }
+  });
+
+  test('generated Node client does NOT unwrap operations with null envelope key', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const clientSource = await readFile(NODE_CLIENT_PATH, 'utf8');
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.sdkSurface !== 'document') continue;
+      if (op.responseEnvelopeKey !== null) continue;
+
+      const opPattern = `CONTRACT.operations["${id}"]`;
+      const opLines = clientSource.split('\n').filter((line) => line.includes(opPattern));
+      if (opLines.length === 0) continue; // operation may not be in the client tree
+
+      for (const line of opLines) {
+        expect(line.includes('unwrapEnvelope')).toBe(false);
+        expect(line.includes('unwrapStringEnvelope')).toBe(false);
+      }
+    }
+  });
+
+  test('generated Python client unwraps every operation that has a non-null envelope key', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const clientSource = await readFile(PYTHON_CLIENT_PATH, 'utf8');
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.sdkSurface !== 'document') continue;
+      const key = op.responseEnvelopeKey;
+      if (key == null) continue;
+
+      const opPattern = `"${id}"`;
+      const opLines = clientSource.split('\n').filter((line) => line.includes(opPattern) && line.includes('invoke'));
+      if (opLines.length === 0) continue;
+
+      for (const line of opLines) {
+        // Next line should have unwrap — check the method body
+        const idx = clientSource.indexOf(line);
+        const nextLines = clientSource.slice(idx).split('\n').slice(1, 3).join('\n');
+        const hasUnwrap = nextLines.includes('_unwrap_envelope') || nextLines.includes('_unwrap_string_envelope');
+        expect(hasUnwrap).toBe(true);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SDK param / inputSchema alignment
+// ---------------------------------------------------------------------------
+
+describe('SDK param alignment with inputSchema', () => {
+  test('operations with inputSchema expose matching params for all required schema fields', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    // Transport-only params that are not in inputSchema
+    const TRANSPORT_ONLY_PARAMS = new Set(['doc', 'sessionId']);
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (!op.inputSchema) continue;
+      const schema = op.inputSchema as { required?: string[]; properties?: Record<string, unknown> };
+      if (!schema.required || !schema.properties) continue;
+
+      const paramNames = new Set(op.params.map((p) => p.name));
+
+      for (const requiredField of schema.required) {
+        // The required field should either be a param or be covered by a json param
+        // that encompasses it (e.g., query-json covers the full query).
+        // At minimum, it should be accessible somehow.
+        if (TRANSPORT_ONLY_PARAMS.has(requiredField)) continue;
+
+        // Check if the field exists as a param (direct or via jsonFlag)
+        const hasDirectParam = paramNames.has(requiredField);
+        const hasJsonParam = op.params.some((p) => p.kind === 'jsonFlag' && p.name === requiredField);
+        const hasFlatExpansion = op.params.some((p) => p.kind === 'flag' && !TRANSPORT_ONLY_PARAMS.has(p.name));
+
+        // Required schema fields should be reachable via SDK params
+        expect(hasDirectParam || hasJsonParam || hasFlatExpansion).toBe(true);
+      }
+    }
+  });
+
+  test('operations with a select field in inputSchema expose select as a param', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (!op.inputSchema) continue;
+      const schema = op.inputSchema as { properties?: Record<string, unknown> };
+      if (!schema.properties?.select) continue;
+
+      const hasSelectParam = op.params.some((p) => p.name === 'select');
+      expect(hasSelectParam).toBe(true);
     }
   });
 });

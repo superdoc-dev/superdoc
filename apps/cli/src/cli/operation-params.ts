@@ -12,6 +12,7 @@
 import {
   buildInternalContractSchemas,
   COMMAND_CATALOG,
+  NODE_TYPES,
   OPERATION_REQUIRES_DOCUMENT_CONTEXT_MAP,
   type OperationId,
 } from '@superdoc/document-api';
@@ -446,7 +447,47 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
 // adjustment for CLI metadata (e.g. simplifying or enriching).
 // ---------------------------------------------------------------------------
 
-const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {};
+// The document-api contract schema for `select` is a strict oneOf(text, node)
+// that rejects shorthand selectors like `{ type: "paragraph" }`. The CLI
+// normalizes these shorthands in resolveFindQuery() → validateQuery(), so
+// the schema-level validation must accept all three supported forms.
+const DOC_FIND_SELECT_SCHEMA: CliTypeSpec = {
+  oneOf: [
+    // { type: 'text', pattern: '...', mode?, caseSensitive? }
+    {
+      type: 'object',
+      properties: {
+        type: { const: 'text' },
+        pattern: { type: 'string' },
+        mode: { oneOf: [{ const: 'contains' }, { const: 'regex' }] },
+        caseSensitive: { type: 'boolean' },
+      },
+      required: ['type', 'pattern'],
+    },
+    // { type: 'node', nodeType?, kind? }
+    {
+      type: 'object',
+      properties: {
+        type: { const: 'node' },
+        nodeType: { type: 'string' },
+        kind: { oneOf: [{ const: 'block' }, { const: 'inline' }] },
+      },
+      required: ['type'],
+    },
+    // Shorthand: { type: '<NodeType>' } — normalized to { type: 'node', nodeType }
+    {
+      type: 'object',
+      properties: {
+        type: { oneOf: NODE_TYPES.map((t) => ({ const: t }) as CliTypeSpec) },
+      },
+      required: ['type'],
+    },
+  ],
+};
+
+const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {
+  'doc.find': { select: DOC_FIND_SELECT_SCHEMA },
+};
 
 // ---------------------------------------------------------------------------
 // Schema-derived param exclusions
@@ -455,11 +496,7 @@ const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>
 // exposed in CLI metadata because the CLI provides an alternative interface.
 // ---------------------------------------------------------------------------
 
-const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
-  // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
-  // is an internal document-api field that the invoker builds from flat flags.
-  'doc.find': new Set(['select']),
-};
+const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {};
 
 // ---------------------------------------------------------------------------
 // Extra CLI-specific params for doc-backed operations
@@ -494,12 +531,16 @@ const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationI
 );
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
+  // Flat flags are CLI convenience alternatives to --select-json. Marked
+  // agentVisible: false so that if doc.find is ever exposed as a tool
+  // (currently skipAsATool), agents see only the structured `select` param.
   'doc.find': [
     {
       name: 'type',
       kind: 'flag',
       type: 'string',
       description: "Selector type: 'text' for text search or 'node' for node type search.",
+      agentVisible: false,
     },
     {
       name: 'nodeType',
@@ -507,23 +548,30 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
       flag: 'node-type',
       type: 'string',
       description: 'Node type to match (paragraph, heading, table, listItem, etc.).',
+      agentVisible: false,
     },
-    { name: 'kind', kind: 'flag', type: 'string', description: "Filter: 'block' or 'inline'." },
-    { name: 'pattern', kind: 'flag', type: 'string', description: 'Text or regex pattern to match.' },
-    { name: 'mode', kind: 'flag', type: 'string', description: "Match mode: 'contains' (substring) or 'regex'." },
+    { name: 'kind', kind: 'flag', type: 'string', description: "Filter: 'block' or 'inline'.", agentVisible: false },
+    {
+      name: 'pattern',
+      kind: 'flag',
+      type: 'string',
+      description: 'Text or regex pattern to match.',
+      agentVisible: false,
+    },
+    {
+      name: 'mode',
+      kind: 'flag',
+      type: 'string',
+      description: "Match mode: 'contains' (substring) or 'regex'.",
+      agentVisible: false,
+    },
     {
       name: 'caseSensitive',
       kind: 'flag',
       flag: 'case-sensitive',
       type: 'boolean',
       description: 'Case-sensitive matching. Default: false.',
-    },
-    {
-      name: 'select',
-      kind: 'jsonFlag',
-      flag: 'select-json',
-      type: 'json',
-      description: "Search selector as JSON: {type:'text', pattern:'...'} or {type:'node', nodeType:'...'}.",
+      agentVisible: false,
     },
     { name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json', description: 'Query filter as JSON object.' },
   ],

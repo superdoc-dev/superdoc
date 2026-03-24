@@ -456,9 +456,10 @@ const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>
 // ---------------------------------------------------------------------------
 
 const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
-  // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
-  // is an internal document-api field that the invoker builds from flat flags.
-  'doc.find': new Set(['select']),
+  // Previously excluded `select` for doc.find, but this also blocked the
+  // jsonFlag re-addition in EXTRA_CLI_PARAMS. The schema-derived `select`
+  // (with full JSON schema type) is the correct param for SDK consumers.
+  // Flat flags (--type, --pattern, --mode) remain available as CLI convenience.
 };
 
 // ---------------------------------------------------------------------------

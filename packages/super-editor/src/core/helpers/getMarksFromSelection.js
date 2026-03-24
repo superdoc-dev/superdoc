@@ -13,7 +13,7 @@ export function getSelectionFormattingState(state, editor) {
 
   if (empty) {
     return getFormattingStateAtPos(state, state.selection.$head.pos, editor, {
-      storedMarks: state.storedMarks || null,
+      storedMarks: state.storedMarks ?? null,
       includeCursorMarksWithStoredMarks: true,
     });
   }
@@ -31,6 +31,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const context = getParagraphRunContext($pos, editor);
   const currentRunProperties = context?.runProperties || null;
   const cursorMarks = $pos.marks();
+  const hasStoredMarks = storedMarks !== null;
   const resolvedMarks = [];
   const inlineMarks = [];
 
@@ -38,7 +39,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   if (preferParagraphRunProperties) {
     inlineRunProperties = context?.paragraphAttrs?.paragraphProperties?.runProperties || null;
     inlineMarks.push(...createMarksFromRunProperties(state, inlineRunProperties, editor));
-  } else if (storedMarks) {
+  } else if (hasStoredMarks) {
     inlineMarks.push(...storedMarks);
     inlineRunProperties = decodeRPrFromMarks(storedMarks);
   } else if (context?.isEmpty) {
@@ -55,7 +56,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const resolvedFromSelection = getInheritedRunProperties(
     $pos,
     editor,
-    preferParagraphRunProperties || (!storedMarks && context?.isEmpty)
+    preferParagraphRunProperties || (!hasStoredMarks && context?.isEmpty)
       ? context?.paragraphAttrs?.paragraphProperties?.runProperties || null
       : inlineRunProperties,
   );
@@ -63,7 +64,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const styleRunProperties = resolvedFromSelection?.styleRunProperties ?? null;
   const resolvedMarksFromProperties = createMarksFromRunProperties(state, resolvedRunProperties, editor);
   resolvedMarks.push(...mergeResolvedMarksWithInlineFallback(resolvedMarksFromProperties, inlineMarks));
-  if (storedMarks && includeCursorMarksWithStoredMarks) {
+  if (hasStoredMarks && includeCursorMarksWithStoredMarks) {
     resolvedMarks.push(...cursorMarks);
   }
 

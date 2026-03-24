@@ -78,7 +78,7 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
 
   try {
     const originalDocJSON = beforeEditor.state.doc.toJSON();
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false });
 
     expect(success).toBe(true);
@@ -106,13 +106,7 @@ const expectDirectReplayPopulatesBodyMedia = async (beforeName, afterName, apply
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
-    const diff = beforeEditor.commands.compareDocuments(
-      afterEditor.state.doc,
-      afterEditor.converter?.comments ?? [],
-      afterEditor.converter?.translatedLinkedStyles,
-      afterEditor.converter?.translatedNumbering,
-      afterEditor,
-    );
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
     const mediaUpserts = Object.keys(diff.partsDiff?.upserts ?? {}).filter((path) => path.startsWith('word/media/'));
     expect(mediaUpserts.length).toBeGreaterThan(0);
@@ -145,7 +139,7 @@ const expectReplaySkipsTrackingWhenDisabled = async (beforeName, afterName) => {
   try {
     expect(beforeEditor.commands.enableTrackChanges()).toBe(true);
 
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false });
 
     expect(success).toBe(true);
@@ -169,7 +163,7 @@ const expectReplayMatchesFixtureWithDefaultOptions = async (beforeName, afterNam
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff);
 
     expect(success).toBe(true);
@@ -196,7 +190,7 @@ const expectReplayCanHasNoSideEffects = async (beforeName, afterName) => {
     const originalCommentsJSON = JSON.parse(JSON.stringify(beforeEditor.converter?.comments ?? []));
     const emitSpy = vi.spyOn(beforeEditor, 'emit');
 
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const canReplay = beforeEditor.can().replayDifferences(diff);
 
     expect(canReplay).toBe(true);
@@ -222,7 +216,7 @@ const expectTrackedReplayMatchesFixture = async (beforeName, afterName) => {
 
   try {
     const originalDocJSON = beforeEditor.state.doc.toJSON();
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
 
     expect(success).toBe(true);
@@ -256,7 +250,7 @@ const expectTrackedReplayMarksHaveIds = async (beforeName, afterName) => {
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
 
     expect(success).toBe(true);
@@ -335,7 +329,7 @@ const expectReplayPreservesTableStyle = async (beforeName, afterName, applyTrack
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
-    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const diff = beforeEditor.commands.compareDocuments(afterEditor);
     const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges });
 
     expect(success).toBe(true);
@@ -437,22 +431,15 @@ describe('replayDifferences options', () => {
     await expectReplaySkipsTrackingWhenDisabled('diff_before3.docx', 'diff_after3.docx');
   });
 });
-describe('compareDocuments defaults', () => {
-  it('does not emit comment delete diffs when updatedComments is omitted', async () => {
+describe('compareDocuments', () => {
+  it('derives comments from the target editor without dispatch side effects', async () => {
     const beforeEditor = await getEditorFromFixture('diff_before8.docx');
     const afterEditor = await getEditorFromFixture('diff_after8.docx');
 
     try {
       const emitSpy = vi.spyOn(beforeEditor, 'emit');
-      const omittedCommentsDiff = beforeEditor.commands.compareDocuments(afterEditor.state.doc);
-      expect(omittedCommentsDiff.commentDiffs).toHaveLength(0);
-      expect(emitSpy).not.toHaveBeenCalledWith('transaction', expect.anything());
-
-      const explicitCommentsDiff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-      );
-      expect(explicitCommentsDiff.commentDiffs.length).toBeGreaterThan(0);
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      expect(diff.commentDiffs.length).toBeGreaterThan(0);
       expect(emitSpy).not.toHaveBeenCalledWith('transaction', expect.anything());
     } finally {
       beforeEditor.destroy?.();
@@ -489,7 +476,7 @@ describe('replayDiffs tracked append regression', () => {
     );
 
     try {
-      const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
       const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
 
       expect(success).toBe(true);
@@ -513,7 +500,7 @@ describe('investigate replay issues', () => {
 
     try {
       const originalDocJSON = beforeEditor.state.doc.toJSON();
-      const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
       const success = beforeEditor.commands.replayDifferences(diff, {
         user: { user: { name: 'Test User', email: 'test@example.com' }, applyTrackedChanges: true },
       });
@@ -536,20 +523,15 @@ describe('investigate replay issues', () => {
 });
 
 describe('parts-aware replay', () => {
-  it('does not emit partsDiff for legacy compareDocuments callers without a compare editor', async () => {
+  it('captures partsDiff when comparing against a target editor', async () => {
     const beforeEditor = await getEditorFromFixture('diff_before19.docx');
     const afterEditor = await getEditorFromFixture('diff_after19.docx');
 
     try {
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.docDiffs.length).toBeGreaterThan(0);
-      expect(diff.partsDiff).toBeNull();
+      expect(diff.partsDiff).not.toBeNull();
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();

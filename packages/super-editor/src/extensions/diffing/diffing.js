@@ -11,42 +11,31 @@ export const Diffing = Extension.create({
   addCommands() {
     return {
       /**
-       * Compares the current document against `updatedDocument` and returns the diffs required to
+       * Compares the current document against `targetEditor` and returns the diffs required to
        * transform the former into the latter.
        *
        * These diffs are intended to be replayed on-top of the old document, so apply the
        * returned list in reverse (last entry first) to keep insertions that share the same
        * `pos` anchor in the correct order.
        *
-       * @param {import('prosemirror-model').Node} updatedDocument
-       * @param {import('./algorithm/comment-diffing.ts').CommentInput[]} [updatedComments]
-       * @param {import('@superdoc/style-engine/ooxml').StylesDocumentProperties | null} [updatedStyles]
-       * @param {import('@superdoc/style-engine/ooxml').NumberingProperties | null} [updatedNumbering]
-       * @param {import('./algorithm/header-footer-diffing.ts').HeaderFooterState | { state?: unknown; converter?: unknown } | null} [updatedHeaderFooters]
+       * @param {{ state: { doc: import('prosemirror-model').Node; schema: import('prosemirror-model').Schema }; converter?: unknown }} targetEditor
        * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
-        (updatedDocument, updatedComments, updatedStyles, updatedNumbering, updatedHeaderFooters) =>
+        (targetEditor) =>
         ({ state, tr }) => {
           tr.setMeta('preventDispatch', true);
+          const updatedDocument = targetEditor.state.doc;
           const currentComments = this.editor.converter?.comments ?? [];
-          const nextComments = updatedComments === undefined ? currentComments : updatedComments;
+          const nextComments = targetEditor.converter?.comments ?? currentComments;
           const currentStyles = this.editor.converter?.translatedLinkedStyles ?? null;
-          const nextStyles = updatedStyles === undefined ? currentStyles : updatedStyles;
+          const nextStyles = targetEditor.converter?.translatedLinkedStyles ?? currentStyles;
           const currentNumbering = this.editor.converter?.translatedNumbering ?? null;
-          const nextNumbering = updatedNumbering === undefined ? currentNumbering : updatedNumbering;
+          const nextNumbering = targetEditor.converter?.translatedNumbering ?? currentNumbering;
           const currentHeaderFooters = captureHeaderFooterState(this.editor);
           const currentPartsState = capturePartsState(this.editor, currentHeaderFooters);
-          const nextHeaderFooters =
-            updatedHeaderFooters === undefined
-              ? currentHeaderFooters
-              : updatedHeaderFooters?.state && updatedHeaderFooters?.converter
-                ? captureHeaderFooterState(updatedHeaderFooters)
-                : updatedHeaderFooters;
-          const nextPartsState =
-            updatedHeaderFooters?.state && updatedHeaderFooters?.converter
-              ? capturePartsState(updatedHeaderFooters, nextHeaderFooters)
-              : null;
+          const nextHeaderFooters = captureHeaderFooterState(targetEditor);
+          const nextPartsState = capturePartsState(targetEditor, nextHeaderFooters);
           const diffs = computeDiff(
             state.doc,
             updatedDocument,

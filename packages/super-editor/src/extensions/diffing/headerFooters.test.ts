@@ -280,13 +280,7 @@ describe('Header/footer diffing', () => {
       setBodySection(beforeEditor, {});
       seedDefaultHeader(afterEditor, 'New header');
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.headerFootersDiff?.addedParts).toHaveLength(1);
       expect(diff.headerFootersDiff?.slotChanges).toHaveLength(1);
@@ -308,13 +302,7 @@ describe('Header/footer diffing', () => {
       seedDefaultHeader(afterEditor, 'New header');
 
       const emitSpy = vi.spyOn(beforeEditor, 'emit');
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
       expect(emitSpy).toHaveBeenCalledWith(
@@ -347,13 +335,7 @@ describe('Header/footer diffing', () => {
         mediaContent: 'data:image/png;base64,aGVhZGVy',
       });
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.partsDiff).not.toBeNull();
       expect(diff.partsDiff?.upserts['word/_rels/header1.xml.rels']).toBeTruthy();
@@ -386,13 +368,7 @@ describe('Header/footer diffing', () => {
       });
 
       const emitSpy = vi.spyOn(beforeEditor, 'emit');
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
       expect(emitSpy).toHaveBeenCalledWith(
@@ -419,13 +395,7 @@ describe('Header/footer diffing', () => {
       setBodySection(beforeEditor, {});
       seedDefaultHeader(afterEditor, 'Exported header');
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
 
@@ -447,13 +417,7 @@ describe('Header/footer diffing', () => {
       seedDefaultHeader(beforeEditor, 'Old header');
       seedDefaultHeader(afterEditor, 'Updated header');
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.headerFootersDiff?.modifiedParts).toHaveLength(1);
 
@@ -486,13 +450,7 @@ describe('Header/footer diffing', () => {
       });
       setBodySection(afterEditor, { headerDefault: 'rIdHeader1' });
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.headerFootersDiff?.modifiedParts).toHaveLength(1);
       expect(diff.headerFootersDiff?.modifiedParts[0]).toMatchObject({
@@ -533,13 +491,7 @@ describe('Header/footer diffing', () => {
       seedDefaultHeader(beforeEditor, 'Remove me');
       setBodySection(afterEditor, {});
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.headerFootersDiff?.removedParts).toHaveLength(1);
       expect(diff.headerFootersDiff?.slotChanges).toHaveLength(1);
@@ -606,13 +558,7 @@ describe('Header/footer diffing', () => {
         headerDefault: 'rIdHeaderDefault',
       });
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(diff.headerFootersDiff?.removedParts).toHaveLength(1);
       expect(diff.partsDiff?.deletes).not.toContain('word/media/shared-logo.png');
@@ -634,13 +580,7 @@ describe('Header/footer diffing', () => {
       afterEditor.dispatch(afterEditor.state.tr.insertText('Updated ', 1));
       seedDefaultHeader(afterEditor, 'Tracked header');
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true })).toBe(true);
       expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
@@ -661,13 +601,7 @@ describe('Header/footer diffing', () => {
       seedDefaultHeader(afterEditor, 'Default header');
       setBodySection(afterEditor, { titlePg: true, headerDefault: 'rIdHeader1' });
 
-      const diff = beforeEditor.commands.compareDocuments(
-        afterEditor.state.doc,
-        afterEditor.converter?.comments ?? [],
-        afterEditor.converter?.translatedLinkedStyles,
-        afterEditor.converter?.translatedNumbering,
-        afterEditor,
-      );
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
 
       expect(beforeEditor.converter?.headerIds?.titlePg).not.toBe(true);
 

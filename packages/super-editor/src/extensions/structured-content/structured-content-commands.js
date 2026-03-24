@@ -1,4 +1,5 @@
 import { DOMParser as PMDOMParser } from 'prosemirror-model';
+import { TextSelection } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
 import { htmlHandler } from '@core/InputRule.js';
 import { findParentNode } from '@helpers/findParentNode.js';
@@ -210,6 +211,12 @@ export const StructuredContentCommands = Extension.create({
               }
 
               tr.replaceWith(runStart, runEnd, fragments);
+
+              // Place the cursor right after the inserted SDT so subsequent
+              // typing lands in the correct position.
+              const sdtStart = runStart + (leftContent.size > 0 ? leftContent.size + 2 : 0);
+              const cursorPos = sdtStart + node.nodeSize;
+              tr.setSelection(TextSelection.create(tr.doc, cursorPos));
             } else {
               tr.replaceWith(from, to, node);
             }

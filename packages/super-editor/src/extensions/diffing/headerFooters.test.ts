@@ -485,6 +485,47 @@ describe('Header/footer diffing', () => {
     }
   });
 
+  it('emits delete and create partChanged events when a header part path is renamed', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedPart(beforeEditor, {
+        kind: 'header',
+        refId: 'rIdHeader1',
+        partPath: 'word/header1.xml',
+        text: 'Same header',
+      });
+      setBodySection(beforeEditor, { headerDefault: 'rIdHeader1' });
+
+      seedPart(afterEditor, {
+        kind: 'header',
+        refId: 'rIdHeader1',
+        partPath: 'word/header2.xml',
+        text: 'Same header',
+      });
+      setBodySection(afterEditor, { headerDefault: 'rIdHeader1' });
+
+      const emitSpy = vi.spyOn(beforeEditor, 'emit');
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(emitSpy).toHaveBeenCalledWith(
+        'partChanged',
+        expect.objectContaining({
+          source: 'diff-replay',
+          parts: expect.arrayContaining([
+            expect.objectContaining({ partId: 'word/header1.xml', sectionId: 'rIdHeader1', operation: 'delete' }),
+            expect.objectContaining({ partId: 'word/header2.xml', sectionId: 'rIdHeader1', operation: 'create' }),
+          ]),
+        }),
+      );
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
   it('compares and replays header removal', async () => {
     const beforeEditor = await createEditor();
     const afterEditor = await createEditor();

@@ -181,6 +181,11 @@ export function replayHeaderFooters({
       changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'create', changedPaths: [] });
     }
     for (const part of headerFootersDiff.modifiedParts) {
+      if (part.oldPartPath !== part.partPath) {
+        changedParts.push({ partId: part.oldPartPath, sectionId: part.refId, operation: 'delete', changedPaths: [] });
+        changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'create', changedPaths: [] });
+        continue;
+      }
       changedParts.push({ partId: part.partPath, sectionId: part.refId, operation: 'mutate', changedPaths: [] });
     }
     for (const part of headerFootersDiff.removedParts) {

@@ -55,9 +55,9 @@ function findNearbyFormatting(
   editor: Editor,
   _pos: number,
   skipHeadings: boolean,
-): { fontFamily?: string; fontSize?: number; color?: string } | null {
+): { fontFamily?: string; fontSize?: number; bold?: boolean; color?: string } | null {
   const doc = editor.state.doc;
-  const result: { fontFamily?: string; fontSize?: number; color?: string } = {};
+  const result: { fontFamily?: string; fontSize?: number; bold?: boolean; color?: string } = {};
 
   // Walk top-level children near the insertion point
   let offset = 0;
@@ -91,37 +91,42 @@ function findNearbyFormatting(
             const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
             if (typeof raw === 'number' && Number.isFinite(raw)) result.fontSize = raw as number;
           }
+          if (attrs.bold === true) result.bold = true;
+          else if (result.bold === undefined) result.bold = false;
         }
         return false;
       });
 
-      if (result.fontFamily) return result;
+      if (result.fontFamily) {
+        // Default to black when no explicit color is set (matches extractBlockFormatting behavior)
+        if (!result.color) result.color = '#000000';
+        return result;
+      }
     }
 
     offset = childEnd;
   }
 
+  if (result.fontFamily && !result.color) result.color = '#000000';
   return result.fontFamily ? result : null;
 }
 
 function applyFormattingToCreatedBlock(
   editor: Editor,
   nodeId: string,
-  formatting: { fontFamily?: string; fontSize?: number; color?: string },
+  formatting: { fontFamily?: string; fontSize?: number; bold?: boolean; color?: string },
 ): void {
-  const textStyleType = editor.state.schema.marks.textStyle;
-  if (!textStyleType) return;
-
-  // Find the created block by walking the document
   const doc = editor.state.doc;
+  const textStyleType = editor.state.schema.marks.textStyle;
   let blockPos = -1;
   let blockEnd = -1;
 
+  // Find the created paragraph
   doc.descendants((node, pos) => {
     if (blockPos >= 0) return false;
     const attrs = node.attrs as Record<string, unknown>;
     if (node.type.name === 'paragraph' && (attrs.sdBlockId === nodeId || attrs.paraId === nodeId)) {
-      blockPos = pos + 1; // inside the paragraph
+      blockPos = pos + 1;
       blockEnd = pos + node.nodeSize - 1;
       return false;
     }
@@ -129,15 +134,45 @@ function applyFormattingToCreatedBlock(
 
   if (blockPos < 0 || blockEnd <= blockPos) return;
 
-  const mark = textStyleType.create({
-    fontFamily: formatting.fontFamily ?? null,
-    fontSize: formatting.fontSize ?? null,
-    color: formatting.color ?? null,
+  const tr = editor.state.tr;
+
+  // 1. Add textStyle marks on text nodes (so marks are the source of truth)
+  if (textStyleType) {
+    const mark = textStyleType.create({
+      fontFamily: formatting.fontFamily ?? null,
+      fontSize: formatting.fontSize ?? null,
+      bold: formatting.bold ?? null,
+      color: formatting.color ?? null,
+    });
+    tr.addMark(blockPos, blockEnd, mark);
+  }
+
+  // 2. Also set runProperties directly on run nodes (so the style engine
+  //    cascade sees them as inlineRpr, the highest-priority layer)
+  doc.nodesBetween(blockPos, blockEnd, (node, pos) => {
+    if (node.type.name === 'run') {
+      const existingRp = (node.attrs as Record<string, unknown>).runProperties as Record<string, unknown> | undefined;
+      const merged: Record<string, unknown> = { ...(existingRp ?? {}) };
+      if (formatting.fontFamily) merged.fontFamily = formatting.fontFamily;
+      if (formatting.fontSize != null) merged.fontSize = formatting.fontSize;
+      if (formatting.bold != null) merged.bold = formatting.bold;
+      if (formatting.color) merged.color = formatting.color;
+      tr.setNodeMarkup(pos, null, { ...node.attrs, runProperties: merged });
+    }
   });
 
-  const tr = editor.state.tr.addMark(blockPos, blockEnd, mark);
+  // 3. Tell calculateInlineRunPropertiesPlugin to PRESERVE our values
+  //    instead of re-deriving them from the style cascade.
+  const preserveKeys = Object.keys(formatting).filter((k) => (formatting as Record<string, unknown>)[k] != null);
+  if (preserveKeys.length > 0) {
+    tr.setMeta(
+      'sdPreserveRunPropertiesKeys',
+      preserveKeys.map((k) => ({ key: k, preferExisting: true })),
+    );
+  }
+
   tr.setMeta('inputType', 'programmatic');
-  editor.view?.dispatch(tr);
+  editor.dispatch(tr);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,8 +407,9 @@ export function createParagraphWrapper(
           applyFormattingToCreatedBlock(storyEditor, paragraphId, formatting);
         }
       }
-    } catch {
-      /* best-effort — formatting failure should not break creation */
+    } catch (e) {
+      // Best-effort — formatting failure should not break creation
+      console.warn('[create-wrapper] auto-formatting failed:', e);
     }
 
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
@@ -497,8 +533,9 @@ export function createHeadingWrapper(
           applyFormattingToCreatedBlock(storyEditor, headingId, headingFormatting);
         }
       }
-    } catch {
-      /* best-effort — formatting failure should not break creation */
+    } catch (e) {
+      // Best-effort — formatting failure should not break creation
+      console.warn('[create-wrapper] auto-formatting failed:', e);
     }
 
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;

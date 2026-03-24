@@ -20,7 +20,11 @@ export const insertHeadingAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
-      paragraphProperties: { styleId: `Heading${level}` },
+      paragraphProperties: {
+        styleId: `Heading${level}`,
+        // Explicitly suppress outline numbering that some templates link to heading styles
+        numberingProperties: { numId: '0', ilvl: '0' },
+      },
     };
     const normalizedText = typeof text === 'string' ? text : '';
 
@@ -30,7 +34,7 @@ export const insertHeadingAt =
       // Strip fontSize from copied marks — headings should keep their style-level size.
       const marks = rawMarks.map((mark) => {
         if (mark.type.name === 'textStyle' && mark.attrs.fontSize != null) {
-          const { fontSize: _, ...rest } = mark.attrs;
+          const rest = Object.fromEntries(Object.entries(mark.attrs).filter(([k]) => k !== 'fontSize'));
           return mark.type.create(rest);
         }
         return mark;

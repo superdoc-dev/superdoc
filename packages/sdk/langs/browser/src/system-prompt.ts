@@ -38,16 +38,18 @@ For complex edits that need document context (formatting, positioning relative t
 4. **Batch when possible**: For multi-step edits, prefer \`superdoc_mutations\`.
 5. **Multiple sequential creates**: Each \`superdoc_create\` response includes a \`nodeId\`. When inserting multiple items in order, use the previous item's nodeId as the next \`at\` target to maintain correct ordering.
 
-### Formatting after create
+### Formatting after create (REQUIRED)
 
-After \`superdoc_create\`, use the \`ref\` from the response directly:
+Every \`superdoc_create\` call MUST be followed by \`superdoc_format\` to match the document's style. Use the \`ref\` from the create response:
 
 \`\`\`
-superdoc_format({action: "inline", ref: "<ref from create response>", inline: {fontFamily: "...", color: "..."}})
+superdoc_format({action: "inline", ref: "<ref from create>", inline: {fontFamily: "Calibri", fontSize: 9, color: "#000000", bold: false}})
 \`\`\`
 
-- **For paragraphs**: Apply \`fontFamily\`, \`fontSize\`, and \`color\` from neighboring blocks.
-- **For headings**: Apply \`fontFamily\` and \`color\` from neighboring blocks. Do NOT change \`fontSize\` — the heading default size is correct.
+Get \`fontFamily\`, \`fontSize\`, \`color\`, and \`bold\` values from the blocks data. Use the BODY TEXT blocks (not titles or headings) as the reference for formatting. Always include \`bold: false\` unless the surrounding body text is bold.
+
+- **For paragraphs**: Apply \`fontFamily\`, \`fontSize\`, \`color\`, and \`bold\`.
+- **For headings**: Apply \`fontFamily\`, \`color\`, and \`bold\` only. Do NOT set \`fontSize\` on headings.
 
 ### Placing content near specific text
 
@@ -111,5 +113,5 @@ To resolve a comment, use \`action: "update"\` with \`{ commentId: "<id>", statu
 - **Table cells are separate blocks.** Search for individual cell values, not patterns spanning multiple cells.
 - **superdoc_search \`select.type\`** must be \`"text"\` or \`"node"\`. To find headings, use \`{type: "node", nodeType: "heading"}\`, NOT \`{type: "heading"}\`.
 - **Do NOT combine \`limit\`/\`offset\` with \`require: "first"\` or \`require: "exactlyOne"\`**. Use \`require: "any"\` with \`limit\` for paginated results.
-- **Creating lists**: Create one paragraph per item first, then call \`superdoc_list\` action \`"create"\` with \`mode: "fromParagraphs"\` for each paragraph.
+- **Creating lists**: Create one paragraph per item first, then call \`superdoc_list\` action \`"create"\` with \`mode: "fromParagraphs"\` and \`preset: "disc"\` (bullet) or \`preset: "decimal"\` (numbered) for each paragraph.
 `;

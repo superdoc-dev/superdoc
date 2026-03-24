@@ -121,7 +121,8 @@ describe('insertHeadingAt', () => {
       insertHeadingAt({ pos: 0, level })({ state, dispatch });
 
       const attrs = paragraphType.createAndFill.mock.calls[0]?.[0];
-      expect(attrs.paragraphProperties).toEqual({ styleId: `Heading${level}` });
+      expect(attrs.paragraphProperties.styleId).toBe(`Heading${level}`);
+      expect(attrs.paragraphProperties.numberingProperties).toEqual({ numId: '0', ilvl: '0' });
     }
   });
 
@@ -134,7 +135,7 @@ describe('insertHeadingAt', () => {
 
     const attrs = paragraphType.createAndFill.mock.calls[0]?.[0];
     expect(attrs.sdBlockId).toBe('block-1');
-    expect(attrs.paragraphProperties).toEqual({ styleId: 'Heading1' });
+    expect(attrs.paragraphProperties.styleId).toBe('Heading1');
   });
 
   it('creates a text node when text is provided', () => {

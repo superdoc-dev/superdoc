@@ -259,19 +259,9 @@ const compareDocuments = async () => {
       createHeadlessEditor(rightFile.value),
     ]);
 
-    const leftDiff = leftEditor.commands.compareDocuments(
-      rightHeadless.state.doc,
-      rightHeadless.converter?.comments ?? [],
-      rightHeadless.converter?.translatedLinkedStyles ?? null,
-      rightHeadless.converter?.translatedNumbering ?? null,
-    );
+    const leftDiff = leftEditor.commands.compareDocuments(rightHeadless);
 
-    const rightDiff = rightEditor.commands.compareDocuments(
-      leftHeadless.state.doc,
-      leftHeadless.converter?.comments ?? [],
-      leftHeadless.converter?.translatedLinkedStyles ?? null,
-      leftHeadless.converter?.translatedNumbering ?? null,
-    );
+    const rightDiff = rightEditor.commands.compareDocuments(leftHeadless);
 
     leftEditor.commands.replayDifferences(leftDiff, { applyTrackedChanges: true });
     rightEditor.commands.replayDifferences(rightDiff, { applyTrackedChanges: true });

@@ -227,16 +227,20 @@ function waitForLiveblocksSync(provider: LiveblocksYjsProvider, room: Room, time
     provider.on('sync', onSync);
     cleanup.push(() => provider.off('sync', onSync));
 
-    // Listen for room errors — classify and fail fast on terminal codes
+    // Listen for room errors — classify and fail fast on terminal codes.
+    // Prefer the typed source-of-truth field (`error.context.code`) here.
     const unsubError = room.subscribe('error', (error) => {
-      const classification = classifyLiveblocksCloseCode(error.code);
+      const code = error.context?.code;
+      if (typeof code !== 'number') return;
+
+      const classification = classifyLiveblocksCloseCode(code);
       if (!classification) return; // Transient — let timeout handle it
 
       finish(
         new CliError(
           classification.errorCode,
-          `Liveblocks room error (${error.code}, ${classification.label}): ${error.message}`,
-          { providerType: 'liveblocks', errorCode: error.code },
+          `Liveblocks room error (${code}, ${classification.label}): ${error.message}`,
+          { providerType: 'liveblocks', errorCode: code },
         ),
       );
     });

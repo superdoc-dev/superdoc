@@ -105,7 +105,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create one paragraph or heading. Response includes ref and nodeId. You MUST call superdoc_format after this tool to apply styling from BODY TEXT blocks (not titles/headings). Call superdoc_get_content blocks first, then after creating use the ref with superdoc_format action "inline". Always include bold:false unless body text is bold. For headings: set fontFamily, color, bold (NOT fontSize). For paragraphs: set fontFamily, fontSize, color, bold. When creating multiple items, use the previous nodeId as the next at target.',
+      'Create one paragraph or heading. Response includes ref and nodeId. You MUST call superdoc_format after this tool. Call superdoc_get_content blocks first to get fontFamily/fontSize from body text blocks. Always use color "#000000". For paragraphs: set fontFamily, fontSize, color, bold:false. For headings: set fontFamily, fontSize (scaled up from body), color, bold:true. When creating multiple items, use the previous nodeId as the next at target.',
   },
   format: {
     toolName: 'superdoc_format',

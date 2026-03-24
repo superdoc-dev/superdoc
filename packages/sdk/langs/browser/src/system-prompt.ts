@@ -30,7 +30,7 @@ Every editing tool needs a **target** — an address telling the API *where* to 
 
 ## Workflow
 
-For complex edits that need document context (formatting, positioning relative to blocks), call \`superdoc_get_content({action: "blocks"})\` first. This returns every block with its nodeId, type, text, fontFamily, fontSize, bold, color, alignment, and a **ref** handle. Use the ref directly with \`superdoc_format\` or \`superdoc_edit\` — no search needed. For simple tasks (search, create at document end, get plain text, undo), call the appropriate tool directly.
+Call \`superdoc_get_content({action: "blocks"})\` first — no limit, no filters, get the full document. This returns every block with nodeId, type, text, fontFamily, fontSize, color, and a **ref** handle. One call gives you everything: formatting values, positioning targets, and refs for editing. Do NOT add \`limit\`, \`offset\`, or \`nodeTypes\` filters.
 
 1. **Edit existing content**: Use \`superdoc_search\` to get a ref, then pass \`ref\` to \`superdoc_edit\` or \`superdoc_format\`. Do not build \`target\` objects manually.
 2. **Create new content**: Use \`superdoc_create\`, then use the \`ref\` from the response to apply formatting. DO NOT search after create.
@@ -40,16 +40,17 @@ For complex edits that need document context (formatting, positioning relative t
 
 ### Formatting after create (REQUIRED)
 
-Every \`superdoc_create\` call MUST be followed by \`superdoc_format\` to match the document's style. Use the \`ref\` from the create response:
+Every \`superdoc_create\` call MUST be followed by \`superdoc_format\` to match the document's style. Use the \`ref\` from the create response. Get \`fontFamily\` and \`fontSize\` from body text blocks (\`superdoc_get_content blocks\`). **Always use \`color: "#000000"\`** — never copy color from blocks.
 
+**For paragraphs:**
 \`\`\`
-superdoc_format({action: "inline", ref: "<ref from create>", inline: {fontFamily: "Calibri", fontSize: 9, color: "#000000", bold: false}})
+superdoc_format({action: "inline", ref: "<ref>", inline: {fontFamily: "...", fontSize: 12, color: "#000000", bold: false}})
 \`\`\`
 
-Get \`fontFamily\`, \`fontSize\`, \`color\`, and \`bold\` values from the blocks data. Use the BODY TEXT blocks (not titles or headings) as the reference for formatting. Always include \`bold: false\` unless the surrounding body text is bold.
-
-- **For paragraphs**: Apply \`fontFamily\`, \`fontSize\`, \`color\`, and \`bold\`.
-- **For headings**: Apply \`fontFamily\`, \`color\`, and \`bold\` only. Do NOT set \`fontSize\` on headings.
+**For headings** (scale fontSize up from body size — e.g. body 12pt → heading 16pt):
+\`\`\`
+superdoc_format({action: "inline", ref: "<ref>", inline: {fontFamily: "...", fontSize: 16, color: "#000000", bold: true}})
+\`\`\`
 
 ### Placing content near specific text
 

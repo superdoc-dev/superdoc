@@ -575,7 +575,7 @@ describe('Header/footer diffing', () => {
 
       expect(diff.headerFootersDiff?.removedParts).toHaveLength(1);
       expect(diff.partsDiff?.deletes).not.toContain('word/media/shared-logo.png');
-      expect(diff.partsDiff?.deletes).toContain('word/header2.xml');
+      expect(diff.partsDiff?.deletes).not.toContain('word/header2.xml');
       expect(diff.partsDiff?.deletes).toContain('word/_rels/header2.xml.rels');
     } finally {
       beforeEditor.destroy?.();

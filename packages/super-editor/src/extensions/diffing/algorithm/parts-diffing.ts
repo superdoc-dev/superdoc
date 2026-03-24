@@ -90,53 +90,26 @@ export function diffParts(
   previousPartsState: PartsState | null | undefined,
   nextPartsState: PartsState | null | undefined,
 ): PartsDiff | null {
+  if (!previousPartsState || !nextPartsState) {
+    return null;
+  }
+
   const upserts: Record<string, PartSnapshot> = {};
   const deletes = new Set<string>();
   const nextReachablePartPaths = collectReachablePartPaths(nextPartsState);
+  const previousOwnedParts = collectOwnedParts(previousPartsState);
+  const nextOwnedParts = collectOwnedParts(nextPartsState);
 
-  if (docDiffs.length > 0) {
-    for (const [partPath, snapshot] of Object.entries(nextPartsState?.bodyClosure ?? {})) {
-      const previous = previousPartsState?.bodyClosure?.[partPath];
-      if (!previous || !partSnapshotsEqual(previous, snapshot)) {
-        upserts[partPath] = structuredClone(snapshot);
-      }
-    }
-
-    for (const partPath of Object.keys(previousPartsState?.bodyClosure ?? {})) {
-      if (!(partPath in (nextPartsState?.bodyClosure ?? {})) && !(partPath in upserts)) {
-        deletes.add(partPath);
-      }
+  for (const [partPath, snapshot] of Object.entries(nextOwnedParts)) {
+    const previous = previousOwnedParts[partPath];
+    if (!previous || !partSnapshotsEqual(previous, snapshot)) {
+      upserts[partPath] = structuredClone(snapshot);
     }
   }
 
-  if (headerFootersDiff) {
-    for (const part of [...headerFootersDiff.addedParts, ...headerFootersDiff.modifiedParts]) {
-      const closure = nextPartsState?.headerFooterClosures?.[part.refId];
-      if (!closure) continue;
-      for (const [partPath, snapshot] of Object.entries(closure.parts)) {
-        upserts[partPath] = structuredClone(snapshot);
-        deletes.delete(partPath);
-      }
-    }
-
-    for (const part of headerFootersDiff.removedParts) {
-      const closure = previousPartsState?.headerFooterClosures?.[part.refId];
-      if (closure) {
-        for (const partPath of Object.keys(closure.parts)) {
-          if (!(partPath in upserts) && !nextReachablePartPaths.has(partPath)) {
-            deletes.add(partPath);
-          }
-        }
-        continue;
-      }
-
-      if (!nextReachablePartPaths.has(part.partPath)) {
-        deletes.add(part.partPath);
-      }
-      const relsPath = toRelsPathForPart(part.partPath);
-      if (relsPath && !nextReachablePartPaths.has(relsPath)) {
-        deletes.add(relsPath);
-      }
+  for (const partPath of Object.keys(previousOwnedParts)) {
+    if (!(partPath in nextOwnedParts) && !(partPath in upserts) && !nextReachablePartPaths.has(partPath)) {
+      deletes.add(partPath);
     }
   }
 
@@ -148,6 +121,41 @@ export function diffParts(
     upserts,
     deletes: [...deletes].sort(),
   };
+}
+
+function collectOwnedParts(partsState: PartsState): Record<string, PartSnapshot> {
+  const owned: Record<string, PartSnapshot> = {};
+
+  addOwnedPartsFromClosure(owned, partsState.bodyClosure);
+
+  for (const closure of Object.values(partsState.headerFooterClosures)) {
+    addOwnedPartsFromClosure(owned, closure.parts, closure.partPath);
+  }
+
+  return owned;
+}
+
+function addOwnedPartsFromClosure(
+  target: Record<string, PartSnapshot>,
+  closure: Record<string, PartSnapshot>,
+  semanticRootPath?: string,
+): void {
+  for (const [partPath, snapshot] of Object.entries(closure)) {
+    if (isSemanticOwnedPart(partPath, semanticRootPath)) {
+      continue;
+    }
+    target[partPath] = snapshot;
+  }
+}
+
+function isSemanticOwnedPart(partPath: string, headerFooterRootPath?: string): boolean {
+  if (partPath === 'word/document.xml' || partPath === 'word/styles.xml' || partPath === 'word/numbering.xml') {
+    return true;
+  }
+  if (headerFooterRootPath && partPath === headerFooterRootPath) {
+    return true;
+  }
+  return false;
 }
 
 function collectReachablePartPaths(partsState: PartsState | null | undefined): Set<string> {

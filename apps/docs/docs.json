@@ -242,6 +242,10 @@
               "guides/general/stable-navigation",
               "guides/general/custom-themes",
               {
+                "group": "Proofing",
+                "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]
+              },
+              {
                 "group": "Collaboration",
                 "pages": [
                   "guides/collaboration/liveblocks",

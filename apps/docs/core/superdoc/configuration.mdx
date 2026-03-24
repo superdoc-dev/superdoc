@@ -233,6 +233,80 @@ new SuperDoc({
   <Warning>**Deprecated** — Use `modules.contextMenu` instead. See the [Context Menu module](/modules/context-menu) for configuration options.</Warning>
 </ParamField>
 
+## Proofing
+
+Provider-based spell check and proofing for the layout-engine editor surface.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  proofing: {
+    enabled: true,
+    provider,
+    defaultLanguage: 'en-US',
+    maxSuggestions: 3,
+  }
+});
+```
+
+<Note>
+  Bring your own provider. SuperDoc handles the editor UI, while your app controls the proofing engine or API. See [Proofing](/guides/general/proofing) and [Custom proofing provider](/guides/general/custom-proofing-provider).
+</Note>
+
+<Info>
+  Proofing is available when the layout engine is active. In `print` layout this works out of the box. In `web` layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`.
+</Info>
+
+<ParamField path="proofing" type="Object">
+  Proofing configuration
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="proofing.enabled" type="boolean" default="false">
+      Enable or disable proofing
+    </ParamField>
+    <ParamField path="proofing.provider" type="Object">
+      Provider instance with an `id` and `check()` function
+    </ParamField>
+    <ParamField path="proofing.defaultLanguage" type="string | null">
+      Fallback language for segments without a resolved language
+    </ParamField>
+    <ParamField path="proofing.debounceMs" type="number" default="500">
+      Debounce delay after edits before rechecking
+    </ParamField>
+    <ParamField path="proofing.maxSuggestions" type="number">
+      Maximum replacement suggestions shown per issue
+    </ParamField>
+    <ParamField path="proofing.visibleFirst" type="boolean" default="true">
+      Prioritize checking visible pages first
+    </ParamField>
+    <ParamField path="proofing.allowIgnoreWord" type="boolean" default="true">
+      Show `Ignore` in the context menu
+    </ParamField>
+    <ParamField path="proofing.allowAddToDictionary" type="boolean" default="false">
+      Show `Add to dictionary` in the context menu
+    </ParamField>
+    <ParamField path="proofing.ignoredWords" type="string[]">
+      Words to suppress from displayed proofing results
+    </ParamField>
+    <ParamField path="proofing.timeoutMs" type="number" default="10000">
+      Provider timeout per request in milliseconds
+    </ParamField>
+    <ParamField path="proofing.maxConcurrentRequests" type="number" default="2">
+      Maximum number of provider requests in flight at the same time
+    </ParamField>
+    <ParamField path="proofing.maxSegmentsPerBatch" type="number" default="20">
+      Maximum number of segments included in a single provider request
+    </ParamField>
+    <ParamField path="proofing.onProofingError" type="function">
+      Called when the provider times out, returns invalid ranges, or fails
+    </ParamField>
+    <ParamField path="proofing.onStatusChange" type="function">
+      Called with `idle`, `checking`, `disabled`, or `degraded`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
 ## Appearance
 
 <ParamField path="title" type="string" default="'SuperDoc'">

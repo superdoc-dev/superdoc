@@ -118,6 +118,72 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
   // Define default sections with isDefault flag
   const defaultSections = [
     {
+      id: 'proofing',
+      isDefault: true,
+      items: [
+        {
+          id: 'proofing-suggestions',
+          label: 'Spelling suggestions',
+          isDefault: true,
+          showWhen: (context) => {
+            return context.trigger === TRIGGERS.click && !!context.proofingContext?.suggestions?.length;
+          },
+          // Dynamic sub-items are rendered by the context menu component
+          // based on context.proofingContext.suggestions
+          getSubItems: (context) => {
+            const proofing = context.proofingContext;
+            if (!proofing) return [];
+            return proofing.suggestions.map((suggestion, i) => ({
+              id: `proofing-replace-${i}`,
+              label: suggestion,
+              isDefault: true,
+              action: (editor) => {
+                if (!proofing.issue) return;
+                const { state, dispatch } = editor.view;
+                const tr = state.tr;
+                tr.replaceWith(proofing.issue.pmFrom, proofing.issue.pmTo, tr.doc.type.schema.text(suggestion));
+                dispatch(tr);
+              },
+            }));
+          },
+        },
+        {
+          id: 'proofing-ignore',
+          label: 'Ignore',
+          isDefault: true,
+          action: (editor, context) => {
+            const proofing = context.proofingContext;
+            if (!proofing?.word) return;
+            proofing.ignoreWord(proofing.word);
+          },
+          showWhen: (context) => {
+            return (
+              context.trigger === TRIGGERS.click &&
+              !!context.proofingContext?.canIgnore &&
+              !!context.proofingContext?.word
+            );
+          },
+        },
+        {
+          id: 'proofing-add-to-dictionary',
+          label: 'Add to dictionary',
+          isDefault: true,
+          action: (editor, context) => {
+            const proofing = context.proofingContext;
+            if (!proofing?.word) return;
+            proofing.addToDictionary(proofing.word);
+          },
+          showWhen: (context) => {
+            return (
+              context.trigger === TRIGGERS.click &&
+              !!context.proofingContext?.canAddToDictionary &&
+              !!context.proofingContext?.word
+            );
+          },
+        },
+      ],
+    },
+    {
       id: 'ai-content',
       isDefault: true,
       items: [

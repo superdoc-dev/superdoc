@@ -200,4 +200,11 @@
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+
+  /* Proofing: underline colors and metrics */
+  --sd-proofing-spelling-color: #e53e3e;
+  --sd-proofing-grammar-color: #3182ce;
+  --sd-proofing-style-color: #805ad5;
+  --sd-proofing-underline-thickness: 1.5px;
+  --sd-proofing-underline-offset: 2px;
 }

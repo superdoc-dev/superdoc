@@ -480,6 +480,36 @@ describe('SuperDoc.vue', () => {
     expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
   });
 
+  it('forwards top-level proofing config into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const proofingProvider = {
+      id: 'test-proofing',
+      check: vi.fn(async () => ({ issues: [] })),
+    };
+    const topLevelProofing = {
+      enabled: true,
+      provider: proofingProvider,
+      defaultLanguage: 'en-US',
+      maxSuggestions: 4,
+    };
+
+    superdocStub.config.proofing = topLevelProofing;
+    superdocStub.config.layoutEngineOptions = {
+      flowMode: 'paginated',
+      proofing: {
+        enabled: false,
+        provider: null,
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.proofing).toBe(topLevelProofing);
+    expect(options.layoutEngineOptions.flowMode).toBe('paginated');
+  });
+
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

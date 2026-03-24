@@ -1,0 +1,92 @@
+---
+title: Spell Check & Proofing
+sidebarTitle: Proofing
+keywords: "spell check, spellcheck, proofing, spelling suggestions, custom proofing provider"
+---
+
+SuperDoc supports proofing on the layout-engine editor surface. Because SuperDoc renders DOCX content through its own document model and layout engine, browser-native spellcheck is not used. Instead, you provide a proofing provider and SuperDoc handles the UI: inline spelling markers, right-click suggestions, and local ignore flows.
+
+## Quick start
+
+```javascript
+const provider = {
+  id: 'my-proofing',
+  async check({ segments, maxSuggestions, signal }) {
+    const response = await fetch('/api/proofing/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments, maxSuggestions }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Proofing request failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
+};
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  proofing: {
+    enabled: true,
+    provider,
+    defaultLanguage: 'en-US',
+    maxSuggestions: 3,
+    allowIgnoreWord: true,
+    allowAddToDictionary: true,
+  },
+});
+```
+
+## What SuperDoc handles
+
+- Extracting proofable text from the document model
+- Checking visible content first, then continuing in the background
+- Rendering spelling markers on the layout-engine surface
+- Showing replacement suggestions in the context menu
+- Supporting `Ignore` and `Add to dictionary` as local suppressions
+
+## What you provide
+
+- A provider object with an `id` and `check()` function
+- Any backend API, on-device dictionary engine, or proxy service you want to use
+- Optional persistence for ignored words if you want them to survive reloads
+
+<Note>
+SuperDoc does not bundle a proofing engine or send document content anywhere by default. Your provider decides where proofing runs.
+</Note>
+
+## Where proofing works
+
+Proofing is available when the layout engine is active.
+
+- In standard print layout, that works out of the box
+- In web layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  viewOptions: { layout: 'web' },
+  layoutEngineOptions: { flowMode: 'semantic' },
+  proofing: {
+    enabled: true,
+    provider,
+  },
+});
+```
+
+## Current scope
+
+- Spelling issues are rendered in the UI in v1
+- Grammar and style issue kinds are accepted by the provider contract but are not rendered yet
+- Proofing state is runtime UI state and is not written into the DOCX
+- Proofing is not part of the Document API in v1
+
+## Next steps
+
+- See [Configuration](/core/superdoc/configuration#proofing) for all options
+- See [Custom proofing provider](/guides/general/custom-proofing-provider) to connect your own service

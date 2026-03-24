@@ -59,12 +59,19 @@ Items shown depend on document context.
 |---|---|---|
 | Accept change | `track-changes` | On a tracked change |
 | Reject change | `track-changes` | On a tracked change |
+| Replacement suggestions | `proofing` | On a spelling issue with provider suggestions |
+| Ignore | `proofing` | On a spelling issue when `proofing.allowIgnoreWord` is enabled |
+| Add to dictionary | `proofing` | On a spelling issue when `proofing.allowAddToDictionary` is enabled |
 | Insert link | `general` | Always |
 | Insert table | `general` | Not inside a table |
 | Edit table | `general` | Inside a table |
 | Cut | `clipboard` | Text selected |
 | Copy | `clipboard` | Text selected |
 | Paste | `clipboard` | Always |
+
+<Note>
+Proofing items appear automatically when top-level [proofing](/core/superdoc/configuration#proofing) is enabled and the clicked text has a spelling issue.
+</Note>
 
 ## Custom items
 

@@ -285,6 +285,37 @@
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  * @property {string} [licenseKey] License key for organization identification
  * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
+ * @property {ProofingConfig} [proofing] Proofing / spellcheck configuration
+ */
+
+/**
+ * @typedef {'idle' | 'checking' | 'disabled' | 'degraded'} ProofingStatus
+ */
+
+/**
+ * @typedef {Object} ProofingError
+ * @property {'provider-error' | 'validation-error' | 'timeout'} kind
+ * @property {string} message
+ * @property {string[]} [segmentIds]
+ * @property {*} [cause]
+ */
+
+/**
+ * @typedef {Object} ProofingConfig
+ * @property {boolean} [enabled] Enable or disable proofing (default: false)
+ * @property {import('@superdoc/super-editor').ProofingProvider | null} [provider] Provider instance
+ * @property {string | null} [defaultLanguage] Fallback language for segments without a resolved language
+ * @property {number} [debounceMs] Debounce delay after edits before rechecking (default: 500)
+ * @property {number} [maxSuggestions] Maximum replacement suggestions per issue
+ * @property {boolean} [visibleFirst] Prioritize checking visible pages first (default: true)
+ * @property {boolean} [allowAddToDictionary] Show "Add to dictionary" in context menu (default: false)
+ * @property {boolean} [allowIgnoreWord] Show "Ignore" in context menu (default: true)
+ * @property {string[]} [ignoredWords] Words to suppress from proofing results
+ * @property {number} [timeoutMs] Provider call timeout in milliseconds (default: 10000)
+ * @property {number} [maxConcurrentRequests] Max concurrent provider requests (default: 2)
+ * @property {number} [maxSegmentsPerBatch] Max segments per provider call (default: 20)
+ * @property {(error: ProofingError) => void} [onProofingError] Error callback for provider failures
+ * @property {(status: ProofingStatus) => void} [onStatusChange] Status change callback
  */
 
 export {};

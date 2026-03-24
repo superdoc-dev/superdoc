@@ -115,6 +115,13 @@ const shouldRenderCommentsInViewing = computed(() => {
   return isViewingCommentsVisible.value || isViewingTrackChangesVisible.value;
 });
 
+const resolvedProofingConfig = computed(() => {
+  if (proxy.$superdoc.config.proofing !== undefined) {
+    return proxy.$superdoc.config.proofing;
+  }
+  return proxy.$superdoc.config.layoutEngineOptions?.proofing;
+});
+
 const commentsModuleConfig = computed(() => {
   const config = modules.comments;
   if (config === false || config == null) return null;
@@ -660,6 +667,7 @@ const editorOptions = (doc) => {
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),
+          proofing: resolvedProofingConfig.value,
           debugLabel: proxy.$superdoc.config.layoutEngineOptions?.debugLabel ?? doc.name ?? doc.id,
           zoom: (activeZoom.value ?? 100) / 100,
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,

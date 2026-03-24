@@ -2,6 +2,11 @@ import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
+import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
+import { applyProofingDecorations, clearProofingDecorations, createDomPainter  } from '@superdoc/painter-dom';
+import type { ProofingAnnotation, LayoutMode, PaintSnapshot  } from '@superdoc/painter-dom';
+import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
+import type { VisibilitySource } from './proofing/visibility-source.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -88,9 +93,7 @@ import type {
   TableHitResult,
 } from '@superdoc/layout-bridge';
 
-import { createDomPainter } from '@superdoc/painter-dom';
 
-import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -329,6 +332,8 @@ export class PresentationEditor extends EventEmitter {
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   /** Bridges external PM plugin decorations onto painted DOM elements. */
   #decorationBridge = new DecorationBridge();
+  /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
+  #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
@@ -668,6 +673,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
       this.#setupSemanticResizeObserver();
+      this.#initializeProofing();
 
       // Register this instance in the static registry.
       // Use a separate field to avoid mutating the caller's options object and to keep
@@ -842,6 +848,52 @@ export class PresentationEditor extends EventEmitter {
    */
   get element(): HTMLElement {
     return this.#visibleHost;
+  }
+
+  /** Access the proofing session manager (for context menu and action integration). */
+  get proofingManager(): ProofingSessionManager | null {
+    return this.#proofingManager;
+  }
+
+  /** Update proofing configuration at runtime. */
+  updateProofingConfig(patch: Partial<ProofingConfig>): void {
+    if (!this.#proofingManager) {
+      // Initialize proofing if not yet created and patch enables it
+      if (patch.enabled && patch.provider) {
+        this.#proofingManager = new ProofingSessionManager({
+          ...patch,
+          enabled: true,
+        } as ProofingConfig);
+        this.#proofingManager.setDocumentId(
+          ((this.#options as Record<string, unknown>).documentId as string | null) ?? null,
+        );
+        // Wire callback, visibility source, and page resolver
+        this.#proofingManager.onResultsChanged = () => this.#applyProofingPass();
+        this.#proofingManager.setVisibilitySource({
+          getVisiblePageIndices: () => {
+            if (!this.#painterHost) return null;
+            const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
+            if (pageEls.length === 0) return null;
+            const indices: number[] = [];
+            for (let i = 0; i < pageEls.length; i++) {
+              const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
+              if (!isNaN(idx)) indices.push(idx);
+            }
+            return indices.length > 0 ? indices : null;
+          },
+        });
+        this.#proofingManager.setPageResolver(this.#buildPageResolver());
+        if (this.#editor?.state?.doc) {
+          this.#proofingManager.runInitialCheck(this.#editor.state.doc);
+        }
+      }
+      return;
+    }
+    // updateConfig fires onResultsChanged internally for state changes
+    // that need a repaint (disable, ignoredWords). For config changes that
+    // don't fire onResultsChanged (e.g. UI flags), an explicit pass is safe.
+    this.#proofingManager.updateConfig(patch, this.#editor?.state?.doc);
+    this.#applyProofingPass();
   }
 
   /**
@@ -2724,6 +2776,8 @@ export class PresentationEditor extends EventEmitter {
       }, 'Decoration sync RAF');
     }
     this.#decorationBridge.destroy();
+    this.#proofingManager?.dispose();
+    this.#proofingManager = null;
 
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
@@ -2835,6 +2889,135 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  // ===========================================================================
+  // Proofing Integration
+  // ===========================================================================
+
+  /** Initialize the proofing session manager from layout engine options. */
+  #initializeProofing(): void {
+    const proofingConfig = this.#options.layoutEngineOptions?.proofing;
+    if (!proofingConfig) return;
+
+    this.#proofingManager = new ProofingSessionManager(proofingConfig);
+    this.#proofingManager.setDocumentId(
+      ((this.#options as Record<string, unknown>).documentId as string | null) ?? null,
+    );
+
+    // Wire the results-changed callback so async provider responses
+    // trigger a decoration repaint without waiting for the next paint cycle.
+    this.#proofingManager.onResultsChanged = () => {
+      this.#applyProofingPass();
+    };
+
+    // Visibility source: query actually mounted page elements in the DOM,
+    // not all layout pages. This makes visible-first scheduling meaningful
+    // under virtualization.
+    const visibilitySource: VisibilitySource = {
+      getVisiblePageIndices: () => {
+        if (!this.#painterHost) return null;
+        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
+        if (pageEls.length === 0) return null;
+        const indices: number[] = [];
+        for (let i = 0; i < pageEls.length; i++) {
+          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
+          if (!isNaN(idx)) indices.push(idx);
+        }
+        return indices.length > 0 ? indices : null;
+      },
+    };
+    this.#proofingManager.setVisibilitySource(visibilitySource);
+    this.#proofingManager.setPageResolver(this.#buildPageResolver());
+
+    // Schedule initial check after first paint
+    if (proofingConfig.enabled && this.#editor?.state?.doc) {
+      // Defer to allow first paint to complete
+      setTimeout(() => {
+        this.#proofingManager?.runInitialCheck(this.#editor!.state.doc);
+      }, 0);
+    }
+  }
+
+  /**
+   * Build a page resolver that maps PM positions to page indices
+   * using the current layout's fragment PM ranges. Returns a closure
+   * that re-reads the layout on each call so it stays current.
+   */
+  #buildPageResolver(): (pmPos: number) => number | undefined {
+    return (pmPos: number) => {
+      const layout = this.#layoutState.layout;
+      if (!layout?.pages) return undefined;
+      for (let idx = 0; idx < layout.pages.length; idx++) {
+        const page = layout.pages[idx];
+        for (const fragment of page.fragments) {
+          const frag = fragment as { pmStart?: number; pmEnd?: number };
+          if (frag.pmStart != null && frag.pmEnd != null && pmPos >= frag.pmStart && pmPos <= frag.pmEnd) {
+            return idx;
+          }
+        }
+      }
+      return undefined;
+    };
+  }
+
+  /**
+   * Apply the proofing decoration pass after paint or when results change.
+   * Walks rendered spans and applies proofing CSS classes.
+   * Rebuilds DomPositionIndex if any DOM mutations were made.
+   *
+   * Also handles the case where proofing is disabled: clears all markers.
+   */
+  #applyProofingPass(): void {
+    if (!this.#painterHost) return;
+
+    // When proofing is disabled or no manager exists, clear any leftover markers
+    if (!this.#proofingManager?.isEnabled) {
+      const cleared = clearProofingDecorations(this.#painterHost);
+      if (cleared) {
+        this.#rebuildDomPositionIndex();
+      }
+      return;
+    }
+
+    const slices = this.#proofingManager.getPaintSlices();
+
+    // Convert paint slices to ProofingAnnotation format
+    const annotations: ProofingAnnotation[] = slices.map((s) => ({
+      pmFrom: s.pmFrom,
+      pmTo: s.pmTo,
+      kind: s.kind,
+    }));
+
+    const mutated = applyProofingDecorations(this.#painterHost, annotations);
+
+    // Rebuild position index if DOM was mutated (sibling splits)
+    if (mutated) {
+      this.#rebuildDomPositionIndex();
+    }
+  }
+
+  /**
+   * Notify the proofing manager of a document change.
+   * Extracts changed ranges from the transaction and forwards to the manager.
+   */
+  #notifyProofingOfDocChange(transaction: Transaction): void {
+    if (!this.#proofingManager?.isEnabled) return;
+
+    const doc = this.#editor?.state?.doc;
+    if (!doc) return;
+
+    // Extract changed ranges from the transaction
+    const changedRanges: Array<{ from: number; to: number }> = [];
+    if (transaction.steps.length > 0) {
+      transaction.mapping.maps.forEach((map, i) => {
+        map.forEach((oldStart, oldEnd, newStart, newEnd) => {
+          changedRanges.push({ from: newStart, to: newEnd });
+        });
+      });
+    }
+
+    this.#proofingManager.onDocumentChanged(doc, changedRanges);
+  }
+
   /**
    * Runs a full decoration sync: applies external plugin decoration classes
    * and styles to the painted DOM elements via DecorationBridge. Runs are
@@ -2930,6 +3113,7 @@ export class PresentationEditor extends EventEmitter {
       // Update local cursor in awareness whenever document changes
       // This ensures cursor position is broadcast with each keystroke
       if (transaction?.docChanged) {
+        this.#notifyProofingOfDocChange(transaction);
         this.#updateLocalAwarenessCursor();
         // Clear cell anchor on document changes to prevent stale references
         // (table structure may have changed, cell positions may be invalid)
@@ -4106,6 +4290,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPostStart = perfNow();
       this.#rebuildDomPositionIndex();
       this.#syncDecorations();
+      this.#applyProofingPass();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);

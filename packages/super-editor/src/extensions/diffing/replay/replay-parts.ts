@@ -2,6 +2,9 @@ import { ReplayResult } from './replay-types';
 import type { PartsDiff } from '../algorithm/parts-diffing';
 
 type ReplayPartsEditor = {
+  commands?: {
+    addImageToCollaboration?: (params: { mediaPath: string; fileData: string }) => boolean;
+  };
   emit?: (event: string, payload?: unknown) => void;
   options?: {
     mediaFiles?: Record<string, unknown>;
@@ -69,6 +72,12 @@ export function replayPartsDiff({
       const value = structuredClone(snapshot.content);
       optionMediaStore[partPath] = value;
       storageMediaStore[partPath] = structuredClone(value);
+      if (partPath.startsWith('word/media/') && typeof value === 'string') {
+        editor.commands?.addImageToCollaboration?.({
+          mediaPath: partPath,
+          fileData: value,
+        });
+      }
       changedParts.push({ partId: partPath, operation, changedPaths: [] });
     }
     result.applied += 1;

@@ -5,6 +5,7 @@ import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { captureHeaderFooterState } from './algorithm/header-footer-diffing';
 import { replayHeaderFooters } from './replay/replay-header-footers';
+import { replayPartsDiff } from './replay/replay-parts';
 import { resolveSectionProjections } from '../../document-api-adapters/helpers/sections-resolver.js';
 
 /**
@@ -387,6 +388,43 @@ describe('Header/footer diffing', () => {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();
     }
+  });
+
+  it('publishes replayed media upserts through collaboration', () => {
+    const addImageToCollaboration = vi.fn(() => true);
+
+    replayPartsDiff({
+      partsDiff: {
+        upserts: {
+          'word/media/header-logo.png': {
+            kind: 'binary',
+            content: 'data:image/png;base64,aGVhZGVy',
+          },
+        },
+        deletes: [],
+      },
+      editor: {
+        commands: {
+          addImageToCollaboration,
+        },
+        converter: {
+          convertedXml: {},
+        },
+        options: {
+          mediaFiles: {},
+        },
+        storage: {
+          image: {
+            media: {},
+          },
+        },
+      },
+    });
+
+    expect(addImageToCollaboration).toHaveBeenCalledWith({
+      mediaPath: 'word/media/header-logo.png',
+      fileData: 'data:image/png;base64,aGVhZGVy',
+    });
   });
 
   it('exports a valid header part after replay adds a new header', async () => {

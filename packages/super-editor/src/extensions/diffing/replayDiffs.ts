@@ -26,6 +26,9 @@ type ReplayDiffsParams = {
   schema: import('prosemirror-model').Schema;
   comments?: import('./algorithm/comment-diffing').CommentInput[];
   editor?: {
+    commands?: {
+      addImageToCollaboration?: (params: { mediaPath: string; fileData: string }) => boolean;
+    };
     state: { doc: import('prosemirror-model').Node };
     emit?: (event: string, payload: unknown) => void;
     options?: {

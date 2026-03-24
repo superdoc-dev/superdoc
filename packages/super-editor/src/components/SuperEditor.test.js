@@ -237,6 +237,119 @@ describe('SuperEditor.vue', () => {
     wrapper.unmount();
   });
 
+  it('waits for collaboration sync before loading a provided file source for an empty room', async () => {
+    vi.useFakeTimers();
+
+    EditorConstructor.loadXmlData.mockResolvedValueOnce([
+      '<docx />',
+      { media: true },
+      { files: true },
+      { fonts: true },
+    ]);
+
+    const metaMap = {
+      has: vi.fn(() => false),
+      get: vi.fn(() => undefined),
+    };
+    const partsMap = { size: 0 };
+    const fragment = { length: 0, observe: vi.fn(), unobserve: vi.fn() };
+    const ydoc = {
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
+    };
+
+    const provider = {
+      listeners: {},
+      on: vi.fn((event, handler) => {
+        provider.listeners[event] = handler;
+      }),
+      off: vi.fn(),
+    };
+
+    const fileSource = new Blob([], { type: DOCX_MIME });
+    const wrapper = mount(SuperEditor, {
+      props: {
+        documentId: 'doc-first-client-with-file',
+        fileSource,
+        options: {
+          ydoc,
+          collaborationProvider: provider,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(EditorConstructor.loadXmlData).not.toHaveBeenCalled();
+    expect(EditorConstructor).not.toHaveBeenCalled();
+
+    const syncedHandler = provider.on.mock.calls.find(([event]) => event === 'synced')[1];
+    syncedHandler();
+    await flushPromises();
+
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(EditorConstructor.loadXmlData).toHaveBeenCalledWith(fileSource);
+    expect(EditorConstructor).toHaveBeenCalledTimes(1);
+    expect(EditorConstructor.mock.calls[0][0].isNewFile).toBe(true);
+
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
+
+  it('ignores a provided file source when the collaboration room already has content', async () => {
+    vi.useFakeTimers();
+
+    const metaMap = {
+      has: vi.fn(() => false),
+      get: vi.fn(() => undefined),
+    };
+    const partsMap = { size: 1 };
+    const fragment = { length: 5 };
+    const ydoc = {
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
+    };
+
+    const provider = {
+      listeners: {},
+      on: vi.fn((event, handler) => {
+        provider.listeners[event] = handler;
+      }),
+      off: vi.fn(),
+    };
+
+    const fileSource = new Blob([], { type: DOCX_MIME });
+    const wrapper = mount(SuperEditor, {
+      props: {
+        documentId: 'doc-existing-room-with-file',
+        fileSource,
+        options: {
+          ydoc,
+          collaborationProvider: provider,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(EditorConstructor.loadXmlData).not.toHaveBeenCalled();
+    expect(EditorConstructor).not.toHaveBeenCalled();
+
+    const syncedHandler = provider.on.mock.calls.find(([event]) => event === 'synced')[1];
+    syncedHandler();
+    await flushPromises();
+
+    expect(EditorConstructor.loadXmlData).not.toHaveBeenCalled();
+    expect(EditorConstructor).toHaveBeenCalledTimes(1);
+    expect(EditorConstructor.mock.calls[0][0].fragment).toStrictEqual(fragment);
+    expect(EditorConstructor.mock.calls[0][0].isNewFile).toBe(false);
+
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
+
   it('waits for fragment settling and passes the shared fragment to the editor for existing rooms', async () => {
     vi.useFakeTimers();
 

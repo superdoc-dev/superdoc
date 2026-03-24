@@ -816,21 +816,21 @@ const notifyFileLoadError = () => {
   console.warn(FILE_LOAD_ERROR_MESSAGE);
 };
 
-const initializeData = async () => {
-  // If we have the file, initialize immediately from file
-  if (props.fileSource) {
-    let fileData = await loadNewFileData();
-    if (!fileData) {
-      // TODO: show a visible error to the user (toast removed with naive-ui)
-      notifyFileLoadError();
-      await setDefaultBlankFile();
-      fileData = await loadNewFileData();
-    }
-    return initEditor(fileData);
+const initEditorFromFileSource = async () => {
+  let fileData = await loadNewFileData();
+  if (!fileData) {
+    notifyFileLoadError();
+    await setDefaultBlankFile();
+    fileData = await loadNewFileData();
   }
+  return initEditor(fileData);
+};
 
-  // If we are in collaboration mode, wait for sync then initialize
-  else if (props.options.ydoc && props.options.collaborationProvider) {
+const initializeData = async () => {
+  // Collaboration startup must own room classification before we initialize
+  // from a local file source. Otherwise the editor can render local content
+  // while the shared room remains blank until a later async seed.
+  if (props.options.ydoc && props.options.collaborationProvider) {
     delete props.options.content;
     const ydoc = props.options.ydoc;
     const provider = props.options.collaborationProvider;
@@ -885,13 +885,19 @@ const initializeData = async () => {
 
         initEditor({});
       } else {
-        // First client — load blank document
+        // First client — seed the room from the provided file source, or
+        // fall back to the blank template if no file is provided.
         props.options.isNewFile = true;
         delete props.options.fragment;
-        const fileData = await loadNewFileData();
-        if (fileData) initEditor(fileData);
+        await initEditorFromFileSource();
       }
     });
+    return;
+  }
+
+  // Non-collaborative mode: initialize immediately from the provided file.
+  if (props.fileSource) {
+    return initEditorFromFileSource();
   }
 };
 

@@ -193,7 +193,6 @@ export function replayHeaderFooters({
     }
 
     editor.emit?.('partChanged', { parts: changedParts, source: 'diff-replay' });
-    editor.emit?.('headerFooterUpdate', { type: 'replayCompleted' });
   }
 
   return result;

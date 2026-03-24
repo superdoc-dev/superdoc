@@ -1,3 +1,4 @@
+import { resolveOpcTargetPath } from '../../../core/super-converter/helpers.js';
 import type { HeaderFooterKind, HeaderFooterState, HeaderFootersDiff } from './header-footer-diffing';
 
 export interface PartSnapshot {
@@ -49,40 +50,6 @@ export type PartsStateEditor = {
 };
 
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
-
-/**
- * Resolves an OOXML relationship target using OPC (Open Packaging Conventions)
- * package-path rules relative to the given part directory.
- */
-function resolveOpcTargetPath(target: string, baseDir = 'word'): string | null {
-  if (!target || typeof target !== 'string') {
-    return null;
-  }
-
-  const normalizedBaseDir = baseDir.replace(/^\/+|\/+$/g, '');
-  const trimmedTarget = target.trim();
-  if (!trimmedTarget) {
-    return null;
-  }
-
-  if (trimmedTarget.startsWith('/')) {
-    return trimmedTarget.replace(/^\/+/, '');
-  }
-
-  const segments = normalizedBaseDir ? normalizedBaseDir.split('/').filter(Boolean) : [];
-  for (const segment of trimmedTarget.split('/')) {
-    if (!segment || segment === '.') {
-      continue;
-    }
-    if (segment === '..') {
-      segments.pop();
-      continue;
-    }
-    segments.push(segment);
-  }
-
-  return segments.join('/');
-}
 
 /**
  * Captures the body and header/footer part closures needed for coarse

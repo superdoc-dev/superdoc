@@ -31,6 +31,10 @@ const CLASS_NAMES = {
   tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
 } as const;
 
+function isRtlLine(lineEl: HTMLElement): boolean {
+  return getComputedStyle(lineEl).direction === 'rtl';
+}
+
 /**
  * Maps a click coordinate to a ProseMirror document position using DOM data attributes.
  *
@@ -370,17 +374,24 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
     return lineStart;
   }
 
-  // Check if click is before first span or after last span
-  const firstRect = spanEls[0].getBoundingClientRect();
-  if (viewX <= firstRect.left) {
-    log('Click before first span, returning lineStart:', lineStart);
-    return lineStart;
+  const rtl = isRtlLine(lineEl);
+
+  // Determine the visual left/right edges of all spans to handle RTL correctly.
+  // In RTL lines the first DOM span may be visually rightmost.
+  const allRects = spanEls.map((el) => el.getBoundingClientRect());
+  const visualLeft = Math.min(...allRects.map((r) => r.left));
+  const visualRight = Math.max(...allRects.map((r) => r.right));
+
+  if (viewX <= visualLeft) {
+    const pos = rtl ? lineEnd : lineStart;
+    log('Click to visual left of all spans, returning:', pos);
+    return pos;
   }
 
-  const lastRect = spanEls[spanEls.length - 1].getBoundingClientRect();
-  if (viewX >= lastRect.right) {
-    log('Click after last span, returning lineEnd:', lineEnd);
-    return lineEnd;
+  if (viewX >= visualRight) {
+    const pos = rtl ? lineStart : lineEnd;
+    log('Click to visual right of all spans, returning:', pos);
+    return pos;
   }
 
   // Find the target element (span or anchor) containing or nearest to the X coordinate
@@ -413,19 +424,18 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
   // Get the text node and find the character index
   const firstChild = targetEl.firstChild;
   if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
-    // Empty element or non-text node: choose closer edge
     const elRect = targetEl.getBoundingClientRect();
     const closerToLeft = Math.abs(viewX - elRect.left) <= Math.abs(viewX - elRect.right);
-    const snapPos = closerToLeft ? spanStart : spanEnd;
-    log('Empty/non-text element, snapping to:', { closerToLeft, snapPos });
+    const snapPos = rtl ? (closerToLeft ? spanEnd : spanStart) : closerToLeft ? spanStart : spanEnd;
+    log('Empty/non-text element, snapping to:', { closerToLeft, rtl, snapPos });
     return snapPos;
   }
 
   const textNode = firstChild as Text;
-  const charIndex = findCharIndexAtX(textNode, targetEl, viewX);
+  const charIndex = findCharIndexAtX(textNode, viewX, rtl);
   const pos = mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
 
-  log('Character position:', { charIndex, spanStart, finalPos: pos });
+  log('Character position:', { charIndex, spanStart, rtl, finalPos: pos });
 
   return pos;
 }
@@ -510,17 +520,22 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     return lineStart;
   }
 
-  // Check if click is before first span or after last span
-  const firstRect = spanEls[0].getBoundingClientRect();
-  if (viewX <= firstRect.left) {
-    log('Click before first span, returning lineStart:', lineStart);
-    return lineStart;
+  const rtl = isRtlLine(lineEl);
+
+  const allRects = spanEls.map((el) => el.getBoundingClientRect());
+  const visualLeft = Math.min(...allRects.map((r) => r.left));
+  const visualRight = Math.max(...allRects.map((r) => r.right));
+
+  if (viewX <= visualLeft) {
+    const pos = rtl ? lineEnd : lineStart;
+    log('Click to visual left of all spans, returning:', pos);
+    return pos;
   }
 
-  const lastRect = spanEls[spanEls.length - 1].getBoundingClientRect();
-  if (viewX >= lastRect.right) {
-    log('Click after last span, returning lineEnd:', lineEnd);
-    return lineEnd;
+  if (viewX >= visualRight) {
+    const pos = rtl ? lineStart : lineEnd;
+    log('Click to visual right of all spans, returning:', pos);
+    return pos;
   }
 
   // Find the target element containing or nearest to the X coordinate
@@ -551,19 +566,18 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
   // Get the text node and find the character index
   const firstChild = targetEl.firstChild;
   if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
-    // Empty element or non-text node: choose closer edge
     const elRect = targetEl.getBoundingClientRect();
     const closerToLeft = Math.abs(viewX - elRect.left) <= Math.abs(viewX - elRect.right);
-    const snapPos = closerToLeft ? spanStart : spanEnd;
-    log('Empty/non-text element, snapping to:', { closerToLeft, snapPos });
+    const snapPos = rtl ? (closerToLeft ? spanEnd : spanStart) : closerToLeft ? spanStart : spanEnd;
+    log('Empty/non-text element, snapping to:', { closerToLeft, rtl, snapPos });
     return snapPos;
   }
 
   const textNode = firstChild as Text;
-  const charIndex = findCharIndexAtX(textNode, targetEl, viewX);
+  const charIndex = findCharIndexAtX(textNode, viewX, rtl);
   const pos = spanStart + charIndex;
 
-  log('Character position:', { charIndex, spanStart, finalPos: pos });
+  log('Character position:', { charIndex, spanStart, rtl, finalPos: pos });
 
   return pos;
 }
@@ -660,61 +674,68 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
 /**
  * Finds the character index in a text node closest to a given X coordinate.
  *
- * Uses binary search with `document.createRange()` to efficiently find the
- * character boundary nearest to the target X position. This provides accurate
- * click-to-character mapping even with variable-width fonts, ligatures, and
- * letter-spacing.
+ * Uses `document.caretPositionFromPoint` / `document.caretRangeFromPoint` as
+ * the primary strategy, which correctly handles RTL, bidi, and contextual
+ * shaping (Arabic ligatures, etc.). Falls back to a binary search with
+ * per-character Range rects when the caret API is unavailable or returns a
+ * result outside the target text node.
  *
  * @param textNode - The Text node containing the characters
- * @param container - The element containing the text node (span or anchor, for position reference)
  * @param targetX - The target X coordinate in viewport space
+ * @param rtl - Whether the containing line has RTL direction
  * @returns Character index (0-based) within the text node
- *
- * @example
- * ```typescript
- * const textNode = element.firstChild as Text;
- * const charIndex = findCharIndexAtX(textNode, element, 150);
- * // charIndex might be 5 if the click was near the 5th character
- * ```
  */
-function findCharIndexAtX(textNode: Text, container: HTMLElement, targetX: number): number {
+function findCharIndexAtX(textNode: Text, targetX: number, rtl: boolean): number {
   const text = textNode.textContent ?? '';
-  const baseLeft = container.getBoundingClientRect().left;
+  if (text.length === 0) return 0;
+
+  const container = textNode.parentElement;
+  if (!container) return 0;
+  const containerRect = container.getBoundingClientRect();
+  const targetY = containerRect.top + containerRect.height / 2;
+
+  // Strategy 1: Browser caret API — handles bidi / shaping natively.
+  const caretIndex = caretOffsetFromPoint(targetX, targetY, textNode);
+  if (caretIndex != null) {
+    log('findCharIndexAtX: caret API returned', caretIndex);
+    return caretIndex;
+  }
+
+  // Strategy 2: Binary search using cumulative range rects.
+  // For LTR the boundary edge is the right side of Range(0, i); for RTL it is the left side.
+  // Using the actual rect edges avoids subpixel alignment issues with the container.
+  log('findCharIndexAtX: falling back to range binary search, rtl =', rtl);
   const range = document.createRange();
 
-  // Binary search for the first character where measured X >= target X
+  const measureX = (i: number): number => {
+    if (i <= 0) {
+      return rtl ? containerRect.right : containerRect.left;
+    }
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, i);
+    const r = range.getBoundingClientRect();
+    return rtl ? r.left : r.right;
+  };
+
   let lo = 0;
   let hi = text.length;
 
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    range.setStart(textNode, 0);
-    range.setEnd(textNode, mid);
-    const w = range.getBoundingClientRect().width;
-    const x = baseLeft + w;
-    if (x < targetX) {
+    const x = measureX(mid);
+    if (rtl ? x > targetX : x < targetX) {
       lo = mid + 1;
     } else {
       hi = mid;
     }
   }
 
-  // lo is the first index where measured X >= click X
-  // Compare with previous boundary to find nearest
   const index = Math.max(0, Math.min(text.length, lo));
-
-  const measureAt = (i: number): number => {
-    range.setStart(textNode, 0);
-    range.setEnd(textNode, i);
-    return baseLeft + range.getBoundingClientRect().width;
-  };
-
-  const xAt = measureAt(index);
+  const xAt = measureX(index);
   const distAt = Math.abs(xAt - targetX);
 
-  // Check if previous boundary is closer
   if (index > 0) {
-    const xPrev = measureAt(index - 1);
+    const xPrev = measureX(index - 1);
     const distPrev = Math.abs(xPrev - targetX);
     if (distPrev < distAt) {
       return index - 1;
@@ -722,4 +743,32 @@ function findCharIndexAtX(textNode: Text, container: HTMLElement, targetX: numbe
   }
 
   return index;
+}
+
+/**
+ * Uses the browser's native caret-from-point API to find a character offset
+ * within a specific text node. Returns null when the API is unavailable or
+ * reports a node other than the expected text node.
+ */
+function caretOffsetFromPoint(x: number, y: number, expectedNode: Text): number | null {
+  // Firefox / spec-track: caretPositionFromPoint
+  const doc = document as Document & {
+    caretPositionFromPoint?(x: number, y: number): { offsetNode: Node; offset: number } | null;
+  };
+  if (typeof doc.caretPositionFromPoint === 'function') {
+    const cp = doc.caretPositionFromPoint(x, y);
+    if (cp && cp.offsetNode === expectedNode) {
+      return cp.offset;
+    }
+  }
+
+  // WebKit / Blink: caretRangeFromPoint
+  if (typeof doc.caretRangeFromPoint === 'function') {
+    const r = doc.caretRangeFromPoint(x, y);
+    if (r && r.startContainer === expectedNode) {
+      return r.startOffset;
+    }
+  }
+
+  return null;
 }

@@ -36,8 +36,11 @@
   },
   "dependencies": {
     "@hocuspocus/provider": "catalog:",
+    "@liveblocks/client": "catalog:",
+    "@liveblocks/yjs": "catalog:",
     "fast-glob": "catalog:",
     "happy-dom": "catalog:",
+    "ws": "catalog:",
     "y-websocket": "catalog:",
     "yjs": "catalog:"
   },
@@ -47,6 +50,7 @@
     "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "^8.5.13",
     "superdoc": "workspace:*",
     "typescript": "catalog:"
   },

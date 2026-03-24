@@ -1,3 +1,4 @@
+import { toPublicCollaborationSummary } from '../lib/collaboration';
 import { getActiveSessionId, listProjectSessions } from '../lib/context';
 import { parseOperationArgs } from '../lib/operation-args';
 import type { CommandContext, CommandExecution } from '../lib/types';
@@ -37,12 +38,17 @@ export async function runSessionList(tokens: string[], _context: CommandContext)
 
   const [sessions, activeSessionId] = await Promise.all([listProjectSessions(), getActiveSessionId()]);
 
+  const redactedSessions = sessions.map((session) => ({
+    ...session,
+    collaboration: session.collaboration ? toPublicCollaborationSummary(session.collaboration) : undefined,
+  }));
+
   return {
     command: 'session list',
     data: {
       activeSessionId: activeSessionId ?? undefined,
-      sessions,
-      total: sessions.length,
+      sessions: redactedSessions,
+      total: redactedSessions.length,
     },
     pretty: buildPretty(activeSessionId, sessions),
   };

@@ -3,6 +3,7 @@ import {
   buildShorthandCollaborationInput,
   parseCollaborationInput,
   resolveCollaborationProfile,
+  toPublicCollaborationSummary,
 } from '../lib/collaboration';
 import {
   getProjectRoot,
@@ -229,7 +230,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             },
             dirty: metadata.dirty,
             sessionType: metadata.sessionType,
-            collaboration: metadata.collaboration,
+            collaboration: metadata.collaboration ? toPublicCollaborationSummary(metadata.collaboration) : undefined,
             bootstrap,
             openedAt: metadata.openedAt,
             updatedAt: metadata.updatedAt,

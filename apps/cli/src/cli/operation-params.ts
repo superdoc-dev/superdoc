@@ -894,7 +894,69 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     params: [
       { name: 'doc', kind: 'doc', type: 'string' },
       SESSION_PARAM,
-      { name: 'collaboration', kind: 'jsonFlag', flag: 'collaboration-json', type: 'json' },
+      {
+        name: 'collaboration',
+        kind: 'jsonFlag',
+        flag: 'collaboration-json',
+        type: 'json',
+        schema: {
+          oneOf: [
+            {
+              type: 'object',
+              description: 'WebSocket-based collaboration (y-websocket or Hocuspocus).',
+              properties: {
+                providerType: {
+                  type: 'string',
+                  enum: ['y-websocket', 'hocuspocus'],
+                  description: 'Collaboration provider.',
+                },
+                url: { type: 'string', description: 'WebSocket server URL.' },
+                documentId: {
+                  type: 'string',
+                  description: 'Room/document identifier. Defaults to session ID if omitted.',
+                },
+                tokenEnv: { type: 'string', description: 'Environment variable name containing the auth token.' },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'url'],
+            },
+            {
+              type: 'object',
+              description: 'Liveblocks collaboration.',
+              properties: {
+                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                roomId: { type: 'string', description: 'Liveblocks room identifier.' },
+                publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
+                authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },
+                authHeadersEnv: {
+                  type: 'string',
+                  description: 'Env var name containing JSON headers for the auth endpoint.',
+                },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'roomId'],
+            },
+          ],
+        } as CliTypeSpec,
+      },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
       { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },

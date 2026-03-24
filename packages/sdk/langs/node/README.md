@@ -81,6 +81,10 @@ await doc.save(params)
 await doc.close(params)
 ```
 
+### Collaboration sessions
+
+The SDK supports collaborative editing with `y-websocket`, `hocuspocus`, and `liveblocks` providers. Pass `collabUrl` for the websocket shorthand or a `collaboration` object for explicit provider config. See the [full collaboration docs](https://docs.superdoc.dev/document-engine/sdks#collaboration-sessions) for examples and all options.
+
 ### Operations
 
 | Category | Operations |

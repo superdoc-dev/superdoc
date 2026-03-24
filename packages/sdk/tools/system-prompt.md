@@ -38,7 +38,7 @@ Call `superdoc_get_content({action: "blocks"})` first — no limit, no filters, 
 
 ### Formatting after create (REQUIRED)
 
-Every `superdoc_create` call MUST be followed by `superdoc_format` to match the document's style. Use the `ref` from the create response. Get `fontFamily` and `fontSize` from body text blocks (`superdoc_get_content blocks`). **Always use `color: "#000000"`** — never copy color from blocks.
+Every `superdoc_create` call MUST be followed by `superdoc_format` to match the document's style. Use the `ref` from the create response. Get `fontFamily`, `fontSize`, and `color` from body text blocks (`superdoc_get_content blocks`).
 
 **For paragraphs:**
 ```

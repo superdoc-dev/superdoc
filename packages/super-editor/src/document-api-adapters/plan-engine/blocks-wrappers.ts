@@ -92,14 +92,19 @@ function extractBlockFormatting(node: ProseMirrorNode): {
     const marks = child.marks ?? [];
     if (!child.isText || marks.length === 0) return;
     for (const mark of marks) {
+      const markName = (mark.type as { name?: string }).name;
       const attrs = mark.attrs as Record<string, unknown>;
-      if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
-      if (attrs.fontSize != null) {
-        const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
-        if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
+      // Only read formatting from textStyle marks — other marks (highlight, underline)
+      // have a color attr that means something different (background, line color).
+      if (markName === 'textStyle') {
+        if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
+        if (attrs.fontSize != null) {
+          const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
+          if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
+        }
+        if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
       }
-      if (attrs.bold === true) bold = true;
-      if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
+      if (markName === 'bold' && attrs.value === true) bold = true;
     }
     return false;
   });

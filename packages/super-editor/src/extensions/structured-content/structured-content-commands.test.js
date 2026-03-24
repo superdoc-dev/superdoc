@@ -633,6 +633,52 @@ describe('insertStructuredContentInline formatting', () => {
     expect(innerRun.attrs.runProperties).toMatchObject({ fontFamily });
   });
 
+  it('does not produce an empty left run when cursor is at the start of a run', () => {
+    const fontFamily = {
+      ascii: 'Courier New',
+      eastAsia: 'Courier New',
+      hAnsi: 'Courier New',
+      cs: 'Courier New',
+    };
+    const textStyleMark = schema.marks.textStyle.create({
+      fontFamily: 'Courier New',
+      fontSize: '12pt',
+    });
+    const styledText = schema.text('Hello', [textStyleMark]);
+    const run = schema.nodes.run.create({ runProperties: { fontFamily } }, styledText);
+    const paragraph = schema.nodes.paragraph.create(null, [run]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+
+    // Cursor at the very start of the run content: doc(1) + paragraph(1) = 2
+    const cursorPos = 2;
+    const nextState = EditorState.create({
+      schema,
+      doc,
+      plugins: editor.state.plugins,
+      selection: TextSelection.create(doc, cursorPos),
+    });
+    editor.setState(nextState);
+
+    editor.commands.insertStructuredContentInline({
+      text: 'Field',
+      attrs: { group: 'header' },
+    });
+
+    const updatedParagraph = editor.state.doc.firstChild;
+
+    // Should be: structuredContent, run — no empty run before the SDT
+    const childTypes = [];
+    updatedParagraph.forEach((child) => {
+      childTypes.push(child.type.name);
+      if (child.type.name === 'run') {
+        expect(child.content.size).toBeGreaterThan(0);
+      }
+    });
+
+    expect(childTypes).toEqual(['structuredContent', 'run']);
+    expect(updatedParagraph.textContent).toBe('FieldHello');
+  });
+
   it('removes selected text when inserting with a ranged selection inside a run', () => {
     const fontFamily = {
       ascii: 'Courier New',

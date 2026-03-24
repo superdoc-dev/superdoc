@@ -116,7 +116,7 @@ const createRunNodeWithContent = (
     attrs: {
       ...encodedAttrs,
       runProperties: resolvedRunProperties,
-      runPropertiesInlineKeys: inlineKeysFromCombine?.length ? inlineKeysFromCombine : null,
+      runPropertiesInlineKeys: inlineKeysFromCombine,
       runPropertiesStyleKeys: runPropertiesStyleKeys?.length ? runPropertiesStyleKeys : null,
       runPropertiesOverrideKeys: runPropertiesOverrideKeys?.length ? runPropertiesOverrideKeys : null,
     },
@@ -327,12 +327,13 @@ const decode = (params, decodedAttrs = {}) => {
   const candidateKeys =
     inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
 
-  const exportKeys = candidateKeys.filter(
-    (k) =>
-      k in (runProperties || {}) &&
-      (!(Array.isArray(styleKeys) && styleKeys.includes(k)) ||
-        (Array.isArray(overrideKeys) && overrideKeys.includes(k))),
-  );
+  const shouldExport = (key) =>
+    key in (runProperties || {}) &&
+    (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
+      (Array.isArray(overrideKeys) && overrideKeys.includes(key)));
+
+  const exportKeys = candidateKeys.filter(shouldExport);
+
   const runPropertiesToExport =
     exportKeys.length > 0 ? Object.fromEntries(exportKeys.map((k) => [k, runProperties[k]])) : {};
 

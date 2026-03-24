@@ -531,7 +531,7 @@ function applyRunAttributePatch(
       : {};
     const currentInlineKeys = Array.isArray(runNode.attrs?.runPropertiesInlineKeys)
       ? runNode.attrs.runPropertiesInlineKeys
-      : [];
+      : Object.keys(currentRunProperties);
     const currentStyleKeys = Array.isArray(runNode.attrs?.runPropertiesStyleKeys)
       ? runNode.attrs.runPropertiesStyleKeys
       : [];

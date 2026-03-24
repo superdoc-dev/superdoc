@@ -115,9 +115,39 @@ const markAttrsIncludeSnapshotAttrs = (mark, snapshot) => {
   return isMatch(normalizedMarkAttrs, normalizedSnapshotAttrs);
 };
 
+// Attribute-only marks (like textStyle) can be serialized with different attr density
+// between snapshot and live state. This overlap matcher lets reject find the live mark
+// when exact/subset comparisons fail but shared attrs still clearly identify the mark.
+const markAttrsMatchOnOverlap = (mark, snapshot) => {
+  if (!mark || !snapshot || mark.type.name !== snapshot.type) {
+    return false;
+  }
+
+  if (!ATTRIBUTE_ONLY_MARKS.includes(snapshot.type)) {
+    return false;
+  }
+
+  const normalizedMarkAttrs = normalizeAttrs(mark.attrs || {});
+  const normalizedSnapshotAttrs = normalizeAttrs(snapshot.attrs || {});
+  const markKeys = Object.keys(normalizedMarkAttrs);
+  const snapshotKeys = Object.keys(normalizedSnapshotAttrs);
+
+  if (markKeys.length === 0 || snapshotKeys.length === 0) {
+    return false;
+  }
+
+  const overlapKeys = markKeys.filter((key) => Object.prototype.hasOwnProperty.call(normalizedSnapshotAttrs, key));
+  if (overlapKeys.length === 0) {
+    return false;
+  }
+
+  return overlapKeys.every((key) => isEqual(normalizedMarkAttrs[key], normalizedSnapshotAttrs[key]));
+};
+
 export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
   let exactMatch = null;
   let subsetMatch = null;
+  let overlapMatch = null;
   let typeOnlyMatch = null;
   const normalizedSnapshotAttrs = normalizeAttrs(snapshot?.attrs || {});
   const hasSnapshotAttrs = Object.keys(normalizedSnapshotAttrs).length > 0;
@@ -146,6 +176,13 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
       }
     }
 
+    if (!overlapMatch) {
+      const overlap = node.marks.find((mark) => markAttrsMatchOnOverlap(mark, snapshot));
+      if (overlap) {
+        overlapMatch = overlap;
+      }
+    }
+
     if (!typeOnlyMatch) {
       const fallback = node.marks.find((mark) => markMatchesSnapshot(mark, snapshot, false));
       if (fallback) {
@@ -154,7 +191,7 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
     }
   });
 
-  const liveMark = exactMatch || subsetMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
+  const liveMark = exactMatch || subsetMatch || overlapMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
   if (!liveMark) console.debug('[track-changes] could not find live mark for snapshot', snapshot);
   return liveMark;
 };

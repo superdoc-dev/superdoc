@@ -271,13 +271,15 @@ export const computeParagraphAttrs = (
     );
   }
 
+  const isRtl = resolvedParagraphProperties.rightToLeft === true;
+
   const normalizedSpacing = normalizeParagraphSpacing(
     resolvedParagraphProperties.spacing,
     Boolean(resolvedParagraphProperties.numberingProperties),
   );
   const normalizedIndent = normalizeIndentTwipsToPx(resolvedParagraphProperties.indent as ParagraphIndent);
   const normalizedTabStops = normalizeOoxmlTabs(resolvedParagraphProperties.tabStops);
-  const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification);
+  const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification, isRtl);
   const normalizedBorders = normalizeParagraphBorders(resolvedParagraphProperties.borders);
   const normalizedShading = normalizeParagraphShading(resolvedParagraphProperties.shading);
   const paragraphDecimalSeparator = DEFAULT_DECIMAL_SEPARATOR;
@@ -318,8 +320,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    direction: normalizedDirection,
-    rtl: normalizedDirection === 'rtl' ? true : normalizedDirection === 'ltr' ? false : undefined,
+    ...(normalizedDirection ? { direction: normalizedDirection as 'rtl' | 'ltr', rtl: isRtl } : {}),
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

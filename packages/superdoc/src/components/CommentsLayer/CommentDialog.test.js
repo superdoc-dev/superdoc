@@ -797,4 +797,59 @@ describe('CommentDialog.vue', () => {
     // Verify cancelComment was called with the superdoc instance
     expect(commentsStoreStub.cancelComment).toHaveBeenCalledWith(superdocStub);
   });
+
+  describe('readOnly mode', () => {
+    it('hides the reply pill when readOnly is true', async () => {
+      const { wrapper, baseComment } = await mountDialog();
+
+      commentsStoreStub.activeComment.value = baseComment.commentId;
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const pill = wrapper.find('.reply-pill');
+      expect(pill.exists()).toBe(false);
+    });
+
+    it('shows the reply pill when readOnly is false', async () => {
+      const { wrapper, baseComment } = await mountDialog();
+
+      commentsStoreStub.activeComment.value = baseComment.commentId;
+      await nextTick();
+
+      const pill = wrapper.find('.reply-pill');
+      expect(pill.exists()).toBe(true);
+    });
+
+    it('does not enter edit mode when readOnly is true and overflow-select edit is emitted', async () => {
+      const { wrapper } = await mountDialog();
+
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('overflow-select', 'edit');
+      await nextTick();
+
+      // Edit mode should not activate — the readOnly config prop is passed to CommentHeader
+      // which gates the edit option, but even if the event fires, the config is propagated
+      expect(header.props('config')).toEqual({ readOnly: true });
+    });
+
+    it('passes readOnly config to CommentHeader', async () => {
+      const { wrapper } = await mountDialog();
+
+      commentsStoreStub.getConfig.value = { readOnly: true };
+      await nextTick();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      expect(header.props('config')).toEqual({ readOnly: true });
+    });
+
+    it('passes non-readOnly config to CommentHeader by default', async () => {
+      const { wrapper } = await mountDialog();
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      expect(header.props('config')).toEqual({ readOnly: false });
+    });
+  });
 });

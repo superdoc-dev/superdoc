@@ -108,6 +108,7 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
+import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -5320,17 +5321,8 @@ export class DomPainter {
     if (styleId) {
       el.setAttribute('styleid', styleId);
     }
-    applyParagraphDirection(el, paragraphAttrs);
-    const alignment = paragraphAttrs.alignment;
-
-    // Apply text-align for center/right immediately.
-    // For justify, we keep 'left' and apply spacing via word-spacing.
-    if (alignment === 'center' || alignment === 'right') {
-      el.style.textAlign = alignment;
-    } else {
-      // Default to 'left' for 'left', 'justify', 'both', and undefined
-      el.style.textAlign = 'left';
-    }
+    const pAttrs = block.attrs as ParagraphAttrs | undefined;
+    const isRtl = applyRtlStyles(el, pAttrs);
 
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
@@ -5584,10 +5576,11 @@ export class DomPainter {
       el.style.wordSpacing = `${spacingPerSpace}px`;
     }
 
-    if (hasExplicitPositioning && line.segments) {
-      // Use segment-based rendering with absolute positioning for tab-aligned text
-      // When rendering segments, we need to track cumulative X position
-      // for segments that don't have explicit X coordinates.
+    if (shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl)) {
+      // Use segment-based rendering with absolute positioning for tab-aligned text.
+      // shouldUseSegmentPositioning returns false for RTL because the layout engine
+      // computes tab positions in LTR order; RTL lines fall through to inline-flow
+      // rendering where dir="rtl" lets the browser handle tab positioning.
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
@@ -5611,8 +5604,10 @@ export class DomPainter {
         : indentLeft;
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
+
+      const segments = line.segments!;
       const segmentsByRun = new Map<number, LineSegment[]>();
-      line.segments.forEach((segment) => {
+      segments.forEach((segment) => {
         const list = segmentsByRun.get(segment.runIndex);
         if (list) {
           list.push(segment);
@@ -5698,7 +5693,6 @@ export class DomPainter {
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
-          // Adjust element left to be relative to wrapper
           elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
@@ -7163,11 +7157,7 @@ const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs)
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
-  applyParagraphDirection(element, attrs);
-  if (attrs.alignment) {
-    // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
-    element.style.textAlign = attrs.alignment === 'justify' ? 'left' : attrs.alignment;
-  }
+  applyRtlStyles(element, attrs);
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
   }

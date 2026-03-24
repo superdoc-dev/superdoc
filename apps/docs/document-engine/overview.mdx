@@ -5,10 +5,6 @@ description: Programmatic document editing — in the browser, from the terminal
 keywords: "document engine, document api, sdk, cli, headless docx, document automation"
 ---
 
-<Info>
-Document Engine is in <strong>alpha</strong> and subject to breaking changes while the contract and adapters continue to evolve.
-</Info>
-
 Document Engine gives you four ways to read and edit `.docx` files without a visible editor:
 
 | Surface | Best for | Runtime |
@@ -24,7 +20,7 @@ All four sit on the same underlying document capabilities. The browser, SDK, and
 
 ```mermaid actions={false}
 flowchart TD
-    API["Document API<br/><em>source of truth</em>"]
+    API["Document API<br/><em>source of truth </em>"]
     API --> CLI["CLI<br/>terminal interface"]
     API --> MCP["MCP Server<br/>AI agent interface"]
     API --> SDK["Node SDK / Python SDK<br/>typed wrappers over CLI"]

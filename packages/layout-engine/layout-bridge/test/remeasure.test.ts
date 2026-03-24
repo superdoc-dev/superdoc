@@ -381,6 +381,36 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].leaders).toBeDefined();
       expect(measure.lines[0].leaders?.length).toBeGreaterThan(0);
       expect(measure.lines[0].leaders?.[0].style).toBe('dot');
+
+      const leader = measure.lines[0].leaders?.[0];
+
+      if (leader) {
+        expect(leader.from).toBeGreaterThanOrEqual(0);
+        expect(leader.to).toBeGreaterThan(leader.from);
+      }
+    });
+
+    it.each([
+      { label: 'without indent', indentLeft: 0 },
+      { label: 'with indent', indentLeft: 36 },
+    ])('leader from/to use absolute coordinates for right-aligned tab $label', ({ indentLeft }) => {
+      const tabStop: TabStop = { pos: pxToTwips(300), val: 'end', leader: 'dot' };
+      const block = createBlock([textRun('Chapter 1'), tabRun(), textRun('42')], {
+        tabs: [tabStop],
+        ...(indentLeft > 0 && { indent: { left: indentLeft } }),
+      });
+      const measure = remeasureParagraph(block, 1000);
+
+      expect(measure.lines).toHaveLength(1);
+      const leaders = measure.lines[0].leaders;
+      expect(leaders).toHaveLength(1);
+      const leader = leaders![0];
+
+      const textWidth = 'Chapter 1'.length * CHAR_WIDTH;
+      const pageNumWidth = '42'.length * CHAR_WIDTH;
+
+      expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
+      expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
     it('handles tab with hyphen leader', () => {

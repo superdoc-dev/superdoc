@@ -97,7 +97,7 @@
           },
           {
             "group": "Document Engine",
-            "tag": "ALPHA",
+            "tag": "NEW",
             "pages": [
               "document-engine/overview",
               {
@@ -316,10 +316,14 @@
       {
         "type": "button",
         "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "",
+        "label": "Discord",
         "icon": "discord"
       }
     ]
+  },
+  "banner": {
+    "content": "**Introducing Document Engine** — edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
+    "dismissible": true
   },
   "redirects": [
     {

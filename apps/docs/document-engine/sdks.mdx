@@ -7,10 +7,6 @@ keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 
 SuperDoc SDKs let you open, read, and edit `.docx` files from Node.js or Python. They manage the CLI process for you and expose typed methods for every operation.
 
-<Info>
-The SDKs are in <strong>alpha</strong>. The API surface matches the [Document API](/document-api/overview) and will evolve alongside it.
-</Info>
-
 ## Installation
 
 <Tabs>
@@ -208,6 +204,11 @@ Use this when your app already has a live collaboration room (Liveblocks, Hocusp
 
 Pass `collabUrl` and `collabDocumentId` to `client.open`:
 
+<Note>
+  The `collabUrl` + `collabDocumentId` shorthand defaults to the `y-websocket` provider. To connect to a
+  Hocuspocus server, pass an explicit `collaboration` object with `providerType: 'hocuspocus'`.
+</Note>
+
 <Tabs>
   <Tab title="Node.js">
     ```typescript
@@ -252,6 +253,35 @@ Pass `collabUrl` and `collabDocumentId` to `client.open`:
   </Tab>
 </Tabs>
 
+### Connect to Hocuspocus explicitly
+
+Use the explicit `collaboration` object when your server speaks the Hocuspocus protocol instead of `y-websocket`:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'hocuspocus',
+        url: 'ws://localhost:1234',
+        documentId: 'my-doc-room',
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "hocuspocus",
+            "url": "ws://localhost:1234",
+            "documentId": "my-doc-room",
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
 ### Start an empty room from a local `.docx`
 
 If the room is empty, pass `doc` together with collaboration params:
@@ -289,7 +319,7 @@ What happens when you pass `doc`:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. Shorthand defaults to `y-websocket`. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
 | `doc` | `string` | — | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |

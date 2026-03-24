@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TextSelection } from 'prosemirror-state';
 import { splitBlock } from './splitBlock.js';
 
 vi.mock('../Attribute.js', () => ({
@@ -209,6 +210,54 @@ describe('splitBlock', () => {
   });
 
   describe('edge cases', () => {
+    it('clears copied paragraph runProperties at paragraph end when the current run has none', () => {
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const parentNode = {
+        contentMatchAt: vi.fn(() => ({
+          edgeCount: 1,
+          edge: vi.fn(() => ({ type: paragraphType })),
+        })),
+        canReplaceWith: vi.fn(() => true),
+      };
+      const paragraphAttrs = { paragraphProperties: { runProperties: { bold: true } } };
+      const $from = createMockResolvedPos({
+        depth: 1,
+        parent: {
+          isBlock: true,
+          content: { size: 5 },
+          type: { name: 'paragraph' },
+          inlineContent: true,
+          attrs: paragraphAttrs,
+        },
+        parentOffset: 5,
+        node: vi.fn((depth) => {
+          if (depth === -1) return parentNode;
+          return { type: { name: 'paragraph' }, attrs: paragraphAttrs };
+        }),
+        nodeBefore: {
+          type: { name: 'run' },
+          attrs: { runProperties: null },
+        },
+        indexAfter: vi.fn(() => 0),
+      });
+      const $to = createMockResolvedPos({
+        parentOffset: 5,
+        parent: { content: { size: 5 } },
+      });
+
+      mockTr.selection = new TextSelection($from, $to);
+      mockState.selection = mockTr.selection;
+      mockTr.doc = {
+        resolve: vi.fn((pos) => (pos === 1 ? $from : $to)),
+      };
+
+      const command = splitBlock();
+      command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
+
+      const [, , types] = mockTr.split.mock.calls[0];
+      expect(types[0].attrs.paragraphProperties.runProperties).toBeUndefined();
+    });
+
     it('does not call ensureMarks when keepMarks is false', () => {
       const $from = createMockResolvedPos({
         marks: [{ type: { name: 'bold' }, attrs: { value: true } }],

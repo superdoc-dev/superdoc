@@ -44,6 +44,20 @@ const getRunPropertiesAtCursor = ($from) => {
   return null;
 };
 
+const syncSplitParagraphRunProperties = (attrs, runProperties) => {
+  const nextParagraphProperties = { ...(attrs.paragraphProperties || {}) };
+  if (runProperties) {
+    nextParagraphProperties.runProperties = runProperties;
+  } else {
+    delete nextParagraphProperties.runProperties;
+  }
+
+  return {
+    ...attrs,
+    paragraphProperties: nextParagraphProperties,
+  };
+};
+
 /**
  * Will split the current node into two nodes. If the selection is not
  * splittable, the command will be ignored.
@@ -88,15 +102,7 @@ export const splitBlock =
       // wrapTextInRunsPlugin know which inline formatting to inherit.
       if (atEnd) {
         const runProperties = getRunPropertiesAtCursor($from);
-        if (runProperties) {
-          newAttrs = {
-            ...newAttrs,
-            paragraphProperties: {
-              ...(newAttrs.paragraphProperties || {}),
-              runProperties,
-            },
-          };
-        }
+        newAttrs = syncSplitParagraphRunProperties(newAttrs, runProperties);
       }
       if (selection instanceof TextSelection) tr.deleteSelection();
       const deflt = $from.depth === 0 ? null : defaultBlockAt($from.node(-1).contentMatchAt($from.indexAfter(-1)));

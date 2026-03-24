@@ -25,6 +25,20 @@ function clearHeadingStyleId(attrs) {
   };
 }
 
+function syncSplitParagraphRunProperties(attrs, runProperties) {
+  const nextParagraphProperties = { ...(attrs.paragraphProperties || {}) };
+  if (runProperties) {
+    nextParagraphProperties.runProperties = { ...runProperties };
+  } else {
+    delete nextParagraphProperties.runProperties;
+  }
+
+  return {
+    ...attrs,
+    paragraphProperties: nextParagraphProperties,
+  };
+}
+
 /**
  * Splits a run node at the current selection into two paragraphs.
  * @returns {import('@core/commands/types').Command}
@@ -102,14 +116,8 @@ export function splitBlockPatch(state, dispatch, editor) {
         // When splitting at the end (creating an empty new paragraph), store the
         // current run's runProperties on the new paragraph so the toolbar and
         // wrapTextInRunsPlugin know which inline formatting to inherit.
-        if (atEnd && $from.parent.type.name === 'run' && $from.parent.attrs.runProperties) {
-          paragraphAttrs = {
-            ...paragraphAttrs,
-            paragraphProperties: {
-              ...(paragraphAttrs.paragraphProperties || {}),
-              runProperties: { ...$from.parent.attrs.runProperties },
-            },
-          };
+        if (atEnd && $from.parent.type.name === 'run') {
+          paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, $from.parent.attrs.runProperties ?? null);
         }
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;

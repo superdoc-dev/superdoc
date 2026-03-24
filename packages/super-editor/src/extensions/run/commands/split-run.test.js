@@ -720,6 +720,40 @@ describe('splitRunToParagraph with style marks', () => {
     expect(paragraphTexts).toEqual(['Heading', ' Text']);
   });
 
+  it('clears copied paragraph runProperties at paragraph end when the current run has none', () => {
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: { bold: true },
+            },
+          },
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: null,
+              },
+              content: [{ type: 'text', text: 'Plain' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Plain');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Plain'.length);
+
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const secondParagraph = editor.view.state.doc.child(1);
+    expect(secondParagraph.attrs.paragraphProperties?.runProperties).toBeUndefined();
+  });
+
   it('handles malformed converter data during split', () => {
     const mockConverter = {
       convertedXml: null,

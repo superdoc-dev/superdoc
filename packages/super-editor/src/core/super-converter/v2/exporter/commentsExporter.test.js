@@ -513,6 +513,70 @@ describe('updateCommentsExtendedXml', () => {
 
     expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
   });
+
+  it('SD-2306: generates commentsExtended.xml for resolved comments with range-based threading', () => {
+    const comments = [
+      {
+        commentId: 'resolved-comment',
+        commentParaId: 'RESOLVED-PARA',
+        resolvedTime: 1711234567890,
+      },
+    ];
+
+    const commentsExtendedXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const profile = {
+      defaultStyle: 'range-based',
+      mixed: false,
+      fileSet: {
+        hasCommentsExtended: false,
+        hasCommentsExtensible: false,
+        hasCommentsIds: false,
+      },
+    };
+
+    const result = updateCommentsExtendedXml(comments, commentsExtendedXml, profile);
+
+    // Must not return null — Word needs this file to read w15:done
+    expect(result).not.toBeNull();
+    const entries = result.elements[0].elements;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].attributes['w15:done']).toBe('1');
+  });
+
+  it('SD-2306: generates commentsExtended.xml for isDone comments with range-based threading', () => {
+    const comments = [
+      {
+        commentId: 'done-comment',
+        commentParaId: 'DONE-PARA',
+        isDone: true,
+        resolvedTime: null,
+      },
+    ];
+
+    const commentsExtendedXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const profile = {
+      defaultStyle: 'range-based',
+      mixed: false,
+      fileSet: {
+        hasCommentsExtended: false,
+        hasCommentsExtensible: false,
+        hasCommentsIds: false,
+      },
+    };
+
+    const result = updateCommentsExtendedXml(comments, commentsExtendedXml, profile);
+
+    expect(result).not.toBeNull();
+    const entries = result.elements[0].elements;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].attributes['w15:done']).toBe('1');
+  });
 });
 
 // =============================================================================

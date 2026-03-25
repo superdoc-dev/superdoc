@@ -711,13 +711,6 @@ const editorOptions = (doc) => {
           licenseKey: proxy.$superdoc.config.telemetry?.licenseKey,
         }
       : null,
-    // Upgrade transition: suppress skeleton and thread visual-ready callback
-    ...(proxy.$superdoc._upgradeVisualReadyCallback
-      ? {
-          suppressSkeletonLoader: true,
-          onUpgradeVisualReady: proxy.$superdoc._upgradeVisualReadyCallback,
-        }
-      : {}),
   };
 
   return options;

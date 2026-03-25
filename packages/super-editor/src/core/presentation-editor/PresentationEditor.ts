@@ -842,6 +842,48 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Late-attach collaboration to the presentation editor.
+   *
+   * Updates the provider reference on this instance and RemoteCursorManager,
+   * then delegates to the backing Editor. The existing `collaborationReady`
+   * listener (wired in #setupEditorListeners) triggers cursor setup
+   * automatically when the backing editor emits the event.
+   *
+   * @param options.ydoc  The Y.Doc already seeded with this editor's state
+   * @param options.collaborationProvider  The synced collaboration provider
+   */
+  attachCollaboration({
+    ydoc,
+    collaborationProvider,
+  }: {
+    ydoc: Y.Doc;
+    collaborationProvider: NonNullable<PresentationEditorOptions['collaborationProvider']>;
+  }): void {
+    const prevProvider = this.#options.collaborationProvider;
+
+    // 1. Update PresentationEditor options so the collaborationReady handler
+    //    check passes (it reads this.#options.collaborationProvider?.awareness).
+    this.#options.collaborationProvider = collaborationProvider;
+
+    // 2. Update RemoteCursorManager's provider reference so setup() reads
+    //    the correct provider when collaborationReady fires.
+    this.#remoteCursorManager?.setCollaborationProvider(collaborationProvider);
+
+    // 3. Delegate to the backing Editor — triggers plugin reconfigure + Y.js observers.
+    //    The collaborationReady event fires asynchronously (setTimeout in initSyncListener).
+    //    The existing listener at handleCollaborationReady calls
+    //    #setupCollaborationCursors() → remoteCursorManager.setup(). No new wiring needed.
+    try {
+      this.#editor.attachCollaboration({ ydoc, collaborationProvider });
+    } catch (err) {
+      // Editor attach failed and rolled back its own state. Restore ours too.
+      this.#options.collaborationProvider = prevProvider;
+      this.#remoteCursorManager?.setCollaborationProvider(prevProvider ?? null);
+      throw err;
+    }
+  }
+
+  /**
    * Expose the visible host element for renderer-agnostic consumers.
    */
   get element(): HTMLElement {

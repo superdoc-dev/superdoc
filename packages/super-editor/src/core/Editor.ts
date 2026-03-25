@@ -43,7 +43,7 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData, cleanupCollaborationSideEffects } from '@extensions/collaboration/collaboration.js';
 import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
 import { onCollaborationProviderSynced } from './helpers/collaboration-provider-sync.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
@@ -1853,6 +1853,86 @@ export class Editor extends EventEmitter<EditorEventMap> {
     });
 
     this.view?.updateState(this._state);
+  }
+
+  /**
+   * Late-attach collaboration to a running editor instance.
+   *
+   * Updates editor options so the Collaboration, CollaborationCursor, and
+   * History extensions produce their collaborative plugins on the next
+   * `extensionService.plugins` access, then reconfigures the PM state in place.
+   *
+   * Prerequisites:
+   * - The ydoc must already be seeded with this editor's current state
+   * - The provider must already be synced
+   * - Editor must be mounted (not headless, not destroyed)
+   *
+   * @param options.ydoc  The Y.Doc to bind
+   * @param options.collaborationProvider  The synced collaboration provider
+   */
+  attachCollaboration({
+    ydoc,
+    collaborationProvider,
+  }: {
+    ydoc: YDoc;
+    collaborationProvider: NonNullable<EditorOptions['collaborationProvider']>;
+  }): void {
+    if (this.isDestroyed) {
+      throw new Error('[super-editor] Cannot attach collaboration to a destroyed editor');
+    }
+    if (this.options.ydoc) {
+      throw new Error('[super-editor] Editor already has collaboration attached');
+    }
+    if (this.options.isHeadless) {
+      throw new Error('[super-editor] attachCollaboration is not supported in headless mode');
+    }
+
+    // Snapshot mutable state so we can restore on failure.
+    const prevProvider = this.options.collaborationProvider;
+    const prevShouldLoadComments = this.options.shouldLoadComments;
+    const prevState = this._state;
+
+    const rollback = () => {
+      cleanupCollaborationSideEffects(this);
+      this.options.ydoc = undefined;
+      this.options.collaborationProvider = prevProvider;
+      this.options.shouldLoadComments = prevShouldLoadComments;
+      this._state = prevState;
+      this.view?.updateState(prevState);
+    };
+
+    // 1. Update options so extensions see ydoc/provider on next plugin generation.
+    this.options.ydoc = ydoc;
+    this.options.collaborationProvider = collaborationProvider;
+
+    // 2. Suppress DOCX comment re-import on collaborationReady.
+    //    In local mode shouldLoadComments was set to true (see setOptions()).
+    //    Without this, #onCollaborationReady → #initComments() would re-emit
+    //    commentsLoaded from DOCX data, duplicating the Yjs comment hydration
+    //    that initCollaborationComments() performs at the SuperDoc layer.
+    this.options.shouldLoadComments = false;
+
+    // 3. Regenerate all plugins and reconfigure PM state.
+    //    Side effects (Y.js observers, part-sync, initSyncListener) run during
+    //    the extensionService.plugins getter. On failure, rollback cleans them up.
+    let plugins: Plugin[];
+    try {
+      plugins = [...this.extensionService.plugins];
+    } catch (err) {
+      rollback();
+      throw err;
+    }
+
+    // 4. Reconfigure state with the new plugin set. ProseMirror diffs old vs new.
+    //    Since the ydoc was seeded from this editor's state, doc content is identical
+    //    → no content DOM mutations. Selection is preserved by reconfigure().
+    try {
+      this._state = this.state.reconfigure({ plugins });
+      this.view?.updateState(this._state);
+    } catch (err) {
+      rollback();
+      throw err;
+    }
   }
 
   /**

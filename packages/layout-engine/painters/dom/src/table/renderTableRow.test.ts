@@ -227,5 +227,39 @@ describe('renderTableRow', () => {
       expect(call.borders?.right).toEqual({ style: 'single', width: 3, color: '#0000FF' });
       expect(call.borders?.left).toEqual({ style: 'single', width: 0.5, color: '#FF0000' });
     });
+
+    it('mirrors correctly with non-zero cellSpacing and colspan', () => {
+      renderTableRow(
+        createDeps({
+          isRtl: true,
+          rowIndex: 0,
+          totalRows: 1,
+          cellSpacingPx: 4,
+          columnWidths: [100, 100, 100],
+          rowMeasure: {
+            height: 20,
+            cells: [
+              { width: 200, height: 20, gridColumnStart: 0, colSpan: 2, rowSpan: 1 },
+              { width: 100, height: 20, gridColumnStart: 2, colSpan: 1, rowSpan: 1 },
+            ],
+          },
+          row: {
+            id: 'row-1',
+            cells: [
+              { id: 'c1', blocks: [] },
+              { id: 'c2', blocks: [] },
+            ],
+          },
+        }) as never,
+      );
+
+      expect(renderTableCellMock).toHaveBeenCalledTimes(2);
+      const calls = renderTableCellMock.mock.calls.map((c: unknown[]) => c[0] as { x: number; cellWidth: number });
+      // totalWidth = 4 + 100 + 4 + 100 + 4 + 100 + 4 = 316
+      // Col 0 (colspan=2, w=200): ltrX = 4, rtlX = 316 - 4 - 200 = 112
+      expect(calls[0].x).toBe(112);
+      // Col 2 (w=100): ltrX = 4+100+4+100+4 = 212, rtlX = 316 - 212 - 100 = 4
+      expect(calls[1].x).toBe(4);
+    });
   });
 });

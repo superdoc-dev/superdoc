@@ -7,7 +7,14 @@ on:
     branches: main
     paths:
       - 'apps/vscode-ext/**'
-      - '!apps/vscode-ext/*.md'
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'pnpm-workspace.yaml'
+      - '!**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -44,6 +51,10 @@ jobs:
       - name: Build superdoc
         run: pnpm run build
 
+      - name: Test vscode-ext
+        run: pnpm run test
+        working-directory: apps/vscode-ext
+
       - name: Build vscode-ext
         run: pnpm run build
         working-directory: apps/vscode-ext
@@ -55,3 +66,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

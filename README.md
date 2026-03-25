@@ -17,8 +17,8 @@
 </div>
 
 <p align="center">
-  <strong>A JavaScript library that renders and edits DOCX files in the browser, headless on the server, and within agentic workflows.</strong><br>
-  Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
+  <strong>The document engine for DOCX files.</strong><br>
+  Renders, edits, and automates .docx files in the browser, headless on the server, and within AI agent workflows.<br>
   Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 
@@ -80,6 +80,15 @@ Or use the CDN:
 
 For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
+### Using an AI coding agent?
+
+Set up your project for AI agents and configure the MCP server:
+
+```bash
+npx @superdoc-dev/create              # generates AGENTS.md for your framework
+claude mcp add superdoc -- npx @superdoc-dev/mcp   # connect agent to DOCX files
+```
+
 ## Features
 
 - **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers. Not a contenteditable wrapper with export bolted on.
@@ -87,7 +96,6 @@ For all available options and events, see the [documentation](https://docs.super
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
 - **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
-- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Examples
@@ -147,6 +155,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/roncallyt"><img src="https://github.com/roncallyt.png" width="50" height="50" alt="roncallyt" title="Thomerson Roncally" /></a>
 <a href="https://github.com/gpardhivvarma"><img src="https://github.com/gpardhivvarma.png" width="50" height="50" alt="gpardhivvarma" title="G Pardhiv Varma" /></a>
 <a href="https://github.com/lucbic"><img src="https://github.com/lucbic.png" width="50" height="50" alt="lucbic" title="Lucas Bicudo" /></a>
+<a href="https://github.com/claudiu-ior"><img src="https://github.com/claudiu-ior.png" width="50" height="50" alt="claudiu-ior" title="Claudiu Iorgulescu" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

@@ -178,7 +178,7 @@ _No fields._
       "type": "integer"
     },
     "mode": {
-      "description": "Required. Creation mode: 'empty' creates a new empty list at the paragraph specified by 'at'; 'fromParagraphs' converts existing paragraph(s) specified by 'target' into list items.",
+      "description": "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
       "enum": [
         "empty",
         "fromParagraphs"
@@ -313,7 +313,7 @@ _No fields._
     },
     "target": {
       "$ref": "#/$defs/BlockAddressOrRange",
-      "description": "Required when mode is 'fromParagraphs'. The paragraph(s) to convert into list items. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}."
+      "description": "Required when mode is 'fromParagraphs'. Each call converts ONE paragraph into a list item. To make a list with N items, create N separate paragraphs first, then call superdoc_list create for EACH one. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}."
     }
   },
   "required": [

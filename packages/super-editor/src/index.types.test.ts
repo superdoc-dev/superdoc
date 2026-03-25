@@ -644,6 +644,8 @@ vi.mock('@superdoc/painter-dom', () => ({
     BLOCK_SDT: 'superdoc-structured-content-block',
     DOCUMENT_SECTION: 'superdoc-document-section',
   },
+  applyProofingDecorations: vi.fn(() => false),
+  clearProofingDecorations: vi.fn(() => false),
 }));
 
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: mockMeasureBlock }));

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Doc as YDoc } from 'yjs';
 
@@ -245,6 +248,40 @@ describe('Editor.replaceFile', () => {
       expectedEditor.destroy();
     }
   });
+
+  it('stores decrypted bytes as fileSource when replacing with an encrypted file', async () => {
+    const __dir = dirname(fileURLToPath(import.meta.url));
+    const encryptedPath = resolve(__dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+    const encryptedBuffer = readFileSync(encryptedPath);
+
+    const editor = createTestEditor();
+
+    try {
+      await editor.open(undefined, {
+        mode: 'docx',
+        content: blankDocData.docx as any,
+        mediaFiles: blankDocData.mediaFiles as any,
+        fonts: blankDocData.fonts as any,
+      });
+
+      await editor.replaceFile(encryptedBuffer, { password: 'test123' });
+
+      // fileSource must NOT be the original encrypted buffer — it should be
+      // the decrypted ZIP bytes so export paths don't choke on the CFB container.
+      expect(editor.options.fileSource).not.toBe(encryptedBuffer);
+      expect(editor.options.fileSource).toBeInstanceOf(Uint8Array);
+
+      // Verify the stored bytes are a valid ZIP (PK magic)
+      const stored = editor.options.fileSource as Uint8Array;
+      expect(stored[0]).toBe(0x50); // 'P'
+      expect(stored[1]).toBe(0x4b); // 'K'
+    } finally {
+      if (editor.lifecycleState === 'ready') {
+        editor.close();
+      }
+      editor.destroy();
+    }
+  }, 30_000);
 
   it('seeds collaborative bodySectPr metadata when replacing a file with a final section', async () => {
     const provider = createProviderStub();

@@ -1,5 +1,10 @@
 import { getBooleanOption, getNumberOption, getStringOption, resolveDocArg, resolveJsonInput } from '../lib/args';
-import { parseCollaborationInput, resolveCollaborationProfile } from '../lib/collaboration';
+import {
+  buildShorthandCollaborationInput,
+  parseCollaborationInput,
+  resolveCollaborationProfile,
+  toPublicCollaborationSummary,
+} from '../lib/collaboration';
 import {
   getProjectRoot,
   createInitialContextMetadata,
@@ -11,7 +16,9 @@ import {
   writeContextMetadata,
 } from '../lib/context';
 import { exportToPath, openCollaborativeDocument, openDocument } from '../lib/document';
+import type { EditorPassThroughOptions } from '../lib/document';
 import { CliError } from '../lib/errors';
+import { resolvePassword } from '../lib/open-password';
 import { parseOperationArgs } from '../lib/operation-args';
 import { generateSessionId } from '../lib/session';
 import type { CommandContext, CommandExecution } from '../lib/types';
@@ -30,16 +37,20 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       command: 'open',
       data: {
         usage: [
-          'superdoc open [doc] [--session <id>]',
+          'superdoc open [doc] [--session <id>] [--password <password>]',
           'superdoc open [doc] --content-override <content> --override-type <markdown|html|text>',
           'superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
+          '',
+          'Encrypted documents: use --password or set SUPERDOC_DOC_PASSWORD env var.',
         ],
       },
       pretty: [
         'Usage:',
-        '  superdoc open [doc] [--session <id>]',
+        '  superdoc open [doc] [--session <id>] [--password <password>]',
         '  superdoc open [doc] --content-override <content> --override-type <markdown|html|text>',
         '  superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
+        '',
+        'Encrypted documents: use --password or set SUPERDOC_DOC_PASSWORD env var.',
       ].join('\n'),
     };
   }
@@ -56,6 +67,8 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const bootstrapSettlingMs = getNumberOption(parsed, 'bootstrap-settling-ms');
   const userName = getStringOption(parsed, 'user-name');
   const userEmail = getStringOption(parsed, 'user-email');
+  const allowEnvFallback = context.executionMode !== 'host';
+  const password = resolvePassword(getStringOption(parsed, 'password'), allowEnvFallback);
 
   // Validate contentOverride / overrideType co-requirement.
   // Use != null checks so that intentional empty-string overrides are honored.
@@ -105,12 +118,11 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       payload.bootstrapSettlingMs = bootstrapSettlingMs;
     collaborationInput = parseCollaborationInput(payload);
   } else if (collabUrl) {
-    collaborationInput = parseCollaborationInput({
-      providerType: 'hocuspocus',
+    collaborationInput = buildShorthandCollaborationInput({
       url: collabUrl,
       documentId: collabDocumentId,
-      ...(onMissing != null ? { onMissing } : {}),
-      ...(bootstrapSettlingMs != null ? { bootstrapSettlingMs } : {}),
+      onMissing,
+      bootstrapSettlingMs,
     });
   } else if (collabDocumentId) {
     throw new CliError('MISSING_REQUIRED', 'open: --collab-document-id requires --collab-url.');
@@ -129,8 +141,8 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   // Build user identity when either flag is provided.
   const user = userName != null || userEmail != null ? { name: userName ?? 'CLI', email: userEmail ?? '' } : undefined;
 
-  // Build editor open options from override params
-  const editorOpenOptions: Record<string, string> = {};
+  // Build editor open options from override params and password.
+  const editorOpenOptions: EditorPassThroughOptions & Record<string, string | undefined> = {};
   if (contentOverride != null && overrideType) {
     if (overrideType === 'markdown') {
       editorOpenOptions.markdown = contentOverride;
@@ -141,6 +153,9 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       // paragraphs directly, preserving all whitespace without markdown parsing.
       editorOpenOptions.plainText = contentOverride;
     }
+  }
+  if (password != null) {
+    editorOpenOptions.password = password;
   }
 
   return withContextLock(
@@ -173,7 +188,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       }
 
       const opened = collaboration
-        ? await openCollaborativeDocument(doc, context.io, collaboration, { user })
+        ? await openCollaborativeDocument(doc, context.io, collaboration, { editorOpenOptions, user })
         : await openDocument(doc, context.io, { editorOpenOptions, user });
       const bootstrap = 'bootstrap' in opened ? opened.bootstrap : undefined;
       let adoptedToHostPool = false;
@@ -226,7 +241,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             },
             dirty: metadata.dirty,
             sessionType: metadata.sessionType,
-            collaboration: metadata.collaboration,
+            collaboration: metadata.collaboration ? toPublicCollaborationSummary(metadata.collaboration) : undefined,
             bootstrap,
             openedAt: metadata.openedAt,
             updatedAt: metadata.updatedAt,

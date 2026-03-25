@@ -2,26 +2,58 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
-import { SuperToolbar, createZip } from '@superdoc/super-editor';
+import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
 import { initSuperdocYdoc, initCollaborationComments, makeDocumentsCollaborative } from './collaboration/helpers.js';
 import { setupAwarenessHandler } from './collaboration/collaboration.js';
+import { overwriteRoomComments, overwriteRoomLockState } from './collaboration/room-overwrite.js';
 import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
 import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
+import { SurfaceManager } from './surface-manager.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
   email: null,
 });
+
+// 24 visually distinct hex colors for awareness cursor assignment.
+// Large enough to minimize collisions (~4% for two users) while staying
+// within y-prosemirror's hex-only color format requirement.
+const DEFAULT_AWARENESS_PALETTE = Object.freeze([
+  '#FF6B6B',
+  '#4ECDC4',
+  '#45B7D1',
+  '#FFA07A',
+  '#98D8C8',
+  '#F7DC6F',
+  '#BB8FCE',
+  '#85C1E2',
+  '#F1948A',
+  '#82E0AA',
+  '#F8C471',
+  '#AED6F1',
+  '#D7BDE2',
+  '#A3E4D7',
+  '#F0B27A',
+  '#AEB6BF',
+  '#E74C3C',
+  '#2ECC71',
+  '#3498DB',
+  '#E67E22',
+  '#1ABC9C',
+  '#9B59B6',
+  '#34495E',
+  '#F39C12',
+]);
 
 /** @typedef {import('./types').User} User */
 /** @typedef {import('./types').Document} Document */
@@ -30,6 +62,9 @@ const DEFAULT_USER = Object.freeze({
 /** @typedef {import('./types').DocumentMode} DocumentMode */
 /** @typedef {import('./types').Config} Config */
 /** @typedef {import('./types').ExportParams} ExportParams */
+/** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
+/** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
+/** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
 
 /**
  * SuperDoc class
@@ -45,9 +80,17 @@ export class SuperDoc extends EventEmitter {
   /** @type {boolean} */
   #destroyed = false;
 
+  /** @type {boolean} */
+  #isUpgrading = false;
+
+  /** @type {(() => void) | null} — aborts an in-flight upgrade (sync wait or ready wait) */
+  #abortUpgrade = null;
+
   /** @type {HTMLDivElement | null} */
   #mountWrapper = null;
 
+  /** @type {SurfaceManager} */
+  #surfaceManager;
   /** @type {string} */
   version;
 
@@ -257,6 +300,12 @@ export class SuperDoc extends EventEmitter {
     // Preprocess document
     this.#initDocuments();
 
+    // Surface manager must exist before the first await — openSurface()
+    // can be called while async init is still in flight.
+    this.#surfaceManager = new SurfaceManager({
+      getModuleConfig: () => this.config.modules?.surfaces,
+    });
+
     // Initialize collaboration if configured
     await this.#initCollaboration(this.config.modules);
 
@@ -269,36 +318,43 @@ export class SuperDoc extends EventEmitter {
     // Apply csp nonce if provided
     if (this.config.cspNonce) this.#patchNaiveUIStyles();
 
-    this.#initVueApp();
-    this.#initListeners();
-    this.#initWhiteboard();
-
-    this.user = this.config.user; // The current user
-    this.users = this.config.users || []; // All users who have access to this superdoc
+    // --- One-time shell setup (survives upgrade) ---
+    this.user = this.config.user;
+    this.users = this.config.users || [];
     this.socket = null;
-
     this.isDev = this.config.isDev || false;
 
     /** @type {Editor | null | undefined} */
     this.activeEditor = null;
     this.comments = [];
 
-    // Mount Vue into a child wrapper element instead of directly on the user's
-    // container. This prevents conflicts with host frameworks (React, Angular)
-    // that manage the container's DOM. See SD-1832.
-    this.#mountWrapper = document.createElement('div');
-    this.#mountWrapper.style.display = 'contents';
-    container.appendChild(this.#mountWrapper);
-    this.app.mount(this.#mountWrapper);
-
-    // Required editors
-    this.readyEditors = 0;
-
     this.isLocked = this.config.isLocked || false;
     this.lockedBy = this.config.lockedBy || null;
 
-    // If a toolbar element is provided, render a toolbar
+    // Mount wrapper created once — Vue apps mount into it on each runtime start
+    this.#mountWrapper = document.createElement('div');
+    this.#mountWrapper.style.display = 'contents';
+    container.appendChild(this.#mountWrapper);
+
+    this.#initListeners();
+    this.#initWhiteboard();
     this.#addToolbar();
+
+    // Mount the runtime once the outer shell is ready.
+    this.#startRuntime();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Runtime mount lifecycle
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Mount the Vue app, stores, and editor runtime.
+   */
+  #startRuntime() {
+    this.#initVueApp();
+    this.readyEditors = 0;
+    this.app.mount(this.#mountWrapper);
   }
 
   #initWhiteboard() {
@@ -430,6 +486,10 @@ export class SuperDoc extends EventEmitter {
     this.app.config.globalProperties.$documentMode = this.config.documentMode;
 
     this.app.config.globalProperties.$superdoc = this;
+
+    // Provide surface manager to Vue components via app-level provide
+    this.app.provide('surfaceManager', this.#surfaceManager);
+
     this.superdocStore = superdocStore;
     this.commentsStore = commentsStore;
     this.highContrastModeStore = highContrastModeStore;
@@ -475,66 +535,10 @@ export class SuperDoc extends EventEmitter {
   async #initCollaboration({ collaboration: collaborationModuleConfig, comments: commentsConfig = {} } = {}) {
     if (!collaborationModuleConfig) return this.config.documents;
 
-    // Flag this superdoc as collaborative
-    this.isCollaborative = true;
-
     // Check for external ydoc/provider (provider-agnostic mode)
     const { ydoc: externalYdoc, provider: externalProvider } = collaborationModuleConfig;
 
     if (externalYdoc && externalProvider) {
-      // Use external provider - wire up awareness for SuperDoc events
-      // Mark Y.js objects as raw to prevent Vue's deep reactive traversal
-      // from hitting circular references inside Y.js internals (causes stack overflow).
-      this.ydoc = markRaw(externalYdoc);
-      this.provider = markRaw(externalProvider);
-
-      // Assign a stable color to the local user so awareness broadcasts it.
-      // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
-      // (orange) as a default, causing color flickering between that default and
-      // the fallback colors used by RemoteCursorAwareness.
-      // Use a hash of the user identity to pick a deterministic color from the
-      // palette so that different users get different colors.
-      if (!this.config.user.color) {
-        // 24 visually distinct hex colors — large enough palette to minimize
-        // collisions (~4% for two users) while staying within y-prosemirror's
-        // hex-only color format requirement.
-        const defaultPalette = [
-          '#FF6B6B',
-          '#4ECDC4',
-          '#45B7D1',
-          '#FFA07A',
-          '#98D8C8',
-          '#F7DC6F',
-          '#BB8FCE',
-          '#85C1E2',
-          '#F1948A',
-          '#82E0AA',
-          '#F8C471',
-          '#AED6F1',
-          '#D7BDE2',
-          '#A3E4D7',
-          '#F0B27A',
-          '#AEB6BF',
-          '#E74C3C',
-          '#2ECC71',
-          '#3498DB',
-          '#E67E22',
-          '#1ABC9C',
-          '#9B59B6',
-          '#34495E',
-          '#F39C12',
-        ];
-        const palette = this.colors.length > 0 ? this.colors : defaultPalette;
-        const userKey = this.config.user.email || this.config.user.name || '';
-        let hash = 5381;
-        for (let i = 0; i < userKey.length; i++) {
-          hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
-        }
-        this.config.user.color = palette[Math.abs(hash) % palette.length];
-      }
-
-      setupAwarenessHandler(externalProvider, this, this.config.user);
-
       // If no documents provided, create a default blank document
       if (!this.config.documents || this.config.documents.length === 0) {
         this.config.documents = [
@@ -546,20 +550,20 @@ export class SuperDoc extends EventEmitter {
         ];
       }
 
-      // Assign to all documents
-      this.config.documents.forEach((doc) => {
-        doc.ydoc = externalYdoc;
-        doc.provider = externalProvider;
-        doc.role = this.config.role;
-      });
+      this.#attachExternalCollaboration(externalYdoc, externalProvider);
 
-      // Initialize comments sync, if enabled
+      // Initialize comments sync (will be re-initialized in #initVueApp if
+      // store is recreated, but the initial subscription must happen here
+      // so comments are available by the time the store is initialized).
       initCollaborationComments(this);
 
       return this.config.documents;
     }
 
-    // Fallback: internal provider creation (legacy mode)
+    // Flag this superdoc as collaborative.
+    this.isCollaborative = true;
+
+    // Fallback: internal provider creation.
     // Start a socket for all documents and general metaMap for this SuperDoc
     if (collaborationModuleConfig.providerType === 'hocuspocus') {
       this.config.socket = new HocuspocusProviderWebsocket({
@@ -584,6 +588,388 @@ export class SuperDoc extends EventEmitter {
     initCollaborationComments(this);
 
     return processedDocuments;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collaboration attachment / detachment
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Attach an external ydoc/provider pair to this instance and all documents.
+   *
+   * Shared by constructor-time initialization and late upgrade.
+   * Does NOT initialize collaboration comments — that happens in `#initVueApp()`
+   * or explicitly after this call during construction.
+   *
+   * @param {import('yjs').Doc} ydoc
+   * @param {import('./types').CollaborationProvider} provider
+   */
+  #attachExternalCollaboration(ydoc, provider) {
+    this.isCollaborative = true;
+
+    // Reset comments observer flag so a new observer is created for the new ydoc
+    this._commentsCollabInitialized = false;
+
+    // Mark as raw to prevent Vue's deep reactive traversal from hitting
+    // circular references inside Y.js internals (causes stack overflow).
+    this.ydoc = markRaw(ydoc);
+    this.provider = markRaw(provider);
+
+    this.#assignUserColor();
+    this._cleanupAwareness = setupAwarenessHandler(provider, this, this.config.user);
+
+    this.config.documents.forEach((doc) => {
+      doc.ydoc = ydoc;
+      doc.provider = provider;
+      doc.role = this.config.role;
+    });
+  }
+
+  /**
+   * Undo `#attachExternalCollaboration()` so the instance can fall back
+   * to non-collaborative mode (used during best-effort rollback).
+   */
+  #detachCollaboration() {
+    // Remove the awareness listener so the discarded provider cannot emit
+    // awareness-update events into this SuperDoc instance after rollback.
+    if (typeof this._cleanupAwareness === 'function') {
+      this._cleanupAwareness();
+      this._cleanupAwareness = null;
+    }
+
+    this.isCollaborative = false;
+    this._commentsCollabInitialized = false;
+    this.ydoc = undefined;
+    this.provider = undefined;
+    delete this.config.modules.collaboration;
+
+    this.config.documents.forEach((doc) => {
+      delete doc.ydoc;
+      delete doc.provider;
+    });
+  }
+
+  /**
+   * Assign a deterministic color to the local user for awareness broadcasts.
+   *
+   * Without this, y-prosemirror's cursor plugin defaults to orange (#ffa500),
+   * causing color flickering. The color is derived from a hash of the user's
+   * identity so different users get different colors.
+   */
+  #assignUserColor() {
+    if (this.config.user.color) return;
+
+    const palette = this.colors.length > 0 ? this.colors : DEFAULT_AWARENESS_PALETTE;
+    const userKey = this.config.user.email || this.config.user.name || '';
+    let hash = 5381;
+    for (let i = 0; i < userKey.length; i++) {
+      hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
+    }
+    this.config.user.color = palette[Math.abs(hash) % palette.length];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Late collaboration upgrade
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Upgrade a local SuperDoc instance into collaboration by overwriting
+   * the supplied room with the current local document and comment state,
+   * then attaching collaboration to the live editor instance in place.
+   *
+   * This is a **destructive promotion**: the target room is authoritatively
+   * overwritten with the caller's current local state. It is NOT the API
+   * for joining an existing room without changing its content.
+   *
+   * Currently limited to:
+   * - A single DOCX document
+   * - External `{ ydoc, provider }` collaboration
+   * - Overwrite-and-upgrade only (no merge semantics)
+   *
+   * @param {UpgradeToCollaborationOptions} options
+   * @returns {Promise<void>} Resolves once the collaborative runtime is ready
+   */
+  async upgradeToCollaboration({ ydoc, provider }) {
+    this.#validateUpgradePrerequisites({ ydoc, provider });
+    this.#isUpgrading = true;
+
+    try {
+      const sourceEditor = this.#resolveSourceEditor();
+
+      await this.#waitForProviderSync(provider);
+      this.#assertNotDestroyed();
+
+      // --- Seed the room authoritatively (while editor is still local) ---
+      seedEditorStateToYDoc(sourceEditor, ydoc);
+      overwriteRoomComments(ydoc, this.commentsStore.commentsList);
+      overwriteRoomLockState(ydoc, { isLocked: this.isLocked, lockedBy: this.lockedBy });
+
+      // --- Attach collaboration config (awareness, flags, config.documents) ---
+      this.config.modules.collaboration = { ydoc, provider };
+      this.#attachExternalCollaboration(ydoc, provider);
+
+      // --- Update live store documents in place (no Vue unmount) ---
+      this.#setStoreDocumentCollaboration(ydoc, provider);
+
+      // --- Hot-swap collaboration into the live editor ---
+      const editorInstance = this.#resolveUpgradeTarget();
+      try {
+        editorInstance.attachCollaboration({ ydoc, collaborationProvider: provider });
+      } catch (attachError) {
+        // Rollback: undo config/store/awareness mutations.
+        // The editor rolled back its own options and cleaned up side effects.
+        this.#rollbackCollaborationAttach();
+        throw attachError;
+      }
+
+      // --- Wait for collaborationReady so cursors and UI are fully wired ---
+      // The collaborationReady event fires asynchronously after attachCollaboration
+      // returns (via initSyncListener → setTimeout). The returned promise only
+      // resolves once the editor is fully collaborative.
+      //
+      // If the wait times out or is aborted by destroy(), we do NOT rollback.
+      // The attach succeeded — the editor IS collaborative. The timeout only
+      // means secondary setup (cursors, presence) is delayed. Rejecting or
+      // rolling back would strand the instance in a worse state.
+      await this.#waitForCollaborationReady(editorInstance);
+
+      // If destroy() fired during the readiness wait, bail out before
+      // registering any new listeners/observers against the dead instance.
+      if (this.#destroyed) return;
+
+      // --- Wire collaboration comments (from Yjs, not DOCX re-import) ---
+      initCollaborationComments(this);
+    } finally {
+      this.#abortUpgrade = null;
+      this.#isUpgrading = false;
+    }
+  }
+
+  /**
+   * Throw if the instance has been destroyed. Used as a checkpoint after
+   * async waits inside upgradeToCollaboration().
+   */
+  #assertNotDestroyed() {
+    if (this.#destroyed) {
+      throw new Error('SuperDoc: instance was destroyed during upgrade');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Late-upgrade helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set ydoc/provider on live store document composables.
+   * Each composable uses shallowRef for these fields (use-document.js:28-29),
+   * so we assign to `.value` directly. Vue's reactive proxy auto-unwraps
+   * shallowRefs on property access, so we must use `toRaw()` to reach the
+   * underlying ref objects.
+   *
+   * @param {import('yjs').Doc | null} ydoc
+   * @param {import('./types').CollaborationProvider | null} provider
+   */
+  #setStoreDocumentCollaboration(ydoc, provider) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!Array.isArray(storeDocs)) return;
+    for (const doc of storeDocs) {
+      const raw = toRaw(doc);
+      if (raw.ydoc && typeof raw.ydoc === 'object' && 'value' in raw.ydoc) {
+        raw.ydoc.value = ydoc;
+      }
+      if (raw.provider && typeof raw.provider === 'object' && 'value' in raw.provider) {
+        raw.provider.value = provider;
+      }
+    }
+  }
+
+  /**
+   * Resolve the editor instance that supports `attachCollaboration`.
+   * Prefers PresentationEditor (has cursor/layout support); falls back to raw Editor.
+   *
+   * @returns {import('@superdoc/super-editor').PresentationEditor | import('@superdoc/super-editor').Editor}
+   */
+  #resolveUpgradeTarget() {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) {
+      throw new Error('SuperDoc: no store documents available for upgrade');
+    }
+    const target = storeDocs[0].getPresentationEditor?.() || storeDocs[0].getEditor?.();
+    if (!target?.attachCollaboration) {
+      throw new Error('SuperDoc: editor does not support attachCollaboration');
+    }
+    return target;
+  }
+
+  /**
+   * Undo config/store/awareness mutations if `editor.attachCollaboration()` fails.
+   * The editor itself is still in local mode (the throw happened before or during
+   * reconfigure), so we only need to undo the SuperDoc-layer changes.
+   */
+  #rollbackCollaborationAttach() {
+    this.#detachCollaboration();
+    this.#setStoreDocumentCollaboration(null, null);
+  }
+
+  /**
+   * Wait for the backing editor to emit `collaborationReady` after a live
+   * attach. Resolves immediately if the editor has already fired the event.
+   *
+   * This wait is **non-fatal**: if it times out or is aborted by `destroy()`,
+   * the promise still resolves (not rejects). The attach already succeeded,
+   * so the editor IS collaborative. A timeout only means secondary setup
+   * (cursors, presence) is delayed — rolling back would be worse.
+   *
+   * @param {import('@superdoc/super-editor').Editor | import('@superdoc/super-editor').PresentationEditor} editorInstance
+   * @returns {Promise<void>}
+   */
+  #waitForCollaborationReady(editorInstance) {
+    const TIMEOUT_MS = 10_000;
+
+    // PresentationEditor wraps Editor; get the underlying editor for event listening.
+    const editor = editorInstance.editor ?? editorInstance;
+
+    // If collaborationReady already fired (options flag set by collaboration extension)
+    if (editor.options?.collaborationIsReady) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (typeof editor.off === 'function') editor.off('collaborationReady', onReady);
+      };
+
+      const timer = setTimeout(() => {
+        cleanup();
+        console.warn(
+          '[SuperDoc] collaborationReady did not fire within 10 s after collaboration attach. Continuing — collaboration is active but cursor/presence setup may be delayed.',
+        );
+        resolve(undefined);
+      }, TIMEOUT_MS);
+
+      const onReady = () => {
+        cleanup();
+        resolve(undefined);
+      };
+
+      // Allow destroy() to abort this wait immediately.
+      this.#abortUpgrade = () => {
+        cleanup();
+        resolve(undefined);
+      };
+
+      if (typeof editor.on === 'function') {
+        editor.on('collaborationReady', onReady);
+      } else {
+        cleanup();
+        resolve(undefined);
+      }
+    });
+  }
+
+  /**
+   * Wait for the provider to report synced, with a timeout.
+   *
+   * Mirrors the timeout + cleanup pattern from Editor.replaceFile() so a
+   * provider that exposes on/off but never emits sync cannot hang forever.
+   * destroy() can abort this wait early via #abortUpgrade.
+   *
+   * @param {import('./types').CollaborationProvider} provider
+   * @returns {Promise<void>}
+   */
+  #waitForProviderSync(provider) {
+    const SYNC_TIMEOUT_MS = 10_000;
+
+    return new Promise((resolve, reject) => {
+      let timer;
+      let settled = false;
+      let syncCleanup = () => {};
+
+      const settle = () => {
+        settled = true;
+        clearTimeout(timer);
+        syncCleanup();
+      };
+
+      syncCleanup = onCollaborationProviderSynced(provider, () => {
+        if (settled) return;
+        settle();
+        resolve();
+      });
+
+      if (!settled) {
+        timer = setTimeout(() => {
+          settle();
+          reject(
+            new Error(
+              `SuperDoc: collaboration provider did not sync within ${SYNC_TIMEOUT_MS} ms. ` +
+                `The provider exposes on/off but never emitted sync(true) or synced.`,
+            ),
+          );
+        }, SYNC_TIMEOUT_MS);
+      }
+
+      // Allow destroy() to abort the sync wait immediately
+      this.#abortUpgrade = () => {
+        if (settled) return;
+        settle();
+        reject(new Error('SuperDoc: instance was destroyed during upgrade'));
+      };
+    });
+  }
+
+  /**
+   * Validate that the instance is in a valid state for a collaboration upgrade.
+   * Throws descriptive errors for each invalid condition.
+   *
+   * @param {{ ydoc: unknown, provider: unknown }} options
+   */
+  #validateUpgradePrerequisites({ ydoc, provider }) {
+    if (this.#destroyed) {
+      throw new Error('SuperDoc: cannot upgrade a destroyed instance');
+    }
+    if (this.#isUpgrading) {
+      throw new Error('SuperDoc: upgrade already in progress');
+    }
+    if (this.isCollaborative) {
+      throw new Error('SuperDoc: instance is already collaborative');
+    }
+    if (!ydoc || !provider) {
+      throw new Error('SuperDoc: upgradeToCollaboration() requires both ydoc and provider');
+    }
+
+    const docxDocs = this.config.documents.filter((d) => d.type === DOCX);
+    if (docxDocs.length === 0) {
+      throw new Error('SuperDoc: no DOCX document found for upgrade');
+    }
+    if (docxDocs.length > 1) {
+      throw new Error('SuperDoc: upgradeToCollaboration() only supports a single DOCX document');
+    }
+    if (this.config.documents.length !== docxDocs.length) {
+      throw new Error('SuperDoc: upgradeToCollaboration() only supports single-DOCX instances');
+    }
+  }
+
+  /**
+   * Resolve the source editor from the DOCX document entry.
+   *
+   * @returns {Editor} The editor instance for the source document
+   * @throws {Error} If the editor is not yet created
+   */
+  #resolveSourceEditor() {
+    const docxDoc = this.config.documents.find((d) => d.type === DOCX);
+    const storeDoc = this.superdocStore.documents.find((d) => d.id === docxDoc.id);
+    const editor = storeDoc?.getEditor?.();
+
+    if (!editor) {
+      throw new Error('SuperDoc: source editor not yet created — wait for the ready event before upgrading');
+    }
+    return editor;
   }
 
   /**
@@ -1258,6 +1644,13 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   #cleanupCollaboration() {
+    // Remove the awareness listener so the provider cannot emit events
+    // into a destroyed SuperDoc instance.
+    if (typeof this._cleanupAwareness === 'function') {
+      this._cleanupAwareness();
+      this._cleanupAwareness = null;
+    }
+
     this.config.socket?.cancelWebsocketRetry();
     this.config.socket?.disconnect();
     this.config.socket?.destroy();
@@ -1273,6 +1666,29 @@ export class SuperDoc extends EventEmitter {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Surface system — generic dialog/floating UI above document content
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Open a surface (dialog or floating) above the document content.
+   *
+   * @template [TResult=unknown]
+   * @param {SurfaceRequest} request
+   * @returns {SurfaceHandle<TResult>}
+   */
+  openSurface(request) {
+    return this.#surfaceManager.open(request);
+  }
+
+  /**
+   * Close a surface by id, or the topmost surface if no id is given.
+   * @param {string} [id]
+   */
+  closeSurface(id) {
+    this.#surfaceManager.close(id);
+  }
+
   /**
    * Destroy the superdoc instance
    * @returns {void}
@@ -1281,6 +1697,17 @@ export class SuperDoc extends EventEmitter {
     // Mark as destroyed early to prevent in-flight init from mounting
     this.#destroyed = true;
 
+    // Abort any in-flight upgrade (sync wait or ready wait) so it settles
+    // immediately instead of hanging for the full timeout duration.
+    if (this.#abortUpgrade) {
+      this.#abortUpgrade();
+      this.#abortUpgrade = null;
+    }
+
+    // Settle all active surfaces before Vue unmount
+    if (this.#surfaceManager) {
+      this.#surfaceManager.destroy();
+    }
     // Unmount the app FIRST so editors are destroyed — this triggers each
     // extension's onDestroy() which cancels debounced Y.js writes and
     // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.

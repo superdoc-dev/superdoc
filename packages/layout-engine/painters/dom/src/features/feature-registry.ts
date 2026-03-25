@@ -31,4 +31,13 @@ export const RENDERING_FEATURES = {
     handles: ['w:shd/@w:fill', 'w:shd/@w:val', 'w:shd/@w:color'],
     spec: '§17.3.1.31',
   },
+
+  // ─── RTL Paragraph ─────────────────────────────────────────────
+  // @spec ECMA-376 §17.3.1.1 (bidi), §17.3.2.30 (rtl)
+  'w:bidi': {
+    feature: 'rtl-paragraph',
+    module: './rtl-paragraph',
+    handles: ['w:pPr/w:bidi', 'w:rPr/w:rtl'],
+    spec: '§17.3.1.1',
+  },
 } as const;

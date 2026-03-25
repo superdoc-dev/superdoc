@@ -23,6 +23,8 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'position',
 ]);
 
+const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
+
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
 
 /**
@@ -384,6 +386,14 @@ function getInlineRunProperties(
   if (existingRunProperties != null) {
     Object.keys(existingRunProperties).forEach((key) => {
       if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key) && !preservedDerivedKeys.has(key)) return;
+      if (
+        key === 'styleId' &&
+        TRANSIENT_HYPERLINK_STYLE_IDS.has(existingRunProperties[key]) &&
+        (runPropertiesFromMarks.styleId == null || runPropertiesFromMarks.styleId === '')
+      ) {
+        // Link-derived character styles must not survive after link/textStyle marks are removed.
+        return;
+      }
       if (key in inlineRunProperties) return;
       if (existingRunProperties[key] === undefined) return;
       inlineRunProperties[key] = existingRunProperties[key];

@@ -27,6 +27,14 @@ new SuperDoc({
 });
 ```
 
+<Note>
+  Use `modules.collaboration = { ydoc, provider }` when the editor should start
+  in collaboration mode. If you want to open the document locally first and
+  create a shared room later, use
+  [`superdoc.upgradeToCollaboration()`](/modules/collaboration/upgrade-to-collaboration)
+  instead.
+</Note>
+
 <ParamField path="modules.collaboration.ydoc" type="Y.Doc" required>
   Your Yjs document instance
 </ParamField>

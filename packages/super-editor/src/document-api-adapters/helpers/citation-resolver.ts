@@ -118,10 +118,13 @@ export function buildCitationDiscoveryItem(
 
 export function findAllBibliographies(doc: ProseMirrorNode): ResolvedBibliography[] {
   const results: ResolvedBibliography[] = [];
+  let occurrenceIndex = 0;
   doc.descendants((node, pos) => {
     if (node.type.name === 'bibliography') {
-      const commandNodeId = node.attrs?.sdBlockId as string | undefined;
-      const nodeId = resolvePublicReferenceBlockNodeId(node, pos);
+      const rawBlockId = node.attrs?.sdBlockId;
+      const commandNodeId = rawBlockId != null ? String(rawBlockId) : undefined;
+      const nodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+      occurrenceIndex += 1;
       results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }
@@ -256,8 +259,8 @@ function resolveParentBlockId(doc: ProseMirrorNode, pos: number): string {
   const resolved = doc.resolve(pos);
   for (let depth = resolved.depth; depth >= 0; depth--) {
     const node = resolved.node(depth);
-    const blockId = node.attrs?.sdBlockId as string | undefined;
-    if (blockId) return blockId;
+    const rawBlockId = node.attrs?.sdBlockId;
+    if (rawBlockId != null) return String(rawBlockId);
   }
   return '';
 }

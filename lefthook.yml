@@ -12,10 +12,6 @@ pre-commit:
     cli-build:
       glob: "apps/cli/**/*.{ts,js}"
       run: pnpm --prefix apps/cli run build
-    vscode-build:
-      root: "apps/vscode-ext/"
-      glob: "apps/vscode-ext/**/*.{ts,js}"
-      run: pnpm run build
     vscode-lint:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"

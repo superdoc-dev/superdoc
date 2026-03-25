@@ -1,20 +1,15 @@
 ---
-title: LLM Tools
-sidebarTitle: LLM Tools
-tag: NEW
-description: Give LLMs structured access to document operations with provider-ready tool definitions and dispatch
+title: AI Agents
+sidebarTitle: Overview
+description: Document tools that plug into any LLM provider — what they do and how they work
 keywords: "llm tools, ai document editing, openai tools, anthropic tools, tool use, function calling, superdoc sdk, document automation"
 ---
 
-The SuperDoc SDK ships tool definitions that plug directly into OpenAI, Anthropic, Vercel AI, or any custom LLM integration. Pick tools, send them with your prompt, dispatch the model's tool calls — the SDK handles schema formatting, argument validation, and execution.
-
-<Info>
-LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
-</Info>
+The SuperDoc SDK ships tool definitions that give LLMs structured access to document operations. They cover reading, searching, editing, formatting, lists, comments, tracked changes, and batched mutations. Pick a provider format, pass the tools to your model, dispatch the calls, and the SDK handles schema formatting, argument validation, and execution.
 
 ## Quick start
 
-Install the SDK, create a client, and wire up an agentic loop.
+Install the SDK, create a client, open a document, and wire up an agentic loop.
 
 <Tabs>
   <Tab title="Node.js">
@@ -38,7 +33,6 @@ Install the SDK, create a client, and wire up an agentic loop.
       { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
     ];
 
-    // Agentic loop
     while (true) {
       const response = await openai.chat.completions.create({
         model: 'gpt-5.2',
@@ -53,9 +47,15 @@ Install the SDK, create a client, and wire up an agentic loop.
 
       for (const call of message.tool_calls) {
         const result = await dispatchSuperDocTool(
-          doc, call.function.name, JSON.parse(call.function.arguments),
+          doc,
+          call.function.name,
+          JSON.parse(call.function.arguments),
         );
-        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+        messages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
       }
     }
 
@@ -70,8 +70,9 @@ Install the SDK, create a client, and wire up an agentic loop.
     ```
 
     ```python
+    import json
+    import openai
     from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
-    import openai, json
 
     client = SuperDocClient()
     client.connect()
@@ -138,9 +139,9 @@ Install the SDK, create a client, and wire up an agentic loop.
 
 The current SDK returns the full grouped intent tool set for the selected provider. Group filtering and meta-discovery are not part of the shipped public API here.
 
-## Current tool set
+## Tool catalog
 
-The generated catalog currently contains 9 grouped intent tools:
+The generated catalog currently contains 9 grouped intent tools. Most tools use an `action` argument to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
 
 | Tool | Actions | What it does |
 | --- | --- | --- |
@@ -154,11 +155,13 @@ The generated catalog currently contains 9 grouped intent tools:
 | `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
 | `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
 
-Multi-action tools use an `action` argument to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
+<Note>
+More tools are being added as we expand coverage — tables, images, hyperlinks, and more. You can also [create custom tools](#creating-custom-tools) for any `doc.*` operation today.
+</Note>
 
 ## Dispatching tool calls
 
-`dispatchSuperDocTool()` resolves a tool name to the correct SDK method, validates arguments, and executes the call.
+`dispatchSuperDocTool()` resolves a tool name to the correct SDK method, validates arguments, and executes the call against a bound document handle.
 
 <Tabs>
   <Tab title="Node.js">
@@ -184,9 +187,19 @@ Multi-action tools use an `action` argument to select the underlying operation. 
   </Tab>
 </Tabs>
 
-The dispatcher validates required parameters, enforces mutual exclusivity constraints, and throws descriptive errors if arguments are invalid — so the LLM gets actionable feedback.
+The dispatcher validates required parameters, enforces mutual exclusivity constraints, and throws descriptive errors if arguments are invalid, so the LLM gets actionable feedback.
 
-## Providers
+## System prompt
+
+`getSystemPrompt()` returns a default prompt that teaches the model the tool workflow: targeting, search-before-edit, and common patterns. It's optional. You can use it as-is, extend it with your own instructions, or write a completely custom prompt.
+
+```typescript
+import { getSystemPrompt } from '@superdoc-dev/sdk';
+
+const systemPrompt = await getSystemPrompt();
+```
+
+## Provider formats
 
 Each provider gets tool definitions in its native format.
 
@@ -217,63 +230,146 @@ Each provider gets tool definitions in its native format.
   </Tab>
 </Tabs>
 
-## Best practices
+## Creating custom tools
 
-### Start with the full grouped set
+The built-in tools cover core editing operations. For advanced features like tables, images, hyperlinks, footnotes, and citations, create custom tools that call `doc.*` methods directly.
 
-The current catalog is intentionally small. In most integrations you should load the full grouped set once and let the model choose among the 9 tools.
+| Step | What you do |
+| --- | --- |
+| 1. Pick operations | Browse `doc.*` to find the methods you need |
+| 2. Define the schema | Write a function tool definition for your provider |
+| 3. Write a dispatcher | Map tool actions to `doc.*` calls |
+| 4. Merge and use | Combine with SDK tools in your agentic loop |
 
-### Minimize tool calls
+### Step 1: Pick your operations
 
-A typical edit should take 3-5 tool calls: read, search, mutate, done. Instruct the LLM to plan all edits before calling tools, and to batch multiple changes only when atomic execution is genuinely helpful.
+Every `doc.*` namespace maps to a group of [Document API](/document-api/overview) operations:
 
-### Read first, then search before editing
+```text
+doc.hyperlinks   → list, get, wrap, insert, patch, remove
+doc.tables       → get, insertRow, deleteRow, mergeCells, ...
+doc.images       → list, get, setSize, rotate, crop, ...
+doc.footnotes    → list, get, create, delete, update, ...
+doc.bookmarks    → list, get, create, delete, ...
+```
 
-Use `superdoc_get_content` to understand the document, then `superdoc_search` to obtain stable handles or addresses. Pass those targets into `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, or `superdoc_comment`.
+### Step 2: Define the tool schema
 
-### Prefer focused tools; use `superdoc_mutations` as an escape hatch
+Group related operations under a single tool using an `action` enum. This matches the pattern the built-in tools use.
 
-Use the focused intent tools for straightforward edits. Reach for `superdoc_mutations` when you need preview/apply semantics, atomic multi-step edits, or a batched workflow that would otherwise require several target refreshes.
+```typescript
+import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 
-### Feed errors back to the model
+const hyperlinkTool: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'superdoc_hyperlink',
+    description:
+      'Create, read, update, or remove hyperlinks in the document.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'get', 'wrap', 'insert', 'patch', 'remove'],
+        },
+        target: {
+          description: 'Target address from superdoc_search results.',
+        },
+        text: { type: 'string', description: 'Display text (insert only).' },
+        href: { type: 'string', description: 'URL destination.' },
+        tooltip: { type: 'string', description: 'Hover tooltip text.' },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+};
+```
 
-`dispatchSuperDocTool` surfaces structured errors from the underlying SDK and Document API. Pass these back as tool results — most models self-correct on the next turn.
+<Note>
+- Keep descriptions short. The model reads every tool definition on each turn.
+- Use `additionalProperties: false` to prevent hallucinated parameters.
+- Reference `superdoc_search` in descriptions so the model knows how to get targets.
+</Note>
 
-### Add tool call examples for repeatable actions
+### Step 3: Write a dispatcher
 
-If your workflow involves the same kind of edit across many documents (e.g., always rewriting a specific clause, always adding a comment to a section), include a concrete tool call example in your system prompt. Models that see a working example of the exact tool invocation produce correct calls more reliably than models that only see the schema.
+Map each action to the corresponding `doc.*` call:
 
-### Include a system prompt
+```typescript
+import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
 
-Tell the model what it can do and how to approach edits. You can load the bundled prompt with `getSystemPrompt()`, or start with something like this:
+async function dispatchToolCall(doc, toolName, args) {
+  // Built-in tools: delegate to the SDK
+  if (toolName !== 'superdoc_hyperlink') {
+    return dispatchSuperDocTool(doc, toolName, args);
+  }
 
-````markdown
-You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize tool calls.
+  // Custom tool: call doc.* directly
+  const { action, target, text, href, tooltip } = args;
 
-## Workflow
+  switch (action) {
+    case 'list':
+      return doc.hyperlinks.list({});
+    case 'get':
+      return doc.hyperlinks.get({ target });
+    case 'wrap':
+      return doc.hyperlinks.wrap({
+        target,
+        link: { destination: { href }, ...(tooltip && { tooltip }) },
+      });
+    case 'insert':
+      return doc.hyperlinks.insert({
+        text,
+        link: { destination: { href }, ...(tooltip && { tooltip }) },
+        ...(target && { target }),
+      });
+    case 'patch':
+      return doc.hyperlinks.patch({
+        target,
+        patch: { ...(href && { href }), ...(tooltip && { tooltip }) },
+      });
+    case 'remove':
+      return doc.hyperlinks.remove({ target });
+    default:
+      throw new Error(`Unknown action: "${action}"`);
+  }
+}
+```
 
-1. **Read** — Use `superdoc_get_content` to understand the document.
-2. **Search** — Use `superdoc_search` to find stable handles or block addresses.
-3. **Edit** — Use the focused tool that matches the job:
-   - `superdoc_edit` for insert, replace, delete, undo, redo
-   - `superdoc_format` for inline or paragraph formatting
-   - `superdoc_create` for paragraphs and headings
-   - `superdoc_comment` for comment threads
-   - `superdoc_track_changes` for review decisions
-4. **Batch only when useful** — Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
+### Step 4: Merge and use
 
-Keep it to 3-5 tool calls total when possible.
+Combine your custom tool with the SDK tools and use your dispatcher in the agentic loop:
 
-## Rules
+```typescript
+const { tools: sdkTools } = await chooseTools({ provider: 'openai' });
+const allTools = [...sdkTools, hyperlinkTool];
 
-- Search before mutating so targets come from fresh results.
-- Use focused intent tools for normal edits.
-- Use `superdoc_mutations` when you need an atomic batch or preview/apply flow.
-- Set `changeMode: "tracked"` when edits need human review.
-- Feed tool errors back to the model so it can recover.
-````
+// In your agentic loop, use your dispatcher instead of dispatchSuperDocTool:
+// OpenAI chat completions store the tool name on function.name.
+const toolName = toolCall.function.name;
+const result = await dispatchToolCall(doc, toolName, args);
+```
 
-## Utility functions
+### Extending the system prompt
+
+For custom tools, append usage instructions to the SDK system prompt so the model knows how to use them:
+
+```typescript
+const systemPrompt = await getSystemPrompt();
+
+const customInstructions = `
+## superdoc_hyperlink
+
+Use this tool to manage hyperlinks. First use superdoc_search to find
+text you want to link, then pass the handle as target to the wrap action.
+`;
+
+const fullPrompt = systemPrompt + '\n' + customInstructions;
+```
+
+## SDK functions
 
 | Function | Description |
 | --- | --- |
@@ -285,8 +381,8 @@ Keep it to 3-5 tool calls total when possible.
 
 ## Related
 
-- [MCP Server](/document-engine/ai-agents/mcp-server) — connect AI agents via the Model Context Protocol
-- [Skills](/document-engine/ai-agents/skills) — reusable prompt templates for LLM document editing
+- [How to use](/document-engine/ai-agents/integrations) — step-by-step integration guide with copy-pasteable code
+- [Best practices](/document-engine/ai-agents/best-practices) — prompting, workflow tips, and tested prompt examples
+- [Debugging](/document-engine/ai-agents/debugging) — troubleshoot tool call failures
 - [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
 - [Document API](/document-api/overview) — the operation set behind the tools
-- [AI Agents](/getting-started/ai-agents) — headless mode for server-side AI workflows

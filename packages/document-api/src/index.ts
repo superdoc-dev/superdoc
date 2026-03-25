@@ -41,7 +41,10 @@ export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './his
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
+  DocumentDefaults,
   DocumentInfo,
+  DocumentStyles,
+  DocumentStyleInfo,
   MutationsApplyInput,
   MutationsPreviewInput,
   MutationsPreviewOutput,

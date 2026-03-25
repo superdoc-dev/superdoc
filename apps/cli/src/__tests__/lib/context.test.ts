@@ -101,5 +101,127 @@ describe('normalizeContextMetadata', () => {
       expect(result.sessionType).toBe('local');
       expect(result.collaboration).toBeUndefined();
     });
+
+    test('preserves Liveblocks collab profile with publicApiKey', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room-123',
+          publicApiKey: 'pk_test_xxx',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('collab');
+      expect(result.collaboration).toEqual({
+        providerType: 'liveblocks',
+        documentId: 'lb-room-123',
+        publicApiKey: 'pk_test_xxx',
+      });
+    });
+
+    test('preserves Liveblocks collab profile with authEndpoint', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room-456',
+          authEndpoint: 'https://example.com/auth',
+          authHeadersEnv: 'LB_HEADERS',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('collab');
+      expect(result.collaboration).toEqual({
+        providerType: 'liveblocks',
+        documentId: 'lb-room-456',
+        authEndpoint: 'https://example.com/auth',
+        authHeadersEnv: 'LB_HEADERS',
+      });
+    });
+
+    test('rejects Liveblocks profile with both auth modes', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room',
+          publicApiKey: 'pk_xxx',
+          authEndpoint: 'https://x',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
+    test('rejects Liveblocks profile with neither auth mode', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
+    test('rejects malformed Liveblocks profile (missing documentId)', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          publicApiKey: 'pk_xxx',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+    });
+
+    test('rejects Liveblocks profile with relative authEndpoint', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room',
+          authEndpoint: '/api/auth',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
+    test('rejects Liveblocks profile with authHeadersEnv but no authEndpoint', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room',
+          publicApiKey: 'pk_xxx',
+          authHeadersEnv: 'MY_HEADERS',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
+    test('rejects Liveblocks profile with invalid authHeadersEnv name', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'liveblocks',
+          documentId: 'lb-room',
+          authEndpoint: 'https://example.com/auth',
+          authHeadersEnv: '123-invalid',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
   });
 });

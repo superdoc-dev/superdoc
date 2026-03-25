@@ -536,6 +536,8 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
 
   // -- Story locator (discriminated union on storyType) --
   StoryLocator: {
+    description:
+      "Story scope. Defaults to document body when omitted. Use {kind:'story', storyType:'body'} for body, or other storyType values for headers, footers, footnotes, endnotes.",
     oneOf: [
       objectSchema({ kind: { const: 'story' }, storyType: { const: 'body' } }, ['kind', 'storyType']),
       objectSchema(
@@ -1092,12 +1094,47 @@ const documentInfoCapabilitiesSchema = objectSchema(
   ['canFind', 'canGetNode', 'canComment', 'canReplace'],
 );
 
+const documentStyleInfoSchema = objectSchema(
+  {
+    styleId: { type: 'string', description: "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText')." },
+    count: { type: 'integer', description: 'Number of paragraphs using this style.' },
+    fontFamily: { type: 'string', description: 'Font family used by text in this style.' },
+    fontSize: { type: 'number', description: 'Font size in half-points used by text in this style.' },
+  },
+  ['styleId', 'count'],
+);
+
+const documentStylesSchema = objectSchema(
+  {
+    paragraphStyles: {
+      ...arraySchema(documentStyleInfoSchema),
+      description: 'Paragraph styles in use, sorted by frequency (most common first).',
+    },
+  },
+  ['paragraphStyles'],
+);
+
+const documentDefaultsSchema = objectSchema(
+  {
+    fontFamily: { type: 'string', description: 'Most common body text font family.' },
+    fontSize: { type: 'number', description: 'Most common body text font size in half-points.' },
+    styleId: { type: 'string', description: 'Most common body paragraph style ID.' },
+  },
+  [],
+);
+
 const documentInfoSchema = objectSchema(
   {
     counts: documentInfoCountsSchema,
     outline: arraySchema(documentInfoOutlineItemSchema),
     capabilities: documentInfoCapabilitiesSchema,
     revision: { type: 'string' },
+    styles: { ...documentStylesSchema, description: 'Styles currently in use in the document.' },
+    defaults: {
+      ...documentDefaultsSchema,
+      description:
+        "Document's default body text formatting. Use these values when creating new content to match existing style.",
+    },
   },
   ['counts', 'outline', 'capabilities', 'revision'],
 );
@@ -2970,9 +3007,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   ...formatInlineAliasOperationSchemas,
   'blocks.list': {
     input: objectSchema({
-      offset: { type: 'number', minimum: 0 },
-      limit: { type: 'number', minimum: 1 },
-      nodeTypes: { type: 'array', items: { enum: [...blockNodeTypeValues] } },
+      offset: { type: 'number', minimum: 0, description: 'Number of blocks to skip. Default: 0.' },
+      limit: { type: 'number', minimum: 1, description: 'Maximum blocks to return. Omit for all blocks.' },
+      nodeTypes: {
+        type: 'array',
+        items: { enum: [...blockNodeTypeValues] },
+        description: "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
+      },
     }),
     output: objectSchema(
       {
@@ -2982,12 +3023,18 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               ordinal: { type: 'number' },
-              nodeId: { type: 'string' },
+              nodeId: { type: 'string', description: 'Block ID for targeting with other tools.' },
               nodeType: { enum: [...blockNodeTypeValues] },
               textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
               isEmpty: { type: 'boolean' },
+              styleId: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Named paragraph style.' },
+              fontFamily: { type: 'string', description: 'Font family from first text run.' },
+              fontSize: { type: 'number', description: 'Font size from first text run.' },
+              bold: { type: 'boolean', description: 'True if text is bold.' },
+              alignment: { type: 'string', description: 'Paragraph alignment.' },
+              headingLevel: { type: 'number', description: 'Heading level (1-6).' },
             },
-            ['ordinal', 'nodeId', 'nodeType', 'textPreview', 'isEmpty'],
+            ['ordinal', 'nodeId', 'nodeType'],
           ),
         },
         revision: { type: 'string' },
@@ -3080,10 +3127,18 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- styles.paragraph.* ---
   'styles.paragraph.setStyle': {
-    input: objectSchema({ target: paragraphTargetSchema, styleId: { type: 'string', minLength: 1 } }, [
-      'target',
-      'styleId',
-    ]),
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        styleId: {
+          type: 'string',
+          minLength: 1,
+          description:
+            "Named paragraph style ID (e.g. 'Normal', 'Heading1', 'BodyText'). Use superdoc_search to find a nearby paragraph, then inspect its style to determine the correct styleId.",
+        },
+      },
+      ['target', 'styleId'],
+    ),
     output: paragraphMutationResultSchemaFor('styles.paragraph.setStyle'),
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('styles.paragraph.setStyle'),
@@ -3420,7 +3475,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ),
         ],
       },
-      text: { type: 'string', description: 'Paragraph text content.' },
+      text: {
+        type: 'string',
+        description:
+          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+      },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -3774,7 +3833,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         mode: {
           enum: ['empty', 'fromParagraphs'],
           description:
-            "Required. Creation mode: 'empty' creates a new empty list at the paragraph specified by 'at'; 'fromParagraphs' converts existing paragraph(s) specified by 'target' into list items.",
+            "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
         },
         at: {
           ...ref('BlockAddress'),
@@ -3784,7 +3843,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         target: {
           ...ref('BlockAddressOrRange'),
           description:
-            "Required when mode is 'fromParagraphs'. The paragraph(s) to convert into list items. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
+            "Required when mode is 'fromParagraphs'. Each call converts ONE paragraph into a list item. To make a list with N items, create N separate paragraphs first, then call superdoc_list create for EACH one. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
         },
         kind: {
           ...listKindSchema,
@@ -4481,7 +4540,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ...textAddressSchema,
           description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
         },
-        parentCommentId: { type: 'string', description: 'Parent comment ID for creating a threaded reply.' },
+        parentCommentId: {
+          type: 'string',
+          description: 'Parent comment ID for creating a threaded reply.',
+        },
       },
       ['text'],
     ),

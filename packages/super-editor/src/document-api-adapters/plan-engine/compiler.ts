@@ -1023,7 +1023,7 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
   }
 
   // Apply cardinality rules (select-only)
-  applyCardinalityCheck(step, targets);
+  applyCardinalityCheck(step, targets, editor);
 
   // Apply cardinality truncation (select-only)
   const require = selectWhere.require;
@@ -1038,21 +1038,30 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
 // Cardinality
 // ---------------------------------------------------------------------------
 
-function buildMatchNotFoundDetails(step: MutationStep): Record<string, unknown> {
+function buildMatchNotFoundDetails(step: MutationStep, editor?: Editor): Record<string, unknown> {
   const where = step.where;
   const select =
     'select' in where ? (where as { select?: { type?: string; pattern?: string; mode?: string } }).select : undefined;
   const within = 'within' in where ? (where as { within?: { blockId?: string } }).within : undefined;
+
+  let textPreview: string | undefined;
+  if (editor) {
+    const docSize = editor.state.doc.content.size;
+    const len = Math.min(docSize, 300);
+    if (len > 0) textPreview = editor.state.doc.textBetween(0, len, '\n', '\n');
+  }
+
   return {
     selectorType: select?.type ?? 'unknown',
     selectorPattern: select?.pattern ?? '',
     selectorMode: select?.mode ?? 'contains',
     searchScope: within?.blockId ?? 'document',
     candidateCount: 0,
+    ...(textPreview ? { textPreview } : {}),
   };
 }
 
-function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): void {
+function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[], editor?: Editor): void {
   const where = step.where;
   if (!('require' in where) || where.require === undefined) return;
 
@@ -1060,11 +1069,21 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): v
 
   if (require === 'first') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
+      throw planError(
+        'MATCH_NOT_FOUND',
+        'selector matched zero ranges',
+        step.id,
+        buildMatchNotFoundDetails(step, editor),
+      );
     }
   } else if (require === 'exactlyOne') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
+      throw planError(
+        'MATCH_NOT_FOUND',
+        'selector matched zero ranges',
+        step.id,
+        buildMatchNotFoundDetails(step, editor),
+      );
     }
     if (targets.length > 1) {
       throw planError('AMBIGUOUS_MATCH', `selector matched ${targets.length} ranges, expected exactly one`, step.id, {
@@ -1073,7 +1092,12 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): v
     }
   } else if (require === 'all') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
+      throw planError(
+        'MATCH_NOT_FOUND',
+        'selector matched zero ranges',
+        step.id,
+        buildMatchNotFoundDetails(step, editor),
+      );
     }
   }
 }

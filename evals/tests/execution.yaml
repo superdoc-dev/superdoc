@@ -148,7 +148,10 @@
         const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
         const hasSearch = tools.some(t => t.includes('search'));
         const hasEdit = tools.some(t => t.includes('edit') || t.includes('mutations'));
-        if (!hasSearch) return { pass: false, score: 0, reason: `No search step. Tools: ${tools.join('→')}` };
+        // Mutations with inline selectors (by: "select") do search internally — accept both patterns
+        const hasMutationsWithSelect = d.toolCalls?.some(tc =>
+          tc.tool === 'superdoc_mutations' && tc.args?.steps?.some(s => s.where?.by === 'select'));
+        if (!hasSearch && !hasMutationsWithSelect) return { pass: false, score: 0, reason: `No search step. Tools: ${tools.join('→')}` };
         if (!hasEdit) return { pass: false, score: 0, reason: `No edit step. Tools: ${tools.join('→')}` };
         return { pass: true, score: 1, reason: `Sequence: ${tools.join(' → ')}` };
       metric: sequence

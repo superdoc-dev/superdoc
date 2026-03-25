@@ -12,6 +12,7 @@ import type {
 import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
 import { hashParagraphBorders, hashTableBorders, hashCellBorders } from './paragraph-hash-utils.js';
+import { hashRunVisualMarks } from './run-visual-marks.js';
 
 /**
  * Comment annotation structure attached to runs.
@@ -152,23 +153,7 @@ const hashRuns = (block: FlowBlock): string => {
             // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
             const text = 'text' in run && typeof run.text === 'string' ? run.text : '';
 
-            // Include formatting marks that affect measurement (mirroring paragraph approach)
-            const bold = 'bold' in run ? run.bold : false;
-            const italic = 'italic' in run ? run.italic : false;
-            const color = 'color' in run ? run.color : undefined;
-            const fontSize = 'fontSize' in run ? run.fontSize : undefined;
-            const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
-            const highlight = 'highlight' in run ? run.highlight : undefined;
-
-            // Build marks string including all formatting properties
-            const marks = [
-              bold ? 'b' : '',
-              italic ? 'i' : '',
-              color ?? '',
-              fontSize !== undefined ? `fs:${fontSize}` : '',
-              fontFamily ? `ff:${fontFamily}` : '',
-              highlight ? `hl:${highlight}` : '',
-            ].join('');
+            const marks = hashRunVisualMarks(run);
 
             // Use type guard to safely access comment metadata
             const commentHash = hasComments(run)
@@ -291,20 +276,7 @@ const hashRuns = (block: FlowBlock): string => {
       // Text is used verbatim without normalization - whitespace affects measurements
       // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
       const text = 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' ? '' : (run.text ?? '');
-      const bold = 'bold' in run ? run.bold : false;
-      const italic = 'italic' in run ? run.italic : false;
-      const color = 'color' in run ? run.color : undefined;
-      const fontSize = 'fontSize' in run ? run.fontSize : undefined;
-      const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
-      const highlight = 'highlight' in run ? run.highlight : undefined;
-      const marks = [
-        bold ? 'b' : '',
-        italic ? 'i' : '',
-        color ?? '',
-        fontSize !== undefined ? `fs:${fontSize}` : '',
-        fontFamily ? `ff:${fontFamily}` : '',
-        highlight ? `hl:${highlight}` : '',
-      ].join('');
+      const marks = hashRunVisualMarks(run);
 
       // Include tracked change metadata in hash
       let trackedKey = '';

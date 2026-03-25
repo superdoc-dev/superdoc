@@ -21,6 +21,7 @@ type NodeOptions = {
   isLeaf?: boolean;
   inlineContent?: boolean;
   nodeSize?: number;
+  marks?: Array<{ attrs: Record<string, unknown> }>;
 };
 
 function computeTextContent(typeName: string, children: ProseMirrorNode[], text: string): string {
@@ -42,9 +43,12 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 
   const textContent = computeTextContent(typeName, children, text);
 
+  const marks = options.marks ?? [];
+
   const node = {
     type: { name: typeName },
     attrs,
+    marks,
     text: isText ? text : undefined,
     textContent,
     content: { size: contentSize },
@@ -539,6 +543,94 @@ describe('blocksListWrapper', () => {
     const result = blocksListWrapper(editor, { nodeTypes: ['table'] });
     expect(result.total).toBe(1);
     expect(result.blocks[0]!.nodeType).toBe('table');
+  });
+
+  it('truncates textPreview to 80 characters for long paragraphs', () => {
+    const longText = 'A'.repeat(200);
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: longText })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect(result.blocks[0]!.textPreview).toHaveLength(80);
+    expect(result.blocks[0]!.textPreview).toBe('A'.repeat(80));
+  });
+
+  it('does not truncate textPreview for short paragraphs', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Short text' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect(result.blocks[0]!.textPreview).toBe('Short text');
+  });
+
+  it('reads alignment from paragraphProperties.justification', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Centered' })], {
+      attrs: {
+        paraId: 'p1',
+        sdBlockId: 'p1',
+        paragraphProperties: { justification: 'center' },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect((result.blocks[0] as any).alignment).toBe('center');
+  });
+
+  it('omits alignment when paragraphProperties has no justification', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Default' })], {
+      attrs: {
+        paraId: 'p1',
+        sdBlockId: 'p1',
+        paragraphProperties: { styleId: 'Normal' },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect((result.blocks[0] as any).alignment).toBeUndefined();
+  });
+
+  it('extracts formatting (fontFamily, fontSize, bold) from first text run marks', () => {
+    const textNode = createNode('text', [], {
+      text: 'Styled',
+      marks: [{ attrs: { fontFamily: 'Arial', fontSize: 12, bold: true } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: {
+        paraId: 'p1',
+        sdBlockId: 'p1',
+        paragraphProperties: { styleId: 'Heading1' },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    expect(block.fontFamily).toBe('Arial');
+    expect(block.fontSize).toBe(12);
+    expect(block.bold).toBe(true);
+    expect(block.styleId).toBe('Heading1');
+    expect(block.headingLevel).toBe(1);
   });
 });
 

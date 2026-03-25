@@ -32,3 +32,4 @@ evaluateOptions:
 
 tests:
   - file://tests/execution.yaml
+  - file://tests/customer-workflows.yaml

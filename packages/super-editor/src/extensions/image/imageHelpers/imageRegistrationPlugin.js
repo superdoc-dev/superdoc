@@ -6,6 +6,7 @@ import { urlToFile, validateUrlAccessibility } from './handleUrl';
 import { checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
+import { isRelativeUrl } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
 
 /**
@@ -29,6 +30,9 @@ export const needsImageRegistration = (node) => {
 
   // Data URI with rId means it was converted (e.g., EMF→SVG) but already has export metadata
   if (src.startsWith('data:') && node.attrs?.rId) return false;
+
+  // Relative URL with rId: already registered for export in browser mode
+  if (isRelativeUrl(src) && node.attrs?.rId) return false;
 
   return true;
 };
@@ -189,6 +193,17 @@ const parseSizeFromImageUrl = (src) => {
 const hasFinitePositiveSize = (size) =>
   Number.isFinite(size?.width) && size.width > 0 && Number.isFinite(size?.height) && size.height > 0;
 
+const getOrInitMediaStore = (editor) => {
+  if (!editor?.storage?.image?.media) {
+    editor.storage.image.media = {};
+  }
+
+  const mediaStore = editor.storage.image.media;
+  const existingFileNames = new Set(Object.keys(mediaStore).map((k) => k.split('/').pop()));
+
+  return { mediaStore, existingFileNames };
+};
+
 /**
  * Handles the node path for image registration.
  *
@@ -199,13 +214,7 @@ const hasFinitePositiveSize = (size) =>
  */
 export const handleNodePath = (foundImages, editor, state) => {
   const { tr } = state;
-  const mediaStore = editor.storage.image.media ?? {};
-
-  if (!editor.storage.image.media) {
-    editor.storage.image.media = mediaStore;
-  }
-
-  const existingFileNames = new Set(Object.keys(mediaStore).map((key) => key.split('/').pop()));
+  const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
 
   foundImages.forEach(({ node, pos }) => {
     const { src } = node.attrs;
@@ -247,10 +256,24 @@ export const handleNodePath = (foundImages, editor, state) => {
  * @param {import('prosemirror-view').EditorView} view - The editor view instance.
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
  * @returns {import('prosemirror-state').Transaction} - The updated transaction with image nodes replaced by placeholders and registration process initiated.
+ * @internal Exported for testing only.
  */
-const handleBrowserPath = (foundImages, editor, view, state) => {
+export const handleBrowserPath = (foundImages, editor, view, state) => {
+  if (foundImages.length === 0) return null;
+
+  // Relative paths are resolved by the browser natively for display.
+  // Register them in the background for export without removing from the document.
+  const relativeImages = foundImages.filter(({ node }) => isRelativeUrl(node.attrs?.src));
+  const imagesToProcess = foundImages.filter(({ node }) => !isRelativeUrl(node.attrs?.src));
+
+  if (relativeImages.length > 0) {
+    registerRelativeImages(relativeImages, editor, view);
+  }
+
+  if (imagesToProcess.length === 0) return null;
+
   // Register the images. (async process).
-  registerImages(foundImages, editor, view);
+  registerImages(imagesToProcess, editor, view);
 
   // Remove all the images that were found. These will eventually be replaced by the updated images.
   const tr = state.tr;
@@ -261,7 +284,7 @@ const handleBrowserPath = (foundImages, editor, view, state) => {
   let { set } = key.getState(state);
 
   // Add decorations for the images first at their current positions
-  foundImages
+  imagesToProcess
     .slice()
     .sort((a, b) => a.pos - b.pos)
     .forEach(({ pos, id }) => {
@@ -273,7 +296,7 @@ const handleBrowserPath = (foundImages, editor, view, state) => {
     });
 
   // Then delete the image nodes (highest position first to avoid position shifting issues)
-  foundImages
+  imagesToProcess
     .slice()
     .sort((a, b) => b.pos - a.pos)
     .forEach(({ node, pos }) => {
@@ -316,6 +339,116 @@ export const getImageRegistrationMetaType = (tr) => {
     return meta.type;
   }
   return null;
+};
+
+/**
+ * Register relative URL images for DOCX export without removing them from the document.
+ *
+ * The browser displays relative images natively via their src attribute. This function
+ * fetches the binary in the background and stores export metadata (rId, media path) on
+ * the node so that DOCX export can include the image in the zip.
+ *
+ * @param {Array} images - Array of found image nodes with their positions and IDs.
+ * @param {Object} editor - The editor instance.
+ * @param {import('prosemirror-view').EditorView} view - The editor view instance.
+ */
+const registerRelativeImages = async (images, editor, view) => {
+  const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
+  const { pendingRelativeRegistrations } = editor.storage.image;
+
+  for (const { node } of images) {
+    const src = node.attrs.src;
+
+    if (pendingRelativeRegistrations.has(src)) continue;
+    pendingRelativeRegistrations.add(src);
+
+    try {
+      const filename = derivePreferredFileName(src);
+      const file = await urlToFile(src, filename);
+      if (!file) continue;
+
+      // Convert File → data URL for media store (matches existing storage format)
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const uniqueFileName = ensureUniqueFileName(filename, existingFileNames);
+      existingFileNames.add(uniqueFileName);
+      const mediaPath = buildMediaPath(uniqueFileName);
+      mediaStore[mediaPath] = dataUrl;
+
+      if (editor.options.ydoc) {
+        const mediaMap = editor.options.ydoc.getMap('media');
+        mediaMap.set(mediaPath, dataUrl);
+      }
+
+      const relPath = mediaPath.startsWith('word/') ? mediaPath.slice(5) : mediaPath;
+      const rId = addImageRelationship({ editor, path: relPath });
+
+      // Update node attrs with rId without changing display src.
+      // Positions may have shifted since detection, so find by src in the current doc.
+      let nodePos = null;
+      view.state.doc.descendants((n, pos) => {
+        if (nodePos !== null) return false;
+        if (n.type.name === 'image' && n.attrs.src === src && !n.attrs.rId) {
+          nodePos = pos;
+        }
+      });
+
+      if (nodePos !== null) {
+        const tr = view.state.tr;
+        const currentNode = tr.doc.nodeAt(nodePos);
+        if (currentNode?.type.name === 'image') {
+          tr.setNodeMarkup(nodePos, undefined, {
+            ...currentNode.attrs,
+            rId,
+            originalSrc: mediaPath,
+          });
+          view.dispatch(tr);
+
+          // Read natural dimensions so DOCX export sizes the image correctly.
+          // Done as a separate update after rId/originalSrc are already set —
+          // Image() may hang in non-browser environments (tests, headless).
+          if (!currentNode.attrs.size?.width || !currentNode.attrs.size?.height) {
+            try {
+              const size = await new Promise((resolve, reject) => {
+                const img = new globalThis.Image();
+                img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                img.onerror = () => resolve(null);
+                setTimeout(() => reject(new Error('timeout')), 5000);
+                img.src = dataUrl;
+              });
+              if (size) {
+                // Re-find node — position may have shifted after previous dispatch
+                let sizePos = null;
+                view.state.doc.descendants((n, p) => {
+                  if (sizePos !== null) return false;
+                  if (n.type.name === 'image' && n.attrs.rId === rId) sizePos = p;
+                });
+                if (sizePos !== null) {
+                  const sizeTr = view.state.tr;
+                  const sizeNode = sizeTr.doc.nodeAt(sizePos);
+                  if (sizeNode?.type.name === 'image') {
+                    sizeTr.setNodeMarkup(sizePos, undefined, { ...sizeNode.attrs, size });
+                    view.dispatch(sizeTr);
+                  }
+                }
+              }
+            } catch {
+              // Image loading unavailable — export will use fallback dimensions
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error registering relative image ${src}:`, error);
+    } finally {
+      pendingRelativeRegistrations.delete(src);
+    }
+  }
 };
 
 const registerImages = async (foundImages, editor, view) => {

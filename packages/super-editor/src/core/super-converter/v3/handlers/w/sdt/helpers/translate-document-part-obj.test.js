@@ -92,4 +92,102 @@ describe('translateDocumentPartObj', () => {
     expect(sdtPr.elements.find((el) => el.name === 'w:foo')).toBeDefined();
     expect(passthroughSdtPr.elements.find((el) => el.name === 'w:id')).toBeDefined();
   });
+
+  it('rewraps the document part in a paragraph when wrapper paragraph attrs are present', () => {
+    const sectPr = { name: 'w:sectPr', elements: [] };
+    const node = {
+      type: 'documentPartObject',
+      content: [],
+      attrs: {
+        id: '123',
+        docPartGallery: 'Table of Figures',
+        docPartUnique: true,
+        wrapperParagraph: {
+          paraId: '41964671',
+          textId: '04598795',
+          rsidR: '00233D7B',
+          rsidRDefault: 'ABCDEF',
+          rsidP: '003104CE',
+          rsidRPr: '003104CE',
+          rsidDel: '00DEAD00',
+          pageBreakSource: 'sectPr',
+          paragraphProperties: {
+            sectPr,
+          },
+        },
+      },
+    };
+
+    const result = translateDocumentPartObj({ node });
+
+    expect(result.name).toBe('w:p');
+    expect(result.attributes).toEqual({
+      'w14:paraId': '41964671',
+      'w14:textId': '04598795',
+      'w:rsidR': '00233D7B',
+      'w:rsidRDefault': 'ABCDEF',
+      'w:rsidP': '003104CE',
+      'w:rsidRPr': '003104CE',
+      'w:rsidDel': '00DEAD00',
+    });
+    expect(result.elements[0]).toMatchObject({
+      name: 'w:pPr',
+      elements: [sectPr],
+    });
+    expect(result.elements[1]).toMatchObject({
+      name: 'w:sdt',
+    });
+  });
+
+  it('rewraps the document part in a paragraph for non-sectPr wrapper formatting', () => {
+    const node = {
+      type: 'documentPartObject',
+      content: [],
+      attrs: {
+        id: '123',
+        docPartGallery: 'Table of Figures',
+        docPartUnique: true,
+        wrapperParagraph: {
+          paraId: '41964671',
+          textId: '04598795',
+          rsidR: '00233D7B',
+          rsidRDefault: 'ABCDEF',
+          rsidP: '003104CE',
+          rsidRPr: '003104CE',
+          paragraphProperties: {
+            styleId: 'TOCHeading',
+            keepNext: true,
+          },
+        },
+      },
+    };
+
+    const result = translateDocumentPartObj({ node });
+
+    expect(result.name).toBe('w:p');
+    expect(result.attributes).toEqual({
+      'w14:paraId': '41964671',
+      'w14:textId': '04598795',
+      'w:rsidR': '00233D7B',
+      'w:rsidRDefault': 'ABCDEF',
+      'w:rsidP': '003104CE',
+      'w:rsidRPr': '003104CE',
+    });
+    expect(result.elements[0]).toMatchObject({
+      name: 'w:pPr',
+      elements: expect.arrayContaining([
+        {
+          name: 'w:pStyle',
+          attributes: { 'w:val': 'TOCHeading' },
+        },
+        {
+          name: 'w:keepNext',
+          attributes: {},
+        },
+      ]),
+    });
+    expect(result.elements[1]).toMatchObject({
+      name: 'w:sdt',
+    });
+  });
 });

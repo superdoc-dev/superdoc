@@ -1,9 +1,116 @@
 ---
 title: Quick start
-keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, 5 minute editor"
+keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, mcp docx, ai agent docx, llm document editing, superdoc init"
 ---
 
-From zero to a working DOCX editor in under two minutes.
+## Using an AI coding agent?
+
+Run this first. It generates an AGENTS.md that teaches your agent how to use SuperDoc.
+
+```bash
+npx @superdoc-dev/create
+```
+
+Then set up the MCP server so your agent can edit DOCX files directly:
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add superdoc -- npx @superdoc-dev/mcp
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Add to `~/.cursor/mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Done. Ask your agent to open a `.docx` file and make an edit.
+
+[MCP setup guide →](/document-engine/ai-agents/mcp-server) · [LLM tools →](/document-engine/ai-agents/llm-tools)
+
+---
+
+## Edit DOCX from backend code
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk
+    ```
+
+    ```typescript
+    import { SuperDocClient } from '@superdoc-dev/sdk';
+
+    const client = new SuperDocClient({ defaultChangeMode: 'tracked' });
+    const doc = await client.open({ doc: './contract.docx' });
+
+    // query, edit, format, comment, track changes...
+
+    await doc.save();
+    await doc.close();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk
+    ```
+
+    ```python
+    from superdoc import SuperDocClient
+
+    client = SuperDocClient(default_change_mode="tracked")
+    doc = client.open({"doc": "./contract.docx"})
+
+    # query, edit, format, comment, track changes...
+
+    doc.save()
+    doc.close()
+    ```
+  </Tab>
+  <Tab title="CLI">
+    ```bash
+    npm install -g @superdoc-dev/cli
+    ```
+
+    ```bash
+    superdoc open contract.docx
+    superdoc find --type text --pattern "ACME Corp"
+    superdoc replace --target-json '...' --text "NewCo Inc." --change-mode tracked
+    superdoc save && superdoc close
+    ```
+  </Tab>
+</Tabs>
+
+[SDK docs →](/document-engine/sdks) · [CLI docs →](/document-engine/cli)
+
+---
+
+## Embed a DOCX editor
 
 <Steps>
   <Step title="Install">
@@ -85,9 +192,9 @@ From zero to a working DOCX editor in under two minutes.
   </Step>
 </Steps>
 
-You now have a fully functional DOCX editor — tracked changes, tables, images, headers/footers, all working.
+Tracked changes, tables, images, headers/footers — all working.
 
-## Using React?
+### Using React?
 
 ```jsx
 import { SuperDocEditor } from '@superdoc-dev/react';
@@ -98,21 +205,23 @@ function App() {
 }
 ```
 
-Install with `npm install @superdoc-dev/react`. If you need to pin the underlying `superdoc` version, use `overrides` (or `pnpm.overrides`) in your app's `package.json`. See the full [React guide](/getting-started/frameworks/react).
+Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-started/frameworks/react)
+
+---
 
 ## What's next
 
 <CardGroup cols={2}>
+  <Card title="Document Engine" icon="screwdriver-wrench" href="/document-engine/overview">
+    Architecture and how to choose a surface
+  </Card>
+  <Card title="LLM tools" icon="sparkles" href="/document-engine/ai-agents/llm-tools">
+    Build custom AI agents with the SDK
+  </Card>
   <Card title="Framework guides" icon="code" href="/getting-started/frameworks/react">
     React, Vue, Angular, Vanilla JS
   </Card>
-  <Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
-    Modes, roles, toolbar, and more
-  </Card>
-  <Card title="Import / Export" icon="file-export" href="/getting-started/import-export">
-    Load and save DOCX files
-  </Card>
-  <Card title="Examples" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
+  <Card title="Examples" icon="arrow-up-right-from-square" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
     Working demos on GitHub
   </Card>
 </CardGroup>

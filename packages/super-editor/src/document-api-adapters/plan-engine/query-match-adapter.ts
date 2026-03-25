@@ -510,13 +510,29 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
   // Apply cardinality checks on actionable matches (D20)
   if (require === 'first' || require === 'exactlyOne' || require === 'all') {
     if (totalMatches === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', undefined, {
-        selectorType: input.select?.type ?? 'unknown',
-        selectorPattern: (input.select as { pattern?: string })?.pattern ?? '',
-        selectorMode: (input.select as { mode?: string })?.mode ?? 'contains',
-        searchScope: (input.within?.kind === 'block' ? input.within.nodeId : undefined) ?? 'document',
-        candidateCount: 0,
-      });
+      // Include a short document text preview so the model can see the actual
+      // text formatting (quote style, whitespace, etc.) and retry with the
+      // correct pattern instead of guessing blindly.
+      const doc = storyEditor.state?.doc;
+      const docSize = typeof doc?.content?.size === 'number' ? doc.content.size : 0;
+      const previewLength = Math.min(docSize, 300);
+      const textPreview =
+        previewLength > 0 && typeof doc?.textBetween === 'function'
+          ? doc.textBetween(0, previewLength, '\n', '\n')
+          : '';
+      throw planError(
+        'MATCH_NOT_FOUND',
+        `selector matched zero ranges. Document starts with: "${textPreview.slice(0, 200)}..."`,
+        undefined,
+        {
+          selectorType: input.select?.type ?? 'unknown',
+          selectorPattern: (input.select as { pattern?: string })?.pattern ?? '',
+          selectorMode: (input.select as { mode?: string })?.mode ?? 'contains',
+          searchScope: (input.within?.kind === 'block' ? input.within.nodeId : undefined) ?? 'document',
+          candidateCount: 0,
+          textPreview,
+        },
+      );
     }
   }
   if (require === 'exactlyOne' && totalMatches > 1) {

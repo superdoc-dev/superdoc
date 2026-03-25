@@ -7,10 +7,6 @@ keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 
 SuperDoc SDKs let you open, read, and edit `.docx` files from Node.js or Python. They manage the CLI process for you and expose typed methods for every operation.
 
-<Info>
-The SDKs are in <strong>alpha</strong>. The API surface matches the [Document API](/document-api/overview) and will evolve alongside it.
-</Info>
-
 ## Installation
 
 <Tabs>
@@ -202,11 +198,21 @@ The `user` is injected into every `client.open` call. If you pass `userName` or 
 
 ## Collaboration sessions
 
-Use this when your app already has a live collaboration room (Liveblocks, Hocuspocus, or SuperDoc Yjs).
+Use this when your app already has a live collaboration room. The SDK supports three providers:
 
-### Join an existing room
+| Provider | When to use | Config path | Auth model |
+| --- | --- | --- | --- |
+| `y-websocket` | Self-hosted, simple setup | `collabUrl` shorthand or explicit `collaboration` object | Token via env var |
+| `hocuspocus` | Hocuspocus server, richer protocol | Explicit `collaboration` object only | Token via env var |
+| `liveblocks` | Managed service, no server to run | Explicit `collaboration` object only | Public key or auth endpoint |
+
+### Join an existing room (y-websocket shorthand)
 
 Pass `collabUrl` and `collabDocumentId` to `client.open`:
+
+<Note>
+  The `collabUrl` + `collabDocumentId` shorthand defaults to the `y-websocket` provider. For Hocuspocus or Liveblocks, pass an explicit `collaboration` object.
+</Note>
 
 <Tabs>
   <Tab title="Node.js">
@@ -252,6 +258,145 @@ Pass `collabUrl` and `collabDocumentId` to `client.open`:
   </Tab>
 </Tabs>
 
+### Connect to Hocuspocus explicitly
+
+Use the explicit `collaboration` object when your server speaks the Hocuspocus protocol:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'hocuspocus',
+        url: 'ws://localhost:1234',
+        documentId: 'my-doc-room',
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "hocuspocus",
+            "url": "ws://localhost:1234",
+            "documentId": "my-doc-room",
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### Connect to Liveblocks
+
+Liveblocks is configured through an explicit `collaboration` object. Two auth modes are supported:
+
+#### Public API key
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'liveblocks',
+        roomId: 'my-room',
+        publicApiKey: 'pk_live_xxx',
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "liveblocks",
+            "roomId": "my-room",
+            "publicApiKey": "pk_live_xxx",
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+#### Auth endpoint
+
+For production use, point to your auth endpoint instead:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'liveblocks',
+        roomId: 'my-room',
+        authEndpoint: 'https://app.example.com/api/liveblocks-auth',
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "liveblocks",
+            "roomId": "my-room",
+            "authEndpoint": "https://app.example.com/api/liveblocks-auth",
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Unlike browser usage, SDK `authEndpoint` values must be absolute URLs (starting with `http://` or `https://`). Relative paths like `/api/liveblocks-auth` are not supported because the CLI host has no browser origin to resolve them against.
+</Warning>
+
+To pass custom headers to your auth endpoint, set `authHeadersEnv` to the name of an environment variable containing a JSON object of headers:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    // Pass the env var through the SDK client
+    const client = new SuperDocClient({
+      env: { MY_AUTH_HEADERS: '{"Authorization":"Bearer service-token"}' },
+    });
+
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'liveblocks',
+        roomId: 'my-room',
+        authEndpoint: 'https://app.example.com/api/liveblocks-auth',
+        authHeadersEnv: 'MY_AUTH_HEADERS',
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    client = AsyncSuperDocClient(
+        env={"MY_AUTH_HEADERS": '{"Authorization":"Bearer service-token"}'},
+    )
+
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "liveblocks",
+            "roomId": "my-room",
+            "authEndpoint": "https://app.example.com/api/liveblocks-auth",
+            "authHeadersEnv": "MY_AUTH_HEADERS",
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Environment variables referenced by `authHeadersEnv` (Liveblocks) and `tokenEnv` (websocket providers) are resolved inside the CLI host process, not in your application code. If the variable is not already in your shell environment, pass it through the SDK client's `env` option as shown above.
+</Note>
+
+Liveblocks input uses `roomId`. The response normalizes this to `documentId`:
+- Input: `collaboration.roomId`
+- Output: `openResult.collaboration.documentId`
+
 ### Start an empty room from a local `.docx`
 
 If the room is empty, pass `doc` together with collaboration params:
@@ -289,7 +434,7 @@ What happens when you pass `doc`:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabUrl` | `string` | — | WebSocket URL. Shorthand for `y-websocket` only. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
 | `doc` | `string` | — | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |

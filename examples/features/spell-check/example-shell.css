@@ -1,0 +1,25 @@
+.spell-check-example {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #70767d;
+}
+
+.spell-check-editor {
+  flex: 1;
+  overflow: auto;
+  background: linear-gradient(180deg, #717880 0%, #6a7077 100%);
+}
+
+.spell-check-editor .superdoc {
+  justify-content: center;
+}
+
+.spell-check-editor .presentation-editor__viewport {
+  box-sizing: border-box;
+  padding: 1.5rem 2rem 2.5rem;
+}
+
+.spell-check-editor .superdoc__document {
+  flex: 0 0 auto;
+}

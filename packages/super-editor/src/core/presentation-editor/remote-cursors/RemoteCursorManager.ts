@@ -181,6 +181,14 @@ export class RemoteCursorManager {
   }
 
   /**
+   * Update the collaboration provider reference. Called during late-attach
+   * upgrade so `setup()` reads the correct provider when `collaborationReady` fires.
+   */
+  setCollaborationProvider(provider: CollaborationProviderLike): void {
+    this.#options.collaborationProvider = provider;
+  }
+
+  /**
    * Setup awareness event subscriptions for remote cursor tracking.
    * Includes scroll listener for virtualization updates.
    * Called after collaborationReady event when ySync plugin is initialized.

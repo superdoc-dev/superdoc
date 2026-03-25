@@ -4,9 +4,6 @@
  * Internally, headings are paragraph nodes with a heading styleId
  * (`Heading1` through `Heading6`) set on `paragraphProperties`.
  *
- * Supports optional seed text, deterministic block id assignment, and
- * operation-scoped tracked-change conversion via transaction meta.
- *
  * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */

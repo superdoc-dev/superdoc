@@ -81,10 +81,12 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
   "additionalProperties": false,
   "properties": {
     "limit": {
+      "description": "Maximum blocks to return. Omit for all blocks.",
       "minimum": 1,
       "type": "number"
     },
     "nodeTypes": {
+      "description": "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
       "items": {
         "enum": [
           "paragraph",
@@ -101,6 +103,7 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
       "type": "array"
     },
     "offset": {
+      "description": "Number of blocks to skip. Default: 0.",
       "minimum": 0,
       "type": "number"
     }
@@ -119,10 +122,31 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
       "items": {
         "additionalProperties": false,
         "properties": {
+          "alignment": {
+            "description": "Paragraph alignment.",
+            "type": "string"
+          },
+          "bold": {
+            "description": "True if text is bold.",
+            "type": "boolean"
+          },
+          "fontFamily": {
+            "description": "Font family from first text run.",
+            "type": "string"
+          },
+          "fontSize": {
+            "description": "Font size from first text run.",
+            "type": "number"
+          },
+          "headingLevel": {
+            "description": "Heading level (1-6).",
+            "type": "number"
+          },
           "isEmpty": {
             "type": "boolean"
           },
           "nodeId": {
+            "description": "Block ID for targeting with other tools.",
             "type": "string"
           },
           "nodeType": {
@@ -141,6 +165,17 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
           "ordinal": {
             "type": "number"
           },
+          "styleId": {
+            "description": "Named paragraph style.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "textPreview": {
             "oneOf": [
               {
@@ -155,9 +190,7 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
         "required": [
           "ordinal",
           "nodeId",
-          "nodeType",
-          "textPreview",
-          "isEmpty"
+          "nodeType"
         ],
         "type": "object"
       },

@@ -10,6 +10,23 @@ const XML_NODE_NAME = 'w:p';
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
 const SD_NODE_NAME = 'paragraph';
 
+const IDENTITY_ATTR_NAMES = new Set(['paraId', 'textId']);
+
+function partitionEncodedParagraphAttrs(encodedAttrs = {}) {
+  const identityAttrs = {};
+  const shareableAttrs = {};
+
+  Object.entries(encodedAttrs).forEach(([key, value]) => {
+    if (IDENTITY_ATTR_NAMES.has(key)) {
+      identityAttrs[key] = value;
+      return;
+    }
+    shareableAttrs[key] = value;
+  });
+
+  return { identityAttrs, shareableAttrs };
+}
+
 /**
  * Encode a <w:p> node as a SuperDoc paragraph node.
  * @param {import('@translator').SCEncoderConfig} params
@@ -21,6 +38,24 @@ const encode = (params, encodedAttrs = {}) => {
   const node = legacyHandleParagraphNode(params);
   if (!node) return undefined;
   if (encodedAttrs && Object.keys(encodedAttrs).length) {
+    if (Array.isArray(node)) {
+      const { identityAttrs, shareableAttrs } = partitionEncodedParagraphAttrs(encodedAttrs);
+      let appliedIdentityAttrs = false;
+
+      return node.map((child) => {
+        if (child?.type !== 'paragraph') return child;
+        const attrs = { ...(child.attrs || {}), ...shareableAttrs };
+        if (!appliedIdentityAttrs) {
+          Object.assign(attrs, identityAttrs);
+          appliedIdentityAttrs = true;
+        }
+
+        return {
+          ...child,
+          attrs,
+        };
+      });
+    }
     node.attrs = { ...node.attrs, ...encodedAttrs };
   }
   return node;

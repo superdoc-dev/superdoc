@@ -197,7 +197,59 @@
   --sd-content-controls-label-text: #ffffff;
   --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
 
+  /* UI: surface system — dialog and floating overlays */
+  --sd-ui-surface-bg: var(--sd-popover-bg, var(--sd-ui-bg));
+  --sd-ui-surface-border: var(--sd-ui-border);
+  --sd-ui-surface-shadow: var(--sd-popover-shadow, 0 8px 32px rgba(0, 0, 0, 0.18));
+  --sd-ui-surface-radius: var(--sd-popover-radius, var(--sd-radius-200));
+  --sd-ui-surface-z-index: 100;
+  --sd-ui-surface-title-padding: 16px 20px 0;
+  --sd-ui-surface-content-padding: 16px 20px 20px;
+  --sd-ui-dialog-backdrop: rgba(0, 0, 0, 0.4);
+  --sd-ui-dialog-max-width: 480px;
+  --sd-ui-floating-width: 360px;
+  --sd-ui-floating-max-width: 480px;
+  --sd-ui-floating-max-height: min(60vh, calc(100% - 32px));
+  --sd-ui-floating-edge-offset: 16px;
+
+  /* UI: password prompt */
+  --sd-ui-password-prompt-gap: 12px;
+  --sd-ui-password-prompt-heading-size: var(--sd-ui-font-size-500, 15px);
+  --sd-ui-password-prompt-heading-weight: 600;
+  --sd-ui-password-prompt-heading-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-description-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-description-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-input-padding: 8px 10px;
+  --sd-ui-password-prompt-input-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-input-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-input-bg: var(--sd-ui-surface-bg, #fff);
+  --sd-ui-password-prompt-input-border: var(--sd-ui-border);
+  --sd-ui-password-prompt-input-focus-border: var(--sd-ui-action);
+  --sd-ui-password-prompt-input-radius: 4px;
+  --sd-ui-password-prompt-input-disabled-opacity: 0.6;
+  --sd-ui-password-prompt-error-size: var(--sd-ui-font-size-300, 13px);
+  --sd-ui-password-prompt-error-color: var(--sd-color-red-500);
+  --sd-ui-password-prompt-actions-gap: 8px;
+  --sd-ui-password-prompt-btn-padding: 6px 16px;
+  --sd-ui-password-prompt-btn-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-btn-radius: 4px;
+  --sd-ui-password-prompt-btn-disabled-opacity: 0.5;
+  --sd-ui-password-prompt-cancel-bg: transparent;
+  --sd-ui-password-prompt-cancel-border: var(--sd-ui-border);
+  --sd-ui-password-prompt-cancel-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-cancel-hover-bg: var(--sd-color-gray-100, #f5f5f5);
+  --sd-ui-password-prompt-submit-bg: var(--sd-ui-action);
+  --sd-ui-password-prompt-submit-border: var(--sd-ui-action);
+  --sd-ui-password-prompt-submit-color: var(--sd-ui-action-text, #fff);
+  --sd-ui-password-prompt-submit-hover-bg: var(--sd-ui-action-hover);
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+
+  /* Proofing: underline colors and metrics */
+  --sd-proofing-spelling-color: #e53e3e;
+  --sd-proofing-grammar-color: #3182ce;
+  --sd-proofing-style-color: #805ad5;
+  --sd-proofing-underline-thickness: 1.5px;
+  --sd-proofing-underline-offset: 2px;
 }

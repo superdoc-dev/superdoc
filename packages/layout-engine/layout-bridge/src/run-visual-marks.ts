@@ -1,0 +1,35 @@
+import type { Run } from '@superdoc/contracts';
+
+/**
+ * Builds a deterministic substring for measure-cache keys and dirty-run comparison.
+ *
+ * Include every run property that affects text measurement or painted output but is not
+ * covered elsewhere (e.g. tracked-change / comment keys). When adding a new visual
+ * property, update this function only — `cache.ts` and `diff.ts` both depend on it.
+ *
+ * @param run - Flow run (text, tab, image, etc.); unknown fields are ignored safely.
+ * @returns Stable string encoding bold/italic/underline/strike/color/font/highlight/link.
+ */
+export const hashRunVisualMarks = (run: Run): string => {
+  const bold = 'bold' in run ? run.bold : false;
+  const italic = 'italic' in run ? run.italic : false;
+  const underline = 'underline' in run ? run.underline : undefined;
+  const strike = 'strike' in run ? run.strike : false;
+  const color = 'color' in run ? run.color : undefined;
+  const fontSize = 'fontSize' in run ? run.fontSize : undefined;
+  const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
+  const highlight = 'highlight' in run ? run.highlight : undefined;
+  const link = 'link' in run ? run.link : undefined;
+
+  return [
+    bold ? 'b' : '',
+    italic ? 'i' : '',
+    underline ? `u:${JSON.stringify(underline)}` : '',
+    strike ? 's' : '',
+    color ?? '',
+    fontSize !== undefined ? `fs:${fontSize}` : '',
+    fontFamily ? `ff:${fontFamily}` : '',
+    highlight ? `hl:${highlight}` : '',
+    link ? `ln:${JSON.stringify(link)}` : '',
+  ].join('');
+};

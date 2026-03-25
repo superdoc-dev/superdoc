@@ -20,6 +20,8 @@ import {
   resolveTableCellBorders,
   createTableBorderOverlay,
   hasExplicitCellBorders,
+  swapTableBordersLR,
+  swapCellBordersLR,
 } from './border-utils.js';
 
 describe('applyBorder', () => {
@@ -467,5 +469,56 @@ describe('createTableBorderOverlay', () => {
     const overlay = createTableBorderOverlay(doc, fragment, tableBorders);
     expect(overlay).toBeTruthy();
     expect(overlay?.style.borderBottom).toMatch(/2px solid (#0000FF|rgb\(0,\s*0,\s*255\))/i);
+  });
+});
+
+describe('swapTableBordersLR', () => {
+  it('swaps left and right borders', () => {
+    const borders: TableBorders = {
+      top: { style: 'single', width: 1, color: '#000000' },
+      bottom: { style: 'single', width: 1, color: '#000000' },
+      left: { style: 'thick', width: 3, color: '#0000FF' },
+      right: { style: 'single', width: 0.5, color: '#FF0000' },
+      insideH: { style: 'single', width: 1, color: '#111111' },
+      insideV: { style: 'single', width: 1, color: '#222222' },
+    };
+    const swapped = swapTableBordersLR(borders)!;
+    expect(swapped.left).toEqual(borders.right);
+    expect(swapped.right).toEqual(borders.left);
+    expect(swapped.top).toEqual(borders.top);
+    expect(swapped.bottom).toEqual(borders.bottom);
+    expect(swapped.insideH).toEqual(borders.insideH);
+    expect(swapped.insideV).toEqual(borders.insideV);
+  });
+
+  it('returns undefined for undefined input', () => {
+    expect(swapTableBordersLR(undefined)).toBeUndefined();
+  });
+
+  it('handles missing left or right', () => {
+    const borders: TableBorders = { top: { style: 'single', width: 1, color: '#000' } };
+    const swapped = swapTableBordersLR(borders)!;
+    expect(swapped.left).toBeUndefined();
+    expect(swapped.right).toBeUndefined();
+  });
+});
+
+describe('swapCellBordersLR', () => {
+  it('swaps left and right borders', () => {
+    const borders: CellBorders = {
+      top: { style: 'single', width: 1, color: '#000000' },
+      bottom: { style: 'single', width: 1, color: '#000000' },
+      left: { style: 'thick', width: 3, color: '#0000FF' },
+      right: { style: 'single', width: 0.5, color: '#FF0000' },
+    };
+    const swapped = swapCellBordersLR(borders)!;
+    expect(swapped.left).toEqual(borders.right);
+    expect(swapped.right).toEqual(borders.left);
+    expect(swapped.top).toEqual(borders.top);
+    expect(swapped.bottom).toEqual(borders.bottom);
+  });
+
+  it('returns undefined for undefined input', () => {
+    expect(swapCellBordersLR(undefined)).toBeUndefined();
   });
 });

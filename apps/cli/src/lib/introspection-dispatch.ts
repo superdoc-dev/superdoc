@@ -8,6 +8,7 @@
  */
 
 import type { CliOperationId } from '../cli';
+import { toPublicCollaborationSummary } from './collaboration';
 import { buildContractOverview, buildContractOperationDetail } from './contract';
 import { getActiveSessionId, getWorkingDocumentSize, withActiveContext } from './context';
 import { CliError } from './errors';
@@ -253,7 +254,7 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
               },
               dirty: metadata.dirty,
               sessionType: metadata.sessionType,
-              collaboration: metadata.collaboration,
+              collaboration: metadata.collaboration ? toPublicCollaborationSummary(metadata.collaboration) : undefined,
               openedAt: metadata.openedAt,
               updatedAt: metadata.updatedAt,
               lastSavedAt: metadata.lastSavedAt,

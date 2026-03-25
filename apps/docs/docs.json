@@ -52,7 +52,6 @@
             "pages": [
               "getting-started/introduction",
               "getting-started/quickstart",
-              "getting-started/ai-agents",
               {
                 "group": "Frameworks",
                 "pages": [
@@ -78,6 +77,7 @@
                   "core/superdoc/overview",
                   "core/superdoc/configuration",
                   "core/superdoc/methods",
+                  "core/superdoc/surfaces",
                   "core/superdoc/events"
                 ]
               },
@@ -98,7 +98,7 @@
           },
           {
             "group": "Document Engine",
-            "tag": "ALPHA",
+            "tag": "NEW",
             "pages": [
               "document-engine/overview",
               {
@@ -120,8 +120,9 @@
                 "pages": [
                   "document-engine/ai-agents/llm-tools",
                   "document-engine/ai-agents/integrations",
-                  "document-engine/ai-agents/skills",
-                  "document-engine/ai-agents/mcp-server"
+                  "document-engine/ai-agents/best-practices",
+                  "document-engine/ai-agents/debugging",
+                  "document-engine/ai-agents/eval-results"
                 ]
               }
             ]
@@ -135,6 +136,7 @@
                 "pages": [
                   "modules/collaboration/overview",
                   "modules/collaboration/quickstart",
+                  "modules/collaboration/upgrade-to-collaboration",
                   "modules/collaboration/configuration"
                 ]
               },
@@ -241,6 +243,10 @@
               "guides/general/stable-navigation",
               "guides/general/custom-themes",
               {
+                "group": "Proofing",
+                "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]
+              },
+              {
                 "group": "Collaboration",
                 "pages": [
                   "guides/collaboration/liveblocks",
@@ -315,12 +321,24 @@
       {
         "type": "button",
         "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "",
+        "label": "Discord",
         "icon": "discord"
       }
     ]
   },
+  "banner": {
+    "content": "**Introducing Document Engine** — edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
+    "dismissible": true
+  },
   "redirects": [
+    {
+      "source": "/getting-started/ai-agents",
+      "destination": "/document-engine/ai-agents/llm-tools"
+    },
+    {
+      "source": "/document-api/eval-results",
+      "destination": "/document-engine/ai-agents/eval-results"
+    },
     {
       "source": "/document-engine/mcp",
       "destination": "/document-engine/ai-agents/mcp-server"

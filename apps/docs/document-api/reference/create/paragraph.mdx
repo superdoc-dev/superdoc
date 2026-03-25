@@ -189,7 +189,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
       "$ref": "#/$defs/StoryLocator"
     },
     "text": {
-      "description": "Paragraph text content.",
+      "description": "Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.",
       "type": "string"
     }
   },

@@ -53,8 +53,14 @@ _No fields._
 | `counts.tables` | integer | yes |  |
 | `counts.trackedChanges` | integer | yes |  |
 | `counts.words` | integer | yes |  |
+| `defaults` | object | no |  |
+| `defaults.fontFamily` | string | no |  |
+| `defaults.fontSize` | number | no |  |
+| `defaults.styleId` | string | no |  |
 | `outline` | object[] | yes |  |
 | `revision` | string | yes |  |
+| `styles` | object | no |  |
+| `styles.paragraphStyles` | object[] | no |  |
 
 ### Example response
 
@@ -79,6 +85,10 @@ _No fields._
     "trackedChanges": 1,
     "words": 250
   },
+  "defaults": {
+    "fontFamily": "example",
+    "fontSize": 12.5
+  },
   "outline": [
     {
       "level": 1,
@@ -86,7 +96,17 @@ _No fields._
       "text": "Hello, world."
     }
   ],
-  "revision": "example"
+  "revision": "example",
+  "styles": {
+    "paragraphStyles": [
+      {
+        "count": 1,
+        "fontFamily": "example",
+        "fontSize": 12.5,
+        "styleId": "style-001"
+      }
+    ]
+  }
 }
 ```
 
@@ -190,6 +210,25 @@ _No fields._
       ],
       "type": "object"
     },
+    "defaults": {
+      "additionalProperties": false,
+      "description": "Document's default body text formatting. Use these values when creating new content to match existing style.",
+      "properties": {
+        "fontFamily": {
+          "description": "Most common body text font family.",
+          "type": "string"
+        },
+        "fontSize": {
+          "description": "Most common body text font size in half-points.",
+          "type": "number"
+        },
+        "styleId": {
+          "description": "Most common body paragraph style ID.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "outline": {
       "items": {
         "additionalProperties": false,
@@ -215,6 +254,46 @@ _No fields._
     },
     "revision": {
       "type": "string"
+    },
+    "styles": {
+      "additionalProperties": false,
+      "description": "Styles currently in use in the document.",
+      "properties": {
+        "paragraphStyles": {
+          "description": "Paragraph styles in use, sorted by frequency (most common first).",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "description": "Number of paragraphs using this style.",
+                "type": "integer"
+              },
+              "fontFamily": {
+                "description": "Font family used by text in this style.",
+                "type": "string"
+              },
+              "fontSize": {
+                "description": "Font size in half-points used by text in this style.",
+                "type": "number"
+              },
+              "styleId": {
+                "description": "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText').",
+                "type": "string"
+              }
+            },
+            "required": [
+              "styleId",
+              "count"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paragraphStyles"
+      ],
+      "type": "object"
     }
   },
   "required": [

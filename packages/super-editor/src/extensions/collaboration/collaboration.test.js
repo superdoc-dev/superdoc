@@ -32,8 +32,14 @@ import * as Yjs from 'yjs';
 
 import * as CollaborationModule from './collaboration.js';
 
-const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaMap, generateCollaborationData } =
-  CollaborationModule;
+const {
+  Collaboration,
+  CollaborationPluginKey,
+  createSyncPlugin,
+  initializeMetaMap,
+  generateCollaborationData,
+  cleanupCollaborationSideEffects,
+} = CollaborationModule;
 
 const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
@@ -810,6 +816,66 @@ describe('collaboration extension', () => {
       expect(metaStore.get('fonts')).toEqual({ 'font1.ttf': new Uint8Array([1]) });
       expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
       expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
+    });
+  });
+
+  describe('initSyncListener cleanup (rollback safety)', () => {
+    it('cancels the pending 250ms timer when cleanup runs before it fires', () => {
+      vi.useFakeTimers();
+      try {
+        const ydoc = createYDocStub();
+        // Provider already synced → initSyncListener takes the setTimeout path.
+        const provider = { synced: true, on: vi.fn(), off: vi.fn() };
+        const editor = {
+          options: { isHeadless: false, ydoc, collaborationProvider: provider },
+          storage: { image: { media: {} } },
+          emit: vi.fn(),
+          view: { state: { doc: {} }, dispatch: vi.fn() },
+        };
+
+        const context = { editor, options: {} };
+        Collaboration.config.addPmPlugins.call(context);
+
+        // Cleanup before the 250ms timer fires (simulates rollback).
+        cleanupCollaborationSideEffects(editor);
+
+        vi.advanceTimersByTime(300);
+
+        // collaborationReady should NOT have been emitted.
+        expect(editor.emit).not.toHaveBeenCalledWith('collaborationReady', expect.anything());
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels provider sync listeners when cleanup runs before sync', () => {
+      const ydoc = createYDocStub();
+      // Provider not synced → initSyncListener registers event listeners.
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: { isHeadless: false, ydoc, collaborationProvider: provider },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        view: { state: { doc: {} }, dispatch: vi.fn() },
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+
+      // Cleanup before provider sync (simulates rollback).
+      cleanupCollaborationSideEffects(editor);
+
+      // Simulate late provider sync — should be no-op.
+      const syncedHandlers = provider.on.mock.calls
+        .filter(([event]) => event === 'synced')
+        .map(([, handler]) => handler);
+      syncedHandlers.forEach((handler) => handler());
+
+      const syncHandlers = provider.on.mock.calls.filter(([event]) => event === 'sync').map(([, handler]) => handler);
+      syncHandlers.forEach((handler) => handler(true));
+
+      // collaborationReady should NOT have been emitted.
+      expect(editor.emit).not.toHaveBeenCalledWith('collaborationReady', expect.anything());
     });
   });
 });

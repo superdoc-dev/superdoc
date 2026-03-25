@@ -7,7 +7,7 @@
     "test": "pnpm --silent --prefix ../../packages/sdk run generate && pnpm --silent --prefix ../../packages/superdoc run build:es && pnpm --silent --prefix ../../apps/cli run build && pnpm --silent --prefix ../../packages/sdk/langs/node run build && vitest run --config ./vitest.config.ts"
   },
   "dependencies": {
-    "@superdoc-dev/sdk": "file:../../packages/sdk/langs/node"
+    "@superdoc-dev/sdk": "workspace:*"
   },
   "devDependencies": {
     "vitest": "catalog:"

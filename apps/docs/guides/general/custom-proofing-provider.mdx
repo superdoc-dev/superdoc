@@ -1,0 +1,153 @@
+---
+title: Custom proofing provider
+sidebarTitle: Custom provider
+keywords: "custom proofing provider, spellcheck api, proofing provider, spelling api"
+---
+
+SuperDoc uses a provider-agnostic proofing contract. Your provider receives text segments and returns structured issues. SuperDoc owns the editor UI and document-range mapping.
+
+## Provider shape
+
+```javascript
+const provider = {
+  id: 'custom-proofing',
+  async check({ documentId, defaultLanguage, maxSuggestions, segments, signal }) {
+    return { issues: [] };
+  },
+  dispose() {},
+};
+```
+
+If you want TypeScript help, the proofing types are available from `superdoc/super-editor`.
+
+## Request model
+
+Each `check()` call receives:
+
+- `documentId` when available
+- `defaultLanguage` as the configured fallback
+- `maxSuggestions` when set
+- `segments`, where each segment includes `id`, `text`, `language`, and `metadata`
+- `signal`, which you should pass through to your network call or worker task
+
+### Segment shape
+
+```javascript
+{
+  id: 'segment-123',
+  text: 'teh contract shall begin on Monday',
+  language: 'en-US',
+  metadata: {
+    surface: 'body',
+    blockId: 'paragraph-8',
+    pageIndex: 0
+  }
+}
+```
+
+## Offset rules
+
+Offsets must be zero-based UTF-16 code-unit offsets into the exact `segment.text` string that SuperDoc sends.
+
+- `start` is inclusive
+- `end` is exclusive
+
+For example, if `segment.text === 'teh contract'`, the misspelling `teh` should be returned as:
+
+```javascript
+{
+  segmentId: 'segment-123',
+  start: 0,
+  end: 3,
+  kind: 'spelling',
+  replacements: ['the']
+}
+```
+
+## Returning issues
+
+Each issue must include:
+
+- `segmentId`
+- `start`
+- `end`
+- `kind`
+
+Optional fields:
+
+- `message`
+- `replacements` - shown as direct context-menu replacement actions when present
+- `ruleId`
+- `providerMeta`
+
+<Note>
+Only `kind: 'spelling'` is rendered in the v1 UI. Providers can return grammar or style issues too, but they are not displayed yet.
+</Note>
+
+## Example: call your own API
+
+```javascript
+const provider = {
+  id: 'company-proofing-api',
+  async check({ documentId, defaultLanguage, maxSuggestions, segments, signal }) {
+    const response = await fetch('/api/proofing/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        documentId,
+        defaultLanguage,
+        maxSuggestions,
+        segments,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Proofing request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      issues: data.issues.map((issue) => ({
+        segmentId: issue.segmentId,
+        start: issue.start,
+        end: issue.end,
+        kind: issue.kind || 'spelling',
+        message: issue.message,
+        replacements: issue.replacements || [],
+        ruleId: issue.ruleId,
+      })),
+    };
+  },
+};
+```
+
+## Best practices
+
+- Honor `signal` so cancelled checks stop immediately
+- Use `maxSuggestions` when your provider can limit results server-side
+- Return `kind: 'spelling'` for issues you want rendered in the current UI
+- Keep the provider pure: no DOM access, no editor assumptions
+- Batch segments when your backend supports it
+
+<Note>
+`Ignore` is a SuperDoc-side suppression in v1, not a provider dictionary mutation. If you want ignored words to persist across reloads, store your own list and pass it back through `proofing.ignoredWords` the next time you create the editor.
+</Note>
+
+## Troubleshooting
+
+If proofing markers do not appear:
+
+- Confirm `proofing.enabled` is `true`
+- Confirm the provider returns `kind: 'spelling'`
+- Confirm `start` and `end` offsets match the exact `segment.text` string
+- Confirm the layout engine is active
+- Use `proofing.onProofingError` to surface validation or provider failures in your app
+
+## Working examples
+
+If you want a concrete starting point, see the repo examples:
+
+- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/typo-js) - Minimal local spell-check provider
+- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/language-tool-self-hosted) - Minimal self-hosted HTTP provider

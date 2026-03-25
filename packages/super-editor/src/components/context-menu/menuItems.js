@@ -84,6 +84,77 @@ const canPerformTrackedChange = (context, action) => {
 };
 
 /**
+ * Build flat proofing menu items for the current context.
+ * The context menu only renders a single-level item list, so provider
+ * suggestions must be emitted as normal clickable rows.
+ *
+ * @param {Object} context
+ * @returns {Array<Object>}
+ */
+const buildProofingItems = (context) => {
+  const items = [];
+  const proofing = context?.proofingContext;
+
+  if (context?.trigger === TRIGGERS.click && proofing?.issue && proofing?.suggestions?.length) {
+    proofing.suggestions.forEach((suggestion, i) => {
+      items.push({
+        id: `proofing-replace-${i}`,
+        label: suggestion,
+        isDefault: true,
+        action: (editor) => {
+          const { state, dispatch } = editor.view;
+          const { pmFrom, pmTo } = proofing.issue;
+
+          // Collect marks common to ALL text nodes in the replaced range
+          // (intersection). This preserves marks that covered the entire
+          // word (including non-inclusive marks like links) while avoiding
+          // over-expansion of marks that only appeared on some text nodes.
+          let commonMarks = null;
+          state.doc.nodesBetween(pmFrom, pmTo, (node) => {
+            if (node.isText) {
+              if (commonMarks === null) {
+                commonMarks = [...node.marks];
+              } else {
+                commonMarks = commonMarks.filter((existing) => node.marks.some((m) => existing.eq(m)));
+              }
+            }
+          });
+          const existingMarks = commonMarks ?? [];
+
+          // Use replaceWith instead of insertText so the replacement carries
+          // exactly the intersection marks. insertText inherits inclusive
+          // marks from the left boundary, which over-expands formatting when
+          // only part of the word was marked.
+          const tr = state.tr;
+          const replacement = state.schema.text(suggestion, existingMarks);
+          tr.replaceWith(pmFrom, pmTo, replacement);
+
+          dispatch(tr);
+        },
+      });
+    });
+  }
+
+  items.push({
+    id: 'proofing-ignore',
+    label: 'Ignore',
+    isDefault: true,
+    action: (editor, context) => {
+      const proofing = context.proofingContext;
+      if (!proofing?.word) return;
+      proofing.ignoreWord(proofing.word);
+    },
+    showWhen: (context) => {
+      return (
+        context.trigger === TRIGGERS.click && !!context.proofingContext?.canIgnore && !!context.proofingContext?.word
+      );
+    },
+  });
+
+  return items;
+};
+
+/**
  * Get menu sections based on context (trigger, selection, node, etc)
  * @param {Object} context - { editor, selectedText, pos, node, event, trigger }
  * @param {Array} customItems - Optional custom menu items from configuration
@@ -117,6 +188,11 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
 
   // Define default sections with isDefault flag
   const defaultSections = [
+    {
+      id: 'proofing',
+      isDefault: true,
+      items: buildProofingItems(enhancedContext),
+    },
     {
       id: 'ai-content',
       isDefault: true,

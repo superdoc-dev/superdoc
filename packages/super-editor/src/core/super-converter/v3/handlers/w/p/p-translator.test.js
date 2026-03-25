@@ -103,6 +103,62 @@ describe('w/p p-translator', () => {
     });
   });
 
+  it('encode() applies identity attrs only to the first paragraph fragment in split results', () => {
+    handleParagraphNode.mockReturnValueOnce([
+      { type: 'paragraph', attrs: { fromLegacy: true }, content: [] },
+      { type: 'documentPartObject', attrs: { id: '123' }, content: [] },
+      { type: 'paragraph', attrs: { trailing: true }, content: [] },
+    ]);
+
+    const result = translator.encode({
+      nodes: [{ name: 'w:p', attributes: { 'w14:paraId': 'X' } }],
+      docx: {},
+      nodeListHandler: { handlerEntities: [] },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        type: 'paragraph',
+        attrs: expect.objectContaining({
+          fromLegacy: true,
+          paraId: 'ENC_PARAID',
+          textId: 'ENC_TEXTID',
+          rsidR: 'ENC_RSIDR',
+          rsidRDefault: 'ENC_RSIDRDEF',
+          rsidP: 'ENC_RSIDP',
+          rsidRPr: 'ENC_RSIDRPR',
+          rsidDel: 'ENC_RSIDDEL',
+        }),
+      }),
+      { type: 'documentPartObject', attrs: { id: '123' }, content: [] },
+      expect.objectContaining({
+        type: 'paragraph',
+        attrs: expect.objectContaining({
+          trailing: true,
+          rsidR: 'ENC_RSIDR',
+          rsidRDefault: 'ENC_RSIDRDEF',
+          rsidP: 'ENC_RSIDP',
+          rsidRPr: 'ENC_RSIDRPR',
+          rsidDel: 'ENC_RSIDDEL',
+        }),
+      }),
+    ]);
+    expect(result[2].attrs.paraId).toBeUndefined();
+    expect(result[2].attrs.textId).toBeUndefined();
+  });
+
+  it('encode() does not stamp paragraph identity attrs onto block-only results', () => {
+    handleParagraphNode.mockReturnValueOnce([{ type: 'documentPartObject', attrs: { id: '123' }, content: [] }]);
+
+    const result = translator.encode({
+      nodes: [{ name: 'w:p', attributes: { 'w14:paraId': 'X' } }],
+      docx: {},
+      nodeListHandler: { handlerEntities: [] },
+    });
+
+    expect(result).toEqual([{ type: 'documentPartObject', attrs: { id: '123' }, content: [] }]);
+  });
+
   it('decode() delegates to exporter and merges decoded attributes', () => {
     const params = {
       node: { type: 'paragraph', attrs: { any: 'thing' } },

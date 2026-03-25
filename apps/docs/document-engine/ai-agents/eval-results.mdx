@@ -1,0 +1,122 @@
+---
+title: LLM eval results
+sidebarTitle: Eval Results
+description: Which LLMs work best with SuperDoc's Document API — tested with Promptfoo across 7 models and 360+ tools
+keywords: "llm eval, model comparison, promptfoo, gpt-5.4, claude haiku, gemini, tool use, document api"
+---
+
+SuperDoc's Document API exposes [360+ operations](/document-api/available-operations) as LLM tools. Seven models were tested with [Promptfoo](https://promptfoo.dev) to measure how accurately each one calls them.
+
+<Tip>
+**Recommended models**
+
+- **Best overall accuracy — GPT-5.4 (OpenAI):** 100% tool quality score with the full system prompt. Use this for batch processing, async pipelines, and any scenario where latency is not the primary constraint.
+- **Best for fast responses — Gemini 2.5 Flash (Google):** 94% tool quality score at lower latency. Use this for real-time, interactive editing where speed matters.
+
+Claude Haiku 4.5 (Anthropic) is a strong alternative for fast use cases — 90% accuracy with the smallest prompt dependency gap (-13 points), meaning it degrades least when the system prompt is trimmed.
+</Tip>
+
+## Tool quality results
+
+Level 1 tests whether a model produces valid tool calls with correct arguments. No documents are executed — only the decision is evaluated. Each of the 31 tests runs twice per model: once with the full SuperDoc system prompt, once with a minimal two-line prompt.
+
+| Model | Full prompt | Minimal prompt | Gap |
+|---|---|---|---|
+| **GPT-5.4** (OpenAI) | **100%** (31/31) | 74% (23/31) | -26 |
+| GPT-4o (OpenAI) | 97% (30/31) | 42% (13/31) | -55 |
+| Amazon Nova 2.0-Lite (AWS) | 94% (29/31) | 74% (23/31) | -20 |
+| Gemini 2.5 Flash (Google) | 94% (29/31) | 61% (19/31) | -33 |
+| Claude Haiku 4.5 (Anthropic) | 90% (28/31) | 77% (24/31) | -13 |
+| GPT-4.1-mini (OpenAI) | 90% (28/31) | 61% (19/31) | -29 |
+
+**Full prompt** = the complete SuperDoc system prompt with tool categories, workflow guidance, and error patterns.
+**Minimal prompt** = tool schemas only, no behavioral instructions.
+**Gap** = the accuracy drop when switching from full to minimal prompt.
+
+## End-to-end results
+
+Level 2 runs 21 tests against real `.docx` fixtures. Each test executes a full agent loop: open the document, let the LLM pick tools, execute them via the CLI, and verify the output file changed correctly.
+
+Three models were tested end-to-end: **GPT-5.4**, **Claude Haiku 4.5**, and **Gemini 2.5 Pro**.
+
+Tests span 10 categories:
+
+- **Reading** — text search, node search, full extraction, counting
+- **Mutation** — replace, delete, multi-step atomic edits, first-occurrence targeting
+- **Formatting** — bold, highlight, underline via `format.apply`
+- **Structure** — headings, paragraphs via `create` group
+- **Tables** — table discovery and creation
+- **Comments** — comment insertion and discovery
+- **Tracked changes** — `tracked` vs. `direct` change modes
+- **Lists** — list discovery and creation
+- **Hygiene / efficiency** — no hallucinated parameters, undo usage, call count limits
+- **Aspirational** — page margins, TOC, cell merging, hyperlinks, liability analysis
+
+<Info>
+Per-category breakdowns by model will be published as the eval suite matures. The current results validate that all three end-to-end models handle the core categories (reading, mutation, formatting) reliably.
+</Info>
+
+## The prompt gap
+
+The "gap" column measures how much a model depends on detailed prompt engineering. A smaller gap means the model interprets SuperDoc's tool definitions well on its own.
+
+- The full system prompt lifts every model by **13–55 percentage points**.
+- **GPT-5.4** is the only model that reaches 100% with the full prompt.
+- **Claude Haiku 4.5** has the smallest gap (-13 points) — it degrades least when the prompt is sparse. This makes it the most robust choice if you need to trim the system prompt for token budget reasons.
+- **GPT-4o** is the most prompt-dependent (55-point gap). It scores 97% with the full prompt but drops to 42% without it.
+
+**Takeaway:** always include the full system prompt. Load it from the SDK or copy it from the [LLM tools reference](/document-engine/ai-agents/llm-tools).
+
+<Tip>
+If you strip down the system prompt to save tokens, expect accuracy to drop. How much depends on the model — Claude Haiku 4.5 loses the least, GPT-4o loses the most.
+</Tip>
+
+## Methodology
+
+Results come from a [Promptfoo](https://promptfoo.dev)-based eval framework running against SuperDoc's grouped intent tool set — 9 meta-tools that cover all [360+ underlying operations](/document-api/available-operations).
+
+- **Level 1 (tool quality):** 31 synthetic test cases × 2 prompts × 6 models = 372 assertions. Gemini 2.5 Pro was tested only in Level 2. A test passes when the model produces a structurally valid tool call with correct arguments. Assertion types include `tool-call-f1` (set comparison), custom JavaScript checks, and latency thresholds.
+- **Level 2 (end-to-end):** 21 tests across 3 real `.docx` fixture documents. Each test runs a full agent loop and checks the resulting document content with `contains` / `not-contains` assertions.
+- **Models tested:** GPT-5.4, GPT-4o, GPT-4.1-mini (OpenAI); Claude Haiku 4.5 (Anthropic); Gemini 2.5 Flash, Gemini 2.5 Pro (Google); Amazon Nova 2.0-Lite (AWS).
+- **Configuration:** temperature 0, seed 42, tool_choice required, 30s timeout (Level 1) / 120s timeout (Level 2).
+- **Eval date:** March 2026.
+
+<Warning>
+Model behavior changes over time. These results are a point-in-time snapshot. Re-run the eval suite after model version updates to verify accuracy.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card
+    title="LLM tools"
+    icon="wand"
+    href="/document-engine/ai-agents/llm-tools"
+  >
+    Tool definitions, dispatch, and the system prompt reference
+  </Card>
+
+  <Card
+    title="Available operations"
+    icon="list"
+    href="/document-api/available-operations"
+  >
+    All Document API operations by namespace
+  </Card>
+
+  <Card
+    title="Skills"
+    icon="book"
+    href="/document-engine/ai-agents/skills"
+  >
+    Reusable prompt templates for common document editing tasks
+  </Card>
+
+  <Card
+    title="Integrations"
+    icon="plug"
+    href="/document-engine/ai-agents/integrations"
+  >
+    Connect to AWS Bedrock, Vercel AI SDK, and other providers
+  </Card>
+</CardGroup>

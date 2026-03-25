@@ -103,6 +103,7 @@ Returns a ParagraphMutationResult; reports NO_OP if the style already matches. W
   "additionalProperties": false,
   "properties": {
     "styleId": {
+      "description": "Named paragraph style ID (e.g. 'Normal', 'Heading1', 'BodyText'). Use superdoc_search to find a nearby paragraph, then inspect its style to determine the correct styleId.",
       "minLength": 1,
       "type": "string"
     },

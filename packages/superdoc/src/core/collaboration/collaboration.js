@@ -141,13 +141,13 @@ const onDestroy = (superdocInstance, documentId) => {
  * @param {Object} provider The external provider (must have awareness property)
  * @param {Object} superdocInstance The SuperDoc instance
  * @param {Object} user The user object for local awareness state
- * @returns {void}
+ * @returns {() => void} Cleanup function that removes the awareness listener
  */
 function setupAwarenessHandler(provider, superdocInstance, user) {
   const awareness = provider.awareness;
   if (!awareness) {
     console.warn('[superdoc] External provider missing awareness property');
-    return;
+    return () => {};
   }
 
   // Set local user state using standard Yjs awareness API
@@ -156,12 +156,19 @@ function setupAwarenessHandler(provider, superdocInstance, user) {
   }
 
   // Listen to standard Yjs awareness 'change' event
-  awareness.on('change', (changes = {}) => {
+  const handler = (changes = {}) => {
     awarenessHandler(superdocInstance, {
       changes,
       states: awareness.getStates(),
     });
-  });
+  };
+  awareness.on('change', handler);
+
+  return () => {
+    if (typeof awareness.off === 'function') {
+      awareness.off('change', handler);
+    }
+  };
 }
 
 export { createProvider, setupAwarenessHandler };

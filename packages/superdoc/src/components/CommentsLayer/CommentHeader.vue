@@ -105,8 +105,8 @@ const getOverflowOptions = computed(() => {
   const allowedOptions = [];
   const options = new Set();
 
-  // Only the comment creator can edit
-  if (props.comment.creatorEmail === proxy.$superdoc.config.user.email) {
+  // Only the comment creator can edit, and only when comments aren't read-only
+  if (!props.config.readOnly && props.comment.creatorEmail === proxy.$superdoc.config.user.email) {
     options.add('edit');
   }
 

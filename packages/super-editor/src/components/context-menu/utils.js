@@ -426,12 +426,9 @@ function resolveProofingContext(editor, pos) {
       issue,
       suggestions: issue.replacements?.slice(0, config.maxSuggestions) ?? [],
       canIgnore: config.allowIgnoreWord,
-      canAddToDictionary: config.allowAddToDictionary,
       word: issue.word ?? '',
       /** Ignore this word for the current session. */
       ignoreWord: (word) => manager.ignoreWord(word),
-      /** Add this word to the dictionary (consumer can persist externally). */
-      addToDictionary: (word) => manager.addToDictionary(word),
     };
   } catch {
     return null;

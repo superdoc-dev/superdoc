@@ -310,6 +310,125 @@ describe('menuItems.js', () => {
 
       expect(pasteItem).toBeDefined();
     });
+
+    it('expands proofing suggestions into clickable menu items', () => {
+      const ignoreWord = vi.fn();
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        proofingContext: {
+          issue: { pmFrom: 10, pmTo: 13 },
+          suggestions: ['the', 'tech'],
+          canIgnore: true,
+          word: 'teh',
+          ignoreWord,
+        },
+      });
+
+      const sections = getItems(mockContext);
+      const proofingSection = sections.find((section) => section.id === 'proofing');
+
+      expect(proofingSection).toBeDefined();
+      expect(proofingSection.items.map((item) => item.id)).toEqual([
+        'proofing-replace-0',
+        'proofing-replace-1',
+        'proofing-ignore',
+      ]);
+      expect(proofingSection.items.map((item) => item.label)).toEqual(['the', 'tech', 'Ignore']);
+    });
+
+    it('replaces the proofed range when a spelling suggestion is clicked', () => {
+      const replaceWith = vi.fn(function () {
+        return this;
+      });
+      const schemaText = vi.fn((text) => ({ text }));
+      const dispatch = vi.fn();
+
+      mockEditor = createMockEditor();
+      mockEditor.view.state.tr = {
+        doc: {
+          type: {
+            schema: {
+              text: schemaText,
+            },
+          },
+        },
+        replaceWith,
+      };
+      mockEditor.view.dispatch = dispatch;
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        proofingContext: {
+          issue: { pmFrom: 22, pmTo: 25 },
+          suggestions: ['the'],
+          canIgnore: true,
+          word: 'teh',
+          ignoreWord: vi.fn(),
+        },
+      });
+
+      const sections = getItems(mockContext);
+      const proofingSection = sections.find((section) => section.id === 'proofing');
+      const suggestionItem = proofingSection?.items.find((item) => item.id === 'proofing-replace-0');
+
+      expect(suggestionItem).toBeDefined();
+
+      suggestionItem.action(mockEditor, mockContext);
+
+      expect(schemaText).toHaveBeenCalledWith('the');
+      expect(replaceWith).toHaveBeenCalledWith(22, 25, { text: 'the' });
+      expect(dispatch).toHaveBeenCalledWith(mockEditor.view.state.tr);
+    });
+
+    it('calls ignoreWord when the Ignore item is clicked', () => {
+      const ignoreWord = vi.fn();
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        proofingContext: {
+          issue: { pmFrom: 10, pmTo: 13 },
+          suggestions: ['the'],
+          canIgnore: true,
+          word: 'teh',
+          ignoreWord,
+        },
+      });
+
+      const sections = getItems(mockContext);
+      const proofingSection = sections.find((section) => section.id === 'proofing');
+      const ignoreItem = proofingSection?.items.find((item) => item.id === 'proofing-ignore');
+
+      expect(ignoreItem).toBeDefined();
+
+      ignoreItem.action(mockEditor, mockContext);
+
+      expect(ignoreWord).toHaveBeenCalledWith('teh');
+    });
+
+    it('hides proofing suggestions and ignore for non-click triggers', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.slash,
+        proofingContext: {
+          issue: { pmFrom: 10, pmTo: 13 },
+          suggestions: ['the'],
+          canIgnore: true,
+          word: 'teh',
+          ignoreWord: vi.fn(),
+        },
+      });
+
+      const sections = getItems(mockContext);
+      const proofingSection = sections.find((section) => section.id === 'proofing');
+
+      // No proofing section should appear — suggestions are gated on click trigger
+      // and Ignore's showWhen also requires click
+      expect(proofingSection).toBeUndefined();
+    });
   });
 
   describe('getItems - custom configuration', () => {

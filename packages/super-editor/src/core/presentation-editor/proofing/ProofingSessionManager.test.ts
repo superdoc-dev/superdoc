@@ -69,7 +69,6 @@ describe('ProofingSessionManager', () => {
       expect(manager.config.maxConcurrentRequests).toBe(2);
       expect(manager.config.maxSegmentsPerBatch).toBe(20);
       expect(manager.config.allowIgnoreWord).toBe(true);
-      expect(manager.config.allowAddToDictionary).toBe(false);
     });
 
     it('applies custom config values', () => {
@@ -77,12 +76,10 @@ describe('ProofingSessionManager', () => {
         debounceMs: 200,
         timeoutMs: 5000,
         maxConcurrentRequests: 3,
-        allowAddToDictionary: true,
       });
       expect(manager.config.debounceMs).toBe(200);
       expect(manager.config.timeoutMs).toBe(5000);
       expect(manager.config.maxConcurrentRequests).toBe(3);
-      expect(manager.config.allowAddToDictionary).toBe(true);
     });
   });
 
@@ -110,8 +107,7 @@ describe('ProofingSessionManager', () => {
       const provider = createMockProvider();
       const manager = new ProofingSessionManager({ enabled: true, provider });
 
-      manager.updateConfig({ allowAddToDictionary: true, allowIgnoreWord: false });
-      expect(manager.config.allowAddToDictionary).toBe(true);
+      manager.updateConfig({ allowIgnoreWord: false });
       expect(manager.config.allowIgnoreWord).toBe(false);
     });
 
@@ -156,12 +152,6 @@ describe('ProofingSessionManager', () => {
       const manager = new ProofingSessionManager({ ignoredWords: ['teh'] });
       manager.removeIgnoredWord('teh');
       expect(manager.config.ignoredWords).not.toContain('teh');
-    });
-
-    it('addToDictionary adds to ignored list', () => {
-      const manager = new ProofingSessionManager();
-      manager.addToDictionary('SuperDoc');
-      expect(manager.config.ignoredWords).toContain('superdoc');
     });
   });
 

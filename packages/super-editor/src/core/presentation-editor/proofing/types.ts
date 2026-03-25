@@ -102,7 +102,6 @@ export type ProofingConfig = {
   debounceMs?: number;
   maxSuggestions?: number;
   visibleFirst?: boolean;
-  allowAddToDictionary?: boolean;
   allowIgnoreWord?: boolean;
   ignoredWords?: string[];
   timeoutMs?: number;

@@ -308,7 +308,6 @@
  * @property {number} [debounceMs] Debounce delay after edits before rechecking (default: 500)
  * @property {number} [maxSuggestions] Maximum replacement suggestions per issue
  * @property {boolean} [visibleFirst] Prioritize checking visible pages first (default: true)
- * @property {boolean} [allowAddToDictionary] Show "Add to dictionary" in context menu (default: false)
  * @property {boolean} [allowIgnoreWord] Show "Ignore" in context menu (default: true)
  * @property {string[]} [ignoredWords] Words to suppress from proofing results
  * @property {number} [timeoutMs] Provider call timeout in milliseconds (default: 10000)

@@ -1,0 +1,8 @@
+services:
+  languagetool:
+    image: erikvl87/languagetool:6.7
+    ports:
+      - "8081:8010"
+    environment:
+      - Java_Xms=256m
+      - Java_Xmx=512m

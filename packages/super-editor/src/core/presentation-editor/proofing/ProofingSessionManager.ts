@@ -61,7 +61,6 @@ type ResolvedProofingConfig = Required<
     | 'debounceMs'
     | 'maxSuggestions'
     | 'visibleFirst'
-    | 'allowAddToDictionary'
     | 'allowIgnoreWord'
     | 'timeoutMs'
     | 'maxConcurrentRequests'
@@ -129,7 +128,6 @@ export class ProofingSessionManager {
       debounceMs: config.debounceMs ?? DEFAULT_DEBOUNCE_MS,
       maxSuggestions: config.maxSuggestions ?? DEFAULT_MAX_SUGGESTIONS,
       visibleFirst: config.visibleFirst ?? true,
-      allowAddToDictionary: config.allowAddToDictionary ?? false,
       allowIgnoreWord: config.allowIgnoreWord ?? true,
       defaultLanguage: config.defaultLanguage ?? null,
       ignoredWords: config.ignoredWords ?? [],
@@ -236,7 +234,6 @@ export class ProofingSessionManager {
     if (patch.debounceMs !== undefined) this.#config.debounceMs = patch.debounceMs;
     if (patch.maxSuggestions !== undefined) this.#config.maxSuggestions = patch.maxSuggestions;
     if (patch.visibleFirst !== undefined) this.#config.visibleFirst = patch.visibleFirst;
-    if (patch.allowAddToDictionary !== undefined) this.#config.allowAddToDictionary = patch.allowAddToDictionary;
     if (patch.allowIgnoreWord !== undefined) this.#config.allowIgnoreWord = patch.allowIgnoreWord;
     if (patch.timeoutMs !== undefined) this.#config.timeoutMs = patch.timeoutMs;
     if (patch.maxConcurrentRequests !== undefined) this.#config.maxConcurrentRequests = patch.maxConcurrentRequests;
@@ -350,11 +347,6 @@ export class ProofingSessionManager {
       this.#config.ignoredWords = [...this.#config.ignoredWords, normalized];
       this.onResultsChanged?.();
     }
-  }
-
-  /** Add a word to the dictionary (ignoredWords). Customer can persist externally. */
-  addToDictionary(word: string): void {
-    this.ignoreWord(word);
   }
 
   /** Remove a word from the ignored list, re-surfacing any suppressed issues. */

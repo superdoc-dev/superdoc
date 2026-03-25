@@ -84,6 +84,53 @@ const canPerformTrackedChange = (context, action) => {
 };
 
 /**
+ * Build flat proofing menu items for the current context.
+ * The context menu only renders a single-level item list, so provider
+ * suggestions must be emitted as normal clickable rows.
+ *
+ * @param {Object} context
+ * @returns {Array<Object>}
+ */
+const buildProofingItems = (context) => {
+  const items = [];
+  const proofing = context?.proofingContext;
+
+  if (context?.trigger === TRIGGERS.click && proofing?.issue && proofing?.suggestions?.length) {
+    proofing.suggestions.forEach((suggestion, i) => {
+      items.push({
+        id: `proofing-replace-${i}`,
+        label: suggestion,
+        isDefault: true,
+        action: (editor) => {
+          const { state, dispatch } = editor.view;
+          const tr = state.tr;
+          tr.replaceWith(proofing.issue.pmFrom, proofing.issue.pmTo, tr.doc.type.schema.text(suggestion));
+          dispatch(tr);
+        },
+      });
+    });
+  }
+
+  items.push({
+    id: 'proofing-ignore',
+    label: 'Ignore',
+    isDefault: true,
+    action: (editor, context) => {
+      const proofing = context.proofingContext;
+      if (!proofing?.word) return;
+      proofing.ignoreWord(proofing.word);
+    },
+    showWhen: (context) => {
+      return (
+        context.trigger === TRIGGERS.click && !!context.proofingContext?.canIgnore && !!context.proofingContext?.word
+      );
+    },
+  });
+
+  return items;
+};
+
+/**
  * Get menu sections based on context (trigger, selection, node, etc)
  * @param {Object} context - { editor, selectedText, pos, node, event, trigger }
  * @param {Array} customItems - Optional custom menu items from configuration
@@ -120,68 +167,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
     {
       id: 'proofing',
       isDefault: true,
-      items: [
-        {
-          id: 'proofing-suggestions',
-          label: 'Spelling suggestions',
-          isDefault: true,
-          showWhen: (context) => {
-            return context.trigger === TRIGGERS.click && !!context.proofingContext?.suggestions?.length;
-          },
-          // Dynamic sub-items are rendered by the context menu component
-          // based on context.proofingContext.suggestions
-          getSubItems: (context) => {
-            const proofing = context.proofingContext;
-            if (!proofing) return [];
-            return proofing.suggestions.map((suggestion, i) => ({
-              id: `proofing-replace-${i}`,
-              label: suggestion,
-              isDefault: true,
-              action: (editor) => {
-                if (!proofing.issue) return;
-                const { state, dispatch } = editor.view;
-                const tr = state.tr;
-                tr.replaceWith(proofing.issue.pmFrom, proofing.issue.pmTo, tr.doc.type.schema.text(suggestion));
-                dispatch(tr);
-              },
-            }));
-          },
-        },
-        {
-          id: 'proofing-ignore',
-          label: 'Ignore',
-          isDefault: true,
-          action: (editor, context) => {
-            const proofing = context.proofingContext;
-            if (!proofing?.word) return;
-            proofing.ignoreWord(proofing.word);
-          },
-          showWhen: (context) => {
-            return (
-              context.trigger === TRIGGERS.click &&
-              !!context.proofingContext?.canIgnore &&
-              !!context.proofingContext?.word
-            );
-          },
-        },
-        {
-          id: 'proofing-add-to-dictionary',
-          label: 'Add to dictionary',
-          isDefault: true,
-          action: (editor, context) => {
-            const proofing = context.proofingContext;
-            if (!proofing?.word) return;
-            proofing.addToDictionary(proofing.word);
-          },
-          showWhen: (context) => {
-            return (
-              context.trigger === TRIGGERS.click &&
-              !!context.proofingContext?.canAddToDictionary &&
-              !!context.proofingContext?.word
-            );
-          },
-        },
-      ],
+      items: buildProofingItems(enhancedContext),
     },
     {
       id: 'ai-content',

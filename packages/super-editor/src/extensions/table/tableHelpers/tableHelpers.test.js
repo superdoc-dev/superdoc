@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { Fragment } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { CellSelection } from 'prosemirror-tables';
 import { initTestEditor } from '@tests/helpers/helpers.js';
@@ -414,6 +415,35 @@ describe('tableHelpers', () => {
 
       const blockStr = buildFormattedCellBlock(schema, 'test', formatting, false);
       expect(blockStr.textContent).toBe('test');
+    });
+
+    it('buildFormattedCellBlock splits newlines into separate paragraphs', () => {
+      const formatting = { blockType: schema.nodes.paragraph, blockAttrs: null, textMarks: [] };
+      const result = buildFormattedCellBlock(schema, 'line1\nline2\nline3', formatting, false);
+      expect(result).toBeInstanceOf(Fragment);
+      expect(result.childCount).toBe(3);
+      expect(result.child(0).textContent).toBe('line1');
+      expect(result.child(1).textContent).toBe('line2');
+      expect(result.child(2).textContent).toBe('line3');
+    });
+
+    it('buildFormattedCellBlock splits CRLF newlines without stray \\r', () => {
+      const formatting = { blockType: schema.nodes.paragraph, blockAttrs: null, textMarks: [] };
+      const result = buildFormattedCellBlock(schema, 'line1\r\nline2', formatting, false);
+      expect(result).toBeInstanceOf(Fragment);
+      expect(result.childCount).toBe(2);
+      expect(result.child(0).textContent).toBe('line1');
+      expect(result.child(1).textContent).toBe('line2');
+    });
+
+    it('buildFormattedCellBlock handles trailing newline', () => {
+      const formatting = { blockType: schema.nodes.paragraph, blockAttrs: null, textMarks: [] };
+      const result = buildFormattedCellBlock(schema, 'text\n', formatting, false);
+      expect(result).toBeInstanceOf(Fragment);
+      expect(result.childCount).toBe(2);
+      expect(result.child(0).textContent).toBe('text');
+      // trailing newline produces an empty paragraph
+      expect(result.child(1).textContent).toBe('');
     });
 
     it('buildRowFromTemplateRow creates row with values by column', () => {

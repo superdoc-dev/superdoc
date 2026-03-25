@@ -18,7 +18,7 @@ import { shallowRef } from 'vue';
  * @property {((ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void))} [render] External renderer
  * @property {(data?: unknown) => void} resolve Content-facing: settle with 'submitted'
  * @property {(reason?: unknown) => void} close Content-facing: settle with 'closed' and clear slot
- * @property {(outcome: SurfaceOutcome) => void} settle Settle the handle promise (internal)
+ * @property {(outcome: SurfaceOutcome) => boolean} settle Settle the handle promise (internal)
  * @property {boolean} settled Whether the handle has already been settled
  */
 
@@ -133,31 +133,34 @@ export class SurfaceManager {
     const request = this.#normalizeRequest(rawRequest);
     const { component, props, render } = this.#resolveRendering(request);
 
-    /** @type {(outcome: SurfaceOutcome<TResult>) => void} */
+    /** @type {(outcome: SurfaceOutcome<TResult>) => boolean} */
     let settle;
     let settled = false;
 
     /** @type {Promise<SurfaceOutcome<TResult>>} */
     const result = new Promise((resolve) => {
       settle = (outcome) => {
-        if (settled) return; // first settle wins
+        if (settled) return false; // first settle wins
         settled = true;
         resolve(outcome);
+        return true;
       };
     });
 
-    // Content-facing callbacks (first-settle-wins is handled by settle())
+    /** @type {ActiveSurface} */
+    let surface;
+
+    // Content-facing callbacks only clear the slot when they settle their own surface.
     const resolveContent = (data) => {
-      settle({ status: 'submitted', data });
-      this.#clearSlotById(request.id, request.mode);
+      if (!settle({ status: 'submitted', data })) return;
+      this.#clearSlot(surface);
     };
     const closeContent = (reason) => {
-      settle({ status: 'closed', reason });
-      this.#clearSlotById(request.id, request.mode);
+      if (!settle({ status: 'closed', reason })) return;
+      this.#clearSlot(surface);
     };
 
-    /** @type {ActiveSurface} */
-    const surface = {
+    surface = {
       id: request.id,
       mode: request.mode,
       request,
@@ -259,17 +262,8 @@ export class SurfaceManager {
    * @param {ActiveSurface} surface
    */
   #clearSlot(surface) {
-    this.#clearSlotById(surface.id, surface.mode);
-  }
-
-  /**
-   * Clear a surface from its slot by id and mode.
-   * @param {string} id
-   * @param {SurfaceMode} mode
-   */
-  #clearSlotById(id, mode) {
-    const slot = mode === 'dialog' ? this.activeDialog : this.activeFloating;
-    if (slot.value?.id === id) {
+    const slot = surface.mode === 'dialog' ? this.activeDialog : this.activeFloating;
+    if (slot.value === surface) {
       slot.value = null;
     }
   }

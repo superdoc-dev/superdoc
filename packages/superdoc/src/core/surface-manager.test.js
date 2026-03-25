@@ -299,6 +299,56 @@ describe('SurfaceManager', () => {
       expect(outcome.reason).toBe('cancelled');
       expect(manager.activeDialog.value).toBeNull();
     });
+
+    it('stale resolve() from a replaced dialog does not clear a replacement reusing the same id', async () => {
+      const firstHandle = manager.open({ id: 'shared', mode: 'dialog', component: StubComponent });
+      const staleSurface = manager.activeDialog.value;
+
+      const replacementHandle = manager.open({ id: 'shared', mode: 'dialog', component: StubComponent });
+      const replacementSurface = manager.activeDialog.value;
+
+      await expect(firstHandle.result).resolves.toEqual({ status: 'replaced', replacedBy: 'shared' });
+
+      staleSurface.resolve('stale-result');
+
+      let replacementSettled = false;
+      replacementHandle.result.then(() => {
+        replacementSettled = true;
+      });
+      await Promise.resolve();
+
+      expect(manager.activeDialog.value).toBe(replacementSurface);
+      expect(replacementSettled).toBe(false);
+
+      replacementSurface.resolve('fresh-result');
+      await expect(replacementHandle.result).resolves.toEqual({ status: 'submitted', data: 'fresh-result' });
+      expect(manager.activeDialog.value).toBeNull();
+    });
+
+    it('stale close() from a replaced floating surface does not clear a replacement reusing the same id', async () => {
+      const firstHandle = manager.open({ id: 'shared', mode: 'floating', component: StubComponent });
+      const staleSurface = manager.activeFloating.value;
+
+      const replacementHandle = manager.open({ id: 'shared', mode: 'floating', component: StubComponent });
+      const replacementSurface = manager.activeFloating.value;
+
+      await expect(firstHandle.result).resolves.toEqual({ status: 'replaced', replacedBy: 'shared' });
+
+      staleSurface.close('stale-close');
+
+      let replacementSettled = false;
+      replacementHandle.result.then(() => {
+        replacementSettled = true;
+      });
+      await Promise.resolve();
+
+      expect(manager.activeFloating.value).toBe(replacementSurface);
+      expect(replacementSettled).toBe(false);
+
+      replacementSurface.close('fresh-close');
+      await expect(replacementHandle.result).resolves.toEqual({ status: 'closed', reason: 'fresh-close' });
+      expect(manager.activeFloating.value).toBeNull();
+    });
   });
 
   // -----------------------------------------------------------------------

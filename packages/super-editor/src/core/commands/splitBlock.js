@@ -41,6 +41,14 @@ const getRunPropertiesAtCursor = ($from) => {
   if (runNode?.type.name === 'run' && runNode.attrs.runProperties) {
     return { ...runNode.attrs.runProperties };
   }
+
+  if ($from.parent?.type.name === 'paragraph' && $from.parent.content.size === 0) {
+    const paragraphRunProperties = $from.parent.attrs?.paragraphProperties?.runProperties;
+    if (paragraphRunProperties && typeof paragraphRunProperties === 'object') {
+      return { ...paragraphRunProperties };
+    }
+  }
+
   return null;
 };
 

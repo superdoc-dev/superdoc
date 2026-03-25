@@ -210,7 +210,7 @@ describe('splitBlock', () => {
   });
 
   describe('edge cases', () => {
-    it('clears copied paragraph runProperties at paragraph end when the current run has none', () => {
+    it('preserves paragraph runProperties at paragraph end for an empty paragraph', () => {
       const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
       const parentNode = {
         contentMatchAt: vi.fn(() => ({
@@ -224,28 +224,25 @@ describe('splitBlock', () => {
         depth: 1,
         parent: {
           isBlock: true,
-          content: { size: 5 },
+          content: { size: 0 },
           type: { name: 'paragraph' },
           inlineContent: true,
           attrs: paragraphAttrs,
         },
-        parentOffset: 5,
+        parentOffset: 0,
         node: vi.fn((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: paragraphAttrs };
         }),
-        nodeBefore: {
-          type: { name: 'run' },
-          attrs: { runProperties: null },
-        },
+        nodeBefore: null,
         indexAfter: vi.fn(() => 0),
       });
       const $to = createMockResolvedPos({
-        parentOffset: 5,
-        parent: { content: { size: 5 } },
+        parentOffset: 0,
+        parent: { content: { size: 0 } },
       });
 
-      mockTr.selection = new TextSelection($from, $to);
+      mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
         resolve: vi.fn((pos) => (pos === 1 ? $from : $to)),
@@ -255,7 +252,7 @@ describe('splitBlock', () => {
       command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
 
       const [, , types] = mockTr.split.mock.calls[0];
-      expect(types[0].attrs.paragraphProperties.runProperties).toBeUndefined();
+      expect(types[0].attrs.paragraphProperties.runProperties).toEqual({ bold: true });
     });
 
     it('does not call ensureMarks when keepMarks is false', () => {

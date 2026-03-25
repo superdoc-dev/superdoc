@@ -197,6 +197,21 @@
   --sd-content-controls-label-text: #ffffff;
   --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
 
+  /* UI: surface system — dialog and floating overlays */
+  --sd-ui-surface-bg: var(--sd-popover-bg, var(--sd-ui-bg));
+  --sd-ui-surface-border: var(--sd-ui-border);
+  --sd-ui-surface-shadow: var(--sd-popover-shadow, 0 8px 32px rgba(0, 0, 0, 0.18));
+  --sd-ui-surface-radius: var(--sd-popover-radius, var(--sd-radius-200));
+  --sd-ui-surface-z-index: 100;
+  --sd-ui-surface-title-padding: 16px 20px 0;
+  --sd-ui-surface-content-padding: 16px 20px 20px;
+  --sd-ui-dialog-backdrop: rgba(0, 0, 0, 0.4);
+  --sd-ui-dialog-max-width: 480px;
+  --sd-ui-floating-width: 360px;
+  --sd-ui-floating-max-width: 480px;
+  --sd-ui-floating-max-height: min(60vh, calc(100% - 32px));
+  --sd-ui-floating-edge-offset: 16px;
+
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);

@@ -86,6 +86,149 @@
  * @typedef {(ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined} LinkPopoverResolver
  */
 
+// ---------------------------------------------------------------------------
+// Surface system types
+// ---------------------------------------------------------------------------
+
+/**
+ * Surface presentation mode.
+ * @typedef {'dialog' | 'floating'} SurfaceMode
+ */
+
+/**
+ * @typedef {'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'} SurfaceFloatingPlacement
+ */
+
+/**
+ * Intent-based surface request — resolved by the resolver or built-in registry.
+ * @typedef {Object} IntentSurfaceRequest
+ * @property {string} [id] Optional surface id (auto-generated if omitted)
+ * @property {string} kind Opaque intent identifier used by the resolver
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
+ * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
+ * @property {Object} [floating] Floating-specific overrides
+ * @property {SurfaceFloatingPlacement} [floating.placement] Position preset (default: 'top-right'). Ignored when explicit insets are provided.
+ * @property {string | number} [floating.top] Exact top inset (overrides placement)
+ * @property {string | number} [floating.right] Exact right inset (overrides placement)
+ * @property {string | number} [floating.bottom] Exact bottom inset (overrides placement)
+ * @property {string | number} [floating.left] Exact left inset (overrides placement)
+ * @property {string | number} [floating.width] Surface width
+ * @property {string | number} [floating.maxWidth] Max width
+ * @property {string | number} [floating.maxHeight] Max height
+ * @property {boolean} [floating.autoFocus] Move focus into first focusable child on open (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Close when pointer down outside the surface (default: false)
+ * @property {Record<string, unknown>} [payload] Arbitrary data for the resolver or content
+ */
+
+/**
+ * Direct-render surface request — provides its own component or external renderer.
+ * @typedef {Object} DirectSurfaceRequest
+ * @property {string} [id] Optional surface id (auto-generated if omitted)
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
+ * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
+ * @property {Object} [floating] Floating-specific overrides
+ * @property {SurfaceFloatingPlacement} [floating.placement] Position preset (default: 'top-right'). Ignored when explicit insets are provided.
+ * @property {string | number} [floating.top] Exact top inset (overrides placement)
+ * @property {string | number} [floating.right] Exact right inset (overrides placement)
+ * @property {string | number} [floating.bottom] Exact bottom inset (overrides placement)
+ * @property {string | number} [floating.left] Exact left inset (overrides placement)
+ * @property {string | number} [floating.width] Surface width
+ * @property {string | number} [floating.maxWidth] Max width
+ * @property {string | number} [floating.maxHeight] Max height
+ * @property {boolean} [floating.autoFocus] Move focus into first focusable child on open (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Close when pointer down outside the surface (default: false)
+ * @property {unknown} [component] Vue component to render as the surface content
+ * @property {Record<string, unknown>} [props] Extra props passed to the Vue component
+ * @property {(ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer function
+ */
+
+/**
+ * Combined surface request type (intent-based or direct-render).
+ * @typedef {IntentSurfaceRequest | DirectSurfaceRequest} SurfaceRequest
+ */
+
+/**
+ * Resolution returned by a surface resolver.
+ * @typedef {{ type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void) }} SurfaceResolution
+ */
+
+/**
+ * Resolver function for customizing surface rendering.
+ * Must be synchronous — do not return a Promise.
+ * Return null/undefined to fall through to built-in handling.
+ * Return { type: 'none' } to explicitly suppress the surface.
+ * @typedef {(request: SurfaceRequest) => SurfaceResolution | null | undefined} SurfaceResolver
+ */
+
+/**
+ * Outcome of a surface lifecycle. The handle.result promise always resolves
+ * with one of these — it never rejects for normal lifecycle events.
+ * @template [TResult=unknown]
+ * @typedef {Object} SurfaceOutcome
+ * @property {'submitted' | 'closed' | 'replaced' | 'destroyed'} status
+ * @property {TResult} [data] Present when status is 'submitted'
+ * @property {unknown} [reason] Present when status is 'closed'
+ * @property {string} [replacedBy] Present when status is 'replaced'
+ */
+
+/**
+ * Handle returned by openSurface(). Callers use this to await the outcome
+ * or close the surface programmatically.
+ * @template [TResult=unknown]
+ * @typedef {Object} SurfaceHandle
+ * @property {string} id Resolved surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {(reason?: unknown) => void} close Close this surface programmatically
+ * @property {Promise<SurfaceOutcome<TResult>>} result Resolves when the surface settles
+ */
+
+/**
+ * Props passed to a custom Vue component rendered inside a surface shell.
+ * Reserved props (surfaceId, mode, request, resolve, close) always win over
+ * caller-provided props to prevent accidental lifecycle override.
+ * @typedef {Object} SurfaceComponentProps
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {SurfaceRequest} request The original (normalized) request
+ * @property {(data?: unknown) => void} resolve Resolves the handle with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the handle with { status: 'closed', reason }
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) surface renderer.
+ * @typedef {Object} ExternalSurfaceRenderContext
+ * @property {HTMLElement} container Empty DOM container to render into
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {SurfaceRequest} request The original (normalized) request
+ * @property {(data?: unknown) => void} resolve Resolves the handle with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the handle with { status: 'closed', reason }
+ */
+
+/**
+ * Module-level configuration for the surface system.
+ * @typedef {Object} SurfacesModuleConfig
+ * @property {SurfaceResolver} [resolver] Global surface resolver
+ * @property {Object} [dialog] Default dialog options
+ * @property {boolean} [dialog.closeOnEscape] Default escape behavior for dialogs (default: true)
+ * @property {boolean} [dialog.closeOnBackdrop] Default backdrop-click behavior for dialogs (default: true)
+ * @property {string | number} [dialog.maxWidth] Default dialog max-width
+ * @property {Object} [floating] Default floating options
+ * @property {SurfaceFloatingPlacement} [floating.placement] Default placement preset (default: 'top-right')
+ * @property {string | number} [floating.width] Default floating width
+ * @property {string | number} [floating.maxWidth] Default floating max-width
+ * @property {string | number} [floating.maxHeight] Default floating max-height
+ * @property {boolean} [floating.closeOnEscape] Default escape behavior for floating surfaces (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Default outside-pointer behavior (default: false)
+ * @property {boolean} [floating.autoFocus] Default auto-focus behavior (default: true)
+ */
+
 /**
  * @typedef {Object} Modules
  * @property {Object | false} [comments] Comments module configuration (false to disable)
@@ -137,6 +280,7 @@
  * @property {Function} [contextMenu.menuProvider] Function to customize menu items
  * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
  * @property {Object} [slashMenu] @deprecated Use contextMenu instead
+ * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  */
 
 /**

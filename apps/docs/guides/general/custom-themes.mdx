@@ -322,6 +322,26 @@ The floating action toolbar for AI and insert actions.
 | `--sd-ui-tools-item-bg` | `rgba(219,219,219,0.6)` | Button background |
 | `--sd-ui-tools-icon-size` | `20px` | Icon size |
 
+### Surfaces
+
+Dialog and floating overlays rendered above document content. Style with CSS variables — the stable classes `.sd-surface-dialog` and `.sd-surface-floating` are also available for stylesheet targeting.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-surface-bg` | inherits `--sd-ui-bg` | Surface background |
+| `--sd-ui-surface-border` | inherits `--sd-ui-border` | Surface border color |
+| `--sd-ui-surface-shadow` | `0 8px 32px rgba(0,0,0,0.18)` | Surface box shadow |
+| `--sd-ui-surface-radius` | inherits `--sd-radius-200` | Surface border radius |
+| `--sd-ui-surface-z-index` | `100` | Base z-index for surface layers |
+| `--sd-ui-surface-title-padding` | `16px 20px 0` | Title area padding |
+| `--sd-ui-surface-content-padding` | `16px 20px 20px` | Content area padding |
+| `--sd-ui-dialog-backdrop` | `rgba(0,0,0,0.4)` | Dialog backdrop color |
+| `--sd-ui-dialog-max-width` | `480px` | Dialog max-width |
+| `--sd-ui-floating-width` | `360px` | Floating surface default width |
+| `--sd-ui-floating-max-width` | `480px` | Floating surface max width |
+| `--sd-ui-floating-max-height` | `min(60vh, calc(100% - 32px))` | Floating surface max height |
+| `--sd-ui-floating-edge-offset` | `16px` | Offset from edges for placement presets |
+
 ## Source files
 
 Token definitions live in your `node_modules/superdoc/` package:

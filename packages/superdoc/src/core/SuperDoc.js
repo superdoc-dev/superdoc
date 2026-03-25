@@ -23,6 +23,7 @@ import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
 import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
+import { SurfaceManager } from './surface-manager.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -67,6 +68,8 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').Config} Config */
 /** @typedef {import('./types').ExportParams} ExportParams */
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
+/** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
+/** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
 
 /**
  * SuperDoc class
@@ -93,6 +96,9 @@ export class SuperDoc extends EventEmitter {
 
   /** @type {HTMLDivElement | null} — snapshot overlay during upgrade transition */
   #upgradeOverlay = null;
+
+  /** @type {SurfaceManager} */
+  #surfaceManager;
 
   /** @type {string} */
   version;
@@ -303,6 +309,12 @@ export class SuperDoc extends EventEmitter {
     // Preprocess document
     this.#initDocuments();
 
+    // Surface manager must exist before the first await — openSurface()
+    // can be called while async init is still in flight.
+    this.#surfaceManager = new SurfaceManager({
+      getModuleConfig: () => this.config.modules?.surfaces,
+    });
+
     // Initialize collaboration if configured
     await this.#initCollaboration(this.config.modules);
 
@@ -364,6 +376,9 @@ export class SuperDoc extends EventEmitter {
    * Must be paired with a subsequent `#startRuntime()` call.
    */
   #stopRuntime() {
+    // Settle all active surfaces before Vue unmounts their components
+    this.#surfaceManager.settleAll({ status: 'closed', reason: 'runtime-restart' });
+
     // Detach toolbar from current editor before unmount
     if (this.toolbar && this.activeEditor) {
       this.toolbar.setActiveEditor(null);
@@ -533,6 +548,10 @@ export class SuperDoc extends EventEmitter {
     this.app.config.globalProperties.$documentMode = this.config.documentMode;
 
     this.app.config.globalProperties.$superdoc = this;
+
+    // Provide surface manager to Vue components via app-level provide
+    this.app.provide('surfaceManager', this.#surfaceManager);
+
     this.superdocStore = superdocStore;
     this.commentsStore = commentsStore;
     this.highContrastModeStore = highContrastModeStore;
@@ -1672,6 +1691,29 @@ export class SuperDoc extends EventEmitter {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Surface system — generic dialog/floating UI above document content
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Open a surface (dialog or floating) above the document content.
+   *
+   * @template [TResult=unknown]
+   * @param {SurfaceRequest} request
+   * @returns {SurfaceHandle<TResult>}
+   */
+  openSurface(request) {
+    return this.#surfaceManager.open(request);
+  }
+
+  /**
+   * Close a surface by id, or the topmost surface if no id is given.
+   * @param {string} [id]
+   */
+  closeSurface(id) {
+    this.#surfaceManager.close(id);
+  }
+
   /**
    * Destroy the superdoc instance
    * @returns {void}
@@ -1693,6 +1735,11 @@ export class SuperDoc extends EventEmitter {
       this.#upgradeOverlay = null;
     }
     this._upgradeVisualReadyCallback = null;
+
+    // Settle all active surfaces before Vue unmount
+    if (this.#surfaceManager) {
+      this.#surfaceManager.destroy();
+    }
 
     // Unmount the app FIRST so editors are destroyed — this triggers each
     // extension's onDestroy() which cancels debounced Y.js writes and

@@ -37,6 +37,7 @@ import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
+import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
 
@@ -1479,12 +1480,16 @@ const getPDFViewer = () => {
         :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
       />
     </div>
+
+    <!-- Surface host — generic dialog/floating overlay system -->
+    <SurfaceHost :geometry-target="layers" />
   </div>
 </template>
 
 <style scoped>
 .superdoc {
   display: flex;
+  position: relative;
 }
 
 .right-sidebar {

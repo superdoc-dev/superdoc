@@ -137,6 +137,7 @@ function createAppHarness({ commentsList = [] } = {}) {
   const app = {
     mount: vi.fn(),
     unmount: vi.fn(),
+    provide: vi.fn(),
     config: { globalProperties: {} },
   };
 
@@ -778,6 +779,7 @@ describe('upgradeToCollaboration', () => {
           }, 0);
         }),
         unmount: vi.fn(),
+        provide: vi.fn(),
         config: { globalProperties: {} },
       },
       pinia: {},
@@ -1059,6 +1061,7 @@ describe('upgradeToCollaboration', () => {
               throw new Error('Collaborative mount failed');
             }),
             unmount: collabUnmount,
+            provide: vi.fn(),
             config: { globalProperties: {} },
           },
           pinia: {},
@@ -1081,6 +1084,7 @@ describe('upgradeToCollaboration', () => {
             }, 0);
           }),
           unmount: vi.fn(),
+          provide: vi.fn(),
           config: { globalProperties: {} },
         },
         pinia: {},
@@ -1131,6 +1135,7 @@ describe('upgradeToCollaboration', () => {
                 // visual-ready callback deliberately NOT called
               }),
               unmount: collabUnmount,
+              provide: vi.fn(),
               config: { globalProperties: {} },
             },
             pinia: {},
@@ -1152,6 +1157,7 @@ describe('upgradeToCollaboration', () => {
               }
             }),
             unmount: vi.fn(),
+            provide: vi.fn(),
             config: { globalProperties: {} },
           },
           pinia: {},
@@ -1236,6 +1242,7 @@ describe('upgradeToCollaboration', () => {
             }, 0);
           }),
           unmount: vi.fn(),
+          provide: vi.fn(),
           config: { globalProperties: {} },
         },
         pinia: {},

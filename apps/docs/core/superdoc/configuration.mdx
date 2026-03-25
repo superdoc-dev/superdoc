@@ -229,6 +229,60 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
+### Surface defaults
+
+<ParamField path="modules.surfaces" type="Object">
+  Optional defaults and resolver for SuperDoc surfaces.
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="modules.surfaces.resolver" type="function">
+      Resolve intent-based surface requests opened with `kind`
+    </ParamField>
+    <ParamField path="modules.surfaces.dialog" type="Object">
+      Default dialog options
+    </ParamField>
+    <ParamField path="modules.surfaces.dialog.closeOnEscape" type="boolean" default="true">
+      Close dialogs on `Escape`
+    </ParamField>
+    <ParamField path="modules.surfaces.dialog.closeOnBackdrop" type="boolean" default="true">
+      Close dialogs on backdrop click
+    </ParamField>
+    <ParamField path="modules.surfaces.dialog.maxWidth" type="string | number">
+      Default dialog max-width
+    </ParamField>
+    <ParamField path="modules.surfaces.floating" type="Object">
+      Default floating-surface options
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.placement" type="'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'" default="'top-right'">
+      Default floating placement
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.width" type="string | number">
+      Default floating width
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.maxWidth" type="string | number">
+      Default floating max-width
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.maxHeight" type="string | number">
+      Default floating max-height
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.closeOnEscape" type="boolean" default="true">
+      Close floating surfaces on `Escape`
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.closeOnOutsidePointerDown" type="boolean" default="false">
+      Close floating surfaces when clicking outside
+    </ParamField>
+    <ParamField path="modules.surfaces.floating.autoFocus" type="boolean" default="true">
+      Move focus into the first focusable child on open
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Note>
+  You only need `modules.surfaces` if you want shared defaults or a central resolver. Direct `superdoc.openSurface(...)` calls do not require any special setup.
+</Note>
+
+See [Surfaces](/core/superdoc/surfaces) for the full API and examples.
+
 <ParamField path="modules.slashMenu" type="Object" deprecated>
   <Warning>**Deprecated** — Use `modules.contextMenu` instead. See the [Context Menu module](/modules/context-menu) for configuration options.</Warning>
 </ParamField>

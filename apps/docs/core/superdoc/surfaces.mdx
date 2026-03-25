@@ -1,0 +1,348 @@
+---
+title: Surfaces
+keywords: "superdoc surfaces, openSurface, closeSurface, floating overlay, dialog api, react render container"
+---
+
+Surfaces let you show dialogs and floating overlays above the document.
+
+Use them for things like:
+
+- password prompts
+- find and replace
+- lightweight tools or inspectors
+- custom workflow dialogs
+
+SuperDoc supports two surface modes:
+
+- `dialog` — modal, centered, blocks interaction behind it
+- `floating` — non-modal, pinned to the visible document area
+
+## When to configure surfaces up front
+
+Most apps do **not** need any extra setup to use surfaces.
+
+If you are opening a surface directly with `superdoc.openSurface(...)`, you can do that with a normal `SuperDoc` instance and no special config.
+
+Add `modules.surfaces` only when you want:
+
+- global defaults for dialogs or floating overlays
+- a central `resolver` for intent-based requests using `kind`
+
+## Open a surface
+
+### `superdoc.openSurface(request)`
+
+Open a `dialog` or `floating` surface above the document.
+
+**Returns:** `SurfaceHandle`
+
+<ParamField path="request" type="Object" required>
+  Surface request
+
+  <Expandable title="common fields" defaultOpen>
+    <ParamField path="mode" type="'dialog' | 'floating'" required>
+      Presentation mode
+    </ParamField>
+    <ParamField path="title" type="string">
+      Optional title rendered in the surface chrome
+    </ParamField>
+    <ParamField path="closeOnEscape" type="boolean" default="true">
+      Whether `Escape` closes the surface
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="dialog fields">
+    <ParamField path="closeOnBackdrop" type="boolean" default="true">
+      Whether clicking the backdrop closes the dialog
+    </ParamField>
+    <ParamField path="dialog.maxWidth" type="string | number">
+      Dialog max-width override
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="floating fields">
+    <ParamField path="floating.placement" type="'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'" default="'top-right'">
+      Placement preset. Ignored when exact insets are provided.
+    </ParamField>
+    <ParamField path="floating.top" type="string | number">
+      Exact top inset
+    </ParamField>
+    <ParamField path="floating.right" type="string | number">
+      Exact right inset
+    </ParamField>
+    <ParamField path="floating.bottom" type="string | number">
+      Exact bottom inset
+    </ParamField>
+    <ParamField path="floating.left" type="string | number">
+      Exact left inset
+    </ParamField>
+    <ParamField path="floating.width" type="string | number">
+      Width override
+    </ParamField>
+    <ParamField path="floating.maxWidth" type="string | number">
+      Max width override
+    </ParamField>
+    <ParamField path="floating.maxHeight" type="string | number">
+      Max height override
+    </ParamField>
+    <ParamField path="floating.autoFocus" type="boolean" default="true">
+      Move focus into the first focusable child on open
+    </ParamField>
+    <ParamField path="floating.closeOnOutsidePointerDown" type="boolean" default="false">
+      Close when clicking outside the floating surface
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="rendering fields">
+    <ParamField path="component" type="Vue Component">
+      Vue component rendered inside the built-in surface shell. Receives `surfaceId`, `mode`, `request`, `resolve`, and `close` as props.
+    </ParamField>
+    <ParamField path="props" type="Record<string, unknown>">
+      Extra props passed to a Vue component
+    </ParamField>
+    <ParamField path="render" type="(ctx) => { destroy?: () => void } | void">
+      Framework-agnostic renderer. Use this for React or manual DOM mounting.
+    </ParamField>
+    <ParamField path="kind" type="string">
+      Intent key for resolver-based surfaces
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Note>
+  Provide either:
+
+  - `component` or `render` for a direct surface request
+  - `kind` for a resolver-based request
+
+  `component` and `render` are mutually exclusive.
+</Note>
+
+### Dialog example
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'dialog',
+  title: 'Confirm action',
+  dialog: { maxWidth: 420 },
+  render: ({ container, close, resolve }) => {
+    container.innerHTML = `
+      <div style="display:grid;gap:12px;">
+        <p style="margin:0;">Continue?</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" data-cancel>Cancel</button>
+          <button type="button" data-ok>Confirm</button>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('[data-cancel]')?.addEventListener('click', () => close('cancel'));
+    container.querySelector('[data-ok]')?.addEventListener('click', () => resolve({ confirmed: true }));
+  },
+});
+```
+
+### Floating example
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  render: ({ container, close }) => {
+    container.innerHTML = `
+      <div style="display:grid;gap:12px;">
+        <input placeholder="Find..." style="width:100%" />
+        <button type="button">Close</button>
+      </div>
+    `;
+
+    container.querySelector('button')?.addEventListener('click', () => close('manual-close'));
+  },
+});
+```
+
+## Close a surface
+
+### `superdoc.closeSurface(id?)`
+
+Close a surface programmatically.
+
+- pass an `id` to close a specific surface
+- omit `id` to close the topmost active surface
+- if both are open, dialog closes before floating
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  render: ({ container }) => {
+    container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+  },
+});
+
+superdoc.closeSurface(handle.id);
+// or:
+superdoc.closeSurface();
+```
+
+## Handle lifecycle
+
+`openSurface()` returns a handle with:
+
+- `id`
+- `mode`
+- `close(reason?)`
+- `result`
+
+`handle.result` always resolves. It does not reject for normal lifecycle events.
+
+Possible results:
+
+- `{ status: 'submitted', data }`
+- `{ status: 'closed', reason }`
+- `{ status: 'replaced', replacedBy }`
+- `{ status: 'destroyed' }`
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'dialog',
+  title: 'Example',
+  render: ({ container, resolve }) => {
+    container.innerHTML = '<button type="button">Done</button>';
+    container.querySelector('button')?.addEventListener('click', () => resolve({ ok: true }));
+  },
+});
+
+const outcome = await handle.result;
+console.log(outcome.status, outcome.data);
+```
+
+<Note>
+  There is one active `dialog` slot and one active `floating` slot. Opening a new surface in the same mode replaces the previous one.
+</Note>
+
+## Vue component content
+
+For Vue consumers, `component` is the simplest path.
+
+```javascript
+import MyFindSurface from './MyFindSurface.vue';
+
+superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  component: MyFindSurface,
+  props: {
+    initialQuery: 'contract',
+  },
+});
+```
+
+Your component receives:
+
+- `surfaceId`
+- `mode`
+- `request`
+- `resolve(data?)`
+- `close(reason?)`
+
+## React and other frameworks
+
+For React, use `render()` and mount into the provided `container`.
+
+```jsx
+import { createRoot } from 'react-dom/client';
+import { FindOverlay } from './FindOverlay';
+
+superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  render: ({ container, request, close, resolve }) => {
+    const root = createRoot(container);
+
+    root.render(
+      <FindOverlay
+        request={request}
+        onClose={() => close('user-close')}
+        onSubmit={(data) => resolve(data)}
+      />
+    );
+
+    return {
+      destroy() {
+        root.unmount();
+      },
+    };
+  },
+});
+```
+
+This is the same pattern as [external link popovers](/modules/links#external-renderer): SuperDoc owns the shell, and your app mounts content into the provided container.
+
+## Optional instantiation config
+
+Add `modules.surfaces` only if you want shared defaults or a resolver.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    surfaces: {
+      dialog: {
+        maxWidth: 520,
+      },
+      floating: {
+        placement: 'top-right',
+        width: 360,
+        maxHeight: 320,
+      },
+    },
+  },
+});
+```
+
+See the full list of available defaults in the [configuration reference](/core/superdoc/configuration#surface-defaults).
+
+## Resolver-based surfaces
+
+Use a resolver when you want to open a surface by intent instead of passing a renderer each time.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    surfaces: {
+      resolver: (request) => {
+        if (request.kind === 'find') {
+          return {
+            type: 'external',
+            render: ({ container, close }) => {
+              container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+              return {};
+            },
+          };
+        }
+      },
+    },
+  },
+});
+
+superdoc.openSurface({
+  kind: 'find',
+  mode: 'floating',
+  title: 'Find',
+});
+```
+
+<Warning>
+  There is no built-in surface registry yet. If you use `kind`, you must provide `modules.surfaces.resolver`.
+</Warning>
+
+## Styling
+
+Background, shadow, border radius, padding, and edge offset are all customizable via `--sd-ui-surface-*` and `--sd-ui-floating-*` CSS variables. See the full token table in [Custom themes](/guides/general/custom-themes#surfaces).

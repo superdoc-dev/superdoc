@@ -1,0 +1,16 @@
+{
+  "name": "consumer-typecheck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "typecheck:matrix": "node typecheck-matrix.mjs"
+  },
+  "dependencies": {
+    "superdoc": "file:../../packages/superdoc/superdoc.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}

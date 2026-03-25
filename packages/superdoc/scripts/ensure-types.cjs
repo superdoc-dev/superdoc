@@ -139,6 +139,18 @@ for (const filePath of dtsFiles) {
   });
 
 
+  // Fix .ts extensions in import specifiers → .js
+  // vite-plugin-dts preserves .ts extensions from the source when the entry
+  // point is a .ts file. TypeScript expects .js extensions in .d.ts files.
+  fileContent = fileContent.replace(
+    /(?<=from\s+['"]|import\(['"])([^'"]+)\.ts(?=['"])/g,
+    (match, pathWithoutExt) => {
+      changed = true;
+      totalReplacements++;
+      return `${pathWithoutExt}.js`;
+    },
+  );
+
   if (changed) {
     fs.writeFileSync(filePath, fileContent);
     fixedFiles++;

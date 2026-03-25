@@ -20,6 +20,7 @@ import {
   cleanArgs,
   cleanupTemp,
   createTempCopy,
+  dispatchWithRetry,
   loadSdk,
   readCache,
   resolveOutputPath,
@@ -64,7 +65,7 @@ function convertTool(fn, sdk, doc, toolLog) {
     execute: async (args) => {
       const cleaned = cleanArgs(args);
       try {
-        const result = await sdk.dispatchSuperDocTool(doc, fn.name, cleaned);
+        const result = await dispatchWithRetry(sdk, doc, fn.name, cleaned);
         toolLog.push({ tool: fn.name, args: cleaned, ok: true });
         return result;
       } catch (err) {

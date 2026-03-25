@@ -16,7 +16,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'In the Indemnification section, change "Each Party shall mutually indemnify" to "The Receiving Party shall indemnify the Disclosing Party". Remove the word "mutually" from that section.'
+    task: 'In the Indemnification section, change "Each Party shall mutually indemnify" to "The Receiving Party shall indemnify the Disclosing Party".'
   assert:
     - type: javascript
       value: |

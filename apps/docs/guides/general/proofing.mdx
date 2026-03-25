@@ -4,7 +4,7 @@ sidebarTitle: Proofing
 keywords: "spell check, spellcheck, proofing, spelling suggestions, custom proofing provider"
 ---
 
-SuperDoc supports proofing on the layout-engine editor surface. Because SuperDoc renders DOCX content through its own document model and layout engine, browser-native spellcheck is not used. Instead, you provide a proofing provider and SuperDoc handles the UI: inline spelling markers, right-click suggestions, and local ignore flows.
+SuperDoc supports proofing on the layout-engine editor surface. Because SuperDoc renders DOCX content through its own document model and layout engine, browser-native spellcheck is not used. Instead, you provide a proofing provider and SuperDoc handles the UI: inline spelling markers, direct right-click replacement suggestions, and local ignore flows.
 
 ## Quick start
 
@@ -45,7 +45,7 @@ new SuperDoc({
 - Extracting proofable text from the document model
 - Checking visible content first, then continuing in the background
 - Rendering spelling markers on the layout-engine surface
-- Showing replacement suggestions in the context menu
+- Showing provider replacement suggestions as direct context-menu actions
 - Supporting `Ignore` for local suppression
 
 ## What you provide
@@ -53,6 +53,10 @@ new SuperDoc({
 - A provider object with an `id` and `check()` function
 - Any backend API, on-device dictionary engine, or proxy service you want to use
 - Optional persistence for ignored words if you want them to survive reloads
+
+<Note>
+`Ignore` is a SuperDoc-side suppression in v1. It only persists if your app stores ignored words and passes them back through `proofing.ignoredWords`.
+</Note>
 
 <Note>
 SuperDoc does not bundle a proofing engine or send document content anywhere by default. Your provider decides where proofing runs.
@@ -63,7 +67,7 @@ SuperDoc does not bundle a proofing engine or send document content anywhere by 
 Proofing is available when the layout engine is active.
 
 - In standard print layout, that works out of the box
-- In web layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`
+- In web layout, use `layoutEngineOptions.flowMode: 'semantic'` so the layout engine stays active on a continuous surface
 
 ```javascript
 new SuperDoc({

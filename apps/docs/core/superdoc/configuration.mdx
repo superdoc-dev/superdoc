@@ -258,6 +258,10 @@ new SuperDoc({
   Proofing is available when the layout engine is active. In `print` layout this works out of the box. In `web` layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`.
 </Info>
 
+<Note>
+  In the current UI, only spelling issues are rendered. Grammar and style issues can still be returned by your provider, but they are not shown yet.
+</Note>
+
 <ParamField path="proofing" type="Object">
   Proofing configuration
 
@@ -266,7 +270,7 @@ new SuperDoc({
       Enable or disable proofing
     </ParamField>
     <ParamField path="proofing.provider" type="Object">
-      Provider instance with an `id` and `check()` function
+      Provider instance with an `id` and `check()` function. When the provider returns `replacements`, SuperDoc shows them as direct context-menu actions.
     </ParamField>
     <ParamField path="proofing.defaultLanguage" type="string | null">
       Fallback language for segments without a resolved language
@@ -284,7 +288,7 @@ new SuperDoc({
       Show `Ignore` in the context menu
     </ParamField>
     <ParamField path="proofing.ignoredWords" type="string[]">
-      Words to suppress from displayed proofing results
+      Words to suppress from displayed proofing results. This is a SuperDoc-side suppression list, not a provider dictionary mutation.
     </ParamField>
     <ParamField path="proofing.timeoutMs" type="number" default="10000">
       Provider timeout per request in milliseconds
@@ -324,7 +328,7 @@ new SuperDoc({
       - `'web'` - Content reflows to fit container width
     </ParamField>
   </Expandable>
-  <Note>Use `'web'` for mobile devices and WCAG AA reflow compliance (Success Criterion 1.4.10). When set to `'web'`, the layout engine is automatically disabled.</Note>
+  <Note>Use `'web'` for mobile devices and WCAG AA reflow compliance (Success Criterion 1.4.10). If you also need layout-engine-powered features such as proofing in web layout, set `layoutEngineOptions.flowMode: 'semantic'`.</Note>
 
   ```javascript
   viewOptions: { layout: 'web' }

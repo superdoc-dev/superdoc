@@ -59,7 +59,7 @@ Items shown depend on document context.
 |---|---|---|
 | Accept change | `track-changes` | On a tracked change |
 | Reject change | `track-changes` | On a tracked change |
-| Replacement suggestions | `proofing` | On a spelling issue with provider suggestions |
+| Replacement actions | `proofing` | One direct menu item per provider suggestion on a spelling issue |
 | Ignore | `proofing` | On a spelling issue when `proofing.allowIgnoreWord` is enabled |
 | Insert link | `general` | Always |
 | Insert table | `general` | Not inside a table |
@@ -69,7 +69,7 @@ Items shown depend on document context.
 | Paste | `clipboard` | Always |
 
 <Note>
-Proofing items appear automatically when top-level [proofing](/core/superdoc/configuration#proofing) is enabled and the clicked text has a spelling issue.
+Proofing items appear automatically when top-level [proofing](/core/superdoc/configuration#proofing) is enabled and the clicked text has a spelling issue. Suggestion items are taken directly from the provider's `replacements` array.
 </Note>
 
 ## Custom items

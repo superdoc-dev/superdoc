@@ -18,7 +18,7 @@ const provider = {
 };
 ```
 
-If you want TypeScript help, the proofing types are exported from `@superdoc/super-editor`.
+If you want TypeScript help, the proofing types are available from `superdoc/super-editor`.
 
 ## Request model
 
@@ -76,9 +76,13 @@ Each issue must include:
 Optional fields:
 
 - `message`
-- `replacements`
+- `replacements` - shown as direct context-menu replacement actions when present
 - `ruleId`
 - `providerMeta`
+
+<Note>
+Only `kind: 'spelling'` is rendered in the v1 UI. Providers can return grammar or style issues too, but they are not displayed yet.
+</Note>
 
 ## Example: call your own API
 
@@ -128,7 +132,7 @@ const provider = {
 - Batch segments when your backend supports it
 
 <Note>
-`Ignore` is a local UI suppression in v1. If you want ignored words to persist across reloads, store your own list and pass it back through `proofing.ignoredWords` the next time you create the editor.
+`Ignore` is a SuperDoc-side suppression in v1, not a provider dictionary mutation. If you want ignored words to persist across reloads, store your own list and pass it back through `proofing.ignoredWords` the next time you create the editor.
 </Note>
 
 ## Troubleshooting

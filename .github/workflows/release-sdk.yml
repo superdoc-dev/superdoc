@@ -183,6 +183,39 @@ jobs:
           skip-existing: true
 
   # -------------------------------------------------------------------
+  # Sync labs agent with newly released SDK (main/@next only)
+  # -------------------------------------------------------------------
+  sync-labs-agent:
+    needs: auto-release
+    if: >-
+      always()
+      && github.event_name == 'push'
+      && github.ref_name == 'main'
+      && needs.auto-release.outputs.version != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate token for superdoc-labs
+        id: labs_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: superdoc-dev
+          repositories: labs
+
+      - name: Dispatch labs SDK update
+        env:
+          GH_TOKEN: ${{ steps.labs_token.outputs.token }}
+        run: |
+          VERSION="${{ needs.auto-release.outputs.version }}"
+          echo "Dispatching update-agent-sdk.yml on superdoc-dev/labs main for @superdoc-dev/sdk@$VERSION"
+          gh workflow run update-agent-sdk.yml \
+            --repo superdoc-dev/labs \
+            --ref main \
+            --field sdk_version="$VERSION" \
+            --field deploy_after_update=true
+
+  # -------------------------------------------------------------------
   # Manual fallback (workflow_dispatch)
   # -------------------------------------------------------------------
   manual-release:

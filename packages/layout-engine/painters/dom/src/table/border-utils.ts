@@ -309,3 +309,28 @@ export const resolveTableCellBorders = (
     right: borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders?.right : null),
   };
 };
+
+/**
+ * Swap left↔right on table borders for RTL tables (ECMA-376 Part 4 §14.3.2, §14.3.6).
+ * insideH/insideV and top/bottom are not affected by direction.
+ */
+export const swapTableBordersLR = (borders: TableBorders | undefined): TableBorders | undefined => {
+  if (!borders) return undefined;
+  return {
+    ...borders,
+    left: borders.right,
+    right: borders.left,
+  };
+};
+
+/**
+ * Swap left↔right on cell borders for RTL tables (ECMA-376 Part 4 §14.3.1, §14.3.5).
+ */
+export const swapCellBordersLR = (borders: CellBorders | undefined): CellBorders | undefined => {
+  if (!borders) return undefined;
+  return {
+    ...borders,
+    left: borders.right,
+    right: borders.left,
+  };
+};

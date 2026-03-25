@@ -278,7 +278,8 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
-  const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
+  const COMMENT_FOCUS_VIEWPORT_RATIO = 0.38;
+  const targetClientY = Math.round(window.innerHeight * COMMENT_FOCUS_VIEWPORT_RATIO);
   const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
   if (willChangeActiveThread) {
     requestInstantSidebarAlignment(targetClientY);

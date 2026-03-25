@@ -189,6 +189,9 @@ export async function getEditorContext(editor, event) {
       ? { x: event.clientX, y: event.clientY }
       : null;
 
+  // Resolve proofing context if available (PresentationEditor mode)
+  const proofingContext = resolveProofingContext(editor, pos);
+
   return {
     selectedText,
     hasSelection,
@@ -215,6 +218,7 @@ export async function getEditorContext(editor, event) {
     trigger: event ? 'click' : 'slash',
     editor,
     trackedChanges,
+    proofingContext,
   };
 }
 
@@ -396,6 +400,37 @@ function getStructureFromResolvedPos(state, pos) {
     };
   } catch (error) {
     console.warn('[ContextMenu] Unable to resolve position for structural context:', error);
+    return null;
+  }
+}
+
+/**
+ * Resolve proofing context at a position.
+ * Returns null if proofing is not active or no issue exists at the position.
+ */
+function resolveProofingContext(editor, pos) {
+  if (pos == null || !Number.isFinite(pos)) return null;
+
+  try {
+    // Access PresentationEditor's proofing manager via the editor's back-reference
+    const pe = editor?._presentationEditor;
+    if (!pe?.proofingManager) return null;
+
+    const manager = pe.proofingManager;
+    const issue = manager.getIssueAtPosition(pos);
+    if (!issue) return null;
+
+    const config = manager.config;
+
+    return {
+      issue,
+      suggestions: issue.replacements?.slice(0, config.maxSuggestions) ?? [],
+      canIgnore: config.allowIgnoreWord,
+      word: issue.word ?? '',
+      /** Ignore this word for the current session. */
+      ignoreWord: (word) => manager.ignoreWord(word),
+    };
+  } catch {
     return null;
   }
 }

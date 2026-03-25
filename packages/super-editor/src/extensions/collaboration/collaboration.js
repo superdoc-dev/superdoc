@@ -150,9 +150,20 @@ export const Collaboration = Extension.create({
 
   addPmPlugins() {
     if (!this.editor.options.ydoc) return [];
+
+    // Guard against double-initialization. If extensionService.plugins is
+    // re-accessed after collaboration was already bootstrapped for this editor,
+    // return the existing sync plugin without re-creating observers or listeners.
+    if (collaborationCleanupByEditor.has(this.editor)) {
+      const fragment = this.options.fragment;
+      if (fragment) {
+        return [ySyncPlugin(fragment, { onFirstRender: () => {} })];
+      }
+    }
+
     this.options.ydoc = this.editor.options.ydoc;
 
-    initSyncListener(this.options.ydoc, this.editor, this);
+    const syncListenerCleanup = initSyncListener(this.options.ydoc, this.editor, this);
 
     const [syncPlugin, fragment] = createSyncPlugin(this.options.ydoc, this.editor);
     this.options.fragment = fragment;
@@ -171,6 +182,7 @@ export const Collaboration = Extension.create({
     // Store cleanup references in a non-reactive WeakMap (NOT this.options)
     // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
     const cleanupState = {
+      syncListenerCleanup,
       mediaMap,
       mediaMapObserver,
       metaMap: null,
@@ -225,22 +237,7 @@ export const Collaboration = Extension.create({
   },
 
   onDestroy() {
-    const cleanup = collaborationCleanupByEditor.get(this.editor);
-    if (!cleanup) return;
-
-    // Clean up Y.js media map observer
-    cleanup.mediaMap.unobserve(cleanup.mediaMapObserver);
-    cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
-
-    // Clean up part-sync publisher/consumer (or pending sync listener)
-    cleanup.partSyncHandle?.destroy();
-    cleanup.partSyncPendingCleanup?.();
-    cleanup.bodySectPrPendingCleanup?.();
-    if (cleanup.bodySectPrTransactionHandler && typeof this.editor.off === 'function') {
-      this.editor.off('transaction', cleanup.bodySectPrTransactionHandler);
-    }
-
-    collaborationCleanupByEditor.delete(this.editor);
+    cleanupCollaborationSideEffects(this.editor);
   },
 
   addCommands() {
@@ -256,6 +253,32 @@ export const Collaboration = Extension.create({
     };
   },
 });
+
+/**
+ * Tear down collaboration side effects registered during `addPmPlugins()`.
+ *
+ * Called by `Collaboration.onDestroy()` during normal teardown and by
+ * `Editor.attachCollaboration()` rollback if reconfigure fails after
+ * plugin generation has already created Y.js observers and listeners.
+ *
+ * @param {import('../../core/Editor').Editor} editor
+ */
+export const cleanupCollaborationSideEffects = (editor) => {
+  const cleanup = collaborationCleanupByEditor.get(editor);
+  if (!cleanup) return;
+
+  cleanup.syncListenerCleanup?.();
+  cleanup.mediaMap?.unobserve?.(cleanup.mediaMapObserver);
+  cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
+  cleanup.partSyncHandle?.destroy();
+  cleanup.partSyncPendingCleanup?.();
+  cleanup.bodySectPrPendingCleanup?.();
+  if (cleanup.bodySectPrTransactionHandler && typeof editor.off === 'function') {
+    editor.off('transaction', cleanup.bodySectPrTransactionHandler);
+  }
+
+  collaborationCleanupByEditor.delete(editor);
+};
 
 export const createSyncPlugin = (ydoc, editor) => {
   const fragment = ydoc.getXmlFragment('supereditor');
@@ -297,24 +320,43 @@ export const initializeMetaMap = (ydoc, editor) => {
   });
 };
 
+/**
+ * Schedule a `collaborationReady` emission once the provider is synced.
+ *
+ * Returns a cleanup function that cancels any pending timer or provider
+ * listener so a rollback in `attachCollaboration()` can prevent stale
+ * emissions from firing against a rolled-back editor state.
+ *
+ * @returns {() => void} cleanup
+ */
 const initSyncListener = (ydoc, editor, extension) => {
   const provider = editor.options.collaborationProvider;
-  if (!provider) return;
+  if (!provider) return () => {};
+
+  let cancelled = false;
 
   const emit = (synced) => {
+    if (cancelled) return;
     if (synced === false) return;
     extension.options.isReady = true;
     editor.emit('collaborationReady', { editor, ydoc });
   };
 
   if (isCollaborationProviderSynced(provider)) {
-    setTimeout(() => {
+    const timerId = setTimeout(() => {
       emit();
     }, 250);
-    return;
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
   }
 
-  onCollaborationProviderSynced(provider, emit);
+  const removeProviderListeners = onCollaborationProviderSynced(provider, emit);
+  return () => {
+    cancelled = true;
+    removeProviderListeners();
+  };
 };
 
 export const generateCollaborationData = async (editor) => {

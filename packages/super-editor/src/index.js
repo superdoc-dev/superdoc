@@ -14,7 +14,7 @@ import { getMarksFromSelection } from './core/helpers/getMarksFromSelection.js';
 import { getActiveFormatting } from './core/helpers/getActiveFormatting.js';
 import { getStarterExtensions, getRichTextExtensions } from './extensions/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
-import { DocxZipper, helpers } from './core/index.js';
+import { DocxEncryptionError, DocxEncryptionErrorCode, DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
 import { PresentationEditor } from './core/presentation-editor/index.js';
 import { createZip } from './core/super-converter/zipper.js';
@@ -74,6 +74,8 @@ export {
   Editor,
   /** @internal */
   PresentationEditor,
+  DocxEncryptionError,
+  DocxEncryptionErrorCode,
 
   // Components
   SuperEditor,

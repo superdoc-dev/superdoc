@@ -12,7 +12,6 @@ on:
       - 'packages/sdk/**'
       - 'scripts/generate-all.mjs'
       - 'package.json'
-      - 'pnpm-lock.yaml'
       - '.github/workflows/ci-sdk.yml'
   workflow_dispatch:
 

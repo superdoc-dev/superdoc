@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "seed": "node --env-file=.env ./scripts/seed-room.mjs"
+    "seed": "node --env-file=.env ./scripts/seed-room.mjs",
+    "smoke:python": "python3 ./scripts/smoke-python-sdk.py"
   },
   "dependencies": {
     "@liveblocks/client": "^3.11.0",

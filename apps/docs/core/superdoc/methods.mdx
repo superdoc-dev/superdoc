@@ -365,6 +365,73 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
+### `openSurface`
+
+Open a `dialog` or `floating` surface above the document.
+
+**Returns:** `SurfaceHandle`
+
+<ParamField path="request" type="Object" required>
+  Surface request. Set `mode` to `'dialog'` or `'floating'`, then provide content via `render` (framework-agnostic) or `component` (Vue). See [Surfaces](/core/superdoc/surfaces) for the full request shape.
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  render: ({ container }) => {
+    container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+  },
+});
+```
+
+```javascript Full Example
+const handle = superdoc.openSurface({
+  mode: 'dialog',
+  title: 'Confirm action',
+  render: ({ container, close }) => {
+    container.innerHTML = '<button type="button">Close</button>';
+    container.querySelector('button')?.addEventListener('click', () => close('manual-close'));
+  },
+});
+
+const outcome = await handle.result;
+console.log(outcome.status);
+```
+
+</CodeGroup>
+
+See [Surfaces](/core/superdoc/surfaces) for the full request shape, Vue/React examples, and resolver-based usage.
+
+### `closeSurface`
+
+Close a specific surface by id, or the topmost active surface when no id is provided. When both a dialog and a floating surface are open, the dialog closes first.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.closeSurface();
+```
+
+```javascript Full Example
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  render: ({ container }) => {
+    container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+  },
+});
+
+superdoc.closeSurface(handle.id);
+```
+
+</CodeGroup>
+
+See [Surfaces](/core/superdoc/surfaces) for lifecycle behavior and close ordering.
+
 ### `setTrackedChangesPreferences`
 
 Override how tracked changes are rendered in the layout engine.

@@ -32,6 +32,36 @@ class DocxZipper {
     this.media = {};
     this.mediaFiles = {};
     this.fonts = {};
+    /** @type {Uint8Array | null} Decrypted ZIP bytes when the input was encrypted, otherwise null. */
+    this.decryptedFileData = null;
+  }
+
+  /**
+   * Read the first `n` bytes from any supported file input type.
+   * Used for magic-byte detection without converting the entire file to bytes.
+   */
+  async #peekBytes(file, n) {
+    if (file instanceof Uint8Array || (typeof Buffer !== 'undefined' && Buffer.isBuffer(file))) {
+      return new Uint8Array(file.buffer, file.byteOffset, Math.min(n, file.byteLength));
+    }
+    if (file instanceof ArrayBuffer) {
+      return new Uint8Array(file, 0, Math.min(n, file.byteLength));
+    }
+    // Blob / File — read the first n bytes via FileReader or arrayBuffer()
+    if (typeof Blob !== 'undefined' && file instanceof Blob) {
+      try {
+        // Prefer Blob.arrayBuffer() (standard, available in modern runtimes)
+        if (typeof file.arrayBuffer === 'function') {
+          const buf = await file.arrayBuffer();
+          return new Uint8Array(buf, 0, Math.min(n, buf.byteLength));
+        }
+      } catch {
+        // Fall through to empty — treat as unknown (normal ZIP path)
+      }
+    }
+    // Unknown type — return empty so detectContainerType returns 'unknown'
+    // and we fall through to the normal JSZip path
+    return new Uint8Array(0);
   }
 
   /**
@@ -52,8 +82,35 @@ class DocxZipper {
    * docProps/core.xml
    * docProps/app.xml
    * */
-  async getDocxData(file, isNode = false) {
-    const extractedFiles = await this.unzip(file);
+  async getDocxData(file, isNode = false, options = {}) {
+    // Detect encrypted files before JSZip sees them. We only need raw bytes
+    // for the 8-byte magic check; if the file is a normal ZIP we hand the
+    // original input straight to JSZip (which accepts Blob, Buffer, etc.).
+    const { detectContainerType } = await import('./ooxml-encryption/detect-container.js');
+
+    const peekBytes = await this.#peekBytes(file, 8);
+    const containerType = detectContainerType(peekBytes);
+
+    let fileData = file;
+    if (containerType === 'cfb') {
+      // Encrypted CFB container — must decrypt before JSZip can parse it
+      const { decryptDocxIfNeeded } = await import('./ooxml-encryption/decrypt-docx.js');
+      const raw =
+        file instanceof Uint8Array
+          ? file
+          : file instanceof ArrayBuffer
+            ? new Uint8Array(file)
+            : new Uint8Array(await file.arrayBuffer());
+      const result = await decryptDocxIfNeeded(raw, { password: options.password });
+      fileData = result.data;
+      // Store decrypted ZIP bytes so the export path can use them instead of
+      // the original encrypted source — avoids re-decryption and ensures
+      // exportFromOriginalFile() receives a valid ZIP, not a CFB container.
+      this.decryptedFileData = result.data;
+    }
+    // If caller supplied a password but the file isn't encrypted, ignore it.
+
+    const extractedFiles = await this.unzip(fileData);
     const files = Object.entries(extractedFiles.files);
 
     for (const [, zipEntry] of files) {

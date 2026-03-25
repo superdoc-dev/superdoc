@@ -86,6 +86,234 @@
  * @typedef {(ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined} LinkPopoverResolver
  */
 
+// ---------------------------------------------------------------------------
+// Surface system types
+// ---------------------------------------------------------------------------
+
+/**
+ * Surface presentation mode.
+ * @typedef {'dialog' | 'floating'} SurfaceMode
+ */
+
+/**
+ * @typedef {'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'} SurfaceFloatingPlacement
+ */
+
+/**
+ * Intent-based surface request — resolved by the resolver or built-in registry.
+ * @typedef {Object} IntentSurfaceRequest
+ * @property {string} [id] Optional surface id (auto-generated if omitted)
+ * @property {string} kind Opaque intent identifier used by the resolver
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
+ * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
+ * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
+ * @property {Object} [floating] Floating-specific overrides
+ * @property {SurfaceFloatingPlacement} [floating.placement] Position preset (default: 'top-right'). Ignored when explicit insets are provided.
+ * @property {string | number} [floating.top] Exact top inset (overrides placement)
+ * @property {string | number} [floating.right] Exact right inset (overrides placement)
+ * @property {string | number} [floating.bottom] Exact bottom inset (overrides placement)
+ * @property {string | number} [floating.left] Exact left inset (overrides placement)
+ * @property {string | number} [floating.width] Surface width
+ * @property {string | number} [floating.maxWidth] Max width
+ * @property {string | number} [floating.maxHeight] Max height
+ * @property {boolean} [floating.autoFocus] Move focus into first focusable child on open (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Close when pointer down outside the surface (default: false)
+ * @property {Record<string, unknown>} [payload] Arbitrary data for the resolver or content
+ */
+
+/**
+ * Direct-render surface request — provides its own component or external renderer.
+ * @typedef {Object} DirectSurfaceRequest
+ * @property {string} [id] Optional surface id (auto-generated if omitted)
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
+ * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
+ * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
+ * @property {Object} [floating] Floating-specific overrides
+ * @property {SurfaceFloatingPlacement} [floating.placement] Position preset (default: 'top-right'). Ignored when explicit insets are provided.
+ * @property {string | number} [floating.top] Exact top inset (overrides placement)
+ * @property {string | number} [floating.right] Exact right inset (overrides placement)
+ * @property {string | number} [floating.bottom] Exact bottom inset (overrides placement)
+ * @property {string | number} [floating.left] Exact left inset (overrides placement)
+ * @property {string | number} [floating.width] Surface width
+ * @property {string | number} [floating.maxWidth] Max width
+ * @property {string | number} [floating.maxHeight] Max height
+ * @property {boolean} [floating.autoFocus] Move focus into first focusable child on open (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Close when pointer down outside the surface (default: false)
+ * @property {unknown} [component] Vue component to render as the surface content
+ * @property {Record<string, unknown>} [props] Extra props passed to the Vue component
+ * @property {(ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer function
+ */
+
+/**
+ * Combined surface request type (intent-based or direct-render).
+ * @typedef {IntentSurfaceRequest | DirectSurfaceRequest} SurfaceRequest
+ */
+
+/**
+ * Resolution returned by a surface resolver.
+ * @typedef {{ type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void) }} SurfaceResolution
+ */
+
+/**
+ * Resolver function for customizing surface rendering.
+ * Must be synchronous — do not return a Promise.
+ * Return null/undefined to fall through to built-in handling.
+ * Return { type: 'none' } to explicitly suppress the surface.
+ * @typedef {(request: SurfaceRequest) => SurfaceResolution | null | undefined} SurfaceResolver
+ */
+
+/**
+ * Outcome of a surface lifecycle. The handle.result promise always resolves
+ * with one of these — it never rejects for normal lifecycle events.
+ * @template [TResult=unknown]
+ * @typedef {Object} SurfaceOutcome
+ * @property {'submitted' | 'closed' | 'replaced' | 'destroyed'} status
+ * @property {TResult} [data] Present when status is 'submitted'
+ * @property {unknown} [reason] Present when status is 'closed'
+ * @property {string} [replacedBy] Present when status is 'replaced'
+ */
+
+/**
+ * Handle returned by openSurface(). Callers use this to await the outcome
+ * or close the surface programmatically.
+ * @template [TResult=unknown]
+ * @typedef {Object} SurfaceHandle
+ * @property {string} id Resolved surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {(reason?: unknown) => void} close Close this surface programmatically
+ * @property {Promise<SurfaceOutcome<TResult>>} result Resolves when the surface settles
+ */
+
+/**
+ * Props passed to a custom Vue component rendered inside a surface shell.
+ * Reserved props (surfaceId, mode, request, resolve, close) always win over
+ * caller-provided props to prevent accidental lifecycle override.
+ * @typedef {Object} SurfaceComponentProps
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {SurfaceRequest} request The original (normalized) request
+ * @property {(data?: unknown) => void} resolve Resolves the handle with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the handle with { status: 'closed', reason }
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) surface renderer.
+ * @typedef {Object} ExternalSurfaceRenderContext
+ * @property {HTMLElement} container Empty DOM container to render into
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ * @property {SurfaceRequest} request The original (normalized) request
+ * @property {(data?: unknown) => void} resolve Resolves the handle with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the handle with { status: 'closed', reason }
+ */
+
+/**
+ * Module-level configuration for the surface system.
+ * @typedef {Object} SurfacesModuleConfig
+ * @property {SurfaceResolver} [resolver] Global surface resolver
+ * @property {Object} [dialog] Default dialog options
+ * @property {boolean} [dialog.closeOnEscape] Default escape behavior for dialogs (default: true)
+ * @property {boolean} [dialog.closeOnBackdrop] Default backdrop-click behavior for dialogs (default: true)
+ * @property {string | number} [dialog.maxWidth] Default dialog max-width
+ * @property {Object} [floating] Default floating options
+ * @property {SurfaceFloatingPlacement} [floating.placement] Default placement preset (default: 'top-right')
+ * @property {string | number} [floating.width] Default floating width
+ * @property {string | number} [floating.maxWidth] Default floating max-width
+ * @property {string | number} [floating.maxHeight] Default floating max-height
+ * @property {boolean} [floating.closeOnEscape] Default escape behavior for floating surfaces (default: true)
+ * @property {boolean} [floating.closeOnOutsidePointerDown] Default outside-pointer behavior (default: false)
+ * @property {boolean} [floating.autoFocus] Default auto-focus behavior (default: true)
+ * @property {boolean | PasswordPromptConfig} [passwordPrompt] Built-in password prompt dialog for encrypted DOCX files.
+ *   Enabled by default when omitted. Set to `false` to disable. When `true`, uses default titles/labels.
+ *   When an object, allows custom titles and labels.
+ */
+
+/**
+ * All customizable text strings for the password prompt, resolved with defaults.
+ * @typedef {Object} ResolvedPasswordPromptTexts
+ * @property {string} title Dialog title for first attempt
+ * @property {string} invalidTitle Dialog title after wrong password
+ * @property {string} description Explanatory text shown below the title
+ * @property {string} placeholder Input placeholder text
+ * @property {string} inputAriaLabel Accessible label for the password input
+ * @property {string} submitLabel Submit button text
+ * @property {string} cancelLabel Cancel button text
+ * @property {string} busyLabel Submit button text while decrypting
+ * @property {string} invalidMessage Error message for wrong password
+ * @property {string} timeoutMessage Error message for decryption timeout
+ * @property {string} genericErrorMessage Error message for other failures
+ */
+
+/**
+ * Result of a password attempt via the `attemptPassword` function.
+ * @typedef {Object} PasswordPromptAttemptResult
+ * @property {boolean} success Whether the password was accepted
+ * @property {string} [errorCode] Error code when success is false (e.g. 'DOCX_PASSWORD_INVALID', 'timeout')
+ */
+
+/**
+ * Handle object injected into custom password prompt UIs as the `passwordPrompt` prop/context field.
+ * Provides document metadata, resolved texts, and the retry function.
+ * @typedef {Object} PasswordPromptHandle
+ * @property {string} documentId The document ID requiring a password
+ * @property {string} errorCode The current error code (e.g. 'DOCX_PASSWORD_REQUIRED', 'DOCX_PASSWORD_INVALID')
+ * @property {ResolvedPasswordPromptTexts} texts All text strings resolved with defaults
+ * @property {(password: string) => Promise<PasswordPromptAttemptResult>} attemptPassword Submit a password attempt. Returns the outcome; do not mutate document state directly.
+ */
+
+/**
+ * Read-only context passed to a password prompt resolver to decide how to render.
+ * Does NOT include `attemptPassword` — the resolver decides, it does not act.
+ * @typedef {Object} PasswordPromptContext
+ * @property {string} documentId The document ID requiring a password
+ * @property {string} errorCode The current error code
+ * @property {ResolvedPasswordPromptTexts} texts Resolved text strings
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) password prompt renderer.
+ * @typedef {Object} PasswordPromptRenderContext
+ * @property {HTMLElement} container Empty DOM container to render into
+ * @property {PasswordPromptHandle} passwordPrompt The password prompt handle
+ * @property {(data?: unknown) => void} resolve Resolves the surface with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the surface with { status: 'closed', reason }
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ */
+
+/**
+ * Resolution returned by a password prompt resolver.
+ * @typedef {{ type: 'default' } | { type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: PasswordPromptRenderContext) => ({ destroy?: () => void } | void) }} PasswordPromptResolution
+ */
+
+/**
+ * Configuration for the password prompt surface.
+ * @typedef {Object} PasswordPromptConfig
+ * @property {string} [title] Dialog title for first attempt (default: 'Password Required')
+ * @property {string} [invalidTitle] Dialog title after wrong password (default: 'Incorrect Password')
+ * @property {string} [description] Explanatory text (default: 'This document is password protected. Enter the password to open it.')
+ * @property {string} [placeholder] Input placeholder (default: 'Enter password')
+ * @property {string} [inputAriaLabel] Accessible label for the input (default: 'Document password')
+ * @property {string} [submitLabel] Submit button text (default: 'Open')
+ * @property {string} [cancelLabel] Cancel button text (default: 'Cancel')
+ * @property {string} [busyLabel] Submit button text while decrypting (default: 'Decrypting\u2026')
+ * @property {string} [invalidMessage] Error for wrong password (default: 'Incorrect password. Please try again.')
+ * @property {string} [timeoutMessage] Error for timeout (default: 'Timed out while decrypting. Please try again.')
+ * @property {string} [genericErrorMessage] Error for other failures (default: 'Unable to decrypt this document.')
+ * @property {unknown} [component] Vue component to render as custom password prompt content. Mutually exclusive with `render`.
+ * @property {Record<string, unknown>} [props] Extra props passed to the custom Vue component. Component-only; ignored for `render`.
+ * @property {(ctx: PasswordPromptRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer. Mutually exclusive with `component`.
+ * @property {(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined} [resolver] Conditional resolver for per-document customization. Can coexist with `component`/`render`.
+ */
+
 /**
  * @typedef {Object} Modules
  * @property {Object | false} [comments] Comments module configuration (false to disable)
@@ -137,6 +365,7 @@
  * @property {Function} [contextMenu.menuProvider] Function to customize menu items
  * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
  * @property {Object} [slashMenu] @deprecated Use contextMenu instead
+ * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  */
 
 /**
@@ -211,6 +440,7 @@
  * @property {DocumentMode} documentMode The mode of the document
  * @property {'editor' | 'viewer' | 'suggester'} [role] The role of the user in this SuperDoc
  * @property {Object | string | File | Blob} [document] The document to load. If a string, it will be treated as a URL. If a File or Blob, it will be used directly.
+ * @property {string} [password] Password for encrypted DOCX files. Forwarded during document load.
  * @property {Array<Document>} [documents] The documents to load -> Soon to be deprecated
  * @property {User} [user] The current user of this SuperDoc
  * @property {Array<User>} [users] All users of this SuperDoc (can be used for "@"-mentions)
@@ -258,7 +488,7 @@
  * @property {(isOpened: boolean) => void} [onSidebarToggle] Callback when the sidebar is toggled
  * @property {(params: { editor: Editor }) => void} [onCollaborationReady] Callback when collaboration is ready
  * @property {(params: EditorUpdateEvent) => void} [onEditorUpdate] Callback when document is updated
- * @property {(params: { error: Error }) => void} [onException] Callback when an exception is thrown
+ * @property {(params: { error: Error, editor?: Editor | null, code?: string }) => void} [onException] Callback when an exception is thrown
  * @property {(params: { isRendered: boolean }) => void} [onCommentsListChange] Callback when the comments list is rendered
  * @property {(params: { totalPages: number, superdoc: SuperDoc }) => void} [onPaginationUpdate] Callback when pagination layout updates (fires after each layout pass with the current page count)
  * @property {(params: {})} [onListDefinitionsChange] Callback when the list definitions change
@@ -285,6 +515,36 @@
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  * @property {string} [licenseKey] License key for organization identification
  * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
+ * @property {ProofingConfig} [proofing] Proofing / spellcheck configuration
+ */
+
+/**
+ * @typedef {'idle' | 'checking' | 'disabled' | 'degraded'} ProofingStatus
+ */
+
+/**
+ * @typedef {Object} ProofingError
+ * @property {'provider-error' | 'validation-error' | 'timeout'} kind
+ * @property {string} message
+ * @property {string[]} [segmentIds]
+ * @property {*} [cause]
+ */
+
+/**
+ * @typedef {Object} ProofingConfig
+ * @property {boolean} [enabled] Enable or disable proofing (default: false)
+ * @property {import('@superdoc/super-editor').ProofingProvider | null} [provider] Provider instance
+ * @property {string | null} [defaultLanguage] Fallback language for segments without a resolved language
+ * @property {number} [debounceMs] Debounce delay after edits before rechecking (default: 500)
+ * @property {number} [maxSuggestions] Maximum replacement suggestions per issue
+ * @property {boolean} [visibleFirst] Prioritize checking visible pages first (default: true)
+ * @property {boolean} [allowIgnoreWord] Show "Ignore" in context menu (default: true)
+ * @property {string[]} [ignoredWords] Words to suppress from proofing results
+ * @property {number} [timeoutMs] Provider call timeout in milliseconds (default: 10000)
+ * @property {number} [maxConcurrentRequests] Max concurrent provider requests (default: 2)
+ * @property {number} [maxSegmentsPerBatch] Max segments per provider call (default: 20)
+ * @property {(error: ProofingError) => void} [onProofingError] Error callback for provider failures
+ * @property {(status: ProofingStatus) => void} [onStatusChange] Status change callback
  */
 
 export {};

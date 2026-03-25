@@ -296,6 +296,15 @@ vi.mock('@superdoc/painter-dom', () => ({
     BLOCK_SDT: 'superdoc-structured-content-block',
     DOCUMENT_SECTION: 'superdoc-document-section',
   },
+  applyProofingDecorations: vi.fn(() => false),
+  clearProofingDecorations: vi.fn(() => false),
+  PROOFING_CSS: {
+    SPELLING: 'sd-proofing-spelling',
+    GRAMMAR: 'sd-proofing-grammar',
+    STYLE: 'sd-proofing-style',
+    DATA_ATTR: 'data-sd-proofing',
+    SPLIT_ATTR: 'data-sd-proofing-split',
+  },
 }));
 
 // Mock measuring-dom

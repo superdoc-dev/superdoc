@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { validateValueAgainstTypeSpec } from '../../lib/operation-args';
 import { CliError } from '../../lib/errors';
 import type { CliTypeSpec } from '../../cli/types';
+import { CLI_OPERATION_METADATA } from '../../cli/operation-params';
 
 describe('validateValueAgainstTypeSpec – oneOf const enumeration', () => {
   const schema: CliTypeSpec = {
@@ -89,5 +90,55 @@ describe('validateValueAgainstTypeSpec – enum branch', () => {
       const cliError = error as CliError;
       expect(cliError.message).toBe('changeMode must be one of: direct, tracked.');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// doc.find select schema override
+// ---------------------------------------------------------------------------
+
+describe('doc.find select schema — accepts canonical and shorthand forms', () => {
+  const metadata = CLI_OPERATION_METADATA['doc.find'];
+  const selectParam = metadata.params.find((p) => p.name === 'select');
+  const schema = selectParam?.schema;
+
+  if (!schema) throw new Error('doc.find metadata missing select param with schema');
+
+  test('accepts canonical text selector', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'text', pattern: 'hello' }, schema, 'select')).not.toThrow();
+  });
+
+  test('accepts canonical text selector with all optional fields', () => {
+    expect(() =>
+      validateValueAgainstTypeSpec(
+        { type: 'text', pattern: 'hello', mode: 'regex', caseSensitive: true },
+        schema,
+        'select',
+      ),
+    ).not.toThrow();
+  });
+
+  test('accepts canonical node selector', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'node', nodeType: 'heading' }, schema, 'select')).not.toThrow();
+  });
+
+  test('accepts canonical node selector with kind', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'node', kind: 'block' }, schema, 'select')).not.toThrow();
+  });
+
+  test('accepts shorthand node selector', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'paragraph' }, schema, 'select')).not.toThrow();
+  });
+
+  test('accepts shorthand for inline node type', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'hyperlink' }, schema, 'select')).not.toThrow();
+  });
+
+  test('rejects invalid shorthand node type', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'magic' }, schema, 'select')).toThrow(CliError);
+  });
+
+  test('rejects text selector missing required pattern', () => {
+    expect(() => validateValueAgainstTypeSpec({ type: 'text' }, schema, 'select')).toThrow(CliError);
   });
 });

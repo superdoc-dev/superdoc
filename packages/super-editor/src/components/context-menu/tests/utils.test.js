@@ -160,6 +160,9 @@ describe('utils.js', () => {
 
         // Editor reference
         editor: mockEditor,
+
+        // Proofing context (null when no PresentationEditor proofing active)
+        proofingContext: null,
       });
 
       // Verify clipboard is not read during context gathering

@@ -517,4 +517,73 @@ describe('InMemorySessionPool', () => {
       expect(pool.isDirty('s1')).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Liveblocks fingerprint
+  // -------------------------------------------------------------------------
+
+  describe('liveblocks fingerprinting', () => {
+    const LIVEBLOCKS_PROFILE = {
+      providerType: 'liveblocks' as const,
+      documentId: 'lb-room-1',
+      publicApiKey: 'pk_test_xxx',
+    };
+
+    const LIVEBLOCKS_METADATA = {
+      sessionType: 'collab' as const,
+      workingDocPath: '/tmp/working.docx',
+      metadataRevision: 1,
+      collaboration: LIVEBLOCKS_PROFILE,
+    };
+
+    test('discards and reopens liveblocks session when auth config changes', async () => {
+      const { pool, openCollabCalls } = createPool();
+
+      await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+
+      const differentAuth = {
+        ...LIVEBLOCKS_METADATA,
+        collaboration: {
+          providerType: 'liveblocks' as const,
+          documentId: 'lb-room-1',
+          authEndpoint: 'https://example.com/auth',
+        },
+      };
+      await pool.acquire('s1', differentAuth, TEST_IO);
+
+      expect(openCollabCalls.length).toBe(2);
+    });
+
+    test('reuses liveblocks session when profile matches', async () => {
+      const { pool, openCollabCalls } = createPool();
+
+      const first = await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+      first.dispose();
+      const second = await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+
+      expect(openCollabCalls.length).toBe(1);
+      expect(first.editor).toBe(second.editor);
+    });
+
+    test('identical profiles produce same fingerprint regardless of key order', async () => {
+      const { pool, openCollabCalls } = createPool();
+
+      // First with one order
+      const first = await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+      first.dispose();
+
+      // Re-acquire with same data (same keys, pool should reuse)
+      const reorderedMeta = {
+        ...LIVEBLOCKS_METADATA,
+        collaboration: {
+          publicApiKey: 'pk_test_xxx',
+          documentId: 'lb-room-1',
+          providerType: 'liveblocks' as const,
+        },
+      };
+      await pool.acquire('s1', reorderedMeta, TEST_IO);
+
+      expect(openCollabCalls.length).toBe(1);
+    });
+  });
 });

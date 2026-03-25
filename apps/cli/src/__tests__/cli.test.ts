@@ -56,7 +56,13 @@ const TEST_DIR = join(import.meta.dir, 'fixtures-cli');
 const STATE_DIR = join(TEST_DIR, 'state');
 const SAMPLE_DOC = join(TEST_DIR, 'sample.docx');
 const LIST_SAMPLE_DOC = join(TEST_DIR, 'lists-sample.docx');
+const ENCRYPTED_DOC = join(TEST_DIR, 'encrypted.docx');
 const CLI_PACKAGE_JSON_PATH = join(import.meta.dir, '../../package.json');
+const REPO_ROOT = join(import.meta.dir, '../../../..');
+const ENCRYPTED_FIXTURE_SOURCE = join(
+  REPO_ROOT,
+  'packages/super-editor/src/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
+);
 
 async function readCliPackageVersion(): Promise<string> {
   const raw = await readFile(CLI_PACKAGE_JSON_PATH, 'utf8');
@@ -205,6 +211,7 @@ describe('superdoc CLI', () => {
     await mkdir(TEST_DIR, { recursive: true });
     await copyFile(await resolveSourceDocFixture(), SAMPLE_DOC);
     await copyFile(await resolveListDocFixture(), LIST_SAMPLE_DOC);
+    await copyFile(ENCRYPTED_FIXTURE_SOURCE, ENCRYPTED_DOC);
     cliPackageVersion = await readCliPackageVersion();
   });
 
@@ -2379,4 +2386,87 @@ describe('superdoc CLI', () => {
     const closeResult = await runCli(['close', '--discard']);
     expect(closeResult.code).toBe(0);
   });
+
+  // -- Encrypted document tests -----------------------------------------------
+
+  // Encrypted tests use 30s timeout — decryption + open is ~4s and can exceed
+  // bun's default 5s budget under full-suite load.
+  test('open encrypted doc with --password succeeds end-to-end', async () => {
+    const result = await runCli(['open', ENCRYPTED_DOC, '--password', 'test123']);
+    expect(result.code).toBe(0);
+
+    const envelope = parseJsonOutput<SuccessEnvelope<{ active: boolean }>>(result);
+    expect(envelope.data.active).toBe(true);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  }, 30_000);
+
+  test('open encrypted doc without password returns DOCX_PASSWORD_REQUIRED', async () => {
+    const result = await runCli(['open', ENCRYPTED_DOC]);
+    expect(result.code).toBe(1);
+
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('DOCX_PASSWORD_REQUIRED');
+  }, 30_000);
+
+  test('open encrypted doc with wrong password returns DOCX_PASSWORD_INVALID', async () => {
+    const result = await runCli(['open', ENCRYPTED_DOC, '--password', 'wrong']);
+    expect(result.code).toBe(1);
+
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('DOCX_PASSWORD_INVALID');
+  }, 30_000);
+
+  test('call doc.open with --input-json password succeeds end-to-end', async () => {
+    const input = JSON.stringify({ doc: ENCRYPTED_DOC, password: 'test123' });
+    const result = await runCli(['call', 'doc.open', '--input-json', input]);
+    expect(result.code).toBe(0);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  }, 30_000);
+
+  test('call doc.open with missing password returns DOCX_PASSWORD_REQUIRED', async () => {
+    const input = JSON.stringify({ doc: ENCRYPTED_DOC });
+    const result = await runCli(['call', 'doc.open', '--input-json', input]);
+    expect(result.code).toBe(1);
+
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('DOCX_PASSWORD_REQUIRED');
+  }, 30_000);
+
+  // -- Env-fallback precedence tests ------------------------------------------
+
+  test('SUPERDOC_DOC_PASSWORD env var is used in direct CLI mode', async () => {
+    const prevEnv = process.env.SUPERDOC_DOC_PASSWORD;
+    try {
+      process.env.SUPERDOC_DOC_PASSWORD = 'test123';
+      // No --password flag — should fall back to env var in direct mode
+      const result = await runCli(['open', ENCRYPTED_DOC]);
+      expect(result.code).toBe(0);
+
+      const closeResult = await runCli(['close', '--discard']);
+      expect(closeResult.code).toBe(0);
+    } finally {
+      if (prevEnv != null) process.env.SUPERDOC_DOC_PASSWORD = prevEnv;
+      else delete process.env.SUPERDOC_DOC_PASSWORD;
+    }
+  }, 30_000);
+
+  test('explicit --password takes precedence over SUPERDOC_DOC_PASSWORD env var', async () => {
+    const prevEnv = process.env.SUPERDOC_DOC_PASSWORD;
+    try {
+      process.env.SUPERDOC_DOC_PASSWORD = 'wrong-env-password';
+      // Explicit password should override the (wrong) env password
+      const result = await runCli(['open', ENCRYPTED_DOC, '--password', 'test123']);
+      expect(result.code).toBe(0);
+
+      const closeResult = await runCli(['close', '--discard']);
+      expect(closeResult.code).toBe(0);
+    } finally {
+      if (prevEnv != null) process.env.SUPERDOC_DOC_PASSWORD = prevEnv;
+      else delete process.env.SUPERDOC_DOC_PASSWORD;
+    }
+  }, 30_000);
 });

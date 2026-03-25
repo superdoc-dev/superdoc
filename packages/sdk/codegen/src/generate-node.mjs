@@ -169,21 +169,8 @@ function generateResultType(operationId, operation, $defs) {
 // Response-envelope unwrapping
 // ---------------------------------------------------------------------------
 
-// Operations whose CLI response wraps payloads inside
-// `{ document, <key>: <value> }`. The SDK unwraps to return `<value>`.
-const ENVELOPE_KEY_BY_OPERATION_ID = {
-  'doc.find': 'result',
-  'doc.getText': 'text',
-  'doc.getMarkdown': 'markdown',
-  'doc.getHtml': 'html',
-};
-
-// Subset of envelope-wrapped operations that should be unwrapped as strings.
-const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
-  'doc.getText': 'text',
-  'doc.getMarkdown': 'markdown',
-  'doc.getHtml': 'html',
-};
+// String-typed envelope keys that should use unwrapStringEnvelope instead of unwrapEnvelope.
+const STRING_ENVELOPE_KEYS = new Set(['text', 'markdown', 'html']);
 
 // ---------------------------------------------------------------------------
 // Client tree rendering
@@ -198,9 +185,9 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
       const resultTypeName = resultTypeMap.get(op.id);
       const hasRequired = (op.params ?? []).some((p) => p.required);
       const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
-      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      const envelopeKey = op.responseEnvelopeKey ?? null;
       if (envelopeKey) {
-        if (STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id]) {
+        if (STRING_ENVELOPE_KEYS.has(envelopeKey)) {
           return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
         }
         return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapEnvelope<${resultTypeName}>(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
@@ -253,9 +240,9 @@ function renderBoundTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '  
       const boundParams = stripBoundParams(op.params ?? []);
       const hasRequired = boundParams.some((p) => p.required);
       const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
-      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      const envelopeKey = op.responseEnvelopeKey ?? null;
       if (envelopeKey) {
-        if (STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id]) {
+        if (STRING_ENVELOPE_KEYS.has(envelopeKey)) {
           return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
         }
         return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapEnvelope<${resultTypeName}>(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;

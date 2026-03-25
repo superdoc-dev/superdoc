@@ -348,9 +348,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
   if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
     applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
-    applyBorder(container, 'Right', borderValueToSpec(tableBorders.right));
+    applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
     applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
-    applyBorder(container, 'Left', borderValueToSpec(tableBorders.left));
+    applyBorder(container, 'Left', borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left));
   }
 
   // Pre-calculate all row heights for rowspan calculations

@@ -111,6 +111,7 @@ onBeforeUnmount(() => {
     role="dialog"
     :aria-labelledby="labelledBy"
     :aria-label="ariaLabel"
+    data-editor-ui-surface
   >
     <div v-if="surface.request.title" :id="titleId" class="sd-surface-floating__title">
       {{ surface.request.title }}

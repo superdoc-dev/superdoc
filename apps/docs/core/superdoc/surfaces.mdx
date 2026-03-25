@@ -27,6 +27,7 @@ Add `modules.surfaces` only when you want:
 
 - global defaults for dialogs or floating overlays
 - a central `resolver` for intent-based requests using `kind`
+- built-in surface behaviors such as opt-in find/replace or password prompt customization
 
 ## Open a surface
 
@@ -287,7 +288,7 @@ This is the same pattern as [external link popovers](/modules/links#external-ren
 
 ## Optional instantiation config
 
-Add `modules.surfaces` only if you want shared defaults or a resolver.
+Add `modules.surfaces` only if you want shared defaults, a resolver, or built-in surface behaviors such as find/replace.
 
 ```javascript
 new SuperDoc({
@@ -346,7 +347,277 @@ superdoc.openSurface({
   There is no built-in surface registry yet. If you use `kind`, you must provide `modules.surfaces.resolver`.
 </Warning>
 
-## Password prompt
+## Built-in Find and Replace
+
+SuperDoc includes a built-in find/replace popover for editor-backed documents. It is disabled by default so existing apps can keep their own `Cmd+F` / `Ctrl+F` handling. When enabled, SuperDoc intercepts those shortcuts while focus is inside SuperDoc and opens the built-in UI.
+
+From shortcut handling, SuperDoc only steals `Cmd+F` / `Ctrl+F` when it can actually open a surface. If `findReplace.resolver` returns `{ type: 'none' }`, or the config is invalid or throws, the browser's native find remains active.
+
+Enable it via `modules.surfaces.findReplace`:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    surfaces: {
+      findReplace: true,
+    },
+  },
+});
+```
+
+### Text customization
+
+Override any of the built-in labels and placeholders:
+
+```javascript
+modules: {
+  surfaces: {
+    findReplace: {
+      findPlaceholder: 'Search in document',
+      replacePlaceholder: 'Replace with',
+      noResultsLabel: 'Nothing found',
+      previousMatchLabel: 'Previous result',
+      nextMatchLabel: 'Next result',
+      closeAriaLabel: 'Close search',
+    },
+  },
+}
+```
+
+### Find-only mode
+
+Disable replace actions and keep only the find UI:
+
+```javascript
+modules: {
+  surfaces: {
+    findReplace: {
+      replaceEnabled: false,
+    },
+  },
+}
+```
+
+<ParamField path="modules.surfaces.findReplace" type="false | true | Object" default="false">
+  Find/replace configuration. Disabled by default; set to `true` to enable the built-in UI, or pass an object to customize labels, disable replace actions, or replace the rendering.
+
+  <Expandable title="text fields">
+    <ParamField path="findPlaceholder" type="string" default="'Find'">
+      Placeholder text for the find input
+    </ParamField>
+    <ParamField path="findAriaLabel" type="string" default="'Find text'">
+      Accessible label for the find input. Also used as the floating surface label.
+    </ParamField>
+    <ParamField path="replacePlaceholder" type="string" default="'Replace'">
+      Placeholder text for the replace input
+    </ParamField>
+    <ParamField path="replaceAriaLabel" type="string" default="'Replace text'">
+      Accessible label for the replace input
+    </ParamField>
+    <ParamField path="noResultsLabel" type="string" default="'No results'">
+      Text shown when the query has no matches
+    </ParamField>
+    <ParamField path="previousMatchLabel" type="string" default="'Previous match (Shift+Enter)'">
+      Title/tooltip text for the previous-match button
+    </ParamField>
+    <ParamField path="previousMatchAriaLabel" type="string" default="'Previous match'">
+      Accessible label for the previous-match button
+    </ParamField>
+    <ParamField path="nextMatchLabel" type="string" default="'Next match (Enter)'">
+      Title/tooltip text for the next-match button
+    </ParamField>
+    <ParamField path="nextMatchAriaLabel" type="string" default="'Next match'">
+      Accessible label for the next-match button
+    </ParamField>
+    <ParamField path="closeLabel" type="string" default="'Close (Escape)'">
+      Title/tooltip text for the close button
+    </ParamField>
+    <ParamField path="closeAriaLabel" type="string" default="'Close find and replace'">
+      Accessible label for the close button
+    </ParamField>
+    <ParamField path="replaceLabel" type="string" default="'Replace'">
+      Replace-current button text
+    </ParamField>
+    <ParamField path="replaceAllLabel" type="string" default="'All'">
+      Replace-all button text
+    </ParamField>
+    <ParamField path="toggleReplaceLabel" type="string" default="'Toggle replace'">
+      Title/tooltip text for the show/hide replace-row button
+    </ParamField>
+    <ParamField path="toggleReplaceAriaLabel" type="string" default="'Toggle replace'">
+      Accessible label for the show/hide replace-row button
+    </ParamField>
+    <ParamField path="matchCaseLabel" type="string" default="'Aa'">
+      Text shown for the match-case toggle
+    </ParamField>
+    <ParamField path="matchCaseAriaLabel" type="string" default="'Match case'">
+      Accessible label for the match-case toggle
+    </ParamField>
+    <ParamField path="ignoreDiacriticsLabel" type="string" default="'ä≡a'">
+      Text shown for the ignore-diacritics toggle
+    </ParamField>
+    <ParamField path="ignoreDiacriticsAriaLabel" type="string" default="'Ignore diacritics'">
+      Accessible label for the ignore-diacritics toggle
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="behavior + custom UI fields">
+    <ParamField path="replaceEnabled" type="boolean" default="true">
+      Whether replace actions are available. Set to `false` for a find-only popover.
+    </ParamField>
+    <ParamField path="component" type="Vue Component">
+      Custom Vue component rendered inside the floating surface shell. Receives a `findReplace` prop. Mutually exclusive with `render`.
+    </ParamField>
+    <ParamField path="props" type="Record<string, unknown>">
+      Extra props passed to the custom Vue component. Component-only; ignored for `render`.
+    </ParamField>
+    <ParamField path="render" type="(ctx: FindReplaceRenderContext) => { destroy?: () => void } | void">
+      Framework-agnostic renderer for React or manual DOM mounting. Mutually exclusive with `component`.
+    </ParamField>
+    <ParamField path="resolver" type="(ctx: FindReplaceContext) => FindReplaceResolution | null | undefined">
+      Runtime resolver for choosing built-in, custom, external, or suppressed rendering. Can coexist with `component`/`render` — the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in UI.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Custom Vue component
+
+Replace the built-in content with your own Vue component. Your component receives a `findReplace` prop with reactive state and actions:
+
+```javascript
+import MyFindReplaceSurface from './MyFindReplaceSurface.vue';
+
+modules: {
+  surfaces: {
+    findReplace: {
+      component: MyFindReplaceSurface,
+    },
+  },
+}
+```
+
+Inside your component:
+
+```vue
+<script setup>
+import { ref, onMounted } from 'vue';
+
+const props = defineProps({
+  findReplace: { type: Object, required: true },
+});
+
+const inputRef = ref(null);
+
+onMounted(() => {
+  props.findReplace.registerFocusFn(() => inputRef.value?.focus());
+});
+</script>
+
+<template>
+  <input
+    ref="inputRef"
+    :value="findReplace.findQuery.value"
+    @input="findReplace.findQuery.value = $event.target.value"
+  />
+  <button @click="findReplace.goPrev()">Prev</button>
+  <button @click="findReplace.goNext()">Next</button>
+</template>
+```
+
+### Custom render function (React, vanilla JS)
+
+Use `render` for framework-agnostic mounting. The render function receives a `FindReplaceRenderContext`:
+
+```javascript
+modules: {
+  surfaces: {
+    findReplace: {
+      render: (ctx) => {
+        const input = document.createElement('input');
+        input.value = ctx.findReplace.findQuery;
+        input.addEventListener('input', (event) => {
+          ctx.findReplace.findQuery = event.target.value;
+        });
+
+        ctx.findReplace.registerFocusFn(() => input.focus());
+        ctx.container.appendChild(input);
+
+        return { destroy: () => input.remove() };
+      },
+    },
+  },
+}
+```
+
+`ctx` exposes `container`, `findReplace`, `resolve`, `close`, `surfaceId`, and `mode`.
+
+`ctx.findReplace` exposes plain JavaScript getters/setters instead of Vue refs so non-Vue renderers can work with it directly.
+
+### Conditional resolver
+
+Use `resolver` when your app wants to decide at runtime whether to use built-in, custom, external, or suppressed rendering. The resolver receives a read-only context with `texts` and `replaceEnabled`:
+
+```javascript
+modules: {
+  surfaces: {
+    findReplace: {
+      replaceEnabled: false,
+      resolver: (ctx) => {
+        if (!ctx.replaceEnabled) {
+          return { type: 'custom', component: ReadOnlyFindSurface };
+        }
+        return null; // fall through to built-in
+      },
+    },
+  },
+}
+```
+
+**Resolution types:**
+
+| Type | Behavior |
+|------|----------|
+| `null` / `undefined` | Fall through to `component`/`render` or built-in |
+| `{ type: 'default' }` | Same as `null` — fall through |
+| `{ type: 'none' }` | Suppress SuperDoc's find/replace surface for this open attempt |
+| `{ type: 'custom', component, props? }` | Mount a Vue component in the floating shell |
+| `{ type: 'external', render }` | Mount framework-agnostic UI in the floating shell |
+
+The resolver can coexist with `component`/`render`. If the resolver returns `null` or `{ type: 'default' }`, the direct `component`/`render` is used. If neither is configured, the built-in popover renders.
+
+**Precedence:** resolver → `component`/`render` → built-in.
+
+### The `findReplace` handle
+
+Custom Vue components receive `findReplace` as a Vue handle with refs/computed refs. External `render` functions receive `ctx.findReplace` with the same API surface, but mutable fields are exposed as plain JavaScript getters/setters and derived fields are plain getters.
+
+| Field | Vue `component` value | External `render` value | Description |
+|-------|-----------------------|-------------------------|-------------|
+| `findQuery` | `Ref<string>` | `string` getter/setter | Current search query |
+| `replaceText` | `Ref<string>` | `string` getter/setter | Current replacement text |
+| `caseSensitive` | `Ref<boolean>` | `boolean` getter/setter | Match-case toggle |
+| `ignoreDiacritics` | `Ref<boolean>` | `boolean` getter/setter | Ignore-diacritics toggle |
+| `showReplace` | `Ref<boolean>` | `boolean` getter/setter | Whether the replace row is expanded |
+| `matchCount` | `Ref<number>` | `number` getter | Total match count |
+| `activeMatchIndex` | `Ref<number>` | `number` getter | Active match index, `-1` when none |
+| `matchLabel` | `ComputedRef<string>` | `string` getter | Formatted label such as `3 of 12` or `No results` |
+| `hasMatches` | `ComputedRef<boolean>` | `boolean` getter | Whether there are any matches |
+| `replaceEnabled` | `boolean` | `boolean` | Whether replace actions are available |
+| `texts` | `ResolvedFindReplaceTexts` | `ResolvedFindReplaceTexts` | All text strings resolved with defaults |
+| `goNext` / `goPrev` | `() => void` | `() => void` | Navigate through matches |
+| `replaceCurrent` / `replaceAll` | `() => void` | `() => void` | Run replacement actions |
+| `registerFocusFn` | `(fn) => void` | `(fn) => void` | Register the function SuperDoc calls when the user presses `Cmd+F` / `Ctrl+F` again while the surface is already open |
+| `close` | `(reason?: unknown) => void` | `(reason?: unknown) => void` | Close the surface |
+
+### `{ type: 'none' }` semantics
+
+`{ type: 'none' }` means **suppress SuperDoc's find/replace surface** for that open attempt.
+
+When find/replace is opened via `Cmd+F` / `Ctrl+F`, suppression falls back to the browser's native find dialog instead of swallowing the shortcut.
+
+## Built-in password prompt
 
 SuperDoc includes a built-in password dialog for encrypted DOCX files. Enabled by default. On wrong password, the dialog stays open and shows an error. On success, the document loads normally.
 
@@ -587,4 +858,4 @@ When `passwordPrompt` is enabled, recoverable encryption errors are intercepted 
 When multiple encrypted documents are loaded, the password prompt queues one dialog at a time in FIFO order. After the user submits or cancels for one document, the next dialog appears.
 ## Styling
 
-Background, shadow, border radius, padding, and edge offset are all customizable via `--sd-ui-surface-*` and `--sd-ui-floating-*` CSS variables. See the full token table in [Custom themes](/guides/general/custom-themes#surfaces).
+Background, shadow, border radius, padding, and edge offset are all customizable via `--sd-ui-surface-*` and `--sd-ui-floating-*` CSS variables. Find/replace controls use `--sd-ui-find-replace-*`, and search highlight colors use `--sd-ui-search-match-bg` plus `--sd-ui-search-match-active-bg`. See the full token table in [Custom themes](/guides/general/custom-themes#surfaces).

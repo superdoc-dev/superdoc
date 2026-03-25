@@ -342,6 +342,49 @@ Dialog and floating overlays rendered above document content. Style with CSS var
 | `--sd-ui-floating-max-height` | `min(60vh, calc(100% - 32px))` | Floating surface max height |
 | `--sd-ui-floating-edge-offset` | `16px` | Offset from edges for placement presets |
 
+### Find and replace
+
+The built-in find/replace popover inherits the shared surface tokens above and adds its own control-level variables.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-find-replace-gap` | `8px` | Vertical gap between main rows |
+| `--sd-ui-find-replace-input-height` | `30px` | Input height |
+| `--sd-ui-find-replace-input-padding` | `4px 8px` | Input padding |
+| `--sd-ui-find-replace-input-font-size` | inherits `--sd-ui-font-size-400` | Input font size |
+| `--sd-ui-find-replace-input-bg` | inherits `--sd-ui-surface-bg` | Input background |
+| `--sd-ui-find-replace-input-border` | inherits `--sd-ui-border` | Input border color |
+| `--sd-ui-find-replace-input-focus-border` | inherits `--sd-ui-action` | Input border on focus |
+| `--sd-ui-find-replace-input-radius` | `4px` | Input border radius |
+| `--sd-ui-find-replace-count-color` | inherits `--sd-ui-text-muted` | Match-count text color |
+| `--sd-ui-find-replace-count-font-size` | inherits `--sd-ui-font-size-300` | Match-count font size |
+| `--sd-ui-find-replace-count-inset` | `8px` | Right inset for the match-count overlay inside the input |
+| `--sd-ui-find-replace-btn-size` | `28px` | Icon-button size |
+| `--sd-ui-find-replace-btn-radius` | `4px` | Icon-button border radius |
+| `--sd-ui-find-replace-btn-hover-bg` | inherits `--sd-ui-hover-bg` | Icon-button hover background |
+| `--sd-ui-find-replace-btn-color` | inherits `--sd-ui-text` | Icon-button color |
+| `--sd-ui-find-replace-btn-disabled-opacity` | `0.4` | Icon-button opacity when disabled |
+| `--sd-ui-find-replace-btn-icon-font-size` | `12px` | Prev/next/close icon size |
+| `--sd-ui-find-replace-btn-toggle-font-size` | `12px` | Text-toggle font size |
+| `--sd-ui-find-replace-btn-toggle-padding` | `4px 8px` | Text-toggle padding |
+| `--sd-ui-find-replace-toggle-active-bg` | inherits `--sd-color-blue-100` | Active background for option toggles |
+| `--sd-ui-find-replace-toggle-active-color` | inherits `--sd-color-blue-700` | Active text/icon color for option toggles |
+| `--sd-ui-find-replace-action-btn-bg` | inherits `--sd-ui-action` | Replace button background |
+| `--sd-ui-find-replace-action-btn-color` | `#fff` | Replace button text color |
+| `--sd-ui-find-replace-action-btn-hover-bg` | inherits `--sd-ui-action-hover` | Replace button hover background |
+| `--sd-ui-find-replace-action-btn-padding` | `4px 10px` | Replace button padding |
+| `--sd-ui-find-replace-nav-gap` | `2px` | Gap between prev/next/close buttons |
+| `--sd-ui-find-replace-options-gap` | `4px` | Gap between the lower-row toggles/actions |
+
+### Search highlights
+
+Colors used for search result highlights inside the document view.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-search-match-bg` | `rgba(255, 213, 0, 0.4)` | Background for non-active search matches |
+| `--sd-ui-search-match-active-bg` | `rgba(255, 150, 0, 0.6)` | Background for the active search match |
+
 ### Password prompt
 
 The built-in password dialog for encrypted DOCX files. All variables default to the shared UI tokens.

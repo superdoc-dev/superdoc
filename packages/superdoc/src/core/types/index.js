@@ -231,6 +231,9 @@
  * @property {boolean} [floating.closeOnEscape] Default escape behavior for floating surfaces (default: true)
  * @property {boolean} [floating.closeOnOutsidePointerDown] Default outside-pointer behavior (default: false)
  * @property {boolean} [floating.autoFocus] Default auto-focus behavior (default: true)
+ * @property {boolean | FindReplaceConfig} [findReplace] Built-in find/replace popover for editor-backed documents.
+ *   Disabled by default. Set to `true` to intercept Cmd+F / Ctrl+F inside SuperDoc and open the built-in UI.
+ *   When an object, allows text customization, custom components, resolvers, and replace-disabling.
  * @property {boolean | PasswordPromptConfig} [passwordPrompt] Built-in password prompt dialog for encrypted DOCX files.
  *   Enabled by default when omitted. Set to `false` to disable. When `true`, uses default titles/labels.
  *   When an object, allows custom titles and labels.
@@ -312,6 +315,112 @@
  * @property {Record<string, unknown>} [props] Extra props passed to the custom Vue component. Component-only; ignored for `render`.
  * @property {(ctx: PasswordPromptRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer. Mutually exclusive with `component`.
  * @property {(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined} [resolver] Conditional resolver for per-document customization. Can coexist with `component`/`render`.
+ */
+
+// ---------------------------------------------------------------------------
+// Find/replace surface types
+// ---------------------------------------------------------------------------
+
+/**
+ * All customizable text strings for the find/replace surface, resolved with defaults.
+ * @typedef {Object} ResolvedFindReplaceTexts
+ * @property {string} findPlaceholder Input placeholder for the find field
+ * @property {string} findAriaLabel Accessible label for the find input
+ * @property {string} replacePlaceholder Input placeholder for the replace field
+ * @property {string} replaceAriaLabel Accessible label for the replace input
+ * @property {string} noResultsLabel Text shown when there are no matches
+ * @property {string} previousMatchLabel Button label / title for previous match
+ * @property {string} previousMatchAriaLabel Accessible label for previous match button
+ * @property {string} nextMatchLabel Button label / title for next match
+ * @property {string} nextMatchAriaLabel Accessible label for next match button
+ * @property {string} closeLabel Button label / title for close
+ * @property {string} closeAriaLabel Accessible label for close button
+ * @property {string} replaceLabel Replace button text
+ * @property {string} replaceAllLabel Replace-all button text
+ * @property {string} toggleReplaceLabel Toggle replace row label
+ * @property {string} toggleReplaceAriaLabel Accessible label for toggle replace button
+ * @property {string} matchCaseLabel Match case toggle text
+ * @property {string} matchCaseAriaLabel Accessible label for match case toggle
+ * @property {string} ignoreDiacriticsLabel Ignore diacritics toggle text
+ * @property {string} ignoreDiacriticsAriaLabel Accessible label for ignore diacritics toggle
+ */
+
+/**
+ * Handle object injected into find/replace UIs as the `findReplace` prop/context field.
+ * Provides reactive search state and all action functions.
+ *
+ * @typedef {Object} FindReplaceHandle
+ * @property {import('vue').Ref<string>} findQuery Current search query
+ * @property {import('vue').Ref<string>} replaceText Current replacement text
+ * @property {import('vue').Ref<boolean>} caseSensitive Case-sensitive toggle
+ * @property {import('vue').Ref<boolean>} ignoreDiacritics Ignore diacritics toggle
+ * @property {import('vue').Ref<boolean>} showReplace Whether replace row is expanded
+ * @property {import('vue').Ref<number>} matchCount Total match count (read-only by convention)
+ * @property {import('vue').Ref<number>} activeMatchIndex Active match index, -1 when none (read-only by convention)
+ * @property {import('vue').ComputedRef<string>} matchLabel Formatted match label e.g. "3 of 12" or "No results"
+ * @property {import('vue').ComputedRef<boolean>} hasMatches Whether there are any matches
+ * @property {boolean} replaceEnabled Whether replace actions are available (false for find-only mode)
+ * @property {ResolvedFindReplaceTexts} texts All text strings resolved with defaults
+ * @property {() => void} goNext Navigate to the next match
+ * @property {() => void} goPrev Navigate to the previous match
+ * @property {() => void} replaceCurrent Replace the active match
+ * @property {() => void} replaceAll Replace all matches
+ * @property {(fn: () => void) => void} registerFocusFn Register a function the composable calls to refocus the find input
+ * @property {(reason?: unknown) => void} close Close the find/replace surface
+ */
+
+/**
+ * Read-only context passed to a find/replace resolver to decide how to render.
+ * Does NOT include action functions — the resolver decides, it does not act.
+ * @typedef {Object} FindReplaceContext
+ * @property {ResolvedFindReplaceTexts} texts Resolved text strings
+ * @property {boolean} replaceEnabled Whether replace is available
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) find/replace renderer.
+ * Vue refs are unwrapped as getter/setter properties for framework neutrality.
+ * @typedef {Object} FindReplaceRenderContext
+ * @property {HTMLElement} container Empty DOM container to render into
+ * @property {Object} findReplace The find/replace handle with getters/setters instead of Vue refs
+ * @property {(data?: unknown) => void} resolve Resolves the surface with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the surface with { status: 'closed', reason }
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ */
+
+/**
+ * Resolution returned by a find/replace resolver.
+ * @typedef {{ type: 'default' } | { type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: FindReplaceRenderContext) => ({ destroy?: () => void } | void) }} FindReplaceResolution
+ */
+
+/**
+ * Configuration for the find/replace surface.
+ * @typedef {Object} FindReplaceConfig
+ * @property {string} [findPlaceholder] Override find placeholder text
+ * @property {string} [findAriaLabel] Override find input aria-label
+ * @property {string} [replacePlaceholder] Override replace placeholder text
+ * @property {string} [replaceAriaLabel] Override replace input aria-label
+ * @property {string} [noResultsLabel] Override "No results" text
+ * @property {string} [previousMatchLabel] Override previous match button title
+ * @property {string} [previousMatchAriaLabel] Override previous match aria-label
+ * @property {string} [nextMatchLabel] Override next match button title
+ * @property {string} [nextMatchAriaLabel] Override next match aria-label
+ * @property {string} [closeLabel] Override close button title
+ * @property {string} [closeAriaLabel] Override close button aria-label
+ * @property {string} [replaceLabel] Override replace button text
+ * @property {string} [replaceAllLabel] Override replace-all button text
+ * @property {string} [toggleReplaceLabel] Override toggle replace button title
+ * @property {string} [toggleReplaceAriaLabel] Override toggle replace aria-label
+ * @property {string} [matchCaseLabel] Override match case toggle text
+ * @property {string} [matchCaseAriaLabel] Override match case aria-label
+ * @property {string} [ignoreDiacriticsLabel] Override ignore diacritics toggle text
+ * @property {string} [ignoreDiacriticsAriaLabel] Override ignore diacritics aria-label
+ * @property {boolean} [replaceEnabled] Whether replace is available (default: true)
+ * @property {unknown} [component] Vue component to render as custom find/replace content. Mutually exclusive with `render`.
+ * @property {Record<string, unknown>} [props] Extra props passed to the custom Vue component.
+ * @property {(ctx: FindReplaceRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer. Mutually exclusive with `component`.
+ * @property {(ctx: FindReplaceContext) => FindReplaceResolution | null | undefined} [resolver] Conditional resolver. Can coexist with `component`/`render`.
  */
 
 /**

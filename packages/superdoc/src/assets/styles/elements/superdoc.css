@@ -17,3 +17,33 @@
 .superdoc--web-layout .superdoc__sub-document {
   width: 100%;
 }
+
+/* --- Upgrade transition (upgradeToCollaboration) --- */
+
+.sd-upgrade-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sd-upgrade-overlay [contenteditable] {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* visibility: hidden (not display: none) so layout engine can still measure */
+.sd-upgrade-hidden {
+  visibility: hidden !important;
+}
+
+/* --- Search highlights (transient, used in both editor and presentation mode) --- */
+
+.superdoc .ProseMirror-search-match {
+  background: var(--sd-ui-search-match-bg);
+}
+
+.superdoc .ProseMirror-active-search-match {
+  background: var(--sd-ui-search-match-active-bg);
+}

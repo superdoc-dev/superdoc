@@ -212,6 +212,39 @@
   --sd-ui-floating-max-height: min(60vh, calc(100% - 32px));
   --sd-ui-floating-edge-offset: 16px;
 
+  /* UI: find/replace surface */
+  --sd-ui-find-replace-gap: 8px;
+  --sd-ui-find-replace-input-height: 30px;
+  --sd-ui-find-replace-input-padding: 4px 8px;
+  --sd-ui-find-replace-input-font-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-find-replace-input-bg: var(--sd-ui-surface-bg, #fff);
+  --sd-ui-find-replace-input-border: var(--sd-ui-border);
+  --sd-ui-find-replace-input-focus-border: var(--sd-ui-action);
+  --sd-ui-find-replace-input-radius: 4px;
+  --sd-ui-find-replace-count-color: var(--sd-ui-text-muted, #6b7280);
+  --sd-ui-find-replace-count-font-size: var(--sd-ui-font-size-300, 13px);
+  --sd-ui-find-replace-btn-size: 28px;
+  --sd-ui-find-replace-btn-radius: 4px;
+  --sd-ui-find-replace-btn-hover-bg: var(--sd-ui-hover-bg, rgba(0, 0, 0, 0.06));
+  --sd-ui-find-replace-btn-color: var(--sd-ui-text);
+  --sd-ui-find-replace-btn-disabled-opacity: 0.4;
+  --sd-ui-find-replace-toggle-active-bg: var(--sd-color-blue-100, #dbeafe);
+  --sd-ui-find-replace-toggle-active-color: var(--sd-color-blue-700, #1d4ed8);
+  --sd-ui-find-replace-action-btn-bg: var(--sd-ui-action);
+  --sd-ui-find-replace-action-btn-color: #fff;
+  --sd-ui-find-replace-action-btn-hover-bg: var(--sd-ui-action-hover, var(--sd-ui-action));
+  --sd-ui-find-replace-nav-gap: 2px;
+  --sd-ui-find-replace-options-gap: 4px;
+  --sd-ui-find-replace-btn-icon-font-size: 12px;
+  --sd-ui-find-replace-btn-toggle-font-size: 12px;
+  --sd-ui-find-replace-action-btn-padding: 4px 10px;
+  --sd-ui-find-replace-btn-toggle-padding: 4px 8px;
+  --sd-ui-find-replace-count-inset: 8px;
+
+  /* Search highlights (editor + presentation mode) */
+  --sd-ui-search-match-bg: rgba(255, 213, 0, 0.4);
+  --sd-ui-search-match-active-bg: rgba(255, 150, 0, 0.6);
+
   /* UI: password prompt */
   --sd-ui-password-prompt-gap: 12px;
   --sd-ui-password-prompt-heading-size: var(--sd-ui-font-size-500, 15px);

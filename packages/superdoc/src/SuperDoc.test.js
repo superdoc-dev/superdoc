@@ -521,6 +521,89 @@ describe('SuperDoc.vue', () => {
     ).toBe(false);
   });
 
+  it('intercepts Cmd+F from a document-level keydown when focus is inside SuperDoc', async () => {
+    const hiddenEditorDom = document.createElement('div');
+    hiddenEditorDom.className = 'ProseMirror ProseMirror-focused';
+
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.surfaces = { findReplace: true };
+    superdocStub.activeEditor = {
+      view: {
+        dom: hiddenEditorDom,
+      },
+      commands: {
+        clearSearchSession: vi.fn(),
+      },
+    };
+
+    const surfaceManager = {
+      activeDialog: shallowRef(null),
+      activeFloating: shallowRef(null),
+      open: vi.fn(() => ({
+        id: 'surface-1',
+        mode: 'floating',
+        close: vi.fn(),
+        result: Promise.resolve({ status: 'closed' }),
+      })),
+    };
+
+    const wrapper = await mountComponent(superdocStub, { surfaceManager });
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(hiddenEditorDom);
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'f',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await vi.dynamicImportSettled();
+
+    expect(surfaceManager.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not intercept Cmd+F when built-in find/replace is not enabled', async () => {
+    const hiddenEditorDom = document.createElement('div');
+    hiddenEditorDom.className = 'ProseMirror ProseMirror-focused';
+
+    const superdocStub = createSuperdocStub();
+    superdocStub.activeEditor = {
+      view: {
+        dom: hiddenEditorDom,
+      },
+      commands: {
+        clearSearchSession: vi.fn(),
+      },
+    };
+
+    const surfaceManager = {
+      activeDialog: shallowRef(null),
+      activeFloating: shallowRef(null),
+      open: vi.fn(() => ({
+        id: 'surface-1',
+        mode: 'floating',
+        close: vi.fn(),
+        result: Promise.resolve({ status: 'closed' }),
+      })),
+    };
+
+    await mountComponent(superdocStub, { surfaceManager });
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(hiddenEditorDom);
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'f',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await vi.dynamicImportSettled();
+
+    expect(surfaceManager.open).not.toHaveBeenCalled();
+  });
+
   it('forwards configured passwords to SuperEditor options', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.password = 'top-secret';

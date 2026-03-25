@@ -388,6 +388,15 @@ export type RangeRect = {
   height: number;
 };
 
+export type BoundingRect = {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  width: number;
+  height: number;
+};
+
 export type HeaderFooterMode = 'body' | 'header' | 'footer';
 
 export type HeaderFooterSession = {

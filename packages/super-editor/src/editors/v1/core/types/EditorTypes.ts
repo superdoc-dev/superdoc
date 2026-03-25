@@ -86,6 +86,20 @@ export interface Toolbar {
 }
 
 /**
+ * Binary data accepted by document open/import APIs.
+ */
+export type BinaryData = ArrayBuffer | ArrayBufferView;
+
+/**
+ * Represents an unsupported HTML element dropped during paste.
+ */
+export type UnsupportedContentItem = {
+  tagName: string;
+  outerHTML: string;
+  count: number;
+};
+
+/**
  * Re-export commonly used types
  */
 export type * from '../OxmlNode.js';

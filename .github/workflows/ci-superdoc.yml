@@ -76,6 +76,8 @@ jobs:
         run: pnpm test
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          VITEST_POOL: forks
+          VITEST_MAX_WORKERS: 2
 
       - name: Run memory profiling tests (non-blocking)
         continue-on-error: true

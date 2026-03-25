@@ -5,6 +5,8 @@ import {
   NoSourcePathError,
   FileSystemNotAvailableError,
   DocumentLoadError,
+  DocxEncryptionError,
+  DocxEncryptionErrorCode,
 } from './errors/index.js';
 import { loadTestDataForEditorTests, getMinimalTranslatedLinkedStyles } from '@tests/helpers/helpers.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -361,6 +363,92 @@ describe('Editor Lifecycle API', () => {
 
         expect(editor.options.deferDocumentLoad).toBe(true);
       });
+    });
+
+    describe('Encrypted document handling', () => {
+      it('should throw PASSWORD_REQUIRED for an encrypted file with no password', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+        const encryptedBuffer = readFileSync(encryptedPath);
+
+        await expect(
+          Editor.open(encryptedBuffer, {
+            extensions: getStarterExtensions(),
+            suppressDefaultDocxStyles: true,
+          }),
+        ).rejects.toThrow(DocxEncryptionError);
+
+        try {
+          await Editor.open(encryptedBuffer, {
+            extensions: getStarterExtensions(),
+            suppressDefaultDocxStyles: true,
+          });
+        } catch (err) {
+          expect((err as DocxEncryptionError).code).toBe(DocxEncryptionErrorCode.PASSWORD_REQUIRED);
+        }
+      });
+
+      it('should throw PASSWORD_INVALID for an encrypted file with wrong password', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+        const encryptedBuffer = readFileSync(encryptedPath);
+
+        let caughtError: DocxEncryptionError | null = null;
+        try {
+          await Editor.open(encryptedBuffer, {
+            extensions: getStarterExtensions(),
+            suppressDefaultDocxStyles: true,
+            password: 'wrong-password',
+          });
+        } catch (err) {
+          caughtError = err as DocxEncryptionError;
+        }
+
+        expect(caughtError).toBeInstanceOf(DocxEncryptionError);
+        expect(caughtError!.code).toBe(DocxEncryptionErrorCode.PASSWORD_INVALID);
+      }, 60_000);
+
+      it('should open an encrypted file with the correct password', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+        const encryptedBuffer = readFileSync(encryptedPath);
+
+        editor = await Editor.open(encryptedBuffer, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          password: 'test123',
+        });
+
+        expect(editor).toBeInstanceOf(Editor);
+        expect(editor.lifecycleState).toBe('ready');
+      }, 30_000);
+
+      it('should not store the password on the editor instance', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+        const encryptedBuffer = readFileSync(encryptedPath);
+
+        editor = await Editor.open(encryptedBuffer, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          password: 'test123',
+        });
+
+        // Password must not leak onto the editor options
+        expect((editor.options as Record<string, unknown>).password).toBeUndefined();
+      }, 30_000);
     });
   });
 

@@ -227,6 +227,18 @@
  * @property {boolean} [floating.closeOnEscape] Default escape behavior for floating surfaces (default: true)
  * @property {boolean} [floating.closeOnOutsidePointerDown] Default outside-pointer behavior (default: false)
  * @property {boolean} [floating.autoFocus] Default auto-focus behavior (default: true)
+ * @property {boolean | PasswordPromptConfig} [passwordPrompt] Built-in password prompt dialog for encrypted DOCX files.
+ *   Enabled by default when omitted. Set to `false` to disable. When `true`, uses default titles/labels.
+ *   When an object, allows custom titles and labels.
+ */
+
+/**
+ * Configuration for the built-in password prompt surface.
+ * @typedef {Object} PasswordPromptConfig
+ * @property {string} [title] Dialog title for first attempt (default: 'Password Required')
+ * @property {string} [invalidTitle] Dialog title after wrong password (default: 'Incorrect Password')
+ * @property {string} [submitLabel] Submit button text (default: 'Open')
+ * @property {string} [cancelLabel] Cancel button text (default: 'Cancel')
  */
 
 /**
@@ -355,6 +367,7 @@
  * @property {DocumentMode} documentMode The mode of the document
  * @property {'editor' | 'viewer' | 'suggester'} [role] The role of the user in this SuperDoc
  * @property {Object | string | File | Blob} [document] The document to load. If a string, it will be treated as a URL. If a File or Blob, it will be used directly.
+ * @property {string} [password] Password for encrypted DOCX files. Forwarded during document load.
  * @property {Array<Document>} [documents] The documents to load -> Soon to be deprecated
  * @property {User} [user] The current user of this SuperDoc
  * @property {Array<User>} [users] All users of this SuperDoc (can be used for "@"-mentions)
@@ -402,7 +415,7 @@
  * @property {(isOpened: boolean) => void} [onSidebarToggle] Callback when the sidebar is toggled
  * @property {(params: { editor: Editor }) => void} [onCollaborationReady] Callback when collaboration is ready
  * @property {(params: EditorUpdateEvent) => void} [onEditorUpdate] Callback when document is updated
- * @property {(params: { error: Error }) => void} [onException] Callback when an exception is thrown
+ * @property {(params: { error: Error, editor?: Editor | null, code?: string }) => void} [onException] Callback when an exception is thrown
  * @property {(params: { isRendered: boolean }) => void} [onCommentsListChange] Callback when the comments list is rendered
  * @property {(params: { totalPages: number, superdoc: SuperDoc }) => void} [onPaginationUpdate] Callback when pagination layout updates (fires after each layout pass with the current page count)
  * @property {(params: {})} [onListDefinitionsChange] Callback when the list definitions change

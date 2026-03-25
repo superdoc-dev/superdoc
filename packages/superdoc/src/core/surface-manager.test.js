@@ -299,7 +299,6 @@ describe('SurfaceManager', () => {
       expect(outcome.reason).toBe('cancelled');
       expect(manager.activeDialog.value).toBeNull();
     });
-
     it('stale resolve() from a replaced dialog does not clear a replacement reusing the same id', async () => {
       const firstHandle = manager.open({ id: 'shared', mode: 'dialog', component: StubComponent });
       const staleSurface = manager.activeDialog.value;

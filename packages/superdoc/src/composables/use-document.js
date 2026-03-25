@@ -13,6 +13,10 @@ export default function useDocument(params, superdocConfig) {
   const role = params.role;
   const html = params.html;
   const markdown = params.markdown;
+  const password = params.password;
+
+  // Password retry — incrementing this forces SuperEditor to remount and re-run loadXmlData.
+  const editorMountNonce = ref(0);
 
   // Placement
   const container = ref(null);
@@ -87,12 +91,14 @@ export default function useDocument(params, superdocConfig) {
     data,
     html,
     markdown,
+    password,
     type,
     config,
     state,
     role,
 
     core,
+    editorMountNonce,
     ydoc,
     provider,
     socket,

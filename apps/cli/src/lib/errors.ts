@@ -47,7 +47,12 @@ export type CliErrorCode =
   | 'CAPABILITY_UNAVAILABLE'
   | 'INVALID_TARGET'
   | 'AMBIGUOUS_TARGET'
-  | 'CAPABILITY_UNSUPPORTED';
+  | 'CAPABILITY_UNSUPPORTED'
+  // DOCX encryption error codes — passed through from super-editor
+  | 'DOCX_PASSWORD_REQUIRED'
+  | 'DOCX_PASSWORD_INVALID'
+  | 'DOCX_ENCRYPTION_UNSUPPORTED'
+  | 'DOCX_DECRYPTION_FAILED';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

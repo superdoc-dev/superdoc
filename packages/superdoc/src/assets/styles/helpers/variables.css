@@ -212,6 +212,36 @@
   --sd-ui-floating-max-height: min(60vh, calc(100% - 32px));
   --sd-ui-floating-edge-offset: 16px;
 
+  /* UI: password prompt */
+  --sd-ui-password-prompt-gap: 12px;
+  --sd-ui-password-prompt-heading-size: var(--sd-ui-font-size-500, 15px);
+  --sd-ui-password-prompt-heading-weight: 600;
+  --sd-ui-password-prompt-heading-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-description-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-description-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-input-padding: 8px 10px;
+  --sd-ui-password-prompt-input-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-input-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-input-bg: var(--sd-ui-surface-bg, #fff);
+  --sd-ui-password-prompt-input-border: var(--sd-ui-border);
+  --sd-ui-password-prompt-input-focus-border: var(--sd-ui-action);
+  --sd-ui-password-prompt-input-radius: 4px;
+  --sd-ui-password-prompt-input-disabled-opacity: 0.6;
+  --sd-ui-password-prompt-error-size: var(--sd-ui-font-size-300, 13px);
+  --sd-ui-password-prompt-error-color: var(--sd-color-red-500);
+  --sd-ui-password-prompt-actions-gap: 8px;
+  --sd-ui-password-prompt-btn-padding: 6px 16px;
+  --sd-ui-password-prompt-btn-size: var(--sd-ui-font-size-400, 14px);
+  --sd-ui-password-prompt-btn-radius: 4px;
+  --sd-ui-password-prompt-btn-disabled-opacity: 0.5;
+  --sd-ui-password-prompt-cancel-bg: transparent;
+  --sd-ui-password-prompt-cancel-border: var(--sd-ui-border);
+  --sd-ui-password-prompt-cancel-color: var(--sd-ui-text);
+  --sd-ui-password-prompt-cancel-hover-bg: var(--sd-color-gray-100, #f5f5f5);
+  --sd-ui-password-prompt-submit-bg: var(--sd-ui-action);
+  --sd-ui-password-prompt-submit-border: var(--sd-ui-action);
+  --sd-ui-password-prompt-submit-color: var(--sd-ui-action-text, #fff);
+  --sd-ui-password-prompt-submit-hover-bg: var(--sd-ui-action-hover);
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);

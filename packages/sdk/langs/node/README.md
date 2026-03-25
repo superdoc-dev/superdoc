@@ -59,6 +59,16 @@ await doc.close();
 await client.dispose();
 ```
 
+## Encrypted Documents
+
+Pass `password` when opening a password-protected `.docx`:
+
+```ts
+const doc = await client.open({ doc: './secret.docx', password: 'mypassword' });
+```
+
+The password is forwarded only for the initial open and is not persisted. If the password is missing or wrong, the error includes a machine-readable code (`DOCX_PASSWORD_REQUIRED`, `DOCX_PASSWORD_INVALID`).
+
 ## API
 
 ### Client

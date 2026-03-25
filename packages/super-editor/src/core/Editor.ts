@@ -38,6 +38,7 @@ import {
   NoSourcePathError,
   FileSystemNotAvailableError,
   DocumentLoadError,
+  DocxEncryptionError,
 } from './errors/index.js';
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
@@ -170,6 +171,9 @@ export interface OpenOptions {
    * When omitted, Editor infers the value from the source type.
    */
   isNewFile?: boolean;
+
+  /** Password for opening encrypted .docx files. Cleared from memory after use. */
+  password?: string;
 }
 
 /**
@@ -770,6 +774,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
         jsonOverride: options?.json ?? null,
       };
 
+      // Password for encrypted .docx — threaded to loadXmlData, then cleared
+      const loadOptions = options?.password ? { password: options.password } : undefined;
+
       // Determine source type and load XML data
       if (typeof source === 'string') {
         // Node.js: read file from path
@@ -778,11 +785,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const fs = require('fs') as typeof import('fs');
           const buffer = fs.readFileSync(source);
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(buffer, true))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            buffer,
+            true,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = buffer;
+          resolvedOptions.fileSource = decryptedData ?? buffer;
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = source;
         } else {
@@ -793,11 +804,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
             throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
           }
           const blob = await response.blob();
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(blob))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            blob,
+            false,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = blob;
+          resolvedOptions.fileSource = decryptedData ?? blob;
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           // In browser, path is just a suggested filename
           this.#sourcePath = source.split('/').pop() || null;
@@ -811,23 +826,28 @@ export class Editor extends EventEmitter<EditorEventMap> {
         const hasArrayBuffer = typeof source === 'object' && 'buffer' in source && source.buffer instanceof ArrayBuffer;
 
         if (isNodeBuffer || isBlob || isArrayBuffer || hasArrayBuffer) {
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
             source as File | Blob | Buffer,
             isNodeBuffer,
+            loadOptions,
           ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.fileSource = decryptedData ?? (source as File | Blob | Buffer);
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         } else {
           // Unknown object type - try to load it anyway
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(source as File | Blob | Buffer, false))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            source as File | Blob | Buffer,
+            false,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.fileSource = decryptedData ?? (source as File | Blob | Buffer);
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         }
@@ -936,6 +956,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
         this.#registerCopyHandler();
       }
     } catch (error) {
+      // Encryption errors are structured and recoverable — surface them directly
+      // so consumers can inspect error.code (PASSWORD_REQUIRED, PASSWORD_INVALID, etc.)
+      if (error instanceof DocxEncryptionError) {
+        console.debug('[SuperDoc] Document load error:', error.message);
+        throw error;
+      }
       const err = error instanceof Error ? error : new Error(String(error));
       console.debug('[SuperDoc] Document load error:', err.message);
       throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
@@ -2020,14 +2046,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
   static async loadXmlData(
     fileSource: File | Blob | Buffer,
     isNode: boolean = false,
-  ): Promise<[DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>] | undefined> {
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  > {
     if (!fileSource) return;
 
     const zipper = new DocxZipper();
-    const xmlFiles = await zipper.getDocxData(fileSource, isNode);
+    const xmlFiles = await zipper.getDocxData(fileSource, isNode, {
+      password: options?.password,
+    });
     const mediaFiles = zipper.media;
 
-    return [xmlFiles, mediaFiles, zipper.mediaFiles, zipper.fonts];
+    // Return decrypted file data (if any) so callers can store the decrypted
+    // bytes instead of the original encrypted source for later export.
+    return [xmlFiles, mediaFiles, zipper.mediaFiles, zipper.fonts, zipper.decryptedFileData];
   }
 
   /**
@@ -3160,6 +3194,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       mediaFiles,
       fonts,
       isNewFile,
+      password,
       // Everything else is EditorOptions
       ...editorConfig
     } = resolvedConfig;
@@ -3176,6 +3211,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       mediaFiles,
       fonts,
       isNewFile,
+      password,
     };
 
     // Use new API mode for static factory
@@ -3469,9 +3505,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
-    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(newFile))!;
+    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
       fileSource: newFile,
       content: docx,

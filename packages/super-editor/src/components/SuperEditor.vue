@@ -2,6 +2,7 @@
 import 'tippy.js/dist/tippy.css';
 import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
 import { Editor } from '@superdoc/super-editor';
+import { DocxEncryptionError } from '@core/ooxml-encryption/errors.js';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import ContextMenu from './context-menu/ContextMenu.vue';
@@ -23,7 +24,7 @@ import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } fro
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid and not password protected.';
+const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid.';
 
 const props = defineProps({
   documentId: {
@@ -779,9 +780,23 @@ const loadNewFileData = async () => {
   }
 
   try {
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value);
+    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value, false, {
+      password: props.options.password,
+    });
     return { content: docx, media, mediaFiles, fonts };
   } catch (err) {
+    // Encryption errors are recoverable (user can supply a password).
+    // Surface them to the consumer and do NOT fall back to a blank document.
+    if (err instanceof DocxEncryptionError) {
+      const handled =
+        typeof props.options.onException === 'function' &&
+        props.options.onException({ error: err, editor: null, code: err.code }) === true;
+      if (!handled) {
+        console.debug('[SuperDoc] Error loading file:', err);
+      }
+      throw err;
+    }
+
     console.debug('[SuperDoc] Error loading file:', err);
     if (typeof props.options.onException === 'function') {
       props.options.onException({ error: err, editor: null });
@@ -819,9 +834,20 @@ const notifyFileLoadError = () => {
 const initializeData = async () => {
   // If we have the file, initialize immediately from file
   if (props.fileSource) {
-    let fileData = await loadNewFileData();
+    let fileData;
+    try {
+      fileData = await loadNewFileData();
+    } catch (err) {
+      if (err instanceof DocxEncryptionError) {
+        // Encryption errors are already surfaced via onException.
+        // Do NOT fall back to a blank document — the consumer should
+        // handle the error (e.g. prompt for a password and re-mount).
+        return;
+      }
+      throw err;
+    }
     if (!fileData) {
-      // TODO: show a visible error to the user (toast removed with naive-ui)
+      // Generic load failure (corrupt/invalid file) — fall back to blank
       notifyFileLoadError();
       await setDefaultBlankFile();
       fileData = await loadNewFileData();
@@ -888,8 +914,13 @@ const initializeData = async () => {
         // First client — load blank document
         props.options.isNewFile = true;
         delete props.options.fragment;
-        const fileData = await loadNewFileData();
-        if (fileData) initEditor(fileData);
+        try {
+          const fileData = await loadNewFileData();
+          if (fileData) initEditor(fileData);
+        } catch (err) {
+          if (err instanceof DocxEncryptionError) return;
+          throw err;
+        }
       }
     });
   }

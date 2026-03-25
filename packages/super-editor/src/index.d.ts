@@ -197,6 +197,8 @@ export interface OpenOptions {
   content?: unknown;
   mediaFiles?: Record<string, unknown>;
   fonts?: Record<string, unknown>;
+  /** Password for opening encrypted .docx files. Cleared from memory after use. */
+  password?: string;
 }
 
 // ============================================
@@ -475,6 +477,7 @@ export declare class Editor {
   static loadXmlData(
     fileSource: File | Blob | BinaryData,
     isNode?: boolean,
+    options?: { password?: string },
   ): Promise<[DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>] | undefined>;
 
   /** Open a document with smart defaults. */
@@ -1111,3 +1114,24 @@ export declare const Extensions: {
 
 export declare const TrackChangesBasePluginKey: any;
 export declare const CommentsPluginKey: any;
+
+// ============================================
+// ENCRYPTION
+// ============================================
+
+/** Error codes for OOXML encryption failures. */
+export declare const DocxEncryptionErrorCode: {
+  readonly PASSWORD_REQUIRED: 'DOCX_PASSWORD_REQUIRED';
+  readonly PASSWORD_INVALID: 'DOCX_PASSWORD_INVALID';
+  readonly ENCRYPTION_UNSUPPORTED: 'DOCX_ENCRYPTION_UNSUPPORTED';
+  readonly DECRYPTION_FAILED: 'DOCX_DECRYPTION_FAILED';
+};
+
+export type DocxEncryptionErrorCode = (typeof DocxEncryptionErrorCode)[keyof typeof DocxEncryptionErrorCode];
+
+/** Thrown when a DOCX file is encrypted and cannot be processed. */
+export declare class DocxEncryptionError extends Error {
+  readonly code: DocxEncryptionErrorCode;
+  readonly cause?: Error;
+  constructor(code: DocxEncryptionErrorCode, message: string, cause?: Error);
+}

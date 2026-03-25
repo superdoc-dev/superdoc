@@ -90,6 +90,13 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
   flag: 'user-email',
   type: 'string',
 };
+const PASSWORD_PARAM: CliOperationParamSpec = {
+  name: 'password',
+  kind: 'flag',
+  type: 'string',
+  description: 'Password for opening encrypted DOCX files.',
+  agentVisible: false,
+};
 
 // ---------------------------------------------------------------------------
 // Schema → param derivation
@@ -1032,6 +1039,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
       USER_NAME_PARAM,
       USER_EMAIL_PARAM,
+      PASSWORD_PARAM,
     ],
     constraints: null,
   },

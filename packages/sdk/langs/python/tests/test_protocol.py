@@ -447,3 +447,20 @@ class TestRealContractUserInjection:
         assert '--user-email' in argv
         idx = argv.index('--user-email')
         assert argv[idx + 1] == 'bot@co.com'
+
+    def test_generated_doc_open_has_password_param(self):
+        op = self._op_index['doc.open']
+        param_names = [p['name'] for p in op['params']]
+        assert 'password' in param_names
+
+    def test_password_emits_flag_with_real_spec(self):
+        op = self._op_index['doc.open']
+        argv = build_operation_argv(op, {'doc': 'secret.docx', 'password': 'test123'})
+        assert '--password' in argv
+        idx = argv.index('--password')
+        assert argv[idx + 1] == 'test123'
+
+    def test_password_omitted_when_not_provided(self):
+        op = self._op_index['doc.open']
+        argv = build_operation_argv(op, {'doc': 'plain.docx'})
+        assert '--password' not in argv

@@ -343,6 +343,101 @@ superdoc.openSurface({
   There is no built-in surface registry yet. If you use `kind`, you must provide `modules.surfaces.resolver`.
 </Warning>
 
+## Built-in password prompt
+
+SuperDoc includes a built-in password dialog for encrypted DOCX files. It is enabled by default. On wrong password, the dialog stays open and shows an error. On success, the document loads normally.
+
+You can configure it via `modules.surfaces.passwordPrompt`:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: encryptedFile,
+  modules: {
+    surfaces: {
+      passwordPrompt: true,
+    },
+  },
+});
+```
+
+### Custom labels
+
+Pass an object to override the default titles and button text:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      title: 'Unlock document',
+      invalidTitle: 'Wrong password — try again',
+      submitLabel: 'Unlock',
+      cancelLabel: 'Dismiss',
+    },
+  },
+}
+```
+
+<ParamField path="modules.surfaces.passwordPrompt" type="boolean | Object" default="true">
+  Built-in password prompt for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable.
+
+  <Expandable title="properties">
+    <ParamField path="title" type="string" default="'Password Required'">
+      Dialog heading on first attempt
+    </ParamField>
+    <ParamField path="invalidTitle" type="string" default="'Incorrect Password'">
+      Dialog heading after a wrong password
+    </ParamField>
+    <ParamField path="submitLabel" type="string" default="'Open'">
+      Submit button text
+    </ParamField>
+    <ParamField path="cancelLabel" type="string" default="'Cancel'">
+      Cancel button text
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Custom password UI via resolver
+
+To replace the built-in dialog with your own component, add a resolver that handles the `'password-prompt'` kind. Keep `passwordPrompt` enabled so the password flow stays active:
+
+```javascript
+import MyPasswordDialog from './MyPasswordDialog.vue';
+
+new SuperDoc({
+  selector: '#editor',
+  document: encryptedFile,
+  modules: {
+    surfaces: {
+      passwordPrompt: true,
+      resolver: (request) => {
+        if (request.kind === 'password-prompt') {
+          return {
+            type: 'custom',
+            component: MyPasswordDialog,
+            props: {
+              attemptPassword: request.payload.attemptPassword,
+              errorCode: request.payload.errorCode,
+            },
+          };
+        }
+      },
+    },
+  },
+});
+```
+
+Your custom component receives `resolve` and `close` as reserved props, plus whatever you pass in `props`. Call `request.payload.attemptPassword(password)` to retry — it returns `{ success: true }` or `{ success: false, errorCode }`. On success, call `resolve()` to close the dialog.
+
+### Relationship with the exception event
+
+If `passwordPrompt` is disabled, encrypted files emit a `DOCX_PASSWORD_REQUIRED` or `DOCX_PASSWORD_INVALID` code on the `exception` event. Your app can handle password entry entirely through that event if you prefer.
+
+When `passwordPrompt` is enabled, the built-in dialog handles retry automatically. The `exception` event still fires (with `documentId` in the payload) so your app can log or track failures.
+
+### Multi-document handling
+
+When multiple encrypted documents are loaded, the password prompt queues one dialog at a time in FIFO order. After the user submits or cancels for one document, the next dialog appears.
 ## Styling
 
 Background, shadow, border radius, padding, and edge offset are all customizable via `--sd-ui-surface-*` and `--sd-ui-floating-*` CSS variables. See the full token table in [Custom themes](/guides/general/custom-themes#surfaces).

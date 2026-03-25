@@ -45,6 +45,7 @@ catalog:
   '@vue/test-utils': ^2.4.6
   buffer-crc32: ^1.0.0
   canvas: ^3.2.0
+  cfb: ^1.2.2
   color2k: ^2.0.3
   concurrently: ^9.1.2
   dotenv: ^16.4.7

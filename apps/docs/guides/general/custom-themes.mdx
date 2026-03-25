@@ -342,6 +342,41 @@ Dialog and floating overlays rendered above document content. Style with CSS var
 | `--sd-ui-floating-max-height` | `min(60vh, calc(100% - 32px))` | Floating surface max height |
 | `--sd-ui-floating-edge-offset` | `16px` | Offset from edges for placement presets |
 
+### Password prompt
+
+The built-in password dialog for encrypted DOCX files. All variables default to the shared UI tokens.
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `--sd-ui-password-prompt-gap` | `12px` | Vertical spacing between sections |
+| `--sd-ui-password-prompt-heading-size` | inherits `--sd-ui-font-size-500` | Heading font size |
+| `--sd-ui-password-prompt-heading-weight` | `600` | Heading font weight |
+| `--sd-ui-password-prompt-heading-color` | inherits `--sd-ui-text` | Heading text color |
+| `--sd-ui-password-prompt-description-size` | inherits `--sd-ui-font-size-400` | Description font size |
+| `--sd-ui-password-prompt-description-color` | inherits `--sd-ui-text` | Description text color |
+| `--sd-ui-password-prompt-input-padding` | `8px 10px` | Input padding |
+| `--sd-ui-password-prompt-input-size` | inherits `--sd-ui-font-size-400` | Input font size |
+| `--sd-ui-password-prompt-input-color` | inherits `--sd-ui-text` | Input text color |
+| `--sd-ui-password-prompt-input-bg` | inherits `--sd-ui-surface-bg` | Input background |
+| `--sd-ui-password-prompt-input-border` | inherits `--sd-ui-border` | Input border color |
+| `--sd-ui-password-prompt-input-focus-border` | inherits `--sd-ui-action` | Input border on focus |
+| `--sd-ui-password-prompt-input-radius` | `4px` | Input border radius |
+| `--sd-ui-password-prompt-input-disabled-opacity` | `0.6` | Input opacity when disabled/busy |
+| `--sd-ui-password-prompt-error-size` | inherits `--sd-ui-font-size-300` | Error message font size |
+| `--sd-ui-password-prompt-error-color` | inherits `--sd-color-red-500` | Error message color |
+| `--sd-ui-password-prompt-actions-gap` | `8px` | Gap between buttons |
+| `--sd-ui-password-prompt-btn-padding` | `6px 16px` | Button padding |
+| `--sd-ui-password-prompt-btn-size` | inherits `--sd-ui-font-size-400` | Button font size |
+| `--sd-ui-password-prompt-btn-radius` | `4px` | Button border radius |
+| `--sd-ui-password-prompt-btn-disabled-opacity` | `0.5` | Button opacity when disabled |
+| `--sd-ui-password-prompt-cancel-bg` | `transparent` | Cancel button background |
+| `--sd-ui-password-prompt-cancel-border` | inherits `--sd-ui-border` | Cancel button border |
+| `--sd-ui-password-prompt-cancel-color` | inherits `--sd-ui-text` | Cancel button text color |
+| `--sd-ui-password-prompt-cancel-hover-bg` | inherits `--sd-color-gray-100` | Cancel button hover background |
+| `--sd-ui-password-prompt-submit-bg` | inherits `--sd-ui-action` | Submit button background |
+| `--sd-ui-password-prompt-submit-border` | inherits `--sd-ui-action` | Submit button border |
+| `--sd-ui-password-prompt-submit-color` | inherits `--sd-ui-action-text` | Submit button text color |
+| `--sd-ui-password-prompt-submit-hover-bg` | inherits `--sd-ui-action-hover` | Submit button hover background |
 ## Source files
 
 Token definitions live in your `node_modules/superdoc/` package:

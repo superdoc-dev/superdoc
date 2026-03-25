@@ -18,7 +18,7 @@ import { shallowRef } from 'vue';
  * @property {((ctx: ExternalSurfaceRenderContext) => ({ destroy?: () => void } | void))} [render] External renderer
  * @property {(data?: unknown) => void} resolve Content-facing: settle with 'submitted'
  * @property {(reason?: unknown) => void} close Content-facing: settle with 'closed' and clear slot
- * @property {(outcome: SurfaceOutcome) => boolean} settle Settle the handle promise (internal)
+* @property {(outcome: SurfaceOutcome) => boolean} settle Settle the handle promise (internal)
  * @property {boolean} settled Whether the handle has already been settled
  */
 

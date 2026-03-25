@@ -70,6 +70,16 @@ Set `default_change_mode="tracked"` to make mutations use tracked changes by def
 
 The SDK also exposes a synchronous `SuperDocClient` with the same document-handle methods when you prefer non-async code paths.
 
+### Encrypted documents
+
+Pass `password` when opening a password-protected `.docx`:
+
+```python
+doc = await client.open({"doc": "./secret.docx", "password": "mypassword"})
+```
+
+The password is forwarded only for the initial open and is not persisted. If the password is missing or wrong, the error includes a machine-readable code (`DOCX_PASSWORD_REQUIRED`, `DOCX_PASSWORD_INVALID`).
+
 ### Sync
 
 ```python

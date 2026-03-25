@@ -6,6 +6,7 @@ import { superdocIcons } from './icons.js';
 //prettier-ignore
 import {
   getCurrentInstance,
+  inject,
   ref,
   onMounted,
   onBeforeUnmount,
@@ -37,9 +38,11 @@ import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
+import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
+const getDocumentLoadPassword = (doc) => doc.password ?? proxy.$superdoc.config.password;
 
 // Stores
 const superdocStore = useSuperdocStore();
@@ -56,6 +59,13 @@ const {
   activeZoom,
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
+
+// Password prompt coordinator — uses surfaces to show a dialog for encrypted DOCX files.
+const surfaceManager = inject('surfaceManager', null);
+const passwordPrompt = usePasswordPrompt({
+  getSurfaceManager: () => surfaceManager,
+  getPasswordPromptConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.passwordPrompt,
+});
 
 /*
 NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
@@ -299,7 +309,14 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   if (doc) {
+    // Notify the password prompt coordinator so a pending retry resolves.
+    passwordPrompt.handleEditorReady(doc);
+
     doc.setPresentationEditor(presentationEditor);
+    // Passwords are only needed during the initial encrypted-file load.
+    // Clear the per-document copy once the editor is ready so the value does
+    // not linger on the reactive document model.
+    if (doc.password) doc.password = undefined;
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
 
@@ -578,8 +595,11 @@ const onEditorContentError = ({ error, editor }) => {
   proxy.$superdoc.emit('content-error', { error, editor });
 };
 
-const onEditorException = ({ error, editor }) => {
-  proxy.$superdoc.emit('exception', { error, editor });
+const onEditorException = (doc, { error, editor, code }) => {
+  const handled = passwordPrompt.handleEncryptionError(doc, code);
+  if (handled) return true;
+  proxy.$superdoc.emit('exception', { error, editor, code, documentId: doc?.id });
+  return false;
 };
 
 const onEditorListdefinitionsChange = (params) => {
@@ -641,7 +661,7 @@ const editorOptions = (doc) => {
     onSelectionUpdate: onEditorSelectionChange,
     onCollaborationReady: onEditorCollaborationReady,
     onContentError: onEditorContentError,
-    onException: onEditorException,
+    onException: (payload) => onEditorException(doc, payload),
     onCommentsLoaded,
     onCommentsUpdate: onEditorCommentsUpdate,
     onCommentLocationsUpdate: (payload) => onEditorCommentLocationsUpdate(doc, payload),
@@ -651,6 +671,7 @@ const editorOptions = (doc) => {
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
     isNewFile,
+    password: getDocumentLoadPassword(doc),
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
@@ -1054,6 +1075,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  passwordPrompt.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
@@ -1423,7 +1445,11 @@ const getPDFViewer = () => {
           :opacity="whiteboardOpacity"
         />
 
-        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+        <div
+          class="superdoc__sub-document sub-document"
+          v-for="doc in documents"
+          :key="`${doc.id}:${doc.editorMountNonce}`"
+        >
           <!-- PDF renderer -->
           <PdfViewer
             v-if="doc.type === PDF"

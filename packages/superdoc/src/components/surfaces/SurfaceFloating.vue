@@ -11,6 +11,8 @@ const floatingRef = ref(null);
 defineExpose({ rootEl: floatingRef });
 
 const titleId = computed(() => (props.surface.request.title ? `sd-surface-title-${props.surface.id}` : undefined));
+const labelledBy = computed(() => titleId.value ?? props.surface.request.ariaLabelledBy ?? undefined);
+const ariaLabel = computed(() => (labelledBy.value ? undefined : props.surface.request.ariaLabel));
 
 // ---------------------------------------------------------------------------
 // Positioning — explicit insets beat placement presets
@@ -102,7 +104,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="floatingRef" :class="floatingClasses" :style="floatingStyle" role="dialog" :aria-labelledby="titleId">
+  <div
+    ref="floatingRef"
+    :class="floatingClasses"
+    :style="floatingStyle"
+    role="dialog"
+    :aria-labelledby="labelledBy"
+    :aria-label="ariaLabel"
+  >
     <div v-if="surface.request.title" :id="titleId" class="sd-surface-floating__title">
       {{ surface.request.title }}
     </div>

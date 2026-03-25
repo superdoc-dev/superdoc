@@ -65,6 +65,17 @@ const surfaceManager = inject('surfaceManager', null);
 const passwordPrompt = usePasswordPrompt({
   getSurfaceManager: () => surfaceManager,
   getPasswordPromptConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.passwordPrompt,
+  onUnhandled: (doc, errorCode, originalException) => {
+    // The password prompt initially claimed this error but could not show a dialog
+    // (resolver returned { type: 'none' }, config was invalid, or resolver threw).
+    // Re-emit the original exception event so the app can handle it.
+    proxy.$superdoc?.emit('exception', {
+      error: originalException?.error ?? new Error(`Password prompt unhandled: ${errorCode}`),
+      editor: originalException?.editor ?? null,
+      code: errorCode,
+      documentId: doc?.id,
+    });
+  },
 });
 
 /*
@@ -603,7 +614,7 @@ const onEditorContentError = ({ error, editor }) => {
 };
 
 const onEditorException = (doc, { error, editor, code }) => {
-  const handled = passwordPrompt.handleEncryptionError(doc, code);
+  const handled = passwordPrompt.handleEncryptionError(doc, code, { error, editor });
   if (handled) return true;
   proxy.$superdoc.emit('exception', { error, editor, code, documentId: doc?.id });
   return false;

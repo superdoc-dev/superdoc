@@ -46,6 +46,9 @@ Open a `dialog` or `floating` surface above the document.
     <ParamField path="title" type="string">
       Optional title rendered in the surface chrome
     </ParamField>
+    <ParamField path="ariaLabel" type="string">
+      Accessible name for the surface when no visible `title` is provided. Used as `aria-label` on the surface element (dialog or floating). Ignored when `title` or `ariaLabelledBy` is set.
+    </ParamField>
     <ParamField path="closeOnEscape" type="boolean" default="true">
       Whether `Escape` closes the surface
     </ParamField>
@@ -343,11 +346,9 @@ superdoc.openSurface({
   There is no built-in surface registry yet. If you use `kind`, you must provide `modules.surfaces.resolver`.
 </Warning>
 
-## Built-in password prompt
+## Password prompt
 
-SuperDoc includes a built-in password dialog for encrypted DOCX files. It is enabled by default. On wrong password, the dialog stays open and shows an error. On success, the document loads normally.
-
-You can configure it via `modules.surfaces.passwordPrompt`:
+SuperDoc includes a built-in password dialog for encrypted DOCX files. Enabled by default. On wrong password, the dialog stays open and shows an error. On success, the document loads normally.
 
 ```javascript
 new SuperDoc({
@@ -355,15 +356,25 @@ new SuperDoc({
   document: encryptedFile,
   modules: {
     surfaces: {
-      passwordPrompt: true,
+      passwordPrompt: true, // default — can omit
     },
   },
 });
 ```
 
-### Custom labels
+Set to `false` to disable:
 
-Pass an object to override the default titles and button text:
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: false,
+  },
+}
+```
+
+### Text customization
+
+Override any of the built-in copy:
 
 ```javascript
 modules: {
@@ -371,22 +382,36 @@ modules: {
     passwordPrompt: {
       title: 'Unlock document',
       invalidTitle: 'Wrong password — try again',
+      description: 'This file requires a password.',
       submitLabel: 'Unlock',
       cancelLabel: 'Dismiss',
+      busyLabel: 'Opening\u2026',
+      invalidMessage: 'That password is wrong. Try again.',
+      timeoutMessage: 'Took too long. Try again.',
+      genericErrorMessage: 'Could not open this file.',
     },
   },
 }
 ```
 
-<ParamField path="modules.surfaces.passwordPrompt" type="boolean | Object" default="true">
-  Built-in password prompt for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable.
+<ParamField path="modules.surfaces.passwordPrompt" type="false | true | Object" default="true">
+  Password prompt configuration. Enabled by default when omitted; set to `false` to disable.
 
-  <Expandable title="properties">
+  <Expandable title="text fields">
     <ParamField path="title" type="string" default="'Password Required'">
       Dialog heading on first attempt
     </ParamField>
     <ParamField path="invalidTitle" type="string" default="'Incorrect Password'">
       Dialog heading after a wrong password
+    </ParamField>
+    <ParamField path="description" type="string" default="'This document is password protected. Enter the password to open it.'">
+      Explanatory text below the heading
+    </ParamField>
+    <ParamField path="placeholder" type="string" default="'Enter password'">
+      Input placeholder text
+    </ParamField>
+    <ParamField path="inputAriaLabel" type="string" default="'Document password'">
+      Accessible label for the password input
     </ParamField>
     <ParamField path="submitLabel" type="string" default="'Open'">
       Submit button text
@@ -394,46 +419,168 @@ modules: {
     <ParamField path="cancelLabel" type="string" default="'Cancel'">
       Cancel button text
     </ParamField>
+    <ParamField path="busyLabel" type="string" default="'Decrypting\u2026'">
+      Submit button text while decrypting
+    </ParamField>
+    <ParamField path="invalidMessage" type="string" default="'Incorrect password. Please try again.'">
+      Error message for wrong password
+    </ParamField>
+    <ParamField path="timeoutMessage" type="string" default="'Timed out while decrypting. Please try again.'">
+      Error message for decryption timeout
+    </ParamField>
+    <ParamField path="genericErrorMessage" type="string" default="'Unable to decrypt this document.'">
+      Error message for other decryption failures
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="custom UI fields">
+    <ParamField path="component" type="Vue Component">
+      Custom Vue component rendered inside the dialog shell. Receives a `passwordPrompt` prop (see handle reference below). Mutually exclusive with `render`.
+    </ParamField>
+    <ParamField path="props" type="Record<string, unknown>">
+      Extra props passed to the custom Vue component. Component-only; ignored for `render`.
+    </ParamField>
+    <ParamField path="render" type="(ctx: PasswordPromptRenderContext) => { destroy?: () => void } | void">
+      Framework-agnostic renderer for React or manual DOM mounting. Mutually exclusive with `component`.
+    </ParamField>
+    <ParamField path="resolver" type="(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined">
+      Conditional resolver for per-document customization. Can coexist with `component`/`render` — the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in.
+    </ParamField>
   </Expandable>
 </ParamField>
 
-### Custom password UI via resolver
+### Custom Vue component
 
-To replace the built-in dialog with your own component, add a resolver that handles the `'password-prompt'` kind. Keep `passwordPrompt` enabled so the password flow stays active:
+Replace the built-in dialog content with your own Vue component. Your component receives a `passwordPrompt` prop with everything it needs:
 
 ```javascript
 import MyPasswordDialog from './MyPasswordDialog.vue';
 
-new SuperDoc({
-  selector: '#editor',
-  document: encryptedFile,
-  modules: {
-    surfaces: {
-      passwordPrompt: true,
-      resolver: (request) => {
-        if (request.kind === 'password-prompt') {
-          return {
-            type: 'custom',
-            component: MyPasswordDialog,
-            props: {
-              attemptPassword: request.payload.attemptPassword,
-              errorCode: request.payload.errorCode,
-            },
-          };
-        }
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      component: MyPasswordDialog,
+    },
+  },
+}
+```
+
+Inside your component:
+
+```vue
+<script setup>
+const props = defineProps({
+  passwordPrompt: { type: Object, required: true },
+  resolve: { type: Function, required: true },
+  close: { type: Function, required: true },
+});
+
+async function handleSubmit(password) {
+  const result = await props.passwordPrompt.attemptPassword(password);
+  if (result.success) {
+    props.resolve(); // no args required
+  }
+  // result.errorCode tells you what went wrong
+}
+</script>
+```
+
+### Custom render function (React, vanilla JS)
+
+Use `render` for framework-agnostic mounting. The render function receives a `PasswordPromptRenderContext`:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      render: (ctx) => {
+        // ctx.container — empty DOM element to render into
+        // ctx.passwordPrompt — the handle (documentId, errorCode, texts, attemptPassword)
+        // ctx.resolve — call on success
+        // ctx.close — call to dismiss
+
+        const root = ReactDOM.createRoot(ctx.container);
+        root.render(<MyPasswordPrompt passwordPrompt={ctx.passwordPrompt} resolve={ctx.resolve} close={ctx.close} />);
+        return { destroy: () => root.unmount() };
       },
     },
   },
-});
+}
 ```
 
-Your custom component receives `resolve` and `close` as reserved props, plus whatever you pass in `props`. Call `request.payload.attemptPassword(password)` to retry — it returns `{ success: true }` or `{ success: false, errorCode }`. On success, call `resolve()` to close the dialog.
+### Conditional resolver
+
+Use `resolver` when you need per-document decisions. The resolver receives a read-only `PasswordPromptContext` (`documentId`, `errorCode`, `texts`) and returns a resolution:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      resolver: (ctx) => {
+        if (ctx.documentId === 'public-doc') {
+          return { type: 'none' }; // suppress prompt for this doc
+        }
+        return null; // fall through to built-in
+      },
+    },
+  },
+}
+```
+
+**Resolution types:**
+
+| Type | Behavior |
+|------|----------|
+| `null` / `undefined` | Fall through to `component`/`render` or built-in |
+| `{ type: 'default' }` | Same as `null` — fall through |
+| `{ type: 'none' }` | Suppress the password prompt for this document |
+| `{ type: 'custom', component, props? }` | Mount a Vue component in the dialog shell |
+| `{ type: 'external', render }` | Mount framework-agnostic UI in the dialog shell |
+
+The resolver can coexist with `component`/`render`. If the resolver returns `null` or `{ type: 'default' }`, the direct `component`/`render` is used. If neither is configured, the built-in prompt renders.
+
+**Precedence:** resolver → `component`/`render` → built-in.
+
+### The `passwordPrompt` handle
+
+Every custom UI (component or render) receives a `passwordPrompt` handle with this shape:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `documentId` | `string` | The document ID requiring a password |
+| `errorCode` | `string` | `'DOCX_PASSWORD_REQUIRED'` or `'DOCX_PASSWORD_INVALID'` |
+| `texts` | `ResolvedPasswordPromptTexts` | All 11 text strings resolved with defaults |
+| `attemptPassword` | `(password: string) => Promise<{ success, errorCode? }>` | Submit a password attempt |
+
+### How actions work
+
+**Submit / unlock button:**
+1. Call `await passwordPrompt.attemptPassword(password)`
+2. If `{ success: true }` — call `resolve()` to close the dialog
+3. If `{ success: false, errorCode }` — keep the dialog open, show your error state
+
+`resolve()` with no arguments is sufficient. The password flow does not consume the resolved data.
+
+**Cancel / dismiss button:**
+- Call `close('user-cancelled')`
+
+**Other actions** (forgot password, help links): app-owned. Keep the dialog open or close with a custom reason.
+
+<Warning>
+  Do not set `doc.password` or increment `editorMountNonce` directly. Use `passwordPrompt.attemptPassword(password)` — it handles the document mutation and remount internally.
+</Warning>
+
+### `{ type: 'none' }` semantics
+
+`{ type: 'none' }` means **suppress SuperDoc's password prompt**. The resolver context does not expose `attemptPassword`, so `none` cannot be used to build a self-hosted modal that retries passwords through SuperDoc.
+
+Use this when your app handles passwords entirely outside SuperDoc — for example, pre-prompting before instantiation or server-side decryption. For global suppression, use `passwordPrompt: false` instead.
 
 ### Relationship with the exception event
 
-If `passwordPrompt` is disabled, encrypted files emit a `DOCX_PASSWORD_REQUIRED` or `DOCX_PASSWORD_INVALID` code on the `exception` event. Your app can handle password entry entirely through that event if you prefer.
+If `passwordPrompt` is disabled, encrypted files emit `DOCX_PASSWORD_REQUIRED` or `DOCX_PASSWORD_INVALID` on the `exception` event. Your app can handle password entry through that event instead.
 
-When `passwordPrompt` is enabled, the built-in dialog handles retry automatically. The `exception` event still fires (with `documentId` in the payload) so your app can log or track failures.
+When `passwordPrompt` is enabled, recoverable encryption errors are intercepted by the password prompt flow. If the prompt renders successfully (built-in, custom, or external), the `exception` event is suppressed. If the prompt cannot render (resolver returned `{ type: 'none' }`, invalid config, or resolver threw), the original `exception` event is re-emitted so your app can handle it.
 
 ### Multi-document handling
 

@@ -106,6 +106,8 @@
  * @property {string} kind Opaque intent identifier used by the resolver
  * @property {SurfaceMode} mode Presentation mode
  * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
+ * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
  * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
@@ -129,6 +131,8 @@
  * @property {string} [id] Optional surface id (auto-generated if omitted)
  * @property {SurfaceMode} mode Presentation mode
  * @property {string} [title] Optional title rendered in the surface chrome
+ * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
+ * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
  * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
@@ -233,12 +237,81 @@
  */
 
 /**
- * Configuration for the built-in password prompt surface.
+ * All customizable text strings for the password prompt, resolved with defaults.
+ * @typedef {Object} ResolvedPasswordPromptTexts
+ * @property {string} title Dialog title for first attempt
+ * @property {string} invalidTitle Dialog title after wrong password
+ * @property {string} description Explanatory text shown below the title
+ * @property {string} placeholder Input placeholder text
+ * @property {string} inputAriaLabel Accessible label for the password input
+ * @property {string} submitLabel Submit button text
+ * @property {string} cancelLabel Cancel button text
+ * @property {string} busyLabel Submit button text while decrypting
+ * @property {string} invalidMessage Error message for wrong password
+ * @property {string} timeoutMessage Error message for decryption timeout
+ * @property {string} genericErrorMessage Error message for other failures
+ */
+
+/**
+ * Result of a password attempt via the `attemptPassword` function.
+ * @typedef {Object} PasswordPromptAttemptResult
+ * @property {boolean} success Whether the password was accepted
+ * @property {string} [errorCode] Error code when success is false (e.g. 'DOCX_PASSWORD_INVALID', 'timeout')
+ */
+
+/**
+ * Handle object injected into custom password prompt UIs as the `passwordPrompt` prop/context field.
+ * Provides document metadata, resolved texts, and the retry function.
+ * @typedef {Object} PasswordPromptHandle
+ * @property {string} documentId The document ID requiring a password
+ * @property {string} errorCode The current error code (e.g. 'DOCX_PASSWORD_REQUIRED', 'DOCX_PASSWORD_INVALID')
+ * @property {ResolvedPasswordPromptTexts} texts All text strings resolved with defaults
+ * @property {(password: string) => Promise<PasswordPromptAttemptResult>} attemptPassword Submit a password attempt. Returns the outcome; do not mutate document state directly.
+ */
+
+/**
+ * Read-only context passed to a password prompt resolver to decide how to render.
+ * Does NOT include `attemptPassword` — the resolver decides, it does not act.
+ * @typedef {Object} PasswordPromptContext
+ * @property {string} documentId The document ID requiring a password
+ * @property {string} errorCode The current error code
+ * @property {ResolvedPasswordPromptTexts} texts Resolved text strings
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) password prompt renderer.
+ * @typedef {Object} PasswordPromptRenderContext
+ * @property {HTMLElement} container Empty DOM container to render into
+ * @property {PasswordPromptHandle} passwordPrompt The password prompt handle
+ * @property {(data?: unknown) => void} resolve Resolves the surface with { status: 'submitted', data }
+ * @property {(reason?: unknown) => void} close Resolves the surface with { status: 'closed', reason }
+ * @property {string} surfaceId The surface id
+ * @property {SurfaceMode} mode Presentation mode
+ */
+
+/**
+ * Resolution returned by a password prompt resolver.
+ * @typedef {{ type: 'default' } | { type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: PasswordPromptRenderContext) => ({ destroy?: () => void } | void) }} PasswordPromptResolution
+ */
+
+/**
+ * Configuration for the password prompt surface.
  * @typedef {Object} PasswordPromptConfig
  * @property {string} [title] Dialog title for first attempt (default: 'Password Required')
  * @property {string} [invalidTitle] Dialog title after wrong password (default: 'Incorrect Password')
+ * @property {string} [description] Explanatory text (default: 'This document is password protected. Enter the password to open it.')
+ * @property {string} [placeholder] Input placeholder (default: 'Enter password')
+ * @property {string} [inputAriaLabel] Accessible label for the input (default: 'Document password')
  * @property {string} [submitLabel] Submit button text (default: 'Open')
  * @property {string} [cancelLabel] Cancel button text (default: 'Cancel')
+ * @property {string} [busyLabel] Submit button text while decrypting (default: 'Decrypting\u2026')
+ * @property {string} [invalidMessage] Error for wrong password (default: 'Incorrect password. Please try again.')
+ * @property {string} [timeoutMessage] Error for timeout (default: 'Timed out while decrypting. Please try again.')
+ * @property {string} [genericErrorMessage] Error for other failures (default: 'Unable to decrypt this document.')
+ * @property {unknown} [component] Vue component to render as custom password prompt content. Mutually exclusive with `render`.
+ * @property {Record<string, unknown>} [props] Extra props passed to the custom Vue component. Component-only; ignored for `render`.
+ * @property {(ctx: PasswordPromptRenderContext) => ({ destroy?: () => void } | void)} [render] External (framework-agnostic) renderer. Mutually exclusive with `component`.
+ * @property {(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined} [resolver] Conditional resolver for per-document customization. Can coexist with `component`/`render`.
  */
 
 /**

@@ -510,6 +510,9 @@ describe('SuperDoc.vue', () => {
       code: 'DOCX_PASSWORD_REQUIRED',
     });
 
+    // The built-in password prompt lazy-imports the component before opening
+    await vi.dynamicImportSettled();
+
     expect(surfaceManager.open).toHaveBeenCalledTimes(1);
     expect(
       superdocStub.emit.mock.calls.some(

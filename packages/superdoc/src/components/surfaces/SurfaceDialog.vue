@@ -12,6 +12,9 @@ const emit = defineEmits(['close']);
 
 const dialogRef = ref(null);
 const titleId = computed(() => (props.surface.request.title ? `sd-surface-title-${props.surface.id}` : undefined));
+// Precedence: title (via aria-labelledby to shell title) → ariaLabelledBy → ariaLabel
+const labelledBy = computed(() => titleId.value ?? props.surface.request.ariaLabelledBy ?? undefined);
+const ariaLabel = computed(() => (labelledBy.value ? undefined : props.surface.request.ariaLabel));
 
 // ---------------------------------------------------------------------------
 // Focus management
@@ -167,7 +170,8 @@ onBeforeUnmount(() => {
       :style="cardStyle"
       role="dialog"
       aria-modal="true"
-      :aria-labelledby="titleId"
+      :aria-labelledby="labelledBy"
+      :aria-label="ariaLabel"
       tabindex="-1"
     >
       <div v-if="surface.request.title" :id="titleId" class="sd-surface-dialog__title">

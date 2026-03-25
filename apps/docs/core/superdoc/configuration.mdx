@@ -274,8 +274,8 @@ new SuperDoc({
     <ParamField path="modules.surfaces.floating.autoFocus" type="boolean" default="true">
       Move focus into the first focusable child on open
     </ParamField>
-    <ParamField path="modules.surfaces.passwordPrompt" type="boolean | Object" default="true">
-      Built-in password dialog for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable, or pass an object to customize titles and button text. See [Surfaces — Built-in password prompt](/core/superdoc/surfaces#built-in-password-prompt).
+    <ParamField path="modules.surfaces.passwordPrompt" type="false | true | Object" default="true">
+      Password prompt for encrypted DOCX files. Enabled by default. Set to `false` to disable, `true` for defaults, or pass an object to customize text, provide a custom component/render function, or add a per-document resolver. See [Surfaces — Password prompt](/core/superdoc/surfaces#password-prompt).
     </ParamField>
   </Expandable>
 </ParamField>

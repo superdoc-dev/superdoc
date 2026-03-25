@@ -8,21 +8,18 @@ const props = defineProps({
   request: { type: Object, default: () => ({}) },
   resolve: { type: Function, default: () => {} },
   close: { type: Function, default: () => {} },
-  // Feature-specific props
-  attemptPassword: { type: Function, required: true },
-  errorCode: { type: String, default: 'DOCX_PASSWORD_REQUIRED' },
-  title: { type: String, default: 'Password Required' },
-  invalidTitle: { type: String, default: 'Incorrect Password' },
-  submitLabel: { type: String, default: 'Open' },
-  cancelLabel: { type: String, default: 'Cancel' },
+  // Feature-specific: the password prompt handle
+  passwordPrompt: { type: Object, required: true },
 });
 
 const password = ref('');
 const isBusy = ref(false);
-const isInvalid = ref(props.errorCode === 'DOCX_PASSWORD_INVALID');
-const errorMessage = ref(isInvalid.value ? 'Incorrect password. Please try again.' : '');
+const isInvalid = ref(props.passwordPrompt.errorCode === 'DOCX_PASSWORD_INVALID');
+const errorMessage = ref(isInvalid.value ? props.passwordPrompt.texts.invalidMessage : '');
 
-const heading = computed(() => (isInvalid.value ? props.invalidTitle : props.title));
+const heading = computed(() =>
+  isInvalid.value ? props.passwordPrompt.texts.invalidTitle : props.passwordPrompt.texts.title,
+);
 
 const canSubmit = computed(() => password.value.length > 0 && !isBusy.value);
 
@@ -32,7 +29,7 @@ async function handleSubmit() {
   isBusy.value = true;
   errorMessage.value = '';
 
-  const result = await props.attemptPassword(password.value);
+  const result = await props.passwordPrompt.attemptPassword(password.value);
 
   if (result.success) {
     props.resolve({ password: password.value });
@@ -45,11 +42,11 @@ async function handleSubmit() {
 
   if (result.errorCode === 'DOCX_PASSWORD_INVALID') {
     isInvalid.value = true;
-    errorMessage.value = 'Incorrect password. Please try again.';
+    errorMessage.value = props.passwordPrompt.texts.invalidMessage;
   } else if (result.errorCode === 'timeout') {
-    errorMessage.value = 'Timed out while decrypting. Please try again.';
+    errorMessage.value = props.passwordPrompt.texts.timeoutMessage;
   } else {
-    errorMessage.value = 'Unable to decrypt this document.';
+    errorMessage.value = props.passwordPrompt.texts.genericErrorMessage;
   }
 }
 
@@ -60,18 +57,18 @@ function handleCancel() {
 
 <template>
   <div class="sd-password-prompt" @keydown.enter.prevent="handleSubmit">
-    <h3 class="sd-password-prompt__heading">{{ heading }}</h3>
-    <p class="sd-password-prompt__description">This document is password protected. Enter the password to open it.</p>
+    <h3 :id="`sd-password-prompt-heading-${surfaceId}`" class="sd-password-prompt__heading">{{ heading }}</h3>
+    <p class="sd-password-prompt__description">{{ passwordPrompt.texts.description }}</p>
 
     <div class="sd-password-prompt__field">
       <input
         v-model="password"
         type="password"
         class="sd-password-prompt__input"
-        placeholder="Enter password"
+        :placeholder="passwordPrompt.texts.placeholder"
         :disabled="isBusy"
         autocomplete="current-password"
-        aria-label="Document password"
+        :aria-label="passwordPrompt.texts.inputAriaLabel"
       />
     </div>
 
@@ -86,7 +83,7 @@ function handleCancel() {
         :disabled="isBusy"
         @click="handleCancel"
       >
-        {{ cancelLabel }}
+        {{ passwordPrompt.texts.cancelLabel }}
       </button>
       <button
         type="button"
@@ -94,7 +91,7 @@ function handleCancel() {
         :disabled="!canSubmit"
         @click="handleSubmit"
       >
-        {{ isBusy ? 'Decrypting\u2026' : submitLabel }}
+        {{ isBusy ? passwordPrompt.texts.busyLabel : passwordPrompt.texts.submitLabel }}
       </button>
     </div>
   </div>

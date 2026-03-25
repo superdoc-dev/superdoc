@@ -168,6 +168,27 @@ describe('SurfaceHost', () => {
     expect(floating.attributes('aria-labelledby')).toBe('sd-surface-title-float-1');
   });
 
+  it('floating uses aria-label when no title is provided but ariaLabel is set', async () => {
+    manager.activeFloating.value = createSurface({
+      id: 'float-1',
+      mode: 'floating',
+      request: {
+        id: 'float-1',
+        mode: 'floating',
+        closeOnEscape: true,
+        ariaLabel: 'Floating Label',
+        floating: { placement: 'top-right' },
+      },
+    });
+    const wrapper = mountHost(manager);
+    await nextTick();
+
+    const floating = wrapper.find('.sd-surface-floating[role="dialog"]');
+    expect(floating.exists()).toBe(true);
+    expect(floating.attributes('aria-label')).toBe('Floating Label');
+    expect(floating.attributes('aria-labelledby')).toBeUndefined();
+  });
+
   it('dialog title renders when provided', async () => {
     manager.activeDialog.value = createSurface();
     const wrapper = mountHost(manager);
@@ -186,6 +207,44 @@ describe('SurfaceHost', () => {
     await nextTick();
 
     expect(wrapper.find('.sd-surface-dialog__title').exists()).toBe(false);
+  });
+
+  it('dialog uses aria-label when no title is provided but ariaLabel is set', async () => {
+    manager.activeDialog.value = createSurface({
+      request: {
+        id: 'test-1',
+        mode: 'dialog',
+        closeOnEscape: true,
+        closeOnBackdrop: true,
+        ariaLabel: 'Password Required',
+      },
+    });
+    const wrapper = mountHost(manager);
+    await nextTick();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.attributes('aria-label')).toBe('Password Required');
+    expect(dialog.attributes('aria-labelledby')).toBeUndefined();
+  });
+
+  it('dialog uses ariaLabelledBy when set (takes precedence over ariaLabel)', async () => {
+    manager.activeDialog.value = createSurface({
+      request: {
+        id: 'test-1',
+        mode: 'dialog',
+        closeOnEscape: true,
+        closeOnBackdrop: true,
+        ariaLabelledBy: 'my-heading-id',
+        ariaLabel: 'should-be-ignored',
+      },
+    });
+    const wrapper = mountHost(manager);
+    await nextTick();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.attributes('aria-labelledby')).toBe('my-heading-id');
+    expect(dialog.attributes('aria-label')).toBeUndefined();
   });
 
   it('renders custom Vue component content inside dialog', async () => {

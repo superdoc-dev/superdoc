@@ -190,8 +190,8 @@ const workspaceImports = new Map(); // module → Set<name>
 for (const filePath of dtsFiles) {
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
-  // Match: import { Foo, Bar } from '...' and import type { Foo } from '...'
-  const namedImports = fileContent.matchAll(/import\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
+  // Match: import/export { Foo, Bar } from '...' and import/export type { Foo } from '...'
+  const namedImports = fileContent.matchAll(/(?:import|export)\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
   for (const m of namedImports) {
     const mod = m[2];
 
@@ -221,7 +221,10 @@ for (const filePath of dtsFiles) {
   const bareRefs = fileContent.matchAll(/['"](@superdoc\/[^'"]+)['"]/g);
   for (const m of bareRefs) {
     const mod = m[1];
-    if (mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    // Skip @superdoc/super-editor (consumer-facing, not internal)
+    // Skip @superdoc/common root module (inlined separately), but allow subpath
+    // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
+    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor')) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }

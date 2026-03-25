@@ -449,6 +449,28 @@ describe('Editor Lifecycle API', () => {
         // Password must not leak onto the editor options
         expect((editor.options as Record<string, unknown>).password).toBeUndefined();
       }, 30_000);
+
+      it('should store decrypted ZIP bytes as fileSource, not the encrypted CFB', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+        const encryptedBuffer = readFileSync(encryptedPath);
+
+        editor = await Editor.open(encryptedBuffer, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          password: 'test123',
+        });
+
+        // fileSource must be the decrypted ZIP, not the original encrypted buffer
+        expect(editor.options.fileSource).not.toBe(encryptedBuffer);
+        const stored = editor.options.fileSource as Uint8Array;
+        // Verify stored bytes are a valid ZIP (PK magic)
+        expect(stored[0]).toBe(0x50); // 'P'
+        expect(stored[1]).toBe(0x4b); // 'K'
+      }, 30_000);
     });
   });
 

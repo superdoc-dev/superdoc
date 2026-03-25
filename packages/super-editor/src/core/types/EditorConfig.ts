@@ -280,8 +280,8 @@ export interface EditorOptions {
   /** Document converter */
   converter?: unknown | null;
 
-  /** Source of the file (File/Blob in browser, Buffer in Node.js) */
-  fileSource?: File | Blob | Buffer | null;
+  /** Source of the file (File/Blob in browser, Buffer/Uint8Array in Node.js) */
+  fileSource?: File | Blob | Buffer | Uint8Array | null;
 
   /** Initial editor state */
   initialState?: EditorState | null;

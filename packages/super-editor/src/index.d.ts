@@ -478,7 +478,10 @@ export declare class Editor {
     fileSource: File | Blob | BinaryData,
     isNode?: boolean,
     options?: { password?: string },
-  ): Promise<[DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>] | undefined>;
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  >;
 
   /** Open a document with smart defaults. */
   static open(

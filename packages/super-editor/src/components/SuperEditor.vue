@@ -780,21 +780,32 @@ const loadNewFileData = async () => {
   }
 
   try {
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value, false, {
+    const [docx, media, mediaFiles, fonts, decryptedData] = await Editor.loadXmlData(fileSource.value, false, {
       password: props.options.password,
     });
+    // Store the decrypted ZIP bytes so export paths use the valid ZIP, not the
+    // original encrypted CFB container.
+    if (decryptedData) {
+      fileSource.value = new Blob([decryptedData], { type: DOCX });
+    }
     return { content: docx, media, mediaFiles, fonts };
   } catch (err) {
     // Encryption errors are recoverable (user can supply a password).
-    // Surface them to the consumer and do NOT fall back to a blank document.
+    // Surface them to the consumer via onException.
     if (err instanceof DocxEncryptionError) {
       const handled =
         typeof props.options.onException === 'function' &&
         props.options.onException({ error: err, editor: null, code: err.code }) === true;
-      if (!handled) {
-        console.debug('[SuperDoc] Error loading file:', err);
+      if (handled) {
+        // Consumer acknowledged the error (e.g. will prompt for a password and
+        // re-mount). Re-throw so initializeData aborts without falling back to
+        // a blank document.
+        throw err;
       }
-      throw err;
+      // Not handled — return undefined so initializeData falls back to a blank
+      // document instead of leaving the component in an unusable empty state.
+      console.debug('[SuperDoc] Error loading file:', err);
+      return;
     }
 
     console.debug('[SuperDoc] Error loading file:', err);
@@ -839,9 +850,9 @@ const initializeData = async () => {
       fileData = await loadNewFileData();
     } catch (err) {
       if (err instanceof DocxEncryptionError) {
-        // Encryption errors are already surfaced via onException.
-        // Do NOT fall back to a blank document — the consumer should
-        // handle the error (e.g. prompt for a password and re-mount).
+        // Only reaches here when onException returned true (consumer handled
+        // the error, e.g. will prompt for a password and re-mount). Abort
+        // initialization so we don't fall back to a blank document.
         return;
       }
       throw err;

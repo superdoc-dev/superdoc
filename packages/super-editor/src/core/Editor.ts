@@ -3507,9 +3507,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
-    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(newFile, false, options))!;
+    const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
-      fileSource: newFile,
+      fileSource: decryptedData ?? newFile,
       content: docx,
       media,
       mediaFiles,

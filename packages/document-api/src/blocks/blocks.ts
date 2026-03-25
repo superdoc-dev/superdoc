@@ -39,6 +39,26 @@ const VALID_BLOCK_NODE_TYPES = new Set<string>(BLOCK_NODE_TYPES);
 // blocks.list validation
 // ---------------------------------------------------------------------------
 
+function normalizeBlocksListInput(input?: BlocksListInput): BlocksListInput | undefined {
+  if (!input) return input;
+
+  // Treat limit=0 as "all blocks" (same as omitting)
+  if (input.limit != null && input.limit === 0) {
+    const { limit: _, ...rest } = input;
+    input = Object.keys(rest).length > 0 ? rest : undefined;
+    if (!input) return input;
+  }
+
+  // Treat empty nodeTypes array as "no filter" (same as omitting)
+  if (Array.isArray(input.nodeTypes) && input.nodeTypes.length === 0) {
+    const { nodeTypes: _, ...rest } = input;
+    input = Object.keys(rest).length > 0 ? rest : undefined;
+    if (!input) return input;
+  }
+
+  return input;
+}
+
 function validateBlocksListInput(input?: BlocksListInput): void {
   if (!input) return;
 
@@ -166,8 +186,9 @@ function validateBlocksDeleteRangeInput(input: BlocksDeleteRangeInput): void {
 // ---------------------------------------------------------------------------
 
 export function executeBlocksList(adapter: BlocksAdapter, input?: BlocksListInput): BlocksListResult {
-  validateBlocksListInput(input);
-  return adapter.list(input);
+  const normalized = normalizeBlocksListInput(input);
+  validateBlocksListInput(normalized);
+  return adapter.list(normalized);
 }
 
 export function executeBlocksDelete(

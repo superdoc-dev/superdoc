@@ -28,7 +28,7 @@ Every editing tool needs a **target** — an address telling the API *where* to 
 
 ## Workflow
 
-Call `superdoc_get_content({action: "blocks"})` first — no limit, no filters, get the full document. This returns every block with nodeId, type, text, fontFamily, fontSize, color, and a **ref** handle. One call gives you everything: formatting values, positioning targets, and refs for editing. Do NOT add `limit`, `offset`, or `nodeTypes` filters.
+Call `superdoc_get_content({action: "blocks"})` first — just pass `action`, nothing else. This returns every block with nodeId, type, text, fontFamily, fontSize, color, and a **ref** handle. One call gives you everything: formatting values, positioning targets, and refs for editing.
 
 1. **Edit existing content**: Use `superdoc_search` to get a ref, then pass `ref` to `superdoc_edit` or `superdoc_format`. Do not build `target` objects manually.
 2. **Create new content**: Use `superdoc_create`, then use the `ref` from the response to apply formatting. DO NOT search after create.

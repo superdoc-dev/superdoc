@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: superdoc-ci-4cpu
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 

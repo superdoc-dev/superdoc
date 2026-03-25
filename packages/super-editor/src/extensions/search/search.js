@@ -715,7 +715,7 @@ export const Search = Extension.create({
        */
       replaceSearchMatch:
         (replacement) =>
-        ({ state, dispatch, editor }) => {
+        ({ state, dispatch, editor, commands }) => {
           const matches = this.storage.searchResults;
           const activeIdx = this.storage.activeMatchIndex;
 
@@ -735,8 +735,12 @@ export const Search = Extension.create({
           }
           if (dispatch) dispatch(tr);
 
+          // Sync chainable state getters to the mutated transaction before
+          // nested commands read state.doc for the refreshed session.
+          void state.tr;
+
           // Re-run search with same session options to refresh matches
-          const result = editor.commands.setSearchSession(this.storage.query, {
+          const result = commands.setSearchSession(this.storage.query, {
             caseSensitive: this.storage.caseSensitive,
             ignoreDiacritics: this.storage.ignoreDiacritics,
             highlight: this.storage.highlightEnabled,
@@ -752,7 +756,7 @@ export const Search = Extension.create({
 
             const nextMatch = result.matches[newIdx];
             if (nextMatch) {
-              editor.commands.goToSearchResult(nextMatch);
+              commands.goToSearchResult(nextMatch);
             }
           }
 
@@ -768,7 +772,7 @@ export const Search = Extension.create({
        */
       replaceAllSearchMatches:
         (replacement) =>
-        ({ state, dispatch, editor }) => {
+        ({ state, dispatch, commands }) => {
           const matches = this.storage.searchResults;
           if (!matches || matches.length === 0) {
             return { replacedCount: 0 };
@@ -794,7 +798,7 @@ export const Search = Extension.create({
           if (dispatch) dispatch(tr);
 
           // Clear session after replacing all
-          editor.commands.clearSearchSession();
+          commands.clearSearchSession();
 
           return { replacedCount: count };
         },

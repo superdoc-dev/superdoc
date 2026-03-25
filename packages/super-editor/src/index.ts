@@ -159,9 +159,9 @@ export type {
 } from './core/types/ChainedCommands.js';
 
 // Editor configuration types
-export type { OpenOptions, DocxFileEntry } from './core/types/EditorConfig.js';
+export type { DocxFileEntry } from './core/types/EditorConfig.js';
 export type { BinaryData, UnsupportedContentItem } from './core/types/EditorTypes.js';
-export type { SaveOptions, ExportOptions } from './core/Editor.js';
+export type { OpenOptions, SaveOptions, ExportOptions } from './core/Editor.js';
 
 // PresentationEditor public types
 export type {

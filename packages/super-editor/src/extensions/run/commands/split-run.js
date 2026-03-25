@@ -2,6 +2,7 @@
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
+import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
 import { clearInheritedLinkedStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
@@ -18,20 +19,6 @@ function clearHeadingStyleId(attrs) {
 
   const nextParagraphProperties = { ...paragraphProperties };
   delete nextParagraphProperties.styleId;
-
-  return {
-    ...attrs,
-    paragraphProperties: nextParagraphProperties,
-  };
-}
-
-function syncSplitParagraphRunProperties(attrs, runProperties) {
-  const nextParagraphProperties = { ...(attrs.paragraphProperties || {}) };
-  if (runProperties) {
-    nextParagraphProperties.runProperties = { ...runProperties };
-  } else {
-    delete nextParagraphProperties.runProperties;
-  }
 
   return {
     ...attrs,
@@ -117,7 +104,7 @@ export function splitBlockPatch(state, dispatch, editor) {
         // current run's runProperties on the new paragraph so the toolbar and
         // wrapTextInRunsPlugin know which inline formatting to inherit.
         if (atEnd && $from.parent.type.name === 'run') {
-          paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, $from.parent.attrs.runProperties ?? null);
+          paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, getSplitRunProperties(state, $from));
         }
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;

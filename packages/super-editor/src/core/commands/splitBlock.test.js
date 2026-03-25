@@ -12,6 +12,21 @@ vi.mock('prosemirror-transform', () => ({
   canSplit: vi.fn(() => true),
 }));
 
+vi.mock('@converter/styles.js', () => ({
+  decodeRPrFromMarks: vi.fn((marks) => {
+    const runProperties = {};
+    for (const mark of marks || []) {
+      if (mark?.type?.name === 'bold' && mark.attrs?.value !== '0' && mark.attrs?.value !== false) {
+        runProperties.bold = true;
+      }
+      if (mark?.type?.name === 'textStyle') {
+        Object.assign(runProperties, mark.attrs || {});
+      }
+    }
+    return runProperties;
+  }),
+}));
+
 /**
  * Create a mock resolved position ($from/$to) compatible with ProseMirror
  */
@@ -210,6 +225,59 @@ describe('splitBlock', () => {
   });
 
   describe('edge cases', () => {
+    it('prefers explicit storedMarks over the previous run when splitting at paragraph end', () => {
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const parentNode = {
+        contentMatchAt: vi.fn(() => ({
+          edgeCount: 1,
+          edge: vi.fn(() => ({ type: paragraphType })),
+        })),
+        canReplaceWith: vi.fn(() => true),
+      };
+      const textStyleMark = {
+        type: { name: 'textStyle' },
+        attrs: { fontFamily: 'Arial, sans-serif', fontSize: '12pt' },
+      };
+      const paragraphAttrs = { paragraphProperties: { runProperties: { bold: true } } };
+      const $from = createMockResolvedPos({
+        depth: 1,
+        parent: {
+          isBlock: true,
+          content: { size: 5 },
+          type: { name: 'paragraph' },
+          inlineContent: true,
+          attrs: paragraphAttrs,
+        },
+        parentOffset: 5,
+        node: vi.fn((depth) => {
+          if (depth === -1) return parentNode;
+          return { type: { name: 'paragraph' }, attrs: paragraphAttrs };
+        }),
+        nodeBefore: {
+          type: { name: 'run' },
+          attrs: { runProperties: { bold: true } },
+        },
+        indexAfter: vi.fn(() => 0),
+      });
+      const $to = createMockResolvedPos({
+        parentOffset: 5,
+        parent: { content: { size: 5 } },
+      });
+
+      mockState.storedMarks = [textStyleMark];
+      mockTr.selection = { $from, $to };
+      mockState.selection = mockTr.selection;
+      mockTr.doc = {
+        resolve: vi.fn((pos) => (pos === 1 ? $from : $to)),
+      };
+
+      const command = splitBlock();
+      command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
+
+      const [, , types] = mockTr.split.mock.calls[0];
+      expect(types[0].attrs.paragraphProperties.runProperties).toEqual(textStyleMark.attrs);
+    });
+
     it('preserves paragraph runProperties at paragraph end for an empty paragraph', () => {
       const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
       const parentNode = {

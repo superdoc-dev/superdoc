@@ -1,6 +1,7 @@
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '../helpers/defaultBlockAt.js';
+import { getSplitRunProperties, syncSplitParagraphRunProperties } from '../helpers/splitParagraphRunProperties.js';
 import { Attribute } from '../Attribute.js';
 import { clearInheritedLinkedStyleId } from './linkedStyleSplitHelpers.js';
 
@@ -27,43 +28,6 @@ const ensureMarks = (state, splittableMarks) => {
     const filtered = marks.filter((m) => splittableMarks?.includes(m.type.name));
     state.tr.ensureMarks(filtered);
   }
-};
-
-/**
- * Extracts runProperties from the run node at the cursor position.
- * When the cursor is directly inside a paragraph (not inside a run), it
- * looks at the node just before the cursor (which is typically a run node).
- * @param {import('prosemirror-model').ResolvedPos} $from
- * @returns {Record<string, unknown> | null}
- */
-const getRunPropertiesAtCursor = ($from) => {
-  const runNode = $from.nodeBefore;
-  if (runNode?.type.name === 'run' && runNode.attrs.runProperties) {
-    return { ...runNode.attrs.runProperties };
-  }
-
-  if ($from.parent?.type.name === 'paragraph' && $from.parent.content.size === 0) {
-    const paragraphRunProperties = $from.parent.attrs?.paragraphProperties?.runProperties;
-    if (paragraphRunProperties && typeof paragraphRunProperties === 'object') {
-      return { ...paragraphRunProperties };
-    }
-  }
-
-  return null;
-};
-
-const syncSplitParagraphRunProperties = (attrs, runProperties) => {
-  const nextParagraphProperties = { ...(attrs.paragraphProperties || {}) };
-  if (runProperties) {
-    nextParagraphProperties.runProperties = runProperties;
-  } else {
-    delete nextParagraphProperties.runProperties;
-  }
-
-  return {
-    ...attrs,
-    paragraphProperties: nextParagraphProperties,
-  };
 };
 
 /**
@@ -109,7 +73,7 @@ export const splitBlock =
       // current run's runProperties on the new paragraph so the toolbar and
       // wrapTextInRunsPlugin know which inline formatting to inherit.
       if (atEnd) {
-        const runProperties = getRunPropertiesAtCursor($from);
+        const runProperties = getSplitRunProperties(state, $from);
         newAttrs = syncSplitParagraphRunProperties(newAttrs, runProperties);
       }
       if (selection instanceof TextSelection) tr.deleteSelection();

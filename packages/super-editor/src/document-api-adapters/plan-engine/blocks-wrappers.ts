@@ -34,9 +34,6 @@ import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-hel
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getRevision } from './revision-tracker.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
-import { resolveRunProperties, resolveParagraphProperties } from '@superdoc/style-engine/ooxml';
-import type { OoxmlResolverParams, RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
-import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -68,69 +65,10 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
 
 const HEADING_PATTERN = /^Heading(\d)$/;
 
-// ---------------------------------------------------------------------------
-// Style-engine cascade context — built once per blocks.list call.
-// ---------------------------------------------------------------------------
-
-function buildResolverParams(editor: Editor): OoxmlResolverParams | null {
-  const translatedLinkedStyles = readTranslatedLinkedStyles(editor);
-  if (!translatedLinkedStyles?.styles) return null;
-  const converter = (
-    editor as unknown as { converter?: { translatedNumbering?: OoxmlResolverParams['translatedNumbering'] } }
-  ).converter;
-  return { translatedLinkedStyles, translatedNumbering: converter?.translatedNumbering };
-}
-
 /**
- * Build a minimal RunProperties from PM marks for the style-engine cascade.
- * Only includes explicitly-set inline properties so the cascade fills in the rest.
+ * Extract key formatting from a block node's first text run marks.
  */
-function buildInlineRprFromMarks(node: ProseMirrorNode): RunProperties {
-  const rpr: RunProperties = {};
-  let found = false;
-  node.descendants((child) => {
-    if (found) return false;
-    if (!child.isText) return;
-    const marks = child.marks ?? [];
-    for (const mark of marks) {
-      const name = (mark.type as { name?: string }).name;
-      const attrs = mark.attrs as Record<string, unknown>;
-      if (name === 'textStyle') {
-        if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) {
-          rpr.fontFamily = { ascii: attrs.fontFamily as string };
-        }
-        if (attrs.fontSize != null) {
-          const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
-          if (typeof raw === 'number' && Number.isFinite(raw)) rpr.fontSize = raw * 2; // to half-points
-        }
-        if (typeof attrs.color === 'string' && attrs.color) {
-          rpr.color = { 'w:val': attrs.color as string } as RunProperties['color'];
-        }
-      }
-      if (name === 'bold') rpr.bold = attrs.value !== false;
-      if (name === 'italic') rpr.italic = attrs.value !== false;
-      if (name === 'underline') {
-        const ut = attrs.underlineType;
-        rpr.underline = { 'w:val': typeof ut === 'string' && ut ? ut : 'single' } as RunProperties['underline'];
-      }
-      if (name === 'runProperties' && typeof attrs.styleId === 'string' && attrs.styleId) {
-        rpr.styleId = attrs.styleId;
-      }
-    }
-    found = true;
-    return false;
-  });
-  return rpr;
-}
-
-/**
- * Extract key formatting from a block node using the style-engine cascade.
- * Falls back to mark-only extraction when the cascade is unavailable.
- */
-function extractBlockFormatting(
-  node: ProseMirrorNode,
-  resolverParams: OoxmlResolverParams | null,
-): {
+function extractBlockFormatting(node: ProseMirrorNode): {
   styleId?: string | null;
   fontFamily?: string;
   fontSize?: number;
@@ -141,9 +79,9 @@ function extractBlockFormatting(
   headingLevel?: number;
 } {
   const pProps = (node.attrs as Record<string, unknown>).paragraphProperties as
-    | (ParagraphProperties & { justification?: string })
+    | { styleId?: string; justification?: string }
     | undefined;
-  const styleId = (pProps?.styleId as string | undefined) ?? null;
+  const styleId = pProps?.styleId ?? null;
 
   let fontFamily: string | undefined;
   let fontSize: number | undefined;
@@ -151,47 +89,28 @@ function extractBlockFormatting(
   let underline: boolean | undefined;
   let color: string | undefined;
 
-  if (resolverParams) {
-    // Resolve the full cascade: doc defaults → Normal → paragraph style → inline marks
-    const inlineRpr = buildInlineRprFromMarks(node);
-    const resolvedPpr = resolveParagraphProperties(resolverParams, pProps ?? null, null);
-    const resolved = resolveRunProperties(resolverParams, inlineRpr, resolvedPpr, null, false);
-
-    // Extract display values from resolved OOXML RunProperties
-    const ff = resolved.fontFamily;
-    if (ff) fontFamily = ff.ascii || ff.hAnsi || ff.eastAsia || ff.cs || undefined;
-    if (resolved.fontSize) fontSize = resolved.fontSize / 2; // half-points → points
-    bold = resolved.bold ?? undefined;
-    const uVal = resolved.underline?.['w:val'];
-    if (uVal && uVal !== 'none') underline = true;
-    const colorObj = resolved.color as { 'w:val'?: string } | string | undefined;
-    if (colorObj) {
-      if (typeof colorObj === 'string') color = colorObj;
-      else if (typeof colorObj['w:val'] === 'string') color = colorObj['w:val'];
-    }
-  } else {
-    // Fallback: read directly from inline marks (no style cascade available)
-    node.descendants((child) => {
-      if (fontFamily !== undefined) return false;
-      const marks = child.marks ?? [];
-      if (!child.isText || marks.length === 0) return;
-      for (const mark of marks) {
-        const markName = (mark.type as { name?: string }).name;
-        const attrs = mark.attrs as Record<string, unknown>;
-        if (markName === 'textStyle') {
-          if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
-          if (attrs.fontSize != null) {
-            const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
-            if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
-          }
-          if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
+  node.descendants((child) => {
+    if (fontFamily !== undefined) return false;
+    const marks = child.marks ?? [];
+    if (!child.isText || marks.length === 0) return;
+    for (const mark of marks) {
+      const markName = (mark.type as { name?: string }).name;
+      const attrs = mark.attrs as Record<string, unknown>;
+      // Only read formatting from textStyle marks — other marks (highlight, underline)
+      // have a color attr that means something different (background, line color).
+      if (markName === 'textStyle') {
+        if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
+        if (attrs.fontSize != null) {
+          const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
+          if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
         }
-        if (markName === 'bold' && attrs.value === true) bold = true;
-        if (markName === 'underline') underline = true;
+        if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
       }
-      return false;
-    });
-  }
+      if (markName === 'bold' && attrs.value === true) bold = true;
+      if (markName === 'underline') underline = true;
+    }
+    return false;
+  });
 
   // Default to black when no explicit color is set
   if (!color) color = '#000000';
@@ -319,9 +238,6 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
 
   const rev = getRevision(editor);
 
-  // Build style-engine cascade context once — reused for every block.
-  const resolverParams = buildResolverParams(editor);
-
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = candidate.node.textContent.length;
     const ref =
@@ -343,7 +259,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       nodeType: candidate.nodeType,
       textPreview: extractTextPreview(candidate.node),
       isEmpty: textLength === 0,
-      ...extractBlockFormatting(candidate.node, resolverParams),
+      ...extractBlockFormatting(candidate.node),
       ...(ref ? { ref } : {}),
     };
   });

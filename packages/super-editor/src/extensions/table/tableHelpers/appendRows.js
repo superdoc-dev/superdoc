@@ -167,10 +167,12 @@ export function buildFormattedCellBlock(schema, value, { blockType, blockAttrs, 
   // Split on newline characters so each line becomes its own paragraph
   const lines = text.split(/\r?\n/);
   if (lines.length > 1) {
-    const paragraphs = lines.map((line) => {
-      const content = line ? schema.text(line, marks) : null;
-      return type.createAndFill(blockAttrs || null, content);
-    });
+    const paragraphs = lines
+      .map((line) => {
+        const content = line ? schema.text(line, marks) : null;
+        return type.createAndFill(blockAttrs || null, content);
+      })
+      .filter(Boolean);
     return Fragment.from(paragraphs);
   }
 

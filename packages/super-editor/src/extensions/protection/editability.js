@@ -164,13 +164,14 @@ export function buildAllowedIdentifierSetFromEditor(editor) {
   const user = editor?.options?.user;
   if (!user) return new Set();
 
-  // Prefer explicit permissionPrincipals
+  // Any provided array (including empty) is authoritative — no email fallback.
+  // An empty array means "this user matches no named principals."
   const principals = user.permissionPrincipals;
-  if (Array.isArray(principals) && principals.length > 0) {
+  if (Array.isArray(principals)) {
     return new Set(principals.map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : '')).filter(Boolean));
   }
 
-  // Fallback: derive from email
+  // Fallback: derive from email only when permissionPrincipals is not set
   const email = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
   if (!email) return new Set();
   const [localPart, domain] = email.split('@');

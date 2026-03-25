@@ -757,4 +757,27 @@ describe('PermissionRanges extension', () => {
     applyEffectiveEditability(instance);
     expect(instance.isEditable).toBe(false);
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // permissionPrincipals edge cases
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('treats empty permissionPrincipals array as explicit no-match (no email fallback)', () => {
+    // User with email that would match the ed attribute, but explicit empty principals
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
+      user: { name: 'Gabriel', email: 'gabriel@superdoc.dev', permissionPrincipals: [] },
+    });
+    // Empty array disables email fallback, so the named range should NOT match
+    expect(instance.isEditable).toBe(false);
+    expect(instance.storage.permissionRanges?.ranges?.length ?? 0).toBe(0);
+  });
+
+  it('falls back to email when permissionPrincipals is undefined', () => {
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
+      user: { name: 'Gabriel', email: 'gabriel@superdoc.dev' },
+    });
+    // No permissionPrincipals → email fallback should match the ed range
+    expect(instance.isEditable).toBe(true);
+    expect(instance.storage.permissionRanges?.ranges?.length).toBeGreaterThan(0);
+  });
 });

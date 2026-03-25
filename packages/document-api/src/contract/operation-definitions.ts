@@ -113,7 +113,11 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a styleId from superdoc_get_content info to apply a named paragraph style.',
   },
   table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
-  list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
+  list: {
+    toolName: 'superdoc_list',
+    description:
+      'Create and manipulate lists. Use action "create" with mode "fromParagraphs" and a range target to convert paragraphs into a list. Use action "set_type" to convert between bullet and ordered. Also supports insert, indent, outdent, and detach.',
+  },
   comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
   track_changes: { toolName: 'superdoc_track_changes', description: 'Review and resolve tracked changes' },
   link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
@@ -498,9 +502,9 @@ export const OPERATION_DEFINITIONS = {
   replace: {
     memberPath: 'replace',
     description:
-      'Replace text using a ref. To replace an entire block, use its ref from superdoc_get_content blocks. ' +
-      'To replace a text match, use handle.ref from superdoc_search. ' +
-      'Do NOT use {kind:"block"} as target — it only works with structural content, not text.',
+      'Replace content at a contiguous document selection. ' +
+      'Text path accepts a SelectionTarget or ref plus replacement text. ' +
+      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
     expectedResult:
       'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,

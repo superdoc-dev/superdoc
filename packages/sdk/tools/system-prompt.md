@@ -112,4 +112,5 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 - **Table cells are separate blocks.** Search for individual cell values, not patterns spanning multiple cells.
 - **superdoc_search `select.type`** must be `"text"` or `"node"`. To find headings, use `{type: "node", nodeType: "heading"}`, NOT `{type: "heading"}`.
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`**. Use `require: "any"` with `limit` for paginated results.
-- **Creating lists**: Create one paragraph per item first, then call `superdoc_list` action `"create"` with `mode: "fromParagraphs"` and `preset: "disc"` (bullet) or `preset: "decimal"` (numbered) for each paragraph.
+- **Creating lists**: Create all paragraphs first. Then call `superdoc_list` action `"create"` once with `mode: "fromParagraphs"`, `preset: "disc"` (bullet) or `preset: "decimal"` (numbered), and a range target: `target: {from: {kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to: {kind:"block", nodeType:"paragraph", nodeId:"<last>"}}`. This converts all paragraphs into one contiguous list.
+- **Converting list type**: To change a bullet list to numbered (or vice versa), use `superdoc_list` action `"set_type"` with `target` pointing to any item in the list and `kind: "ordered"` or `kind: "bullet"`.

@@ -1,14 +1,14 @@
 ---
 title: replace
 sidebarTitle: replace
-description: "Replace text using a ref. To replace an entire block, use its ref from superdoc_get_content blocks. To replace a text match, use handle.ref from superdoc_search. Do NOT use {kind:\"block\"} as target — it only works with structural content, not text."
+description: Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Replace text using a ref. To replace an entire block, use its ref from superdoc_get_content blocks. To replace a text match, use handle.ref from superdoc_search. Do NOT use \{kind:"block"\} as target — it only works with structural content, not text.
+Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 
 - Operation ID: `replace`
 - API member path: `editor.doc.replace(...)`

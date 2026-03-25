@@ -12,7 +12,7 @@ export const handleEnter = (editor) => {
   view?.dispatch?.(closeHistory(view?.state?.tr));
 
   return editor.commands.first(({ commands }) => [
-    () => commands.splitRunToParagraph(),
+    () => commands.splitRunToParagraph?.() ?? false,
     () => commands.newlineInCode(),
     () => commands.createParagraphNear(),
     () => commands.liftEmptyBlock(),

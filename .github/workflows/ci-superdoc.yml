@@ -74,6 +74,8 @@ jobs:
 
       - name: Run unit tests
         run: pnpm test
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Run memory profiling tests (non-blocking)
         continue-on-error: true

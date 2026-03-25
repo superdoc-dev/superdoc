@@ -544,7 +544,19 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-hover,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-hover {
+  background: none;
+  border: none;
+}
+
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {
+  background: none;
+  border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-inline[data-lock-mode]:hover {
   background: none;
   border: none;
 }

@@ -2,7 +2,7 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -761,9 +761,10 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Set ydoc/provider on live store document composables.
-   * Each composable uses shallowRef for these fields (use-document.js:24-26),
-   * so we assign to `.value` directly. Pinia auto-unwraps the store's
-   * `documents` ref, so we access it as a plain array.
+   * Each composable uses shallowRef for these fields (use-document.js:28-29),
+   * so we assign to `.value` directly. Vue's reactive proxy auto-unwraps
+   * shallowRefs on property access, so we must use `toRaw()` to reach the
+   * underlying ref objects.
    *
    * @param {import('yjs').Doc | null} ydoc
    * @param {import('./types').CollaborationProvider | null} provider
@@ -772,11 +773,12 @@ export class SuperDoc extends EventEmitter {
     const storeDocs = this.superdocStore?.documents;
     if (!Array.isArray(storeDocs)) return;
     for (const doc of storeDocs) {
-      if (doc.ydoc && typeof doc.ydoc === 'object' && 'value' in doc.ydoc) {
-        doc.ydoc.value = ydoc;
+      const raw = toRaw(doc);
+      if (raw.ydoc && typeof raw.ydoc === 'object' && 'value' in raw.ydoc) {
+        raw.ydoc.value = ydoc;
       }
-      if (doc.provider && typeof doc.provider === 'object' && 'value' in doc.provider) {
-        doc.provider.value = provider;
+      if (raw.provider && typeof raw.provider === 'object' && 'value' in raw.provider) {
+        raw.provider.value = provider;
       }
     }
   }

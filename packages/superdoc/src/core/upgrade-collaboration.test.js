@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shallowRef, reactive } from 'vue';
 import { DOCX, PDF } from '@superdoc/common';
 
 // ---------------------------------------------------------------------------
@@ -189,12 +190,18 @@ function createUpgradeHarness({ commentsList = [], attachImpl } = {}) {
     getEditor: () => editorInstance,
     getPresentationEditor: () => editorInstance,
     setEditor: vi.fn(),
-    ydoc: { value: null },
-    provider: { value: null },
+    // Use real Vue shallowRefs to match use-document.js composable behavior.
+    // Wrapping documents in reactive() below simulates Pinia's reactive store,
+    // which auto-unwraps shallowRefs on property access through the proxy.
+    ydoc: shallowRef(null),
+    provider: shallowRef(null),
   };
 
   const superdocStore = {
-    documents: [storeDoc],
+    // reactive() simulates Pinia's ref([]) store behavior: items accessed
+    // through the reactive array become reactive proxies that auto-unwrap
+    // shallowRef properties — the code must use toRaw() to reach .value.
+    documents: reactive([storeDoc]),
     init: vi.fn(),
     reset: vi.fn(),
     setExceptionHandler: vi.fn(),

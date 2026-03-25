@@ -1890,6 +1890,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // Snapshot mutable state so we can restore on failure.
     const prevProvider = this.options.collaborationProvider;
     const prevShouldLoadComments = this.options.shouldLoadComments;
+    const prevCollaborationIsReady = this.options.collaborationIsReady;
     const prevState = this._state;
 
     const rollback = () => {
@@ -1897,6 +1898,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.options.ydoc = undefined;
       this.options.collaborationProvider = prevProvider;
       this.options.shouldLoadComments = prevShouldLoadComments;
+      this.options.collaborationIsReady = prevCollaborationIsReady;
       this._state = prevState;
       this.view?.updateState(prevState);
     };

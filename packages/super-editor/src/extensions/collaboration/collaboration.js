@@ -163,7 +163,7 @@ export const Collaboration = Extension.create({
 
     this.options.ydoc = this.editor.options.ydoc;
 
-    initSyncListener(this.options.ydoc, this.editor, this);
+    const syncListenerCleanup = initSyncListener(this.options.ydoc, this.editor, this);
 
     const [syncPlugin, fragment] = createSyncPlugin(this.options.ydoc, this.editor);
     this.options.fragment = fragment;
@@ -182,6 +182,7 @@ export const Collaboration = Extension.create({
     // Store cleanup references in a non-reactive WeakMap (NOT this.options)
     // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
     const cleanupState = {
+      syncListenerCleanup,
       mediaMap,
       mediaMapObserver,
       metaMap: null,
@@ -266,6 +267,7 @@ export const cleanupCollaborationSideEffects = (editor) => {
   const cleanup = collaborationCleanupByEditor.get(editor);
   if (!cleanup) return;
 
+  cleanup.syncListenerCleanup?.();
   cleanup.mediaMap?.unobserve?.(cleanup.mediaMapObserver);
   cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
   cleanup.partSyncHandle?.destroy();
@@ -318,24 +320,43 @@ export const initializeMetaMap = (ydoc, editor) => {
   });
 };
 
+/**
+ * Schedule a `collaborationReady` emission once the provider is synced.
+ *
+ * Returns a cleanup function that cancels any pending timer or provider
+ * listener so a rollback in `attachCollaboration()` can prevent stale
+ * emissions from firing against a rolled-back editor state.
+ *
+ * @returns {() => void} cleanup
+ */
 const initSyncListener = (ydoc, editor, extension) => {
   const provider = editor.options.collaborationProvider;
-  if (!provider) return;
+  if (!provider) return () => {};
+
+  let cancelled = false;
 
   const emit = (synced) => {
+    if (cancelled) return;
     if (synced === false) return;
     extension.options.isReady = true;
     editor.emit('collaborationReady', { editor, ydoc });
   };
 
   if (isCollaborationProviderSynced(provider)) {
-    setTimeout(() => {
+    const timerId = setTimeout(() => {
       emit();
     }, 250);
-    return;
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
   }
 
-  onCollaborationProviderSynced(provider, emit);
+  const removeProviderListeners = onCollaborationProviderSynced(provider, emit);
+  return () => {
+    cancelled = true;
+    removeProviderListeners();
+  };
 };
 
 export const generateCollaborationData = async (editor) => {

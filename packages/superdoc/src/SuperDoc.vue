@@ -1691,6 +1691,11 @@ const getPDFViewer = () => {
   pointer-events: none;
 }
 
+/* Re-enable pointer events on comment anchors so highlights remain clickable */
+.superdoc--contained .sd-comment-anchor {
+  pointer-events: auto;
+}
+
 .superdoc__right-sidebar {
   width: 320px;
   min-width: 320px;

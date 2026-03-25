@@ -55,6 +55,17 @@ Uses `layout-engine` for virtualized rendering with pagination.
 `PresentationEditor.ts` bridges state between modes.
 See `super-editor/src/editors/v1/core/presentation-editor/` for implementation.
 
+### Fixed-height container embedding
+By default SuperDoc expands to the document's full height. To embed it inside a fixed-height container (panel, sidebar, modal, dashboard widget), pass `contained: true`. The parent element must have a definite height.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  contained: true,
+});
+```
+
 ## Theming
 
 SuperDoc UI is themed via `--sd-*` CSS variables. Use `createTheme()` for JS-based theming or set variables directly in CSS.
@@ -76,7 +87,6 @@ document.documentElement.classList.add(theme);
 - Preset themes — `src/assets/styles/helpers/themes.css`
 - Backward-compat aliases — `src/assets/styles/helpers/compat.css`
 - Consumer-facing agent guide — `AGENTS.md` (ships with npm package)
-
 ## Testing
 
 - Unit tests: `src/SuperDoc.test.js`

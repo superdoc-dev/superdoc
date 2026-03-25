@@ -89,6 +89,14 @@ new SuperDoc({
 - Proofing state is runtime UI state and is not written into the DOCX
 - Proofing is not part of the Document API in v1
 
+## Provider options
+
+SuperDoc does not include a spell-check engine. You bring your own provider.
+
+- [Typo.js](https://github.com/cfinke/Typo.js) - Simple local browser-based spell check. Good for lightweight demos, privacy-sensitive flows, and no-backend setups. See the [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/typo-js).
+- [LanguageTool](https://languagetool.org/) - API or self-hosted proofing with broader language support and a path to grammar checking later. See the [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/language-tool-self-hosted).
+- [hunspell-asm](https://www.npmjs.com/package/hunspell-asm) - A stronger local/offline WebAssembly Hunspell option if you want a more serious on-device spell-check provider than pure JavaScript dictionaries.
+
 ## Examples
 
 See the working repo examples for two complete provider integrations:

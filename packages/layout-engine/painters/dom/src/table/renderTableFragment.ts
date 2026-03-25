@@ -184,6 +184,11 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const tableBorders = block.attrs?.borders;
   const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
   const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
+
+  // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
+  // table-level properties (borders, margins, indent) are mirrored.
+  const tableProperties = block.attrs?.tableProperties as Record<string, unknown> | undefined;
+  const isRtl = tableProperties?.rightToLeft === true;
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -206,6 +211,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+
+  // RTL: set direction on the table container so downstream CSS inherits correctly
+  if (isRtl) {
+    container.setAttribute('dir', 'rtl');
+    container.style.direction = 'rtl';
+  }
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -382,6 +393,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         columnWidths: effectiveColumnWidths,
         allRowHeights,
         tableIndent,
+        isRtl,
         context,
         renderLine,
         captureLineSnapshot,
@@ -433,6 +445,15 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
           ghostWidth += effectiveColumnWidths[i];
         }
 
+        // RTL: mirror ghost cell x position
+        if (isRtl && ghostWidth > 0) {
+          let totalWidth = cellSpacingPx;
+          for (let i = 0; i < effectiveColumnWidths.length; i++) {
+            totalWidth += effectiveColumnWidths[i] + cellSpacingPx;
+          }
+          ghostX = totalWidth - ghostX - ghostWidth;
+        }
+
         // Calculate height: from fromRow to min(spanEndRow, toRow)
         const effectiveEnd = Math.min(spanEndRow, fragment.toRow);
         let ghostHeight = 0;
@@ -467,32 +488,30 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         const cellEndsWithinFragment = effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow;
 
         if (tableBorders) {
-          // Explicit cell borders override table borders; otherwise fall through to table defaults
-          applyBorder(
-            ghostDiv,
-            'Top',
-            (explicit ? cellBordersAttr.top : undefined) ?? borderValueToSpec(tableBorders.top),
-          );
-          applyBorder(
-            ghostDiv,
-            'Left',
+          // Resolve borders using logical positions
+          const topB = (explicit ? cellBordersAttr.top : undefined) ?? borderValueToSpec(tableBorders.top);
+          let leftB =
             (explicit ? cellBordersAttr.left : undefined) ??
-              borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders.left : tableBorders.insideV),
-          );
-          applyBorder(
-            ghostDiv,
-            'Right',
+            borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders.left : tableBorders.insideV);
+          let rightB =
             (explicit ? cellBordersAttr.right : undefined) ??
-              borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders.right : tableBorders.insideV),
-          );
-          if (cellEndsWithinFragment) {
-            applyBorder(
-              ghostDiv,
-              'Bottom',
-              (explicit ? cellBordersAttr.bottom : undefined) ??
-                borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders.bottom : tableBorders.insideH),
-            );
+            borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders.right : tableBorders.insideV);
+          const bottomB = cellEndsWithinFragment
+            ? ((explicit ? cellBordersAttr.bottom : undefined) ??
+              borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders.bottom : tableBorders.insideH))
+            : undefined;
+
+          // RTL: swap resolved left↔right so CSS matches visual edges
+          if (isRtl) {
+            const tmp = leftB;
+            leftB = rightB;
+            rightB = tmp;
           }
+
+          applyBorder(ghostDiv, 'Top', topB);
+          applyBorder(ghostDiv, 'Left', leftB);
+          applyBorder(ghostDiv, 'Right', rightB);
+          if (bottomB) applyBorder(ghostDiv, 'Bottom', bottomB);
         }
 
         // Apply cell background if present
@@ -530,6 +549,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       columnWidths: effectiveColumnWidths,
       allRowHeights,
       tableIndent,
+      isRtl,
       context,
       renderLine,
       captureLineSnapshot,

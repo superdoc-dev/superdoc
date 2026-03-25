@@ -1,32 +1,39 @@
 # SuperDoc for VS Code
 
-Open and edit `.docx` files directly in VS Code.
+[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/superdoc-dev.superdoc-vscode-ext)](https://marketplace.visualstudio.com/items?itemName=superdoc-dev.superdoc-vscode-ext)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/superdoc-dev.superdoc-vscode-ext)](https://marketplace.visualstudio.com/items?itemName=superdoc-dev.superdoc-vscode-ext)
 
-## Install
+Open, edit, and review Word documents directly in VS Code.
 
-Search for **SuperDoc** in the VS Code Extensions panel, or:
-
-```bash
-code --install-extension superdoc-dev.superdoc-vscode-ext
-```
-
-Once installed, `.docx` files open with SuperDoc by default.
+![SuperDoc VS Code Extension Demo](https://github.com/user-attachments/assets/23dcf3b1-9b6e-4e77-a4f6-17dde9d25ebc)
 
 ## Features
 
-- **Real DOCX editing** — Formatting, tables, lists, headers — all preserved. No conversion to HTML or any intermediate format.
-- **Pagination and rulers** — Documents render with page breaks and ruler guides, just like Word.
-- **Auto-save** — Changes save automatically as you type.
-- **Live reload** — When an AI agent or external process modifies your file, the document refreshes instantly.
-- **Context menu** — Right-click any `.docx` in the Explorer and choose "Open with SuperDoc."
+- **Full DOCX rendering** — pagination, headings, tables, lists, signature blocks
+- **Edit in place** — type, format, and save without leaving VS Code
+- **Tracked changes** — AI agents can suggest edits as Word tracked changes
+- **Comments** — view and add Word comments with margin bubbles
+- **Live reload** — when an external process modifies the file, the document refreshes automatically
+- **Auto-save** — changes are saved as you type
+- **Context menu** — right-click any `.docx` in the Explorer and choose "Open with SuperDoc"
 
-## How it works
+## Install
 
-SuperDoc renders documents directly from OOXML — the native format of `.docx` files. The extension bundles the full SuperDoc rendering and editing engine in a VS Code webview. No server calls. Your documents never leave your machine.
+Search **"SuperDoc"** in the VS Code Extensions panel, or:
+
+```
+ext install superdoc-dev.superdoc-vscode-ext
+```
+
+Once installed, click any `.docx` file to open it with SuperDoc.
+
+## AI Integration
+
+SuperDoc provides an [MCP server](https://github.com/superdoc-dev/superdoc/tree/main/apps/mcp) that lets AI agents read, edit, and comment on Word documents programmatically. Combined with this extension, you get a live preview of AI-suggested changes — tracked changes and comments appear in real time as the agent works.
 
 ## Part of SuperDoc
 
-This extension is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
+This extension is powered by [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing for the browser and server. No server calls — your documents never leave your machine.
 
 ## License
 

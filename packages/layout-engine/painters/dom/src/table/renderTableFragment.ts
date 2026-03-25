@@ -212,12 +212,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
-  // RTL: set direction on the table container so downstream CSS inherits correctly
-  if (isRtl) {
-    container.setAttribute('dir', 'rtl');
-    container.style.direction = 'rtl';
-  }
-
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
@@ -445,13 +439,19 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
           ghostWidth += effectiveColumnWidths[i];
         }
 
-        // RTL: mirror ghost cell x position
+        // RTL: mirror ghost cell x position.
+        // ghostX must include spacing to match the totalWidth formula.
         if (isRtl && ghostWidth > 0) {
           let totalWidth = cellSpacingPx;
           for (let i = 0; i < effectiveColumnWidths.length; i++) {
             totalWidth += effectiveColumnWidths[i] + cellSpacingPx;
           }
-          ghostX = totalWidth - ghostX - ghostWidth;
+          // Recompute ghostX with spacing (matching calculateXPosition in renderTableRow)
+          let ghostXWithSpacing = cellSpacingPx;
+          for (let i = 0; i < gridCol && i < effectiveColumnWidths.length; i++) {
+            ghostXWithSpacing += effectiveColumnWidths[i] + cellSpacingPx;
+          }
+          ghostX = totalWidth - ghostXWithSpacing - ghostWidth;
         }
 
         // Calculate height: from fromRow to min(spanEndRow, toRow)

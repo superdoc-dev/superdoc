@@ -119,6 +119,7 @@ describe('getMarksFromSelection', () => {
       expect(result.inlineRunProperties).toEqual({});
       expect(result.resolvedMarks).toEqual([]);
       expect(result.resolvedRunProperties).toEqual({});
+      expect(result.styleRunProperties).toEqual({});
     });
 
     it('does not return inherited marks when paragraph has text content', () => {

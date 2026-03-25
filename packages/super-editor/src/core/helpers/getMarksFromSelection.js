@@ -32,6 +32,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const currentRunProperties = context?.runProperties || null;
   const cursorMarks = $pos.marks();
   const hasStoredMarks = storedMarks !== null;
+  const hasExplicitEmptyStoredMarks = hasStoredMarks && storedMarks.length === 0;
   const resolvedMarks = [];
   const inlineMarks = [];
 
@@ -51,6 +52,16 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   } else {
     inlineMarks.push(...cursorMarks);
     inlineRunProperties = decodeRPrFromMarks(inlineMarks);
+  }
+
+  if (hasExplicitEmptyStoredMarks) {
+    return {
+      resolvedMarks: [],
+      inlineMarks: [],
+      resolvedRunProperties: {},
+      inlineRunProperties: {},
+      styleRunProperties: {},
+    };
   }
 
   const resolvedFromSelection = getInheritedRunProperties(

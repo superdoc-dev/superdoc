@@ -5,7 +5,7 @@
 
 Open, edit, and review Word documents directly in VS Code.
 
-![SuperDoc VS Code Extension Demo](https://github.com/user-attachments/assets/23dcf3b1-9b6e-4e77-a4f6-17dde9d25ebc)
+![SuperDoc VS Code Extension Demo](demo.gif)
 
 ## Features
 

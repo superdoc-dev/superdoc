@@ -107,4 +107,3 @@ packages/sdk/tools/*.json
 # deploys directly from git with no pre-build hook support.
 
 .playwright-cli/
-apps/vscode-ext/demo.gif

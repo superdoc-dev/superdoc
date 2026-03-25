@@ -73,6 +73,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   fontFamily?: string;
   fontSize?: number;
   bold?: boolean;
+  underline?: boolean;
   color?: string;
   alignment?: string;
   headingLevel?: number;
@@ -85,6 +86,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   let fontFamily: string | undefined;
   let fontSize: number | undefined;
   let bold: boolean | undefined;
+  let underline: boolean | undefined;
   let color: string | undefined;
 
   node.descendants((child) => {
@@ -105,6 +107,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
         if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
       }
       if (markName === 'bold' && attrs.value === true) bold = true;
+      if (markName === 'underline') underline = true;
     }
     return false;
   });
@@ -123,6 +126,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
     ...(fontFamily ? { fontFamily } : {}),
     ...(fontSize !== undefined ? { fontSize } : {}),
     ...(bold ? { bold } : {}),
+    ...(underline ? { underline } : {}),
     ...(color ? { color } : {}),
     ...(pProps?.justification ? { alignment: pProps.justification } : {}),
     ...(headingLevel ? { headingLevel } : {}),

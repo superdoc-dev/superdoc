@@ -53,6 +53,8 @@ def dispatch_intent_tool(
             return execute('doc.format.paragraph.setIndentation', rest)
         elif action == 'set_spacing':
             return execute('doc.format.paragraph.setSpacing', rest)
+        elif action == 'set_flow_options':
+            return execute('doc.format.paragraph.setFlowOptions', rest)
         elif action == 'set_direction':
             return execute('doc.format.paragraph.setDirection', rest)
         else:

@@ -336,7 +336,7 @@ function buildIntentTools(contract) {
       for (const [propName, propSchema] of Object.entries(allProperties)) {
         if (propSchema.description) continue;
         if (propName === 'target') {
-          allProperties[propName] = { ...propSchema, description: "Target address. Prefer 'ref' from superdoc_search instead. Selection: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Block: {kind:'block', nodeType, nodeId}." };
+          allProperties[propName] = { ...propSchema, description: "Target address. For inline/set_style: prefer 'ref' from superdoc_search, or use {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. For paragraph actions (set_alignment, set_indentation, set_spacing, set_direction, set_flow_options): use {kind:'block', nodeType:'paragraph'|'heading'|'listItem', nodeId:'<nodeId from blocks list>'}." };
         } else if (propName === 'ref') {
           allProperties[propName] = { ...propSchema, description: "Handle ref string from superdoc_search. Pass handle.ref value directly (e.g. 'text:eyJ...'). Preferred for text-level operations." };
         } else if (propName === 'content') {

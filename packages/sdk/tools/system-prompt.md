@@ -36,19 +36,39 @@ Call `superdoc_get_content({action: "blocks"})` first — just pass `action`, no
 4. **Batch when possible**: For multi-step edits, prefer `superdoc_mutations`.
 5. **Multiple sequential creates**: Each `superdoc_create` response includes a `nodeId`. When inserting multiple items in order, use the previous item's nodeId as the next `at` target to maintain correct ordering.
 
+### Paragraph formatting (alignment, spacing, page breaks)
+
+Paragraph-level formatting actions (`set_alignment`, `set_indentation`, `set_spacing`, `set_direction`, `set_flow_options`) require a **block target**, not a ref or selection:
+```
+superdoc_format({action: "set_alignment", target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId>"}, alignment: "center"})
+```
+
+**Page breaks**: Use `set_flow_options` with `pageBreakBefore: true` to start a paragraph on a new page:
+```
+superdoc_format({action: "set_flow_options", target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId>"}, pageBreakBefore: true})
+```
+
 ### Formatting after create (REQUIRED)
 
-Every `superdoc_create` call MUST be followed by `superdoc_format` to match the document's style. Use the `ref` from the create response. Get `fontFamily`, `fontSize`, and `color` from body text blocks (`superdoc_get_content blocks`).
+Every `superdoc_create` call MUST be followed by `superdoc_format` to match the document's style. Use the `ref` from the create response.
 
-**For paragraphs:**
+**Read formatting from the blocks data** — do NOT hardcode values. Look at `fontFamily`, `fontSize`, `color`, `bold`, `underline`, and `alignment` on nearby blocks and replicate them exactly:
 ```
-superdoc_format({action: "inline", ref: "<ref>", inline: {fontFamily: "...", fontSize: 12, color: "#000000", bold: false}})
+superdoc_format({action: "inline", ref: "<ref>", inline: {fontFamily: "<from blocks>", fontSize: <from blocks>, color: "<from blocks>", bold: <from blocks>, underline: <from blocks>}})
 ```
 
-**For headings** (scale fontSize up from body size — e.g. body 12pt → heading 16pt):
+Then set paragraph alignment to match:
 ```
-superdoc_format({action: "inline", ref: "<ref>", inline: {fontFamily: "...", fontSize: 16, color: "#000000", bold: true}})
+superdoc_format({action: "set_alignment", target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId>"}, alignment: "<from blocks>"})
 ```
+
+### Matching referenced content (CRITICAL)
+
+When asked to create content "like", "similar to", or as a new page matching existing content (e.g., "create a new page like Exhibit A"):
+1. **Find the referenced blocks** in the blocks data and read their exact properties
+2. **Use the same nodeType** — if the reference is a `paragraph` with bold/underline, create a `paragraph`, NOT a `heading`
+3. **Copy ALL formatting exactly**: `bold`, `underline`, `fontSize`, `fontFamily`, `color`, `alignment` — read each from the reference block and apply the same values
+4. **Title blocks** in documents are often bold+underline paragraphs, not heading nodes — check the blocks data to see which it is
 
 ### Placing content near specific text
 

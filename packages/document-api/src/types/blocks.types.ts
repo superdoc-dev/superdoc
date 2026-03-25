@@ -18,6 +18,8 @@ export interface BlockListEntry {
   fontSize?: number;
   /** True if the block's text is bold. */
   bold?: boolean;
+  /** True if the block's text is underlined. */
+  underline?: boolean;
   /** Text color (defaults to '#000000' when not explicitly set). */
   color?: string;
   /** Paragraph alignment. */

@@ -1202,6 +1202,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-flow-options.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_flow_options',
   },
   'format.paragraph.setTabStop': {
     memberPath: 'format.paragraph.setTabStop',

@@ -384,16 +384,14 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
   // In RTL lines the first DOM span may be visually rightmost.
   // Filter out non-rendered spans (display:none field annotations, hidden tracked
   // changes, etc.) whose zero-sized rects would collapse the bounds to 0.
+  // When every rect is zero-sized (e.g. JSDOM) fall back to the unfiltered set
+  // so the downstream logic still runs.
   const allRects = spanEls.map((el) => el.getBoundingClientRect());
   const visibleRects = allRects.filter(isVisibleRect);
+  const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
 
-  if (visibleRects.length === 0) {
-    log('All spans hidden, returning lineStart:', lineStart);
-    return lineStart;
-  }
-
-  const visualLeft = Math.min(...visibleRects.map((r) => r.left));
-  const visualRight = Math.max(...visibleRects.map((r) => r.right));
+  const visualLeft = Math.min(...boundsRects.map((r) => r.left));
+  const visualRight = Math.max(...boundsRects.map((r) => r.right));
 
   if (viewX <= visualLeft) {
     const pos = rtl ? lineEnd : lineStart;
@@ -537,14 +535,10 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
 
   const allRects = spanEls.map((el) => el.getBoundingClientRect());
   const visibleRects = allRects.filter(isVisibleRect);
+  const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
 
-  if (visibleRects.length === 0) {
-    log('All spans hidden, returning lineStart:', lineStart);
-    return lineStart;
-  }
-
-  const visualLeft = Math.min(...visibleRects.map((r) => r.left));
-  const visualRight = Math.max(...visibleRects.map((r) => r.right));
+  const visualLeft = Math.min(...boundsRects.map((r) => r.left));
+  const visualRight = Math.max(...boundsRects.map((r) => r.right));
 
   if (viewX <= visualLeft) {
     const pos = rtl ? lineEnd : lineStart;

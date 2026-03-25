@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProofingSessionManager } from './ProofingSessionManager.js';
 import type { ProofingProvider, ProofingCheckRequest, ProofingCheckResult, ProofingConfig } from './types.js';
+import { doc, p } from 'prosemirror-test-builder';
+import { Mapping } from 'prosemirror-transform';
 
 // =============================================================================
 // Mock Provider
@@ -220,6 +222,113 @@ describe('ProofingSessionManager', () => {
       const manager = new ProofingSessionManager({ enabled: true, provider });
       manager.dispose();
       manager.dispose(); // Should not throw
+    });
+  });
+
+  describe('scheduling', () => {
+    it('drains pending segments after a stale-epoch request completes', async () => {
+      // Provider that holds responses until explicitly resolved
+      const resolvers: Array<(result: ProofingCheckResult) => void> = [];
+      const provider: ProofingProvider & { checkCalls: ProofingCheckRequest[] } = {
+        id: 'controllable',
+        checkCalls: [],
+        check: vi.fn((request: ProofingCheckRequest) => {
+          provider.checkCalls.push(request);
+          return new Promise<ProofingCheckResult>((resolve) => {
+            resolvers.push(resolve);
+          });
+        }),
+        dispose: vi.fn(),
+      };
+
+      const manager = new ProofingSessionManager({
+        enabled: true,
+        provider,
+        maxConcurrentRequests: 1,
+        debounceMs: 10,
+        visibleFirst: false,
+      });
+
+      // Step 1: Start initial check (epoch 0)
+      const doc1 = doc(p('hello'));
+      manager.runInitialCheck(doc1);
+
+      // Fire debounce → triggers provider.check for epoch 0
+      await vi.advanceTimersByTimeAsync(10);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+      expect(resolvers).toHaveLength(1);
+
+      // Step 2: Document changes while epoch 0 is in-flight → epoch 1
+      const doc2 = doc(p('world'));
+      manager.onDocumentChanged(doc2, [{ from: 1, to: 6 }], new Mapping());
+
+      // Fire debounce for epoch 1 — but the slot is still occupied by epoch 0
+      await vi.advanceTimersByTimeAsync(10);
+
+      // provider.check should NOT have been called again — the slot is full
+      expect(provider.check).toHaveBeenCalledTimes(1);
+
+      // Step 3: Resolve the stale epoch-0 request (frees the slot)
+      resolvers[0]({ issues: [] });
+
+      // Flush microtasks so the await chain in #sendBatch completes
+      // and #drainPendingSegments fires
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Step 4: The fix ensures pending epoch-1 segments are now drained
+      expect(provider.check).toHaveBeenCalledTimes(2);
+    });
+
+    it('drains pending segments after a stale-epoch request errors without reporting stale failure', async () => {
+      let rejectNext: ((err: Error) => void) | null = null;
+      const provider: ProofingProvider & { checkCalls: ProofingCheckRequest[] } = {
+        id: 'rejectable',
+        checkCalls: [],
+        check: vi.fn((request: ProofingCheckRequest) => {
+          provider.checkCalls.push(request);
+          return new Promise<ProofingCheckResult>((_, reject) => {
+            rejectNext = reject;
+          });
+        }),
+        dispose: vi.fn(),
+      };
+
+      const onProofingError = vi.fn();
+      const onStatusChange = vi.fn();
+      const manager = new ProofingSessionManager({
+        enabled: true,
+        provider,
+        maxConcurrentRequests: 1,
+        debounceMs: 10,
+        visibleFirst: false,
+        onProofingError,
+        onStatusChange,
+      });
+
+      // Start epoch 0 check
+      manager.runInitialCheck(doc(p('hello')));
+      await vi.advanceTimersByTimeAsync(10);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+
+      // Edit → epoch 1, debounce fires but slot is full
+      manager.onDocumentChanged(doc(p('world')), [{ from: 1, to: 6 }], new Mapping());
+      await vi.advanceTimersByTimeAsync(10);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+
+      // Clear callback trackers before the stale rejection
+      onProofingError.mockClear();
+      onStatusChange.mockClear();
+
+      // Epoch 0 errors out (frees the slot)
+      rejectNext!(new Error('boom'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Epoch 1's pending segments should be drained
+      expect(provider.check).toHaveBeenCalledTimes(2);
+
+      // Stale failure must NOT be surfaced as a current error or degrade status
+      expect(onProofingError).not.toHaveBeenCalled();
+      expect(onStatusChange).not.toHaveBeenCalledWith('degraded');
     });
   });
 });

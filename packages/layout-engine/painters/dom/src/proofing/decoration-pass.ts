@@ -84,8 +84,8 @@ export function applyProofingDecorations(container: HTMLElement, annotations: Pr
 export function clearProofingDecorations(container: HTMLElement): boolean {
   let cleared = false;
 
-  // Restore sibling splits first
-  restoreSplitSpans(container);
+  // Restore sibling splits first — track whether DOM was mutated
+  const splitRestored = restoreSplitSpans(container);
 
   // Remove proofing classes and attributes from all decorated spans
   const decorated = Array.from(container.querySelectorAll<HTMLElement>(`[${PROOFING_CSS.DATA_ATTR}]`));
@@ -96,7 +96,7 @@ export function clearProofingDecorations(container: HTMLElement): boolean {
     cleared = true;
   }
 
-  return cleared;
+  return cleared || splitRestored;
 }
 
 // =============================================================================

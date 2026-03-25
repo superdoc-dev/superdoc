@@ -184,9 +184,9 @@ export function replaceSpanWithSiblings(
  * Finds all split-marked spans, retrieves their saved original span,
  * and restores it — perfectly preserving all renderer metadata.
  */
-export function restoreSplitSpans(container: HTMLElement): void {
+export function restoreSplitSpans(container: HTMLElement): boolean {
   const splitSpans = Array.from(container.querySelectorAll<HTMLElement>(`[${PROOFING_CSS.SPLIT_ATTR}]`));
-  if (splitSpans.length === 0) return;
+  if (splitSpans.length === 0) return false;
 
   // Group split siblings by their original span reference
   const groupsByOriginal = new Map<HTMLElement, HTMLElement[]>();
@@ -226,6 +226,8 @@ export function restoreSplitSpans(container: HTMLElement): void {
   for (const el of hiddenOriginals) {
     unhideOriginalSpan(el);
   }
+
+  return true;
 }
 
 /** Unhide a hidden original span and reinstate its saved PM position attributes. */

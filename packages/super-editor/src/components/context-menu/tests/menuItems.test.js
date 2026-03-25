@@ -342,18 +342,21 @@ describe('menuItems.js', () => {
       const replaceWith = vi.fn(function () {
         return this;
       });
-      const schemaText = vi.fn((text) => ({ text }));
       const dispatch = vi.fn();
 
+      const mockMark = { type: { name: 'bold' }, eq: (other) => other === mockMark };
+      const mockTextNode = { text: 'the', marks: [mockMark] };
+
       mockEditor = createMockEditor();
+      mockEditor.view.state.doc = {
+        nodesBetween: vi.fn((from, to, cb) => {
+          cb({ isText: true, marks: [mockMark] });
+        }),
+      };
+      mockEditor.view.state.schema = {
+        text: vi.fn(() => mockTextNode),
+      };
       mockEditor.view.state.tr = {
-        doc: {
-          type: {
-            schema: {
-              text: schemaText,
-            },
-          },
-        },
         replaceWith,
       };
       mockEditor.view.dispatch = dispatch;
@@ -378,8 +381,8 @@ describe('menuItems.js', () => {
 
       suggestionItem.action(mockEditor, mockContext);
 
-      expect(schemaText).toHaveBeenCalledWith('the');
-      expect(replaceWith).toHaveBeenCalledWith(22, 25, { text: 'the' });
+      expect(mockEditor.view.state.schema.text).toHaveBeenCalledWith('the', [mockMark]);
+      expect(replaceWith).toHaveBeenCalledWith(22, 25, mockTextNode);
       expect(dispatch).toHaveBeenCalledWith(mockEditor.view.state.tr);
     });
 

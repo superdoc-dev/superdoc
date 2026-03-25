@@ -509,8 +509,12 @@ export class ProofingSessionManager {
       if (!this.#pendingAbortControllers.delete(controller)) return;
       this.#inFlightCount--;
 
-      // Discard if epoch changed (stale result)
-      if (epoch !== this.#documentEpoch || this.#disposed) return;
+      // Discard if epoch changed (stale result), but still drain
+      // pending segments since a concurrency slot just freed up.
+      if (epoch !== this.#documentEpoch || this.#disposed) {
+        this.#drainPendingSegments();
+        return;
+      }
 
       // Build fresh confirmed issues from provider results
       const validSegmentIds = new Set(segments.map((s) => s.id));
@@ -564,6 +568,14 @@ export class ProofingSessionManager {
 
       if (this.#disposed) return;
 
+      // If this request is from a superseded epoch, its failure is not
+      // relevant to the current proofing state — skip error reporting
+      // and just drain any pending work for the current epoch.
+      if (epoch !== this.#documentEpoch) {
+        this.#drainPendingSegments();
+        return;
+      }
+
       // At this point, abort must be from our timeout timer (not #cancelAll,
       // which is handled by the controller-removal guard above).
       const isTimeout = controller.signal.aborted;
@@ -590,6 +602,16 @@ export class ProofingSessionManager {
     if (nextBatch.length > 0) {
       this.#sendBatch(nextBatch, epoch, recheckIds);
     }
+  }
+
+  /**
+   * Drain pending segments for the current epoch after a stale request frees
+   * a concurrency slot. This prevents pending work from getting stranded when
+   * all slots were occupied by a superseded epoch's in-flight requests.
+   */
+  #drainPendingSegments(): void {
+    if (this.#disposed || this.#pendingSegments.length === 0) return;
+    this.#schedulePendingSegments(this.#documentEpoch, this.#store.getActiveRecheckIds());
   }
 
   // ===========================================================================

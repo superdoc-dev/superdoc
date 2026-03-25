@@ -103,8 +103,32 @@ const buildProofingItems = (context) => {
         isDefault: true,
         action: (editor) => {
           const { state, dispatch } = editor.view;
+          const { pmFrom, pmTo } = proofing.issue;
+
+          // Collect marks common to ALL text nodes in the replaced range
+          // (intersection). This preserves marks that covered the entire
+          // word (including non-inclusive marks like links) while avoiding
+          // over-expansion of marks that only appeared on some text nodes.
+          let commonMarks = null;
+          state.doc.nodesBetween(pmFrom, pmTo, (node) => {
+            if (node.isText) {
+              if (commonMarks === null) {
+                commonMarks = [...node.marks];
+              } else {
+                commonMarks = commonMarks.filter((existing) => node.marks.some((m) => existing.eq(m)));
+              }
+            }
+          });
+          const existingMarks = commonMarks ?? [];
+
+          // Use replaceWith instead of insertText so the replacement carries
+          // exactly the intersection marks. insertText inherits inclusive
+          // marks from the left boundary, which over-expands formatting when
+          // only part of the word was marked.
           const tr = state.tr;
-          tr.replaceWith(proofing.issue.pmFrom, proofing.issue.pmTo, tr.doc.type.schema.text(suggestion));
+          const replacement = state.schema.text(suggestion, existingMarks);
+          tr.replaceWith(pmFrom, pmTo, replacement);
+
           dispatch(tr);
         },
       });

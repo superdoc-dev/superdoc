@@ -2202,7 +2202,38 @@ describe('executeCompiledPlan: format.apply textStyle attr gating', () => {
 });
 
 describe('executeStyleApply: run attribute ownership', () => {
-  it('marks only updated run-attribute keys as inline-owned and style overrides', () => {
+  it('preserves legacy run-attribute ownership when inline metadata is missing', () => {
+    const { editor, tr, getRunNode } = makeRunAttributePlanEditor({
+      runProperties: {
+        lang: { val: 'en-US' },
+        rtl: true,
+      },
+      runPropertiesInlineKeys: null,
+      runPropertiesStyleKeys: null,
+      runPropertiesOverrideKeys: null,
+    });
+
+    const target = makeTarget({ op: 'style.apply' as any, absFrom: 2, absTo: 7 }) as any;
+    const step: StyleApplyStep = {
+      id: 'step-run-lang-legacy',
+      op: 'style.apply',
+      where: { by: 'target', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } } as any,
+      args: { inline: { lang: { val: 'fr-FR' } } as any },
+    };
+
+    const result = executeStyleApply(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(result).toEqual({ changed: true });
+    expect(tr.setNodeMarkup).toHaveBeenCalled();
+    expect(getRunNode().attrs.runProperties).toEqual({
+      lang: { val: 'fr-FR' },
+      rtl: true,
+    });
+    expect(getRunNode().attrs.runPropertiesInlineKeys.sort()).toEqual(['lang', 'rtl'].sort());
+    expect(getRunNode().attrs.runPropertiesOverrideKeys).toBeNull();
+  });
+
+  it('marks only updated style-backed run-attribute keys as inline-owned and style overrides', () => {
     const { editor, tr, getRunNode } = makeRunAttributePlanEditor({
       runProperties: {
         lang: { val: 'en-US' },

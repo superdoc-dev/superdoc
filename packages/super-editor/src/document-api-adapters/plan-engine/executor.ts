@@ -529,15 +529,26 @@ function applyRunAttributePatch(
     const currentRunProperties = isRecord(runNode.attrs?.runProperties)
       ? { ...(runNode.attrs.runProperties as Record<string, unknown>) }
       : {};
-    const currentInlineKeys = Array.isArray(runNode.attrs?.runPropertiesInlineKeys)
-      ? runNode.attrs.runPropertiesInlineKeys
-      : Object.keys(currentRunProperties);
     const currentStyleKeys = Array.isArray(runNode.attrs?.runPropertiesStyleKeys)
       ? runNode.attrs.runPropertiesStyleKeys
       : [];
     const currentOverrideKeys = Array.isArray(runNode.attrs?.runPropertiesOverrideKeys)
       ? runNode.attrs.runPropertiesOverrideKeys
       : [];
+    const hasInlineOwnershipMetadata = Array.isArray(runNode.attrs?.runPropertiesInlineKeys);
+    let currentInlineKeys: string[];
+    if (hasInlineOwnershipMetadata) {
+      currentInlineKeys = runNode.attrs.runPropertiesInlineKeys;
+    } else if (currentStyleKeys.length > 0) {
+      currentInlineKeys = [
+        ...new Set([
+          ...Object.keys(currentRunProperties).filter((key) => !currentStyleKeys.includes(key)),
+          ...currentOverrideKeys,
+        ]),
+      ];
+    } else {
+      currentInlineKeys = Object.keys(currentRunProperties);
+    }
 
     const nextRunProperties = { ...currentRunProperties };
     let runChanged = false;

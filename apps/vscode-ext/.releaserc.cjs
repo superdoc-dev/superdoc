@@ -37,6 +37,7 @@ const config = {
   branches,
   tagFormat: 'vscode-v${version}',
   plugins: [
+<<<<<<< HEAD
     [
       '@semantic-release/commit-analyzer',
       {
@@ -52,6 +53,9 @@ const config = {
         ],
       },
     ],
+=======
+    '@semantic-release/commit-analyzer',
+>>>>>>> origin/stable
     notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }], // Version bump only, handles workspace:* versions
   ],

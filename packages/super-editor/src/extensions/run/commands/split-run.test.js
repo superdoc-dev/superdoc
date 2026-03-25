@@ -754,6 +754,44 @@ describe('splitRunToParagraph with style marks', () => {
     expect(secondParagraph.attrs.paragraphProperties?.runProperties).toBeUndefined();
   });
 
+  it('preserves enclosing runProperties when splitting at paragraph end with null storedMarks', () => {
+    const runProperties = {
+      styleId: 'CustomCharStyle',
+      fonts: { ascii: 'Aptos Display' },
+    };
+
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {},
+          },
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties,
+              },
+              content: [{ type: 'text', text: 'Styled' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Styled');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Styled'.length);
+
+    expect(editor.view.state.storedMarks).toBeNull();
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const secondParagraph = editor.view.state.doc.child(1);
+    expect(secondParagraph.attrs.paragraphProperties?.runProperties).toEqual(runProperties);
+  });
+
   it('handles malformed converter data during split', () => {
     const mockConverter = {
       convertedXml: null,

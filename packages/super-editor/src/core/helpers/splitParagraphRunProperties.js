@@ -19,6 +19,10 @@ function normalizeRunProperties(runProperties) {
  * @returns {Record<string, unknown> | null}
  */
 export function getRunPropertiesAtCursor($from) {
+  if ($from.parent?.type.name === 'run' && $from.parent.attrs?.runProperties) {
+    return { ...$from.parent.attrs.runProperties };
+  }
+
   const runNode = $from.nodeBefore;
   if (runNode?.type.name === 'run' && runNode.attrs.runProperties) {
     return { ...runNode.attrs.runProperties };

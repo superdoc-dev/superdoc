@@ -4,6 +4,15 @@
  * Runtime owner for the proofing lifecycle in PresentationEditor mode.
  * Coordinates provider calls, dirty-segment tracking, result caching,
  * and visible-first scheduling.
+ *
+ * Display continuity model:
+ * - On edit, dirty issues are remapped through the PM transaction mapping
+ *   (not deleted), so underlines stay visible at shifted positions.
+ * - A debounced recheck replaces the remapped cohort atomically when
+ *   fresh provider results arrive.
+ * - The word under the caret is suppressed at paint time to avoid
+ *   stale underlines fighting the user while typing.
+ * - IME composition hard-pauses recheck scheduling.
  */
 
 import type {
@@ -28,12 +37,14 @@ import { prioritizeByVisibility } from './visibility-priority.js';
 import { buildPaintSlices, findSliceAtPosition } from './proofing-ranges.js';
 import type { VisibilitySource } from './visibility-source.js';
 import type { Node as PmNode } from 'prosemirror-model';
+import type { Mapping } from 'prosemirror-transform';
 
 // =============================================================================
 // Defaults
 // =============================================================================
 
 const DEFAULT_DEBOUNCE_MS = 500;
+const DEFAULT_MAX_WAIT_MS = 2_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_CONCURRENT = 2;
 const DEFAULT_MAX_SEGMENTS_PER_BATCH = 20;
@@ -89,6 +100,12 @@ export class ProofingSessionManager {
   #disposed = false;
   /** Segments still waiting to be sent (overflow from concurrency cap). */
   #pendingSegments: ProofingSegment[] = [];
+  /** Monotonically incrementing counter for recheck cohort identity. */
+  #nextRecheckId = 0;
+  /** Whether IME composition is active (hard-pauses recheck scheduling). */
+  #isComposing = false;
+  /** Timestamp of the last fired check (for max-wait throttle). */
+  #lastCheckFiredAt = 0;
 
   // -- External adapters ------------------------------------------------------
   #visibilitySource: VisibilitySource | null = null;
@@ -160,22 +177,41 @@ export class ProofingSessionManager {
     this.#pageResolver = resolver;
   }
 
+  /** Notify the manager of IME composition state changes. */
+  setComposing(composing: boolean): void {
+    this.#isComposing = composing;
+    // When composition ends, resume scheduling if there are pending dirty segments
+    if (!composing && this.#lastSegments.length > 0 && this.isEnabled) {
+      this.#scheduleDebouncedCheck(this.#lastSegments);
+    }
+  }
+
   /**
    * Returns non-overlapping paint slices for rendering, filtered by suppression
    * (ignored words) and restricted to spelling issues in v1.
+   *
+   * @param activeWordRange - Word range under the caret to suppress (prevents
+   *   stale underlines on the word being typed). Null to show all slices.
    */
-  getPaintSlices(): ProofingPaintSlice[] {
+  getPaintSlices(activeWordRange?: { from: number; to: number } | null): ProofingPaintSlice[] {
     if (!this.isEnabled) return [];
+
     const displayIssues = this.#store.getDisplayIssues(this.#config.ignoredWords);
-    return buildPaintSlices(displayIssues);
+    const slices = buildPaintSlices(displayIssues);
+
+    if (!activeWordRange) return slices;
+
+    // Active-token suppression: exclude slices overlapping the word at the caret
+    return slices.filter((s) => s.pmTo <= activeWordRange.from || s.pmFrom >= activeWordRange.to);
   }
 
   /**
    * Find the proofing issue at a given PM position (for context menu).
-   * Returns the primary issue for the paint slice at that position, or null.
+   * Respects active-word suppression so the context menu doesn't show
+   * suggestions for a word the user is currently typing.
    */
-  getIssueAtPosition(pmPos: number): StoredIssue | null {
-    const slices = this.getPaintSlices();
+  getIssueAtPosition(pmPos: number, activeWordRange?: { from: number; to: number } | null): StoredIssue | null {
+    const slices = this.getPaintSlices(activeWordRange);
     return findSliceAtPosition(slices, pmPos)?.issue ?? null;
   }
 
@@ -233,7 +269,7 @@ export class ProofingSessionManager {
         this.#segmentHashes.clear();
         this.#offsetMaps.clear();
         this.#setStatus('disabled');
-        this.onResultsChanged?.(); // Notify so DOM markers get cleared
+        this.onResultsChanged?.();
         return;
       }
       if (patch.enabled && !prevEnabled && doc) {
@@ -244,13 +280,11 @@ export class ProofingSessionManager {
     }
 
     if (needsRecheck && this.isEnabled && doc) {
-      // Cancel in-flight requests from the old provider/language and bump
-      // epoch so any stragglers that resolve are discarded as stale.
       this.#cancelAll();
       this.#documentEpoch++;
       this.#store.clear();
       this.#segmentHashes.clear();
-      this.onResultsChanged?.(); // Clear stale markers before recheck
+      this.onResultsChanged?.();
       this.#scheduleFullCheck(doc);
     }
   }
@@ -261,15 +295,16 @@ export class ProofingSessionManager {
 
   /**
    * Called after a PM transaction that changes the document.
-   * Identifies dirty segments and schedules a debounced recheck.
+   * Remaps dirty issues through the transaction mapping (keeps them visible)
+   * and schedules a debounced recheck.
    */
-  onDocumentChanged(doc: PmNode, changedRanges: Array<{ from: number; to: number }>): void {
+  onDocumentChanged(doc: PmNode, changedRanges: Array<{ from: number; to: number }>, mapping: Mapping): void {
     if (!this.isEnabled) return;
 
     this.#documentEpoch++;
     this.#lastDoc = doc;
 
-    const { segments, offsetMaps } = extractSegmentsWithMaps(
+    const { segments, offsetMaps, segmentPositions } = extractSegmentsWithMaps(
       doc,
       this.#config.defaultLanguage,
       this.#pageResolver ?? undefined,
@@ -277,15 +312,21 @@ export class ProofingSessionManager {
     this.#lastSegments = segments;
     this.#offsetMaps = offsetMaps;
 
-    const dirtyIds = computeDirtySegmentIds(segments, changedRanges);
+    const dirtyIds = computeDirtySegmentIds(segments, segmentPositions, changedRanges);
 
     // Invalidate hashes for dirty segments so they get rechecked
     for (const id of dirtyIds) {
       this.#segmentHashes.delete(id);
     }
 
-    // Remove stale issues for dirty segments
-    this.#store.removeBySegmentIds(dirtyIds);
+    // Remap instead of delete: transform dirty issues through the mapping
+    // so underlines stay visible at shifted positions while awaiting recheck.
+    // Also clean up orphaned segments from paragraph merge/remove.
+    if (dirtyIds.size > 0) {
+      const recheckId = this.#nextRecheckId++;
+      this.#store.remapIssues(dirtyIds, mapping, recheckId);
+      this.#store.removeOrphanedSegments(new Set(segments.map((s) => s.id)));
+    }
 
     this.#scheduleDebouncedCheck(segments);
   }
@@ -359,14 +400,39 @@ export class ProofingSessionManager {
     this.#scheduleDebouncedCheck(segments);
   }
 
+  /**
+   * Schedule a proofing check with debounce + max-wait.
+   *
+   * Each keystroke resets the debounce timer (default 500ms). But if the
+   * time since the last check exceeds a max-wait ceiling (default 2000ms),
+   * the check fires immediately instead of resetting. This ensures results
+   * appear while the user is still typing, not only after a full pause.
+   */
   #scheduleDebouncedCheck(segments: ProofingSegment[]): void {
+    // Hard-pause during IME composition — resume is triggered by setComposing(false)
+    if (this.#isComposing) return;
+
     if (this.#debounceTimer !== null) {
       clearTimeout(this.#debounceTimer);
     }
-    this.#debounceTimer = setTimeout(() => {
-      this.#debounceTimer = null;
-      this.#runCheck(segments);
-    }, this.#config.debounceMs);
+
+    const msSinceLastCheck = Date.now() - this.#lastCheckFiredAt;
+    const maxWaitExceeded = this.#lastCheckFiredAt > 0 && msSinceLastCheck >= DEFAULT_MAX_WAIT_MS;
+
+    if (maxWaitExceeded) {
+      // Continuous typing has exceeded max-wait — fire immediately
+      this.#fireCheck(segments);
+    } else {
+      this.#debounceTimer = setTimeout(() => {
+        this.#debounceTimer = null;
+        this.#fireCheck(segments);
+      }, this.#config.debounceMs);
+    }
+  }
+
+  #fireCheck(segments: ProofingSegment[]): void {
+    this.#lastCheckFiredAt = Date.now();
+    this.#runCheck(segments);
   }
 
   async #runCheck(segments: ProofingSegment[]): Promise<void> {
@@ -393,6 +459,12 @@ export class ProofingSessionManager {
       return;
     }
 
+    // Collect the recheckIds that will be replaced when results arrive.
+    // By the time the debounce fires, all mapped issues from recent edits
+    // have been tagged with recheckIds. Capture them now so #sendBatch
+    // knows which cohort to sweep.
+    const activeRecheckIds = this.#store.getActiveRecheckIds();
+
     // Prioritize visible segments first
     const ordered =
       this.#config.visibleFirst && this.#visibilitySource
@@ -407,7 +479,6 @@ export class ProofingSessionManager {
     for (let i = 0; i < batches.length; i++) {
       if (this.#disposed || epoch !== this.#documentEpoch) return;
       if (this.#inFlightCount >= this.#config.maxConcurrentRequests) {
-        // Store remaining batches for continuation after in-flight requests complete
         for (let j = i; j < batches.length; j++) {
           this.#pendingSegments.push(...batches[j]);
         }
@@ -415,11 +486,11 @@ export class ProofingSessionManager {
       }
       // Intentionally not awaited — batches run concurrently up to maxConcurrentRequests.
       // Errors are handled inside #sendBatch; continuation via #schedulePendingSegments.
-      this.#sendBatch(batches[i], epoch);
+      this.#sendBatch(batches[i], epoch, activeRecheckIds);
     }
   }
 
-  async #sendBatch(segments: ProofingSegment[], epoch: number): Promise<void> {
+  async #sendBatch(segments: ProofingSegment[], epoch: number, recheckIds: Set<number>): Promise<void> {
     if (!this.#provider || this.#disposed) return;
 
     const controller = new AbortController();
@@ -427,7 +498,6 @@ export class ProofingSessionManager {
     this.#inFlightCount++;
     this.#setStatus('checking');
 
-    // Apply timeout
     const timeoutId = setTimeout(() => controller.abort(), this.#config.timeoutMs);
 
     const request: ProofingCheckRequest = {
@@ -450,10 +520,10 @@ export class ProofingSessionManager {
       // Discard if epoch changed (stale result)
       if (epoch !== this.#documentEpoch || this.#disposed) return;
 
-      // Validate and store issues using pre-computed offset maps
+      // Build fresh confirmed issues from provider results
       const validSegmentIds = new Set(segments.map((s) => s.id));
       const segmentTextMap = new Map(segments.map((s) => [s.id, s]));
-      let addedAny = false;
+      const freshIssues: StoredIssue[] = [];
 
       for (const issue of result.issues) {
         if (!this.#validateIssue(issue, validSegmentIds, segmentTextMap)) continue;
@@ -461,17 +531,26 @@ export class ProofingSessionManager {
         const offsetMap = this.#offsetMaps.get(issue.segmentId);
         if (!offsetMap) continue;
 
+        const resolved = resolveIssuePmRangeFromSlices(issue, offsetMap.slices);
+        if (!resolved) continue;
+
         const segment = segmentTextMap.get(issue.segmentId);
-        const storedIssue = resolveIssuePmRangeFromSlices(issue, offsetMap.slices);
-        if (storedIssue) {
-          // Derive the actual misspelled word from segment text using offsets
-          if (segment) {
-            storedIssue.word = segment.text.slice(issue.start, issue.end);
-          }
-          this.#store.addIssue(storedIssue);
-          addedAny = true;
+        const storedIssue: StoredIssue = {
+          ...resolved,
+          state: 'confirmed',
+          recheckId: null,
+        };
+        if (segment) {
+          storedIssue.word = segment.text.slice(issue.start, issue.end);
         }
+        freshIssues.push(storedIssue);
       }
+
+      // Replace mapped issues for this batch's segments with fresh results.
+      // Only sweeps issues matching the recheckIds AND belonging to segments
+      // covered by this batch — does not affect mapped issues in other batches'
+      // segments, preserving display continuity for multi-batch checks.
+      this.#store.replaceBatchResults(recheckIds, validSegmentIds, freshIssues);
 
       // Update hashes for successfully checked segments
       for (const seg of segments) {
@@ -479,14 +558,10 @@ export class ProofingSessionManager {
       }
 
       this.#setStatus(this.#inFlightCount > 0 ? 'checking' : 'idle');
-
-      // Notify PresentationEditor to repaint proofing markers
-      if (addedAny) {
-        this.onResultsChanged?.();
-      }
+      this.onResultsChanged?.();
 
       // Continue scheduling remaining pending segments
-      this.#schedulePendingSegments(epoch);
+      this.#schedulePendingSegments(epoch, recheckIds);
     } catch (err) {
       clearTimeout(timeoutId);
 
@@ -509,20 +584,19 @@ export class ProofingSessionManager {
       this.#config.onProofingError?.(proofingError);
       this.#setStatus(this.#inFlightCount > 0 ? 'checking' : 'degraded');
 
-      // Still try to continue with remaining pending segments
-      this.#schedulePendingSegments(epoch);
+      this.#schedulePendingSegments(epoch, recheckIds);
     }
   }
 
   /** Send the next batch from #pendingSegments after an in-flight request completes. */
-  #schedulePendingSegments(epoch: number): void {
+  #schedulePendingSegments(epoch: number, recheckIds: Set<number>): void {
     if (this.#disposed || epoch !== this.#documentEpoch) return;
     if (this.#pendingSegments.length === 0) return;
     if (this.#inFlightCount >= this.#config.maxConcurrentRequests) return;
 
     const nextBatch = this.#pendingSegments.splice(0, this.#config.maxSegmentsPerBatch);
     if (nextBatch.length > 0) {
-      this.#sendBatch(nextBatch, epoch);
+      this.#sendBatch(nextBatch, epoch, recheckIds);
     }
   }
 

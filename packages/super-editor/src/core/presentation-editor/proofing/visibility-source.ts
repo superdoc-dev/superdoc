@@ -18,10 +18,3 @@ export interface VisibilitySource {
    */
   getVisiblePageIndices(): number[] | null;
 }
-
-/**
- * Fallback visibility source that always returns null (document-order fallback).
- */
-export const NULL_VISIBILITY_SOURCE: VisibilitySource = {
-  getVisiblePageIndices: () => null,
-};

@@ -19,20 +19,12 @@ import { resolveSegmentLanguage } from './language-resolution.js';
 export type ExtractionResult = {
   segments: ProofingSegment[];
   offsetMaps: Map<string, SegmentOffsetMap>;
+  /** Maps segment ID to its paragraph start position (for dirty-range matching). */
+  segmentPositions: Map<string, number>;
 };
 
 /** Optional resolver that maps a PM position to a page index. */
 export type PageResolver = (pmPos: number) => number | undefined;
-
-/**
- * Extract proofing segments from the document.
- * Each body paragraph and table-cell paragraph becomes one segment.
- * Header/footer content is excluded in v1.
- */
-export function extractSegments(doc: PmNode, defaultLanguage?: string | null): ProofingSegment[] {
-  const result = extractSegmentsWithMaps(doc, defaultLanguage);
-  return result.segments;
-}
 
 /**
  * Extract segments with their offset maps (used by the session manager
@@ -49,12 +41,13 @@ export function extractSegmentsWithMaps(
 ): ExtractionResult {
   const segments: ProofingSegment[] = [];
   const offsetMaps = new Map<string, SegmentOffsetMap>();
+  const segmentPositions = new Map<string, number>();
 
   walkParagraphs(doc, (paraNode, paraPos, surface) => {
     const { text, slices } = extractParagraphText(paraNode, paraPos);
     if (text.length === 0) return;
 
-    const segmentId = buildSegmentId(paraPos);
+    const segmentId = buildSegmentId(paraNode, paraPos);
     const language = resolveSegmentLanguage(paraNode, defaultLanguage ?? null);
     const pageIndex = pageResolver?.(paraPos);
 
@@ -70,9 +63,10 @@ export function extractSegmentsWithMaps(
     });
 
     offsetMaps.set(segmentId, { segmentId, slices });
+    segmentPositions.set(segmentId, paraPos);
   });
 
-  return { segments, offsetMaps };
+  return { segments, offsetMaps, segmentPositions };
 }
 
 // =============================================================================
@@ -252,7 +246,14 @@ function isNonTextInlineNode(typeName: string): boolean {
   return NON_TEXT_INLINE_NODES.has(typeName);
 }
 
-/** Build a deterministic segment ID from the paragraph's PM position. */
-function buildSegmentId(paraPos: number): string {
-  return `seg-${paraPos}`;
+/**
+ * Build a stable segment ID for a paragraph.
+ * Prefers sdBlockId (a UUID assigned by BlockNodePlugin that survives
+ * position shifts from edits to other paragraphs). Falls back to
+ * position-based IDs for paragraphs that don't have one yet (e.g.,
+ * freshly split paragraphs before the plugin runs).
+ */
+function buildSegmentId(paraNode: PmNode, paraPos: number): string {
+  const blockId = (paraNode.attrs as Record<string, unknown>).sdBlockId as string | undefined;
+  return blockId ? `blk-${blockId}` : `pos-${paraPos}`;
 }

@@ -6,17 +6,21 @@
  * produced by the segment extractor.
  */
 
-import type { ProofingIssue, StoredIssue, OffsetSlice } from './types.js';
+import type { ProofingIssue, OffsetSlice } from './types.js';
+
+/** Issue with resolved PM positions, before lifecycle state is assigned by the caller. */
+export type ResolvedIssue = ProofingIssue & { pmFrom: number; pmTo: number };
 
 // =============================================================================
 // Public API
 // =============================================================================
 
 /**
- * Resolve an issue using pre-computed offset slices.
- * This is the preferred hot path during batch result processing.
+ * Resolve an issue's text offsets into PM positions using pre-computed offset slices.
+ * Returns the issue with pmFrom/pmTo, or null if the range can't be mapped.
+ * The caller assigns `state`, `recheckId`, and `word` to produce a full StoredIssue.
  */
-export function resolveIssuePmRangeFromSlices(issue: ProofingIssue, slices: OffsetSlice[]): StoredIssue | null {
+export function resolveIssuePmRangeFromSlices(issue: ProofingIssue, slices: OffsetSlice[]): ResolvedIssue | null {
   const pmFrom = textOffsetToPmPos(issue.start, slices);
   const pmTo = textOffsetToPmPos(issue.end, slices);
 

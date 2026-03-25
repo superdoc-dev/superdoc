@@ -14,61 +14,44 @@
 import type { ProofingSegment } from './types.js';
 
 /**
- * Given the current segments and a set of changed PM ranges,
- * return the IDs of segments that need rechecking.
+ * Given the current segments, their paragraph positions, and a set of
+ * changed PM ranges, return the IDs of segments that need rechecking.
+ *
+ * @param segments - Current proofing segments (from extraction)
+ * @param segmentPositions - Map of segment ID → paragraph start position
+ * @param changedRanges - PM ranges affected by the transaction
  */
 export function computeDirtySegmentIds(
   segments: ProofingSegment[],
+  segmentPositions: Map<string, number>,
   changedRanges: Array<{ from: number; to: number }>,
 ): Set<string> {
   if (changedRanges.length === 0) return new Set();
 
   const dirty = new Set<string>();
 
-  // Build a fast lookup: segment positions derived from segment IDs.
-  // Segment IDs are `seg-{paraPos}`, so we can extract the PM position.
-  const segmentPositions = segments
-    .map((seg) => ({
-      id: seg.id,
-      pos: parseSegmentPos(seg.id),
-    }))
-    .filter((s) => s.pos !== null) as Array<{ id: string; pos: number }>;
-
-  // Sort by position for binary search
-  segmentPositions.sort((a, b) => a.pos - b.pos);
+  // Build a sorted list of (id, position) for range matching
+  const sorted = segments
+    .map((seg) => ({ id: seg.id, pos: segmentPositions.get(seg.id) ?? -1 }))
+    .filter((s) => s.pos >= 0)
+    .sort((a, b) => a.pos - b.pos);
 
   for (const range of changedRanges) {
-    // Find all segments whose paragraph position falls within or near the changed range.
-    // A segment starting before range.to and the next segment starting after range.from
-    // are both potentially affected.
-    for (let i = 0; i < segmentPositions.length; i++) {
-      const seg = segmentPositions[i];
-      const nextSeg = segmentPositions[i + 1];
-
-      // Segment's content region extends from seg.pos to the next segment's pos (or doc end).
-      const segEnd = nextSeg ? nextSeg.pos : Infinity;
+    for (let i = 0; i < sorted.length; i++) {
+      const seg = sorted[i];
+      const segEnd = sorted[i + 1]?.pos ?? Infinity;
 
       // Check if this segment overlaps with the changed range
       if (seg.pos < range.to && segEnd > range.from) {
         dirty.add(seg.id);
       }
 
-      // Also mark adjacent segments for boundary changes (split/merge)
+      // Also mark adjacent segment for boundary changes (split/merge)
       if (seg.pos <= range.from && segEnd >= range.from && i > 0) {
-        dirty.add(segmentPositions[i - 1].id);
+        dirty.add(sorted[i - 1].id);
       }
     }
   }
 
   return dirty;
-}
-
-// =============================================================================
-// Internal
-// =============================================================================
-
-/** Extract the PM position from a segment ID like "seg-42". */
-function parseSegmentPos(segmentId: string): number | null {
-  const match = segmentId.match(/^seg-(\d+)$/);
-  return match ? parseInt(match[1], 10) : null;
 }

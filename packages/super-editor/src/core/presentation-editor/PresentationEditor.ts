@@ -3,10 +3,15 @@ import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
-import { applyProofingDecorations, clearProofingDecorations, createDomPainter  } from '@superdoc/painter-dom';
-import type { ProofingAnnotation, LayoutMode, PaintSnapshot  } from '@superdoc/painter-dom';
+import { applyProofingDecorations, clearProofingDecorations, createDomPainter } from '@superdoc/painter-dom';
+import type { ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
 import type { VisibilitySource } from './proofing/visibility-source.js';
+import { computeWordSelectionRangeAt,
+  computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
+  computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
+  getFirstTextPosition as getFirstTextPositionFromHelper,
+  registerPointerClick as registerPointerClickFromHelper } from './input/ClickSelectionUtilities.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -41,12 +46,6 @@ import { PresentationInputBridge } from './input/PresentationInputBridge.js';
 import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './utils/SchemaNodeTypes.js';
 import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
-import {
-  computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
-  computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
-  getFirstTextPosition as getFirstTextPositionFromHelper,
-  registerPointerClick as registerPointerClickFromHelper,
-} from './input/ClickSelectionUtilities.js';
 import {
   computeA11ySelectionAnnouncement as computeA11ySelectionAnnouncementFromHelper,
   scheduleA11ySelectionAnnouncement as scheduleA11ySelectionAnnouncementFromHelper,
@@ -92,7 +91,6 @@ import type {
   PositionHit,
   TableHitResult,
 } from '@superdoc/layout-bridge';
-
 
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
@@ -864,25 +862,7 @@ export class PresentationEditor extends EventEmitter {
           ...patch,
           enabled: true,
         } as ProofingConfig);
-        this.#proofingManager.setDocumentId(
-          ((this.#options as Record<string, unknown>).documentId as string | null) ?? null,
-        );
-        // Wire callback, visibility source, and page resolver
-        this.#proofingManager.onResultsChanged = () => this.#applyProofingPass();
-        this.#proofingManager.setVisibilitySource({
-          getVisiblePageIndices: () => {
-            if (!this.#painterHost) return null;
-            const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
-            if (pageEls.length === 0) return null;
-            const indices: number[] = [];
-            for (let i = 0; i < pageEls.length; i++) {
-              const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
-              if (!isNaN(idx)) indices.push(idx);
-            }
-            return indices.length > 0 ? indices : null;
-          },
-        });
-        this.#proofingManager.setPageResolver(this.#buildPageResolver());
+        this.#wireProofingManagerAdapters();
         if (this.#editor?.state?.doc) {
           this.#proofingManager.runInitialCheck(this.#editor.state.doc);
         }
@@ -2899,34 +2879,7 @@ export class PresentationEditor extends EventEmitter {
     if (!proofingConfig) return;
 
     this.#proofingManager = new ProofingSessionManager(proofingConfig);
-    this.#proofingManager.setDocumentId(
-      ((this.#options as Record<string, unknown>).documentId as string | null) ?? null,
-    );
-
-    // Wire the results-changed callback so async provider responses
-    // trigger a decoration repaint without waiting for the next paint cycle.
-    this.#proofingManager.onResultsChanged = () => {
-      this.#applyProofingPass();
-    };
-
-    // Visibility source: query actually mounted page elements in the DOM,
-    // not all layout pages. This makes visible-first scheduling meaningful
-    // under virtualization.
-    const visibilitySource: VisibilitySource = {
-      getVisiblePageIndices: () => {
-        if (!this.#painterHost) return null;
-        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
-        if (pageEls.length === 0) return null;
-        const indices: number[] = [];
-        for (let i = 0; i < pageEls.length; i++) {
-          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
-          if (!isNaN(idx)) indices.push(idx);
-        }
-        return indices.length > 0 ? indices : null;
-      },
-    };
-    this.#proofingManager.setVisibilitySource(visibilitySource);
-    this.#proofingManager.setPageResolver(this.#buildPageResolver());
+    this.#wireProofingManagerAdapters();
 
     // Schedule initial check after first paint
     if (proofingConfig.enabled && this.#editor?.state?.doc) {
@@ -2960,6 +2913,44 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Wire all adapters (callbacks, visibility source, page resolver, composition
+   * listeners) onto the current proofing manager. Called once from both
+   * #initializeProofing and updateProofingConfig to avoid duplication.
+   */
+  #wireProofingManagerAdapters(): void {
+    const mgr = this.#proofingManager;
+    if (!mgr) return;
+
+    mgr.setDocumentId(((this.#options as Record<string, unknown>).documentId as string | null) ?? null);
+
+    mgr.onResultsChanged = () => this.#applyProofingPass();
+
+    mgr.setVisibilitySource({
+      getVisiblePageIndices: () => {
+        if (!this.#painterHost) return null;
+        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
+        if (pageEls.length === 0) return null;
+        const indices: number[] = [];
+        for (let i = 0; i < pageEls.length; i++) {
+          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
+          if (!isNaN(idx)) indices.push(idx);
+        }
+        return indices.length > 0 ? indices : null;
+      },
+    });
+
+    mgr.setPageResolver(this.#buildPageResolver());
+
+    // Composition hard-pause: direct DOM events are more reliable than
+    // view.composing which may be stale by the time the end-transaction fires.
+    const editorDom = this.#editor?.view?.dom;
+    if (editorDom) {
+      editorDom.addEventListener('compositionstart', () => mgr.setComposing(true));
+      editorDom.addEventListener('compositionend', () => mgr.setComposing(false));
+    }
+  }
+
+  /**
    * Apply the proofing decoration pass after paint or when results change.
    * Walks rendered spans and applies proofing CSS classes.
    * Rebuilds DomPositionIndex if any DOM mutations were made.
@@ -2978,7 +2969,15 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const slices = this.#proofingManager.getPaintSlices();
+    // Compute active word range for caret-token suppression:
+    // suppress the underline on the word the user is currently typing.
+    const editorState = this.#editor?.state;
+    let activeWordRange: { from: number; to: number } | null = null;
+    if (editorState?.selection.empty) {
+      activeWordRange = computeWordSelectionRangeAt(editorState, editorState.selection.head);
+    }
+
+    const slices = this.#proofingManager.getPaintSlices(activeWordRange);
 
     // Convert paint slices to ProofingAnnotation format
     const annotations: ProofingAnnotation[] = slices.map((s) => ({
@@ -3005,17 +3004,22 @@ export class PresentationEditor extends EventEmitter {
     const doc = this.#editor?.state?.doc;
     if (!doc) return;
 
-    // Extract changed ranges from the transaction
+    // Extract changed ranges in final-document coordinates.
+    // Each step map's ranges are in intermediate coordinates — they must be
+    // mapped forward through all subsequent steps to reach the final doc space.
     const changedRanges: Array<{ from: number; to: number }> = [];
-    if (transaction.steps.length > 0) {
-      transaction.mapping.maps.forEach((map, i) => {
-        map.forEach((oldStart, oldEnd, newStart, newEnd) => {
-          changedRanges.push({ from: newStart, to: newEnd });
+    const { mapping } = transaction;
+    mapping.maps.forEach((map, stepIndex) => {
+      const mapFrom = mapping.slice(stepIndex + 1);
+      map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+        changedRanges.push({
+          from: mapFrom.map(newStart, -1),
+          to: mapFrom.map(newEnd, 1),
         });
       });
-    }
+    });
 
-    this.#proofingManager.onDocumentChanged(doc, changedRanges);
+    this.#proofingManager.onDocumentChanged(doc, changedRanges, transaction.mapping);
   }
 
   /**

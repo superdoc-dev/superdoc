@@ -97,8 +97,8 @@
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
-    "@superdoc/common": "workspace:*",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

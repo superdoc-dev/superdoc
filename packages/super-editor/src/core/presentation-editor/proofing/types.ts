@@ -138,7 +138,7 @@ export type SegmentOffsetMap = {
 // Internal: Proofing Store
 // =============================================================================
 
-/** A stored issue with its resolved PM range and derived word. */
+/** A stored issue with its resolved PM range, lifecycle state, and derived word. */
 export type StoredIssue = ProofingIssue & {
   /** Resolved PM start position. */
   pmFrom: number;
@@ -151,6 +151,10 @@ export type StoredIssue = ProofingIssue & {
    * a human-readable explanation rather than the raw token.
    */
   word?: string;
+  /** 'confirmed' = trusted provider result. 'mapped' = transformed through transaction, awaiting recheck. */
+  state: 'confirmed' | 'mapped';
+  /** Identifies which pending recheck cohort owns this mapped issue. null for confirmed issues. */
+  recheckId: number | null;
 };
 
 // =============================================================================

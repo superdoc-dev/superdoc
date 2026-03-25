@@ -12,6 +12,8 @@ function makeIssue(pmFrom: number, pmTo: number, overrides: Partial<StoredIssue>
     replacements: [],
     pmFrom,
     pmTo,
+    state: 'confirmed',
+    recheckId: null,
     ...overrides,
   };
 }

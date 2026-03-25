@@ -716,6 +716,101 @@ describe('insertStructuredContentInline formatting', () => {
     // "some" should be removed; remaining text is "This is " + "Inline Header" + " text"
     expect(updatedParagraph.textContent).toBe('This is Inline Header text');
   });
+
+  it('does not produce an empty right run when cursor is at the end of a run', () => {
+    const fontFamily = {
+      ascii: 'Courier New',
+      eastAsia: 'Courier New',
+      hAnsi: 'Courier New',
+      cs: 'Courier New',
+    };
+    const textStyleMark = schema.marks.textStyle.create({
+      fontFamily: 'Courier New',
+      fontSize: '12pt',
+    });
+    const styledText = schema.text('Hello', [textStyleMark]);
+    const run = schema.nodes.run.create({ runProperties: { fontFamily } }, styledText);
+    const paragraph = schema.nodes.paragraph.create(null, [run]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+
+    // Cursor at the very end of the run content: doc(1) + paragraph(1) + "Hello"(5) = 7
+    const cursorPos = 2 + 'Hello'.length; // 7
+    const nextState = EditorState.create({
+      schema,
+      doc,
+      plugins: editor.state.plugins,
+      selection: TextSelection.create(doc, cursorPos),
+    });
+    editor.setState(nextState);
+
+    editor.commands.insertStructuredContentInline({
+      text: 'Field',
+      attrs: { group: 'header' },
+    });
+
+    const updatedParagraph = editor.state.doc.firstChild;
+
+    // Should be: run, structuredContent — no empty run after the SDT
+    const childTypes = [];
+    updatedParagraph.forEach((child) => {
+      childTypes.push(child.type.name);
+      if (child.type.name === 'run') {
+        expect(child.content.size).toBeGreaterThan(0);
+      }
+    });
+
+    expect(childTypes).toEqual(['run', 'structuredContent']);
+    expect(updatedParagraph.textContent).toBe('HelloField');
+  });
+
+  it('places the cursor right after the inserted SDT', () => {
+    const fontFamily = {
+      ascii: 'Courier New',
+      eastAsia: 'Courier New',
+      hAnsi: 'Courier New',
+      cs: 'Courier New',
+    };
+    const textStyleMark = schema.marks.textStyle.create({
+      fontFamily: 'Courier New',
+      fontSize: '12pt',
+    });
+    const styledText = schema.text('Hello World', [textStyleMark]);
+    const run = schema.nodes.run.create({ runProperties: { fontFamily } }, styledText);
+    const paragraph = schema.nodes.paragraph.create(null, [run]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+
+    // Cursor after "Hello " (6 chars): doc(1) + paragraph(1) + 6 = 8
+    const cursorPos = 2 + 'Hello '.length; // 8
+    const nextState = EditorState.create({
+      schema,
+      doc,
+      plugins: editor.state.plugins,
+      selection: TextSelection.create(doc, cursorPos),
+    });
+    editor.setState(nextState);
+
+    editor.commands.insertStructuredContentInline({
+      text: 'Field',
+      attrs: { group: 'header' },
+    });
+
+    const updatedState = editor.state;
+    const updatedParagraph = updatedState.doc.firstChild;
+
+    // Find the SDT node and compute where the cursor should be (right after it)
+    let sdtEnd = null;
+    let offset = 1; // paragraph opens at pos 1
+    updatedParagraph.forEach((child) => {
+      if (child.type.name === 'structuredContent') {
+        sdtEnd = offset + child.nodeSize;
+      }
+      offset += child.nodeSize;
+    });
+
+    expect(sdtEnd).not.toBeNull();
+    expect(updatedState.selection.from).toBe(sdtEnd);
+    expect(updatedState.selection.to).toBe(sdtEnd);
+  });
 });
 
 describe('StructuredContent ID Validation', () => {

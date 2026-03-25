@@ -143,6 +143,23 @@ describe('splitRunToParagraph command', () => {
     expect(paragraphTexts).toEqual(['He', 'llo']);
   });
 
+  it('preserves explicit stored marks when splitting into a new paragraph', () => {
+    loadDoc(RUN_DOC);
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Hello'.length);
+
+    const bold = editor.schema.marks.bold.create();
+    editor.view.dispatch(editor.view.state.tr.setStoredMarks([bold]));
+    expect((editor.view.state.storedMarks || []).map((mark) => mark.type.name)).toContain('bold');
+
+    const handled = editor.commands.splitRunToParagraph();
+
+    expect(handled).toBe(true);
+    expect((editor.view.state.storedMarks || []).map((mark) => mark.type.name)).toContain('bold');
+  });
+
   it('splits a run at the cursor into two runs', () => {
     loadDoc(RUN_DOC);
 
@@ -701,6 +718,78 @@ describe('splitRunToParagraph with style marks', () => {
 
     const paragraphTexts = getParagraphTexts(editor.view.state.doc);
     expect(paragraphTexts).toEqual(['Heading', ' Text']);
+  });
+
+  it('clears copied paragraph runProperties at paragraph end when the current run has none', () => {
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: { bold: true },
+            },
+          },
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: null,
+              },
+              content: [{ type: 'text', text: 'Plain' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Plain');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Plain'.length);
+
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const secondParagraph = editor.view.state.doc.child(1);
+    expect(secondParagraph.attrs.paragraphProperties?.runProperties).toBeUndefined();
+  });
+
+  it('preserves enclosing runProperties when splitting at paragraph end with null storedMarks', () => {
+    const runProperties = {
+      styleId: 'CustomCharStyle',
+      fonts: { ascii: 'Aptos Display' },
+    };
+
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {},
+          },
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties,
+              },
+              content: [{ type: 'text', text: 'Styled' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Styled');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Styled'.length);
+
+    expect(editor.view.state.storedMarks).toBeNull();
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const secondParagraph = editor.view.state.doc.child(1);
+    expect(secondParagraph.attrs.paragraphProperties?.runProperties).toEqual(runProperties);
   });
 
   it('handles malformed converter data during split', () => {

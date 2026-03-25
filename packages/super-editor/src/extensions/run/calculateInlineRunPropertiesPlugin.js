@@ -78,7 +78,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
       if (!runPositions.size) return null;
 
-      const selectionPreserver = createSelectionPreserver(tr, newState.selection);
+      const selectionPreserver = createSelectionPreserver(tr, newState.selection, newState.storedMarks);
       const sortedRunPositions = Array.from(runPositions).sort((a, b) => b - a);
 
       sortedRunPositions.forEach((pos) => {
@@ -101,14 +101,45 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         );
         const runProperties = firstInlineProps ?? null;
 
+        const existingInlineKeys = runNode.attrs?.runPropertiesInlineKeys || [];
+        const styleKeys = runNode.attrs?.runPropertiesStyleKeys || [];
+        const keysFromMarks = (segment) => {
+          const textNode = segment.content?.find((n) => n.isText);
+          return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
+        };
+        const overrideKeysFromInlineProps = (inlineProps) => styleKeys.filter((k) => inlineProps && k in inlineProps);
         if (segments.length === 1) {
-          if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
-          tr.setNodeMarkup(mappedPos, runNode.type, { ...runNode.attrs, runProperties }, runNode.marks);
+          const hadInlineKeys =
+            Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;
+          if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties) && hadInlineKeys) return;
+          // Allow-list = prior inline keys ∪ mark keys only. Do not union Object.keys(runProperties): runs often
+          // carry resolved paragraph-style noise in runProperties; listing every key would re-export it on w:rPr
+          // and bloat document.xml. Importer / plan-engine must seed runPropertiesInlineKeys for true OOXML keys.
+          const newInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segments[0])])];
+          const newOverrideKeys = overrideKeysFromInlineProps(runProperties);
+          tr.setNodeMarkup(
+            mappedPos,
+            runNode.type,
+            {
+              ...runNode.attrs,
+              runProperties,
+              runPropertiesInlineKeys: newInlineKeys.length ? newInlineKeys : null,
+              runPropertiesOverrideKeys: newOverrideKeys.length ? newOverrideKeys : null,
+            },
+            runNode.marks,
+          );
         } else {
           const newRuns = segments.map((segment) => {
             const props = segment.inlineProps ?? null;
+            const segmentInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segment)])];
+            const segmentOverrideKeys = overrideKeysFromInlineProps(props);
             return runType.create(
-              { ...(runNode.attrs ?? {}), runProperties: props },
+              {
+                ...(runNode.attrs ?? {}),
+                runProperties: props,
+                runPropertiesInlineKeys: segmentInlineKeys.length ? segmentInlineKeys : null,
+                runPropertiesOverrideKeys: segmentOverrideKeys.length ? segmentOverrideKeys : null,
+              },
               Fragment.fromArray(segment.content),
               runNode.marks,
             );
@@ -426,7 +457,7 @@ function stableStringifyInlineProps(inlineProps) {
  * @param {import('prosemirror-state').Selection} originalSelection
  * @returns {{ mapReplacement: (startPos: number, nodeSize: number, replacement: Fragment) => void, finalize: () => void }|null}
  */
-function createSelectionPreserver(tr, originalSelection) {
+function createSelectionPreserver(tr, originalSelection, originalStoredMarks = null) {
   if (!originalSelection) return null;
 
   const isTextSelection = originalSelection instanceof TextSelection;
@@ -503,6 +534,9 @@ function createSelectionPreserver(tr, originalSelection) {
     if (!tr.docChanged) return;
     if (isTextSelection && preservedAnchor != null && preservedHead != null) {
       tr.setSelection(TextSelection.create(tr.doc, preservedAnchor, preservedHead));
+      if (preservedAnchor === preservedHead && originalStoredMarks !== null) {
+        tr.setStoredMarks(originalStoredMarks);
+      }
       return;
     }
     tr.setSelection(originalSelection.map(tr.doc, tr.mapping));

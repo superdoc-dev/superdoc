@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { DocxEncryptionError, DocxEncryptionErrorCode } from '@core/ooxml-encryption/errors.js';
 
 const onMarginClickCursorChangeMock = vi.hoisted(() => vi.fn());
 const checkNodeSpecificClicksMock = vi.hoisted(() => vi.fn());
@@ -116,7 +117,7 @@ describe('SuperEditor.vue', () => {
 
     await flushPromises();
 
-    expect(EditorConstructor.loadXmlData).toHaveBeenCalledWith(fileSource);
+    expect(EditorConstructor.loadXmlData).toHaveBeenCalledWith(fileSource, false, { password: undefined });
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
     const options = EditorConstructor.mock.calls[0][0];
@@ -515,12 +516,41 @@ describe('SuperEditor.vue', () => {
     await flushPromises();
 
     expect(onException).toHaveBeenCalledWith({ error, editor: null });
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'Unable to load the file. Please verify the .docx is valid and not password protected.',
-    );
+    expect(consoleWarnSpy).toHaveBeenCalledWith('Unable to load the file. Please verify the .docx is valid.');
     expect(getFileObjectMock).toHaveBeenCalledWith('blank-docx-url', 'blank.docx', DOCX_MIME);
     expect(EditorConstructor.loadXmlData).toHaveBeenCalledTimes(2);
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('suppresses load-error logging when a recoverable password error is handled', async () => {
+    const error = new DocxEncryptionError(
+      DocxEncryptionErrorCode.PASSWORD_REQUIRED,
+      'This document is password-protected.',
+    );
+
+    EditorConstructor.loadXmlData.mockRejectedValueOnce(error);
+
+    const onException = vi.fn(() => true);
+    const fileSource = new Blob([], { type: DOCX_MIME });
+
+    const wrapper = mount(SuperEditor, {
+      props: {
+        fileSource,
+        options: { onException },
+      },
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onException).toHaveBeenCalledWith({
+      error,
+      editor: null,
+      code: DocxEncryptionErrorCode.PASSWORD_REQUIRED,
+    });
+    expect(consoleDebugSpy).not.toHaveBeenCalledWith('[SuperDoc] Error loading file:', error);
 
     wrapper.unmount();
   });

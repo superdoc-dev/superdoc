@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shallowRef, reactive } from 'vue';
 import { DOCX, PDF } from '@superdoc/common';
 
 // ---------------------------------------------------------------------------
@@ -11,11 +12,8 @@ vi.mock('@superdoc/common/collaboration/awareness', () => ({
 
 vi.mock('uuid', () => ({ v4: vi.fn(() => 'uuid-test') }));
 
-// --- super-editor ---
-
 const seedEditorStateToYDocMock = vi.fn();
-const onCollaborationProviderSyncedMock = vi.fn((provider, cb) => {
-  // Immediately report synced by default (tests can override)
+const onCollaborationProviderSyncedMock = vi.fn((_, cb) => {
   cb();
   return () => {};
 });
@@ -40,8 +38,6 @@ vi.mock('@superdoc/super-editor', () => ({
   onCollaborationProviderSynced: onCollaborationProviderSyncedMock,
 }));
 
-// --- collaboration helpers ---
-
 const initCollaborationCommentsMock = vi.fn();
 
 vi.mock('./collaboration/helpers.js', () => ({
@@ -59,8 +55,6 @@ vi.mock('./collaboration/collaboration.js', () => ({
   setupAwarenessHandler: setupAwarenessHandlerMock,
 }));
 
-// --- room overwrite ---
-
 const overwriteRoomCommentsMock = vi.fn();
 const overwriteRoomLockStateMock = vi.fn();
 
@@ -68,8 +62,6 @@ vi.mock('./collaboration/room-overwrite.js', () => ({
   overwriteRoomComments: overwriteRoomCommentsMock,
   overwriteRoomLockState: overwriteRoomLockStateMock,
 }));
-
-// --- other mocks ---
 
 vi.mock('../components/CommentsLayer/commentsList/super-comments-list.js', () => ({
   SuperComments: vi.fn(),
@@ -99,57 +91,8 @@ vi.mock('@hocuspocus/provider', () => ({
   HocuspocusProviderWebsocket: vi.fn(),
 }));
 
-// --- Vue app harness ---
-
 const createVueAppMock = vi.fn();
 vi.mock('./create-app.js', () => ({ createSuperdocVueApp: createVueAppMock }));
-
-function createAppHarness({ commentsList = [] } = {}) {
-  const mockEditor = createMockEditor();
-
-  const superdocStore = {
-    documents: [
-      {
-        id: 'doc-1',
-        type: DOCX,
-        getEditor: () => mockEditor,
-        setEditor: vi.fn(),
-      },
-    ],
-    init: vi.fn(),
-    reset: vi.fn(),
-    setExceptionHandler: vi.fn(),
-    activeZoom: 100,
-  };
-
-  const commentsStore = {
-    init: vi.fn(),
-    commentsList,
-    translateCommentsForExport: vi.fn(() => []),
-    handleEditorLocationsUpdate: vi.fn(),
-    hasSyncedCollaborationComments: false,
-    commentsParentElement: null,
-    editorCommentIds: [],
-    removePendingComment: vi.fn(),
-    setActiveComment: vi.fn(),
-  };
-
-  const app = {
-    mount: vi.fn(),
-    unmount: vi.fn(),
-    config: { globalProperties: {} },
-  };
-
-  createVueAppMock.mockReturnValue({
-    app,
-    pinia: {},
-    superdocStore,
-    commentsStore,
-    highContrastModeStore: {},
-  });
-
-  return { app, superdocStore, commentsStore, mockEditor };
-}
 
 function createMockEditor() {
   const docJson = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'user edits' }] }] };
@@ -205,52 +148,108 @@ function createMockYDoc() {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const flushMicrotasks = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
 
-/**
- * Mount mock that creates a `.superdoc` element (simulating Vue render)
- * and fires the upgrade visual-ready callback (or falls back to the `ready`
- * event for non-upgrade mounts like initial construction).
- */
-function makeUpgradeAwareMountMock(instance) {
-  return (wrapper) => {
-    const el = document.createElement('div');
-    el.className = 'superdoc';
-    wrapper.appendChild(el);
-
-    setTimeout(() => {
-      if (instance._upgradeVisualReadyCallback) {
-        instance._upgradeVisualReadyCallback();
-      } else {
-        instance.emit('ready', { superdoc: instance });
-      }
-    }, 0);
+function baseConfig(overrides = {}) {
+  return {
+    modules: { comments: {} },
+    colors: [],
+    onException: vi.fn(),
+    ...overrides,
   };
 }
 
-/**
- * Ensure the initial mount creates a `.superdoc` element so the snapshot
- * code has something to clone during upgrade-transition tests.
- */
-function makeInitialMountMock() {
-  return (wrapper) => {
-    const el = document.createElement('div');
-    el.className = 'superdoc';
-    el.innerHTML = '<p>Initial content</p>';
-    wrapper.appendChild(el);
+function createUpgradeHarness({ commentsList = [], attachImpl } = {}) {
+  const mockEditor = createMockEditor();
+  const innerEditor = {
+    ...mockEditor,
+    options: { ...mockEditor.options, collaborationIsReady: false },
+    on: vi.fn(),
+    off: vi.fn(),
+  };
+
+  const attachCollaborationMock = vi.fn(() => {
+    if (attachImpl) {
+      return attachImpl(innerEditor);
+    }
+    innerEditor.options.collaborationIsReady = true;
+  });
+
+  const editorInstance = {
+    ...mockEditor,
+    editor: innerEditor,
+    attachCollaboration: attachCollaborationMock,
+  };
+
+  const storeDoc = {
+    id: 'doc-1',
+    type: DOCX,
+    getEditor: () => editorInstance,
+    getPresentationEditor: () => editorInstance,
+    setEditor: vi.fn(),
+    // Use real Vue shallowRefs to match use-document.js composable behavior.
+    // Wrapping documents in reactive() below simulates Pinia's reactive store,
+    // which auto-unwraps shallowRefs on property access through the proxy.
+    ydoc: shallowRef(null),
+    provider: shallowRef(null),
+  };
+
+  const superdocStore = {
+    // reactive() simulates Pinia's ref([]) store behavior: items accessed
+    // through the reactive array become reactive proxies that auto-unwrap
+    // shallowRef properties — the code must use toRaw() to reach .value.
+    documents: reactive([storeDoc]),
+    init: vi.fn(),
+    reset: vi.fn(),
+    setExceptionHandler: vi.fn(),
+    activeZoom: 100,
+  };
+
+  const commentsStore = {
+    init: vi.fn(),
+    commentsList,
+    translateCommentsForExport: vi.fn(() => []),
+    handleEditorLocationsUpdate: vi.fn(),
+    hasSyncedCollaborationComments: false,
+    commentsParentElement: null,
+    editorCommentIds: [],
+    removePendingComment: vi.fn(),
+    setActiveComment: vi.fn(),
+  };
+
+  const app = {
+    mount: vi.fn((wrapper) => {
+      const el = document.createElement('div');
+      el.className = 'superdoc';
+      wrapper.appendChild(el);
+    }),
+    unmount: vi.fn(),
+    provide: vi.fn(),
+    config: { globalProperties: {} },
+  };
+
+  createVueAppMock.mockReturnValue({
+    app,
+    pinia: {},
+    superdocStore,
+    commentsStore,
+    highContrastModeStore: {},
+  });
+
+  return {
+    app,
+    superdocStore,
+    commentsStore,
+    mockEditor,
+    innerEditor,
+    editorInstance,
+    attachCollaborationMock,
+    storeDoc,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 let consoleDebugSpy;
 let consoleLogSpy;
@@ -287,18 +286,12 @@ describe('upgradeToCollaboration', () => {
     vi.clearAllMocks();
   });
 
-  // -----------------------------------------------------------------------
-  // Happy path
-  // -----------------------------------------------------------------------
-
-  it('upgrades a local instance into collaboration mode', async () => {
-    const { app, superdocStore, mockEditor } = createAppHarness();
+  it('upgrades a local instance into collaboration mode without unmounting the app', async () => {
+    const { app, editorInstance, attachCollaborationMock } = createUpgradeHarness();
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
     instance.readyEditors = 1;
@@ -306,118 +299,141 @@ describe('upgradeToCollaboration', () => {
     const ydoc = createMockYDoc();
     const provider = createMockProvider();
 
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
     await instance.upgradeToCollaboration({ ydoc, provider });
 
     expect(instance.isCollaborative).toBe(true);
-    expect(seedEditorStateToYDocMock).toHaveBeenCalledWith(mockEditor, ydoc);
-    expect(overwriteRoomCommentsMock).toHaveBeenCalledWith(ydoc, expect.anything());
-    expect(overwriteRoomLockStateMock).toHaveBeenCalledWith(ydoc, {
-      isLocked: false,
-      lockedBy: null,
-    });
+    expect(app.unmount).not.toHaveBeenCalled();
+    expect(seedEditorStateToYDocMock).toHaveBeenCalledWith(editorInstance, ydoc);
+    expect(attachCollaborationMock).toHaveBeenCalledWith({ ydoc, collaborationProvider: provider });
   });
 
   it('waits for provider sync before seeding', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
+    createUpgradeHarness();
     let syncCallback;
     onCollaborationProviderSyncedMock.mockImplementation((_, cb) => {
       syncCallback = cb;
       return () => {};
     });
 
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      ...baseConfig(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
 
-    const ydoc = createMockYDoc();
-    const provider = createMockProvider({ synced: false });
+    const upgradePromise = instance.upgradeToCollaboration({
+      ydoc: createMockYDoc(),
+      provider: createMockProvider({ synced: false }),
+    });
 
-    const upgradePromise = instance.upgradeToCollaboration({ ydoc, provider });
-
-    // Seed should NOT have been called yet (provider not synced)
     expect(seedEditorStateToYDocMock).not.toHaveBeenCalled();
 
-    // Now report synced
     syncCallback();
     await upgradePromise;
 
-    expect(seedEditorStateToYDocMock).toHaveBeenCalled();
+    expect(seedEditorStateToYDocMock).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves document ids across upgrade', async () => {
-    const { app, superdocStore } = createAppHarness();
-    superdocStore.documents[0].id = 'my-doc-id';
+  it('preserves document ids and transfers lock state during upgrade', async () => {
+    const { storeDoc } = createUpgradeHarness();
+    storeDoc.id = 'my-doc-id';
 
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'my-doc-id', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig({ isLocked: true, lockedBy: { name: 'Alice' } }),
     });
     await flushMicrotasks();
     instance.readyEditors = 1;
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    expect(instance.config.documents[0].id).toBe('my-doc-id');
-  });
-
-  it('transfers lock state during upgrade', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      isLocked: true,
-      lockedBy: { name: 'Alice' },
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
 
     const ydoc = createMockYDoc();
     await instance.upgradeToCollaboration({ ydoc, provider: createMockProvider() });
 
+    expect(instance.config.documents[0].id).toBe('my-doc-id');
     expect(overwriteRoomLockStateMock).toHaveBeenCalledWith(ydoc, {
       isLocked: true,
       lockedBy: { name: 'Alice' },
     });
   });
 
-  // -----------------------------------------------------------------------
-  // Validation
-  // -----------------------------------------------------------------------
-
-  it('throws when instance is already collaborative', async () => {
-    const { app } = createAppHarness();
+  it('updates store documents with ydoc/provider and wires collaboration comments', async () => {
+    const { storeDoc } = createUpgradeHarness();
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: {
-        comments: {},
-        collaboration: { ydoc: createMockYDoc(), provider: createMockProvider() },
-      },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
+
+    const ydoc = createMockYDoc();
+    const provider = createMockProvider();
+
+    await instance.upgradeToCollaboration({ ydoc, provider });
+
+    expect(storeDoc.ydoc.value).toBe(ydoc);
+    expect(storeDoc.provider.value).toBe(provider);
+    expect(initCollaborationCommentsMock).toHaveBeenCalledWith(instance);
+  });
+
+  it('rolls back if attachCollaboration throws', async () => {
+    const { attachCollaborationMock, storeDoc } = createUpgradeHarness();
+    attachCollaborationMock.mockImplementation(() => {
+      throw new Error('Attach failed');
+    });
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      ...baseConfig(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
+
+    await expect(
+      instance.upgradeToCollaboration({
+        ydoc: createMockYDoc(),
+        provider: createMockProvider(),
+      }),
+    ).rejects.toThrow('Attach failed');
+
+    expect(instance.isCollaborative).toBe(false);
+    expect(awarenessCleanupSpy).toHaveBeenCalled();
+    expect(storeDoc.ydoc.value).toBeNull();
+    expect(storeDoc.provider.value).toBeNull();
+  });
+
+  it('does not create a DOM snapshot overlay', async () => {
+    createUpgradeHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      ...baseConfig(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
+
+    await instance.upgradeToCollaboration({
+      ydoc: createMockYDoc(),
+      provider: createMockProvider(),
+    });
+
+    expect(document.getElementById('host').querySelector('.sd-upgrade-overlay')).toBeNull();
+  });
+
+  it('throws when instance is already collaborative', async () => {
+    createUpgradeHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      ...baseConfig({
+        modules: {
+          comments: {},
+          collaboration: { ydoc: createMockYDoc(), provider: createMockProvider() },
+        },
+      }),
     });
     await flushMicrotasks();
 
@@ -426,116 +442,88 @@ describe('upgradeToCollaboration', () => {
     ).rejects.toThrow('already collaborative');
   });
 
-  it('throws when ydoc is missing', async () => {
-    createAppHarness();
+  it('throws when ydoc or provider is missing', async () => {
+    createUpgradeHarness();
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
 
     await expect(instance.upgradeToCollaboration({ ydoc: null, provider: createMockProvider() })).rejects.toThrow(
       'requires both ydoc and provider',
     );
-  });
-
-  it('throws when provider is missing', async () => {
-    createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-
     await expect(instance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: null })).rejects.toThrow(
       'requires both ydoc and provider',
     );
   });
 
-  it('throws for multi-DOCX instances', async () => {
-    createAppHarness();
-    const instance = new SuperDoc({
+  it('throws for unsupported document sets', async () => {
+    createUpgradeHarness();
+
+    const multiDocx = new SuperDoc({
       selector: '#host',
       documents: [
         { id: 'doc-1', type: DOCX, data: new Blob() },
         { id: 'doc-2', type: DOCX, data: new Blob() },
       ],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
 
     await expect(
-      instance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
+      multiDocx.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
     ).rejects.toThrow('single DOCX');
-  });
 
-  it('throws for instances with non-DOCX documents', async () => {
-    createAppHarness();
-    const instance = new SuperDoc({
+    createUpgradeHarness();
+    const mixedDocs = new SuperDoc({
       selector: '#host',
       documents: [
         { id: 'doc-1', type: DOCX, data: new Blob() },
         { id: 'pdf-1', type: PDF, data: new Blob() },
       ],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
 
     await expect(
-      instance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
+      mixedDocs.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
     ).rejects.toThrow('single-DOCX');
   });
 
-  it('throws when editor is not ready', async () => {
-    const harness = createAppHarness();
-    // Override getEditor to return null (editor not created yet)
-    harness.superdocStore.documents[0].getEditor = () => null;
+  it('throws when the source editor is not ready or the instance is destroyed', async () => {
+    const harness = createUpgradeHarness();
+    harness.storeDoc.getPresentationEditor = () => null;
+    harness.storeDoc.getEditor = () => null;
 
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
 
     await expect(
       instance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
     ).rejects.toThrow('source editor not yet created');
-  });
 
-  it('throws when instance is destroyed', async () => {
-    createAppHarness();
-    const instance = new SuperDoc({
+    createUpgradeHarness();
+    const destroyedInstance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
-
-    instance.destroy();
+    destroyedInstance.destroy();
 
     await expect(
-      instance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
+      destroyedInstance.upgradeToCollaboration({ ydoc: createMockYDoc(), provider: createMockProvider() }),
     ).rejects.toThrow('destroyed');
   });
 
   it('prevents concurrent upgrades', async () => {
-    const { app } = createAppHarness();
-
+    createUpgradeHarness();
     let syncResolve;
     onCollaborationProviderSyncedMock.mockImplementation((_, cb) => {
       syncResolve = cb;
@@ -545,14 +533,10 @@ describe('upgradeToCollaboration', () => {
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
     instance.readyEditors = 1;
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
 
     const first = instance.upgradeToCollaboration({
       ydoc: createMockYDoc(),
@@ -570,52 +554,15 @@ describe('upgradeToCollaboration', () => {
     await first;
   });
 
-  it('rejects immediately if destroyed during provider sync wait', async () => {
-    createAppHarness();
-
-    // Hold the sync callback — never call it; destroy should abort the wait
-    onCollaborationProviderSyncedMock.mockImplementation(() => {
-      return () => {}; // cleanup
-    });
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const upgradePromise = instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider({ synced: false }),
-    });
-
-    // Destroy while waiting for sync — should abort the wait immediately
-    instance.destroy();
-
-    await expect(upgradePromise).rejects.toThrow('destroyed during upgrade');
-
-    // Seeding should NOT have happened
-    expect(seedEditorStateToYDocMock).not.toHaveBeenCalled();
-  });
-
-  it('cleans up sync listener when destroyed during sync wait', async () => {
-    createAppHarness();
-
+  it('rejects immediately and cleans up the sync listener when destroyed during provider sync wait', async () => {
+    createUpgradeHarness();
     const syncCleanupSpy = vi.fn();
-    onCollaborationProviderSyncedMock.mockImplementation(() => {
-      return syncCleanupSpy;
-    });
+    onCollaborationProviderSyncedMock.mockImplementation(() => syncCleanupSpy);
 
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
     instance.readyEditors = 1;
@@ -625,653 +572,63 @@ describe('upgradeToCollaboration', () => {
       provider: createMockProvider({ synced: false }),
     });
 
-    // Destroy aborts immediately and cleans up the sync listener
     instance.destroy();
 
     await expect(upgradePromise).rejects.toThrow('destroyed during upgrade');
     expect(syncCleanupSpy).toHaveBeenCalled();
+    expect(seedEditorStateToYDocMock).not.toHaveBeenCalled();
   });
 
-  it('rejects if destroyed during collaborative remount wait', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    // Do NOT call visual-ready callback — simulate a runtime that hasn't
-    // finished initializing when destroy() is called.
-    app.mount.mockImplementation((wrapper) => {
-      const el = document.createElement('div');
-      el.className = 'superdoc';
-      wrapper.appendChild(el);
-    });
-
-    const upgradePromise = instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    await flushMicrotasks();
-    instance.destroy();
-
-    await expect(upgradePromise).rejects.toThrow('destroyed during upgrade');
-    expect(instance.isCollaborative).toBe(true); // detach was skipped
-  });
-
-  // -----------------------------------------------------------------------
-  // Runtime teardown / remount
-  // -----------------------------------------------------------------------
-
-  it('does not call removeAllListeners during upgrade', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const removeAllSpy = vi.spyOn(instance, 'removeAllListeners');
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    expect(removeAllSpy).not.toHaveBeenCalled();
-  });
-
-  it('resets readyEditors to 0 during remount', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    let readyEditorsAtMount;
-    app.mount.mockImplementation((wrapper) => {
-      readyEditorsAtMount = instance.readyEditors;
-      const el = document.createElement('div');
-      el.className = 'superdoc';
-      wrapper.appendChild(el);
-      setTimeout(() => {
-        if (instance._upgradeVisualReadyCallback) {
-          instance._upgradeVisualReadyCallback();
-        }
-      }, 0);
-    });
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    expect(readyEditorsAtMount).toBe(0);
-  });
-
-  it('unmounts and remounts the Vue app', async () => {
-    const { app } = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    expect(app.unmount).toHaveBeenCalled();
-    expect(createVueAppMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('triggers rollback preserving local state, awareness cleanup, and comments list when remount fails', async () => {
-    const harness = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    instance.commentsList = { close: vi.fn() };
-    const addCommentsListSpy = vi.spyOn(instance, 'addCommentsList').mockImplementation(() => {});
-
-    let jsonOverrideDuringRollback;
-    let callCount = 0;
-    const successResult = () => ({
-      app: {
-        mount: vi.fn((wrapper) => {
-          const el = document.createElement('div');
-          el.className = 'superdoc';
-          wrapper.appendChild(el);
-          setTimeout(() => {
-            if (instance._upgradeVisualReadyCallback) {
-              instance._upgradeVisualReadyCallback();
-            }
-          }, 0);
-        }),
-        unmount: vi.fn(),
-        config: { globalProperties: {} },
-      },
-      pinia: {},
-      superdocStore: harness.superdocStore,
-      commentsStore: harness.commentsStore,
-      highContrastModeStore: {},
-    });
-    createVueAppMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('Simulated remount failure');
-      }
-      jsonOverrideDuringRollback = instance.config.jsonOverride;
-      return successResult();
-    });
-
-    let caughtError;
-    try {
-      await instance.upgradeToCollaboration({
-        ydoc: createMockYDoc(),
-        provider: createMockProvider(),
-      });
-    } catch (err) {
-      caughtError = err;
-    }
-
-    expect(caughtError?.message).toBe('Simulated remount failure');
-    expect(awarenessCleanupSpy).toHaveBeenCalled();
-    expect(instance.isCollaborative).toBe(false);
-    expect(addCommentsListSpy).toHaveBeenCalled();
-    expect(jsonOverrideDuringRollback).toEqual({
-      type: 'doc',
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'user edits' }] }],
-    });
-    expect(instance.config.jsonOverride).toBeNull();
-  });
-
-  // -----------------------------------------------------------------------
-  // Upgrade transition (snapshot overlay)
-  // -----------------------------------------------------------------------
-
-  it('creates a snapshot overlay before teardown and removes it after visual-ready', async () => {
-    const { app } = createAppHarness();
-    app.mount.mockImplementation(makeInitialMountMock());
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const host = document.getElementById('host');
-
-    // Override mount for the upgrade remount
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    // Overlay should have been removed after success
-    expect(host.querySelector('.sd-upgrade-overlay')).toBeNull();
-    // New .superdoc should not have the hidden class
-    const newSuperdoc = host.querySelector('.superdoc');
-    expect(newSuperdoc?.classList.contains('sd-upgrade-hidden')).toBe(false);
-  });
-
-  it('pins container geometry during transition and restores it after', async () => {
-    const { app } = createAppHarness();
-    app.mount.mockImplementation(makeInitialMountMock());
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const host = document.getElementById('host');
-    const originalMinHeight = host.style.minHeight;
-
-    let minHeightDuringMount;
-    app.mount.mockImplementation((wrapper) => {
-      minHeightDuringMount = host.style.minHeight;
-      const el = document.createElement('div');
-      el.className = 'superdoc';
-      wrapper.appendChild(el);
-      setTimeout(() => {
-        if (instance._upgradeVisualReadyCallback) {
-          instance._upgradeVisualReadyCallback();
-        }
-      }, 0);
-    });
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    // Min-height should have been set during transition (pinned)
-    expect(minHeightDuringMount).toBeTruthy();
-    // Min-height should be restored after reveal
-    expect(host.style.minHeight).toBe(originalMinHeight);
-  });
-
-  it('cleans up overlay when destroy is called during the upgrade transition', async () => {
-    const { app } = createAppHarness();
-    app.mount.mockImplementation(makeInitialMountMock());
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const host = document.getElementById('host');
-
-    // Don't call visual-ready callback — leave the upgrade transition in progress
-    app.mount.mockImplementation((wrapper) => {
-      const el = document.createElement('div');
-      el.className = 'superdoc';
-      wrapper.appendChild(el);
-    });
-
-    const upgradePromise = instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-    await flushMicrotasks();
-
-    // Overlay should exist while the upgrade transition is in progress
-    expect(host.querySelector('.sd-upgrade-overlay')).not.toBeNull();
-
-    instance.destroy();
-    await expect(upgradePromise).rejects.toThrow('destroyed');
-
-    // Overlay should be cleaned up
-    expect(host.querySelector('.sd-upgrade-overlay')).toBeNull();
-    expect(instance._upgradeVisualReadyCallback).toBeNull();
-  });
-
-  it('degrades gracefully when no .superdoc element exists for snapshot', async () => {
-    const { app } = createAppHarness();
-    // Initial mount does NOT create a .superdoc element
-    app.mount.mockImplementation(() => {});
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    // Upgrade mount: create .superdoc and fire callback
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    // Should complete without error even though snapshot was null
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    expect(instance.isCollaborative).toBe(true);
-  });
-
-  it('waits for visual-ready callback, not the ready event', async () => {
-    const { app } = createAppHarness();
-    app.mount.mockImplementation(makeInitialMountMock());
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    let visualReadyCallbackCalled = false;
-
-    // Mount creates a .superdoc but does NOT call the visual-ready callback.
-    // Instead, it emits the 'ready' event (old path). The upgrade should
-    // NOT resolve from 'ready' alone.
-    app.mount.mockImplementation((wrapper) => {
-      const el = document.createElement('div');
-      el.className = 'superdoc';
-      wrapper.appendChild(el);
-      setTimeout(() => {
-        instance.emit('ready', { superdoc: instance });
-        // Then after a further tick, call the visual-ready callback
-        setTimeout(() => {
-          visualReadyCallbackCalled = true;
-          if (instance._upgradeVisualReadyCallback) {
-            instance._upgradeVisualReadyCallback();
-          }
-        }, 0);
-      }, 0);
-    });
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    // The upgrade should have waited for the visual-ready callback
-    expect(visualReadyCallbackCalled).toBe(true);
-  });
-
-  it('sets _upgradeVisualReadyCallback only during upgrade', async () => {
-    const { app } = createAppHarness();
-    app.mount.mockImplementation(makeInitialMountMock());
-
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    // Before upgrade: no callback
-    expect(instance._upgradeVisualReadyCallback).toBeFalsy();
-
-    app.mount.mockImplementation(makeUpgradeAwareMountMock(instance));
-
-    await instance.upgradeToCollaboration({
-      ydoc: createMockYDoc(),
-      provider: createMockProvider(),
-    });
-
-    // After upgrade: callback cleared
-    expect(instance._upgradeVisualReadyCallback).toBeNull();
-  });
-
-  // -----------------------------------------------------------------------
-  // Rollback regression: leaked runtime (Fix 1)
-  // -----------------------------------------------------------------------
-
-  it('stops the failed collaborative runtime before starting rollback (mount throws)', async () => {
-    const harness = createAppHarness();
-    const instance = new SuperDoc({
-      selector: '#host',
-      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
-    });
-    await flushMicrotasks();
-    instance.readyEditors = 1;
-
-    const collabUnmount = vi.fn();
-    let callCount = 0;
-
-    createVueAppMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        // Collaborative runtime: app created but mount throws
-        return {
-          app: {
-            mount: vi.fn(() => {
-              throw new Error('Collaborative mount failed');
-            }),
-            unmount: collabUnmount,
-            config: { globalProperties: {} },
-          },
-          pinia: {},
-          superdocStore: harness.superdocStore,
-          commentsStore: harness.commentsStore,
-          highContrastModeStore: {},
-        };
-      }
-      // Rollback runtime: succeeds
-      return {
-        app: {
-          mount: vi.fn((wrapper) => {
-            const el = document.createElement('div');
-            el.className = 'superdoc';
-            wrapper.appendChild(el);
-            setTimeout(() => {
-              if (instance._upgradeVisualReadyCallback) {
-                instance._upgradeVisualReadyCallback();
-              }
-            }, 0);
-          }),
-          unmount: vi.fn(),
-          config: { globalProperties: {} },
-        },
-        pinia: {},
-        superdocStore: harness.superdocStore,
-        commentsStore: harness.commentsStore,
-        highContrastModeStore: {},
-      };
-    });
-
-    await expect(
-      instance.upgradeToCollaboration({
-        ydoc: createMockYDoc(),
-        provider: createMockProvider(),
-      }),
-    ).rejects.toThrow('Collaborative mount failed');
-
-    // The collaborative app must be unmounted via #stopRuntime() before rollback
-    expect(collabUnmount).toHaveBeenCalled();
-  });
-
-  it('stops a timed-out collaborative runtime before starting rollback', async () => {
+  it('resolves successfully even when collaborationReady times out', async () => {
     vi.useFakeTimers();
     try {
-      const harness = createAppHarness();
+      const harness = createUpgradeHarness({ attachImpl: () => {} });
+      harness.innerEditor.options.collaborationIsReady = false;
+
       const instance = new SuperDoc({
         selector: '#host',
         documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-        modules: { comments: {} },
-        colors: [],
-        onException: vi.fn(),
+        ...baseConfig(),
       });
       await vi.advanceTimersByTimeAsync(0);
       instance.readyEditors = 1;
-
-      const collabUnmount = vi.fn();
-      let callCount = 0;
-
-      createVueAppMock.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          // Collaborative runtime: mounts but never fires visual-ready
-          return {
-            app: {
-              mount: vi.fn((wrapper) => {
-                const el = document.createElement('div');
-                el.className = 'superdoc';
-                wrapper.appendChild(el);
-                // visual-ready callback deliberately NOT called
-              }),
-              unmount: collabUnmount,
-              config: { globalProperties: {} },
-            },
-            pinia: {},
-            superdocStore: harness.superdocStore,
-            commentsStore: harness.commentsStore,
-            highContrastModeStore: {},
-          };
-        }
-        // Rollback runtime: fires visual-ready immediately
-        return {
-          app: {
-            mount: vi.fn((wrapper) => {
-              const el = document.createElement('div');
-              el.className = 'superdoc';
-              wrapper.appendChild(el);
-              // Fire visual-ready synchronously to avoid timer complications
-              if (instance._upgradeVisualReadyCallback) {
-                instance._upgradeVisualReadyCallback();
-              }
-            }),
-            unmount: vi.fn(),
-            config: { globalProperties: {} },
-          },
-          pinia: {},
-          superdocStore: harness.superdocStore,
-          commentsStore: harness.commentsStore,
-          highContrastModeStore: {},
-        };
-      });
 
       const upgradePromise = instance.upgradeToCollaboration({
         ydoc: createMockYDoc(),
         provider: createMockProvider(),
       });
 
-      // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
-      const resultPromise = expect(upgradePromise).rejects.toThrow('visually ready within 30 s');
+      await vi.advanceTimersByTimeAsync(10_001);
+      await upgradePromise;
 
-      // Advance past the 30s collaborative timeout
-      await vi.advanceTimersByTimeAsync(30_001);
-
-      await resultPromise;
-
-      // The timed-out collaborative app must be unmounted before rollback
-      expect(collabUnmount).toHaveBeenCalled();
+      expect(instance.isCollaborative).toBe(true);
+      expect(initCollaborationCommentsMock).toHaveBeenCalledWith(instance);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  // -----------------------------------------------------------------------
-  // Rollback regression: incomplete state restoration (Fix 2)
-  // -----------------------------------------------------------------------
-
-  it('restores convertedXml and mediaFiles on the rollback editor', async () => {
-    const harness = createAppHarness();
-
-    // Simulate pre-upgrade edits that modified parts and media
-    harness.mockEditor.converter.convertedXml = {
-      'word/styles.xml': { tag: 'w:styles', children: [{ tag: 'w:style', attrs: { id: 'custom' } }] },
-      'word/numbering.xml': { tag: 'w:numbering', children: [{ tag: 'w:abstractNum' }] },
-    };
-    harness.mockEditor.options.mediaFiles = {
-      'word/media/image1.png': 'base64-data-here',
-    };
+  it('resolves immediately when destroy() is called during readiness wait without reinitializing comments', async () => {
+    const harness = createUpgradeHarness({ attachImpl: () => {} });
+    harness.innerEditor.options.collaborationIsReady = false;
 
     const instance = new SuperDoc({
       selector: '#host',
       documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
-      modules: { comments: {} },
-      colors: [],
-      onException: vi.fn(),
+      ...baseConfig(),
     });
     await flushMicrotasks();
     instance.readyEditors = 1;
 
-    // The rollback editor starts with empty/reimported state
-    const rollbackEditor = {
-      converter: { convertedXml: {} },
-      options: { mediaFiles: {}, fonts: {} },
-      state: harness.mockEditor.state,
-      getJSON: harness.mockEditor.getJSON,
-    };
-
-    let callCount = 0;
-    createVueAppMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        // Collaborative: fails during createSuperdocVueApp
-        throw new Error('Simulated collab failure');
-      }
-      // Rollback: succeeds, returns a store with the rollback editor
-      return {
-        app: {
-          mount: vi.fn((wrapper) => {
-            const el = document.createElement('div');
-            el.className = 'superdoc';
-            wrapper.appendChild(el);
-            setTimeout(() => {
-              if (instance._upgradeVisualReadyCallback) {
-                instance._upgradeVisualReadyCallback();
-              }
-            }, 0);
-          }),
-          unmount: vi.fn(),
-          config: { globalProperties: {} },
-        },
-        pinia: {},
-        superdocStore: {
-          documents: [
-            {
-              id: 'doc-1',
-              type: DOCX,
-              getEditor: () => rollbackEditor,
-              setEditor: vi.fn(),
-            },
-          ],
-          init: vi.fn(),
-          reset: vi.fn(),
-          setExceptionHandler: vi.fn(),
-          activeZoom: 100,
-        },
-        commentsStore: harness.commentsStore,
-        highContrastModeStore: {},
-      };
+    const upgradePromise = instance.upgradeToCollaboration({
+      ydoc: createMockYDoc(),
+      provider: createMockProvider(),
     });
 
-    await expect(
-      instance.upgradeToCollaboration({
-        ydoc: createMockYDoc(),
-        provider: createMockProvider(),
-      }),
-    ).rejects.toThrow('Simulated collab failure');
+    await flushMicrotasks();
+    instance.destroy();
+    await upgradePromise;
 
-    // The rollback editor should have the pre-upgrade parts and media restored
-    expect(rollbackEditor.converter.convertedXml).toEqual({
-      'word/styles.xml': { tag: 'w:styles', children: [{ tag: 'w:style', attrs: { id: 'custom' } }] },
-      'word/numbering.xml': { tag: 'w:numbering', children: [{ tag: 'w:abstractNum' }] },
-    });
-    expect(rollbackEditor.options.mediaFiles).toEqual({
-      'word/media/image1.png': 'base64-data-here',
-    });
+    expect(initCollaborationCommentsMock).not.toHaveBeenCalled();
   });
 });

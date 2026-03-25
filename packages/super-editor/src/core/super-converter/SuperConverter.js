@@ -1410,9 +1410,13 @@ class SuperConverter {
     // D7: Strip orphaned numbering definitions (entries not referenced by any
     // paragraph in the exported document parts).
     const referencedNumIds = collectReferencedNumIds(this.convertedXml);
-    const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
 
-    currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
+    if (this.numbering?.definitions && this.numbering?.abstracts) {
+      const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
+      currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
+    } else {
+      currentNumberingXml.elements = [];
+    }
 
     // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;

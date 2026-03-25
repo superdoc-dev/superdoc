@@ -170,6 +170,33 @@ describe('legacy-handle-paragraph-node', () => {
       { tab: { tabType: 'center', pos: undefined } },
     ]);
   });
+  
+  it('sets paragraphProperties.runPropertiesInlineKeys from keys of w:pPr w:rPr for export filtering', () => {
+    const params = makeParams();
+    params.nodes[0].elements = [
+      {
+        name: 'w:pPr',
+        elements: [
+          { name: 'w:pStyle', attributes: { 'w:val': 'Normal' } },
+          {
+            name: 'w:rPr',
+            elements: [
+              { name: 'w:b', attributes: {} },
+              { name: 'w:sz', attributes: { 'w:val': '24' } },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const out = handleParagraphNode(params);
+
+    expect(out.attrs.paragraphProperties.runPropertiesInlineKeys).toBeDefined();
+    expect(out.attrs.paragraphProperties.runPropertiesInlineKeys).toEqual(expect.arrayContaining(['bold', 'fontSize']));
+    expect(out.attrs.paragraphProperties.runPropertiesInlineKeys).toHaveLength(
+      Object.keys(out.attrs.paragraphProperties.runProperties || {}).length,
+    );
+  });
 
   it('preserves sectPr on wrapper metadata when translated paragraph content is block-only', () => {
     const docPart = {

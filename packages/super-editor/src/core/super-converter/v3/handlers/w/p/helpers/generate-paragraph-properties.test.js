@@ -81,4 +81,89 @@ describe('generateParagraphProperties', () => {
       elements: [sectPr],
     });
   });
+
+  it('preserves runProperties when runPropertiesInlineKeys is missing for backward compatibility', () => {
+    const paragraphProperties = { spacing: { line: 240 }, runProperties: { bold: true } };
+    const node = { type: 'paragraph', attrs: { paragraphProperties } };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.runProperties).toEqual({ bold: true });
+      return { type: 'element', name: 'w:pPr', elements: [] };
+    });
+
+    generateParagraphProperties({ node });
+
+    expect(wPPrNodeTranslator.decode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        node: expect.objectContaining({
+          attrs: expect.objectContaining({
+            paragraphProperties: expect.objectContaining({ runProperties: { bold: true } }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('strips runProperties when runPropertiesInlineKeys is empty array', () => {
+    const paragraphProperties = {
+      spacing: { line: 240 },
+      runProperties: { bold: true },
+      runPropertiesInlineKeys: [],
+    };
+    const node = { type: 'paragraph', attrs: { paragraphProperties } };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.runProperties).toBeUndefined();
+      return { type: 'element', name: 'w:pPr', elements: [] };
+    });
+
+    generateParagraphProperties({ node });
+
+    expect(wPPrNodeTranslator.decode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        node: expect.objectContaining({
+          attrs: expect.objectContaining({
+            paragraphProperties: expect.not.objectContaining({ runProperties: expect.anything() }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('passes filtered runProperties when runPropertiesInlineKeys is set and non-empty', () => {
+    const paragraphProperties = {
+      spacing: { line: 240 },
+      runProperties: { bold: true, color: 'FF0000' },
+      runPropertiesInlineKeys: ['bold'],
+    };
+    const node = { type: 'paragraph', attrs: { paragraphProperties } };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.runProperties).toEqual({ bold: true });
+      return { type: 'element', name: 'w:pPr', elements: [] };
+    });
+
+    generateParagraphProperties({ node });
+
+    expect(wPPrNodeTranslator.decode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        node: expect.objectContaining({
+          attrs: expect.objectContaining({
+            paragraphProperties: expect.objectContaining({ runProperties: { bold: true } }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('strips runProperties when runPropertiesInlineKeys has no matching keys', () => {
+    const paragraphProperties = {
+      runProperties: { color: 'FF0000' },
+      runPropertiesInlineKeys: ['bold'],
+    };
+    const node = { type: 'paragraph', attrs: { paragraphProperties } };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.runProperties).toBeUndefined();
+      return { type: 'element', name: 'w:pPr', elements: [] };
+    });
+
+    generateParagraphProperties({ node });
+  });
 });

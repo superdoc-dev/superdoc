@@ -409,10 +409,12 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
   // Find table properties to get borders and cell margins
   const tblPr = styleTag.elements.find((el) => el.name === 'w:tblPr');
   if (tblPr && tblPr.elements) {
-    if (baseTblPr && baseTblPr.elements) {
-      tblPr.elements = [...baseTblPr.elements, ...tblPr.elements];
-    }
-    const tableProperties = tblPrTranslator.encode({ ...params, nodes: [tblPr] });
+    // Merge base + current for encoding only; do not mutate styles.xml (would duplicate w:tblCellMar etc. per table using this style)
+    const mergedTblPr =
+      baseTblPr?.elements?.length > 0
+        ? { name: tblPr.name, attributes: tblPr.attributes, elements: [...baseTblPr.elements, ...tblPr.elements] }
+        : tblPr;
+    const tableProperties = tblPrTranslator.encode({ ...params, nodes: [mergedTblPr] });
     if (tableProperties) {
       const borders = _processTableBorders(tableProperties.borders || {});
 

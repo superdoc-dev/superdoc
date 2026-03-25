@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { h, defineComponent, ref, reactive, nextTick } from 'vue';
+import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
@@ -152,6 +152,7 @@ const buildSuperdocStore = () => {
       markdown: '',
       isReady: false,
       rulers: false,
+      editorMountNonce: ref(0),
       setEditor: vi.fn(),
       getEditor: vi.fn(() => null),
     },
@@ -245,7 +246,7 @@ const buildCommentsStore = () => ({
   isCommentHighlighted: ref(false),
 });
 
-const mountComponent = async (superdocStub) => {
+const mountComponent = async (superdocStub, { surfaceManager = null } = {}) => {
   superdocStoreStub = buildSuperdocStore();
   commentsStoreStub = buildCommentsStore();
   superdocStoreStub.modules.ai = { endpoint: '/ai' };
@@ -276,6 +277,9 @@ const mountComponent = async (superdocStub) => {
             delete el.__clickOutside;
           },
         },
+      },
+      provide: {
+        surfaceManager,
       },
     },
   });
@@ -476,8 +480,87 @@ describe('SuperDoc.vue', () => {
     options.onDocumentLocked({ editor: editorMock, isLocked: true, lockedBy: { name: 'A' } });
     expect(superdocStub.lockSuperdoc).toHaveBeenCalledWith(true, { name: 'A' });
 
-    options.onException({ error: new Error('boom'), editor: editorMock });
-    expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
+    options.onException({ error: new Error('boom'), editor: editorMock, code: 'DOCX_ENCRYPTION_UNSUPPORTED' });
+    expect(superdocStub.emit).toHaveBeenCalledWith('exception', {
+      error: expect.any(Error),
+      editor: editorMock,
+      code: 'DOCX_ENCRYPTION_UNSUPPORTED',
+      documentId: 'doc-1',
+    });
+  });
+
+  it('does not emit public exception events for recoverable password prompt errors by default', async () => {
+    const superdocStub = createSuperdocStub();
+    const surfaceManager = {
+      activeDialog: shallowRef(null),
+      activeFloating: shallowRef(null),
+      open: vi.fn(() => ({
+        id: 'surface-1',
+        mode: 'dialog',
+        close: vi.fn(),
+        result: Promise.resolve({ status: 'closed' }),
+      })),
+    };
+    const wrapper = await mountComponent(superdocStub, { surfaceManager });
+    const editorOptions = wrapper.findComponent(SuperEditorStub).props('options');
+
+    editorOptions.onException({
+      error: new Error('password required'),
+      editor: null,
+      code: 'DOCX_PASSWORD_REQUIRED',
+    });
+
+    // The built-in password prompt lazy-imports the component before opening
+    await vi.dynamicImportSettled();
+
+    expect(surfaceManager.open).toHaveBeenCalledTimes(1);
+    expect(
+      superdocStub.emit.mock.calls.some(
+        ([eventName, payload]) => eventName === 'exception' && payload?.code === 'DOCX_PASSWORD_REQUIRED',
+      ),
+    ).toBe(false);
+  });
+
+  it('forwards configured passwords to SuperEditor options', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.password = 'top-secret';
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const editorComponent = wrapper.findComponent(SuperEditorStub);
+    expect(editorComponent.exists()).toBe(true);
+    expect(editorComponent.props('options').password).toBe('top-secret');
+  });
+
+  it('forwards top-level proofing config into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const proofingProvider = {
+      id: 'test-proofing',
+      check: vi.fn(async () => ({ issues: [] })),
+    };
+    const topLevelProofing = {
+      enabled: true,
+      provider: proofingProvider,
+      defaultLanguage: 'en-US',
+      maxSuggestions: 4,
+    };
+
+    superdocStub.config.proofing = topLevelProofing;
+    superdocStub.config.layoutEngineOptions = {
+      flowMode: 'paginated',
+      proofing: {
+        enabled: false,
+        provider: null,
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.proofing).toBe(topLevelProofing);
+    expect(options.layoutEngineOptions.flowMode).toBe('paginated');
   });
 
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {

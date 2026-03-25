@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CollaborationProfile } from '../lib/collaboration';
 import { exportToPath, openCollaborativeDocument, openDocument, type OpenedDocument } from '../lib/document';
 import type { CliIO, UserIdentity } from '../lib/types';
@@ -77,15 +78,8 @@ export interface SessionPool {
 // ---------------------------------------------------------------------------
 
 function profileToFingerprint(profile: CollaborationProfile): string {
-  return JSON.stringify({
-    providerType: profile.providerType,
-    url: profile.url,
-    documentId: profile.documentId,
-    tokenEnv: profile.tokenEnv ?? null,
-    syncTimeoutMs: profile.syncTimeoutMs ?? null,
-    onMissing: profile.onMissing ?? null,
-    bootstrapSettlingMs: profile.bootstrapSettlingMs ?? null,
-  });
+  const sortedJson = JSON.stringify(profile, Object.keys(profile).sort());
+  return createHash('sha256').update(sortedJson).digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +198,16 @@ export class InMemorySessionPool implements SessionPool {
       dirty: false,
       leased: false,
       workingDocPath: metadata.workingDocPath,
-      io: { stdout() {}, stderr() {}, readStdinBytes: async () => new Uint8Array(), now: this.now },
+      io: {
+        stdout() {
+          /* noop – pool sessions have no output */
+        },
+        stderr() {
+          /* noop – pool sessions have no output */
+        },
+        readStdinBytes: async () => new Uint8Array(),
+        now: this.now,
+      },
       metadataRevision: metadata.metadataRevision,
       lastUsedAtMs: this.now(),
       autosaveTimer: null,

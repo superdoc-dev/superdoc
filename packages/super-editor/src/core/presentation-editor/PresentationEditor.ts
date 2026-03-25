@@ -2,6 +2,16 @@ import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
+import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
+import { applyProofingDecorations, clearProofingDecorations, createDomPainter } from '@superdoc/painter-dom';
+import type { ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
+import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
+import type { VisibilitySource } from './proofing/visibility-source.js';
+import { computeWordSelectionRangeAt,
+  computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
+  computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
+  getFirstTextPosition as getFirstTextPositionFromHelper,
+  registerPointerClick as registerPointerClickFromHelper } from './input/ClickSelectionUtilities.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -36,12 +46,6 @@ import { PresentationInputBridge } from './input/PresentationInputBridge.js';
 import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './utils/SchemaNodeTypes.js';
 import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
-import {
-  computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
-  computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
-  getFirstTextPosition as getFirstTextPositionFromHelper,
-  registerPointerClick as registerPointerClickFromHelper,
-} from './input/ClickSelectionUtilities.js';
 import {
   computeA11ySelectionAnnouncement as computeA11ySelectionAnnouncementFromHelper,
   scheduleA11ySelectionAnnouncement as scheduleA11ySelectionAnnouncementFromHelper,
@@ -88,9 +92,6 @@ import type {
   TableHitResult,
 } from '@superdoc/layout-bridge';
 
-import { createDomPainter } from '@superdoc/painter-dom';
-
-import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -329,6 +330,8 @@ export class PresentationEditor extends EventEmitter {
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   /** Bridges external PM plugin decorations onto painted DOM elements. */
   #decorationBridge = new DecorationBridge();
+  /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
+  #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
@@ -668,6 +671,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
       this.#setupSemanticResizeObserver();
+      this.#initializeProofing();
 
       // Register this instance in the static registry.
       // Use a separate field to avoid mutating the caller's options object and to keep
@@ -838,10 +842,80 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Late-attach collaboration to the presentation editor.
+   *
+   * Updates the provider reference on this instance and RemoteCursorManager,
+   * then delegates to the backing Editor. The existing `collaborationReady`
+   * listener (wired in #setupEditorListeners) triggers cursor setup
+   * automatically when the backing editor emits the event.
+   *
+   * @param options.ydoc  The Y.Doc already seeded with this editor's state
+   * @param options.collaborationProvider  The synced collaboration provider
+   */
+  attachCollaboration({
+    ydoc,
+    collaborationProvider,
+  }: {
+    ydoc: Y.Doc;
+    collaborationProvider: NonNullable<PresentationEditorOptions['collaborationProvider']>;
+  }): void {
+    const prevProvider = this.#options.collaborationProvider;
+
+    // 1. Update PresentationEditor options so the collaborationReady handler
+    //    check passes (it reads this.#options.collaborationProvider?.awareness).
+    this.#options.collaborationProvider = collaborationProvider;
+
+    // 2. Update RemoteCursorManager's provider reference so setup() reads
+    //    the correct provider when collaborationReady fires.
+    this.#remoteCursorManager?.setCollaborationProvider(collaborationProvider);
+
+    // 3. Delegate to the backing Editor — triggers plugin reconfigure + Y.js observers.
+    //    The collaborationReady event fires asynchronously (setTimeout in initSyncListener).
+    //    The existing listener at handleCollaborationReady calls
+    //    #setupCollaborationCursors() → remoteCursorManager.setup(). No new wiring needed.
+    try {
+      this.#editor.attachCollaboration({ ydoc, collaborationProvider });
+    } catch (err) {
+      // Editor attach failed and rolled back its own state. Restore ours too.
+      this.#options.collaborationProvider = prevProvider;
+      this.#remoteCursorManager?.setCollaborationProvider(prevProvider ?? null);
+      throw err;
+    }
+  }
+
+  /**
    * Expose the visible host element for renderer-agnostic consumers.
    */
   get element(): HTMLElement {
     return this.#visibleHost;
+  }
+
+  /** Access the proofing session manager (for context menu and action integration). */
+  get proofingManager(): ProofingSessionManager | null {
+    return this.#proofingManager;
+  }
+
+  /** Update proofing configuration at runtime. */
+  updateProofingConfig(patch: Partial<ProofingConfig>): void {
+    if (!this.#proofingManager) {
+      // Initialize proofing if not yet created and patch enables it
+      if (patch.enabled && patch.provider) {
+        this.#proofingManager = new ProofingSessionManager({
+          ...patch,
+          enabled: true,
+        } as ProofingConfig);
+        this.#wireProofingManagerAdapters();
+        if (this.#editor?.state?.doc) {
+          this.#proofingManager.runInitialCheck(this.#editor.state.doc);
+        }
+      }
+      return;
+    }
+    // updateConfig fires onResultsChanged internally for state changes
+    // that need a repaint (disable, ignoredWords). For config changes that
+    // don't fire onResultsChanged (e.g. UI flags), an explicit pass is safe.
+    this.#proofingManager.updateConfig(patch, this.#editor?.state?.doc);
+    this.#applyProofingPass();
   }
 
   /**
@@ -2724,6 +2798,8 @@ export class PresentationEditor extends EventEmitter {
       }, 'Decoration sync RAF');
     }
     this.#decorationBridge.destroy();
+    this.#proofingManager?.dispose();
+    this.#proofingManager = null;
 
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
@@ -2835,6 +2911,159 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  // ===========================================================================
+  // Proofing Integration
+  // ===========================================================================
+
+  /** Initialize the proofing session manager from layout engine options. */
+  #initializeProofing(): void {
+    const proofingConfig = this.#options.layoutEngineOptions?.proofing;
+    if (!proofingConfig) return;
+
+    this.#proofingManager = new ProofingSessionManager(proofingConfig);
+    this.#wireProofingManagerAdapters();
+
+    // Schedule initial check after first paint
+    if (proofingConfig.enabled && this.#editor?.state?.doc) {
+      // Defer to allow first paint to complete
+      setTimeout(() => {
+        this.#proofingManager?.runInitialCheck(this.#editor!.state.doc);
+      }, 0);
+    }
+  }
+
+  /**
+   * Build a page resolver that maps PM positions to page indices
+   * using the current layout's fragment PM ranges. Returns a closure
+   * that re-reads the layout on each call so it stays current.
+   */
+  #buildPageResolver(): (pmPos: number) => number | undefined {
+    return (pmPos: number) => {
+      const layout = this.#layoutState.layout;
+      if (!layout?.pages) return undefined;
+      for (let idx = 0; idx < layout.pages.length; idx++) {
+        const page = layout.pages[idx];
+        for (const fragment of page.fragments) {
+          const frag = fragment as { pmStart?: number; pmEnd?: number };
+          if (frag.pmStart != null && frag.pmEnd != null && pmPos >= frag.pmStart && pmPos <= frag.pmEnd) {
+            return idx;
+          }
+        }
+      }
+      return undefined;
+    };
+  }
+
+  /**
+   * Wire all adapters (callbacks, visibility source, page resolver, composition
+   * listeners) onto the current proofing manager. Called once from both
+   * #initializeProofing and updateProofingConfig to avoid duplication.
+   */
+  #wireProofingManagerAdapters(): void {
+    const mgr = this.#proofingManager;
+    if (!mgr) return;
+
+    mgr.setDocumentId(((this.#options as Record<string, unknown>).documentId as string | null) ?? null);
+
+    mgr.onResultsChanged = () => this.#applyProofingPass();
+
+    mgr.setVisibilitySource({
+      getVisiblePageIndices: () => {
+        if (!this.#painterHost) return null;
+        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
+        if (pageEls.length === 0) return null;
+        const indices: number[] = [];
+        for (let i = 0; i < pageEls.length; i++) {
+          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
+          if (!isNaN(idx)) indices.push(idx);
+        }
+        return indices.length > 0 ? indices : null;
+      },
+    });
+
+    mgr.setPageResolver(this.#buildPageResolver());
+
+    // Composition hard-pause: direct DOM events are more reliable than
+    // view.composing which may be stale by the time the end-transaction fires.
+    const editorDom = this.#editor?.view?.dom;
+    if (editorDom) {
+      editorDom.addEventListener('compositionstart', () => mgr.setComposing(true));
+      editorDom.addEventListener('compositionend', () => mgr.setComposing(false));
+    }
+  }
+
+  /**
+   * Apply the proofing decoration pass after paint or when results change.
+   * Walks rendered spans and applies proofing CSS classes.
+   * Rebuilds DomPositionIndex if any DOM mutations were made.
+   *
+   * Also handles the case where proofing is disabled: clears all markers.
+   */
+  #applyProofingPass(): void {
+    if (!this.#painterHost) return;
+
+    // When proofing is disabled or no manager exists, clear any leftover markers
+    if (!this.#proofingManager?.isEnabled) {
+      const cleared = clearProofingDecorations(this.#painterHost);
+      if (cleared) {
+        this.#rebuildDomPositionIndex();
+      }
+      return;
+    }
+
+    // Compute active word range for caret-token suppression:
+    // suppress the underline on the word the user is currently typing.
+    const editorState = this.#editor?.state;
+    let activeWordRange: { from: number; to: number } | null = null;
+    if (editorState?.selection.empty) {
+      activeWordRange = computeWordSelectionRangeAt(editorState, editorState.selection.head);
+    }
+
+    const slices = this.#proofingManager.getPaintSlices(activeWordRange);
+
+    // Convert paint slices to ProofingAnnotation format
+    const annotations: ProofingAnnotation[] = slices.map((s) => ({
+      pmFrom: s.pmFrom,
+      pmTo: s.pmTo,
+      kind: s.kind,
+    }));
+
+    const mutated = applyProofingDecorations(this.#painterHost, annotations);
+
+    // Rebuild position index if DOM was mutated (sibling splits)
+    if (mutated) {
+      this.#rebuildDomPositionIndex();
+    }
+  }
+
+  /**
+   * Notify the proofing manager of a document change.
+   * Extracts changed ranges from the transaction and forwards to the manager.
+   */
+  #notifyProofingOfDocChange(transaction: Transaction): void {
+    if (!this.#proofingManager?.isEnabled) return;
+
+    const doc = this.#editor?.state?.doc;
+    if (!doc) return;
+
+    // Extract changed ranges in final-document coordinates.
+    // Each step map's ranges are in intermediate coordinates — they must be
+    // mapped forward through all subsequent steps to reach the final doc space.
+    const changedRanges: Array<{ from: number; to: number }> = [];
+    const { mapping } = transaction;
+    mapping.maps.forEach((map, stepIndex) => {
+      const mapFrom = mapping.slice(stepIndex + 1);
+      map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+        changedRanges.push({
+          from: mapFrom.map(newStart, -1),
+          to: mapFrom.map(newEnd, 1),
+        });
+      });
+    });
+
+    this.#proofingManager.onDocumentChanged(doc, changedRanges, transaction.mapping);
+  }
+
   /**
    * Runs a full decoration sync: applies external plugin decoration classes
    * and styles to the painted DOM elements via DecorationBridge. Runs are
@@ -2930,6 +3159,7 @@ export class PresentationEditor extends EventEmitter {
       // Update local cursor in awareness whenever document changes
       // This ensures cursor position is broadcast with each keystroke
       if (transaction?.docChanged) {
+        this.#notifyProofingOfDocChange(transaction);
         this.#updateLocalAwarenessCursor();
         // Clear cell anchor on document changes to prevent stale references
         // (table structure may have changed, cell positions may be invalid)
@@ -4106,6 +4336,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPostStart = perfNow();
       this.#rebuildDomPositionIndex();
       this.#syncDecorations();
+      this.#applyProofingPass();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);

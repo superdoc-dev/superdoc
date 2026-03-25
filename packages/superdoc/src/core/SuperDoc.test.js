@@ -153,6 +153,7 @@ const createAppHarness = () => {
   const app = {
     mount: vi.fn(),
     unmount: vi.fn(),
+    provide: vi.fn(),
     config: { globalProperties: {} },
   };
 
@@ -1555,6 +1556,86 @@ describe('SuperDoc core', () => {
       expect(() => {
         instance.emit('pagination-update', { totalPages: 3, superdoc: instance });
       }).not.toThrow();
+    });
+  });
+
+  describe('Surface API (openSurface / closeSurface)', () => {
+    const StubComponent = { template: '<div>stub</div>' };
+
+    it('openSurface returns a handle with id, mode, close, and result', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const handle = instance.openSurface({ mode: 'dialog', component: StubComponent });
+      expect(handle.id).toBeDefined();
+      expect(handle.mode).toBe('dialog');
+      expect(typeof handle.close).toBe('function');
+      expect(handle.result).toBeInstanceOf(Promise);
+    });
+
+    it('closeSurface closes the active dialog', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const handle = instance.openSurface({ mode: 'dialog', component: StubComponent });
+      instance.closeSurface(handle.id);
+
+      const outcome = await handle.result;
+      expect(outcome.status).toBe('closed');
+    });
+
+    it('closeSurface with no args closes topmost surface', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const handle = instance.openSurface({ mode: 'dialog', component: StubComponent });
+      instance.closeSurface();
+
+      const outcome = await handle.result;
+      expect(outcome.status).toBe('closed');
+    });
+
+    it('openSurface throws synchronously for invalid requests', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(() => instance.openSurface({ mode: 'dialog' })).toThrow(/must provide/);
+    });
+
+    it('destroy settles active surfaces with destroyed status', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const handle = instance.openSurface({ mode: 'floating', component: StubComponent });
+      instance.destroy();
+
+      const outcome = await handle.result;
+      expect(outcome.status).toBe('destroyed');
     });
   });
 });

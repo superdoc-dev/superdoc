@@ -19,6 +19,11 @@ export * from './Editor.js';
 
 export { default as DocxZipper } from './DocxZipper.js';
 
+// Encryption support
+export { DocxEncryptionError, DocxEncryptionErrorCode } from './ooxml-encryption/index.js';
+export { decryptDocxIfNeeded } from './ooxml-encryption/index.js';
+export type { DecryptDocxOptions, DecryptDocxResult, ContainerType } from './ooxml-encryption/index.js';
+
 // Export types
 export type * from './types/EditorTypes.js';
 export type * from './types/EditorEvents.js';

@@ -9,10 +9,15 @@ on:
     paths-ignore:
       - '.github/workflows/**'
       - 'apps/docs/**'
+      - 'apps/mcp/**'
+      - 'apps/vscode-ext/**'
       - 'demos/**'
       - 'examples/**'
+      - 'packages/react/**'
+      - 'packages/sdk/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
+      - 'evals/**'
       - '**/*.md'
   workflow_dispatch:
 

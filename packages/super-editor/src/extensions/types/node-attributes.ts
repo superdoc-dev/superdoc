@@ -388,6 +388,8 @@ export interface TableCellAttrs extends TableNodeAttributes {
   borders: CellBorders | null;
   /** Cell properties from OOXML */
   tableCellProperties: TableCellProperties | null;
+  /** Keys present in the cell's w:tcPr (exclude inherited from table style on export) */
+  tableCellPropertiesInlineKeys: string[] | null;
   /** Width type */
   widthType: string;
   /** Width unit */

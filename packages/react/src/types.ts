@@ -67,6 +67,8 @@ export interface SuperDocContentErrorEvent {
 /** Event passed to onException callback */
 export interface SuperDocExceptionEvent {
   error: Error;
+  editor?: Editor | null;
+  code?: string;
 }
 
 // =============================================================================

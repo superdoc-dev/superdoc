@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   Editor,
   BLANK_DOCX_BASE64,
+  DocxEncryptionError,
   getDocumentApiAdapters,
   markdownToPmDoc,
   initPartsRuntime,
@@ -50,7 +51,9 @@ interface ContentOverrideOptions {
 }
 
 /** Options passed through to Editor.open() alongside content overrides. */
-type EditorPassThroughOptions = Record<string, unknown>;
+export interface EditorPassThroughOptions {
+  password?: string;
+}
 
 interface OpenDocumentOptions {
   documentId?: string;
@@ -203,6 +206,11 @@ export async function openDocument(
   } catch (error) {
     commentBridge?.dispose();
     domEnv.dispose();
+    // Preserve DOCX encryption errors so callers get actionable codes
+    // (e.g. DOCX_PASSWORD_REQUIRED) instead of generic DOCUMENT_OPEN_FAILED.
+    if (error instanceof DocxEncryptionError) {
+      throw new CliError(error.code, error.message, { source: meta });
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
       message,
@@ -287,7 +295,7 @@ export async function openCollaborativeDocument(
   doc: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
-  options: { user?: UserIdentity } = {},
+  options: { editorOpenOptions?: EditorPassThroughOptions; user?: UserIdentity } = {},
 ): Promise<OpenedDocument & { bootstrap?: BootstrapResult }> {
   const runtime = createCollaborationRuntime(profile);
 
@@ -340,6 +348,7 @@ export async function openCollaborativeDocument(
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
       isNewFile: shouldSeed,
+      editorOpenOptions: options.editorOpenOptions,
       user: options.user,
     });
 

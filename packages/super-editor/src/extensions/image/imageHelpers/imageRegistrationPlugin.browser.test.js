@@ -52,9 +52,6 @@ vi.mock('./handleUrl', () => ({
 vi.mock('./startImageUpload', () => ({
   checkAndProcessImage: vi.fn(),
   uploadAndInsertImage: vi.fn(),
-}));
-
-vi.mock('@extensions/image/imageHelpers/startImageUpload.js', () => ({
   addImageRelationship: vi.fn(() => 'rId99'),
 }));
 
@@ -67,7 +64,7 @@ vi.mock('./fileNameUtils.js', () => ({
 import { Decoration } from 'prosemirror-view';
 import { handleBrowserPath } from './imageRegistrationPlugin.js';
 import { urlToFile, validateUrlAccessibility } from './handleUrl';
-import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
+import { addImageRelationship } from './startImageUpload';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const createImageNode = (attrs) => ({

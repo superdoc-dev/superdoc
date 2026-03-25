@@ -76,6 +76,7 @@ import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
  * @property {import('./helpers/createCellBorders.js').CellBorders} [borders] - Cell border configuration
  * @property {string} [widthType='auto'] @internal - Internal width type
  * @property {string} [widthUnit='px'] @internal - Internal width unit
+ * @property {string[]} [tableCellPropertiesInlineKeys] @internal - Keys present in the cell's w:tcPr (not from table style); used to avoid exporting inherited tcPr
  */
 
 /**
@@ -227,6 +228,12 @@ export const TableCell = Node.create({
        * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 463
        */
       tableCellProperties: {
+        default: null,
+        rendered: false,
+      },
+
+      /** @private - Keys from the cell's w:tcPr (exclude inherited from table style on export) */
+      tableCellPropertiesInlineKeys: {
         default: null,
         rendered: false,
       },

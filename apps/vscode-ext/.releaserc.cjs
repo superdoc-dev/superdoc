@@ -1,4 +1,24 @@
 /* eslint-env node */
+/*
+ * Commit filter: vscode-ext bundles superdoc, so git log must include
+ * commits touching superdoc's sub-packages. This shared helper patches
+ * git-log-parser to expand path coverage. It REPLACES
+ * semantic-release-commit-filter — do not use both (the filter restricts
+ * to CWD, which undoes the expansion).
+ *
+ * Keep in sync with .github/workflows/release-vscode-ext.yml paths: trigger.
+ */
+require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+  'apps/vscode-ext',
+  'packages/superdoc',
+  'packages/super-editor',
+  'packages/layout-engine',
+  'packages/ai',
+  'packages/word-layout',
+  'packages/preset-geometry',
+  'pnpm-workspace.yaml',
+]);
+
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const branches = [
@@ -17,10 +37,23 @@ const config = {
   branches,
   tagFormat: 'vscode-v${version}',
   plugins: [
-    'semantic-release-commit-filter',
-    '@semantic-release/commit-analyzer',
+    [
+      '@semantic-release/commit-analyzer',
+      {
+        // Cap at minor — the extension bundles superdoc, so upstream breaking
+        // changes don't break the extension's public API (it has none).
+        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
+        releaseRules: [
+          { breaking: true, release: 'minor' },
+          { type: 'feat', release: 'minor' },
+          { type: 'fix', release: 'patch' },
+          { type: 'perf', release: 'patch' },
+          { type: 'revert', release: 'patch' },
+        ],
+      },
+    ],
     notesPlugin,
-    ['@semantic-release/npm', { npmPublish: false }], // Version bump only, no npm publish
+    ['semantic-release-pnpm', { npmPublish: false }], // Version bump only, handles workspace:* versions
   ],
 };
 

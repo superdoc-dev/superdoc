@@ -271,6 +271,59 @@ test.describe('viewing mode hides SDT affordances', () => {
 
     await superdoc.snapshot('inline SDT viewing mode');
   });
+
+  test('block SDT hover does not show background in viewing mode (SD-2232)', async ({ superdoc }) => {
+    await superdoc.type('Some text');
+    await superdoc.newLine();
+    await superdoc.waitForStable();
+    await insertBlockSdt(superdoc.page, 'Hover Block', 'Content');
+    await superdoc.waitForStable();
+
+    await superdoc.setDocumentMode('viewing');
+    await superdoc.waitForStable();
+
+    // Move mouse over the block SDT
+    const center = await getCenter(superdoc.page, BLOCK_SDT);
+    await superdoc.page.mouse.move(center.x, center.y);
+    await superdoc.waitForStable();
+
+    // Even if the sdt-hover class gets applied, the CSS override should
+    // suppress any visible background in viewing mode.
+    const bg = await superdoc.page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      return getComputedStyle(el).backgroundColor;
+    }, BLOCK_SDT);
+
+    expect(bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent').toBe(true);
+
+    await superdoc.snapshot('block SDT hover suppressed in viewing mode');
+  });
+
+  test('inline SDT hover does not show background in viewing mode (SD-2232)', async ({ superdoc }) => {
+    await superdoc.type('Hello ');
+    await superdoc.waitForStable();
+    await insertInlineSdt(superdoc.page, 'Hover Inline', 'value');
+    await superdoc.waitForStable();
+
+    await superdoc.setDocumentMode('viewing');
+    await superdoc.waitForStable();
+
+    // Move mouse over the inline SDT
+    const center = await getCenter(superdoc.page, INLINE_SDT);
+    await superdoc.page.mouse.move(center.x, center.y);
+    await superdoc.waitForStable();
+
+    const bg = await superdoc.page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      return getComputedStyle(el).backgroundColor;
+    }, INLINE_SDT);
+
+    expect(bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent').toBe(true);
+
+    await superdoc.snapshot('inline SDT hover suppressed in viewing mode');
+  });
 });
 
 // ==========================================================================

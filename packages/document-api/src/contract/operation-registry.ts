@@ -63,6 +63,24 @@ import type {
   DiffApplyOptions,
 } from '../diff/diff.types.js';
 import type {
+  DocumentProtectionState,
+  ProtectionGetInput,
+  SetEditingRestrictionInput,
+  ClearEditingRestrictionInput,
+  ProtectionMutationResult,
+} from '../protection/protection.types.js';
+import type {
+  PermissionRangesListInput,
+  PermissionRangesListResult,
+  PermissionRangesGetInput,
+  PermissionRangeInfo,
+  PermissionRangesCreateInput,
+  PermissionRangesRemoveInput,
+  PermissionRangesUpdatePrincipalInput,
+  PermissionRangeMutationResult,
+  PermissionRangeRemoveResult,
+} from '../permission-ranges/permission-ranges.types.js';
+import type {
   ListsListQuery,
   ListsListResult,
   ListsGetInput,
@@ -1470,6 +1488,42 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
   'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
   'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
+
+  // --- protection.* ---
+  'protection.get': { input: ProtectionGetInput; options: never; output: DocumentProtectionState };
+  'protection.setEditingRestriction': {
+    input: SetEditingRestrictionInput;
+    options: MutationOptions;
+    output: ProtectionMutationResult;
+  };
+  'protection.clearEditingRestriction': {
+    input: ClearEditingRestrictionInput;
+    options: MutationOptions;
+    output: ProtectionMutationResult;
+  };
+
+  // --- permissionRanges.* ---
+  'permissionRanges.list': {
+    input: PermissionRangesListInput | undefined;
+    options: never;
+    output: PermissionRangesListResult;
+  };
+  'permissionRanges.get': { input: PermissionRangesGetInput; options: never; output: PermissionRangeInfo };
+  'permissionRanges.create': {
+    input: PermissionRangesCreateInput;
+    options: MutationOptions;
+    output: PermissionRangeMutationResult;
+  };
+  'permissionRanges.remove': {
+    input: PermissionRangesRemoveInput;
+    options: MutationOptions;
+    output: PermissionRangeRemoveResult;
+  };
+  'permissionRanges.updatePrincipal': {
+    input: PermissionRangesUpdatePrincipalInput;
+    options: MutationOptions;
+    output: PermissionRangeMutationResult;
+  };
 }
 
 // --- Bidirectional completeness checks ---

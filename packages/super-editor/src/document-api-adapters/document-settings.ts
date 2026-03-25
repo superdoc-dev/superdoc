@@ -1,6 +1,8 @@
 import type { XmlElement } from './helpers/sections-xml.js';
+import type { DocumentProtectionState, EditingRestrictionMode } from '@superdoc/document-api';
+import { DEFAULT_PROTECTION_STATE } from '@superdoc/document-api';
 
-const SETTINGS_PART_PATH = 'word/settings.xml';
+export const SETTINGS_PART_PATH = 'word/settings.xml';
 
 export interface ConverterWithDocumentSettings {
   convertedXml?: Record<string, unknown>;
@@ -159,4 +161,132 @@ export function setUpdateFields(settingsRoot: XmlElement, enabled: boolean): voi
   } else if (idx !== -1) {
     elements.splice(idx, 1);
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:documentProtection — parsing
+// ──────────────────────────────────────────────────────────────────────────────
+
+const VALID_EDIT_MODES = new Set<string>(['readOnly', 'comments', 'trackedChanges', 'forms']);
+
+/** XML boolean: `"1"`, `1`, `"true"`, `"on"` → true */
+function isXmlTrue(value: unknown): boolean {
+  return value === '1' || value === 1 || value === 'true' || value === 'on' || value === true;
+}
+
+/** Whether hash/salt/verifier fields indicate a password was set. */
+function hasVerifierFields(attrs: Record<string, string | number | boolean>): boolean {
+  return !!(
+    attrs['w:cryptAlgorithmSid'] ||
+    attrs['w:hash'] ||
+    attrs['w:salt'] ||
+    attrs['w:cryptProviderType'] ||
+    attrs['w:cryptAlgorithmType'] ||
+    attrs['w:cryptAlgorithmClass'] ||
+    attrs['w:cryptSpinCount']
+  );
+}
+
+/**
+ * Parse `w:documentProtection` and `w:writeProtection` from settings root
+ * into a normalized `DocumentProtectionState`.
+ */
+export function parseProtectionState(settingsRoot: XmlElement | null): DocumentProtectionState {
+  if (!settingsRoot) return { ...DEFAULT_PROTECTION_STATE };
+
+  const elements = settingsRoot.elements ?? [];
+
+  // --- Editing restriction ---
+  const docProtEl = elements.find((el) => el.name === 'w:documentProtection');
+  const dpAttrs = docProtEl?.attributes ?? {};
+
+  const rawMode = dpAttrs['w:edit'] as string | undefined;
+  const mode: EditingRestrictionMode =
+    rawMode && VALID_EDIT_MODES.has(rawMode) ? (rawMode as EditingRestrictionMode) : 'none';
+  const enforced = isXmlTrue(dpAttrs['w:enforcement']);
+  const formattingRestricted = isXmlTrue(dpAttrs['w:formatting']);
+  const passwordProtected = docProtEl ? hasVerifierFields(dpAttrs) : false;
+
+  // runtimeEnforced: only readOnly+enforced is actively enforced in this engine version
+  const runtimeEnforced = mode === 'readOnly' && enforced;
+
+  // --- Write protection ---
+  const writeProt = elements.find((el) => el.name === 'w:writeProtection');
+  const wpAttrs = writeProt?.attributes ?? {};
+  const writeEnabled = !!writeProt;
+  const writePasswordProtected = writeProt ? hasVerifierFields(wpAttrs) : false;
+
+  // --- Read-only recommended ---
+  const readOnlyRecommended = isXmlTrue(wpAttrs['w:recommended']);
+
+  return {
+    editingRestriction: {
+      mode,
+      enforced,
+      runtimeEnforced,
+      passwordProtected,
+      formattingRestricted,
+    },
+    writeProtection: {
+      enabled: writeEnabled,
+      passwordProtected: writePasswordProtected,
+    },
+    readOnlyRecommended,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:documentProtection — writing
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Write or replace `w:documentProtection` in settings.xml.
+ * Creates the element if absent, updates attributes if present.
+ * Preserves verifier/hash fields from the existing element.
+ */
+export function setDocumentProtection(
+  settingsRoot: XmlElement,
+  opts: { mode: EditingRestrictionMode; enforced: boolean; formattingRestricted?: boolean },
+): void {
+  const elements = ensureSettingsRootElements(settingsRoot);
+  const idx = elements.findIndex((el) => el.name === 'w:documentProtection');
+
+  // Preserve existing verifier fields if element exists
+  const existingAttrs = idx !== -1 ? { ...(elements[idx].attributes ?? {}) } : {};
+
+  const attrs: Record<string, string | number | boolean> = {
+    ...existingAttrs,
+    'w:edit': opts.mode,
+    'w:enforcement': opts.enforced ? '1' : '0',
+  };
+
+  if (opts.formattingRestricted !== undefined) {
+    attrs['w:formatting'] = opts.formattingRestricted ? '1' : '0';
+  }
+
+  const newEl: XmlElement = {
+    type: 'element',
+    name: 'w:documentProtection',
+    attributes: attrs,
+    elements: [],
+  };
+
+  if (idx !== -1) {
+    elements[idx] = newEl;
+  } else {
+    elements.push(newEl);
+  }
+}
+
+/**
+ * Disable enforcement on `w:documentProtection` while preserving the element
+ * and its metadata (mode, formatting, verifier fields) for round-trip fidelity.
+ */
+export function clearDocumentProtectionEnforcement(settingsRoot: XmlElement): void {
+  const elements = settingsRoot.elements ?? [];
+  const el = elements.find((e) => e.name === 'w:documentProtection');
+  if (!el) return;
+
+  if (!el.attributes) el.attributes = {};
+  el.attributes['w:enforcement'] = '0';
 }

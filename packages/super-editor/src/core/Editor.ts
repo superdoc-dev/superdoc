@@ -68,7 +68,7 @@ import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import type { DocumentApi, ResolveRangeOutput } from '@superdoc/document-api';
-import { createDocumentApi } from '@superdoc/document-api';
+import { createDocumentApi, DEFAULT_PROTECTION_STATE  } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import {
   resolveCurrentEditorSelectionRange,
@@ -81,6 +81,8 @@ import { captureSelectionHandle, resolveHandleToSelection, releaseSelectionHandl
 import type { SelectionHandle } from './selection-state.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
+import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
+import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -892,6 +894,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Create converter
       this.#createConverter();
       initPartsRuntime(this);
+      this.#initProtectionState();
 
       // Initialize media
       this.#initMedia();
@@ -944,6 +947,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       // Set document mode
       this.setDocumentMode(this.options.documentMode!, 'init');
+
+      // Emit protectionChanged with source 'init' for the loaded document
+      this.#emitProtectionInit();
 
       // Initialize collaboration data for new files
       this.initializeCollaborationData();
@@ -1020,6 +1026,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
       (this.storage.image as ImageStorage).media = {};
     }
 
+    // Reset protection state
+    const protStorageToReset = getProtectionStorage(this);
+    if (protStorageToReset) {
+      protStorageToReset.state = { ...DEFAULT_PROTECTION_STATE };
+      protStorageToReset.initialized = false;
+      protStorageToReset.editableBaseline = null;
+    }
+
     // Clear source path
     this.#sourcePath = null;
 
@@ -1033,6 +1047,32 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Bootstrap protection state from word/settings.xml into editor.storage.protection.
+   * Must be called after converter and parts runtime are ready, before #createInitialState().
+   */
+  #initProtectionState(): void {
+    const protStorage = getProtectionStorage(this);
+    if (!protStorage) return;
+    const settingsRoot = this.converter ? readSettingsRoot(this.converter) : null;
+    protStorage.state = parseProtectionState(settingsRoot);
+    protStorage.initialized = true;
+  }
+
+  /**
+   * Emit protectionChanged with source 'init' so consumers can react to the
+   * initial protection state. Called after event listeners are registered.
+   */
+  #emitProtectionInit(): void {
+    const protStorage = getProtectionStorage(this);
+    if (!protStorage?.initialized) return;
+    this.emit('protectionChanged', {
+      editor: this,
+      state: protStorage.state,
+      source: 'init',
+    });
+  }
+
+  /**
    * Initialize the editor with the given options
    */
   #init(): void {
@@ -1041,6 +1081,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#createSchema();
     this.#createConverter();
     initPartsRuntime(this);
+    this.#initProtectionState();
     this.#initMedia();
 
     this.on('beforeCreate', this.options.onBeforeCreate!);
@@ -1105,6 +1146,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     this.setDocumentMode(this.options.documentMode!, 'init');
+
+    // Emit protectionChanged with source 'init' so consumers can react
+    // to the initial protection state after all listeners are registered.
+    this.#emitProtectionInit();
 
     if (!this.options.ydoc && !this.options.isChildEditor) {
       this.#initComments();
@@ -1547,6 +1592,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.setOptions({ documentMode: 'editing' });
       if (pm) pm.classList.remove('view-mode');
     }
+
+    // Apply protection-aware editability override.
+    // This may override the setEditable calls above when read-only protection
+    // is enforced or when permission ranges allow editing in protected docs.
+    applyEffectiveEditability(this);
   }
 
   /**

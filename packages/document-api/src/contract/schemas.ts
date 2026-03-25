@@ -7074,6 +7074,104 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: diffApplyResultSchema,
     failure: { type: 'object' },
   },
+  // --- protection.* ---
+  'protection.get': {
+    input: objectSchema({}),
+    output: objectSchema(
+      {
+        editingRestriction: objectSchema(
+          {
+            mode: { type: 'string', enum: ['none', 'readOnly', 'comments', 'trackedChanges', 'forms'] },
+            enforced: { type: 'boolean' },
+            runtimeEnforced: { type: 'boolean' },
+            passwordProtected: { type: 'boolean' },
+            formattingRestricted: { type: 'boolean' },
+          },
+          ['mode', 'enforced', 'runtimeEnforced', 'passwordProtected', 'formattingRestricted'],
+        ),
+        writeProtection: objectSchema(
+          {
+            enabled: { type: 'boolean' },
+            passwordProtected: { type: 'boolean' },
+          },
+          ['enabled', 'passwordProtected'],
+        ),
+        readOnlyRecommended: { type: 'boolean' },
+      },
+      ['editingRestriction', 'writeProtection', 'readOnlyRecommended'],
+    ),
+  },
+  'protection.setEditingRestriction': {
+    input: objectSchema(
+      {
+        mode: { type: 'string', enum: ['readOnly'] },
+        formattingRestricted: { type: 'boolean' },
+      },
+      ['mode'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'protection.clearEditingRestriction': {
+    input: objectSchema({}),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+
+  // --- permissionRanges.* ---
+  'permissionRanges.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'permissionRanges.get': {
+    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    output: { type: 'object' },
+  },
+  'permissionRanges.create': {
+    input: objectSchema(
+      {
+        target: selectionTargetSchema,
+        principal: objectSchema(
+          {
+            kind: { type: 'string', enum: ['everyone', 'editor'] },
+            id: { type: 'string' },
+          },
+          ['kind'],
+        ),
+        id: { type: 'string' },
+      },
+      ['target', 'principal'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'permissionRanges.remove': {
+    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'permissionRanges.updatePrincipal': {
+    input: objectSchema(
+      {
+        id: { type: 'string' },
+        principal: objectSchema(
+          {
+            kind: { type: 'string', enum: ['everyone', 'editor'] },
+            id: { type: 'string' },
+          },
+          ['kind'],
+        ),
+      },
+      ['id', 'principal'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
 };
 
 /**

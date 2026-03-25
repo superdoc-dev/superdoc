@@ -63,7 +63,9 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
-  | 'diff';
+  | 'diff'
+  | 'protection'
+  | 'permissionRanges';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -262,6 +264,17 @@ const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_MUTATION_REMOVE = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_INSERT = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+
+// Protection / permission-range throw-code arrays
+const T_PROTECTION_READ = ['CAPABILITY_UNAVAILABLE'] as const;
+const T_PROTECTION_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_PERM_RANGE_READ = ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_PERM_RANGE_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
 
 type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
 
@@ -5567,6 +5580,133 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'diff/apply.mdx',
     referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  // =========================================================================
+  // protection.*
+  // =========================================================================
+
+  'protection.get': {
+    memberPath: 'protection.get',
+    description:
+      'Read the current document protection state including editing restrictions, write protection, and read-only recommendation.',
+    expectedResult:
+      'Returns a DocumentProtectionState with editingRestriction, writeProtection, and readOnlyRecommended fields.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PROTECTION_READ }),
+    referenceDocPath: 'protection/get.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+  'protection.setEditingRestriction': {
+    memberPath: 'protection.setEditingRestriction',
+    description: 'Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1.',
+    expectedResult: 'Returns a ProtectionMutationResult with the updated protection state on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PROTECTION_MUTATION,
+    }),
+    referenceDocPath: 'protection/set-editing-restriction.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+  'protection.clearEditingRestriction': {
+    memberPath: 'protection.clearEditingRestriction',
+    description:
+      'Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity.',
+    expectedResult: 'Returns a ProtectionMutationResult with the updated protection state on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PROTECTION_MUTATION,
+    }),
+    referenceDocPath: 'protection/clear-editing-restriction.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+
+  // =========================================================================
+  // permissionRanges.*
+  // =========================================================================
+
+  'permissionRanges.list': {
+    memberPath: 'permissionRanges.list',
+    description:
+      'List all permission ranges in the document. Returns only complete paired ranges (both start and end markers present).',
+    expectedResult:
+      'Returns a PermissionRangesListResult containing discovered permission ranges with principal and position data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PERM_RANGE_READ }),
+    referenceDocPath: 'permission-ranges/list.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.get': {
+    memberPath: 'permissionRanges.get',
+    description: 'Get detailed information about a specific permission range by ID.',
+    expectedResult: 'Returns a PermissionRangeInfo object with the range principal, kind, and positions.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PERM_RANGE_READ }),
+    referenceDocPath: 'permission-ranges/get.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.create': {
+    memberPath: 'permissionRanges.create',
+    description:
+      'Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target.',
+    expectedResult: 'Returns a PermissionRangeMutationResult with the created range info on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/create.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.remove': {
+    memberPath: 'permissionRanges.remove',
+    description:
+      'Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both).',
+    expectedResult: 'Returns a PermissionRangeRemoveResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/remove.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.updatePrincipal': {
+    memberPath: 'permissionRanges.updatePrincipal',
+    description:
+      'Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker.',
+    expectedResult: 'Returns a PermissionRangeMutationResult with the updated range info on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/update-principal.mdx',
+    referenceGroup: 'permissionRanges',
     skipAsATool: true,
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;

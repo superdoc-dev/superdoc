@@ -3347,6 +3347,18 @@ export class PresentationEditor extends EventEmitter {
       event: 'commentsUpdate',
       handler: handleCommentsUpdate as (...args: unknown[]) => void,
     });
+
+    // Listen for protection state changes to refresh visual lock state and overlays
+    const handleProtectionChanged = () => {
+      this.#updatePermissionOverlay();
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    };
+    this.#editor.on('protectionChanged', handleProtectionChanged);
+    this.#editorListeners.push({
+      event: 'protectionChanged',
+      handler: handleProtectionChanged as (...args: unknown[]) => void,
+    });
   }
 
   /**
@@ -6585,6 +6597,19 @@ export class PresentationEditor extends EventEmitter {
    * check allowSelectionInViewMode separately.
    */
   #isViewLocked(): boolean {
+    // Check if read-only protection is runtime-enforced (protection wins over documentMode)
+    const protectionStorage = (this.#editor as Editor & { storage?: Record<string, any> })?.storage?.protection;
+    const protectionEnforced =
+      protectionStorage?.initialized === true && protectionStorage?.state?.editingRestriction?.runtimeEnforced === true;
+
+    if (protectionEnforced) {
+      // When protection is enforced, lock unless permission ranges allow editing
+      const hasPermissionOverride = !!(this.#editor as Editor & { storage?: Record<string, any> })?.storage
+        ?.permissionRanges?.hasAllowedRanges;
+      return !hasPermissionOverride;
+    }
+
+    // Fall back to documentMode check for non-protected documents
     if (this.#documentMode !== 'viewing') return false;
     const hasPermissionOverride = !!(this.#editor as Editor & { storage?: Record<string, any> })?.storage
       ?.permissionRanges?.hasAllowedRanges;

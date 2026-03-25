@@ -509,5 +509,17 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'diff.capture': () => api.diff.capture(),
     'diff.compare': (input) => api.diff.compare(input),
     'diff.apply': (input, options) => api.diff.apply(input, options),
+
+    // --- protection.* ---
+    'protection.get': (input) => api.protection.get(input),
+    'protection.setEditingRestriction': (input, options) => api.protection.setEditingRestriction(input, options),
+    'protection.clearEditingRestriction': (input, options) => api.protection.clearEditingRestriction(input, options),
+
+    // --- permissionRanges.* ---
+    'permissionRanges.list': (input) => api.permissionRanges.list(input),
+    'permissionRanges.get': (input) => api.permissionRanges.get(input),
+    'permissionRanges.create': (input, options) => api.permissionRanges.create(input, options),
+    'permissionRanges.remove': (input, options) => api.permissionRanges.remove(input, options),
+    'permissionRanges.updatePrincipal': (input, options) => api.permissionRanges.updatePrincipal(input, options),
   };
 }

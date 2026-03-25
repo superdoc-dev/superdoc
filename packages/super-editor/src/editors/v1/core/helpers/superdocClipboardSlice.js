@@ -43,6 +43,17 @@ export function collectReferencedImageMediaForClipboard(sliceJsonString, editor)
         }
       }
     }
+    if (node.type === 'shapeGroup' && Array.isArray(node.attrs?.shapes)) {
+      for (const shape of node.attrs.shapes) {
+        const src = shape?.attrs?.src;
+        if (typeof src === 'string' && src.length > 0) {
+          const val = source[src];
+          if (typeof val === 'string' && val.length > 0) {
+            out[src] = val;
+          }
+        }
+      }
+    }
     const { content } = node;
     if (Array.isArray(content)) {
       for (const child of content) visit(child);
@@ -57,33 +68,127 @@ export function collectReferencedImageMediaForClipboard(sliceJsonString, editor)
 }
 
 /**
+ * @param {string} originalPath
+ * @param {Record<string, string>} store
+ * @param {Set<string>} reserved keys allocated in this paste batch
+ */
+function allocateUniqueMediaPath(originalPath, store, reserved) {
+  const extMatch = originalPath.match(/(\.[^./]+)$/);
+  const ext = extMatch ? extMatch[1] : '';
+  const dirMatch = originalPath.match(/^(.*\/)/);
+  const dir = dirMatch ? dirMatch[1] : 'word/media/';
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  let candidate = `${dir}sd-paste-${id}${ext}`;
+  let n = 0;
+  while ((store[candidate] != null && store[candidate] !== '') || reserved.has(candidate)) {
+    candidate = `${dir}sd-paste-${id}-${n}${ext}`;
+    n += 1;
+  }
+  reserved.add(candidate);
+  return candidate;
+}
+
+/**
+ * @param {unknown} node slice JSON node
+ * @param {Map<string, string>} pathRemap old path → new path
+ */
+function rewriteImageSrcsInSliceJsonTree(node, pathRemap) {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === 'image' && node.attrs && typeof node.attrs.src === 'string') {
+    const next = pathRemap.get(node.attrs.src);
+    if (next) {
+      node.attrs = { ...node.attrs, src: next };
+    }
+  }
+  if (node.type === 'shapeGroup' && Array.isArray(node.attrs?.shapes)) {
+    node.attrs = {
+      ...node.attrs,
+      shapes: node.attrs.shapes.map((shape) => {
+        if (!shape || typeof shape !== 'object' || !shape.attrs || typeof shape.attrs.src !== 'string') {
+          return shape;
+        }
+        const next = pathRemap.get(shape.attrs.src);
+        if (!next) return shape;
+        return { ...shape, attrs: { ...shape.attrs, src: next } };
+      }),
+    };
+  }
+  const { content } = node;
+  if (Array.isArray(content)) {
+    for (const child of content) rewriteImageSrcsInSliceJsonTree(child, pathRemap);
+  }
+}
+
+/**
+ * Read `SUPERDOC_MEDIA_MIME` from the clipboard, merge into `editor.storage.image.media` (and Yjs),
+ * and optionally rewrite `sliceJson` so `image` / `shapeGroup` src keys stay in sync.
+ *
+ * DOCX-style paths (`word/media/image1.png`) collide across documents; if the target already has
+ * different data at a path, pasted bytes go under a new `word/media/sd-paste-…` key instead.
+ *
  * @param {object} editor
  * @param {DataTransfer | null | undefined} clipboardData
+ * @param {string | null} [sliceJson] SuperDoc slice JSON string, if any
+ * @returns {string | null} slice JSON to paste (updated when paths were remapped), or `sliceJson` unchanged
  */
-export function mergeSuperdocClipboardMediaIntoEditor(editor, clipboardData) {
-  if (!editor?.storage?.image) return;
+export function applySuperdocClipboardMedia(editor, clipboardData, sliceJson = null) {
   const raw = clipboardData?.getData?.(SUPERDOC_MEDIA_MIME);
-  if (!raw || typeof raw !== 'string') return;
+  if (!editor?.storage?.image || !raw || typeof raw !== 'string') {
+    return sliceJson;
+  }
 
   let map;
   try {
     map = JSON.parse(raw);
   } catch {
-    return;
+    return sliceJson;
   }
-  if (!map || typeof map !== 'object') return;
+  if (!map || typeof map !== 'object') {
+    return sliceJson;
+  }
+
+  const entries = Object.entries(map).filter(([p, d]) => typeof p === 'string' && p && typeof d === 'string' && d);
+  if (entries.length === 0) {
+    return sliceJson;
+  }
 
   if (!editor.storage.image.media) {
     editor.storage.image.media = {};
   }
-
+  const store = editor.storage.image.media;
   const yMedia = editor.options?.ydoc?.getMap?.('media');
 
-  for (const [path, data] of Object.entries(map)) {
-    if (typeof path !== 'string' || !path || typeof data !== 'string' || !data) continue;
-    editor.storage.image.media[path] = data;
-    yMedia?.set?.(path, data);
+  /** @type {Map<string, string>} */
+  const renames = new Map();
+  const reserved = new Set();
+
+  for (const [path, data] of entries) {
+    const existing = store[path];
+    if (existing != null && existing !== '' && existing !== data) {
+      renames.set(path, allocateUniqueMediaPath(path, store, reserved));
+    }
   }
+
+  let outSlice = sliceJson;
+  if (renames.size > 0 && sliceJson) {
+    try {
+      const slice = JSON.parse(sliceJson);
+      if (Array.isArray(slice.content)) {
+        for (const node of slice.content) rewriteImageSrcsInSliceJsonTree(node, renames);
+      }
+      outSlice = JSON.stringify(slice);
+    } catch {
+      outSlice = sliceJson;
+    }
+  }
+
+  for (const [path, data] of entries) {
+    const key = renames.get(path) ?? path;
+    store[key] = data;
+    yMedia?.set?.(key, data);
+  }
+
+  return outSlice;
 }
 
 /** Latin-1 / “binary” string → base64 (browser `btoa`, else Node `Buffer`). */

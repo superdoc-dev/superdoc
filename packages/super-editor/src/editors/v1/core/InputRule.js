@@ -28,7 +28,7 @@ import {
   extractBodySectPrFromHtml,
   bodySectPrShouldEmbed,
   collectReferencedImageMediaForClipboard,
-  mergeSuperdocClipboardMediaIntoEditor,
+  applySuperdocClipboardMedia,
 } from './helpers/superdocClipboardSlice.js';
 import { annotateFragmentDomWithClipboardData } from './helpers/clipboardFragmentAnnotate.js';
 
@@ -317,9 +317,9 @@ export const inputRulesPlugin = ({ editor, rules }) => {
         const isSuperdocHtml = isSuperdocOriginClipboardHtml(rawHtml);
         const embeddedBodySectPr = isSuperdocHtml ? extractBodySectPrFromHtml(rawHtml) : null;
 
-        const superdocSliceData = clipboard.getData(SUPERDOC_SLICE_MIME) || extractSliceFromHtml(rawHtml);
+        let superdocSliceData = clipboard.getData(SUPERDOC_SLICE_MIME) || extractSliceFromHtml(rawHtml);
         if (isSuperdocHtml || superdocSliceData) {
-          mergeSuperdocClipboardMediaIntoEditor(editor, clipboard);
+          superdocSliceData = applySuperdocClipboardMedia(editor, clipboard, superdocSliceData || null);
         }
         if (superdocSliceData) {
           try {
@@ -881,7 +881,7 @@ function handleSuperdocSlicePaste(sliceData, editor, view, embeddedBodySectPr = 
 
   if (!slice.content.size) return false;
 
-  const stripped = stripBlockIds(slice.content);
+  const stripped = stripSuperdocSliceBlockIdentities(slice.content);
   const cleanContent = remapPastedListNumberingInFragment(stripped, editor);
   const cleanSlice = new Slice(cleanContent, slice.openStart, slice.openEnd);
 
@@ -899,21 +899,48 @@ function handleSuperdocSlicePaste(sliceData, editor, view, embeddedBodySectPr = 
   return true;
 }
 
-function stripBlockIds(fragment) {
+/**
+ * Attrs cleared per node type when pasting a SuperDoc slice. Import uses
+ * {@link ./super-converter/v2/importer/normalizeDuplicateBlockIdentitiesInContent.js}
+ * so in-doc IDs are unique; slice paste must not keep `paraId` / legacy table ids /
+ * structured `id` from the copy source or `resolveBlockNodeId` will expose duplicate
+ * public block IDs (paragraphs prefer `paraId` over `sdBlockId`).
+ *
+ * @type {Record<string, Record<string, null | number>>}
+ */
+const SUPERDOC_SLICE_PASTE_IDENTITY_RESETS = {
+  paragraph: { paraId: null, sdBlockId: null, sdBlockRev: 0 },
+  table: { paraId: null, sdBlockId: null },
+  tableRow: { paraId: null, sdBlockId: null },
+  tableCell: { paraId: null, sdBlockId: null },
+  tableHeader: { sdBlockId: null },
+  structuredContentBlock: { id: null },
+  documentSection: { id: null, sdBlockId: null },
+  documentPartObject: { id: null, sdBlockId: null },
+  tableOfContents: { sdBlockId: null },
+};
+
+/**
+ * @param {import('prosemirror-model').Fragment} fragment
+ */
+function stripSuperdocSliceBlockIdentities(fragment) {
   const children = [];
   fragment.forEach((node) => {
-    let newNode = node;
-
-    const needsClean = node.type.name === 'paragraph' || node.attrs.sdBlockId != null;
-
-    if (needsClean) {
-      const cleanAttrs = { ...node.attrs, sdBlockId: null, sdBlockRev: 0 };
-      newNode = node.type.create(cleanAttrs, node.childCount ? stripBlockIds(node.content) : node.content, node.marks);
-    } else if (node.childCount) {
-      const newContent = stripBlockIds(node.content);
-      if (newContent !== node.content) {
-        newNode = node.copy(newContent);
+    const resets = SUPERDOC_SLICE_PASTE_IDENTITY_RESETS[node.type.name];
+    let newContent = node.content;
+    if (node.childCount) {
+      const strippedChildren = stripSuperdocSliceBlockIdentities(node.content);
+      if (strippedChildren !== node.content) {
+        newContent = strippedChildren;
       }
+    }
+
+    let newNode = node;
+    if (resets) {
+      const cleanAttrs = { ...node.attrs, ...resets };
+      newNode = node.type.create(cleanAttrs, newContent, node.marks);
+    } else if (newContent !== node.content) {
+      newNode = node.copy(newContent);
     }
 
     children.push(newNode);

@@ -33,19 +33,18 @@ const createParagraph = (attrs, pos) => ({
   pos,
 });
 
-const createState = (paragraphs, { from = 1, to = 10, beforeNode = null, blockIndex = 0 } = {}) => ({
+const createState = (paragraphs, { from = 1, to = 10, beforeNode = null } = {}) => ({
   doc: {
     nodesBetween: vi.fn((_from, _to, callback) => {
       for (const { node, pos } of paragraphs) {
         callback(node, pos);
       }
     }),
-    resolve: vi.fn(() => ({
-      index: (depth) => (depth === 0 ? blockIndex : 0),
-    })),
-    child: vi.fn((i) => {
-      if (beforeNode != null && i === blockIndex - 1) return beforeNode;
-      return undefined;
+    resolve: vi.fn((pos) => {
+      if (paragraphs.length > 0 && pos === paragraphs[0].pos) {
+        return { nodeBefore: beforeNode };
+      }
+      return { nodeBefore: null };
     }),
   },
   selection: { from, to },
@@ -193,7 +192,7 @@ describe('toggleList', () => {
     };
     ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
     const paragraphs = [createParagraph({ paragraphProperties: {} }, 4)];
-    const state = createState(paragraphs, { beforeNode, blockIndex: 1, from: 4, to: 8 });
+    const state = createState(paragraphs, { beforeNode, from: 4, to: 8 });
     const handler = toggleList('orderedList');
 
     const result = handler({ editor, state, tr, dispatch });
@@ -220,7 +219,7 @@ describe('toggleList', () => {
       createParagraph({ paragraphProperties: {} }, 4),
       createParagraph({ paragraphProperties: {} }, 8),
     ];
-    const state = createState(paragraphs, { beforeNode, blockIndex: 1 });
+    const state = createState(paragraphs, { beforeNode });
     const handler = toggleList('orderedList');
 
     const result = handler({ editor, state, tr, dispatch });

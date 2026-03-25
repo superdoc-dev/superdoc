@@ -33,6 +33,31 @@ function paragraphMatchesToggleListType(node, editor, listType) {
   return false;
 }
 
+/**
+ * Previous paragraph sibling of the anchor block: `doc.resolve(pos).nodeBefore` where `pos`
+ * is the gap before the first selected paragraph (or before the paragraph containing `from`).
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} from
+ * @param {Array<{ node: import('prosemirror-model').Node, pos: number }>} paragraphsInSelection
+ * @returns {import('prosemirror-model').Node | null}
+ */
+function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
+  let pos = paragraphsInSelection.length > 0 ? paragraphsInSelection[0].pos : null;
+  if (pos == null && from > 0) {
+    const $from = doc.resolve(from);
+    for (let d = $from.depth; d > 0; d -= 1) {
+      if ($from.node(d).type.name === 'paragraph') {
+        pos = $from.before(d);
+        break;
+      }
+    }
+  }
+  if (pos == null) return null;
+  const nb = doc.resolve(pos).nodeBefore;
+  return nb?.type?.name === 'paragraph' ? nb : null;
+}
+
 export const toggleList =
   (listType) =>
   ({ editor, state, tr, dispatch }) => {
@@ -70,13 +95,9 @@ export const toggleList =
       }
     }
     if (!firstListNode && from > 0) {
-      const $from = state.doc.resolve(from);
-      const blockIndex = $from.index(0);
-      if (blockIndex > 0) {
-        const beforeNode = state.doc.child(blockIndex - 1);
-        if (beforeNode && beforeNode.type.name === 'paragraph' && predicate(beforeNode)) {
-          firstListNode = beforeNode;
-        }
+      const beforeNode = getPrecedingParagraphForListReuse(state.doc, from, paragraphsInSelection);
+      if (beforeNode && predicate(beforeNode)) {
+        firstListNode = beforeNode;
       }
     }
     // 3. Resolve numbering properties

@@ -156,6 +156,8 @@ export type {
   ChainedCommand,
   ChainableCommandObject,
   CanObject,
+  CoreCommandMap,
+  ExtensionCommandMap,
 } from './core/types/ChainedCommands.js';
 
 // Editor configuration types
@@ -178,6 +180,7 @@ export type {
   LayoutError,
   RangeRect,
   BoundingRect,
+  LayoutUpdatePayload,
 } from './core/presentation-editor/types.js';
 
 // Layout engine types

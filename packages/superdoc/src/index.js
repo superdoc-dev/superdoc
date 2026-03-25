@@ -88,6 +88,9 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').SelectionHandle} SelectionHandle
  * @typedef {import('@superdoc/super-editor').SelectionCommandContext} SelectionCommandContext
  * @typedef {import('@superdoc/super-editor').ResolveRangeOutput} ResolveRangeOutput
+ * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
+ * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
+ * @typedef {import('@superdoc/super-editor').ExtensionCommandMap} ExtensionCommandMap
  */
 
 // Public exports

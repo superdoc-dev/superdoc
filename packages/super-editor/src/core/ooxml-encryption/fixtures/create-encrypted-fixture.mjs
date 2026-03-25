@@ -1,3 +1,5 @@
+/* global TextEncoder */
+
 /**
  * Generate a password-encrypted .docx test fixture.
  *

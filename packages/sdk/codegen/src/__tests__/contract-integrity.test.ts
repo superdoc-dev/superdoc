@@ -403,6 +403,7 @@ describe('agentVisible param annotation integrity', () => {
   // like "type" or "kind" must be scoped to avoid masking accidental hiding).
   const OPERATION_SCOPED_HIDDEN: Record<string, Set<string>> = {
     'doc.find': new Set(['type', 'nodeType', 'kind', 'pattern', 'mode', 'caseSensitive']),
+    'doc.open': new Set(['password']),
   };
 
   function isExpectedHidden(operationId: string, paramName: string): boolean {

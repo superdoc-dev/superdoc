@@ -11,7 +11,7 @@ import type {
   ImageFragmentMetadata,
   DrawingBlock,
   DrawingMeasure,
-  DrawingFragment,
+  DrawingFragment, ParagraphBorders 
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -23,6 +23,7 @@ import {
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
 import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { PX_PER_PT } from '@superdoc/pm-adapter/constants.js';
 
 const spacingDebugEnabled = false;
 /**
@@ -89,6 +90,8 @@ type ParagraphBlockAttrs = {
   floatAlignment?: unknown;
   /** Keep all lines of the paragraph on the same page */
   keepLines?: boolean;
+  /** Border attributes for the paragraph */
+  borders?: ParagraphBorders;
 };
 
 const spacingDebugLog = (..._args: unknown[]): void => {
@@ -160,6 +163,28 @@ const asSafeNumber = (value: unknown): number => {
     return 0;
   }
   return value;
+};
+
+/**
+ * Computes the vertical border expansion for a paragraph fragment.
+ * The border's `space` attribute (in points) plus the border width extends
+ * the visual box beyond the content area. This ensures cursorY accounts
+ * for the full visual height when paragraphs have borders with space.
+ */
+const computeBorderVerticalExpansion = (borders?: ParagraphBorders): { top: number; bottom: number } => {
+  if (!borders) return { top: 0, bottom: 0 };
+
+  // Top border: space (pts) + width (px)
+  const topSpace = (borders.top?.space ?? 0) * PX_PER_PT;
+  const topWidth = borders.top?.width ?? 0;
+  const top = topSpace + topWidth;
+
+  // Bottom border: space (pts) + width (px)
+  const bottomSpace = (borders.bottom?.space ?? 0) * PX_PER_PT;
+  const bottomWidth = borders.bottom?.width ?? 0;
+  const bottom = bottomSpace + bottomWidth;
+
+  return { top, bottom };
 };
 
 /**
@@ -785,14 +810,15 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Expand width: negative indents on both sides expand the fragment width
     // (e.g., -48px left + -72px right = 120px wider)
     const adjustedWidth = effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
-
+    // Account for border space + width that extends the visual box
+    const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
       fromLine,
       toLine: slice.toLine,
       x: adjustedX,
-      y: state.cursorY,
+      y: state.cursorY + borderExpansion.top,
       width: adjustedWidth,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
@@ -838,9 +864,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         fragment.x = columnX(state.columnIndex) + offsetX + (effectiveColumnWidth - maxLineWidth) / 2;
       }
     }
-
     state.page.fragments.push(fragment);
-    state.cursorY += fragmentHeight;
+
+    state.cursorY += fragmentHeight + borderExpansion.top + borderExpansion.bottom;
     lastState = state;
     fromLine = slice.toLine;
   }

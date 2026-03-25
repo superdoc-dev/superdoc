@@ -100,9 +100,14 @@ function uint32LE(value: number): Uint8Array {
   return buf;
 }
 
+/** Coerce a Uint8Array to a plain ArrayBuffer so it satisfies the BufferSource type in strict TS. */
+function toBuffer(arr: Uint8Array): ArrayBuffer {
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+}
+
 async function hash(algorithm: AlgorithmIdentifier, data: Uint8Array): Promise<Uint8Array> {
   const subtle = getSubtleCrypto();
-  const digest = await subtle.digest(algorithm, data);
+  const digest = await subtle.digest(algorithm, toBuffer(data));
   return new Uint8Array(digest);
 }
 
@@ -120,7 +125,7 @@ async function decryptAesCbc(keyBytes: Uint8Array, iv: Uint8Array, ciphertext: U
   const subtle = getSubtleCrypto();
   const blockSize = 16;
 
-  const key = await subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+  const key = await subtle.importKey('raw', toBuffer(keyBytes), { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
 
   // Build a valid PKCS#7 tail: encrypt a full padding block (0x10 * 16)
   // using the last ciphertext block as the CBC IV so it chains correctly.
@@ -129,7 +134,7 @@ async function decryptAesCbc(keyBytes: Uint8Array, iv: Uint8Array, ciphertext: U
   pkcs7Plaintext.fill(blockSize);
 
   const encryptedPadding = new Uint8Array(
-    await subtle.encrypt({ name: 'AES-CBC', iv: lastBlock }, key, pkcs7Plaintext),
+    await subtle.encrypt({ name: 'AES-CBC', iv: toBuffer(lastBlock) }, key, pkcs7Plaintext),
   );
   // Web Crypto adds its own PKCS#7 block during encrypt — take only the first block.
   const paddingBlock = encryptedPadding.subarray(0, blockSize);
@@ -139,7 +144,7 @@ async function decryptAesCbc(keyBytes: Uint8Array, iv: Uint8Array, ciphertext: U
   withPadding.set(ciphertext);
   withPadding.set(paddingBlock, ciphertext.length);
 
-  const decrypted = await subtle.decrypt({ name: 'AES-CBC', iv }, key, withPadding);
+  const decrypted = await subtle.decrypt({ name: 'AES-CBC', iv: toBuffer(iv) }, key, withPadding);
   // Return only the bytes corresponding to the original ciphertext length
   return new Uint8Array(decrypted).subarray(0, ciphertext.length);
 }
@@ -395,8 +400,8 @@ async function verifyDataIntegrity(
   const expectedHmac = await decryptAesCbc(encryptionKey, ivHmacValue, params.encryptedHmacValue);
 
   // Compute HMAC of the encrypted package (per spec §2.3.6.3)
-  const cryptoKey = await subtle.importKey('raw', hmacKey, { name: 'HMAC', hash: algo }, false, ['sign']);
-  const computedHmac = new Uint8Array(await subtle.sign('HMAC', cryptoKey, encryptedPackage));
+  const cryptoKey = await subtle.importKey('raw', toBuffer(hmacKey), { name: 'HMAC', hash: algo }, false, ['sign']);
+  const computedHmac = new Uint8Array(await subtle.sign('HMAC', cryptoKey, toBuffer(encryptedPackage)));
 
   // Compare (truncate expected to hash size in case of padding from AES block alignment)
   const expected = expectedHmac.subarray(0, computedHmac.length);

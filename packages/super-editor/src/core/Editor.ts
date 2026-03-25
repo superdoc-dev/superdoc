@@ -795,7 +795,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = decryptedData ?? buffer;
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
-          this.#sourcePath = source;
+          // When the file was encrypted, clear sourcePath so that save()
+          // cannot silently overwrite the protected original with an
+          // unencrypted ZIP. Callers must use saveTo() or exportDocument().
+          this.#sourcePath = decryptedData ? null : source;
         } else {
           // Browser: fetch the file
           const response = await fetch(source);

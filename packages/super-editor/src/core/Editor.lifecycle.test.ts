@@ -471,6 +471,24 @@ describe('Editor Lifecycle API', () => {
         expect(stored[0]).toBe(0x50); // 'P'
         expect(stored[1]).toBe(0x4b); // 'K'
       }, 30_000);
+
+      it('should clear sourcePath for encrypted files opened by path to prevent silent save', async () => {
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const dir = dirname(fileURLToPath(import.meta.url));
+        const encryptedPath = resolve(dir, 'ooxml-encryption/fixtures/encrypted-hello.docx');
+
+        editor = await Editor.open(encryptedPath, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          password: 'test123',
+        });
+
+        // sourcePath must be null so save() cannot silently overwrite the
+        // encrypted original with an unencrypted ZIP.
+        expect(editor.sourcePath).toBeNull();
+        await expect(editor.save()).rejects.toThrow(NoSourcePathError);
+      }, 30_000);
     });
   });
 

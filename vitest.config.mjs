@@ -24,6 +24,7 @@ export default defineConfig({
       './packages/layout-engine/painters/dom',
       './packages/layout-engine/pm-adapter',
       './packages/layout-engine/tests',
+      './apps/vscode-ext',
     ],
     coverage: {
       exclude: [

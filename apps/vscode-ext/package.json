@@ -50,18 +50,7 @@
     },
     "configuration": {
       "title": "SuperDoc",
-      "properties": {
-        "superdoc.autoSaveDelay": {
-          "type": "number",
-          "default": 1000,
-          "description": "Delay in milliseconds before auto-saving after an edit"
-        },
-        "superdoc.enableAutoSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable automatic saving of document changes"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
@@ -76,6 +65,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "release": "pnpx semantic-release",
     "release:dry-run": "pnpx semantic-release --dry-run",
@@ -87,7 +77,8 @@
     "@types/vscode": "^1.107.0",
     "@vscode/vsce": "^2.32.0",
     "esbuild": "^0.25.0",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "dependencies": {
     "superdoc": "workspace:*"

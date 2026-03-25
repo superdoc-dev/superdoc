@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: superdoc-ci-4cpu
     steps:
       - uses: actions/checkout@v6
 
@@ -74,10 +74,6 @@ jobs:
 
       - name: Run unit tests
         run: pnpm test
-        env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
-          VITEST_POOL: forks
-          VITEST_MAX_WORKERS: 2
 
       - name: Run memory profiling tests (non-blocking)
         continue-on-error: true

@@ -3,6 +3,7 @@ import { calculateResolvedParagraphProperties } from '@extensions/paragraph/reso
 import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
 
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { normalizeRunProperties } from './normalizeRunProperties.js';
 
 export function getMarksFromSelection(state, editor) {
   return getSelectionFormattingState(state, editor).resolvedMarks;
@@ -250,11 +251,6 @@ function getParagraphRunContext($pos, editor) {
     tableInfo,
     numberingDefinedInline: Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
   };
-}
-
-function normalizeRunProperties(runProperties) {
-  if (!runProperties || typeof runProperties !== 'object') return null;
-  return Object.keys(runProperties).length > 0 ? runProperties : null;
 }
 
 function getSafeResolutionContext(editor, node, $pos, paragraphAttrs) {

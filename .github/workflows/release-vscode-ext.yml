@@ -7,8 +7,14 @@ on:
     branches: main
     paths:
       - 'apps/vscode-ext/**'
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
       - 'pnpm-workspace.yaml'
-      - '!apps/vscode-ext/*.md'
+      - '!**/*.md'
   workflow_dispatch:
 
 permissions:

@@ -373,82 +373,7 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
     }),
   );
 
-  if (spanEls.length === 0) {
-    log('No spans in line, returning lineStart:', lineStart);
-    return lineStart;
-  }
-
-  const rtl = isRtlLine(lineEl);
-
-  // Determine the visual left/right edges of all spans to handle RTL correctly.
-  // In RTL lines the first DOM span may be visually rightmost.
-  // Filter out non-rendered spans (display:none field annotations, hidden tracked
-  // changes, etc.) whose zero-sized rects would collapse the bounds to 0.
-  // When every rect is zero-sized (e.g. JSDOM) fall back to the unfiltered set
-  // so the downstream logic still runs.
-  const allRects = spanEls.map((el) => el.getBoundingClientRect());
-  const visibleRects = allRects.filter(isVisibleRect);
-  const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
-
-  const visualLeft = Math.min(...boundsRects.map((r) => r.left));
-  const visualRight = Math.max(...boundsRects.map((r) => r.right));
-
-  if (viewX <= visualLeft) {
-    const pos = rtl ? lineEnd : lineStart;
-    log('Click to visual left of all spans, returning:', pos);
-    return pos;
-  }
-
-  if (viewX >= visualRight) {
-    const pos = rtl ? lineStart : lineEnd;
-    log('Click to visual right of all spans, returning:', pos);
-    return pos;
-  }
-
-  // Find the target element (span or anchor) containing or nearest to the X coordinate
-  const targetEl = findSpanAtX(spanEls, viewX);
-  if (!targetEl) {
-    log('No target element found, returning lineStart:', lineStart);
-    return lineStart;
-  }
-
-  const spanStart = Number(targetEl.dataset.pmStart ?? 'NaN');
-  const spanEnd = Number(targetEl.dataset.pmEnd ?? 'NaN');
-  const targetRect = targetEl.getBoundingClientRect();
-
-  log('Target element:', {
-    tag: targetEl.tagName,
-    pmStart: spanStart,
-    pmEnd: spanEnd,
-    text: targetEl.textContent?.substring(0, 30),
-    visibility: targetEl.style.visibility,
-    rect: { left: targetRect.left, right: targetRect.right, width: targetRect.width },
-    pageX: viewX,
-    pageY: viewY,
-  });
-
-  if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) {
-    log('Element has invalid PM positions');
-    return null;
-  }
-
-  // Get the text node and find the character index
-  const firstChild = targetEl.firstChild;
-  if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
-    const elRect = targetEl.getBoundingClientRect();
-    const closerToLeft = Math.abs(viewX - elRect.left) <= Math.abs(viewX - elRect.right);
-    const snapPos = rtl ? (closerToLeft ? spanEnd : spanStart) : closerToLeft ? spanStart : spanEnd;
-    log('Empty/non-text element, snapping to:', { closerToLeft, rtl, snapPos });
-    return snapPos;
-  }
-
-  const textNode = firstChild as Text;
-  const charIndex = findCharIndexAtX(textNode, viewX, rtl);
-  const pos = mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
-
-  log('Character position:', { charIndex, spanStart, rtl, finalPos: pos });
-
-  return pos;
+  return resolveLinePosition(lineEl, lineStart, lineEnd, spanEls, viewX);
 }
 
 function mapCharIndexToPm(spanStart: number, spanEnd: number, textLength: number, charIndex: number): number {
@@ -526,6 +451,26 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     }),
   );
 
+  return resolveLinePosition(lineEl, lineStart, lineEnd, spanEls, viewX);
+}
+
+/**
+ * Shared logic for resolving a click's X coordinate to a ProseMirror position
+ * within a line. Used by both `processFragment` (after locating the line by Y)
+ * and `processLineElement` (when the line is already known from the hit chain).
+ *
+ * Handles RTL-aware boundary snapping, hidden-span filtering, empty-element
+ * snapping, and character-level position mapping via `findCharIndexAtX`.
+ *
+ * @internal
+ */
+function resolveLinePosition(
+  lineEl: HTMLElement,
+  lineStart: number,
+  lineEnd: number,
+  spanEls: HTMLElement[],
+  viewX: number,
+): number | null {
   if (spanEls.length === 0) {
     log('No spans in line, returning lineStart:', lineStart);
     return lineStart;
@@ -533,6 +478,10 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
 
   const rtl = isRtlLine(lineEl);
 
+  // Filter out non-rendered spans (display:none field annotations, hidden tracked
+  // changes, etc.) whose zero-sized rects would collapse the bounds to 0.
+  // When every rect is zero-sized (e.g. JSDOM) fall back to the unfiltered set
+  // so the downstream logic still runs.
   const allRects = spanEls.map((el) => el.getBoundingClientRect());
   const visibleRects = allRects.filter(isVisibleRect);
   const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
@@ -552,7 +501,6 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     return pos;
   }
 
-  // Find the target element containing or nearest to the X coordinate
   const targetEl = findSpanAtX(spanEls, viewX);
   if (!targetEl) {
     log('No target element found, returning lineStart:', lineStart);
@@ -561,7 +509,6 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
 
   const spanStart = Number(targetEl.dataset.pmStart ?? 'NaN');
   const spanEnd = Number(targetEl.dataset.pmEnd ?? 'NaN');
-  const targetRect = targetEl.getBoundingClientRect();
 
   log('Target element:', {
     tag: targetEl.tagName,
@@ -569,7 +516,10 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     pmEnd: spanEnd,
     text: targetEl.textContent?.substring(0, 30),
     visibility: targetEl.style.visibility,
-    rect: { left: targetRect.left, right: targetRect.right, width: targetRect.width },
+    rect: (() => {
+      const r = targetEl.getBoundingClientRect();
+      return { left: r.left, right: r.right, width: r.width };
+    })(),
   });
 
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) {
@@ -577,7 +527,6 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     return null;
   }
 
-  // Get the text node and find the character index
   const firstChild = targetEl.firstChild;
   if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
     const elRect = targetEl.getBoundingClientRect();
@@ -589,7 +538,7 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
 
   const textNode = firstChild as Text;
   const charIndex = findCharIndexAtX(textNode, viewX, rtl);
-  const pos = spanStart + charIndex;
+  const pos = mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
 
   log('Character position:', { charIndex, spanStart, rtl, finalPos: pos });
 
@@ -656,6 +605,7 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
   }
 
   let targetSpan: HTMLElement = spanEls[0];
+  let minDist = Infinity;
 
   for (let i = 0; i < spanEls.length; i++) {
     const span = spanEls[i];
@@ -671,7 +621,9 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
       });
       return span;
     }
-    if (viewX > rect.right) {
+    const dist = Math.min(Math.abs(viewX - rect.left), Math.abs(viewX - rect.right));
+    if (dist < minDist) {
+      minDist = dist;
       targetSpan = span;
     }
   }

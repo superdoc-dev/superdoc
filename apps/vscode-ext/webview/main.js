@@ -98,6 +98,7 @@ function initializeEditor(fileArrayBuffer) {
         documentMode: 'editing',
         pagination: true,
         rulers: true,
+        comments: { visible: true },
         onReady: () => {
           debug('SuperDoc is ready');
           isInitialLoad = false;

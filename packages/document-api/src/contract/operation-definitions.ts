@@ -2148,6 +2148,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/table.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'table',
   },
 
   // -------------------------------------------------------------------------

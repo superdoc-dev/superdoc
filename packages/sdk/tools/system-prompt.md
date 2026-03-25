@@ -94,6 +94,10 @@ Split mutation calls into logical rounds:
 1. **Text mutations first** — all `text.rewrite`, `text.insert`, `text.delete` operations in one `superdoc_mutations` call.
 2. **Formatting second** — all `format.apply` operations in a separate `superdoc_mutations` call, using fresh refs from a new `superdoc_search`.
 
+### Avoiding overlap errors
+
+**Never create two steps that target overlapping text in the same block.** If one edit is a subset of another (e.g., replacing a phrase that already contains a word you also want to remove), combine them into a single `text.rewrite` step. Two steps targeting the same or overlapping ranges will fail with `PLAN_CONFLICT_OVERLAP`.
+
 ## Using superdoc_comment
 
 The comment tool manages comment threads in the document.

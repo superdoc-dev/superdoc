@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => {
         // document-api-adapters: insert-structured-wrapper needs DOM for HTML insert
         ['src/document-api-adapters/**/insert-structured-wrapper.test.*', 'happy-dom'],
         ['src/document-api-adapters/**', 'node'],
+        ['src/core/ooxml-encryption/**', 'node'],
         ['src/utils/**', 'node'],
       ],
       retry: 2,

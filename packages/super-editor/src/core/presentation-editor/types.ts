@@ -8,6 +8,7 @@
 import type { Editor } from '../Editor.js';
 import type { TrackedChangesMode, FlowBlock, Layout, Measure, FlowMode, SectionMetadata } from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
+import type { ProofingConfig } from './proofing/types.js';
 import type * as Y from 'yjs';
 
 import type { HeaderFooterRegion } from '../header-footer/types.js';
@@ -161,6 +162,8 @@ export type LayoutEngineOptions = {
    * inch marks and optionally margin handles for interactive margin adjustment.
    */
   ruler?: RulerOptions;
+  /** Proofing / spellcheck configuration. */
+  proofing?: ProofingConfig;
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {

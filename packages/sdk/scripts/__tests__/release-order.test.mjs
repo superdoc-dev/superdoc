@@ -94,6 +94,18 @@ test('release-sdk auto workflow resumes releases from sdk-v tags at HEAD', async
   );
 });
 
+test('release-sdk auto workflow runs on stable and main', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  assert.ok(
+    content.includes('      - main'),
+    '.github/workflows/release-sdk.yml: auto-release must continue to run on main',
+  );
+  assert.ok(
+    content.includes('      - stable'),
+    '.github/workflows/release-sdk.yml: auto-release must run on stable',
+  );
+});
+
 test('sdk semantic-release prepareCmd builds Node SDK before validate', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assertOrder(
@@ -119,6 +131,14 @@ test('sdk semantic-release matches CLI channel model (next/next on main, latest 
   assert.ok(
     content.includes("{ name: 'main', prerelease: 'next', channel: 'next' }"),
     "packages/sdk/.releaserc.cjs: main branch must release next versions on next channel",
+  );
+  assert.ok(
+    content.includes('const isCiRelease = Boolean(process.env.CI);'),
+    'packages/sdk/.releaserc.cjs: CI releases must be detected explicitly',
+  );
+  assert.ok(
+    content.includes('if (isCiRelease || isPrerelease) {'),
+    'packages/sdk/.releaserc.cjs: CI releases must keep Python publishing in the workflow',
   );
 });
 

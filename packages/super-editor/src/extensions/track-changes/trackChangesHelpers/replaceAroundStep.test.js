@@ -356,27 +356,236 @@ describe('replaceAroundStep handler', () => {
       expect(trackMeta.selectionPos).toBeLessThan(cursorPos);
     });
 
-    it('returns early when no live character exists before cursor', () => {
-      // All content is tracked-deleted — nothing to delete
+    it('blocks structural step when cursor is at start of non-empty list item (regression)', () => {
+      // Cursor at position 0 of a non-empty list item. findPreviousLiveCharPos
+      // returns null (no live char before caret), but the item still has live
+      // content after the cursor. The structural lift must be blocked.
+      const listItemType = schema.nodes.listItem || schema.nodes.list_item;
+      const bulletListType = schema.nodes.bulletList || schema.nodes.bullet_list;
+
+      if (!listItemType || !bulletListType) return; // skip if schema lacks list nodes
+
+      const doc = schema.nodes.doc.create({}, [
+        bulletListType.create({}, [
+          listItemType.create({}, [
+            schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello')])),
+          ]),
+        ]),
+      ]);
+
+      let state = createState(doc);
+
+      // Cursor at the very start of "Hello"
+      const cursorPos = findTextPos(state.doc, 'Hello');
+      state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursorPos)));
+
+      const tr = state.tr;
+      tr.setMeta('inputType', 'deleteContentBackward');
+
+      // Build a ReplaceAroundStep that unwraps the paragraph (simulates PM structural backspace)
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.descendants((node, pos) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = pos;
+          paraEnd = pos + node.nodeSize;
+        }
+      });
+
+      const step = new ReplaceAroundStep(
+        paraStart,
+        paraEnd,
+        paraStart + 1,
+        paraEnd - 1,
+        new Slice(Fragment.from(schema.nodes.paragraph.create()), 0, 0),
+        1,
+        true,
+      );
+
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // The structural step must be blocked — the list item has live content.
+      expect(newTr.steps.length).toBe(0);
+      expect(map.maps.length).toBe(0);
+    });
+
+    it('attempts structural change when no live character exists before cursor (SD-2187)', () => {
+      // All content is tracked-deleted — no character to delete, but the
+      // handler should attempt the structural change (e.g. lifting out of
+      // list) so the user can remove the empty bullet. Previously this
+      // returned early and blocked the backspace entirely.
       const deleteMark = schema.marks[TrackDeleteMarkName].create({
         id: 'del-existing',
         author: user.name,
         authorEmail: user.email,
         date,
       });
-      const doc = schema.nodes.doc.create(
-        {},
-        schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Deleted', [deleteMark])])),
-      );
+
+      // Build a doc with a paragraph inside a list item so the structural
+      // step (unwrap list item) can actually apply.
+      const listItemType = schema.nodes.listItem || schema.nodes.list_item;
+      const bulletListType = schema.nodes.bulletList || schema.nodes.bullet_list;
+
+      let doc;
+      if (listItemType && bulletListType) {
+        doc = schema.nodes.doc.create({}, [
+          bulletListType.create({}, [
+            listItemType.create({}, [
+              schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Deleted', [deleteMark])])),
+            ]),
+          ]),
+        ]);
+      } else {
+        // Fallback: simple paragraph (structural step may fail, but handler
+        // should not throw or block).
+        doc = schema.nodes.doc.create(
+          {},
+          schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Deleted', [deleteMark])])),
+        );
+      }
+
       let state = createState(doc);
 
       const cursorPos = findTextPos(state.doc, 'Deleted') + 7;
       state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursorPos)));
 
-      const newTr = invokeHandler({ state });
+      // Invoke with a real ReplaceAroundStep instead of fakeStep
+      const tr = state.tr;
+      tr.setMeta('inputType', 'deleteContentBackward');
 
-      // No steps — nothing to delete
+      // Create a ReplaceAroundStep that unwraps the paragraph
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.descendants((node, pos) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = pos;
+          paraEnd = pos + node.nodeSize;
+        }
+      });
+
+      const step = new ReplaceAroundStep(
+        paraStart,
+        paraEnd,
+        paraStart + 1,
+        paraEnd - 1,
+        new Slice(Fragment.from(schema.nodes.paragraph.create()), 0, 0),
+        1,
+        true,
+      );
+
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // The handler must apply the structural step — the list item is fully
+      // track-deleted so there is nothing live to preserve.
+      expect(newTr.steps.length).toBeGreaterThan(0);
+    });
+
+    it('blocks structural step when first paragraph is deleted but list item has live content in a later paragraph', () => {
+      // Multi-paragraph list item: first paragraph fully deleted, second has
+      // live text. Backspace at the start of the first paragraph should NOT
+      // allow the structural lift — the list item scope still has live content.
+      const listItemType = schema.nodes.listItem || schema.nodes.list_item;
+      const bulletListType = schema.nodes.bulletList || schema.nodes.bullet_list;
+
+      if (!listItemType || !bulletListType) return;
+
+      const deleteMark = schema.marks[TrackDeleteMarkName].create({
+        id: 'del-existing',
+        author: user.name,
+        authorEmail: user.email,
+        date,
+      });
+
+      let doc;
+      try {
+        doc = schema.nodes.doc.create({}, [
+          bulletListType.create({}, [
+            listItemType.create({}, [
+              schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Gone', [deleteMark])])),
+              schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Still here')])),
+            ]),
+          ]),
+        ]);
+      } catch {
+        // Schema may not allow multiple paragraphs in a list item — skip.
+        return;
+      }
+
+      let state = createState(doc);
+
+      // Cursor at the start of the first (deleted) paragraph
+      const cursorPos = findTextPos(state.doc, 'Gone');
+      state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursorPos)));
+
+      const tr = state.tr;
+      tr.setMeta('inputType', 'deleteContentBackward');
+
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.descendants((node, pos) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = pos;
+          paraEnd = pos + node.nodeSize;
+        }
+      });
+
+      const step = new ReplaceAroundStep(
+        paraStart,
+        paraEnd,
+        paraStart + 1,
+        paraEnd - 1,
+        new Slice(Fragment.from(schema.nodes.paragraph.create()), 0, 0),
+        1,
+        true,
+      );
+
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // Structural step must be blocked — listItem still has live content.
       expect(newTr.steps.length).toBe(0);
+      expect(map.maps.length).toBe(0);
     });
   });
 

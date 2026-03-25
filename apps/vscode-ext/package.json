@@ -2,9 +2,22 @@
   "name": "superdoc-vscode-ext",
   "displayName": "SuperDoc - Word Document Editor",
   "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
-  "version": "0.0.0",
+  "version": "2.0.0",
   "publisher": "superdoc-dev",
-  "repository": "https://github.com/superdoc-dev/superdoc",
+  "icon": "logo.png",
+  "homepage": "https://superdoc.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superdoc-dev/superdoc",
+    "directory": "apps/vscode-ext"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -17,6 +30,9 @@
     "word",
     "document",
     "editor",
+    "office",
+    "ooxml",
+    "tracked changes",
     "superdoc"
   ],
   "main": "./dist/extension.js",
@@ -50,18 +66,7 @@
     },
     "configuration": {
       "title": "SuperDoc",
-      "properties": {
-        "superdoc.autoSaveDelay": {
-          "type": "number",
-          "default": 1000,
-          "description": "Delay in milliseconds before auto-saving after an edit"
-        },
-        "superdoc.enableAutoSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable automatic saving of document changes"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
@@ -76,6 +81,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "release": "pnpx semantic-release",
     "release:dry-run": "pnpx semantic-release --dry-run",
@@ -87,7 +93,8 @@
     "@types/vscode": "^1.107.0",
     "@vscode/vsce": "^2.32.0",
     "esbuild": "^0.25.0",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "dependencies": {
     "superdoc": "workspace:*"

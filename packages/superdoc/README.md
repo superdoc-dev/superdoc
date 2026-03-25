@@ -42,6 +42,13 @@ const superdoc = new SuperDoc({
 
 For React, Vue, and other frameworks, see the [documentation](https://docs.superdoc.dev).
 
+### Using an AI coding agent?
+
+```bash
+npx @superdoc-dev/create              # generates AGENTS.md for your framework
+claude mcp add superdoc -- npx @superdoc-dev/mcp   # connect agent to DOCX files
+```
+
 ## Documentation
 
 [docs.superdoc.dev](https://docs.superdoc.dev) — installation, integration guides, collaboration setup, API reference, and more.

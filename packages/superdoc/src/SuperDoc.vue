@@ -6,6 +6,7 @@ import { superdocIcons } from './icons.js';
 //prettier-ignore
 import {
   getCurrentInstance,
+  inject,
   ref,
   onMounted,
   onBeforeUnmount,
@@ -37,8 +38,11 @@ import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
+import { usePasswordPrompt } from './composables/use-password-prompt.js';
+import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
+const getDocumentLoadPassword = (doc) => doc.password ?? proxy.$superdoc.config.password;
 
 // Stores
 const superdocStore = useSuperdocStore();
@@ -55,6 +59,24 @@ const {
   activeZoom,
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
+
+// Password prompt coordinator — uses surfaces to show a dialog for encrypted DOCX files.
+const surfaceManager = inject('surfaceManager', null);
+const passwordPrompt = usePasswordPrompt({
+  getSurfaceManager: () => surfaceManager,
+  getPasswordPromptConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.passwordPrompt,
+  onUnhandled: (doc, errorCode, originalException) => {
+    // The password prompt initially claimed this error but could not show a dialog
+    // (resolver returned { type: 'none' }, config was invalid, or resolver threw).
+    // Re-emit the original exception event so the app can handle it.
+    proxy.$superdoc?.emit('exception', {
+      error: originalException?.error ?? new Error(`Password prompt unhandled: ${errorCode}`),
+      editor: originalException?.editor ?? null,
+      code: errorCode,
+      documentId: doc?.id,
+    });
+  },
+});
 
 /*
 NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
@@ -113,6 +135,13 @@ const isViewingTrackChangesVisible = computed(
 const shouldRenderCommentsInViewing = computed(() => {
   if (!isViewingMode()) return true;
   return isViewingCommentsVisible.value || isViewingTrackChangesVisible.value;
+});
+
+const resolvedProofingConfig = computed(() => {
+  if (proxy.$superdoc.config.proofing !== undefined) {
+    return proxy.$superdoc.config.proofing;
+  }
+  return proxy.$superdoc.config.layoutEngineOptions?.proofing;
 });
 
 const commentsModuleConfig = computed(() => {
@@ -298,7 +327,14 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   if (doc) {
+    // Notify the password prompt coordinator so a pending retry resolves.
+    passwordPrompt.handleEditorReady(doc);
+
     doc.setPresentationEditor(presentationEditor);
+    // Passwords are only needed during the initial encrypted-file load.
+    // Clear the per-document copy once the editor is ready so the value does
+    // not linger on the reactive document model.
+    if (doc.password) doc.password = undefined;
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
 
@@ -577,8 +613,11 @@ const onEditorContentError = ({ error, editor }) => {
   proxy.$superdoc.emit('content-error', { error, editor });
 };
 
-const onEditorException = ({ error, editor }) => {
-  proxy.$superdoc.emit('exception', { error, editor });
+const onEditorException = (doc, { error, editor, code }) => {
+  const handled = passwordPrompt.handleEncryptionError(doc, code, { error, editor });
+  if (handled) return true;
+  proxy.$superdoc.emit('exception', { error, editor, code, documentId: doc?.id });
+  return false;
 };
 
 const onEditorListdefinitionsChange = (params) => {
@@ -640,7 +679,7 @@ const editorOptions = (doc) => {
     onSelectionUpdate: onEditorSelectionChange,
     onCollaborationReady: onEditorCollaborationReady,
     onContentError: onEditorContentError,
-    onException: onEditorException,
+    onException: (payload) => onEditorException(doc, payload),
     onCommentsLoaded,
     onCommentsUpdate: onEditorCommentsUpdate,
     onCommentLocationsUpdate: (payload) => onEditorCommentLocationsUpdate(doc, payload),
@@ -650,6 +689,7 @@ const editorOptions = (doc) => {
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
     isNewFile,
+    password: getDocumentLoadPassword(doc),
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
@@ -660,6 +700,7 @@ const editorOptions = (doc) => {
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),
+          proofing: resolvedProofingConfig.value,
           debugLabel: proxy.$superdoc.config.layoutEngineOptions?.debugLabel ?? doc.name ?? doc.id,
           zoom: (activeZoom.value ?? 100) / 100,
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
@@ -681,13 +722,6 @@ const editorOptions = (doc) => {
           licenseKey: proxy.$superdoc.config.telemetry?.licenseKey,
         }
       : null,
-    // Upgrade transition: suppress skeleton and thread visual-ready callback
-    ...(proxy.$superdoc._upgradeVisualReadyCallback
-      ? {
-          suppressSkeletonLoader: true,
-          onUpgradeVisualReady: proxy.$superdoc._upgradeVisualReadyCallback,
-        }
-      : {}),
   };
 
   return options;
@@ -1053,6 +1087,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  passwordPrompt.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
@@ -1422,7 +1457,11 @@ const getPDFViewer = () => {
           :opacity="whiteboardOpacity"
         />
 
-        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+        <div
+          class="superdoc__sub-document sub-document"
+          v-for="doc in documents"
+          :key="`${doc.id}:${doc.editorMountNonce}`"
+        >
           <!-- PDF renderer -->
           <PdfViewer
             v-if="doc.type === PDF"
@@ -1479,12 +1518,16 @@ const getPDFViewer = () => {
         :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
       />
     </div>
+
+    <!-- Surface host — generic dialog/floating overlay system -->
+    <SurfaceHost :geometry-target="layers" />
   </div>
 </template>
 
 <style scoped>
 .superdoc {
   display: flex;
+  position: relative;
 }
 
 .right-sidebar {

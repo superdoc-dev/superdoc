@@ -1,0 +1,590 @@
+---
+title: Surfaces
+keywords: "superdoc surfaces, openSurface, closeSurface, floating overlay, dialog api, react render container"
+---
+
+Surfaces let you show dialogs and floating overlays above the document.
+
+Use them for things like:
+
+- password prompts
+- find and replace
+- lightweight tools or inspectors
+- custom workflow dialogs
+
+SuperDoc supports two surface modes:
+
+- `dialog` — modal, centered, blocks interaction behind it
+- `floating` — non-modal, pinned to the visible document area
+
+## When to configure surfaces up front
+
+Most apps do **not** need any extra setup to use surfaces.
+
+If you are opening a surface directly with `superdoc.openSurface(...)`, you can do that with a normal `SuperDoc` instance and no special config.
+
+Add `modules.surfaces` only when you want:
+
+- global defaults for dialogs or floating overlays
+- a central `resolver` for intent-based requests using `kind`
+
+## Open a surface
+
+### `superdoc.openSurface(request)`
+
+Open a `dialog` or `floating` surface above the document.
+
+**Returns:** `SurfaceHandle`
+
+<ParamField path="request" type="Object" required>
+  Surface request
+
+  <Expandable title="common fields" defaultOpen>
+    <ParamField path="mode" type="'dialog' | 'floating'" required>
+      Presentation mode
+    </ParamField>
+    <ParamField path="title" type="string">
+      Optional title rendered in the surface chrome
+    </ParamField>
+    <ParamField path="ariaLabel" type="string">
+      Accessible name for the surface when no visible `title` is provided. Used as `aria-label` on the surface element (dialog or floating). Ignored when `title` or `ariaLabelledBy` is set.
+    </ParamField>
+    <ParamField path="closeOnEscape" type="boolean" default="true">
+      Whether `Escape` closes the surface
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="dialog fields">
+    <ParamField path="closeOnBackdrop" type="boolean" default="true">
+      Whether clicking the backdrop closes the dialog
+    </ParamField>
+    <ParamField path="dialog.maxWidth" type="string | number">
+      Dialog max-width override
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="floating fields">
+    <ParamField path="floating.placement" type="'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'" default="'top-right'">
+      Placement preset. Ignored when exact insets are provided.
+    </ParamField>
+    <ParamField path="floating.top" type="string | number">
+      Exact top inset
+    </ParamField>
+    <ParamField path="floating.right" type="string | number">
+      Exact right inset
+    </ParamField>
+    <ParamField path="floating.bottom" type="string | number">
+      Exact bottom inset
+    </ParamField>
+    <ParamField path="floating.left" type="string | number">
+      Exact left inset
+    </ParamField>
+    <ParamField path="floating.width" type="string | number">
+      Width override
+    </ParamField>
+    <ParamField path="floating.maxWidth" type="string | number">
+      Max width override
+    </ParamField>
+    <ParamField path="floating.maxHeight" type="string | number">
+      Max height override
+    </ParamField>
+    <ParamField path="floating.autoFocus" type="boolean" default="true">
+      Move focus into the first focusable child on open
+    </ParamField>
+    <ParamField path="floating.closeOnOutsidePointerDown" type="boolean" default="false">
+      Close when clicking outside the floating surface
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="rendering fields">
+    <ParamField path="component" type="Vue Component">
+      Vue component rendered inside the built-in surface shell. Receives `surfaceId`, `mode`, `request`, `resolve`, and `close` as props.
+    </ParamField>
+    <ParamField path="props" type="Record<string, unknown>">
+      Extra props passed to a Vue component
+    </ParamField>
+    <ParamField path="render" type="(ctx) => { destroy?: () => void } | void">
+      Framework-agnostic renderer. Use this for React or manual DOM mounting.
+    </ParamField>
+    <ParamField path="kind" type="string">
+      Intent key for resolver-based surfaces
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Note>
+  Provide either:
+
+  - `component` or `render` for a direct surface request
+  - `kind` for a resolver-based request
+
+  `component` and `render` are mutually exclusive.
+</Note>
+
+### Dialog example
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'dialog',
+  title: 'Confirm action',
+  dialog: { maxWidth: 420 },
+  render: ({ container, close, resolve }) => {
+    container.innerHTML = `
+      <div style="display:grid;gap:12px;">
+        <p style="margin:0;">Continue?</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" data-cancel>Cancel</button>
+          <button type="button" data-ok>Confirm</button>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('[data-cancel]')?.addEventListener('click', () => close('cancel'));
+    container.querySelector('[data-ok]')?.addEventListener('click', () => resolve({ confirmed: true }));
+  },
+});
+```
+
+### Floating example
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  render: ({ container, close }) => {
+    container.innerHTML = `
+      <div style="display:grid;gap:12px;">
+        <input placeholder="Find..." style="width:100%" />
+        <button type="button">Close</button>
+      </div>
+    `;
+
+    container.querySelector('button')?.addEventListener('click', () => close('manual-close'));
+  },
+});
+```
+
+## Close a surface
+
+### `superdoc.closeSurface(id?)`
+
+Close a surface programmatically.
+
+- pass an `id` to close a specific surface
+- omit `id` to close the topmost active surface
+- if both are open, dialog closes before floating
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  render: ({ container }) => {
+    container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+  },
+});
+
+superdoc.closeSurface(handle.id);
+// or:
+superdoc.closeSurface();
+```
+
+## Handle lifecycle
+
+`openSurface()` returns a handle with:
+
+- `id`
+- `mode`
+- `close(reason?)`
+- `result`
+
+`handle.result` always resolves. It does not reject for normal lifecycle events.
+
+Possible results:
+
+- `{ status: 'submitted', data }`
+- `{ status: 'closed', reason }`
+- `{ status: 'replaced', replacedBy }`
+- `{ status: 'destroyed' }`
+
+```javascript
+const handle = superdoc.openSurface({
+  mode: 'dialog',
+  title: 'Example',
+  render: ({ container, resolve }) => {
+    container.innerHTML = '<button type="button">Done</button>';
+    container.querySelector('button')?.addEventListener('click', () => resolve({ ok: true }));
+  },
+});
+
+const outcome = await handle.result;
+console.log(outcome.status, outcome.data);
+```
+
+<Note>
+  There is one active `dialog` slot and one active `floating` slot. Opening a new surface in the same mode replaces the previous one.
+</Note>
+
+## Vue component content
+
+For Vue consumers, `component` is the simplest path.
+
+```javascript
+import MyFindSurface from './MyFindSurface.vue';
+
+superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  component: MyFindSurface,
+  props: {
+    initialQuery: 'contract',
+  },
+});
+```
+
+Your component receives:
+
+- `surfaceId`
+- `mode`
+- `request`
+- `resolve(data?)`
+- `close(reason?)`
+
+## React and other frameworks
+
+For React, use `render()` and mount into the provided `container`.
+
+```jsx
+import { createRoot } from 'react-dom/client';
+import { FindOverlay } from './FindOverlay';
+
+superdoc.openSurface({
+  mode: 'floating',
+  title: 'Find',
+  floating: { placement: 'top-right', width: 360 },
+  render: ({ container, request, close, resolve }) => {
+    const root = createRoot(container);
+
+    root.render(
+      <FindOverlay
+        request={request}
+        onClose={() => close('user-close')}
+        onSubmit={(data) => resolve(data)}
+      />
+    );
+
+    return {
+      destroy() {
+        root.unmount();
+      },
+    };
+  },
+});
+```
+
+This is the same pattern as [external link popovers](/modules/links#external-renderer): SuperDoc owns the shell, and your app mounts content into the provided container.
+
+## Optional instantiation config
+
+Add `modules.surfaces` only if you want shared defaults or a resolver.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    surfaces: {
+      dialog: {
+        maxWidth: 520,
+      },
+      floating: {
+        placement: 'top-right',
+        width: 360,
+        maxHeight: 320,
+      },
+    },
+  },
+});
+```
+
+See the full list of available defaults in the [configuration reference](/core/superdoc/configuration#surface-defaults).
+
+## Resolver-based surfaces
+
+Use a resolver when you want to open a surface by intent instead of passing a renderer each time.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    surfaces: {
+      resolver: (request) => {
+        if (request.kind === 'find') {
+          return {
+            type: 'external',
+            render: ({ container, close }) => {
+              container.innerHTML = '<input placeholder="Find..." style="width:100%" />';
+              return {};
+            },
+          };
+        }
+      },
+    },
+  },
+});
+
+superdoc.openSurface({
+  kind: 'find',
+  mode: 'floating',
+  title: 'Find',
+});
+```
+
+<Warning>
+  There is no built-in surface registry yet. If you use `kind`, you must provide `modules.surfaces.resolver`.
+</Warning>
+
+## Password prompt
+
+SuperDoc includes a built-in password dialog for encrypted DOCX files. Enabled by default. On wrong password, the dialog stays open and shows an error. On success, the document loads normally.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: encryptedFile,
+  modules: {
+    surfaces: {
+      passwordPrompt: true, // default — can omit
+    },
+  },
+});
+```
+
+Set to `false` to disable:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: false,
+  },
+}
+```
+
+### Text customization
+
+Override any of the built-in copy:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      title: 'Unlock document',
+      invalidTitle: 'Wrong password — try again',
+      description: 'This file requires a password.',
+      submitLabel: 'Unlock',
+      cancelLabel: 'Dismiss',
+      busyLabel: 'Opening\u2026',
+      invalidMessage: 'That password is wrong. Try again.',
+      timeoutMessage: 'Took too long. Try again.',
+      genericErrorMessage: 'Could not open this file.',
+    },
+  },
+}
+```
+
+<ParamField path="modules.surfaces.passwordPrompt" type="false | true | Object" default="true">
+  Password prompt configuration. Enabled by default when omitted; set to `false` to disable.
+
+  <Expandable title="text fields">
+    <ParamField path="title" type="string" default="'Password Required'">
+      Dialog heading on first attempt
+    </ParamField>
+    <ParamField path="invalidTitle" type="string" default="'Incorrect Password'">
+      Dialog heading after a wrong password
+    </ParamField>
+    <ParamField path="description" type="string" default="'This document is password protected. Enter the password to open it.'">
+      Explanatory text below the heading
+    </ParamField>
+    <ParamField path="placeholder" type="string" default="'Enter password'">
+      Input placeholder text
+    </ParamField>
+    <ParamField path="inputAriaLabel" type="string" default="'Document password'">
+      Accessible label for the password input
+    </ParamField>
+    <ParamField path="submitLabel" type="string" default="'Open'">
+      Submit button text
+    </ParamField>
+    <ParamField path="cancelLabel" type="string" default="'Cancel'">
+      Cancel button text
+    </ParamField>
+    <ParamField path="busyLabel" type="string" default="'Decrypting\u2026'">
+      Submit button text while decrypting
+    </ParamField>
+    <ParamField path="invalidMessage" type="string" default="'Incorrect password. Please try again.'">
+      Error message for wrong password
+    </ParamField>
+    <ParamField path="timeoutMessage" type="string" default="'Timed out while decrypting. Please try again.'">
+      Error message for decryption timeout
+    </ParamField>
+    <ParamField path="genericErrorMessage" type="string" default="'Unable to decrypt this document.'">
+      Error message for other decryption failures
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="custom UI fields">
+    <ParamField path="component" type="Vue Component">
+      Custom Vue component rendered inside the dialog shell. Receives a `passwordPrompt` prop (see handle reference below). Mutually exclusive with `render`.
+    </ParamField>
+    <ParamField path="props" type="Record<string, unknown>">
+      Extra props passed to the custom Vue component. Component-only; ignored for `render`.
+    </ParamField>
+    <ParamField path="render" type="(ctx: PasswordPromptRenderContext) => { destroy?: () => void } | void">
+      Framework-agnostic renderer for React or manual DOM mounting. Mutually exclusive with `component`.
+    </ParamField>
+    <ParamField path="resolver" type="(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined">
+      Conditional resolver for per-document customization. Can coexist with `component`/`render` — the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Custom Vue component
+
+Replace the built-in dialog content with your own Vue component. Your component receives a `passwordPrompt` prop with everything it needs:
+
+```javascript
+import MyPasswordDialog from './MyPasswordDialog.vue';
+
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      component: MyPasswordDialog,
+    },
+  },
+}
+```
+
+Inside your component:
+
+```vue
+<script setup>
+const props = defineProps({
+  passwordPrompt: { type: Object, required: true },
+  resolve: { type: Function, required: true },
+  close: { type: Function, required: true },
+});
+
+async function handleSubmit(password) {
+  const result = await props.passwordPrompt.attemptPassword(password);
+  if (result.success) {
+    props.resolve(); // no args required
+  }
+  // result.errorCode tells you what went wrong
+}
+</script>
+```
+
+### Custom render function (React, vanilla JS)
+
+Use `render` for framework-agnostic mounting. The render function receives a `PasswordPromptRenderContext`:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      render: (ctx) => {
+        // ctx.container — empty DOM element to render into
+        // ctx.passwordPrompt — the handle (documentId, errorCode, texts, attemptPassword)
+        // ctx.resolve — call on success
+        // ctx.close — call to dismiss
+
+        const root = ReactDOM.createRoot(ctx.container);
+        root.render(<MyPasswordPrompt passwordPrompt={ctx.passwordPrompt} resolve={ctx.resolve} close={ctx.close} />);
+        return { destroy: () => root.unmount() };
+      },
+    },
+  },
+}
+```
+
+### Conditional resolver
+
+Use `resolver` when you need per-document decisions. The resolver receives a read-only `PasswordPromptContext` (`documentId`, `errorCode`, `texts`) and returns a resolution:
+
+```javascript
+modules: {
+  surfaces: {
+    passwordPrompt: {
+      resolver: (ctx) => {
+        if (ctx.documentId === 'public-doc') {
+          return { type: 'none' }; // suppress prompt for this doc
+        }
+        return null; // fall through to built-in
+      },
+    },
+  },
+}
+```
+
+**Resolution types:**
+
+| Type | Behavior |
+|------|----------|
+| `null` / `undefined` | Fall through to `component`/`render` or built-in |
+| `{ type: 'default' }` | Same as `null` — fall through |
+| `{ type: 'none' }` | Suppress the password prompt for this document |
+| `{ type: 'custom', component, props? }` | Mount a Vue component in the dialog shell |
+| `{ type: 'external', render }` | Mount framework-agnostic UI in the dialog shell |
+
+The resolver can coexist with `component`/`render`. If the resolver returns `null` or `{ type: 'default' }`, the direct `component`/`render` is used. If neither is configured, the built-in prompt renders.
+
+**Precedence:** resolver → `component`/`render` → built-in.
+
+### The `passwordPrompt` handle
+
+Every custom UI (component or render) receives a `passwordPrompt` handle with this shape:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `documentId` | `string` | The document ID requiring a password |
+| `errorCode` | `string` | `'DOCX_PASSWORD_REQUIRED'` or `'DOCX_PASSWORD_INVALID'` |
+| `texts` | `ResolvedPasswordPromptTexts` | All 11 text strings resolved with defaults |
+| `attemptPassword` | `(password: string) => Promise<{ success, errorCode? }>` | Submit a password attempt |
+
+### How actions work
+
+**Submit / unlock button:**
+1. Call `await passwordPrompt.attemptPassword(password)`
+2. If `{ success: true }` — call `resolve()` to close the dialog
+3. If `{ success: false, errorCode }` — keep the dialog open, show your error state
+
+`resolve()` with no arguments is sufficient. The password flow does not consume the resolved data.
+
+**Cancel / dismiss button:**
+- Call `close('user-cancelled')`
+
+**Other actions** (forgot password, help links): app-owned. Keep the dialog open or close with a custom reason.
+
+<Warning>
+  Do not set `doc.password` or increment `editorMountNonce` directly. Use `passwordPrompt.attemptPassword(password)` — it handles the document mutation and remount internally.
+</Warning>
+
+### `{ type: 'none' }` semantics
+
+`{ type: 'none' }` means **suppress SuperDoc's password prompt**. The resolver context does not expose `attemptPassword`, so `none` cannot be used to build a self-hosted modal that retries passwords through SuperDoc.
+
+Use this when your app handles passwords entirely outside SuperDoc — for example, pre-prompting before instantiation or server-side decryption. For global suppression, use `passwordPrompt: false` instead.
+
+### Relationship with the exception event
+
+If `passwordPrompt` is disabled, encrypted files emit `DOCX_PASSWORD_REQUIRED` or `DOCX_PASSWORD_INVALID` on the `exception` event. Your app can handle password entry through that event instead.
+
+When `passwordPrompt` is enabled, recoverable encryption errors are intercepted by the password prompt flow. If the prompt renders successfully (built-in, custom, or external), the `exception` event is suppressed. If the prompt cannot render (resolver returned `{ type: 'none' }`, invalid config, or resolver threw), the original `exception` event is re-emitted so your app can handle it.
+
+### Multi-document handling
+
+When multiple encrypted documents are loaded, the password prompt queues one dialog at a time in FIFO order. After the user submits or cancels for one document, the next dialog appears.
+## Styling
+
+Background, shadow, border radius, padding, and edge offset are all customizable via `--sd-ui-surface-*` and `--sd-ui-floating-*` CSS variables. See the full token table in [Custom themes](/guides/general/custom-themes#surfaces).

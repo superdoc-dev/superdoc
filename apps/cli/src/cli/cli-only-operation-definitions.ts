@@ -63,10 +63,13 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         dirty: { type: 'boolean' },
         collaboration: {
           type: 'object',
+          description: 'Collaboration summary (auth config redacted).',
           properties: {
+            providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
             documentId: { type: 'string' },
-            url: { type: 'string' },
+            url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
           },
+          required: ['providerType', 'documentId'],
         },
         bootstrap: {
           type: 'object',
@@ -173,10 +176,13 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         },
         collaboration: {
           type: 'object',
+          description: 'Collaboration summary (auth config redacted).',
           properties: {
+            providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
             documentId: { type: 'string' },
-            url: { type: 'string' },
+            url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
           },
+          required: ['providerType', 'documentId'],
         },
         openedAt: { type: 'string' },
         updatedAt: { type: 'string' },
@@ -249,6 +255,16 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
               sessionType: { type: 'string' },
               dirty: { type: 'boolean' },
               revision: { type: 'number' },
+              collaboration: {
+                type: 'object',
+                description: 'Collaboration summary (auth config redacted).',
+                properties: {
+                  providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
+                  documentId: { type: 'string' },
+                  url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
+                },
+                required: ['providerType', 'documentId'],
+              },
             },
           },
         },

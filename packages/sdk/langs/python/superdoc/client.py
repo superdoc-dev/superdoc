@@ -16,7 +16,11 @@ from __future__ import annotations
 from typing import Any, Dict, Literal, Optional
 
 from .errors import SuperDocError
-from .generated.client import _AsyncDocApi, _SyncDocApi, _AsyncBoundDocApi, _SyncBoundDocApi
+from .generated.client import (
+    _AsyncDocApi, _SyncDocApi, _AsyncBoundDocApi, _SyncBoundDocApi,
+    DocOpenParams as GeneratedDocOpenParams,
+    DocOpenResult as GeneratedDocOpenResult,
+)
 from .runtime import SuperDocAsyncRuntime, SuperDocSyncRuntime
 
 UserIdentity = Dict[str, str]
@@ -100,7 +104,7 @@ class SuperDocDocument:
         self,
         bound_runtime: _BoundSyncRuntime,
         session_id: str,
-        open_result: Dict[str, Any],
+        open_result: GeneratedDocOpenResult,
         client: SuperDocClient,
     ) -> None:
         self._bound_runtime = bound_runtime
@@ -114,7 +118,7 @@ class SuperDocDocument:
         return self._session_id
 
     @property
-    def open_result(self) -> Dict[str, Any]:
+    def open_result(self) -> GeneratedDocOpenResult:
         """Read-only snapshot of the initial doc.open response metadata."""
         return self._open_result
 
@@ -163,7 +167,7 @@ class AsyncSuperDocDocument:
         self,
         bound_runtime: _BoundAsyncRuntime,
         session_id: str,
-        open_result: Dict[str, Any],
+        open_result: GeneratedDocOpenResult,
         client: AsyncSuperDocClient,
     ) -> None:
         self._bound_runtime = bound_runtime
@@ -177,7 +181,7 @@ class AsyncSuperDocDocument:
         return self._session_id
 
     @property
-    def open_result(self) -> Dict[str, Any]:
+    def open_result(self) -> GeneratedDocOpenResult:
         """Read-only snapshot of the initial doc.open response metadata."""
         return self._open_result
 
@@ -257,7 +261,7 @@ class SuperDocClient:
 
     def open(
         self,
-        params: Dict[str, Any],
+        params: GeneratedDocOpenParams,
         *,
         timeout_ms: Optional[int] = None,
         stdin_bytes: Optional[bytes] = None,
@@ -361,7 +365,7 @@ class AsyncSuperDocClient:
 
     async def open(
         self,
-        params: Dict[str, Any],
+        params: GeneratedDocOpenParams,
         *,
         timeout_ms: Optional[int] = None,
         stdin_bytes: Optional[bytes] = None,

@@ -29,8 +29,8 @@ permissions:
   packages: write
 
 concurrency:
-  group: release-cli-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:
   release:
@@ -47,6 +47,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Refresh stable branch head
+        if: github.ref_name == 'stable'
+        run: |
+          git fetch origin "${{ github.ref_name }}" --tags
+          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
 
       - uses: pnpm/action-setup@v4
 

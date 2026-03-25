@@ -29,6 +29,7 @@ import {
 } from '../src/cli/operation-set';
 import type { CliOnlyOperation } from '../src/cli/types';
 import { CLI_ONLY_OPERATION_DEFINITIONS } from '../src/cli/cli-only-operation-definitions';
+import { RESPONSE_ENVELOPE_KEY } from '../src/cli/operation-hints';
 import { HOST_PROTOCOL_VERSION, HOST_PROTOCOL_FEATURES, HOST_PROTOCOL_NOTIFICATIONS } from '../src/host/protocol';
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,10 @@ function buildSdkContract() {
       description: cliDescription(cliOpId),
       requiresDocumentContext: cliRequiresDocumentContext(cliOpId),
       docRequirement: metadata.docRequirement,
+
+      // Response envelope key — tells SDKs which property to unwrap from the CLI response.
+      // null means result is spread across top-level keys (no unwrapping needed).
+      responseEnvelopeKey: docApiId ? (RESPONSE_ENVELOPE_KEY[docApiId] ?? null) : null,
 
       // Transport plane
       params: metadata.params.map((p) => {

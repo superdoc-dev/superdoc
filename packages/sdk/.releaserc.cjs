@@ -20,6 +20,7 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
 ]);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
+const isCiRelease = Boolean(process.env.CI);
 
 const branches = [
   { name: 'stable', channel: 'latest' },
@@ -62,12 +63,12 @@ const config = {
   ],
 };
 
-// On prerelease (main), PyPI is handled by GHA OIDC — keep --npm-only.
-// On stable (local release), sdk-release-publish.mjs uploads to PyPI via twine.
+// In CI (main/stable), PyPI is handled by the workflow via OIDC — keep --npm-only.
+// For local stable releases, sdk-release-publish.mjs uploads to PyPI via twine.
 const execPlugin = config.plugins.find(
   (p) => Array.isArray(p) && p[0] === '@semantic-release/exec',
 );
-if (isPrerelease) {
+if (isCiRelease || isPrerelease) {
   execPlugin[1].publishCmd =
     'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
 } else {

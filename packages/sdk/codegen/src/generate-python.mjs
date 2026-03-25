@@ -193,18 +193,8 @@ function classNameFor(pathParts, asyncMode) {
   return `${prefix}${pathParts.map((p) => pascalCase(p)).join('')}Api`;
 }
 
-const ENVELOPE_KEY_BY_OPERATION_ID = {
-  'doc.find': 'result',
-  'doc.getText': 'text',
-  'doc.getMarkdown': 'markdown',
-  'doc.getHtml': 'html',
-};
-
-const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
-  'doc.getText': 'text',
-  'doc.getMarkdown': 'markdown',
-  'doc.getHtml': 'html',
-};
+// String-typed envelope keys that should use _unwrap_string_envelope instead of _unwrap_envelope.
+const STRING_ENVELOPE_KEYS = new Set(['text', 'markdown', 'html']);
 
 function snakeCase(value) {
   return value
@@ -226,8 +216,8 @@ function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap
       const operationId = value.__operation.id;
       const resultType = resultTypeMap.get(operationId) ?? 'dict[str, Any]';
       const paramsType = paramTypeMap.get(operationId) ?? 'dict[str, Any]';
-      const envelopeKey = ENVELOPE_KEY_BY_OPERATION_ID[operationId] ?? null;
-      const stringEnvelopeKey = resultType === 'str' ? (STRING_ENVELOPE_KEY_BY_OPERATION_ID[operationId] ?? null) : null;
+      const envelopeKey = value.__operation.responseEnvelopeKey ?? null;
+      const stringEnvelopeKey = resultType === 'str' && envelopeKey && STRING_ENVELOPE_KEYS.has(envelopeKey) ? envelopeKey : null;
       const invokeExpression = `${asyncMode ? 'await ' : ''}self._runtime.invoke(${JSON.stringify(operationId)}, params or {}, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)`;
 
       if (asyncMode) {

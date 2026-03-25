@@ -15,6 +15,7 @@ import {
   borderValueToSpec,
   resolveTableBorderValue,
   hasExplicitCellBorders,
+  swapCellBordersLR,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -134,6 +135,8 @@ type TableRowRenderDependencies = {
   allRowHeights: number[];
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
+  /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
+  isRtl?: boolean;
   /** Rendering context */
   context: FragmentRenderContext;
   /** Function to render a line of paragraph content */
@@ -229,6 +232,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     columnWidths,
     allRowHeights,
     tableIndent,
+    isRtl,
     context,
     renderLine,
     captureLineSnapshot,
@@ -271,6 +275,17 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     }
     return x;
   };
+
+  // Total table content width (for RTL mirroring)
+  // RTL tables mirror cell X positions: rtlX = totalWidth - ltrX - cellWidth
+  // (ECMA-376 §17.4.1: cells stored logically, displayed right-to-left)
+  let tableContentWidth = 0;
+  if (isRtl) {
+    tableContentWidth = cellSpacingPx;
+    for (let i = 0; i < columnWidths.length; i++) {
+      tableContentWidth += columnWidths[i] + cellSpacingPx;
+    }
+  }
 
   /**
    * Calculates the total height for a cell that spans multiple rows (rowspan).
@@ -320,11 +335,14 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     const colSpan = cellMeasure.colSpan ?? 1;
 
     // Calculate x position from gridColumnStart if available, otherwise fallback
-    const x = calculateXPosition(gridColumnStart);
+    let x = calculateXPosition(gridColumnStart);
 
     // Check if cell has any border attribute at all (even if empty - empty means "no borders")
     const cellBordersAttr = cell?.attrs?.borders;
     const hasBordersAttribute = cellBordersAttr !== undefined;
+
+    // For RTL tables, swap left↔right edge detection so borders mirror correctly
+    // (ECMA-376 Part 4 §14.3.1–14.3.8: left/right borders and margins swap for bidiVisual)
     const cellPosition: TableCellGridPosition = {
       rowIndex,
       rowSpan,
@@ -333,6 +351,11 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       totalRows,
       totalCols,
     };
+
+    // Resolve borders using logical positions, then swap output for RTL.
+    // The resolver uses touchesLeftEdge/touchesRightEdge which are LOGICAL edges.
+    // For RTL, logical left = visual right, so we swap the resolved CSS properties
+    // so borderLeft/borderRight match the correct visual edges.
     const resolvedBorders = resolveRenderedCellBorders({
       cellBorders: cellBordersAttr,
       hasBordersAttribute,
@@ -342,6 +365,8 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       continuesFromPrev: continuesFromPrev === true,
       continuesOnNext: continuesOnNext === true,
     });
+    // RTL: swap resolved left↔right so CSS properties match visual edges
+    const finalBorders = isRtl && resolvedBorders ? swapCellBordersLR(resolvedBorders) : resolvedBorders;
 
     // Calculate cell height - use rowspan height if cell spans multiple rows
     // For partial rows, use the partial height instead
@@ -364,6 +389,11 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     // in portrait). The columnWidths array is already rescaled by the layout engine.
     const computedCellWidth = calculateColspanWidth(gridColumnStart, colSpan);
 
+    // RTL: mirror x position so first logical column appears on the right
+    if (isRtl && computedCellWidth > 0) {
+      x = tableContentWidth - x - computedCellWidth;
+    }
+
     // Never use default borders - cells are either explicitly styled or borderless
     // This prevents gray borders on cells with borders={} (intentionally borderless)
     const { cellElement } = renderTableCell({
@@ -373,7 +403,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       rowHeight: cellHeight,
       cellMeasure,
       cell,
-      borders: resolvedBorders,
+      borders: finalBorders,
       useDefaultBorder: false,
       renderLine,
       captureLineSnapshot,
@@ -384,6 +414,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       fromLine,
       toLine,
       tableIndent,
+      isRtl,
       cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
     });
 

@@ -1695,4 +1695,162 @@ describe('renderTableFragment', () => {
       expect(parsed2.segments[1][0].y).toBe(0);
     });
   });
+
+  describe('RTL table (bidiVisual)', () => {
+    it('mirrors ghost cell x positions for RTL tables with rowspan continuations', () => {
+      // 2-column RTL table where col 0 has rowSpan=2.
+      // Fragment 2 continues from fragment 1, so col 0 becomes a ghost cell.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-ghost-table' as BlockId,
+        attrs: {
+          tableProperties: { rightToLeft: true },
+          borders: {
+            top: { style: 'single', width: 1, color: '#000' },
+            bottom: { style: 'single', width: 1, color: '#000' },
+            insideH: { style: 'single', width: 1, color: '#000' },
+            insideV: { style: 'single', width: 1, color: '#000' },
+          },
+        },
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              { id: 'c-1-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-1' as BlockId, runs: [] } },
+              { id: 'c-1-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-2' as BlockId, runs: [] } },
+            ],
+          },
+          {
+            id: 'row-2' as BlockId,
+            cells: [
+              { id: 'c-2-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-1' as BlockId, runs: [] } },
+              { id: 'c-2-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-2' as BlockId, runs: [] } },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 2 },
+              { width: 200, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+            ],
+            height: 20,
+          },
+          {
+            cells: [{ width: 200, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 }],
+            height: 20,
+          },
+        ],
+        columnWidths: [100, 200],
+        totalWidth: 300,
+        totalHeight: 40,
+      };
+
+      // Fragment 2: continuation from row 1 (only row 1 body, ghost for col 0)
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'rtl-ghost-table' as BlockId,
+        fromRow: 1,
+        toRow: 2,
+        continuesFromPrev: true,
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 20,
+      };
+
+      blockLookup.set('rtl-ghost-table', { block, measure });
+
+      const el = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: () => doc.createElement('div'),
+        applyStyles: (e, s) => Object.assign(e.style, s),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+      });
+
+      // Ghost cell for col 0 (rowSpan=2, width=100) should be mirrored.
+      // In LTR: ghostX=0. In RTL: ghostX = 300 - 0 - 100 = 200.
+      const ghostCells = Array.from(el.querySelectorAll('div')).filter(
+        (d) => d.style.position === 'absolute' && d.style.overflow === 'hidden' && d.childElementCount === 0,
+      );
+
+      expect(ghostCells.length).toBeGreaterThanOrEqual(1);
+      const ghostLeft = parseFloat(ghostCells[0].style.left);
+      // Ghost should be on the right side (x=200), not left (x=0)
+      expect(ghostLeft).toBe(200);
+    });
+
+    it('passes isRtl to renderTableRow for body rows', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-pass-table' as BlockId,
+        attrs: { tableProperties: { rightToLeft: true } },
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              { id: 'c-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1' as BlockId, runs: [] } },
+              { id: 'c-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2' as BlockId, runs: [] } },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+              { width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+            ],
+            height: 20,
+          },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 20,
+      };
+
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'rtl-pass-table' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 20,
+      };
+
+      blockLookup.set('rtl-pass-table', { block, measure });
+
+      const el = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: () => doc.createElement('div'),
+        applyStyles: (e, s) => Object.assign(e.style, s),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+      });
+
+      // Cells should be mirrored: col 0 at x=100, col 1 at x=0
+      const cells = Array.from(el.querySelectorAll('div')).filter(
+        (d) => d.style.position === 'absolute' && d.style.width === '100px',
+      );
+
+      const positions = cells.map((c) => parseFloat(c.style.left)).sort((a, b) => a - b);
+      expect(positions).toEqual([0, 100]);
+    });
+  });
 });

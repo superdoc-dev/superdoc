@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.21.0",
+  "version": "1.23.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -97,8 +97,8 @@
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
-    "@superdoc/common": "workspace:*",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

@@ -2,6 +2,7 @@
 import 'tippy.js/dist/tippy.css';
 import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
 import { Editor } from '@superdoc/super-editor';
+import { DocxEncryptionError } from '@core/ooxml-encryption/errors.js';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import ContextMenu from './context-menu/ContextMenu.vue';
@@ -23,7 +24,7 @@ import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } fro
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid and not password protected.';
+const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid.';
 
 const props = defineProps({
   documentId: {
@@ -779,9 +780,34 @@ const loadNewFileData = async () => {
   }
 
   try {
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value);
+    const [docx, media, mediaFiles, fonts, decryptedData] = await Editor.loadXmlData(fileSource.value, false, {
+      password: props.options.password,
+    });
+    // Store the decrypted ZIP bytes so export paths use the valid ZIP, not the
+    // original encrypted CFB container.
+    if (decryptedData) {
+      fileSource.value = new Blob([decryptedData], { type: DOCX });
+    }
     return { content: docx, media, mediaFiles, fonts };
   } catch (err) {
+    // Encryption errors are recoverable (user can supply a password).
+    // Surface them to the consumer via onException.
+    if (err instanceof DocxEncryptionError) {
+      const handled =
+        typeof props.options.onException === 'function' &&
+        props.options.onException({ error: err, editor: null, code: err.code }) === true;
+      if (handled) {
+        // Consumer acknowledged the error (e.g. will prompt for a password and
+        // re-mount). Re-throw so initializeData aborts without falling back to
+        // a blank document.
+        throw err;
+      }
+      // Not handled — return undefined so initializeData falls back to a blank
+      // document instead of leaving the component in an unusable empty state.
+      console.debug('[SuperDoc] Error loading file:', err);
+      return;
+    }
+
     console.debug('[SuperDoc] Error loading file:', err);
     if (typeof props.options.onException === 'function') {
       props.options.onException({ error: err, editor: null });
@@ -819,9 +845,20 @@ const notifyFileLoadError = () => {
 const initializeData = async () => {
   // If we have the file, initialize immediately from file
   if (props.fileSource) {
-    let fileData = await loadNewFileData();
+    let fileData;
+    try {
+      fileData = await loadNewFileData();
+    } catch (err) {
+      if (err instanceof DocxEncryptionError) {
+        // Only reaches here when onException returned true (consumer handled
+        // the error, e.g. will prompt for a password and re-mount). Abort
+        // initialization so we don't fall back to a blank document.
+        return;
+      }
+      throw err;
+    }
     if (!fileData) {
-      // TODO: show a visible error to the user (toast removed with naive-ui)
+      // Generic load failure (corrupt/invalid file) — fall back to blank
       notifyFileLoadError();
       await setDefaultBlankFile();
       fileData = await loadNewFileData();
@@ -888,8 +925,13 @@ const initializeData = async () => {
         // First client — load blank document
         props.options.isNewFile = true;
         delete props.options.fragment;
-        const fileData = await loadNewFileData();
-        if (fileData) initEditor(fileData);
+        try {
+          const fileData = await loadNewFileData();
+          if (fileData) initEditor(fileData);
+        } catch (err) {
+          if (err instanceof DocxEncryptionError) return;
+          throw err;
+        }
       }
     });
   }
@@ -921,51 +963,6 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     editor: activeEditor.value,
     presentationEditor: editor.value instanceof PresentationEditor ? editor.value : null,
   });
-
-  // Upgrade visual-readiness signal: during upgradeToCollaboration, SuperDoc
-  // threads this callback so it knows when the rebuilt runtime has actually
-  // painted AND collaboration is ready, not just when editors are created.
-  // For collaborative remounts the provider is already synced so the
-  // collaboration extension will emit collaborationReady after a 250ms delay.
-  // We must wait for BOTH that event AND the first layout paint before
-  // signalling that the upgrade transition can reveal the new runtime.
-  const onUpgradeVisualReady = props.options?.onUpgradeVisualReady;
-  if (typeof onUpgradeVisualReady === 'function') {
-    const hasCollabProvider = Boolean(props.options?.collaborationProvider);
-    const isPresentationEditor = editor.value instanceof PresentationEditor;
-
-    let collabReady = !hasCollabProvider; // no provider → already satisfied
-    let layoutReady = !isPresentationEditor; // no layout engine → already satisfied
-
-    const tryFire = () => {
-      if (collabReady && layoutReady) {
-        nextTick(() => onUpgradeVisualReady());
-      }
-    };
-
-    if (!collabReady) {
-      editor.value.once('collaborationReady', () => {
-        collabReady = true;
-        tryFire();
-      });
-    }
-
-    if (!layoutReady) {
-      const pe = editor.value;
-      if (pe.getPages().length > 0) {
-        layoutReady = true;
-      } else {
-        const onFirstLayout = () => {
-          pe.off('layoutUpdated', onFirstLayout);
-          layoutReady = true;
-          tryFire();
-        };
-        pe.on('layoutUpdated', onFirstLayout);
-      }
-    }
-
-    tryFire();
-  }
 
   // Attach layout-engine specific image selection listeners
   if (editor.value instanceof PresentationEditor) {

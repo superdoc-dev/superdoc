@@ -227,3 +227,18 @@ export const initTestEditor = (options = {}) => {
 export const getNewTransaction = (editor) => {
   return editor.state.tr;
 };
+
+export const hasAnyMark = (doc, markName) => {
+  let found = false;
+  doc.descendants((node) => {
+    if (found) return false;
+    if (!node.isInline) return;
+
+    const hasMark = node.marks.some((mark) => mark.type.name === markName);
+    if (!hasMark) return;
+
+    found = true;
+    return false;
+  });
+  return found;
+};

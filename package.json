@@ -142,7 +142,8 @@
       "superdoc": "workspace:*",
       "@superdoc-dev/react": "workspace:*",
       "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
-      "@superdoc-dev/sdk": "workspace:*"
+      "@superdoc-dev/sdk": "workspace:*",
+      "openapi-types": "12.1.3"
     },
     "ignoredBuiltDependencies": [
       "@parcel/watcher",
@@ -165,7 +166,11 @@
       "sharp",
       "unrs-resolver",
       "vue-demi"
-    ]
+    ],
+    "patchedDependencies": {
+      "readable-stream@3.6.2": "patches/readable-stream@3.6.2.patch",
+      "openapi-types@12.1.3": "patches/openapi-types@12.1.3.patch"
+    }
   },
   "dependencies": {
     "superdoc": "link:../../../packages/superdoc"

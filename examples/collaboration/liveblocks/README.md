@@ -59,6 +59,44 @@ Then start the browser client and connect to the same room:
 npm run dev
 ```
 
+## Python SDK smoke
+
+This example also includes a small manual smoke test for the repo-local Python SDK.
+It opens two SDK clients against the same Liveblocks room, inserts one line from
+each client, verifies each client can read the other client's text, and saves the
+resulting `.docx` so you can inspect it.
+
+Build the local CLI once:
+
+```bash
+pnpm --prefix ../../../apps/cli run build:native
+```
+
+Seed a room with a starting document:
+
+```bash
+npm run seed -- --fresh /absolute/path/to/test.docx
+```
+
+Run the smoke:
+
+```bash
+npm run smoke:python
+```
+
+The output document is written to:
+
+```bash
+examples/collaboration/liveblocks/.superdoc-state/python-sdk-liveblocks-smoke.docx
+```
+
+Notes:
+- `smoke:python` reads `examples/collaboration/liveblocks/.env` directly.
+- It uses the repo-local Python SDK source from `packages/sdk/langs/python`.
+- It defaults to the repo-local CLI binary at `apps/cli/dist/superdoc`.
+- Set `SUPERDOC_CLI_BIN` to override the CLI path.
+- Set `SMOKE_OUTPUT_DOCX` to override the saved `.docx` path.
+
 Notes:
 - `npm run seed` reads `.env` via `node --env-file=.env`.
 - Room id defaults to `VITE_ROOM_ID`. You can override with `LIVEBLOCKS_ROOM_ID`.

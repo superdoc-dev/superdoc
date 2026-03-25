@@ -70,6 +70,16 @@ Set `default_change_mode="tracked"` to make mutations use tracked changes by def
 
 The SDK also exposes a synchronous `SuperDocClient` with the same document-handle methods when you prefer non-async code paths.
 
+### Encrypted documents
+
+Pass `password` when opening a password-protected `.docx`:
+
+```python
+doc = await client.open({"doc": "./secret.docx", "password": "mypassword"})
+```
+
+The password is forwarded only for the initial open and is not persisted. If the password is missing or wrong, the error includes a machine-readable code (`DOCX_PASSWORD_REQUIRED`, `DOCX_PASSWORD_INVALID`).
+
 ### Sync
 
 ```python
@@ -147,11 +157,11 @@ Client instances are serialized: one operation at a time per client. For paralle
 
 ## Collaboration sessions
 
-Use this when your app already has a live collaboration room (Liveblocks, Hocuspocus, or SuperDoc Yjs).
+Use this when your app already has a live collaboration room. The SDK supports `y-websocket`, `hocuspocus`, and `liveblocks` providers. See the [full collaboration docs](https://docs.superdoc.dev/document-engine/sdks#collaboration-sessions) for provider choice guidance and all configuration options.
 
-### Join an existing room
+### Join an existing room (y-websocket shorthand)
 
-Pass `collabUrl` and `collabDocumentId` to `client.open`:
+> The `collabUrl` + `collabDocumentId` shorthand defaults to the `y-websocket` provider. For Hocuspocus or Liveblocks, pass an explicit `collaboration` object.
 
 ```python
 import asyncio
@@ -175,9 +185,43 @@ async def main():
 asyncio.run(main())
 ```
 
-### Start an empty room from a local `.docx`
+### Connect to Hocuspocus explicitly
 
-If the room is empty, pass `doc` together with collaboration params:
+```python
+doc = await client.open({
+    "collaboration": {
+        "providerType": "hocuspocus",
+        "url": "ws://localhost:1234",
+        "documentId": "my-doc-room",
+    }
+})
+```
+
+### Connect to Liveblocks
+
+```python
+# Public API key
+doc = await client.open({
+    "collaboration": {
+        "providerType": "liveblocks",
+        "roomId": "my-room",
+        "publicApiKey": "pk_live_xxx",
+    }
+})
+
+# Auth endpoint (production)
+doc = await client.open({
+    "collaboration": {
+        "providerType": "liveblocks",
+        "roomId": "my-room",
+        "authEndpoint": "https://app.example.com/api/liveblocks-auth",
+    }
+})
+```
+
+> SDK `authEndpoint` values must be absolute URLs. Relative paths like `/api/liveblocks-auth` are not supported because the CLI host has no browser origin.
+
+### Start an empty room from a local `.docx`
 
 ```python
 doc = await client.open({
@@ -187,19 +231,11 @@ doc = await client.open({
 })
 ```
 
-What happens when you pass `doc`:
-
-| Room state | Result |
-| --- | --- |
-| Room already has content | SDK joins the room. `doc` is ignored. |
-| Room is empty and `doc` is provided | SDK seeds the room from `doc`, then joins. |
-| Room is empty and no `doc` is provided | SDK starts a blank document. |
-
 ### Control empty-room behavior
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabUrl` | `string` | — | WebSocket URL. Shorthand for `y-websocket` only. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
 | `doc` | `string` | — | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
@@ -216,8 +252,6 @@ doc = await client.open({
 ```
 
 ### Check if the SDK seeded or joined
-
-`client.open` returns a bound document handle. In collaboration mode, bootstrap details are available on `doc.open_result`:
 
 ```python
 doc = await client.open({

@@ -12,6 +12,7 @@
 import {
   buildInternalContractSchemas,
   COMMAND_CATALOG,
+  NODE_TYPES,
   OPERATION_REQUIRES_DOCUMENT_CONTEXT_MAP,
   type OperationId,
 } from '@superdoc/document-api';
@@ -88,6 +89,13 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'user-email',
   type: 'string',
+};
+const PASSWORD_PARAM: CliOperationParamSpec = {
+  name: 'password',
+  kind: 'flag',
+  type: 'string',
+  description: 'Password for opening encrypted DOCX files.',
+  agentVisible: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -446,7 +454,47 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
 // adjustment for CLI metadata (e.g. simplifying or enriching).
 // ---------------------------------------------------------------------------
 
-const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {};
+// The document-api contract schema for `select` is a strict oneOf(text, node)
+// that rejects shorthand selectors like `{ type: "paragraph" }`. The CLI
+// normalizes these shorthands in resolveFindQuery() → validateQuery(), so
+// the schema-level validation must accept all three supported forms.
+const DOC_FIND_SELECT_SCHEMA: CliTypeSpec = {
+  oneOf: [
+    // { type: 'text', pattern: '...', mode?, caseSensitive? }
+    {
+      type: 'object',
+      properties: {
+        type: { const: 'text' },
+        pattern: { type: 'string' },
+        mode: { oneOf: [{ const: 'contains' }, { const: 'regex' }] },
+        caseSensitive: { type: 'boolean' },
+      },
+      required: ['type', 'pattern'],
+    },
+    // { type: 'node', nodeType?, kind? }
+    {
+      type: 'object',
+      properties: {
+        type: { const: 'node' },
+        nodeType: { type: 'string' },
+        kind: { oneOf: [{ const: 'block' }, { const: 'inline' }] },
+      },
+      required: ['type'],
+    },
+    // Shorthand: { type: '<NodeType>' } — normalized to { type: 'node', nodeType }
+    {
+      type: 'object',
+      properties: {
+        type: { oneOf: NODE_TYPES.map((t) => ({ const: t }) as CliTypeSpec) },
+      },
+      required: ['type'],
+    },
+  ],
+};
+
+const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {
+  'doc.find': { select: DOC_FIND_SELECT_SCHEMA },
+};
 
 // ---------------------------------------------------------------------------
 // Schema-derived param exclusions
@@ -455,11 +503,7 @@ const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>
 // exposed in CLI metadata because the CLI provides an alternative interface.
 // ---------------------------------------------------------------------------
 
-const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
-  // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
-  // is an internal document-api field that the invoker builds from flat flags.
-  'doc.find': new Set(['select']),
-};
+const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {};
 
 // ---------------------------------------------------------------------------
 // Extra CLI-specific params for doc-backed operations
@@ -494,12 +538,16 @@ const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationI
 );
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
+  // Flat flags are CLI convenience alternatives to --select-json. Marked
+  // agentVisible: false so that if doc.find is ever exposed as a tool
+  // (currently skipAsATool), agents see only the structured `select` param.
   'doc.find': [
     {
       name: 'type',
       kind: 'flag',
       type: 'string',
       description: "Selector type: 'text' for text search or 'node' for node type search.",
+      agentVisible: false,
     },
     {
       name: 'nodeType',
@@ -507,23 +555,30 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
       flag: 'node-type',
       type: 'string',
       description: 'Node type to match (paragraph, heading, table, listItem, etc.).',
+      agentVisible: false,
     },
-    { name: 'kind', kind: 'flag', type: 'string', description: "Filter: 'block' or 'inline'." },
-    { name: 'pattern', kind: 'flag', type: 'string', description: 'Text or regex pattern to match.' },
-    { name: 'mode', kind: 'flag', type: 'string', description: "Match mode: 'contains' (substring) or 'regex'." },
+    { name: 'kind', kind: 'flag', type: 'string', description: "Filter: 'block' or 'inline'.", agentVisible: false },
+    {
+      name: 'pattern',
+      kind: 'flag',
+      type: 'string',
+      description: 'Text or regex pattern to match.',
+      agentVisible: false,
+    },
+    {
+      name: 'mode',
+      kind: 'flag',
+      type: 'string',
+      description: "Match mode: 'contains' (substring) or 'regex'.",
+      agentVisible: false,
+    },
     {
       name: 'caseSensitive',
       kind: 'flag',
       flag: 'case-sensitive',
       type: 'boolean',
       description: 'Case-sensitive matching. Default: false.',
-    },
-    {
-      name: 'select',
-      kind: 'jsonFlag',
-      flag: 'select-json',
-      type: 'json',
-      description: "Search selector as JSON: {type:'text', pattern:'...'} or {type:'node', nodeType:'...'}.",
+      agentVisible: false,
     },
     { name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json', description: 'Query filter as JSON object.' },
   ],
@@ -894,7 +949,88 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     params: [
       { name: 'doc', kind: 'doc', type: 'string' },
       SESSION_PARAM,
-      { name: 'collaboration', kind: 'jsonFlag', flag: 'collaboration-json', type: 'json' },
+      {
+        name: 'collaboration',
+        kind: 'jsonFlag',
+        flag: 'collaboration-json',
+        type: 'json',
+        schema: {
+          oneOf: [
+            {
+              type: 'object',
+              description: 'WebSocket-based collaboration (y-websocket or Hocuspocus).',
+              properties: {
+                providerType: {
+                  type: 'string',
+                  enum: ['y-websocket', 'hocuspocus'],
+                  description: 'Collaboration provider.',
+                },
+                url: { type: 'string', description: 'WebSocket server URL.' },
+                documentId: {
+                  type: 'string',
+                  description: 'Room/document identifier. Defaults to session ID if omitted.',
+                },
+                tokenEnv: { type: 'string', description: 'Environment variable name containing the auth token.' },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'url'],
+            },
+            {
+              type: 'object',
+              description: 'Liveblocks collaboration with a public API key.',
+              properties: {
+                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                roomId: { type: 'string', description: 'Liveblocks room identifier.' },
+                publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'roomId', 'publicApiKey'],
+            },
+            {
+              type: 'object',
+              description: 'Liveblocks collaboration with a custom auth endpoint.',
+              properties: {
+                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                roomId: { type: 'string', description: 'Liveblocks room identifier.' },
+                authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },
+                authHeadersEnv: {
+                  type: 'string',
+                  description: 'Env var name containing JSON headers for the auth endpoint.',
+                },
+                syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
+                onMissing: {
+                  type: 'string',
+                  enum: ['seedFromDoc', 'blank', 'error'],
+                  description: 'What to do when the remote room is empty.',
+                },
+                bootstrapSettlingMs: {
+                  type: 'number',
+                  description: 'Time (ms) to wait for bootstrap claim propagation.',
+                },
+              },
+              required: ['providerType', 'roomId', 'authEndpoint'],
+            },
+          ],
+        } as CliTypeSpec,
+      },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
       { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
@@ -903,6 +1039,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
       USER_NAME_PARAM,
       USER_EMAIL_PARAM,
+      PASSWORD_PARAM,
     ],
     constraints: null,
   },

@@ -97,10 +97,6 @@ export const TrackChanges = Extension.create({
               return;
             }
 
-            trackedMark.attrs.before.forEach((oldMark) => {
-              tr.step(new AddMarkStep(mappedFrom, mappedTo, state.schema.marks[oldMark.type].create(oldMark.attrs)));
-            });
-
             trackedMark.attrs.after.forEach((newMark) => {
               const liveMark = findMarkInRangeBySnapshot({
                 doc: tr.doc,
@@ -114,6 +110,12 @@ export const TrackChanges = Extension.create({
               }
 
               tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
+            });
+
+            // Remove suggested "after" marks first, then restore "before" marks.
+            // This avoids overlap matching removing a just-restored attribute-only mark (e.g. textStyle).
+            trackedMark.attrs.before.forEach((oldMark) => {
+              tr.step(new AddMarkStep(mappedFrom, mappedTo, state.schema.marks[oldMark.type].create(oldMark.attrs)));
             });
 
             tr.step(new RemoveMarkStep(mappedFrom, mappedTo, trackedMark));

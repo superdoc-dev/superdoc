@@ -80,6 +80,15 @@ Or use the CDN:
 
 For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
+### Using an AI coding agent?
+
+Set up your project for AI agents and configure the MCP server:
+
+```bash
+npx @superdoc-dev/create              # generates AGENTS.md for your framework
+claude mcp add superdoc -- npx @superdoc-dev/mcp   # connect agent to DOCX files
+```
+
 ## Features
 
 - **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers. Not a contenteditable wrapper with export bolted on.
@@ -146,6 +155,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/roncallyt"><img src="https://github.com/roncallyt.png" width="50" height="50" alt="roncallyt" title="Thomerson Roncally" /></a>
 <a href="https://github.com/gpardhivvarma"><img src="https://github.com/gpardhivvarma.png" width="50" height="50" alt="gpardhivvarma" title="G Pardhiv Varma" /></a>
 <a href="https://github.com/lucbic"><img src="https://github.com/lucbic.png" width="50" height="50" alt="lucbic" title="Lucas Bicudo" /></a>
+<a href="https://github.com/claudiu-ior"><img src="https://github.com/claudiu-ior.png" width="50" height="50" alt="claudiu-ior" title="Claudiu Iorgulescu" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

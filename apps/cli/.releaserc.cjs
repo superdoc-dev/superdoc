@@ -1,5 +1,4 @@
 /* eslint-env node */
-
 /*
  * Commit filter: CLI bundles multiple sub-packages, so git log must include
  * commits touching any of them. This shared helper patches git-log-parser to

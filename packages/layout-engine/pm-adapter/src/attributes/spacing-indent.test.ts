@@ -102,9 +102,29 @@ describe('normalizeAlignment', () => {
     expect(normalizeAlignment('justify')).toBe('justify');
   });
 
-  it('maps start/end to left/right', () => {
+  it('maps start/end to left/right in LTR', () => {
     expect(normalizeAlignment('start')).toBe('left');
     expect(normalizeAlignment('end')).toBe('right');
+    expect(normalizeAlignment('start', false)).toBe('left');
+    expect(normalizeAlignment('end', false)).toBe('right');
+  });
+
+  it('maps start/end to right/left in RTL', () => {
+    expect(normalizeAlignment('start', true)).toBe('right');
+    expect(normalizeAlignment('end', true)).toBe('left');
+  });
+
+  it('does not flip explicit left/right/center/justify in RTL', () => {
+    expect(normalizeAlignment('left', true)).toBe('left');
+    expect(normalizeAlignment('right', true)).toBe('right');
+    expect(normalizeAlignment('center', true)).toBe('center');
+    expect(normalizeAlignment('justify', true)).toBe('justify');
+  });
+
+  it('maps Arabic kashida justify variants to justify', () => {
+    expect(normalizeAlignment('lowKashida')).toBe('justify');
+    expect(normalizeAlignment('mediumKashida')).toBe('justify');
+    expect(normalizeAlignment('highKashida')).toBe('justify');
   });
 
   it('returns undefined for invalid values', () => {

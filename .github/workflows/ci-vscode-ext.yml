@@ -1,0 +1,43 @@
+name: CI VS Code Extension
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'apps/vscode-ext/**'
+      - 'packages/superdoc/src/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-vscode-ext-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint
+        run: pnpm --filter superdoc-vscode-ext lint
+
+      - name: Type check
+        run: pnpm --filter superdoc-vscode-ext typecheck
+
+      - name: Test
+        run: pnpm --filter superdoc-vscode-ext test
+
+      - name: Build extension host
+        run: pnpm --filter superdoc-vscode-ext compile:ext

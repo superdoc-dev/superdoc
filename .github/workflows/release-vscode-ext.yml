@@ -45,6 +45,10 @@ jobs:
       - name: Build superdoc
         run: pnpm run build
 
+      - name: Test vscode-ext
+        run: pnpm run test
+        working-directory: apps/vscode-ext
+
       - name: Build vscode-ext
         run: pnpm run build
         working-directory: apps/vscode-ext

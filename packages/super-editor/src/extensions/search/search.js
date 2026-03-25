@@ -5,6 +5,7 @@ import { PositionTracker } from '@core/PositionTracker.js';
 import { search, SearchQuery, setSearchState, getMatchHighlights } from './prosemirror-search-patched.js';
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
+import { Fragment, Slice } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
 import { SearchIndex } from './SearchIndex.js';
 
@@ -26,6 +27,52 @@ export const getCustomSearchDecorations = (state) => {
 
 const isRegExp = (value) => Object.prototype.toString.call(value) === '[object RegExp]';
 const SEARCH_POSITION_TRACKER_TYPE = 'search-match';
+
+/**
+ * Convert raw SearchIndex matches into SearchMatch objects with document ranges
+ * and optional position tracking.
+ *
+ * @param {Object} params
+ * @param {SearchIndex} params.searchIndex - The search index to map offsets
+ * @param {Array<{start: number, end: number, text: string}>} params.indexMatches - Raw index matches
+ * @param {import('prosemirror-model').Node} params.doc - The document for text extraction
+ * @param {Object} [params.positionTracker] - Optional position tracker for tracking ranges
+ * @returns {SearchMatch[]}
+ */
+const mapIndexMatchesToDocMatches = ({ searchIndex, indexMatches, doc, positionTracker }) => {
+  const matches = [];
+  for (const indexMatch of indexMatches) {
+    const ranges = searchIndex.offsetRangeToDocRanges(indexMatch.start, indexMatch.end);
+    if (ranges.length === 0) continue;
+
+    const matchTexts = ranges.map((r) => doc.textBetween(r.from, r.to));
+
+    const match = {
+      from: ranges[0].from,
+      to: ranges[ranges.length - 1].to,
+      text: matchTexts.join(''),
+      id: uuidv4(),
+      ranges,
+      trackerIds: [],
+    };
+
+    if (positionTracker?.trackMany) {
+      const trackedRanges = ranges.map((range, rangeIndex) => ({
+        from: range.from,
+        to: range.to,
+        spec: { type: SEARCH_POSITION_TRACKER_TYPE, metadata: { rangeIndex } },
+      }));
+      const trackerIds = positionTracker.trackMany(trackedRanges);
+      if (trackerIds.length > 0) {
+        match.trackerIds = trackerIds;
+        match.id = trackerIds[0];
+      }
+    }
+
+    matches.push(match);
+  }
+  return matches;
+};
 
 const resolveMatchSelectionRange = (match, positionTracker) => {
   if (!match) return { from: undefined, to: undefined };
@@ -192,6 +239,30 @@ export const Search = Extension.create({
        * Lazily-built search index for cross-paragraph matching
        */
       searchIndex: new SearchIndex(),
+      /**
+       * @private
+       * @type {number}
+       * Index of the currently active match (-1 = none)
+       */
+      activeMatchIndex: -1,
+      /**
+       * @private
+       * @type {string}
+       * Current search query string
+       */
+      query: '',
+      /**
+       * @private
+       * @type {boolean}
+       * Whether the current search is case-sensitive
+       */
+      caseSensitive: false,
+      /**
+       * @private
+       * @type {boolean}
+       * Whether the current search ignores diacritics
+       */
+      ignoreDiacritics: false,
     };
   },
 
@@ -199,14 +270,55 @@ export const Search = Extension.create({
     const editor = this.editor;
     const storage = this.storage;
 
-    // Plugin to invalidate search index when document changes
+    // Plugin to invalidate search index and refresh the live session when the document changes.
+    // Without this, highlights and replace targets would reference stale positions after any edit.
     const searchIndexInvalidatorPlugin = new Plugin({
       key: new PluginKey('searchIndexInvalidator'),
       appendTransaction(transactions, oldState, newState) {
         const docChanged = transactions.some((tr) => tr.docChanged);
-        if (docChanged && storage?.searchIndex) {
+        if (!docChanged) return null;
+
+        if (storage?.searchIndex) {
           storage.searchIndex.invalidate();
         }
+
+        // If there is a live search session, refresh it so highlights and match
+        // ranges stay in sync with the new document. We check storage.query (not
+        // searchResults.length) so that a zero-result session can become non-zero
+        // when the user edits the document to contain the search term.
+        if (storage?.query) {
+          // Rebuild the index against the new doc
+          storage.searchIndex.ensureValid(newState.doc);
+
+          const searchFn = storage.ignoreDiacritics
+            ? (q, opts) => storage.searchIndex.searchIgnoringDiacritics(q, opts)
+            : (q, opts) => storage.searchIndex.search(q, opts);
+
+          const indexMatches = searchFn(storage.query, {
+            caseSensitive: storage.caseSensitive,
+          });
+
+          const refreshed = mapIndexMatchesToDocMatches({
+            searchIndex: storage.searchIndex,
+            indexMatches,
+            doc: newState.doc,
+          });
+
+          storage.searchResults = refreshed;
+
+          // Reconcile activeMatchIndex with the new result set:
+          // - no results → -1
+          // - was -1 but now have results → promote to 0
+          // - index past end → clamp to last
+          if (refreshed.length === 0) {
+            storage.activeMatchIndex = -1;
+          } else if (storage.activeMatchIndex < 0) {
+            storage.activeMatchIndex = 0;
+          } else if (storage.activeMatchIndex >= refreshed.length) {
+            storage.activeMatchIndex = refreshed.length - 1;
+          }
+        }
+
         return null;
       },
     });
@@ -224,10 +336,16 @@ export const Search = Extension.create({
 
           // Build decorations from all ranges in each match
           const decorations = [];
-          for (const match of matches) {
+          const activeIdx = storage?.activeMatchIndex ?? -1;
+
+          for (let i = 0; i < matches.length; i++) {
+            const match = matches[i];
+            const isActive = i === activeIdx;
+            const cls = isActive ? 'ProseMirror-active-search-match' : 'ProseMirror-search-match';
+
             // Determine decoration attributes based on highlight setting
             const attrs = highlightEnabled
-              ? { id: `search-match-${match.id}`, class: 'ProseMirror-search-match' }
+              ? { id: `search-match-${match.id}`, class: cls }
               : { id: `search-match-${match.id}` };
 
             if (match.ranges && match.ranges.length > 0) {
@@ -394,44 +512,12 @@ export const Search = Extension.create({
           });
 
           // Map matches to document positions
-          const resultMatches = [];
-          for (const indexMatch of indexMatches) {
-            const ranges = searchIndex.offsetRangeToDocRanges(indexMatch.start, indexMatch.end);
-            if (ranges.length === 0) continue;
-
-            // Get text for each range and combine
-            const matchTexts = ranges.map((r) => state.doc.textBetween(r.from, r.to));
-            const combinedText = matchTexts.join('');
-
-            const match = {
-              from: ranges[0].from,
-              to: ranges[ranges.length - 1].to,
-              text: combinedText,
-              id: uuidv4(),
-              ranges: ranges,
-              trackerIds: [],
-            };
-
-            if (positionTracker?.trackMany) {
-              const trackedRanges = ranges.map((range, rangeIndex) => ({
-                from: range.from,
-                to: range.to,
-                spec: {
-                  type: SEARCH_POSITION_TRACKER_TYPE,
-                  metadata: {
-                    rangeIndex,
-                  },
-                },
-              }));
-              const trackerIds = positionTracker.trackMany(trackedRanges);
-              if (trackerIds.length > 0) {
-                match.trackerIds = trackerIds;
-                match.id = trackerIds[0];
-              }
-            }
-
-            resultMatches.push(match);
-          }
+          const resultMatches = mapIndexMatchesToDocMatches({
+            searchIndex,
+            indexMatches,
+            doc: state.doc,
+            positionTracker,
+          });
 
           // Store results and highlight preference (no dispatches needed - decorations come from storage)
           this.storage.searchResults = resultMatches;
@@ -494,6 +580,227 @@ export const Search = Extension.create({
           }
 
           return true;
+        },
+
+      /**
+       * Start or update a search session with query and options.
+       * Stores session state and sets activeMatchIndex to 0 if matches are found.
+       * @category Command
+       * @param {string} query - Search query string
+       * @param {Object} [options={}] - Session options
+       * @param {boolean} [options.caseSensitive=false] - Case-sensitive search
+       * @param {boolean} [options.ignoreDiacritics=false] - Ignore diacritics when matching
+       * @param {boolean} [options.highlight=true] - Apply visual highlighting
+       * @returns {{ matches: SearchMatch[], activeMatchIndex: number }}
+       */
+      setSearchSession:
+        (query, options = {}) =>
+        ({ state, editor }) => {
+          const caseSensitive = options.caseSensitive ?? false;
+          const ignoreDiacritics = options.ignoreDiacritics ?? false;
+          const highlight = options.highlight ?? true;
+
+          // Store session state
+          this.storage.query = query;
+          this.storage.caseSensitive = caseSensitive;
+          this.storage.ignoreDiacritics = ignoreDiacritics;
+
+          // Clear existing position trackers
+          const positionTracker = getPositionTracker(editor);
+          positionTracker?.untrackByType?.(SEARCH_POSITION_TRACKER_TYPE);
+
+          if (!query) {
+            this.storage.searchResults = [];
+            this.storage.activeMatchIndex = -1;
+            this.storage.highlightEnabled = highlight;
+            return { matches: [], activeMatchIndex: -1 };
+          }
+
+          // Build/validate search index
+          const searchIndex = this.storage.searchIndex;
+          searchIndex.ensureValid(state.doc);
+
+          // Search with diacritic support
+          const indexMatches = ignoreDiacritics
+            ? searchIndex.searchIgnoringDiacritics(query, { caseSensitive })
+            : searchIndex.search(query, { caseSensitive });
+
+          // Map matches to document positions
+          const resultMatches = mapIndexMatchesToDocMatches({
+            searchIndex,
+            indexMatches,
+            doc: state.doc,
+            positionTracker,
+          });
+
+          this.storage.searchResults = resultMatches;
+          this.storage.highlightEnabled = highlight;
+          this.storage.activeMatchIndex = resultMatches.length > 0 ? 0 : -1;
+
+          return { matches: resultMatches, activeMatchIndex: this.storage.activeMatchIndex };
+        },
+
+      /**
+       * Clear the current search session, removing all highlights and state.
+       * @category Command
+       */
+      clearSearchSession:
+        () =>
+        ({ editor }) => {
+          const positionTracker = getPositionTracker(editor);
+          positionTracker?.untrackByType?.(SEARCH_POSITION_TRACKER_TYPE);
+
+          this.storage.searchResults = [];
+          this.storage.highlightEnabled = true;
+          this.storage.activeMatchIndex = -1;
+          this.storage.query = '';
+          this.storage.caseSensitive = false;
+          this.storage.ignoreDiacritics = false;
+
+          return true;
+        },
+
+      /**
+       * Navigate to the next search match (wraps around).
+       * @category Command
+       * @returns {{ activeMatchIndex: number, match: SearchMatch | null }}
+       */
+      nextSearchMatch:
+        () =>
+        ({ state, editor }) => {
+          const matches = this.storage.searchResults;
+          if (!matches || matches.length === 0) {
+            return { activeMatchIndex: -1, match: null };
+          }
+
+          const nextIdx = (this.storage.activeMatchIndex + 1) % matches.length;
+          this.storage.activeMatchIndex = nextIdx;
+          const match = matches[nextIdx];
+
+          // Scroll to the active match
+          editor.commands.goToSearchResult(match);
+
+          return { activeMatchIndex: nextIdx, match };
+        },
+
+      /**
+       * Navigate to the previous search match (wraps around).
+       * @category Command
+       * @returns {{ activeMatchIndex: number, match: SearchMatch | null }}
+       */
+      previousSearchMatch:
+        () =>
+        ({ state, editor }) => {
+          const matches = this.storage.searchResults;
+          if (!matches || matches.length === 0) {
+            return { activeMatchIndex: -1, match: null };
+          }
+
+          const prevIdx = (this.storage.activeMatchIndex - 1 + matches.length) % matches.length;
+          this.storage.activeMatchIndex = prevIdx;
+          const match = matches[prevIdx];
+
+          // Scroll to the active match
+          editor.commands.goToSearchResult(match);
+
+          return { activeMatchIndex: prevIdx, match };
+        },
+
+      /**
+       * Replace the currently active search match with the given text.
+       * Re-runs the search afterwards to update matches and counts.
+       * @category Command
+       * @param {string} replacement - Replacement text
+       * @returns {{ matches: SearchMatch[], activeMatchIndex: number }}
+       */
+      replaceSearchMatch:
+        (replacement) =>
+        ({ state, dispatch, editor, commands }) => {
+          const matches = this.storage.searchResults;
+          const activeIdx = this.storage.activeMatchIndex;
+
+          if (!matches || activeIdx < 0 || activeIdx >= matches.length) {
+            return { matches: matches || [], activeMatchIndex: activeIdx };
+          }
+
+          const match = matches[activeIdx];
+          const from = match.ranges[0].from;
+          const to = match.ranges[match.ranges.length - 1].to;
+
+          const tr = state.tr;
+          if (replacement) {
+            tr.replace(from, to, new Slice(Fragment.from(state.schema.text(replacement)), 0, 0));
+          } else {
+            tr.replace(from, to, Slice.empty);
+          }
+          if (dispatch) dispatch(tr);
+
+          // Sync chainable state getters to the mutated transaction before
+          // nested commands read state.doc for the refreshed session.
+          void state.tr;
+
+          // Re-run search with same session options to refresh matches
+          const result = commands.setSearchSession(this.storage.query, {
+            caseSensitive: this.storage.caseSensitive,
+            ignoreDiacritics: this.storage.ignoreDiacritics,
+            highlight: this.storage.highlightEnabled,
+          });
+
+          // Clamp activeMatchIndex to new match count and scroll to the
+          // newly active match so the editor selection follows the replacement,
+          // matching the behavior of nextSearchMatch / previousSearchMatch.
+          if (result.matches.length > 0) {
+            const newIdx = Math.min(activeIdx, result.matches.length - 1);
+            this.storage.activeMatchIndex = newIdx;
+            result.activeMatchIndex = newIdx;
+
+            const nextMatch = result.matches[newIdx];
+            if (nextMatch) {
+              commands.goToSearchResult(nextMatch);
+            }
+          }
+
+          return result;
+        },
+
+      /**
+       * Replace all search matches with the given text.
+       * Applies all replacements in a single transaction (back-to-front).
+       * @category Command
+       * @param {string} replacement - Replacement text
+       * @returns {{ replacedCount: number }}
+       */
+      replaceAllSearchMatches:
+        (replacement) =>
+        ({ state, dispatch, commands }) => {
+          const matches = this.storage.searchResults;
+          if (!matches || matches.length === 0) {
+            return { replacedCount: 0 };
+          }
+
+          const { schema } = state;
+          const tr = state.tr;
+          const count = matches.length;
+
+          // Apply replacements back-to-front to avoid position shifts
+          for (let i = matches.length - 1; i >= 0; i--) {
+            const match = matches[i];
+            const from = match.ranges[0].from;
+            const to = match.ranges[match.ranges.length - 1].to;
+
+            if (replacement) {
+              tr.replace(from, to, new Slice(Fragment.from(schema.text(replacement)), 0, 0));
+            } else {
+              tr.replace(from, to, Slice.empty);
+            }
+          }
+
+          if (dispatch) dispatch(tr);
+
+          // Clear session after replacing all
+          commands.clearSearchSession();
+
+          return { replacedCount: count };
         },
     };
   },

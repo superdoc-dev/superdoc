@@ -274,14 +274,17 @@ new SuperDoc({
     <ParamField path="modules.surfaces.floating.autoFocus" type="boolean" default="true">
       Move focus into the first focusable child on open
     </ParamField>
+    <ParamField path="modules.surfaces.findReplace" type="false | true | Object" default="false">
+      Built-in find/replace popover for editor-backed documents. Disabled by default; set to `true` for the built-in UI, or pass an object to customize text, disable replace actions, provide a custom component or render function, or add a runtime resolver. See [Surfaces — Built-in Find and Replace](/core/superdoc/surfaces#built-in-find-and-replace).
+    </ParamField>
     <ParamField path="modules.surfaces.passwordPrompt" type="false | true | Object" default="true">
-      Password prompt for encrypted DOCX files. Enabled by default. Set to `false` to disable, `true` for defaults, or pass an object to customize text, provide a custom component/render function, or add a per-document resolver. See [Surfaces — Password prompt](/core/superdoc/surfaces#password-prompt).
+      Built-in password prompt for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable, `true` for defaults, or pass an object to customize text, provide a custom component or render function, or add a per-document resolver. See [Surfaces — Built-in password prompt](/core/superdoc/surfaces#built-in-password-prompt).
     </ParamField>
   </Expandable>
 </ParamField>
 
 <Note>
-  You only need `modules.surfaces` if you want shared defaults or a central resolver. Direct `superdoc.openSurface(...)` calls do not require any special setup.
+  You only need `modules.surfaces` if you want shared defaults, a central resolver, or to enable/configure built-in surface behaviors like find/replace and the password prompt. Direct `superdoc.openSurface(...)` calls do not require any special setup.
 </Note>
 
 See [Surfaces](/core/superdoc/surfaces) for the full API and examples.

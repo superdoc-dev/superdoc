@@ -742,6 +742,9 @@ const init = async () => {
         excludeItems: [], // ['italic', 'bold'],
         // texts: {},
       },
+      surfaces: {
+        findReplace: true,
+      },
       // Test custom context menu configuration
       contextMenu: {
         // includeDefaultItems: true, // Include default items

@@ -39,6 +39,7 @@ import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
+import { useFindReplace } from './composables/use-find-replace.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
@@ -129,6 +130,10 @@ const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectio
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
+const isFindReplaceEnabled = computed(() => {
+  const val = proxy?.$superdoc?.config?.modules?.surfaces?.findReplace;
+  return val === true || (typeof val === 'object' && val !== null);
+});
 const isViewingTrackChangesVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.trackChanges?.visible === true,
 );
@@ -182,6 +187,7 @@ const superdocStyleVars = computed(() => {
 });
 
 // Refs
+const superdocRoot = ref(null);
 const layers = ref(null);
 const pdfViewerRef = ref(null);
 const pendingReplayTrackedChangeSync = ref(false);
@@ -192,6 +198,14 @@ const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
 
 // Create a ref to pass to the composable
 const activeEditorRef = computed(() => proxy.$superdoc.activeEditor);
+
+// Find/replace controller — uses surfaces to show a floating find/replace popover.
+const findReplace = useFindReplace({
+  getSurfaceManager: () => surfaceManager,
+  getActiveEditor: () => proxy.$superdoc?.activeEditor,
+  activeEditorRef,
+  getFindReplaceConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.findReplace,
+});
 
 // Use the composable to get the selected text
 const { selectedText } = useSelectedText(activeEditorRef);
@@ -1084,11 +1098,57 @@ onMounted(() => {
   if (config && !config.readOnly) {
     document.addEventListener('mousedown', handleDocumentMouseDown);
   }
+  document.addEventListener('keydown', handleFindShortcut, true);
 });
+
+/**
+ * Handle Cmd+F / Ctrl+F to open find/replace instead of browser find.
+ * Use a document-level capture listener because the dev shell and
+ * presentation-mode bridge do not always leave keyboard focus on a node
+ * that bubbles through the .superdoc root.
+ */
+function isFindShortcutEvent(e) {
+  return (e.metaKey || e.ctrlKey) && !e.altKey && e.key?.toLowerCase?.() === 'f';
+}
+
+function isFocusInsideSuperDoc() {
+  const root = superdocRoot.value;
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof Node)) return false;
+
+  if (root?.contains(activeElement)) {
+    return true;
+  }
+
+  const activeEditorDom = proxy.$superdoc?.activeEditor?.view?.dom;
+  return (
+    activeEditorDom instanceof Node && (activeElement === activeEditorDom || activeEditorDom.contains?.(activeElement))
+  );
+}
+
+function handleFindShortcut(e) {
+  if (!isFindShortcutEvent(e)) return;
+  if (!isFindReplaceEnabled.value) return;
+  if (!isFocusInsideSuperDoc()) return;
+
+  // Only steal the shortcut if the composable will actually open a surface.
+  // If the resolver returns { type: 'none' }, we must let the browser handle Cmd+F.
+  if (!findReplace.wouldOpen()) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  findReplace.open();
+}
+
+function handleContainerKeydown(e) {
+  handleFindShortcut(e);
+}
 
 onBeforeUnmount(() => {
   passwordPrompt.destroy();
+  findReplace.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  document.removeEventListener('keydown', handleFindShortcut, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;
@@ -1376,6 +1436,7 @@ const getPDFViewer = () => {
 
 <template>
   <div
+    ref="superdocRoot"
     class="superdoc"
     :class="{
       'superdoc--with-sidebar': showCommentsSidebar,
@@ -1383,6 +1444,7 @@ const getPDFViewer = () => {
       'high-contrast': isHighContrastMode,
     }"
     :style="superdocStyleVars"
+    @keydown="handleContainerKeydown"
   >
     <div class="superdoc__layers layers" ref="layers" role="group">
       <!-- Floating tools menu (shows up when user has text selection)-->

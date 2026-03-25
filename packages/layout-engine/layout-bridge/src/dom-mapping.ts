@@ -35,6 +35,10 @@ function isRtlLine(lineEl: HTMLElement): boolean {
   return getComputedStyle(lineEl).direction === 'rtl';
 }
 
+function isVisibleRect(rect: DOMRect): boolean {
+  return rect.width > 0 && rect.height > 0;
+}
+
 /**
  * Maps a click coordinate to a ProseMirror document position using DOM data attributes.
  *
@@ -378,9 +382,18 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
 
   // Determine the visual left/right edges of all spans to handle RTL correctly.
   // In RTL lines the first DOM span may be visually rightmost.
+  // Filter out non-rendered spans (display:none field annotations, hidden tracked
+  // changes, etc.) whose zero-sized rects would collapse the bounds to 0.
   const allRects = spanEls.map((el) => el.getBoundingClientRect());
-  const visualLeft = Math.min(...allRects.map((r) => r.left));
-  const visualRight = Math.max(...allRects.map((r) => r.right));
+  const visibleRects = allRects.filter(isVisibleRect);
+
+  if (visibleRects.length === 0) {
+    log('All spans hidden, returning lineStart:', lineStart);
+    return lineStart;
+  }
+
+  const visualLeft = Math.min(...visibleRects.map((r) => r.left));
+  const visualRight = Math.max(...visibleRects.map((r) => r.right));
 
   if (viewX <= visualLeft) {
     const pos = rtl ? lineEnd : lineStart;
@@ -523,8 +536,15 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
   const rtl = isRtlLine(lineEl);
 
   const allRects = spanEls.map((el) => el.getBoundingClientRect());
-  const visualLeft = Math.min(...allRects.map((r) => r.left));
-  const visualRight = Math.max(...allRects.map((r) => r.right));
+  const visibleRects = allRects.filter(isVisibleRect);
+
+  if (visibleRects.length === 0) {
+    log('All spans hidden, returning lineStart:', lineStart);
+    return lineStart;
+  }
+
+  const visualLeft = Math.min(...visibleRects.map((r) => r.left));
+  const visualRight = Math.max(...visibleRects.map((r) => r.right));
 
   if (viewX <= visualLeft) {
     const pos = rtl ? lineEnd : lineStart;
@@ -646,6 +666,7 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
   for (let i = 0; i < spanEls.length; i++) {
     const span = spanEls[i];
     const rect = span.getBoundingClientRect();
+    if (!isVisibleRect(rect)) continue;
     if (viewX >= rect.left && viewX <= rect.right) {
       log('findSpanAtX: Found containing element at index', i, {
         tag: span.tagName,
@@ -656,7 +677,6 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
       });
       return span;
     }
-    // Track nearest element to the right if none contain X
     if (viewX > rect.right) {
       targetSpan = span;
     }

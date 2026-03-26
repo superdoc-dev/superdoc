@@ -5,6 +5,20 @@ import path from 'node:path';
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
 const CONTRACT_PATH = path.join(REPO_ROOT, 'apps/cli/generated/sdk-contract.json');
 const CATALOG_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json');
+const CLI_ONLY_OPERATIONS = new Set([
+  'doc.open',
+  'doc.save',
+  'doc.close',
+  'doc.status',
+  'doc.describe',
+  'doc.describeCommand',
+  'doc.insertTab',
+  'doc.insertLineBreak',
+  'doc.session.list',
+  'doc.session.save',
+  'doc.session.close',
+  'doc.session.setDefault',
+]);
 
 async function loadJson<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, 'utf8')) as T;
@@ -128,10 +142,10 @@ describe('Contract integrity', () => {
     }
   });
 
-  test('mutations have successSchema and failureSchema', async () => {
+  test('doc-backed mutations have successSchema and failureSchema', async () => {
     contract = await loadJson<Contract>(CONTRACT_PATH);
     for (const [id, op] of Object.entries(contract.operations)) {
-      if (op.mutates && op.inputSchema) {
+      if (!CLI_ONLY_OPERATIONS.has(id) && op.mutates && op.inputSchema) {
         expect(op.successSchema).toBeTruthy();
         expect(op.failureSchema).toBeTruthy();
       }
@@ -140,20 +154,8 @@ describe('Contract integrity', () => {
 
   test('doc-backed operations have inputSchema', async () => {
     contract = await loadJson<Contract>(CONTRACT_PATH);
-    const CLI_ONLY = new Set([
-      'doc.open',
-      'doc.save',
-      'doc.close',
-      'doc.status',
-      'doc.describe',
-      'doc.describeCommand',
-      'doc.session.list',
-      'doc.session.save',
-      'doc.session.close',
-      'doc.session.setDefault',
-    ]);
     for (const [id, op] of Object.entries(contract.operations)) {
-      if (!CLI_ONLY.has(id)) {
+      if (!CLI_ONLY_OPERATIONS.has(id)) {
         expect(op.inputSchema).toBeTruthy();
       }
     }

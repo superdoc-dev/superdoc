@@ -462,8 +462,12 @@ function generatePythonDispatchCode(tools) {
     }
   }
 
-  lines.push('    else:');
-  lines.push("        raise SuperDocError(f'Unknown intent tool: {tool_name}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': tool_name})");
+  if (first) {
+    lines.push("    raise SuperDocError(f'Unknown intent tool: {tool_name}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': tool_name})");
+  } else {
+    lines.push('    else:');
+    lines.push("        raise SuperDocError(f'Unknown intent tool: {tool_name}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': tool_name})");
+  }
   lines.push('');
 
   return lines.join('\n');

@@ -2027,11 +2027,19 @@ describe('superdoc CLI', () => {
     const insertEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         receipt: { success: boolean };
-        output?: { path: string; byteLength: number };
+        output?: {
+          path: string;
+          failed?: boolean;
+          error?: { code?: string; message?: string };
+        };
       }>
     >(insertResult);
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.output).toBeUndefined();
+    expect(insertEnvelope.data.output).toMatchObject({
+      path: blockedOutPath,
+      failed: true,
+      error: { code: 'OUTPUT_EXISTS' },
+    });
 
     const verifyResult = await runCli(['find', '--type', 'text', '--pattern', 'STATEFUL_INSERT_EXPORT_FAILURE_1597']);
     expect(verifyResult.code).toBe(0);
@@ -2067,11 +2075,19 @@ describe('superdoc CLI', () => {
     const createEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: { success: boolean };
-        output?: { path: string; byteLength: number };
+        output?: {
+          path: string;
+          failed?: boolean;
+          error?: { code?: string; message?: string };
+        };
       }>
     >(createResult);
     expect(createEnvelope.data.result.success).toBe(true);
-    expect(createEnvelope.data.output).toBeUndefined();
+    expect(createEnvelope.data.output).toMatchObject({
+      path: blockedOutPath,
+      failed: true,
+      error: { code: 'OUTPUT_EXISTS' },
+    });
 
     const verifyResult = await runCli(['find', '--type', 'text', '--pattern', 'STATEFUL_CREATE_EXPORT_FAILURE_1597']);
     expect(verifyResult.code).toBe(0);

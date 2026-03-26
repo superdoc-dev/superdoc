@@ -274,6 +274,22 @@ function seedDefaultHeader(editor: Editor, text: string): void {
   setBodySection(editor, { headerDefault: 'rIdHeader1' });
 }
 
+/**
+ * Seeds one default footer for a single-section test document.
+ *
+ * @param editor Editor whose converter should be updated.
+ * @param text Footer text content.
+ */
+function seedDefaultFooter(editor: Editor, text: string): void {
+  seedPart(editor, {
+    kind: 'footer',
+    refId: 'rIdFooter1',
+    partPath: 'word/footer1.xml',
+    text,
+  });
+  setBodySection(editor, { footerDefault: 'rIdFooter1' });
+}
+
 describe('Header/footer diffing', () => {
   it('emits cleared slot changes when a section slot is removed', async () => {
     const editor = await createEditor();
@@ -330,6 +346,27 @@ describe('Header/footer diffing', () => {
     try {
       setBodySection(beforeEditor, {});
       seedDefaultHeader(afterEditor, 'New header');
+
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+
+      expect(diff.headerFootersDiff?.addedParts).toHaveLength(1);
+      expect(diff.headerFootersDiff?.slotChanges).toHaveLength(1);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('compares and replays a newly added footer', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultFooter(afterEditor, 'New footer');
 
       const diff = beforeEditor.commands.compareDocuments(afterEditor);
 

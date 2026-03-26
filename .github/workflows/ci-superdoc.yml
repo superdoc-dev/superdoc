@@ -7,7 +7,6 @@ on:
   pull_request:
     branches: [main, 'release/**']
     paths-ignore:
-      - '.github/workflows/**'
       - 'apps/docs/**'
       - 'apps/mcp/**'
       - 'apps/vscode-ext/**'

@@ -16,6 +16,7 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
+import SidebarCitations from './sidebar/SidebarCitations.vue';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
@@ -1248,6 +1249,11 @@ const sidebarOptions = [
     id: 'fields',
     label: 'Field Annotations',
     component: SidebarFieldAnnotations,
+  },
+  {
+    id: 'citations',
+    label: 'Citations Demo',
+    component: SidebarCitations,
   },
   {
     id: 'layout',

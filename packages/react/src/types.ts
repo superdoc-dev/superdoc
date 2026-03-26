@@ -136,6 +136,10 @@ interface ReactProps {
   /** Hide the toolbar container. When true, no toolbar is rendered. @default false */
   hideToolbar?: boolean;
 
+  /** Enable contained mode for fixed-height container embedding. When true, SuperDoc
+   *  fits within its parent's height and scrolls internally. @default false */
+  contained?: boolean;
+
   /** Additional CSS class name for the wrapper element */
   className?: string;
 

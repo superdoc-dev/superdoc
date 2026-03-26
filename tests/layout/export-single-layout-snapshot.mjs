@@ -192,7 +192,6 @@ async function runExporter({ inputRoot, outputRoot, pipeline, timeoutMs, moduleS
 
   await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, commandArgs, {
-      cwd: path.dirname(EXPORT_SCRIPT_PATH),
       stdio: 'inherit',
     });
 

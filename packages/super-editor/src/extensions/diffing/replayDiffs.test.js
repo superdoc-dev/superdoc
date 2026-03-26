@@ -504,17 +504,15 @@ describe('investigate replay issues', () => {
       const success = beforeEditor.commands.replayDifferences(diff, {
         user: { user: { name: 'Test User', email: 'test@example.com' }, applyTrackedChanges: true },
       });
-      console.log('Replay success:', success);
-
+      expect(success).toBe(true);
       expect(beforeEditor.state.doc.toJSON()).not.toEqual(originalDocJSON);
       expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
-      console.log(JSON.stringify(beforeEditor.state.doc.toJSON(), null, 2));
       const replayDiffsResult = computeDiff(
         beforeEditor.state.doc,
         afterEditor.state.doc,
         beforeEditor.schema,
       ).docDiffs;
-      // expect(replayDiffsResult.every(isAcceptableRemainingDiff)).toBe(true);
+      expect(replayDiffsResult.every(isAcceptableRemainingDiff)).toBe(true);
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();

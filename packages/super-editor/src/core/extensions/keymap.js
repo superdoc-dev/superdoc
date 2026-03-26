@@ -5,7 +5,7 @@ import { isMacOS } from '../utilities/isMacOS.js';
 
 const dispatchHistoryBoundary = (view) => {
   const tr = view?.state?.tr;
-  if (typeof tr?.setMeta !== 'function') return;
+  if (!tr) return;
   view.dispatch?.(closeHistory(tr));
 };
 

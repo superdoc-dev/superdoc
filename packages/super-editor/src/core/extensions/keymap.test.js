@@ -47,7 +47,7 @@ describe('Keymap extension', () => {
 
     const editor = {
       view: {
-        state: { tr: {} },
+        state: { tr: { setMeta: vi.fn(() => ({})) } },
         dispatch: vi.fn(),
       },
       commands: { first },

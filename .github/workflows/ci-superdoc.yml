@@ -118,7 +118,7 @@ jobs:
           VITEST_MIN_WORKERS: '1'
         run: |
           SHARD=${{ matrix.shard }}
-          SUB_COUNT=3
+          SUB_COUNT=6
           TOTAL=$((3 * SUB_COUNT))
           for i in $(seq 0 $((SUB_COUNT - 1))); do
             SUB=$(( (SHARD - 1) * SUB_COUNT + i + 1 ))

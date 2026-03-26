@@ -10,6 +10,7 @@ packages:
   - shared/*
   - examples/*
   - examples/*/*
+  - examples/*/*/*
   - demos/*
   - demos/*/*
   - evals

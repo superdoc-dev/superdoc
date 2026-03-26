@@ -114,9 +114,9 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
         run: |
-          for sub in $(seq 1 3); do
-            SUB=$(( (${{ matrix.shard }} - 1) * 3 + sub ))
-            pnpm exec vitest run --shard=$SUB/15 --exclude='**/decrypt-docx.integration*'
+          for sub in $(seq 1 6); do
+            SUB=$(( (${{ matrix.shard }} - 1) * 6 + sub ))
+            pnpm exec vitest run --shard=$SUB/30 --exclude='**/decrypt-docx.integration*'
           done
 
       - name: Run encryption integration tests

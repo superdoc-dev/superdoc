@@ -1,4 +1,5 @@
 import { resolveOpcTargetPath } from '../../../core/super-converter/helpers.js';
+import { toRelsPathForPart } from '../part-paths';
 import type { HeaderFooterKind, HeaderFooterState } from './header-footer-diffing';
 
 export interface PartSnapshot {
@@ -290,19 +291,6 @@ function readRelationships(relsPart: unknown): Array<{ attributes?: Record<strin
 function getPartBaseDir(partPath: string): string {
   const lastSlash = partPath.lastIndexOf('/');
   return lastSlash >= 0 ? partPath.slice(0, lastSlash) : '';
-}
-
-function toRelsPathForPart(partPath: string): string | null {
-  if (partPath === DOCUMENT_RELS_PATH || partPath.endsWith('.rels')) {
-    return null;
-  }
-  const lastSlash = partPath.lastIndexOf('/');
-  if (lastSlash < 0 || lastSlash === partPath.length - 1) {
-    return null;
-  }
-  const directory = partPath.slice(0, lastSlash);
-  const fileName = partPath.slice(lastSlash + 1);
-  return `${directory}/_rels/${fileName}.rels`;
 }
 
 function shouldCaptureBodyRelationship(type: string): boolean {

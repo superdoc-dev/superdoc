@@ -1,5 +1,6 @@
 import { EditorState, type Transaction } from 'prosemirror-state';
 import type { Schema } from 'prosemirror-model';
+import { toRelsPathForPart } from '../part-paths';
 import { replayDocDiffs } from './replay-doc';
 import { ReplayResult } from './replay-types';
 import {
@@ -462,7 +463,10 @@ function deleteHeaderFooterPart(
 
   removeRelationshipEntry(converter.convertedXml!, part.refId);
   delete converter.convertedXml![part.partPath];
-  delete converter.convertedXml![toRelsPathForPart(part.partPath)];
+  const relsPath = toRelsPathForPart(part.partPath);
+  if (relsPath) {
+    delete converter.convertedXml![relsPath];
+  }
 }
 
 function updateHeaderFooterPartPath(
@@ -501,7 +505,7 @@ function updateHeaderFooterPartPath(
 
   const oldRelsPath = toRelsPathForPart(part.oldPartPath);
   const nextRelsPath = toRelsPathForPart(part.partPath);
-  if (oldRelsPath !== nextRelsPath) {
+  if (oldRelsPath && nextRelsPath && oldRelsPath !== nextRelsPath) {
     const previousRels = converter.convertedXml![oldRelsPath];
     if (previousRels) {
       converter.convertedXml![nextRelsPath] = previousRels;
@@ -585,11 +589,6 @@ function ensureXmlPartExists(convertedXml: Record<string, unknown>, part: Header
       },
     ],
   };
-}
-
-function toRelsPathForPart(partPath: string): string {
-  const fileName = partPath.split('/').pop();
-  return `word/_rels/${fileName}.rels`;
 }
 
 /**

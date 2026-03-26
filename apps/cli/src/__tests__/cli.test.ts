@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { run } from '../index';
 import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
-import { writeListDocWithoutParaIds } from './unstable-list-fixture';
+import { writeListDocWithoutParaIds, writeTableOnlyDocFixture } from './unstable-list-fixture';
 
 type RunResult = {
   code: number;
@@ -1241,6 +1241,36 @@ describe('superdoc CLI', () => {
 
     const documentXml = await readDocxPart(outputDoc, 'word/document.xml');
     expect(documentXml).toContain('<w:br');
+  });
+
+  test('insert tab without a target creates a paragraph host at structural end', async () => {
+    const sourceDoc = join(TEST_DIR, 'insert-tab-table-only-source.docx');
+    const outputDoc = join(TEST_DIR, 'insert-tab-table-only-output.docx');
+    await rm(sourceDoc, { force: true });
+    await rm(outputDoc, { force: true });
+    await writeTableOnlyDocFixture(sourceDoc);
+
+    const tabResult = await runCli(['insert', 'tab', sourceDoc, '--out', outputDoc]);
+    expect(tabResult.code).toBe(0);
+
+    const documentXml = await readDocxPart(outputDoc, 'word/document.xml');
+    expect(documentXml).toContain('<w:tab');
+    expect(documentXml).toMatch(/<\/w:tbl><w:p[\s\S]*<w:tab/);
+  });
+
+  test('insert line-break without a target creates a paragraph host at structural end', async () => {
+    const sourceDoc = join(TEST_DIR, 'insert-line-break-table-only-source.docx');
+    const outputDoc = join(TEST_DIR, 'insert-line-break-table-only-output.docx');
+    await rm(sourceDoc, { force: true });
+    await rm(outputDoc, { force: true });
+    await writeTableOnlyDocFixture(sourceDoc);
+
+    const lineBreakResult = await runCli(['insert', 'line-break', sourceDoc, '--out', outputDoc]);
+    expect(lineBreakResult.code).toBe(0);
+
+    const documentXml = await readDocxPart(outputDoc, 'word/document.xml');
+    expect(documentXml).toContain('<w:br');
+    expect(documentXml).toMatch(/<\/w:tbl><w:p[\s\S]*<w:br/);
   });
 
   test('session-mode mutations keep JSON output machine-clean when optional export fails', async () => {

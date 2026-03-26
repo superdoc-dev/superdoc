@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { resolveListDocFixture } from './fixtures';
+import { resolveListDocFixture, resolveTableDocFixture } from './fixtures';
 
 /** Minimal type for the subset of the JSZip API used in this fixture. */
 interface JsZipInstance {
@@ -49,6 +49,31 @@ export async function writeListDocWithoutParaIds(outputPath: string): Promise<st
 
   if (updatedXml === documentXml) {
     throw new Error(`Fixture doc did not contain paragraph ids to strip: ${sourcePath}`);
+  }
+
+  zip.file('word/document.xml', updatedXml);
+  const outputBytes = await zip.generateAsync({ type: 'nodebuffer' });
+  await writeFile(outputPath, outputBytes);
+  return outputPath;
+}
+
+export async function writeTableOnlyDocFixture(outputPath: string): Promise<string> {
+  const sourcePath = await resolveTableDocFixture();
+  const JSZip = await loadJsZip();
+  const sourceBytes = await readFile(sourcePath);
+  const zip = await JSZip.loadAsync(sourceBytes);
+  const documentXmlFile = zip.file('word/document.xml');
+  if (!documentXmlFile) {
+    throw new Error(`Fixture doc is missing word/document.xml: ${sourcePath}`);
+  }
+
+  const documentXml = await documentXmlFile.async('string');
+  const updatedXml = documentXml
+    .replace(/<\/w:tbl><w:p\b[^>]*\/><w:tbl>/g, '</w:tbl><w:tbl>')
+    .replace(/<\/w:tbl><w:p\b[^>]*\/><w:sectPr>/g, '</w:tbl><w:sectPr>');
+
+  if (updatedXml === documentXml) {
+    throw new Error(`Fixture doc did not contain removable top-level paragraphs: ${sourcePath}`);
   }
 
   zip.file('word/document.xml', updatedXml);

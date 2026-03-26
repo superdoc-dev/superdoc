@@ -25,9 +25,25 @@ type DocumentPayload = {
   revision: number;
 };
 
-type ResolvedInsertionPoint = {
-  target: TextAddress;
-  range: { from: number; to: number };
+type ResolvedInsertionPoint =
+  | {
+      kind: 'text-block';
+      target: TextAddress;
+      range: { from: number; to: number };
+    }
+  | {
+      kind: 'structural-end';
+      target: TextAddress;
+      insertPos: number;
+    };
+
+type InlineSpecialChain = {
+  setMeta(key: string, value: unknown): InlineSpecialChain;
+  setTextSelection(position: { from: number; to: number }): InlineSpecialChain;
+  insertParagraphAt(options: { pos: number; tracked?: boolean }): InlineSpecialChain;
+  insertTabNode(): InlineSpecialChain;
+  insertLineBreak(): InlineSpecialChain;
+  run(): boolean;
 };
 
 const COMMAND_BY_KIND: Record<
@@ -56,11 +72,6 @@ function isCollapsedTextSelectionTarget(target: SelectionTarget): target is Sele
     target.start.blockId === target.end.blockId &&
     target.start.offset === target.end.offset
   );
-}
-
-function applyTextSelection(editor: EditorWithDoc, from: number, to: number): boolean {
-  const setTextSelection = editor.commands?.setTextSelection;
-  return typeof setTextSelection === 'function' && setTextSelection({ from, to }) === true;
 }
 
 function buildPrettyOutput(kind: InlineSpecialKind, revision: number, outputPath?: string): string {
@@ -139,14 +150,23 @@ async function resolveInsertionPoint(
   }
 
   const fallback = resolveDefaultInsertTarget(editor);
-  if (!fallback || fallback.kind === 'structural-end') {
+  if (!fallback) {
     throw new CliError(
       'TARGET_NOT_FOUND',
       `insert ${COMMAND_BY_KIND[kind].label}: no writable text block is available. Pass an explicit collapsed text target.`,
     );
   }
 
+  if (fallback.kind === 'structural-end') {
+    return {
+      kind: 'structural-end',
+      target: { kind: 'text', blockId: '', range: { start: 0, end: 0 } },
+      insertPos: fallback.insertPos,
+    };
+  }
+
   return {
+    kind: 'text-block',
     target: fallback.target,
     range: fallback.range,
   };
@@ -155,24 +175,15 @@ async function resolveInsertionPoint(
 function executeInlineSpecialInsert(
   editor: EditorWithDoc,
   kind: InlineSpecialKind,
-  range: { from: number; to: number },
+  insertionPoint: ResolvedInsertionPoint,
 ): void {
-  if (range.from !== range.to) {
-    throw new CliError(
-      'INVALID_TARGET',
-      `insert ${COMMAND_BY_KIND[kind].label}: target must be collapsed to a single insertion point.`,
-    );
-  }
-
-  if (!applyTextSelection(editor, range.from, range.to)) {
-    throw new CliError(
-      'INVALID_TARGET',
-      `insert ${COMMAND_BY_KIND[kind].label}: could not move the editor selection to the requested insertion point.`,
-    );
-  }
-
   const commandName = kind === 'tab' ? 'insertTabNode' : 'insertLineBreak';
-  const command = (editor.commands as Record<string, (() => boolean) | undefined> | undefined)?.[commandName];
+  const commands = editor.commands as
+    | (Record<string, ((...args: unknown[]) => boolean) | undefined> & {
+        insertParagraphAt?: (options: { pos: number; tracked?: boolean }) => boolean;
+      })
+    | undefined;
+  const command = commands?.[commandName];
   if (typeof command !== 'function') {
     throw new CliError(
       'CAPABILITY_UNAVAILABLE',
@@ -180,7 +191,34 @@ function executeInlineSpecialInsert(
     );
   }
 
-  if (command() !== true) {
+  let chain = editor.chain() as InlineSpecialChain;
+
+  if (insertionPoint.kind === 'structural-end') {
+    if (typeof commands?.insertParagraphAt !== 'function') {
+      throw new CliError(
+        'CAPABILITY_UNAVAILABLE',
+        `insert ${COMMAND_BY_KIND[kind].label}: insertParagraphAt is unavailable.`,
+      );
+    }
+
+    // No top-level text block exists. Create one at doc end, then insert into it.
+    chain = chain
+      .insertParagraphAt({ pos: insertionPoint.insertPos, tracked: false })
+      .setTextSelection({ from: insertionPoint.insertPos + 1, to: insertionPoint.insertPos + 1 });
+  } else {
+    const { from, to } = insertionPoint.range;
+    if (from !== to) {
+      throw new CliError(
+        'INVALID_TARGET',
+        `insert ${COMMAND_BY_KIND[kind].label}: target must be collapsed to a single insertion point.`,
+      );
+    }
+
+    chain = chain.setMeta('inputType', 'programmatic').setMeta('skipTrackChanges', true).setTextSelection({ from, to });
+  }
+
+  chain = kind === 'tab' ? chain.insertTabNode() : chain.insertLineBreak();
+  if (chain.run() !== true) {
     throw new CliError('COMMAND_FAILED', `insert ${COMMAND_BY_KIND[kind].label}: editor command returned false.`);
   }
 }
@@ -268,7 +306,7 @@ async function runInsertInlineSpecial(
     const opened = await openDocument(doc, context.io);
     try {
       const resolved = await resolveInsertionPoint(opened.editor, input, kind);
-      executeInlineSpecialInsert(opened.editor, kind, resolved.range);
+      executeInlineSpecialInsert(opened.editor, kind, resolved);
 
       const output = await exportToPath(opened.editor, outPath, force);
       const document: DocumentPayload = {
@@ -303,7 +341,7 @@ async function runInsertInlineSpecial(
 
       try {
         const resolved = await resolveInsertionPoint(opened.editor, input, kind);
-        executeInlineSpecialInsert(opened.editor, kind, resolved.range);
+        executeInlineSpecialInsert(opened.editor, kind, resolved);
 
         let updatedMetadata: typeof metadata;
         let byteLength: number;

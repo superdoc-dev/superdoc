@@ -41,46 +41,27 @@ describe('DocxExporter', () => {
     expect(xml).toContain('Format=&lt;&lt;NUM&gt;&gt;_&lt;&lt;VER&gt;&gt;');
   });
 
-  describe('null declaration handling', () => {
-    it('uses default XML declaration when converter.declaration is null', () => {
-      const exporter = new DocxExporter({ declaration: null });
+  it.each([
+    { label: 'null', stub: { declaration: null } },
+    { label: 'undefined', stub: {} },
+  ])('uses default XML declaration when converter.declaration is $label', ({ stub }) => {
+    const exporter = new DocxExporter(stub);
 
-      const data = {
-        name: 'w:document',
-        attributes: {},
-        elements: [
-          {
-            name: 'w:t',
-            elements: [{ type: 'text', text: 'Hello' }],
-          },
-        ],
-      };
+    const data = {
+      name: 'w:document',
+      attributes: {},
+      elements: [
+        {
+          name: 'w:t',
+          elements: [{ type: 'text', text: 'Hello' }],
+        },
+      ],
+    };
 
-      const xml = exporter.schemaToXml(data);
+    const xml = exporter.schemaToXml(data);
 
-      expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-      expect(xml).toContain('<w:t>Hello</w:t>');
-    });
-
-    it('uses default XML declaration when converter.declaration is undefined', () => {
-      const exporter = new DocxExporter({});
-
-      const data = {
-        name: 'w:document',
-        attributes: {},
-        elements: [
-          {
-            name: 'w:t',
-            elements: [{ type: 'text', text: 'Hello' }],
-          },
-        ],
-      };
-
-      const xml = exporter.schemaToXml(data);
-
-      expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-      expect(xml).toContain('<w:t>Hello</w:t>');
-    });
+    expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    expect(xml).toContain('<w:t>Hello</w:t>');
   });
 
   it('encodes all ampersands in text nodes including entity-like sequences', () => {

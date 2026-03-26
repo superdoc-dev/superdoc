@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { resolveOpcTargetPath } from './helpers.js';
+import { DEFAULT_XML_DECLARATION } from './constants.js';
 
 export const BIBLIOGRAPHY_NAMESPACE_URI = 'http://schemas.openxmlformats.org/officeDocument/2006/bibliography';
 export const CUSTOM_XML_RELATIONSHIP_TYPE =
@@ -11,14 +12,6 @@ export const CUSTOM_XML_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-off
 const DEFAULT_SELECTED_STYLE = '/APA.XSL';
 const DEFAULT_STYLE_NAME = 'APA';
 const DEFAULT_VERSION = '6';
-
-const DEFAULT_XML_DECLARATION = Object.freeze({
-  attributes: Object.freeze({
-    version: '1.0',
-    encoding: 'UTF-8',
-    standalone: 'yes',
-  }),
-});
 
 const API_TO_OOXML_SOURCE_TYPE = Object.freeze({
   book: 'Book',

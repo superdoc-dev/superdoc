@@ -11,6 +11,15 @@ export const COMMENT_FILE_BASENAMES = [
   'commentsExtensible.xml',
 ];
 
+/** Standard XML declaration used for all OOXML parts */
+export const DEFAULT_XML_DECLARATION = Object.freeze({
+  attributes: Object.freeze({
+    version: '1.0',
+    encoding: 'UTF-8',
+    standalone: 'yes',
+  }),
+});
+
 // Comment-related relationship types (used for pruning stale rels on export)
 export const COMMENT_RELATIONSHIP_TYPES = new Set([
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',

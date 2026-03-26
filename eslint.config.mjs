@@ -51,6 +51,22 @@ export default [
     ],
   },
   {
+    settings: {
+      'import-x/resolver': {
+        // Prefer repo source entrypoints during lint so workspace packages do
+        // not depend on generated dist artifacts before the build step runs.
+        node: {
+          conditionNames: ['source', 'import', 'require', 'node', 'default'],
+          mainFields: ['source', 'module', 'main'],
+        },
+        typescript: {
+          conditionNames: ['source', 'types', 'import', 'require', 'node', 'default'],
+          mainFields: ['source', 'module', 'main'],
+        },
+      },
+    },
+  },
+  {
     languageOptions: {
       // Globals for mixed browser/Node.js codebase
       globals: {

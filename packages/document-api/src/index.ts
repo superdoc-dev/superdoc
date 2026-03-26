@@ -661,6 +661,39 @@ import type {
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
 
+import type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
+import {
+  executeProtectionGet,
+  executeSetEditingRestriction,
+  executeClearEditingRestriction,
+} from './protection/protection.js';
+import type {
+  DocumentProtectionState,
+  SetEditingRestrictionInput,
+  ClearEditingRestrictionInput,
+  ProtectionMutationResult,
+  ProtectionGetInput,
+} from './protection/protection.types.js';
+import type { PermissionRangesApi, PermissionRangesAdapter } from './permission-ranges/permission-ranges.js';
+import {
+  executePermissionRangesList,
+  executePermissionRangesGet,
+  executePermissionRangesCreate,
+  executePermissionRangesRemove,
+  executePermissionRangesUpdatePrincipal,
+} from './permission-ranges/permission-ranges.js';
+import type {
+  PermissionRangesListInput,
+  PermissionRangesListResult,
+  PermissionRangesGetInput,
+  PermissionRangeInfo,
+  PermissionRangesCreateInput,
+  PermissionRangesRemoveInput,
+  PermissionRangesUpdatePrincipalInput,
+  PermissionRangeMutationResult,
+  PermissionRangeRemoveResult,
+} from './permission-ranges/permission-ranges.types.js';
+
 import type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 import {
   executeFootnotesList,
@@ -981,6 +1014,12 @@ export type {
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+
+export type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
+export * from './protection/protection.types.js';
+
+export type { PermissionRangesApi, PermissionRangesAdapter } from './permission-ranges/permission-ranges.js';
+export type * from './permission-ranges/permission-ranges.types.js';
 
 export type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 export type { CrossRefsApi, CrossRefsAdapter } from './cross-refs/cross-refs.js';
@@ -1619,6 +1658,14 @@ export interface DocumentApi {
    */
   history: HistoryApi;
   /**
+   * Document-level protection state and editing restriction operations.
+   */
+  protection: ProtectionApi;
+  /**
+   * Permission range exception operations for protected documents.
+   */
+  permissionRanges: PermissionRangesApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -1680,6 +1727,8 @@ export interface DocumentApiAdapters {
   mutations: MutationsAdapter;
   diff: DiffAdapter;
   history: HistoryAdapter;
+  protection: ProtectionAdapter;
+  permissionRanges: PermissionRangesAdapter;
 }
 
 /**
@@ -3088,6 +3137,40 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       redo(): HistoryActionResult {
         return executeHistoryRedo(adapters.history);
+      },
+    },
+    protection: {
+      get(input?: ProtectionGetInput): DocumentProtectionState {
+        return executeProtectionGet(adapters.protection, input);
+      },
+      setEditingRestriction(input: SetEditingRestrictionInput, options?: MutationOptions): ProtectionMutationResult {
+        return executeSetEditingRestriction(adapters.protection, input, options);
+      },
+      clearEditingRestriction(
+        input?: ClearEditingRestrictionInput,
+        options?: MutationOptions,
+      ): ProtectionMutationResult {
+        return executeClearEditingRestriction(adapters.protection, input, options);
+      },
+    },
+    permissionRanges: {
+      list(input?: PermissionRangesListInput): PermissionRangesListResult {
+        return executePermissionRangesList(adapters.permissionRanges, input);
+      },
+      get(input: PermissionRangesGetInput): PermissionRangeInfo {
+        return executePermissionRangesGet(adapters.permissionRanges, input);
+      },
+      create(input: PermissionRangesCreateInput, options?: MutationOptions): PermissionRangeMutationResult {
+        return executePermissionRangesCreate(adapters.permissionRanges, input, options);
+      },
+      remove(input: PermissionRangesRemoveInput, options?: MutationOptions): PermissionRangeRemoveResult {
+        return executePermissionRangesRemove(adapters.permissionRanges, input, options);
+      },
+      updatePrincipal(
+        input: PermissionRangesUpdatePrincipalInput,
+        options?: MutationOptions,
+      ): PermissionRangeMutationResult {
+        return executePermissionRangesUpdatePrincipal(adapters.permissionRanges, input, options);
       },
     },
     invoke(request: DynamicInvokeRequest): unknown {

@@ -24,6 +24,17 @@ pnpm test:layout -- --match tables --limit 5
 
 The sections below document the underlying scripts that `pnpm test:layout` wraps. Use these for advanced workflows.
 
+### Single-Document Snapshot Export
+
+Export one layout snapshot directly to an exact JSON path:
+
+```bash
+pnpm layout:export-one -- --input ./test-corpus/tables/sample.docx --output /tmp/sample.layout.json
+pnpm layout:export-one -- ./test-corpus/tables/sample.docx --output /tmp/sample.layout.json
+```
+
+This is useful for downstream tooling that wants a single stable artifact path instead of the bulk `candidate/` folder layout.
+
 ### Layout Snapshot Exporter
 
 Exports layout JSON for every `.docx` under:

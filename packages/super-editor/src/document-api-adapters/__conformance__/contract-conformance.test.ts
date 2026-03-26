@@ -1615,6 +1615,11 @@ const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
   'history.undo',
   'history.redo',
   'diff.apply',
+  'protection.setEditingRestriction',
+  'protection.clearEditingRestriction',
+  'permissionRanges.create',
+  'permissionRanges.remove',
+  'permissionRanges.updatePrincipal',
 ] as OperationId[]);
 
 /**
@@ -11020,7 +11025,8 @@ describe('document-api adapter conformance', () => {
     (operationId) =>
       COMMAND_CATALOG[operationId].supportsDryRun &&
       !STUB_TABLE_OPS.has(operationId) &&
-      !PLAN_ENGINE_META_OPS.has(operationId),
+      !PLAN_ENGINE_META_OPS.has(operationId) &&
+      !NON_RECEIPT_MUTATION_OPS.has(operationId),
   );
 
   it('dryRun vectors cover every dryRun-capable operation', () => {

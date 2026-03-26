@@ -21,24 +21,69 @@ npx @superdoc-dev/cli open my-doc.docx
 
 ## Workflow
 
-The CLI uses persistent sessions. Open a document, run operations, then save and close:
+The CLI uses persistent sessions. Open a document, run operations, then save and close.
+
+### Edit an existing document
 
 ```bash
-# Open a document
 superdoc open contract.docx
 
-# Search for text
-superdoc find --pattern "ACME Corp"
-
-# Replace it
+superdoc query match --select-json '{"type":"text","pattern":"ACME Corp"}' --require exactlyOne
 superdoc replace --target-json '{"kind":"selection","start":{"kind":"text","blockId":"...","offset":0},"end":{"kind":"text","blockId":"...","offset":9}}' --text "NewCo Inc."
 
-# Save and close
 superdoc save
 superdoc close
 ```
 
+Use `query match` for edits against existing content because it returns mutation-ready targets with explicit cardinality.
+
+### Generate a synthetic document body
+
+Use `open --content-override` when you want to seed a document body from Markdown, HTML, or plain text:
+
+```bash
+superdoc open --content-override "# Probe Title\n\nALPHA01" --override-type markdown
+superdoc save --out probe.docx
+superdoc close
+```
+
+```bash
+superdoc open template.docx \
+  --content-override '<p>ALPHA01 <strong>BRAVO02</strong><br/>CHARLIE03</p>' \
+  --override-type html
+superdoc save --out probe.docx
+superdoc close
+```
+
+For generation, start with `content-override` or `insert`. Do not begin with `query match` unless you are modifying pre-existing content.
+
+### Seed text, then reuse the insert receipt target
+
+For deterministic probe docs, insert the text first and format the returned range directly:
+
+```bash
+superdoc open
+superdoc insert --value "ALPHA01 BRAVO02 CHARLIE03"
+superdoc format apply --block-id <from-insert-receipt> --start 8 --end 15 --inline-json '{"fontSize":16,"fontFamily":"Times New Roman"}'
+superdoc format apply --block-id <from-insert-receipt> --start 16 --end 25 --inline-json '{"fontSize":10,"fontFamily":"Arial"}'
+superdoc save --out probe.docx
+superdoc close
+```
+
+The insert receipt exposes the resolved insertion point under `receipt.resolution.target`.
+
 For `replace`, `delete`, and `format.*`, prefer canonical `SelectionTarget` JSON or a mutation-ready `ref`. The CLI still accepts legacy single-block text ranges such as `{"kind":"text","blockId":"...","range":{"start":0,"end":9}}` and upgrades them automatically for compatibility, but new scripts should use the canonical selection form.
+
+## Inline tabs and line breaks
+
+`insert tab` and `insert line-break` create real inline Word nodes in the current paragraph:
+
+```bash
+superdoc insert tab --block-id p1 --offset 12
+superdoc insert line-break --block-id p1 --offset 12
+```
+
+This is different from paragraph tab stops. Tab stops define layout positions on the paragraph. Tab nodes and line-break nodes are inline document content that export as `w:tab` and `w:br`.
 
 ## Tracked mode for mutations
 
@@ -80,7 +125,7 @@ superdoc open contract.docx --user-name "Review Bot" --user-email "bot@example.c
 
 | Command | Description |
 | --- | --- |
-| `superdoc open <doc>` | Open a document and create an editing session. Supports `--user-name` and `--user-email` to set the editing identity. In collaboration mode, also supports `--on-missing` and `--bootstrap-settling-ms`. |
+| `superdoc open <doc>` | Open a document and create an editing session. Supports `--content-override` + `--override-type` for body seeding, plus `--user-name` and `--user-email` for editing identity. In collaboration mode, also supports `--on-missing` and `--bootstrap-settling-ms`. |
 | `superdoc save` | Save the current session to disk |
 | `superdoc close` | Close the active session and clean up resources |
 
@@ -95,6 +140,8 @@ The CLI exposes all [Document API operations](/document-api/overview) as command
 | `superdoc get-node` | `getNode` | Get a node by address |
 | `superdoc get-node-by-id` | `getNodeById` | Get a node by ID |
 | `superdoc insert` | `insert` | Insert text at a position |
+| `superdoc insert tab` | CLI-only | Insert a real inline Word tab node at a collapsed text target |
+| `superdoc insert line-break` | CLI-only | Insert a real inline Word line-break node at a collapsed text target |
 | `superdoc replace` | `replace` | Replace content at a selection |
 | `superdoc delete` | `delete` | Delete content at a selection |
 | `superdoc format bold` | `format.bold` | Toggle bold on a selection |
@@ -134,6 +181,8 @@ All commands accept `--input-json` or `--input-file` for structured input and re
 ```bash
 superdoc call doc.find --input-json '{"doc":"./contract.docx","query":{"select":{"type":"text","pattern":"test"}}}'
 ```
+
+In `--output json` mode, command results are returned as a JSON envelope. Use `--quiet` to suppress non-essential warnings in pretty mode.
 
 ## Related
 

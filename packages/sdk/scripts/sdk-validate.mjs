@@ -121,9 +121,9 @@ async function main() {
     ]);
   });
 
-  // 2. Regenerate SDK artifacts from current contract
-  await check('SDK/codegen artifacts are current', async () => {
-    await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
+  // 2. Regenerate SDK artifacts from source-backed contract export
+  await check('SDK/codegen artifacts regenerate cleanly from source', async () => {
+    await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/sdk-generate.mjs')]);
   });
 
   // 3. Load contract and verify structure

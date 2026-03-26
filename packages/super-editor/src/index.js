@@ -43,6 +43,8 @@ import { registeredHandlers } from './core/super-converter/v3/handlers/index.js'
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { seedEditorStateToYDoc } from './extensions/collaboration/seed-editor-to-ydoc.js';
 import { onCollaborationProviderSynced } from './core/helpers/collaboration-provider-sync.js';
+import { resolveSelectionTarget } from './document-api-adapters/helpers/selection-target-resolver.js';
+import { resolveDefaultInsertTarget } from './document-api-adapters/helpers/adapter-utils.js';
 
 const Extensions = {
   Node,
@@ -129,4 +131,10 @@ export {
   seedEditorStateToYDoc,
   /** @internal */
   onCollaborationProviderSynced,
+
+  // CLI/document-api bridge helpers
+  /** @internal */
+  resolveSelectionTarget,
+  /** @internal */
+  resolveDefaultInsertTarget,
 };

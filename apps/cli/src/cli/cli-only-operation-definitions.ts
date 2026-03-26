@@ -1,7 +1,7 @@
 /**
  * Canonical CLI-only operation definitions — single source of truth.
  *
- * This module consolidates metadata for the 10 CLI-only operations that
+ * This module consolidates metadata for the CLI-only operations that
  * are not backed by document-api. All downstream consumers project the
  * views they need from this canonical object:
  *
@@ -147,6 +147,44 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         },
       },
       required: ['contextId', 'closed'],
+    },
+  },
+  insertTab: {
+    category: 'core',
+    description:
+      'Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts.',
+    requiresDocumentContext: false,
+    tokenOverride: ['insert', 'tab'],
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        document: { type: 'object' },
+        receipt: { type: 'object' },
+        inserted: { type: 'object' },
+        context: { type: 'object' },
+        output: { type: 'object' },
+      },
+      required: ['receipt', 'inserted'],
+    },
+  },
+  insertLineBreak: {
+    category: 'core',
+    description:
+      'Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts.',
+    requiresDocumentContext: false,
+    tokenOverride: ['insert', 'line-break'],
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        document: { type: 'object' },
+        receipt: { type: 'object' },
+        inserted: { type: 'object' },
+        context: { type: 'object' },
+        output: { type: 'object' },
+      },
+      required: ['receipt', 'inserted'],
     },
   },
   status: {

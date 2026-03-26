@@ -6,11 +6,13 @@ import { CLI_OPERATION_METADATA, type CliOperationId } from '../../cli';
 
 describe('manual command allowlist', () => {
   test('contains only lifecycle/session commands plus call', () => {
-    expect(MANUAL_COMMAND_ALLOWLIST).toEqual([
+    expect([...MANUAL_COMMAND_ALLOWLIST]).toEqual([
       'call',
       'open',
       'save',
       'close',
+      'insert tab',
+      'insert line-break',
       'session list',
       'session save',
       'session close',
@@ -20,10 +22,12 @@ describe('manual command allowlist', () => {
   });
 
   test('operation allowlist contains only lifecycle/session operations', () => {
-    expect(MANUAL_OPERATION_ALLOWLIST).toEqual([
+    expect([...MANUAL_OPERATION_ALLOWLIST]).toEqual([
       'doc.open',
       'doc.save',
       'doc.close',
+      'doc.insertTab',
+      'doc.insertLineBreak',
       'doc.session.list',
       'doc.session.save',
       'doc.session.close',
@@ -40,6 +44,7 @@ describe('manual command allowlist', () => {
     expect(actual).toEqual([
       'call.ts',
       'close.ts',
+      'insert-inline-special.ts',
       'install.ts',
       'legacy-compat.ts',
       'open.ts',

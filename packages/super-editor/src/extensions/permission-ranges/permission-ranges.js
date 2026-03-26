@@ -2,6 +2,17 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { Mapping } from 'prosemirror-transform';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
+import {
+  isReadOnlyProtectionRuntimeEnforced,
+  applyEffectiveEditability,
+  buildAllowedIdentifierSetFromEditor,
+} from '../protection/editability.js';
+
+/**
+ * Meta key set by permissionRanges.create / remove / updatePrincipal adapters
+ * to signal intentional mutations that should bypass the repair appendTransaction.
+ */
+export const PERMISSION_MUTATION_META = 'permissionRangeMutation';
 
 const PERMISSION_PLUGIN_KEY = new PluginKey('permissionRanges');
 const EVERYONE_GROUP = 'everyone';
@@ -9,29 +20,12 @@ const EMPTY_IDENTIFIER_SET = Object.freeze(new Set());
 
 const normalizeIdentifier = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 
-const buildAllowedIdentifierSet = (editor) => {
-  const email = normalizeIdentifier(editor?.options?.user?.email);
-  if (!email) {
-    return EMPTY_IDENTIFIER_SET;
-  }
-  const [localPart, domain] = email.split('@');
-  if (!localPart || !domain) {
-    return EMPTY_IDENTIFIER_SET;
-  }
-  const formatted = `${domain}\\${localPart}`;
-  return formatted ? new Set([formatted]) : EMPTY_IDENTIFIER_SET;
-};
-
 const isEveryoneGroup = (value) => normalizeIdentifier(value) === EVERYONE_GROUP;
 
 const isRangeAllowedForUser = (attrs, allowedIdentifiers) => {
   if (!attrs) return false;
-  if (isEveryoneGroup(attrs.edGrp)) {
-    return true;
-  }
-  if (!allowedIdentifiers?.size) {
-    return false;
-  }
+  if (isEveryoneGroup(attrs.edGrp)) return true;
+  if (!allowedIdentifiers?.size) return false;
   const normalizedEd = normalizeIdentifier(attrs.ed);
   return normalizedEd && allowedIdentifiers.has(normalizedEd);
 };
@@ -58,33 +52,52 @@ const getPermissionTypeInfo = (schema) => {
   };
 };
 
-/**
- * Generates the identifier used to match permStart/permEnd pairs.
- * @param {import('prosemirror-model').Node} node
- * @param {number} pos
- * @param {string} fallbackPrefix
- * @returns {string}
- */
 const getPermissionNodeId = (node, pos, fallbackPrefix) => String(node.attrs?.id ?? `${fallbackPrefix}-${pos}`);
+
 /**
- * Parse permStart/permEnd pairs and return ranges.
- * @param {import('prosemirror-model').Node} doc
- * @param {{ startTypeSet: Set<import('prosemirror-model').NodeType>, endTypeSet: Set<import('prosemirror-model').NodeType> }} permTypes
- * @returns {{ ranges: Array<{ id: string, from: number, to: number }>, hasAllowedRanges: boolean }}
+ * Derive the principal model from a permStart node's attrs.
+ * @param {Record<string, unknown>} attrs
+ * @returns {{ kind: string, id?: string }}
  */
-const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET, permTypes) => {
-  const ranges = [];
-  /** @type {Map<string, { from: number, attrs: any }>} */
+const derivePrincipal = (attrs) => {
+  if (isEveryoneGroup(attrs?.edGrp)) return { kind: 'everyone' };
+  if (attrs?.ed) return { kind: 'editor', id: String(attrs.ed) };
+  return { kind: 'everyone' };
+};
+
+/**
+ * Parse permStart/permEnd pairs and return both allRanges (unfiltered) and
+ * allowedRanges (filtered by current user AND protection enforcement).
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {Set<string>} allowedIdentifiers
+ * @param {ReturnType<typeof getPermissionTypeInfo>} permTypes
+ * @param {boolean} protectionEnforced - whether readOnly protection is runtime-enforced
+ * @returns {{ allRanges: Array, allowedRanges: Array, hasAllowedRanges: boolean }}
+ */
+const buildPermissionState = (
+  doc,
+  allowedIdentifiers = EMPTY_IDENTIFIER_SET,
+  permTypes,
+  protectionEnforced = false,
+) => {
+  const allRanges = [];
+  const allowedRanges = [];
+  /** @type {Map<string, { from: number, startPos: number, attrs: Record<string, unknown>, isBlock: boolean }>} */
   const openRanges = new Map();
   const startTypeSet = permTypes?.startTypeSet ?? new Set();
   const endTypeSet = permTypes?.endTypeSet ?? new Set();
+  const blockStartType = doc.type.schema?.nodes?.['permStartBlock'];
+  const blockEndType = doc.type.schema?.nodes?.['permEndBlock'];
 
   doc.descendants((node, pos) => {
     if (startTypeSet.has(node.type)) {
       const id = getPermissionNodeId(node, pos, 'permStart');
       openRanges.set(id, {
         from: pos + node.nodeSize,
+        startPos: pos,
         attrs: node.attrs ?? {},
+        isBlock: node.type === blockStartType,
       });
       return false;
     }
@@ -92,17 +105,30 @@ const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET, pe
     if (endTypeSet.has(node.type)) {
       const id = getPermissionNodeId(node, pos, 'permEnd');
       const start = openRanges.get(id);
-      if (start && isRangeAllowedForUser(start.attrs, allowedIdentifiers)) {
+      if (start) {
         const to = Math.max(pos, start.from);
         if (to > start.from) {
-          ranges.push({
+          const isBlock = start.isBlock || node.type === blockEndType;
+          const entry = {
             id,
             from: start.from,
             to,
-          });
+            startPos: start.startPos,
+            endPos: pos,
+            principal: derivePrincipal(start.attrs),
+            kind: isBlock ? 'block' : 'inline',
+            // Preserve raw attrs for legacy compatibility
+            edGrp: start.attrs.edGrp,
+            ed: start.attrs.ed,
+          };
+
+          allRanges.push(entry);
+
+          // Only add to allowedRanges if protection is enforced AND user matches
+          if (protectionEnforced && isRangeAllowedForUser(start.attrs, allowedIdentifiers)) {
+            allowedRanges.push(entry);
+          }
         }
-      }
-      if (start) {
         openRanges.delete(id);
       }
       return false;
@@ -110,32 +136,26 @@ const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET, pe
   });
 
   return {
-    ranges,
-    hasAllowedRanges: ranges.length > 0,
+    allRanges,
+    allowedRanges,
+    hasAllowedRanges: allowedRanges.length > 0,
+    // Legacy compat: `ranges` points to allowedRanges
+    ranges: allowedRanges,
   };
 };
 
 /**
  * Collects permStart/permEnd tags keyed by id.
- * @param {import('prosemirror-model').Node} doc
- * @param {import('prosemirror-model').NodeType[]} permStartTypes
- * @param {import('prosemirror-model').NodeType[]} permEndTypes
- * @returns {Map<string, { start?: { pos: number, attrs: any, nodeType: import('prosemirror-model').NodeType }, end?: { pos: number, attrs: any, nodeType: import('prosemirror-model').NodeType } }>}
  */
 const collectPermissionTags = (doc, permStartTypes, permEndTypes) => {
-  /** @type {Map<string, { start?: { pos: number, attrs: any, nodeType: import('prosemirror-model').NodeType }, end?: { pos: number, attrs: any, nodeType: import('prosemirror-model').NodeType } }>} */
   const tags = new Map();
   const permStartTypeSet = new Set(permStartTypes);
   const permEndTypeSet = new Set(permEndTypes);
 
   doc.descendants((node, pos) => {
-    if (!permStartTypeSet.has(node.type) && !permEndTypeSet.has(node.type)) {
-      return;
-    }
+    if (!permStartTypeSet.has(node.type) && !permEndTypeSet.has(node.type)) return;
     const id = node.attrs?.id;
-    if (!id) {
-      return;
-    }
+    if (!id) return;
 
     const entry = tags.get(id) ?? {};
     if (permStartTypeSet.has(node.type)) {
@@ -150,49 +170,30 @@ const collectPermissionTags = (doc, permStartTypes, permEndTypes) => {
 };
 
 const clampPosition = (pos, size) => {
-  if (Number.isNaN(pos) || !Number.isFinite(pos)) {
-    return 0;
-  }
+  if (Number.isNaN(pos) || !Number.isFinite(pos)) return 0;
   return Math.max(0, Math.min(pos, size));
 };
 
-/**
- * Removes leading/trailing perm tags from a changed range so edits that touch
- * permStart/permEnd boundaries can still be evaluated against allowed content.
- * @param {import('prosemirror-model').Node} doc
- * @param {{ from: number, to: number }} range
- * @param {Set<import('prosemirror-model').NodeType>} permTagTypes
- * @returns {{ from: number, to: number }}
- */
 const trimPermissionTagsFromRange = (doc, range, permTagTypes) => {
   let from = range.from;
   let to = range.to;
 
   while (from < to) {
     const node = doc.nodeAt(from);
-    if (!node || !permTagTypes.has(node.type)) {
-      break;
-    }
+    if (!node || !permTagTypes.has(node.type)) break;
     from += node.nodeSize;
   }
 
   while (to > from) {
     const $pos = doc.resolve(to);
     const nodeBefore = $pos.nodeBefore;
-    if (!nodeBefore || !permTagTypes.has(nodeBefore.type)) {
-      break;
-    }
+    if (!nodeBefore || !permTagTypes.has(nodeBefore.type)) break;
     to -= nodeBefore.nodeSize;
   }
 
   return { from, to };
 };
 
-/**
- * Collects the ranges affected by a transaction, based on the document BEFORE the change.
- * @param {import('prosemirror-state').Transaction} tr
- * @returns {Array<{ from: number, to: number }>}
- */
 const collectChangedRanges = (tr) => {
   const ranges = [];
   tr.mapping.maps.forEach((map) => {
@@ -205,11 +206,6 @@ const collectChangedRanges = (tr) => {
   return ranges;
 };
 
-/**
- * Checks if affected range is entirely within an allowed permission range.
- * @param {{ from: number, to: number }} range
- * @param {Array<{ from: number, to: number }>} allowedRanges
- */
 const isRangeAllowed = (range, allowedRanges) => {
   if (!allowedRanges?.length) return false;
   return allowedRanges.some((allowed) => range.from >= allowed.from && range.to <= allowed.to);
@@ -217,56 +213,32 @@ const isRangeAllowed = (range, allowedRanges) => {
 
 /**
  * @module PermissionRanges
- * A helper extension that ensures content wrapped with w:permStart/w:permEnd and `edGrp="everyone"`
- * stays editable even when the document is in viewing mode.
+ * Extension that manages permission range editability.
+ *
+ * When read-only protection is runtime-enforced, content within allowed
+ * permission ranges (matching the current user) becomes editable.
+ * When protection is not enforced, permission ranges are preserved but inactive.
  */
 export const PermissionRanges = Extension.create({
   name: 'permissionRanges',
 
   addStorage() {
     return {
-      ranges: [],
+      /** @type {Array} All permission ranges in the document (unfiltered). Used by document-api adapters. */
+      allRanges: [],
+      /** @type {Array} Ranges allowed for the current user when protection is enforced. Used by edit enforcement. */
+      allowedRanges: [],
+      /** Whether allowedRanges is non-empty. */
       hasAllowedRanges: false,
+      /** @deprecated Legacy alias for allowedRanges. */
+      ranges: [],
     };
   },
 
   addPmPlugins() {
     const editor = this.editor;
     const storage = this.storage;
-    let originalSetDocumentMode = null;
-    const getAllowedIdentifiers = () => buildAllowedIdentifierSet(editor);
-
-    const toggleEditableIfAllowed = (hasAllowedRanges) => {
-      if (!editor || editor.isDestroyed) return;
-      if (editor.options.documentMode !== 'viewing') return;
-      if (hasAllowedRanges && !editor.isEditable) {
-        editor.setEditable(true, false);
-      } else if (!hasAllowedRanges && editor.isEditable) {
-        editor.setEditable(false, false);
-      }
-    };
-    const updateEditableState = (hasAllowedRanges) => {
-      const nextValue = Boolean(hasAllowedRanges);
-      const previousValue = storage.hasAllowedRanges;
-      storage.hasAllowedRanges = nextValue;
-      if (previousValue === nextValue) {
-        return;
-      }
-      toggleEditableIfAllowed(nextValue);
-    };
-
-    if (editor && typeof editor.setDocumentMode === 'function') {
-      originalSetDocumentMode = editor.setDocumentMode.bind(editor);
-      editor.setDocumentMode = (mode, caller) => {
-        originalSetDocumentMode(mode, caller);
-        const state = editor.state;
-        if (!state) return;
-        const pluginState = PERMISSION_PLUGIN_KEY.getState(state);
-        if (pluginState) {
-          toggleEditableIfAllowed(pluginState.hasAllowedRanges);
-        }
-      };
-    }
+    const getAllowedIdentifiers = () => buildAllowedIdentifierSetFromEditor(editor);
 
     return [
       new Plugin({
@@ -274,50 +246,63 @@ export const PermissionRanges = Extension.create({
         state: {
           init(_, state) {
             const permissionTypeInfo = getPermissionTypeInfo(state.schema);
-            const permissionState = buildPermissionState(state.doc, getAllowedIdentifiers(), permissionTypeInfo);
+            const protectionEnforced = isReadOnlyProtectionRuntimeEnforced(editor);
+            const permissionState = buildPermissionState(
+              state.doc,
+              getAllowedIdentifiers(),
+              permissionTypeInfo,
+              protectionEnforced,
+            );
+
+            storage.allRanges = permissionState.allRanges;
+            storage.allowedRanges = permissionState.allowedRanges;
+            storage.hasAllowedRanges = permissionState.hasAllowedRanges;
             storage.ranges = permissionState.ranges;
-            updateEditableState(permissionState.hasAllowedRanges);
+
+            // Apply editability through the single-owner helper
+            applyEffectiveEditability(editor, { refilterRanges: false });
+
             return permissionState;
           },
 
           apply(tr, value, _oldState, newState) {
-            let permissionState = value;
-            if (tr.docChanged) {
-              const permissionTypeInfo = getPermissionTypeInfo(newState.schema);
-              permissionState = buildPermissionState(newState.doc, getAllowedIdentifiers(), permissionTypeInfo);
-              storage.ranges = permissionState.ranges;
-              updateEditableState(permissionState.hasAllowedRanges);
-            }
+            if (!tr.docChanged) return value;
+
+            const permissionTypeInfo = getPermissionTypeInfo(newState.schema);
+            const protectionEnforced = isReadOnlyProtectionRuntimeEnforced(editor);
+            const permissionState = buildPermissionState(
+              newState.doc,
+              getAllowedIdentifiers(),
+              permissionTypeInfo,
+              protectionEnforced,
+            );
+
+            storage.allRanges = permissionState.allRanges;
+            storage.allowedRanges = permissionState.allowedRanges;
+            storage.hasAllowedRanges = permissionState.hasAllowedRanges;
+            storage.ranges = permissionState.ranges;
+
+            // Apply editability (skip refilter since we just computed ranges)
+            applyEffectiveEditability(editor, { refilterRanges: false });
+
             return permissionState;
           },
         },
 
-        view() {
-          return {
-            destroy() {
-              if (editor && originalSetDocumentMode) {
-                editor.setDocumentMode = originalSetDocumentMode;
-              }
-            },
-          };
-        },
-
-        // Appends transactions to the document to ensure permission ranges are updated.
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((tr) => tr.docChanged)) return null;
-          // Any y-prosemirror transaction (remote sync, snapshot enter/exit)
-          // carries authoritative state — do not attempt to repair permission
-          // tags against oldState or we will reinsert stale markers and
-          // corrupt the shared document.
+
+          // Skip repair for intentional permission-range mutations
+          if (transactions.some((tr) => tr.getMeta?.(PERMISSION_MUTATION_META))) return null;
+
+          // Skip repair for y-prosemirror collaborative syncs
           if (transactions.some((tr) => tr.getMeta?.(ySyncPluginKey))) return null;
 
           const permTypes = getPermissionTypeInfo(newState.schema);
           if (!permTypes.startTypes.length || !permTypes.endTypes.length) return null;
 
           const oldTags = collectPermissionTags(oldState.doc, permTypes.startTypes, permTypes.endTypes);
-          if (!oldTags.size) {
-            return null;
-          }
+          if (!oldTags.size) return null;
           const newTags = collectPermissionTags(newState.doc, permTypes.startTypes, permTypes.endTypes);
 
           const mappingToNew = new Mapping();
@@ -349,14 +334,10 @@ export const PermissionRanges = Extension.create({
             }
           });
 
-          if (!pendingInsertions.length) {
-            return null;
-          }
+          if (!pendingInsertions.length) return null;
 
           pendingInsertions.sort((a, b) => {
-            if (a.pos === b.pos) {
-              return a.priority - b.priority;
-            }
+            if (a.pos === b.pos) return a.priority - b.priority;
             return a.pos - b.pos;
           });
 
@@ -373,26 +354,34 @@ export const PermissionRanges = Extension.create({
           return tr.docChanged ? tr : null;
         },
 
-        // Filters transactions to ensure only allowed edits are applied.
+        // Gate edits on protection state, not documentMode
         filterTransaction(tr, state) {
           if (!tr.docChanged) return true;
           if (tr.getMeta?.(ySyncPluginKey)) return true;
-          if (!editor || editor.options.documentMode !== 'viewing') return true;
-          const pluginState = PERMISSION_PLUGIN_KEY.getState(state);
-          if (!pluginState?.hasAllowedRanges) {
-            return true;
+          if (tr.getMeta?.(PERMISSION_MUTATION_META)) return true;
+          if (!editor) return true;
+
+          // Only filter when read-only protection is runtime-enforced
+          if (!isReadOnlyProtectionRuntimeEnforced(editor)) return true;
+
+          // Read from extension storage (kept up-to-date by applyEffectiveEditability)
+          // rather than PM plugin state which may be stale after protection changes.
+          const activeRanges = storage.allowedRanges ?? storage.ranges;
+          if (!activeRanges?.length) {
+            // No allowed ranges — block all doc-changing transactions
+            return false;
           }
+
           const changedRanges = collectChangedRanges(tr);
           if (!changedRanges.length) return true;
+
           const permTypes = getPermissionTypeInfo(state.schema);
           if (!permTypes.startTypes.length || !permTypes.endTypes.length) return true;
 
-          const allRangesAllowed = changedRanges.every((range) => {
+          return changedRanges.every((range) => {
             const trimmed = trimPermissionTagsFromRange(state.doc, range, permTypes.allTypeSet);
-            return isRangeAllowed(trimmed, pluginState.ranges);
+            return isRangeAllowed(trimmed, activeRanges);
           });
-
-          return allRangesAllowed;
         },
       }),
     ];

@@ -96,6 +96,16 @@ export interface User {
 
   /** The user's photo URL */
   image: string | null;
+
+  /**
+   * Explicit permission-range principal identifiers for this user.
+   * When set, these are used to match against `w:ed` values on permission range
+   * markers instead of deriving principals from the email address.
+   *
+   * Each entry should match the exact string used in the document's
+   * `w:permStart` `w:ed` attribute (e.g., `"contoso.com\\jdoe"`).
+   */
+  permissionPrincipals?: string[];
 }
 
 /**

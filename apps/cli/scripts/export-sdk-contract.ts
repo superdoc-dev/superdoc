@@ -11,12 +11,12 @@
  * Check: bun run apps/cli/scripts/export-sdk-contract.ts --check
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
 import { COMMAND_CATALOG, INTENT_GROUP_META } from '@superdoc/document-api';
+import { buildContractSnapshot } from '@superdoc/document-api/scripts/lib/contract-snapshot.ts';
 
 import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
 import {
@@ -27,7 +27,7 @@ import {
   cliRequiresDocumentContext,
   toDocApiId,
 } from '../src/cli/operation-set';
-import type { CliOnlyOperation } from '../src/cli/types';
+import type { CliOnlyOperation, CliOperationParamSpec, CliTypeSpec } from '../src/cli/types';
 import { CLI_ONLY_OPERATION_DEFINITIONS } from '../src/cli/cli-only-operation-definitions';
 import { RESPONSE_ENVELOPE_KEY } from '../src/cli/operation-hints';
 import { HOST_PROTOCOL_VERSION, HOST_PROTOCOL_FEATURES, HOST_PROTOCOL_NOTIFICATIONS } from '../src/host/protocol';
@@ -48,28 +48,59 @@ function classifySdkSurface(operationId: string): SdkSurface {
   return 'document';
 }
 
+function buildParamSchema(param: CliOperationParamSpec): Record<string, unknown> {
+  let schema: Record<string, unknown>;
+
+  if (param.type === 'string' && param.schema) schema = { type: 'string', ...(param.schema as CliTypeSpec) };
+  else if (param.type === 'string') schema = { type: 'string' };
+  else if (param.type === 'number') schema = { type: 'number' };
+  else if (param.type === 'boolean') schema = { type: 'boolean' };
+  else if (param.type === 'string[]') schema = { type: 'array', items: { type: 'string' } };
+  else if (param.type === 'json' && param.schema && (param.schema as CliTypeSpec).type !== 'json') {
+    schema = { ...(param.schema as CliTypeSpec) };
+  } else {
+    schema = { type: 'object' };
+  }
+
+  if (param.description) schema.description = param.description;
+  return schema;
+}
+
+function buildCliOnlyInputSchema(
+  params: readonly CliOperationParamSpec[],
+  sdkSurface: SdkSurface,
+): Record<string, unknown> {
+  const properties: Record<string, Record<string, unknown>> = {};
+  const required: string[] = [];
+
+  for (const param of params) {
+    if (param.agentVisible === false) continue;
+    if (sdkSurface === 'document' && (param.name === 'doc' || param.name === 'sessionId')) continue;
+
+    properties[param.name] = buildParamSchema(param);
+    if (param.required) required.push(param.name);
+  }
+
+  return {
+    type: 'object',
+    properties,
+    ...(required.length > 0 ? { required } : {}),
+    additionalProperties: false,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
 const ROOT = resolve(import.meta.dir, '../../..');
 const CLI_DIR = resolve(ROOT, 'apps/cli');
-const CONTRACT_JSON_PATH = resolve(ROOT, 'packages/document-api/generated/schemas/document-api-contract.json');
 const OUTPUT_PATH = resolve(CLI_DIR, 'generated/sdk-contract.json');
 const CLI_PKG_PATH = resolve(CLI_DIR, 'package.json');
 
 // ---------------------------------------------------------------------------
 // Load inputs
 // ---------------------------------------------------------------------------
-
-function loadDocApiContract(): {
-  contractVersion: string;
-  $defs?: Record<string, unknown>;
-  operations: Record<string, Record<string, unknown>>;
-} {
-  const raw = readFileSync(CONTRACT_JSON_PATH, 'utf-8');
-  return JSON.parse(raw);
-}
 
 function loadCliPackage(): { name: string; version: string } {
   const raw = readFileSync(CLI_PKG_PATH, 'utf-8');
@@ -81,10 +112,14 @@ function loadCliPackage(): { name: string; version: string } {
 // ---------------------------------------------------------------------------
 
 function buildSdkContract() {
-  const docApiContract = loadDocApiContract();
+  // Read the live document-api source snapshot instead of the generated JSON
+  // artifact. This keeps SDK export resilient when developers add operations
+  // before refreshing packages/document-api/generated/.
+  const docApiContract = buildContractSnapshot();
   const cliPkg = loadCliPackage();
-
-  const sourceHash = createHash('sha256').update(JSON.stringify(docApiContract)).digest('hex').slice(0, 16);
+  const docApiOperations = Object.fromEntries(
+    docApiContract.operations.map((operation) => [operation.operationId, operation]),
+  );
 
   const operations: Record<string, unknown> = {};
 
@@ -94,11 +129,12 @@ function buildSdkContract() {
     const stripped = cliOpId.slice(4) as CliOnlyOperation;
 
     const cliOnlyDef = docApiId ? null : CLI_ONLY_OPERATION_DEFINITIONS[stripped];
+    const sdkSurface = classifySdkSurface(cliOpId);
 
     // Base fields shared by all operations
     const entry: Record<string, unknown> = {
       operationId: cliOpId,
-      sdkSurface: classifySdkSurface(cliOpId),
+      sdkSurface,
       command: metadata.command,
       commandTokens: [...cliCommandTokens(cliOpId)],
       category: cliCategory(cliOpId),
@@ -135,21 +171,22 @@ function buildSdkContract() {
       entry.supportsTrackedMode = catalog.supportsTrackedMode;
       entry.supportsDryRun = catalog.supportsDryRun;
 
-      // Schema plane from document-api-contract.json
-      const docOp = docApiContract.operations[docApiId];
+      // Schema plane from the source snapshot.
+      const docOp = docApiOperations[docApiId];
       if (!docOp) {
-        throw new Error(`Missing document-api contract entry for ${docApiId}`);
+        throw new Error(`CLI operation ${cliOpId} maps to missing document-api source entry ${docApiId}.`);
       }
-      entry.inputSchema = docOp.inputSchema;
-      entry.outputSchema = docOp.outputSchema;
-      if (docOp.successSchema) entry.successSchema = docOp.successSchema;
-      if (docOp.failureSchema) entry.failureSchema = docOp.failureSchema;
+      entry.inputSchema = docOp.schemas.input;
+      entry.outputSchema = docOp.schemas.output;
+      if (docOp.schemas.success) entry.successSchema = docOp.schemas.success;
+      if (docOp.schemas.failure) entry.failureSchema = docOp.schemas.failure;
       if (docOp.skipAsATool) entry.skipAsATool = true;
       if (docOp.intentGroup) entry.intentGroup = docOp.intentGroup;
       if (docOp.intentAction) entry.intentAction = docOp.intentAction;
     } else {
       // CLI-only operation — metadata from canonical definitions
       const def = cliOnlyDef!;
+      entry.inputSchema = buildCliOnlyInputSchema(metadata.params, sdkSurface);
       entry.mutates = def.sdkMetadata.mutates;
       entry.idempotency = def.sdkMetadata.idempotency;
       entry.supportsTrackedMode = def.sdkMetadata.supportsTrackedMode;
@@ -168,7 +205,7 @@ function buildSdkContract() {
 
   return {
     contractVersion: docApiContract.contractVersion,
-    sourceHash,
+    sourceHash: docApiContract.sourceHash,
     ...(docApiContract.$defs ? { $defs: docApiContract.$defs } : {}),
     cli: {
       package: cliPkg.name,

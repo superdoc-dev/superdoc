@@ -176,6 +176,16 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Snapshot-based document comparison and replay.',
     pagePath: 'diff/index.mdx',
   },
+  protection: {
+    title: 'Protection',
+    description: 'Document-level protection state and editing restriction operations.',
+    pagePath: 'protection/index.mdx',
+  },
+  permissionRanges: {
+    title: 'Permission Ranges',
+    description: 'Permission range exception operations for protected documents.',
+    pagePath: 'permission-ranges/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

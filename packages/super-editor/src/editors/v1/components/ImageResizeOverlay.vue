@@ -72,6 +72,8 @@ const props = defineProps({
 
 const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-success', 'resize-error']);
 
+const isResizeDisabled = computed(() => props.editor?.options?.documentMode === 'viewing' || !props.editor?.isEditable);
+
 /**
  * Parsed image metadata from data-image-metadata attribute
  */
@@ -319,6 +321,8 @@ function parseImageMetadata() {
 function onHandleMouseDown(event, handlePosition) {
   event.preventDefault();
   event.stopPropagation();
+
+  if (isResizeDisabled.value) return;
 
   if (!isValidEditor(props.editor) || !imageMetadata.value || !props.imageElement) return;
 

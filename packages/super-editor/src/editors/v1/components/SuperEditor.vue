@@ -631,6 +631,11 @@ const onTableResizeEnd = () => {
 const updateImageResizeOverlay = (event: MouseEvent): void => {
   if (!editorElem.value) return;
 
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    hideImageResizeOverlay();
+    return;
+  }
+
   // Type guard: ensure event target is an Element
   if (!(event.target instanceof Element)) {
     imageResizeState.visible = false;
@@ -719,6 +724,11 @@ const clearSelectedImage = () => {
  * @returns {void}
  */
 const setSelectedImage = (element, blockId, pmStart) => {
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    clearSelectedImage();
+    return;
+  }
+
   // Remove selection from the previously selected element
   if (selectedImageState.element && selectedImageState.element !== element) {
     selectedImageState.element.classList.remove('superdoc-image-selected');
@@ -748,9 +758,10 @@ const isViewingMode = () => getDocumentMode() === 'viewing';
 const handleOverlayUpdates = (event) => {
   if (isViewingMode()) {
     hideTableResizeOverlay();
-  } else {
-    updateTableResizeOverlay(event);
+    hideImageResizeOverlay();
+    return;
   }
+  updateTableResizeOverlay(event);
   // Don't evaluate image overlay during an active table resize drag —
   // without the oversized table overlay, pointer events can reach images
   // and spuriously activate the image resize overlay mid-drag.
@@ -1112,6 +1123,7 @@ const handleSuperEditorClick = (event) => {
   // Update table resize overlay on click
   if (isViewingMode()) {
     hideTableResizeOverlay();
+    clearSelectedImage();
   } else {
     updateTableResizeOverlay(event);
   }

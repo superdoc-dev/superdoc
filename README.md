@@ -156,6 +156,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/gpardhivvarma"><img src="https://github.com/gpardhivvarma.png" width="50" height="50" alt="gpardhivvarma" title="G Pardhiv Varma" /></a>
 <a href="https://github.com/lucbic"><img src="https://github.com/lucbic.png" width="50" height="50" alt="lucbic" title="Lucas Bicudo" /></a>
 <a href="https://github.com/claudiu-ior"><img src="https://github.com/claudiu-ior.png" width="50" height="50" alt="claudiu-ior" title="Claudiu Iorgulescu" /></a>
+<a href="https://github.com/Branc0"><img src="https://github.com/Branc0.png" width="50" height="50" alt="Branc0" title="Rafael Rocha de Azevedo" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

@@ -7,11 +7,13 @@ import { applyProofingDecorations, clearProofingDecorations, createDomPainter } 
 import type { ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
 import type { VisibilitySource } from './proofing/visibility-source.js';
-import { computeWordSelectionRangeAt,
+import {
+  computeWordSelectionRangeAt,
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
   computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
   getFirstTextPosition as getFirstTextPositionFromHelper,
-  registerPointerClick as registerPointerClickFromHelper } from './input/ClickSelectionUtilities.js';
+  registerPointerClick as registerPointerClickFromHelper,
+} from './input/ClickSelectionUtilities.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';

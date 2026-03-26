@@ -11007,75 +11007,70 @@ describe('document-api adapter conformance', () => {
     }
   });
 
-  it('enforces pre-apply throw behavior for every mutating operation', () => {
-    const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id),
-    );
-    for (const operationId of implementedMutatingOps) {
-      const vector = mutationVectors[operationId];
-      expect(vector, `Missing vector for ${operationId}`).toBeDefined();
-      expectThrowCode(operationId, () => vector!.throwCase());
-    }
-  });
+  // ---------------------------------------------------------------------------
+  // Per-operation conformance tests (it.each instead of for-loops).
+  // Using it.each gives V8 GC opportunities between operations, preventing
+  // the ~400 MB heap spike that caused CI OOM when all vectors ran in one it().
+  // ---------------------------------------------------------------------------
 
-  it('enforces structured non-applied outcomes for every mutating operation', () => {
-    const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) =>
-        !STUB_TABLE_OPS.has(id) &&
-        !PLAN_ENGINE_META_OPS.has(id) &&
-        !NON_RECEIPT_MUTATION_OPS.has(id) &&
-        !CC_DIRECT_DISPATCH_OPS.has(id) &&
-        HAS_STRUCTURED_FAILURE_RESULT(id),
-    );
-    for (const operationId of implementedMutatingOps) {
-      const vector = mutationVectors[operationId];
-      expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
-      const result = vector!.failureCase!() as { success?: boolean; failure?: { code: string } };
-      expect(result.success, `${operationId} failureCase should return success=false`).toBe(false);
-      if (result.success !== false || !result.failure) continue;
-      expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);
-      assertSchema(operationId, 'output', result);
-      assertSchema(operationId, 'failure', result);
-    }
-  });
+  const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
+    (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id),
+  );
 
-  it('enforces no post-apply throws across every mutating operation', () => {
-    const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id),
-    );
-    for (const operationId of implementedMutatingOps) {
-      const vector = mutationVectors[operationId]!;
-      let result: { success?: boolean };
-      try {
-        result = vector.applyCase() as { success?: boolean };
-      } catch (error) {
-        const err = error as Error;
-        throw new Error(`${operationId} threw post-apply: ${err.message}\n${err.stack ?? ''}`);
-      }
-      expect(result.success, `${operationId} should report success on applyCase`).toBe(true);
-      assertSchema(operationId, 'output', result);
-      assertSchema(operationId, 'success', result);
-    }
-  });
+  const failureCaseOps = implementedMutatingOps.filter(
+    (id) => HAS_STRUCTURED_FAILURE_RESULT(id) && !CC_DIRECT_DISPATCH_OPS.has(id),
+  );
 
-  it('enforces dryRun non-mutation invariants for every dryRun-capable mutation', () => {
-    const expectedDryRunOperations = MUTATING_OPERATION_IDS.filter(
-      (operationId) =>
-        COMMAND_CATALOG[operationId].supportsDryRun &&
-        !STUB_TABLE_OPS.has(operationId) &&
-        !PLAN_ENGINE_META_OPS.has(operationId) &&
-        !NON_RECEIPT_MUTATION_OPS.has(operationId),
-    );
+  const expectedDryRunOps = MUTATING_OPERATION_IDS.filter(
+    (operationId) =>
+      COMMAND_CATALOG[operationId].supportsDryRun &&
+      !STUB_TABLE_OPS.has(operationId) &&
+      !PLAN_ENGINE_META_OPS.has(operationId) &&
+      !NON_RECEIPT_MUTATION_OPS.has(operationId),
+  );
+
+  it('dryRun vectors cover every dryRun-capable operation', () => {
     const vectorKeys = Object.keys(dryRunVectors).sort();
-    expect(vectorKeys).toEqual([...expectedDryRunOperations].sort());
+    expect(vectorKeys).toEqual([...expectedDryRunOps].sort());
+  });
 
-    for (const operationId of expectedDryRunOperations) {
-      const run = dryRunVectors[operationId]!;
-      const result = run() as { success?: boolean };
-      expect(result.success).toBe(true);
-      assertSchema(operationId, 'output', result);
-      assertSchema(operationId, 'success', result);
+  it.each(implementedMutatingOps)('pre-apply throw: %s', (operationId) => {
+    const vector = mutationVectors[operationId];
+    expect(vector, `Missing vector for ${operationId}`).toBeDefined();
+    expectThrowCode(operationId, () => vector!.throwCase());
+  });
+
+  it.each(failureCaseOps)('structured failure: %s', (operationId) => {
+    const vector = mutationVectors[operationId];
+    expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
+    const result = vector!.failureCase!() as { success?: boolean; failure?: { code: string } };
+    expect(result.success, `${operationId} failureCase should return success=false`).toBe(false);
+    if (result.success !== false || !result.failure) return;
+    expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);
+    assertSchema(operationId, 'output', result);
+    assertSchema(operationId, 'failure', result);
+  });
+
+  it.each(implementedMutatingOps)('no post-apply throw: %s', (operationId) => {
+    const vector = mutationVectors[operationId]!;
+    let result: { success?: boolean };
+    try {
+      result = vector.applyCase() as { success?: boolean };
+    } catch (error) {
+      const err = error as Error;
+      throw new Error(`${operationId} threw post-apply: ${err.message}\n${err.stack ?? ''}`);
     }
+    expect(result.success, `${operationId} should report success on applyCase`).toBe(true);
+    assertSchema(operationId, 'output', result);
+    assertSchema(operationId, 'success', result);
+  });
+
+  it.each(expectedDryRunOps)('dryRun non-mutation: %s', (operationId) => {
+    const run = dryRunVectors[operationId]!;
+    const result = run() as { success?: boolean };
+    expect(result.success).toBe(true);
+    assertSchema(operationId, 'output', result);
+    assertSchema(operationId, 'success', result);
   });
 
   it('does not advance revision for create.table/tables.* dry-run success paths', () => {

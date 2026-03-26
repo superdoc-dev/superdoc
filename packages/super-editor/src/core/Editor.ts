@@ -68,7 +68,7 @@ import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import type { DocumentApi, ResolveRangeOutput } from '@superdoc/document-api';
-import { createDocumentApi, DEFAULT_PROTECTION_STATE  } from '@superdoc/document-api';
+import { createDocumentApi, DEFAULT_PROTECTION_STATE } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import {
   resolveCurrentEditorSelectionRange,

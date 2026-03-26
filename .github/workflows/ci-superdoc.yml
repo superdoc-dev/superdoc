@@ -112,6 +112,11 @@ jobs:
         run: pnpm run build
 
       - name: Run vitest (shard ${{ matrix.shard }}/3)
+        env:
+          NODE_OPTIONS: '--max-old-space-size=6144'
+          VITEST_POOL: forks
+          VITEST_MAX_WORKERS: '1'
+          VITEST_MIN_WORKERS: '1'
         run: pnpm exec vitest run --shard=${{ matrix.shard }}/3
 
       - name: Run bun tests

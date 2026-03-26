@@ -176,6 +176,16 @@ function seedDefaultHeader(editor: Editor, text: string): void {
   setBodySection(editor, { headerDefault: 'rIdHeader1' });
 }
 
+function seedDefaultFooter(editor: Editor, text: string): void {
+  seedPart(editor, {
+    kind: 'footer',
+    refId: 'rIdFooter1',
+    partPath: 'word/footer1.xml',
+    text,
+  });
+  setBodySection(editor, { footerDefault: 'rIdFooter1' });
+}
+
 async function openBlankDocxWithText(text: string): Promise<Editor> {
   const editor = await Editor.open(Buffer.from(BLANK_DOCX_BASE64, 'base64'), {
     isHeadless: true,
@@ -303,6 +313,30 @@ describe('diff-service tracked apply', () => {
       for (const path of mediaUpserts) {
         expect((baseEditor.storage.image as { media?: Record<string, unknown> }).media?.[path]).toBeDefined();
       }
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('captures header/footer-only diffs from snapshots when body content is unchanged', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document.');
+
+    try {
+      seedDefaultFooter(targetEditor, 'Footer only change');
+
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+
+      expect(diff.payload.docDiffs).toEqual([]);
+      expect(diff.payload.headerFootersDiff).not.toBeNull();
+      expect((diff.payload.headerFootersDiff as { addedParts?: unknown[] }).addedParts).toHaveLength(1);
+      expect((diff.payload.headerFootersDiff as { slotChanges?: unknown[] }).slotChanges).toHaveLength(1);
+      expect(diff.payload.partsDiff).not.toBeNull();
+      expect(
+        (diff.payload.partsDiff as { upserts?: Record<string, unknown> }).upserts?.['word/_rels/document.xml.rels'],
+      ).toBeTruthy();
     } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();

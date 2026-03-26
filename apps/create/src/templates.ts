@@ -172,6 +172,7 @@ Key options for the editor:
 | \`documentMode\` | \`'editing' \\| 'viewing' \\| 'suggesting'\` | Editor mode |
 | \`user\` | \`{ name, email }\` | Current user (for comments/tracked changes) |
 | \`toolbar\` | \`string \\| HTMLElement\` | Toolbar mount selector or element |
+| \`contained\` | \`boolean\` | Scroll inside a fixed-height parent instead of expanding |
 | \`modules.comments\` | \`object\` | Comments panel configuration |
 | \`modules.collaboration\` | \`object\` | Real-time collaboration (Yjs) |
 

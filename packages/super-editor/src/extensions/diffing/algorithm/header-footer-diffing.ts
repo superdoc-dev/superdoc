@@ -143,9 +143,12 @@ export function diffHeaderFooters(
   }
 
   const previousSlots = new Map(previous.slots.map((slot) => [slot.sectionId, slot]));
+  const nextSlots = new Map(next.slots.map((slot) => [slot.sectionId, slot]));
   const slotChanges: HeaderFooterSlotState[] = [];
-  for (const nextSlot of next.slots) {
-    const previousSlot = previousSlots.get(nextSlot.sectionId);
+  const sectionIds = new Set([...previousSlots.keys(), ...nextSlots.keys()]);
+  for (const sectionId of sectionIds) {
+    const previousSlot = previousSlots.get(sectionId);
+    const nextSlot = nextSlots.get(sectionId) ?? createClearedSlotState(sectionId);
     if (!slotsEqual(previousSlot, nextSlot)) {
       slotChanges.push(structuredClone(nextSlot));
     }
@@ -301,6 +304,29 @@ function compareParts(a: HeaderFooterPartState, b: HeaderFooterPartState): numbe
     return a.kind.localeCompare(b.kind);
   }
   return a.refId.localeCompare(b.refId);
+}
+
+/**
+ * Creates an explicit cleared slot payload for a section that no longer exists.
+ *
+ * @param sectionId Removed section id.
+ * @returns Slot state that clears title-page and variant refs on replay.
+ */
+function createClearedSlotState(sectionId: string): HeaderFooterSlotState {
+  return {
+    sectionId,
+    titlePg: false,
+    header: {
+      default: null,
+      first: null,
+      even: null,
+    },
+    footer: {
+      default: null,
+      first: null,
+      even: null,
+    },
+  };
 }
 
 /**

@@ -3,7 +3,7 @@ import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
-import { captureHeaderFooterState } from './algorithm/header-footer-diffing';
+import { captureHeaderFooterState, diffHeaderFooters, type HeaderFooterState } from './algorithm/header-footer-diffing';
 import { replayHeaderFooters } from './replay/replay-header-footers';
 import { replayPartsDiff } from './replay/replay-parts';
 import { resolveSectionProjections } from '../../document-api-adapters/helpers/sections-resolver.js';
@@ -275,6 +275,54 @@ function seedDefaultHeader(editor: Editor, text: string): void {
 }
 
 describe('Header/footer diffing', () => {
+  it('emits cleared slot changes when a section slot is removed', async () => {
+    const editor = await createEditor();
+
+    try {
+      const previous: HeaderFooterState = {
+        parts: [],
+        slots: [
+          {
+            sectionId: 'section-a',
+            titlePg: false,
+            header: { default: 'rIdHeaderDefault', first: null, even: null },
+            footer: { default: null, first: null, even: null },
+          },
+          {
+            sectionId: 'section-b',
+            titlePg: true,
+            header: { default: null, first: 'rIdHeaderFirst', even: null },
+            footer: { default: null, first: 'rIdFooterFirst', even: null },
+          },
+        ],
+      };
+      const next: HeaderFooterState = {
+        parts: [],
+        slots: [
+          {
+            sectionId: 'section-a',
+            titlePg: false,
+            header: { default: 'rIdHeaderDefault', first: null, even: null },
+            footer: { default: null, first: null, even: null },
+          },
+        ],
+      };
+
+      const diff = diffHeaderFooters(previous, next, editor.schema);
+
+      expect(diff?.slotChanges).toEqual([
+        {
+          sectionId: 'section-b',
+          titlePg: false,
+          header: { default: null, first: null, even: null },
+          footer: { default: null, first: null, even: null },
+        },
+      ]);
+    } finally {
+      editor.destroy?.();
+    }
+  });
+
   it('compares and replays a newly added header', async () => {
     const beforeEditor = await createEditor();
     const afterEditor = await createEditor();

@@ -116,16 +116,13 @@ jobs:
           VITEST_POOL: forks
           VITEST_MAX_WORKERS: '1'
           VITEST_MIN_WORKERS: '1'
-        run: |
-          SHARD=${{ matrix.shard }}
-          SUB_COUNT=6
-          TOTAL=$((3 * SUB_COUNT))
-          for i in $(seq 0 $((SUB_COUNT - 1))); do
-            SUB=$(( (SHARD - 1) * SUB_COUNT + i + 1 ))
-            echo "::group::Sub-shard $SUB/$TOTAL"
-            pnpm exec vitest run --shard=$SUB/$TOTAL
-            echo "::endgroup::"
-          done
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/3 --exclude='**/decrypt-docx*'
+
+      - name: Run encryption integration tests
+        if: matrix.shard == 2
+        env:
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: pnpm exec vitest run packages/super-editor/src/core/ooxml-encryption/decrypt-docx.integration.test.ts
 
       - name: Run bun tests
         if: matrix.shard == 1

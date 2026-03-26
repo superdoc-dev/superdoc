@@ -6,7 +6,7 @@
 export type { EditorView } from 'prosemirror-view';
 export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
-export type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+export type { ResolveRangeOutput, DocumentApi, SelectionTarget, TextAddress } from '@superdoc/document-api';
 
 /**
  * An opaque, session-local handle representing a captured editor selection.
@@ -1052,12 +1052,26 @@ export declare const registeredHandlers: {
 // FUNCTIONS
 // ============================================
 
+export type ResolvedSelectionTarget = {
+  absFrom: number;
+  absTo: number;
+  text: string;
+};
+
+export type DefaultInsertTarget =
+  | { kind: 'text-block'; target: TextAddress; range: { from: number; to: number } }
+  | { kind: 'structural-end'; insertPos: number };
+
 export declare function getMarksFromSelection(selection: any): any[];
 export declare function getActiveFormatting(state: any): Record<string, any>;
 export declare function getStarterExtensions(): any[];
 export declare function getRichTextExtensions(): any[];
 export declare function createZip(files: any): Promise<Blob>;
 export declare function getAllowedImageDimensions(file: File): Promise<{ width: number; height: number }>;
+/** @internal */
+export declare function resolveSelectionTarget(editor: Editor, target: SelectionTarget): ResolvedSelectionTarget;
+/** @internal */
+export declare function resolveDefaultInsertTarget(editor: Editor): DefaultInsertTarget | null;
 
 // ============================================
 // TYPE GUARDS

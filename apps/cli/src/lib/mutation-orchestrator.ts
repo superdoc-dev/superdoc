@@ -14,7 +14,13 @@ import { RESPONSE_ENVELOPE_KEY, SUCCESS_VERB } from '../cli/operation-hints.js';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { cliCommandTokens } from '../cli/operation-set.js';
 import { assertExpectedRevision, markContextUpdated, withActiveContext, writeContextMetadata } from './context.js';
-import { exportToPath, openDocument, openSessionDocument, type EditorWithDoc } from './document.js';
+import {
+  exportOptionalSessionOutput,
+  exportToPath,
+  openDocument,
+  openSessionDocument,
+  type EditorWithDoc,
+} from './document.js';
 import { mapInvokeError, mapFailedReceipt } from './error-mapping.js';
 import { CliError } from './errors.js';
 import { formatOutput } from './output-formatters.js';
@@ -102,21 +108,6 @@ function buildPrettyOutput(
   return outputPath
     ? `Revision ${document.revision}: ${verb} -> ${outputPath}`
     : `Revision ${document.revision}: ${verb}`;
-}
-
-async function exportOptionalSessionOutput(
-  editor: EditorWithDoc,
-  outPath: string | undefined,
-  force: boolean,
-): Promise<{ path: string; byteLength: number } | undefined> {
-  if (!outPath) return undefined;
-  try {
-    return await exportToPath(editor, outPath, force);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`[warn] optional export to ${outPath} failed: ${message}\n`);
-    return undefined;
-  }
 }
 
 export async function executeMutationOperation(request: DocOperationRequest): Promise<CommandExecution> {
@@ -261,7 +252,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
           byteLength = workingOutput.byteLength;
         }
 
-        const externalOutput = await exportOptionalSessionOutput(opened.editor, outPath, force);
+        const externalOutput = await exportOptionalSessionOutput(opened.editor, context.io, outPath, force);
         const document: DocumentPayload = {
           path: updatedMetadata.sourcePath,
           source: updatedMetadata.source,
@@ -275,9 +266,20 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
             changeMode,
             dryRun: false,
             context: { dirty: updatedMetadata.dirty, revision: updatedMetadata.revision },
-            output: externalOutput,
+            output:
+              externalOutput?.output ??
+              (externalOutput?.warning
+                ? {
+                    path: externalOutput.warning.path,
+                    failed: true,
+                    error: {
+                      code: externalOutput.warning.code,
+                      message: externalOutput.warning.message,
+                    },
+                  }
+                : undefined),
           }),
-          pretty: buildPrettyOutput(operationId, document, result, externalOutput?.path),
+          pretty: buildPrettyOutput(operationId, document, result, externalOutput?.output?.path),
         };
       } finally {
         opened.dispose();

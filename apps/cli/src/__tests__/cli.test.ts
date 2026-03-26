@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { execFile } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { run } from '../index';
 import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
 import { writeListDocWithoutParaIds } from './unstable-list-fixture';
@@ -63,6 +65,8 @@ const ENCRYPTED_FIXTURE_SOURCE = join(
   REPO_ROOT,
   'packages/super-editor/src/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
 );
+const execFileAsync = promisify(execFile);
+const ZIP_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 async function readCliPackageVersion(): Promise<string> {
   const raw = await readFile(CLI_PACKAGE_JSON_PATH, 'utf8');
@@ -71,6 +75,13 @@ async function readCliPackageVersion(): Promise<string> {
     throw new Error('Expected apps/cli/package.json to contain a non-empty version string.');
   }
   return parsed.version;
+}
+
+async function readDocxPart(docPath: string, partPath: string): Promise<string> {
+  const { stdout } = await execFileAsync('unzip', ['-p', docPath, partPath], {
+    maxBuffer: ZIP_MAX_BUFFER_BYTES,
+  });
+  return stdout;
 }
 
 async function runCli(args: string[], stdinBytes?: Uint8Array): Promise<RunResult> {
@@ -1184,6 +1195,79 @@ describe('superdoc CLI', () => {
     expect(verifyResult.code).toBe(0);
     const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert tab inserts a real Word tab node', async () => {
+    const outputDoc = join(TEST_DIR, 'insert-tab-output.docx');
+    await rm(outputDoc, { force: true });
+
+    const openResult = await runCli(['open']);
+    expect(openResult.code).toBe(0);
+
+    const seedResult = await runCli(['insert', '--value', 'ALPHA']);
+    expect(seedResult.code).toBe(0);
+    const seedEnvelope = parseJsonOutput<MutationReceiptEnvelope>(seedResult);
+    const blockId = seedEnvelope.data.receipt.resolution?.target.blockId;
+    expect(blockId).toBeDefined();
+
+    const tabResult = await runCli(['insert', 'tab', '--block-id', blockId!, '--offset', '5']);
+    expect(tabResult.code).toBe(0);
+
+    const saveResult = await runCli(['save', '--out', outputDoc]);
+    expect(saveResult.code).toBe(0);
+
+    const documentXml = await readDocxPart(outputDoc, 'word/document.xml');
+    expect(documentXml).toContain('<w:tab');
+  });
+
+  test('insert line-break inserts a real Word line break node', async () => {
+    const outputDoc = join(TEST_DIR, 'insert-line-break-output.docx');
+    await rm(outputDoc, { force: true });
+
+    const openResult = await runCli(['open']);
+    expect(openResult.code).toBe(0);
+
+    const seedResult = await runCli(['insert', '--value', 'ALPHA']);
+    expect(seedResult.code).toBe(0);
+    const seedEnvelope = parseJsonOutput<MutationReceiptEnvelope>(seedResult);
+    const blockId = seedEnvelope.data.receipt.resolution?.target.blockId;
+    expect(blockId).toBeDefined();
+
+    const lineBreakResult = await runCli(['insert', 'line-break', '--block-id', blockId!, '--offset', '5']);
+    expect(lineBreakResult.code).toBe(0);
+
+    const saveResult = await runCli(['save', '--out', outputDoc]);
+    expect(saveResult.code).toBe(0);
+
+    const documentXml = await readDocxPart(outputDoc, 'word/document.xml');
+    expect(documentXml).toContain('<w:br');
+  });
+
+  test('session-mode mutations keep JSON output machine-clean when optional export fails', async () => {
+    const occupiedOut = join(TEST_DIR, 'session-warning-existing.docx');
+    await writeFile(occupiedOut, 'occupied');
+
+    const openResult = await runCli(['open']);
+    expect(openResult.code).toBe(0);
+
+    const result = await runCli(['insert', '--value', 'JSON_CONTRACT_TOKEN', '--out', occupiedOut]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+
+    const envelope = JSON.parse(result.stdout.trim()) as SuccessEnvelope<{
+      output?: {
+        path?: string;
+        failed?: boolean;
+        error?: { code?: string; message?: string };
+      };
+    }>;
+
+    expect(envelope.command).toBe('insert');
+    expect(envelope.data.output).toMatchObject({
+      path: occupiedOut,
+      failed: true,
+      error: { code: 'OUTPUT_EXISTS' },
+    });
   });
 
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {

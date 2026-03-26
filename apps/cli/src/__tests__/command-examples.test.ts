@@ -18,7 +18,8 @@ import { DOC_COMMAND_EXAMPLES } from '../cli/command-examples';
 import { CLI_HELPER_COMMANDS } from '../cli/helper-commands';
 import { CLI_COMMAND_SPECS } from '../cli/commands';
 import { CLI_OPERATION_OPTION_SPECS } from '../cli/operation-params';
-import { parseCommandArgs, ensureValidArgs } from '../lib/args';
+import { CLI_ONLY_OPERATIONS } from '../cli/types';
+import { parseCommandArgs, parseGlobalArgs, ensureValidArgs } from '../lib/args';
 import type { CliOperationId } from '../cli/operation-set';
 import type { OptionSpec } from '../lib/args';
 
@@ -149,6 +150,19 @@ function stripCommandPrefix(tokens: string[], commandTokens: readonly string[]):
 }
 
 /**
+ * Mirrors the real CLI pipeline:
+ *  1. shell tokenize
+ *  2. remove `superdoc`
+ *  3. extract global args like `--session`
+ *  4. strip command tokens
+ */
+function extractCommandArgTokens(tokens: string[], commandTokens: readonly string[]): string[] {
+  const withoutBinary = tokens[0] === 'superdoc' ? tokens.slice(1) : [...tokens];
+  const { rest } = parseGlobalArgs(withoutBinary);
+  return stripCommandPrefix(rest, commandTokens);
+}
+
+/**
  * Validates that every --*-json flag value in the parsed options is valid JSON.
  * Returns an array of error descriptions (empty = all valid).
  */
@@ -184,7 +198,7 @@ describe('DOC_COMMAND_EXAMPLES parse through real CLI parser', () => {
         const allTokens = shellTokenize(example);
 
         // 2. Strip superdoc + command tokens
-        const flagTokens = stripCommandPrefix(allTokens, commandSpec!.tokens);
+        const flagTokens = extractCommandArgTokens(allTokens, commandSpec!.tokens);
 
         // 3. Parse through the real CLI parser
         const parsed = parseCommandArgs(flagTokens, fullSpecs);
@@ -232,8 +246,32 @@ describe('CLI_HELPER_COMMANDS examples parse through real CLI parser', () => {
         expect(helperSpec).toBeDefined();
 
         const allTokens = shellTokenize(example);
-        const flagTokens = stripCommandPrefix(allTokens, helper.tokens);
+        const flagTokens = extractCommandArgTokens(allTokens, helper.tokens);
 
+        const parsed = parseCommandArgs(flagTokens, fullSpecs);
+
+        expect(parsed.unknown).toEqual([]);
+        expect(parsed.errors).toEqual([]);
+        expect(() => ensureValidArgs(parsed)).not.toThrow();
+
+        const jsonErrors = validateJsonPayloads(parsed.options);
+        expect(jsonErrors).toEqual([]);
+      });
+    }
+  }
+});
+
+describe('CLI-only command examples parse through real CLI parser', () => {
+  const cliOnlyOpIds = new Set(CLI_ONLY_OPERATIONS.map((id) => `doc.${id}`));
+
+  for (const spec of CLI_COMMAND_SPECS) {
+    if (spec.alias || spec.defaultInput || !cliOnlyOpIds.has(spec.operationId) || spec.examples.length === 0) continue;
+
+    const fullSpecs = buildFullOptionSpecs(spec.operationId);
+    for (const example of spec.examples) {
+      test(`${spec.key}: ${example.slice(0, 80)}...`, () => {
+        const allTokens = shellTokenize(example);
+        const flagTokens = extractCommandArgTokens(allTokens, spec.tokens);
         const parsed = parseCommandArgs(flagTokens, fullSpecs);
 
         expect(parsed.unknown).toEqual([]);

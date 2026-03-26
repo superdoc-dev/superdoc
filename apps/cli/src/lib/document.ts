@@ -440,6 +440,48 @@ export async function getFileChecksum(path: string): Promise<string> {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+export type OptionalExportResult = {
+  output?: { path: string; byteLength: number };
+  warning?: {
+    code: string;
+    path: string;
+    message: string;
+  };
+};
+
+/**
+ * Attempts an optional session export, returning structured success/warning
+ * data instead of throwing on failure.
+ *
+ * @param editor - The editor instance to export from
+ * @param io - CLI I/O for diagnostic warnings
+ * @param outPath - Optional output path; returns `undefined` when absent
+ * @param force - Whether to overwrite an existing file
+ * @returns Export result with output or warning metadata, or `undefined` if no path
+ */
+export async function exportOptionalSessionOutput(
+  editor: EditorWithDoc,
+  io: CliIO,
+  outPath: string | undefined,
+  force: boolean,
+): Promise<OptionalExportResult | undefined> {
+  if (!outPath) return undefined;
+  try {
+    return { output: await exportToPath(editor, outPath, force) };
+  } catch (error) {
+    const code = error instanceof CliError ? error.code : 'FILE_WRITE_ERROR';
+    const message = error instanceof Error ? error.message : String(error);
+    io.warn?.(`[warn] optional export to ${outPath} failed: ${message}\n`);
+    return {
+      warning: {
+        code,
+        path: outPath,
+        message,
+      },
+    };
+  }
+}
+
 export async function exportToPath(editor: Editor, outputPath: string, force = false): Promise<FileOutputMeta> {
   const exists = await pathExists(outputPath);
   if (exists && !force) {

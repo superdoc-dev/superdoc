@@ -17,6 +17,22 @@
       "types": "./dist/src/types.d.ts",
       "import": "./dist/types.js"
     },
+    "./blank-docx": {
+      "source": "./src/core/blank-docx.ts",
+      "types": "./dist/src/core/blank-docx.d.ts"
+    },
+    "./document-api-adapters": {
+      "source": "./src/document-api-adapters/index.ts",
+      "types": "./dist/src/document-api-adapters/index.d.ts"
+    },
+    "./markdown": {
+      "source": "./src/core/helpers/markdown/index.ts",
+      "types": "./dist/src/core/helpers/markdown/index.d.ts"
+    },
+    "./parts-runtime": {
+      "source": "./src/core/parts/init-parts-runtime.ts",
+      "types": "./dist/src/core/parts/init-parts-runtime.d.ts"
+    },
     "./*": {
       "source": "./src/*"
     },

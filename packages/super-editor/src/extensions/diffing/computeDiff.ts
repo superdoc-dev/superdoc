@@ -65,8 +65,7 @@ export function computeDiff(
 ): DiffResult {
   const docDiffs = diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc));
   const headerFootersDiff = diffHeaderFooters(oldHeaderFooters, newHeaderFooters, schema);
-  const partsDiff =
-    oldPartsState && newPartsState ? diffParts(docDiffs, headerFootersDiff, oldPartsState, newPartsState) : null;
+  const partsDiff = oldPartsState && newPartsState ? diffParts(oldPartsState, newPartsState) : null;
   return {
     docDiffs,
     commentDiffs: diffComments(oldComments, newComments, schema),

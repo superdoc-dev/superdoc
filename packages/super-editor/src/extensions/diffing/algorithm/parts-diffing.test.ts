@@ -129,7 +129,7 @@ describe('parts-diffing', () => {
       headerFooterClosures: {},
     };
 
-    const partsDiff = diffParts([], null, previousPartsState, nextPartsState);
+    const partsDiff = diffParts(previousPartsState, nextPartsState);
 
     expect(partsDiff).not.toBeNull();
     expect(partsDiff?.upserts['word/media/image1.png']).toEqual({

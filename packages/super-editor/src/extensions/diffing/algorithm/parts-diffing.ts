@@ -1,5 +1,5 @@
 import { resolveOpcTargetPath } from '../../../core/super-converter/helpers.js';
-import type { HeaderFooterKind, HeaderFooterState, HeaderFootersDiff } from './header-footer-diffing';
+import type { HeaderFooterKind, HeaderFooterState } from './header-footer-diffing';
 
 export interface PartSnapshot {
   kind: 'xml' | 'binary';
@@ -85,8 +85,6 @@ export function capturePartsState(
  * causes the captured body relationship closure to be compared and emitted.
  */
 export function diffParts(
-  docDiffs: Array<unknown>,
-  headerFootersDiff: HeaderFootersDiff | null | undefined,
   previousPartsState: PartsState | null | undefined,
   nextPartsState: PartsState | null | undefined,
 ): PartsDiff | null {

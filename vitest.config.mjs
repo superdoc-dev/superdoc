@@ -9,11 +9,6 @@ export default defineConfig({
     pool: testPool,
     minWorkers,
     maxWorkers,
-    poolOptions: {
-      vmForks: {
-        memoryLimit: '0.25',
-      },
-    },
     // Use package directories; Vitest will pick up each package's vite.config.js
     // Packages migrated to bun test: document-api, layout-engine/{layout-engine,style-engine,geometry-utils},
     // word-layout, shared/{common,font-utils,locale-utils,url-validation}

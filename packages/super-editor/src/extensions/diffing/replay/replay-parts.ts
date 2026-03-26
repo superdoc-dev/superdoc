@@ -50,10 +50,14 @@ export function replayPartsDiff({
     return result;
   }
 
-  const optionMediaStore =
-    (editor.options ??= {}).mediaFiles ?? ((editor.options.mediaFiles = {}), editor.options.mediaFiles);
-  const storageImage = (editor.storage ??= {}).image ?? ((editor.storage.image = {}), editor.storage.image);
-  const storageMediaStore = storageImage.media ?? ((storageImage.media = {}), storageImage.media);
+  editor.options ??= {};
+  editor.options.mediaFiles ??= {};
+  const optionMediaStore = editor.options.mediaFiles;
+
+  editor.storage ??= {};
+  editor.storage.image ??= {};
+  editor.storage.image.media ??= {};
+  const storageMediaStore = editor.storage.image.media;
   const changedParts: Array<{
     partId: string;
     operation: 'mutate' | 'create' | 'delete';

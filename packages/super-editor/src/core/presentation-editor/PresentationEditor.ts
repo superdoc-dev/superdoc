@@ -312,6 +312,8 @@ export class PresentationEditor extends EventEmitter {
   #errorBannerMessage: HTMLElement | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
+  #isComposing = false;
+  #compositionCleanup: (() => void) | null = null;
   #focusScrollRafId: number | null = null;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
@@ -667,6 +669,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupHeaderFooterSession();
       this.#applyZoom();
       this.#setupEditorListeners();
+      this.#setupCompositionDeferral();
       this.#initializeEditorInputManager();
       this.#setupPointerHandlers();
       this.#setupDragHandlers();
@@ -2860,6 +2863,9 @@ export class PresentationEditor extends EventEmitter {
       this.#scrollHandler = null;
       this.#scrollContainer = null;
     }
+    this.#compositionCleanup?.();
+    this.#compositionCleanup = null;
+
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -3927,6 +3933,37 @@ export class PresentationEditor extends EventEmitter {
     return calculateExtendedSelection(this.#layoutState.blocks, anchor, head, mode);
   }
 
+  /**
+   * Listens for IME composition events on the hidden editor DOM and defers
+   * layout rerenders while composition is active.  Repainting the visible
+   * surface during composition causes structural DOM mutations (e.g. decoration
+   * span add/remove) on the hidden ProseMirror editor that invalidate the
+   * browser's composition range, breaking CJK IME input.
+   */
+  #setupCompositionDeferral(): void {
+    const editorDom = this.#editor?.view?.dom;
+    if (!editorDom) return;
+
+    const onStart = () => {
+      this.#isComposing = true;
+    };
+    const onEnd = () => {
+      this.#isComposing = false;
+      // Resume deferred layout work now that composition is done.
+      if (this.#pendingDocChange) {
+        this.#scheduleRerender();
+      }
+    };
+
+    editorDom.addEventListener('compositionstart', onStart);
+    editorDom.addEventListener('compositionend', onEnd);
+
+    this.#compositionCleanup = () => {
+      editorDom.removeEventListener('compositionstart', onStart);
+      editorDom.removeEventListener('compositionend', onEnd);
+    };
+  }
+
   #scheduleRerender() {
     if (this.#renderScheduled) {
       return;
@@ -3944,6 +3981,12 @@ export class PresentationEditor extends EventEmitter {
   async #flushRerenderQueue() {
     if (this.#isRerendering) {
       this.#pendingDocChange = true;
+      return;
+    }
+    // Defer layout while IME composition is active.  Repainting during
+    // composition causes DOM mutations that break the browser's composition
+    // range (SD-2368).  The deferred work is picked up on compositionend.
+    if (this.#isComposing) {
       return;
     }
     if (!this.#pendingDocChange) {

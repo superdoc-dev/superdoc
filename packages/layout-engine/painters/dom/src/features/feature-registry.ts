@@ -40,4 +40,37 @@ export const RENDERING_FEATURES = {
     handles: ['w:pPr/w:bidi', 'w:rPr/w:rtl'],
     spec: '§17.3.1.1',
   },
+
+  // ─── Math ─────────────────────────────────────────────────────
+  // @spec ECMA-376 §22.1 (Math)
+  'm:oMath': {
+    feature: 'math',
+    module: './math',
+    handles: [
+      'm:oMath',
+      'm:oMathPara',
+      'm:r',
+      'm:t',
+      'm:f',
+      'm:rad',
+      'm:sSup',
+      'm:sSub',
+      'm:sSubSup',
+      'm:sPre',
+      'm:d',
+      'm:nary',
+      'm:acc',
+      'm:bar',
+      'm:groupChr',
+      'm:limLow',
+      'm:limUpp',
+      'm:func',
+      'm:m',
+      'm:eqArr',
+      'm:borderBox',
+      'm:box',
+      'm:phant',
+    ],
+    spec: '§22.1',
+  },
 } as const;

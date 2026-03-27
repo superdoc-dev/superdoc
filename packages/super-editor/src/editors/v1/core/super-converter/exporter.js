@@ -211,6 +211,8 @@ export function exportSchemaToJson(params) {
     tableOfContents: sdTableOfContentsTranslator,
     index: sdIndexTranslator,
     indexEntry: sdIndexEntryTranslator,
+    mathBlock: translatePassthroughNode,
+    mathInline: translatePassthroughNode,
     passthroughBlock: translatePassthroughNode,
     passthroughInline: translatePassthroughNode,
   };

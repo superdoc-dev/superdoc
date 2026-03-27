@@ -406,11 +406,19 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
     const runA = a.runs[i];
     const runB = b.runs[i];
     const leftText =
-      'src' in runA || runA.kind === 'lineBreak' || runA.kind === 'break' || runA.kind === 'fieldAnnotation'
+      'src' in runA ||
+      runA.kind === 'lineBreak' ||
+      runA.kind === 'break' ||
+      runA.kind === 'fieldAnnotation' ||
+      runA.kind === 'math'
         ? ''
         : runA.text;
     const rightText =
-      'src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
+      'src' in runB ||
+      runB.kind === 'lineBreak' ||
+      runB.kind === 'break' ||
+      runB.kind === 'fieldAnnotation' ||
+      runB.kind === 'math'
         ? ''
         : runB.text;
 

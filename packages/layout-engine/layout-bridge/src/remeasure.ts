@@ -123,7 +123,11 @@ function fontString(run: Run): string {
  * @returns Text content of the run, or empty string for non-text runs
  */
 function runText(run: Run): string {
-  return 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+  return 'src' in run ||
+    run.kind === 'lineBreak' ||
+    run.kind === 'break' ||
+    run.kind === 'fieldAnnotation' ||
+    run.kind === 'math'
     ? ''
     : (run.text ?? '');
 }

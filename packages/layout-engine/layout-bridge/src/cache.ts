@@ -275,7 +275,8 @@ const hashRuns = (block: FlowBlock): string => {
 
       // Text is used verbatim without normalization - whitespace affects measurements
       // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
-      const text = 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' ? '' : (run.text ?? '');
+      const text =
+        'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'math' ? '' : (run.text ?? '');
       const marks = hashRunVisualMarks(run);
 
       // Include tracked change metadata in hash

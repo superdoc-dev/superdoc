@@ -50,6 +50,7 @@ import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
 import { Chart } from './chart/index.js';
+import { MathInline, MathBlock } from './math/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
 import { IndexEntry } from './index-entry/index.js';
 import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
@@ -131,6 +132,8 @@ const getRichTextExtensions = () => {
     Image,
     NodeResizer,
     CustomSelection,
+    MathInline,
+    MathBlock,
     PassthroughInline,
     PassthroughBlock,
   ];
@@ -229,6 +232,8 @@ const getStarterExtensions = () => {
     PermissionRanges,
     Protection,
     VerticalNavigation,
+    MathInline,
+    MathBlock,
     PassthroughInline,
     PassthroughBlock,
     Diffing,
@@ -308,6 +313,8 @@ export {
   VectorShape,
   ShapeGroup,
   Chart,
+  MathInline,
+  MathBlock,
   PassthroughInline,
   PassthroughBlock,
   PermissionRanges,

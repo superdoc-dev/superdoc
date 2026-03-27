@@ -35,6 +35,7 @@ import { ensureNumberingCache } from './numberingCache.js';
 import { commentRangeStartHandlerEntity, commentRangeEndHandlerEntity } from './commentRangeImporter.js';
 import { permStartHandlerEntity } from './permStartImporter.js';
 import { permEndHandlerEntity } from './permEndImporter.js';
+import { mathNodeHandlerEntity } from './math/index.js';
 import { normalizeDuplicateBlockIdentitiesInContent } from './normalizeDuplicateBlockIdentitiesInContent.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
@@ -248,6 +249,7 @@ export const defaultNodeListHandler = () => {
     pageReferenceEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
+    mathNodeHandlerEntity,
     passthroughNodeHandlerEntity,
   ];
 

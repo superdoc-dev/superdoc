@@ -41,6 +41,7 @@ import type {
   TableBlock,
   TableCellAttrs,
   TableFragment,
+  MathRun,
   TextRun,
   TrackedChangeKind,
   TrackedChangesMode,
@@ -109,6 +110,7 @@ import {
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
+import { convertOmmlToMathml } from './features/math/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -4379,7 +4381,7 @@ export class DomPainter {
    * @returns Sanitized link data or null if invalid/missing
    */
   private extractLinkData(run: Run): LinkRenderData | null {
-    if (run.kind === 'tab' || run.kind === 'image' || run.kind === 'lineBreak') {
+    if (run.kind === 'tab' || run.kind === 'image' || run.kind === 'lineBreak' || run.kind === 'math') {
       return null;
     }
     const link = (run as TextRun).link as FlowRunLink | undefined;
@@ -4612,6 +4614,37 @@ export class DomPainter {
     return run.kind === 'fieldAnnotation';
   }
 
+  /**
+   * Type guard to check if a run is a math run.
+   */
+  private isMathRun(run: Run): run is MathRun {
+    return run.kind === 'math';
+  }
+
+  /**
+   * Render a math run as a MathML element wrapped in a span.
+   */
+  private renderMathRun(run: MathRun): HTMLElement | null {
+    if (!this.doc) return null;
+    const wrapper = this.doc.createElement('span');
+    wrapper.className = 'sd-math';
+    wrapper.style.display = 'inline-block';
+    wrapper.style.verticalAlign = 'middle';
+
+    const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);
+    if (mathEl) {
+      wrapper.appendChild(mathEl);
+    } else {
+      // Fallback: render plain text content
+      wrapper.textContent = run.textContent || '';
+    }
+
+    if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
+    if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);
+
+    return wrapper;
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -4625,6 +4658,11 @@ export class DomPainter {
     // Handle FieldAnnotationRun - inline pill-styled form fields
     if (this.isFieldAnnotationRun(run)) {
       return this.renderFieldAnnotationRun(run);
+    }
+
+    // Handle MathRun - inline math rendered as MathML
+    if (this.isMathRun(run)) {
+      return this.renderMathRun(run);
     }
 
     // Handle LineBreakRun - line breaks are handled by the measurer creating new lines,
@@ -6982,7 +7020,8 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
     run.kind === 'image' ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||
-    run.kind === 'fieldAnnotation'
+    run.kind === 'fieldAnnotation' ||
+    run.kind === 'math'
   ) {
     // Tab, image, lineBreak, break, and fieldAnnotation runs don't have text styling properties
     return;

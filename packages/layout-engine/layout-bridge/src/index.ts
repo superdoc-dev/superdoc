@@ -270,7 +270,14 @@ const buildLineText = (block: FlowBlock, line: Line): string => {
   let text = '';
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
     const run = block.runs[runIndex];
-    if (!run || 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation')
+    if (
+      !run ||
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
+    )
       continue;
     const runText = run.text ?? '';
     const isFirstRun = runIndex === line.fromRun;
@@ -608,7 +615,11 @@ export function selectionToRects(
           if (SELECTION_DEBUG_ENABLED) {
             const runs = block.runs.slice(line.fromRun, line.toRun + 1).map((run: Run, idx: number) => {
               const isAtomic =
-                'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation';
+                'src' in run ||
+                run.kind === 'lineBreak' ||
+                run.kind === 'break' ||
+                run.kind === 'fieldAnnotation' ||
+                run.kind === 'math';
               const text = isAtomic ? '' : (run.text ?? '');
               return {
                 idx: line.fromRun + idx,
@@ -1193,7 +1204,11 @@ export function pmPosToCharOffset(block: FlowBlock, line: Line, pmPos: number): 
     if (!run) continue;
 
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runTextLength = text.length;
@@ -1394,6 +1409,12 @@ const _sliceRunsForLine = (block: FlowBlock, line: Line): Run[] => {
 
     // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
     if (run.kind === 'fieldAnnotation') {
+      result.push(run);
+      continue;
+    }
+
+    // MathRun handling - math runs are atomic units, no slicing needed
+    if (run.kind === 'math') {
       result.push(run);
       continue;
     }

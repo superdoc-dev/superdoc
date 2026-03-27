@@ -420,7 +420,25 @@ export type FieldAnnotationRun = {
   sdt?: SdtMetadata;
 };
 
-export type Run = TextRun | TabRun | ImageRun | LineBreakRun | BreakRun | FieldAnnotationRun;
+export type MathRun = {
+  kind: 'math';
+  /** OMML XML as JSON (xml2json format) for the renderer to convert to MathML. */
+  ommlJson: unknown;
+  /** Plain text content for measurement fallback and accessibility. */
+  textContent: string;
+  /** Estimated width in pixels. */
+  width: number;
+  /** Estimated height in pixels. */
+  height: number;
+  /** Absolute ProseMirror position (inclusive) of this math run. */
+  pmStart?: number;
+  /** Absolute ProseMirror position (exclusive) after this math run. */
+  pmEnd?: number;
+  /** SDT metadata if math is wrapped in a structured document tag. */
+  sdt?: SdtMetadata;
+};
+
+export type Run = TextRun | TabRun | ImageRun | LineBreakRun | BreakRun | FieldAnnotationRun | MathRun;
 
 export type ParagraphBlock = {
   kind: 'paragraph';

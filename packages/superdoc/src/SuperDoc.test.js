@@ -4,9 +4,12 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
-import { Extension } from '../../super-editor/src/core/Extension.js';
-import { CommentsPlugin, CommentsPluginKey } from '../../super-editor/src/extensions/comment/comments-plugin.js';
-import { CommentMarkName } from '../../super-editor/src/extensions/comment/comments-constants.js';
+import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
+import {
+  CommentsPlugin,
+  CommentsPluginKey,
+} from '../../super-editor/src/editors/v1/extensions/comment/comments-plugin.js';
+import { CommentMarkName } from '../../super-editor/src/editors/v1/extensions/comment/comments-constants.js';
 
 const isRef = (value) => value && typeof value === 'object' && 'value' in value;
 

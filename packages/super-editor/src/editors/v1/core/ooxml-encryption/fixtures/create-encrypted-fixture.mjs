@@ -14,7 +14,7 @@
  *   - Password: "test123"
  *
  * Usage:
- *   node packages/super-editor/src/core/ooxml-encryption/fixtures/create-encrypted-fixture.mjs
+ *   node packages/super-editor/src/editors/v1/core/ooxml-encryption/fixtures/create-encrypted-fixture.mjs
  *
  * @see https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-offcrypto/
  */

@@ -9,15 +9,15 @@
     "baseUrl": ".",
     "paths": {
       "@": ["./src/*"],
-      "@core/*": ["./src/core/*"],
-      "@extensions/*": ["./src/extensions/*"],
-      "@features/*": ["./src/features/*"],
-      "@components/*": ["./src/components/*"],
-      "@helpers/*": ["./src/core/helpers/*"],
-      "@utils/*": ["./src/utils/*"],
-      "@converter/*": ["./src/core/super-converter/*"],
-      "@tests/*": ["./src/tests/*"],
-      "@translator": ["./src/core/super-converter/v3/node-translator/"]
+      "@core/*": ["./src/editors/v1/core/*"],
+      "@extensions/*": ["./src/editors/v1/extensions/*"],
+      "@features/*": ["./src/editors/v1/features/*"],
+      "@components/*": ["./src/editors/v1/components/*"],
+      "@helpers/*": ["./src/editors/v1/core/helpers/*"],
+      "@utils/*": ["./src/editors/v1/utils/*"],
+      "@converter/*": ["./src/editors/v1/core/super-converter/*"],
+      "@tests/*": ["./src/editors/v1/tests/*"],
+      "@translator": ["./src/editors/v1/core/super-converter/v3/node-translator/"]
     }
   },
   "include": ["src/**/*"],

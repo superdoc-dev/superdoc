@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 // When running from apps/docs/ directory within the monorepo, look up to packages/
-const sourceDir = process.argv[2] || path.join(__dirname, '../../../packages/super-editor/src/extensions');
+const sourceDir = process.argv[2] || path.join(__dirname, '../../../packages/super-editor/src/editors/v1/extensions');
 const outputDir = 'extensions';
 
 // Extensions to process
@@ -265,7 +265,7 @@ async function parseExtension(name, files) {
     ),
     commands: data.filter((d) => d.kind === 'function' && hasCategory(d, 'Command')),
     helpers: data.filter((d) => d.kind === 'function' && hasCategory(d, 'Helper')),
-    githubPath: getGithubPath(moduleDoc?.context?.file) || `packages/super-editor/src/extensions/${name}`,
+    githubPath: getGithubPath(moduleDoc?.context?.file) || `packages/super-editor/src/editors/v1/extensions/${name}`,
   };
 
   // Process typedefs

@@ -7,7 +7,7 @@ import { transformCode, applyStubs } from './lib/transform.ts';
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 const docsRoot = resolve(import.meta.dir, '..');
-const fixturePath = resolve(import.meta.dir, '../../../packages/super-editor/src/tests/data/complex2.docx');
+const fixturePath = resolve(import.meta.dir, '../../../packages/super-editor/src/editors/v1/tests/data/complex2.docx');
 
 let fixtureBuffer: Buffer;
 

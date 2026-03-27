@@ -170,7 +170,7 @@ describe('legacy-handle-paragraph-node', () => {
       { tab: { tabType: 'center', pos: undefined } },
     ]);
   });
-  
+
   it('sets paragraphProperties.runPropertiesInlineKeys from keys of w:pPr w:rPr for export filtering', () => {
     const params = makeParams();
     params.nodes[0].elements = [

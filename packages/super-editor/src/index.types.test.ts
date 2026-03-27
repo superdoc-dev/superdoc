@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PresentationEditor } from './core/presentation-editor/PresentationEditor.js';
+import { PresentationEditor } from './editors/v1/core/presentation-editor/PresentationEditor.js';
 
 // ============================================
 // EXACT SHAPE VERIFICATION HELPERS
@@ -561,7 +561,7 @@ const {
   };
 });
 
-vi.mock('./core/Editor', () => ({
+vi.mock('./editors/v1/core/Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     setDocumentMode: vi.fn(),
     setOptions: vi.fn(),
@@ -655,7 +655,7 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('./core/header-footer/EditorOverlayManager', () => ({
+vi.mock('./editors/v1/core/header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 

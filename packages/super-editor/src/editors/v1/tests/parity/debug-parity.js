@@ -2,7 +2,7 @@
  * Debug script for comparing NodeView reference pipeline vs layout-engine adapter.
  *
  * Usage:
- *   node packages/super-editor/src/tests/parity/debug-parity.js <docx-file-path>
+ *   node packages/super-editor/src/editors/v1/tests/parity/debug-parity.js <docx-file-path>
  *
  * This script loads a DOCX file and dumps side-by-side comparison of:
  * - Reference snapshot (NodeView logic)

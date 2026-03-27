@@ -24,7 +24,10 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MULTI_SECTION_DOCX_PATH = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
+const MULTI_SECTION_DOCX_PATH = path.join(
+  __dirname,
+  '../../../super-editor/src/editors/v1/tests/data/multi_section_doc.docx',
+);
 
 type LoadedMultiSectionFixture = Awaited<ReturnType<typeof docxToPMJson>>;
 let loadedFixture: LoadedMultiSectionFixture | null = null;
@@ -47,11 +50,11 @@ async function docxToPMJson(docxPath: string): Promise<{
   themeColors?: unknown;
 }> {
   // Dynamic imports to avoid bundling issues
-  const { default: DocxZipper } = await import('../../../super-editor/src/core/DocxZipper.js');
+  const { default: DocxZipper } = await import('../../../super-editor/src/editors/v1/core/DocxZipper.js');
   const { createDocumentJson } = await import(
-    '../../../super-editor/src/core/super-converter/v2/importer/docxImporter.js'
+    '../../../super-editor/src/editors/v1/core/super-converter/v2/importer/docxImporter.js'
   );
-  const { parseXmlToJson } = await import('../../../super-editor/src/core/super-converter/v2/docxHelper.js');
+  const { parseXmlToJson } = await import('../../../super-editor/src/editors/v1/core/super-converter/v2/docxHelper.js');
 
   const EXTENSIONS_TO_CONVERT = new Set(['.xml', '.rels']);
 

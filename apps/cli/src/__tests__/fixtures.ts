@@ -4,19 +4,19 @@ import path from 'node:path';
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 
 const SOURCE_DOC_CANDIDATES = [
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/advanced-text.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/advanced-text.docx'),
   path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/advanced-text.docx'),
 ];
 
 const LIST_SOURCE_DOC_CANDIDATES = [
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-list.docx'),
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/list_with_indents.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-list.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/list_with_indents.docx'),
   path.join(REPO_ROOT, 'devtools/document-api-tests/fixtures/matrix-list.input.docx'),
   path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
 ];
 
 const PRE_SEPARATED_LIST_CANDIDATES = [
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/pre-separated-list.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/pre-separated-list.docx'),
 ];
 
 const TOC_SOURCE_DOC_CANDIDATES = [
@@ -26,8 +26,8 @@ const TOC_SOURCE_DOC_CANDIDATES = [
 ];
 
 const TABLE_SOURCE_DOC_CANDIDATES = [
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/super-basic-table.docx'),
-  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/table.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/super-basic-table.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/table.docx'),
 ];
 
 let resolvedSourceDoc: string | null = null;

@@ -376,7 +376,7 @@ async function main() {
   // 19. Host-platform compiled CLI smoke test
   await check('CLI compiled binary can open a document on host platform', async () => {
     const cliBinaryPath = resolveHostCliBinaryPath();
-    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-paragraph.docx');
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-cli-validate-'));
 
     try {
@@ -407,7 +407,7 @@ async function main() {
   // 20. Python SDK + compiled CLI integration smoke test
   await check('Python SDK can open a document via host compiled CLI binary', async () => {
     const cliBinaryPath = resolveHostCliBinaryPath();
-    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-paragraph.docx');
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-python-sdk-validate-'));
 
     try {

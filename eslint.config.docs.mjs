@@ -2,7 +2,7 @@ import jsdoc from 'eslint-plugin-jsdoc';
 
 export default [
   {
-    files: ['packages/super-editor/src/extensions/**/*.js'],
+    files: ['packages/super-editor/src/editors/v1/extensions/**/*.js'],
     plugins: {
       jsdoc
     },

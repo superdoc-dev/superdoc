@@ -24,7 +24,7 @@ original_name=$(basename "$FILE_PATH" | sed 's/\.[^.]*$//')
 
 # Remove special characters and replace spaces
 safe_name=$(echo "$original_name" | sed 's/[^a-zA-Z0-9]/_/g' | tr '[:upper:]' '[:lower:]')
-BASE_PATH=./packages/super-editor/src/tests/data
+BASE_PATH=./packages/super-editor/src/editors/v1/tests/data
 DIR_PATH=$BASE_PATH/$safe_name
 
 if [ -d "$DIR_PATH" ]; then

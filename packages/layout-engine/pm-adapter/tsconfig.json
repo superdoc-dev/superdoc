@@ -7,8 +7,10 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@superdoc/super-editor/converter/internal/*.js": ["../../super-editor/dist/core/super-converter/*.d.ts"],
-      "@translator": ["../../super-editor/dist/core/super-converter/v3/node-translator/index.d.ts"]
+      "@superdoc/super-editor/converter/internal/*.js": [
+        "../../super-editor/dist/src/editors/v1/core/super-converter/*.d.ts"
+      ],
+      "@translator": ["../../super-editor/dist/src/editors/v1/core/super-converter/v3/node-translator/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/fixtures/**/*.json"]

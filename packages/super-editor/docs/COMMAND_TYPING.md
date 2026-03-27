@@ -36,7 +36,7 @@ Use the command name as the key and the **outer** signature (`(...args) => boole
 as the value.
 
 ```ts
-// packages/super-editor/src/extensions/bookmarks/bookmark-start.types.ts
+// packages/super-editor/src/editors/v1/extensions/bookmarks/bookmark-start.types.ts
 import type { CommandProps } from '@core/types/ChainedCommands';
 
 declare module '@core/types/ChainedCommands' {

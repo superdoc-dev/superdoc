@@ -33,8 +33,8 @@ const THRESHOLDS = {
  */
 const FIXTURES = {
   basic: path.join(__dirname, '../fixtures/sdt-flow-input.json'),
-  annot2: path.join(__dirname, '../../../super-editor/src/tests/data/annot2.docx'),
-  trackedChanges: path.join(__dirname, '../../../super-editor/src/tests/data/basic-tracked-change.docx'),
+  annot2: path.join(__dirname, '../../../super-editor/src/editors/v1/tests/data/annot2.docx'),
+  trackedChanges: path.join(__dirname, '../../../super-editor/src/editors/v1/tests/data/basic-tracked-change.docx'),
 } as const;
 
 /**

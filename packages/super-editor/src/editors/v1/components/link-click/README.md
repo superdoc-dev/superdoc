@@ -37,7 +37,7 @@ elem.addEventListener('click', (event: MouseEvent) => {
 - Stops event propagation to avoid conflicts
 - Dispatches a bubbling custom event with link metadata
 
-### 2. Event Handler Layer (`packages/super-editor/src/components/link-click/LinkClickHandler.vue`)
+### 2. Event Handler Layer (`packages/super-editor/src/editors/v1/components/link-click/LinkClickHandler.vue`)
 
 A Vue component that listens for the `superdoc-link-click` event and displays the LinkInput popover:
 
@@ -68,7 +68,7 @@ const handleLinkClick = (event) => {
 - Verifies the selection is inside a link mark
 - Shows the LinkInput popover at the click position
 
-### 3. Integration Layer (`packages/super-editor/src/components/SuperEditor.vue`)
+### 3. Integration Layer (`packages/super-editor/src/editors/v1/components/SuperEditor.vue`)
 
 The LinkClickHandler is instantiated alongside other editor components:
 
@@ -116,7 +116,7 @@ The feature works automatically once integrated. When a user clicks a link in la
 - Validates custom event dispatch with correct metadata
 - Tests multiple links and edge cases
 
-**Component Tests** (`packages/super-editor/src/components/link-click/LinkClickHandler.test.js`):
+**Component Tests** (`packages/super-editor/src/editors/v1/components/link-click/LinkClickHandler.test.js`):
 - Tests event listener attachment/removal
 - Validates cursor movement and link detection
 - Confirms popover positioning calculations

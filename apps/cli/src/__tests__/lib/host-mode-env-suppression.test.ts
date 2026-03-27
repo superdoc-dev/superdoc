@@ -13,7 +13,7 @@ import { tmpdir } from 'os';
 const REPO_ROOT = join(import.meta.dir, '../../../../..');
 const ENCRYPTED_DOC = join(
   REPO_ROOT,
-  'packages/super-editor/src/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
+  'packages/super-editor/src/editors/v1/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
 );
 
 const silentIo = {

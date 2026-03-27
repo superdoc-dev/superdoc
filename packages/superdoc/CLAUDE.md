@@ -53,7 +53,7 @@ Uses `layout-engine` for virtualized rendering with pagination.
 
 ### Mode Switching
 `PresentationEditor.ts` bridges state between modes.
-See `super-editor/src/core/presentation-editor/` for implementation.
+See `super-editor/src/editors/v1/core/presentation-editor/` for implementation.
 
 ## Theming
 

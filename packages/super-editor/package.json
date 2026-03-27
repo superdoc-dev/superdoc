@@ -18,53 +18,53 @@
       "import": "./dist/types.js"
     },
     "./blank-docx": {
-      "source": "./src/core/blank-docx.ts",
-      "types": "./dist/src/core/blank-docx.d.ts"
+      "source": "./src/editors/v1/core/blank-docx.ts",
+      "types": "./dist/src/editors/v1/core/blank-docx.d.ts"
     },
     "./document-api-adapters": {
-      "source": "./src/document-api-adapters/index.ts",
-      "types": "./dist/src/document-api-adapters/index.d.ts"
+      "source": "./src/editors/v1/document-api-adapters/index.ts",
+      "types": "./dist/src/editors/v1/document-api-adapters/index.d.ts"
     },
     "./markdown": {
-      "source": "./src/core/helpers/markdown/index.ts",
-      "types": "./dist/src/core/helpers/markdown/index.d.ts"
+      "source": "./src/editors/v1/core/helpers/markdown/index.ts",
+      "types": "./dist/src/editors/v1/core/helpers/markdown/index.d.ts"
     },
     "./parts-runtime": {
-      "source": "./src/core/parts/init-parts-runtime.ts",
-      "types": "./dist/src/core/parts/init-parts-runtime.d.ts"
+      "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",
+      "types": "./dist/src/editors/v1/core/parts/init-parts-runtime.d.ts"
     },
     "./*": {
       "source": "./src/*"
     },
     "./converter": {
-      "source": "./src/core/super-converter/SuperConverter.js",
+      "source": "./src/editors/v1/core/super-converter/SuperConverter.js",
       "import": "./dist/converter.es.js"
     },
     "./converter/internal/*": {
-      "default": "./src/core/super-converter/*"
+      "default": "./src/editors/v1/core/super-converter/*"
     },
     "./docx-zipper": {
-      "source": "./src/core/DocxZipper.js",
+      "source": "./src/editors/v1/core/DocxZipper.js",
       "import": "./dist/docx-zipper.es.js"
     },
     "./toolbar": {
-      "source": "./src/components/toolbar/Toolbar.vue",
+      "source": "./src/editors/v1/components/toolbar/Toolbar.vue",
       "import": "./dist/toolbar.es.js"
     },
     "./super-input": {
-      "source": "./src/components/SuperInput.vue",
+      "source": "./src/editors/v1/components/SuperInput.vue",
       "import": "./dist/super-input.es.js"
     },
     "./editor": {
-      "source": "./src/core/Editor.ts",
+      "source": "./src/editors/v1/core/Editor.ts",
       "import": "./dist/super-editor.es.js"
     },
     "./file-zipper": {
-      "source": "./src/core/super-converter/zipper.js",
+      "source": "./src/editors/v1/core/super-converter/zipper.js",
       "import": "./dist/file-zipper.es.js"
     },
     "./ai-writer": {
-      "source": "./src/core/components/AIWriter.vue",
+      "source": "./src/editors/v1/components/toolbar/AIWriter.vue",
       "import": "./dist/ai-writer.es.js"
     },
     "./style.css": {

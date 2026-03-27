@@ -736,6 +736,14 @@ function measureTabAlignmentGroup(
       continue;
     }
 
+    // Measure math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathWidth = (run as { width: number }).width ?? 20;
+      result.runs.push({ runIndex: i, width: mathWidth });
+      result.totalWidth += mathWidth;
+      continue;
+    }
+
     // Measure field annotation runs
     if (isFieldAnnotationRun(run)) {
       const fontSize = (run as { fontSize?: number }).fontSize ?? DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
@@ -1629,6 +1637,24 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
 
+      continue;
+    }
+
+    // Handle math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathRun = run as { width: number; height: number };
+      const mathWidth = mathRun.width ?? 20;
+      const mathHeight = mathRun.height ?? 24;
+
+      if (currentLine) {
+        currentLine.toRun = runIndex;
+        currentLine.toChar = 1;
+        currentLine.width = roundValue(currentLine.width + mathWidth);
+        currentLine.maxImageHeight = Math.max(currentLine.maxImageHeight ?? 0, mathHeight);
+        if (!currentLine.segments) currentLine.segments = [];
+        currentLine.segments.push({ runIndex, fromChar: 0, toChar: 1, width: mathWidth });
+      }
+      pendingRunSpacing = 0;
       continue;
     }
 

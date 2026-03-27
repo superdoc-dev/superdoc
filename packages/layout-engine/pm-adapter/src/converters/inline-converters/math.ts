@@ -4,11 +4,9 @@ import { estimateMathDimensions } from '../math-constants.js';
 
 /**
  * Converts a mathInline PM node to a MathRun for the layout engine.
+ * Follows the same pattern as imageNodeToRun — position is optional.
  */
 export function mathInlineNodeToRun({ node, positions, sdtMetadata }: InlineConverterParams): MathRun | null {
-  const pos = positions.get(node);
-  if (!pos) return null;
-
   const textContent = String(node.attrs?.textContent ?? '');
   const { width, height } = estimateMathDimensions(textContent);
 
@@ -18,9 +16,13 @@ export function mathInlineNodeToRun({ node, positions, sdtMetadata }: InlineConv
     textContent,
     width,
     height,
-    pmStart: pos.start,
-    pmEnd: pos.end,
   };
+
+  const pos = positions.get(node);
+  if (pos) {
+    run.pmStart = pos.start;
+    run.pmEnd = pos.end;
+  }
 
   if (sdtMetadata) {
     run.sdt = sdtMetadata;

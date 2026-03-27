@@ -4623,6 +4623,7 @@ export class DomPainter {
 
   /**
    * Render a math run as a MathML element wrapped in a span.
+   * Follows the same pattern as renderImageRun — sets explicit dimensions.
    */
   private renderMathRun(run: MathRun): HTMLElement | null {
     if (!this.doc) return null;
@@ -4630,6 +4631,9 @@ export class DomPainter {
     wrapper.className = 'sd-math';
     wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'middle';
+    wrapper.style.width = `${run.width}px`;
+    wrapper.style.height = `${run.height}px`;
+    wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
 
     const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);
     if (mathEl) {
@@ -5846,6 +5850,26 @@ export class DomPainter {
             const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
             const segX = baseSegX + indentOffset;
             const segWidth = (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : 0) ?? 0;
+            elem.style.position = 'absolute';
+            elem.style.left = `${segX}px`;
+            appendToLineGeo(elem, baseRun, segX, segWidth);
+            cumulativeX = baseSegX + segWidth;
+          }
+          continue;
+        }
+
+        // Handle MathRun - render as-is (atomic unit like images)
+        if (this.isMathRun(baseRun)) {
+          const elem = this.renderRun(baseRun, context, trackedConfig);
+          if (elem) {
+            if (styleId) {
+              elem.setAttribute('styleid', styleId);
+            }
+            const runSegments = segmentsByRun.get(runIndex);
+            const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
+            const segX = baseSegX + indentOffset;
+            const segWidth =
+              (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : baseRun.width) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);

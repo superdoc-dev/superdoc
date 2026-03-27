@@ -4152,6 +4152,128 @@ describe('DomPainter', () => {
     expect(updatedWrapper.style.width).toBe('310px');
   });
 
+  it('applies resolved zIndex only to anchored media fragments', () => {
+    const anchoredDrawingBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-anchored',
+      drawingKind: 'vectorShape',
+      geometry: { width: 10, height: 10 },
+      anchor: { isAnchored: true },
+    };
+
+    const inlineDrawingBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-inline',
+      drawingKind: 'vectorShape',
+      geometry: { width: 10, height: 10 },
+      zIndex: 1,
+    };
+
+    const drawingMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 30,
+      height: 15,
+      scale: 1,
+      naturalWidth: 30,
+      naturalHeight: 15,
+      geometry: { width: 10, height: 10 },
+    };
+
+    const drawingLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'drawing',
+              drawingKind: 'vectorShape',
+              blockId: 'drawing-anchored',
+              x: 30,
+              y: 40,
+              width: 30,
+              height: 15,
+              isAnchored: true,
+              zIndex: 7,
+              geometry: { width: 10, height: 10 },
+              scale: 1,
+            },
+            {
+              kind: 'drawing',
+              drawingKind: 'vectorShape',
+              blockId: 'drawing-inline',
+              x: 30,
+              y: 80,
+              width: 30,
+              height: 15,
+              zIndex: 1,
+              geometry: { width: 10, height: 10 },
+              scale: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const resolvedLayout: ResolvedLayout = {
+      version: 1,
+      flowMode: 'paginated',
+      pageGap: 0,
+      pages: [
+        {
+          id: 'page-0',
+          index: 0,
+          number: 1,
+          width: 400,
+          height: 500,
+          items: [
+            {
+              kind: 'fragment',
+              id: 'drawing:drawing-anchored:30:40',
+              pageIndex: 0,
+              x: 30,
+              y: 40,
+              width: 30,
+              height: 15,
+              zIndex: 7,
+              fragmentKind: 'drawing',
+              blockId: 'drawing-anchored',
+              fragmentIndex: 0,
+            },
+            {
+              kind: 'fragment',
+              id: 'drawing:drawing-inline:30:80',
+              pageIndex: 0,
+              x: 30,
+              y: 80,
+              width: 30,
+              height: 15,
+              zIndex: 1,
+              fragmentKind: 'drawing',
+              blockId: 'drawing-inline',
+              fragmentIndex: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({
+      blocks: [anchoredDrawingBlock, inlineDrawingBlock],
+      measures: [drawingMeasure, drawingMeasure],
+    });
+
+    painter.setResolvedLayout?.(resolvedLayout);
+    painter.paint(drawingLayout, mount);
+
+    const anchoredDrawingEl = mount.querySelector('[data-block-id="drawing-anchored"]') as HTMLElement;
+    const inlineDrawingEl = mount.querySelector('[data-block-id="drawing-inline"]') as HTMLElement;
+
+    expect(anchoredDrawingEl.style.zIndex).toBe('7');
+    expect(inlineDrawingEl.style.zIndex).toBe('');
+  });
+
   it('applies run-level decorations and hyperlinks', () => {
     const decoratedBlock: FlowBlock = {
       kind: 'paragraph',

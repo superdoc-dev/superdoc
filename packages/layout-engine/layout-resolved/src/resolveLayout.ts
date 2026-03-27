@@ -4,6 +4,8 @@ import type {
   FlowBlock,
   Measure,
   Fragment,
+  DrawingFragment,
+  ImageFragment,
   Line,
   ResolvedLayout,
   ResolvedPage,
@@ -65,6 +67,22 @@ function computeFragmentHeight(fragment: Fragment, blockMap: Map<string, BlockMa
   return 0;
 }
 
+function isAnchoredMediaFragment(fragment: Fragment): fragment is ImageFragment | DrawingFragment {
+  return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
+}
+
+/**
+ * Resolved layout only serializes wrapper stacking for anchored media.
+ * Inline media intentionally keep their legacy DOM-order paint behavior.
+ */
+function resolveFragmentZIndex(fragment: Fragment): number | undefined {
+  if (!isAnchoredMediaFragment(fragment)) {
+    return undefined;
+  }
+
+  return fragment.zIndex;
+}
+
 /** Mirrors fragmentKey() from painter-dom renderer.ts for stable identity. */
 function resolveFragmentId(fragment: Fragment): string {
   switch (fragment.kind) {
@@ -99,7 +117,7 @@ function resolveFragmentItem(
     y: fragment.y,
     width: fragment.width,
     height: computeFragmentHeight(fragment, blockMap),
-    zIndex: 'zIndex' in fragment && fragment.zIndex != null ? fragment.zIndex : undefined,
+    zIndex: resolveFragmentZIndex(fragment),
     fragmentKind: fragment.kind,
     blockId: fragment.blockId,
     fragmentIndex,

@@ -234,6 +234,28 @@ describe('resolveLayout', () => {
       });
     });
 
+    it('omits zIndex for non-anchored drawing fragments even when the fragment carries one', () => {
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        blockId: 'dr-inline',
+        x: 50,
+        y: 60,
+        width: 200,
+        height: 150,
+        zIndex: 1,
+        geometry: { width: 200, height: 150 },
+        scale: 1,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [drawingFragment] }],
+      };
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].items[0].zIndex).toBeUndefined();
+    });
+
     it('resolves a table fragment with partialRow in id', () => {
       const tableFragment: TableFragment = {
         kind: 'table',

@@ -3431,14 +3431,10 @@ export class DomPainter {
       } else {
         this.applyFragmentFrame(fragmentEl, fragment, context.section);
         fragmentEl.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
       this.applySdtDataset(fragmentEl, block.attrs?.sdt);
       this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
-
-      // Apply z-index for anchored images (legacy path — resolved path handles this in applyResolvedFragmentFrame)
-      if (!resolvedItem && fragment.isAnchored && fragment.zIndex != null) {
-        fragmentEl.style.zIndex = String(fragment.zIndex);
-      }
 
       // Add block ID for PM transaction targeting
       if (block.id) {
@@ -3549,14 +3545,10 @@ export class DomPainter {
       } else {
         this.applyFragmentFrame(fragmentEl, fragment, context.section);
         fragmentEl.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
       fragmentEl.style.position = 'absolute';
       fragmentEl.style.overflow = 'hidden';
-
-      // z-index for anchored drawings (legacy path — resolved path handles this in applyResolvedFragmentFrame)
-      if (!resolvedItem && fragment.isAnchored && fragment.zIndex != null) {
-        fragmentEl.style.zIndex = String(fragment.zIndex);
-      }
 
       const innerWrapper = this.doc.createElement('div');
       innerWrapper.classList.add('superdoc-drawing-inner');
@@ -6214,11 +6206,9 @@ export class DomPainter {
       this.applyResolvedFragmentFrame(el, resolvedItem, fragment, section);
     } else {
       this.applyFragmentFrame(el, fragment, section);
-      if (fragment.kind === 'image') {
+      if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         el.style.height = `${fragment.height}px`;
-      }
-      if (fragment.kind === 'drawing') {
-        el.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(el, fragment);
       }
     }
   }
@@ -6319,6 +6309,27 @@ export class DomPainter {
    * Applies fragment wrapper positioning from a ResolvedFragmentItem.
    * Uses resolved data for spatial properties and delegates PM attributes to the legacy path.
    */
+  private isAnchoredMediaFragment(fragment: Fragment): fragment is ImageFragment | DrawingFragment {
+    return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
+  }
+
+  /**
+   * Only anchored images and drawings participate in explicit wrapper stacking.
+   * Inline media intentionally rely on DOM order to preserve legacy paint order.
+   */
+  private resolveFragmentWrapperZIndex(fragment: Fragment, resolvedZIndex?: number): string {
+    if (!this.isAnchoredMediaFragment(fragment)) {
+      return '';
+    }
+
+    const zIndex = resolvedZIndex ?? fragment.zIndex;
+    return zIndex != null ? String(zIndex) : '';
+  }
+
+  private applyFragmentWrapperZIndex(el: HTMLElement, fragment: Fragment, resolvedZIndex?: number): void {
+    el.style.zIndex = this.resolveFragmentWrapperZIndex(fragment, resolvedZIndex);
+  }
+
   private applyResolvedFragmentFrame(
     el: HTMLElement,
     item: ResolvedFragmentItem,
@@ -6330,10 +6341,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
-
-    if (item.zIndex != null) {
-      el.style.zIndex = String(item.zIndex);
-    }
+    this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
       el.style.height = `${item.height}px`;

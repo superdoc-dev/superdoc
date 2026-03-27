@@ -7,3 +7,4 @@
  * See types.ts for the MathObjectConverter interface.
  */
 export { convertMathRun } from './math-run.js';
+export { convertFraction } from './fraction.js';

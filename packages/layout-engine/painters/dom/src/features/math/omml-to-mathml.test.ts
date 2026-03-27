@@ -139,9 +139,12 @@ describe('convertOmmlToMathml', () => {
 
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
-    // Even without a dedicated fraction converter, the text should be extracted
-    expect(result!.textContent).toContain('a');
-    expect(result!.textContent).toContain('b');
+    // Should produce a <mfrac> with numerator and denominator
+    const mfrac = result!.querySelector('mfrac');
+    expect(mfrac).not.toBeNull();
+    expect(mfrac!.children.length).toBe(2);
+    expect(mfrac!.children[0]!.textContent).toBe('a');
+    expect(mfrac!.children[1]!.textContent).toBe('b');
   });
 
   it('sets mathvariant=normal for m:nor (normal text) flag', () => {

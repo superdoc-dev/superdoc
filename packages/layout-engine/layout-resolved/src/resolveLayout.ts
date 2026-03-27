@@ -10,8 +10,12 @@ import type {
   ResolvedLayout,
   ResolvedPage,
   ResolvedFragmentItem,
+  ResolvedParagraphContent,
   ListMeasure,
+  ParagraphBlock,
+  ParagraphMeasure,
 } from '@superdoc/contracts';
+import { resolveParagraphContent } from './resolveParagraph.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -103,6 +107,18 @@ function resolveFragmentId(fragment: Fragment): string {
   }
 }
 
+function resolveParagraphContentIfApplicable(
+  fragment: Fragment,
+  blockMap: Map<string, BlockMapEntry>,
+): ResolvedParagraphContent | undefined {
+  if (fragment.kind !== 'para') return undefined;
+
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry || entry.block.kind !== 'paragraph' || entry.measure.kind !== 'paragraph') return undefined;
+
+  return resolveParagraphContent(fragment, entry.block as ParagraphBlock, entry.measure as ParagraphMeasure);
+}
+
 function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
@@ -121,6 +137,7 @@ function resolveFragmentItem(
     fragmentKind: fragment.kind,
     blockId: fragment.blockId,
     fragmentIndex,
+    content: resolveParagraphContentIfApplicable(fragment, blockMap),
   };
 }
 

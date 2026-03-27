@@ -89,6 +89,7 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
+import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
   resolvePainterListMarkerGeometry,
@@ -194,90 +195,11 @@ type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
 };
 
 /**
- * Type guard to check if a value is a valid MinimalWordLayout object.
- *
- * This guard validates that the object has the expected structure for MinimalWordLayout
- * without unsafe type assertions. It checks for the presence of valid properties and
- * ensures type safety when accessing wordLayout from block attributes.
- *
- * @param value - The value to check (typically from block.attrs?.wordLayout)
- * @returns True if the value is a valid MinimalWordLayout object, false otherwise
- *
- * @example
- * ```typescript
- * const wordLayout = block.attrs?.wordLayout;
- * if (isMinimalWordLayout(wordLayout)) {
- *   // TypeScript now knows wordLayout is MinimalWordLayout
- *   const marker = wordLayout.marker;
- *   const isFirstLineMode = wordLayout.firstLineIndentMode === true;
- * }
- * ```
+ * Type guard narrowing to the renderer-local MinimalWordLayout type.
+ * Delegates structural validation to the shared isMinimalWordLayout guard.
  */
 function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const obj = value as Record<string, unknown>;
-
-  // Check marker property if present
-  if (obj.marker !== undefined) {
-    if (typeof obj.marker !== 'object' || obj.marker === null) {
-      return false;
-    }
-    const marker = obj.marker as Record<string, unknown>;
-
-    // Validate marker.markerText if present (must be a string)
-    if (marker.markerText !== undefined && typeof marker.markerText !== 'string') {
-      return false;
-    }
-
-    // Validate marker.markerX if present
-    if (marker.markerX !== undefined && typeof marker.markerX !== 'number') {
-      return false;
-    }
-
-    // Validate marker.textStartX if present
-    if (marker.textStartX !== undefined && typeof marker.textStartX !== 'number') {
-      return false;
-    }
-  }
-
-  // Check indentLeftPx property if present
-  if (obj.indentLeftPx !== undefined) {
-    if (typeof obj.indentLeftPx !== 'number') {
-      return false;
-    }
-  }
-
-  // Check firstLineIndentMode property if present
-  if (obj.firstLineIndentMode !== undefined) {
-    if (typeof obj.firstLineIndentMode !== 'boolean') {
-      return false;
-    }
-  }
-
-  // Check textStartPx property if present
-  if (obj.textStartPx !== undefined) {
-    if (typeof obj.textStartPx !== 'number') {
-      return false;
-    }
-  }
-
-  // Check tabsPx property if present and validate all array elements are numbers
-  if (obj.tabsPx !== undefined) {
-    if (!Array.isArray(obj.tabsPx)) {
-      return false;
-    }
-    // Validate that all elements are numbers
-    for (const tab of obj.tabsPx) {
-      if (typeof tab !== 'number') {
-        return false;
-      }
-    }
-  }
-
-  return true;
+  return isMinimalWordLayoutShared(value);
 }
 
 /**
@@ -2794,6 +2716,7 @@ export class DomPainter {
       const block = lookup.block as ParagraphBlock;
       const measure = lookup.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
+      const content = resolvedItem?.content;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -2863,11 +2786,34 @@ export class DomPainter {
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
       // Render drop cap if present (only on the first fragment, not continuation)
-      const dropCapDescriptor = block.attrs?.dropCapDescriptor;
-      const dropCapMeasure = measure.dropCap;
-      if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
-        const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
+      if (content?.dropCap) {
+        const dc = content.dropCap;
+        const dropCapEl = this.renderDropCap(
+          {
+            mode: dc.mode,
+            run: {
+              text: dc.text,
+              fontFamily: dc.fontFamily,
+              fontSize: dc.fontSize,
+              bold: dc.bold,
+              italic: dc.italic,
+              color: dc.color,
+              position: dc.position,
+            },
+            lines: 0,
+          },
+          dc.width != null && dc.height != null
+            ? { width: dc.width, height: dc.height, lines: 0, mode: dc.mode }
+            : undefined,
+        );
         fragmentEl.appendChild(dropCapEl);
+      } else {
+        const dropCapDescriptor = block.attrs?.dropCapDescriptor;
+        const dropCapMeasure = measure.dropCap;
+        if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
+          const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
+          fragmentEl.appendChild(dropCapEl);
+        }
       }
 
       // Remove fragment-level indent so line-level indent handling doesn't double-apply.
@@ -2878,24 +2824,138 @@ export class DomPainter {
       if (fragmentEl.style.marginRight) fragmentEl.style.removeProperty('margin-right');
       if (fragmentEl.style.textIndent) fragmentEl.style.removeProperty('text-indent');
 
-      const paraIndent = block.attrs?.indent;
-      const paraIndentLeft = paraIndent?.left ?? 0;
-      const paraIndentRight = paraIndent?.right ?? 0;
-      // Word quirk: justified paragraphs ignore first-line indent. The pm-adapter sets // => This is not true
-      // suppressFirstLineIndent=true for these cases.
-      const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-      const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+      if (content) {
+        // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
+        const resolvedMarker = content.marker;
 
-      // Check if the paragraph ends with a lineBreak run.
-      // In Word, justified text stretches all lines EXCEPT the true last line of a paragraph.
-      // However, if the paragraph ends with a <w:br/> (lineBreak), the visible text before
-      // the break should still be justified because the "last line" is the empty line after the break.
-      const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-      const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+        content.lines.forEach((resolvedLine) => {
+          const lineEl = this.renderLine(
+            block,
+            resolvedLine.line,
+            context,
+            resolvedLine.availableWidth,
+            resolvedLine.lineIndex,
+            resolvedLine.skipJustify,
+            resolvedLine.resolvedListTextStartPx,
+            resolvedLine.indentOffset,
+          );
 
-      const listFirstLineTextStartPx =
-        !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
-          ? resolvePainterListTextStartPx({
+          // Apply pre-computed indent values
+          if (!resolvedLine.isListFirstLine) {
+            if (resolvedLine.paddingLeftPx > 0) {
+              lineEl.style.paddingLeft = `${resolvedLine.paddingLeftPx}px`;
+            }
+            if (resolvedLine.textIndentPx !== 0) {
+              lineEl.style.textIndent = `${resolvedLine.textIndentPx}px`;
+            } else if (resolvedLine.lineIndex > 0 || content.continuesFromPrev) {
+              // Body lines: reset textIndent to 0 if firstLineOffset would have been set
+              // (mirrors the legacy `else if (firstLineOffset && !isListFirstLine)` branch)
+              const paraIndent = block.attrs?.indent;
+              const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+              const flo = suppressFLI ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+              if (flo && !resolvedLine.isListFirstLine) {
+                lineEl.style.textIndent = '0px';
+              }
+            }
+          }
+          if (resolvedLine.paddingRightPx > 0) {
+            lineEl.style.paddingRight = `${resolvedLine.paddingRightPx}px`;
+          }
+
+          // Render marker on list first line
+          if (resolvedLine.isListFirstLine && resolvedMarker) {
+            lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+
+            if (!resolvedMarker.vanish) {
+              const markerContainer = this.doc!.createElement('span');
+              markerContainer.style.display = 'inline-block';
+              markerContainer.style.wordSpacing = '0px';
+
+              const markerEl = this.doc!.createElement('span');
+              markerEl.classList.add('superdoc-paragraph-marker');
+              markerEl.textContent = resolvedMarker.text;
+              markerEl.style.pointerEvents = 'none';
+
+              markerContainer.style.position = 'relative';
+              if (resolvedMarker.justification === 'right') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+              } else if (resolvedMarker.justification === 'center') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                lineEl.style.paddingLeft =
+                  parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+              }
+
+              markerEl.style.fontFamily =
+                toCssFontFamily(resolvedMarker.run.fontFamily) ?? resolvedMarker.run.fontFamily;
+              markerEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
+              markerEl.style.fontWeight = resolvedMarker.run.bold ? 'bold' : '';
+              markerEl.style.fontStyle = resolvedMarker.run.italic ? 'italic' : '';
+              if (resolvedMarker.run.color) {
+                markerEl.style.color = resolvedMarker.run.color;
+              }
+              if (resolvedMarker.run.letterSpacing != null) {
+                markerEl.style.letterSpacing = `${resolvedMarker.run.letterSpacing}px`;
+              }
+              markerContainer.appendChild(markerEl);
+
+              if (resolvedMarker.suffix === 'tab') {
+                const tabEl = this.doc!.createElement('span');
+                tabEl.className = 'superdoc-tab';
+                tabEl.innerHTML = '&nbsp;';
+                tabEl.style.display = 'inline-block';
+                tabEl.style.wordSpacing = '0px';
+                tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
+                lineEl.prepend(tabEl);
+              } else if (resolvedMarker.suffix === 'space') {
+                const spaceEl = this.doc!.createElement('span');
+                spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.wordSpacing = '0px';
+                spaceEl.textContent = '\u00A0';
+                lineEl.prepend(spaceEl);
+              }
+              lineEl.prepend(markerContainer);
+            }
+          }
+          this.capturePaintSnapshotLine(lineEl, context, {
+            inTableFragment: false,
+            inTableParagraph: false,
+          });
+          fragmentEl.appendChild(lineEl);
+        });
+      } else {
+        // ── Legacy path: compute everything from block attrs and measure ──
+        const paraIndent = block.attrs?.indent;
+        const paraIndentLeft = paraIndent?.left ?? 0;
+        const paraIndentRight = paraIndent?.right ?? 0;
+        const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+
+        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+
+        const listFirstLineTextStartPx =
+          !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+            ? resolvePainterListTextStartPx({
+                wordLayout,
+                indentLeftPx: paraIndentLeft,
+                hangingIndentPx: paraIndent?.hanging ?? 0,
+                firstLineIndentPx: paraIndent?.firstLine ?? 0,
+                markerTextWidthPx: fragment.markerTextWidth,
+              })
+            : undefined;
+
+        const shouldUseSharedInlinePrefixGeometry =
+          !fragment.continuesFromPrev &&
+          fragment.markerWidth &&
+          wordLayout?.marker?.justification === 'left' &&
+          wordLayout.firstLineIndentMode !== true &&
+          typeof fragment.markerTextWidth === 'number' &&
+          Number.isFinite(fragment.markerTextWidth) &&
+          fragment.markerTextWidth >= 0;
+        const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
+          ? resolvePainterListMarkerGeometry({
               wordLayout,
               indentLeftPx: paraIndentLeft,
               hangingIndentPx: paraIndent?.hanging ?? 0,
@@ -2904,270 +2964,172 @@ export class DomPainter {
             })
           : undefined;
 
-      const shouldUseSharedInlinePrefixGeometry =
-        !fragment.continuesFromPrev &&
-        fragment.markerWidth &&
-        wordLayout?.marker?.justification === 'left' &&
-        wordLayout.firstLineIndentMode !== true &&
-        typeof fragment.markerTextWidth === 'number' &&
-        Number.isFinite(fragment.markerTextWidth) &&
-        fragment.markerTextWidth >= 0;
-      const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
-        ? resolvePainterListMarkerGeometry({
-            wordLayout,
-            indentLeftPx: paraIndentLeft,
-            hangingIndentPx: paraIndent?.hanging ?? 0,
-            firstLineIndentPx: paraIndent?.firstLine ?? 0,
-            markerTextWidthPx: fragment.markerTextWidth,
-          })
-        : undefined;
+        let listTabWidth = 0;
+        let markerStartPos = 0;
+        if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
+          const markerTextWidth = fragment.markerTextWidth!;
+          const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+          const markerJustification = wordLayout.marker.justification ?? 'left';
+          let currentPos: number;
+          if (markerJustification === 'left') {
+            markerStartPos = anchorPoint;
+            currentPos = markerStartPos + markerTextWidth;
+          } else if (markerJustification === 'right') {
+            markerStartPos = anchorPoint - markerTextWidth;
+            currentPos = anchorPoint;
+          } else {
+            markerStartPos = anchorPoint - markerTextWidth / 2;
+            currentPos = markerStartPos + markerTextWidth;
+          }
 
-      // Pre-calculate marker geometry used later when painting the inline prefix.
-      let listTabWidth = 0;
-      let markerStartPos = 0;
-      if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
-        const markerTextWidth = fragment.markerTextWidth!;
-        const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
-        const markerJustification = wordLayout.marker.justification ?? 'left';
-        let currentPos: number;
-        if (markerJustification === 'left') {
-          markerStartPos = anchorPoint;
-          currentPos = markerStartPos + markerTextWidth;
-        } else if (markerJustification === 'right') {
-          markerStartPos = anchorPoint - markerTextWidth;
-          currentPos = anchorPoint;
-        } else {
-          markerStartPos = anchorPoint - markerTextWidth / 2;
-          currentPos = markerStartPos + markerTextWidth;
+          const suffix = wordLayout.marker.suffix ?? 'tab';
+          if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
+            listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
+          } else if (suffix === 'tab') {
+            listTabWidth = computeTabWidth(
+              currentPos,
+              markerJustification,
+              wordLayout.tabsPx,
+              paraIndent?.hanging,
+              paraIndent?.firstLine,
+              paraIndentLeft,
+            );
+          } else if (suffix === 'space') {
+            listTabWidth = 4;
+          }
         }
 
-        const suffix = wordLayout.marker.suffix ?? 'tab';
-        if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
-          listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
-        } else if (suffix === 'tab') {
-          listTabWidth = computeTabWidth(
-            currentPos,
-            markerJustification,
-            wordLayout.tabsPx,
-            paraIndent?.hanging,
-            paraIndent?.firstLine,
-            paraIndentLeft,
+        lines.forEach((line, index) => {
+          const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+          const hasListFirstLineMarker =
+            index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+          const shouldUseResolvedListTextStart =
+            hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+
+          const positiveIndentReduction = Math.max(0, paraIndentLeft) + Math.max(0, paraIndentRight);
+          const fallbackAvailableWidth = Math.max(0, fragment.width - positiveIndentReduction);
+          let availableWidthOverride =
+            line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
+
+          if (shouldUseResolvedListTextStart) {
+            availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
+          }
+
+          const isLastLineOfFragment = index === lines.length - 1;
+          const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
+          const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
+
+          const lineEl = this.renderLine(
+            block,
+            line,
+            context,
+            availableWidthOverride,
+            fragment.fromLine + index,
+            shouldSkipJustifyForLastLine,
+            shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
-        } else if (suffix === 'space') {
-          listTabWidth = 4;
-        }
-      }
 
-      lines.forEach((line, index) => {
-        const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
-        const hasListFirstLineMarker =
-          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
-        const shouldUseResolvedListTextStart =
-          hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
+          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
 
-        // Calculate available width from fragment dimensions (the actual rendered width).
-        // This is the ground truth for justify calculations since it matches what's visible.
-        // Only subtract positive indents - negative indents already expand fragment.width in layout
-        const positiveIndentReduction = Math.max(0, paraIndentLeft) + Math.max(0, paraIndentRight);
-        const fallbackAvailableWidth = Math.max(0, fragment.width - positiveIndentReduction);
-        // Use line.maxWidth if available (accounts for drop caps, exclusion zones), but cap it at
-        // fallbackAvailableWidth to handle cases where measurement used a different width than layout
-        // (e.g., paragraph measured at full page width but laid out in narrower column).
-        let availableWidthOverride =
-          line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
-
-        // Only explicit-positioned list first lines need a painter-side width override.
-        // Inline list first lines already have the correct measured width in `line.maxWidth`,
-        // and second-guessing that width causes justified spacing regressions.
-        if (shouldUseResolvedListTextStart) {
-          availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
-        }
-
-        // Determine if this is the true last line of the paragraph that should skip justification.
-        // Skip justify if: this is the last line of the last fragment AND no trailing lineBreak.
-        //
-        // IMPORTANT: List paragraphs (paragraphs with fragment.markerWidth and wordLayout.marker)
-        // SHOULD be justified per MS Word specification when alignment is 'justify'. Do NOT add
-        // an isListParagraph check here - the last line rule applies equally to list and non-list
-        // paragraphs (both skip justification on the final line unless it ends with lineBreak).
-        const isLastLineOfFragment = index === lines.length - 1;
-        const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
-        const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
-
-        const lineEl = this.renderLine(
-          block,
-          line,
-          context,
-          availableWidthOverride,
-          fragment.fromLine + index,
-          shouldSkipJustifyForLastLine,
-          shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
-        );
-
-        // List first lines handle indentation via marker positioning and tab stops,
-        // not CSS padding/text-indent. This matches Word's rendering model.
-        const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-
-        /**
-         * Identifies first lines that require special indent handling.
-         * This includes both hanging indents (negative firstLineOffset) and positive firstLine indents.
-         * When combined with explicit segment positioning, we must adjust paddingLeft instead of
-         * using textIndent, since absolutely positioned segments are not affected by textIndent.
-         */
-        const isFirstLine = index === 0 && !fragment.continuesFromPrev;
-
-        // Apply paragraph indent via padding (skip for list first lines)
-        if (!isListFirstLine) {
-          /**
-           * Special handling for first lines with explicit segment positioning.
-           *
-           * Normally we implement first-line/hanging indents with:
-           * - paddingLeft = leftIndent
-           * - textIndent = firstLine - hanging (positive for firstLine, negative for hanging)
-           *
-           * However, when tabs are present, segments have explicit X positions calculated
-           * during layout that are relative to the content area start. Since these segments
-           * use absolute positioning, CSS textIndent doesn't affect them.
-           *
-           * Therefore, we must incorporate the firstLineOffset into paddingLeft to match
-           * where the absolutely positioned segments expect to start.
-           *
-           * Examples:
-           * - leftIndent=360, hanging=360 (firstLineOffset=-360)
-           *   Normal: paddingLeft=360px, textIndent=-360px → first line content at 0px
-           *   With tabs: paddingLeft=0px, no textIndent → segments positioned correctly
-           *
-           * - leftIndent=360, firstLine=720 (firstLineOffset=+720)
-           *   Normal: paddingLeft=360px, textIndent=720px → first line content at 1080px
-           *   With tabs: paddingLeft=1080px, no textIndent → segments positioned correctly
-           */
-          if (hasExplicitSegmentPositioning) {
-            // When segments have explicit X positions (from tabs), they are absolutely positioned.
-            // Absolutely positioned elements ignore padding, so we must NOT set paddingLeft.
-            // The segment X positions already include the paragraph indent from layout calculation.
-            // For first lines with firstLineOffset, adjust the starting position.
-            if (isFirstLine && firstLineOffset !== 0) {
-              // For negative left indent, fragment position is already adjusted in layout engine.
-              // Only apply padding for the firstLineOffset (relative to the paragraph indent).
-              const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
-              const adjustedPadding = effectiveLeftIndent + firstLineOffset;
-              if (adjustedPadding > 0) {
-                lineEl.style.paddingLeft = `${adjustedPadding}px`;
+          if (!isListFirstLine) {
+            if (hasExplicitSegmentPositioning) {
+              if (isFirstLine && firstLineOffset !== 0) {
+                const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
+                const adjustedPadding = effectiveLeftIndent + firstLineOffset;
+                if (adjustedPadding > 0) {
+                  lineEl.style.paddingLeft = `${adjustedPadding}px`;
+                }
               }
-              // Note: negative adjustedPadding (from hanging indent) is handled by textIndent below
+            } else if (paraIndentLeft && paraIndentLeft > 0) {
+              lineEl.style.paddingLeft = `${paraIndentLeft}px`;
+            } else if (
+              !isFirstLine &&
+              paraIndent?.hanging &&
+              paraIndent.hanging > 0 &&
+              !(paraIndentLeft != null && paraIndentLeft < 0)
+            ) {
+              lineEl.style.paddingLeft = `${paraIndent.hanging}px`;
             }
-            // Otherwise, don't set paddingLeft - segment positions handle indentation
-          } else if (paraIndentLeft && paraIndentLeft > 0) {
-            // Only apply positive left indent as padding.
-            // Negative left indent is handled by fragment positioning in layout engine.
-            lineEl.style.paddingLeft = `${paraIndentLeft}px`;
-          } else if (
-            !isFirstLine &&
-            paraIndent?.hanging &&
-            paraIndent.hanging > 0 &&
-            // Only apply hanging padding when left indent is NOT negative.
-            // When left indent is negative, the fragment position already accounts for it.
-            // Adding padding here would shift body lines right, causing right-side overflow.
-            !(paraIndentLeft != null && paraIndentLeft < 0)
-          ) {
-            // Body lines with hanging indent need paddingLeft = hanging when left indent is non-negative.
-            // First line doesn't get this padding because it "hangs" (starts further left).
-            lineEl.style.paddingLeft = `${paraIndent.hanging}px`;
           }
-        }
-        if (paraIndentRight && paraIndentRight > 0) {
-          // Only apply positive right indent as padding.
-          // Negative right indent is handled by fragment positioning in layout engine.
-          lineEl.style.paddingRight = `${paraIndentRight}px`;
-        }
-        // Apply first-line/hanging text-indent (skip for list first lines and lines with explicit positioning)
-        // When using explicit segment positioning, segments are absolutely positioned and textIndent
-        // has no effect, so we skip it to avoid confusion.
-        if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
-          if (!hasExplicitSegmentPositioning) {
-            lineEl.style.textIndent = `${firstLineOffset}px`;
+          if (paraIndentRight && paraIndentRight > 0) {
+            lineEl.style.paddingRight = `${paraIndentRight}px`;
           }
-        } else if (firstLineOffset && !isListFirstLine) {
-          lineEl.style.textIndent = '0px';
-        }
-
-        if (isListFirstLine) {
-          const marker = wordLayout?.marker;
-          if (!marker) {
-            return;
+          if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
+            if (!hasExplicitSegmentPositioning) {
+              lineEl.style.textIndent = `${firstLineOffset}px`;
+            }
+          } else if (firstLineOffset && !isListFirstLine) {
+            lineEl.style.textIndent = '0px';
           }
-          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
-          // Skip marker rendering when hidden by vanish property (preserves list indentation)
-          if (!marker.run.vanish) {
-            const markerContainer = this.doc!.createElement('span');
-            markerContainer.style.display = 'inline-block';
-            // Justification is implemented via `word-spacing` on the line element. The list marker (and its
-            // tab/space suffix) must not inherit this spacing or it will shift the text start and can
-            // cause overflow for justified list paragraphs.
-            markerContainer.style.wordSpacing = '0px';
-
-            const markerEl = this.doc!.createElement('span');
-            markerEl.classList.add('superdoc-paragraph-marker');
-            markerEl.textContent = marker.markerText ?? '';
-            markerEl.style.pointerEvents = 'none';
-
-            // Left-justified markers stay inline to share flow with the tab spacer.
-            // Other justifications use absolute positioning.
-            const markerJustification = marker.justification ?? 'left';
-
-            markerContainer.style.position = 'relative';
-            if (markerJustification === 'right') {
-              markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos}px`;
-            } else if (markerJustification === 'center') {
-              markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-              lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+          if (isListFirstLine) {
+            const marker = wordLayout?.marker;
+            if (!marker) {
+              return;
             }
+            lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
-            // Apply marker run styling with font fallback chain
-            markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-            markerEl.style.fontSize = `${marker.run.fontSize}px`;
-            markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-            markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-            if (marker.run.color) {
-              markerEl.style.color = marker.run.color;
+            if (!marker.run.vanish) {
+              const markerContainer = this.doc!.createElement('span');
+              markerContainer.style.display = 'inline-block';
+              markerContainer.style.wordSpacing = '0px';
+
+              const markerEl = this.doc!.createElement('span');
+              markerEl.classList.add('superdoc-paragraph-marker');
+              markerEl.textContent = marker.markerText ?? '';
+              markerEl.style.pointerEvents = 'none';
+
+              const markerJustification = marker.justification ?? 'left';
+
+              markerContainer.style.position = 'relative';
+              if (markerJustification === 'right') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${markerStartPos}px`;
+              } else if (markerJustification === 'center') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+              }
+
+              markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+              markerEl.style.fontSize = `${marker.run.fontSize}px`;
+              markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+              markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+              if (marker.run.color) {
+                markerEl.style.color = marker.run.color;
+              }
+              if (marker.run.letterSpacing != null) {
+                markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+              }
+              markerContainer.appendChild(markerEl);
+
+              const suffix = marker.suffix ?? 'tab';
+              if (suffix === 'tab') {
+                const tabEl = this.doc!.createElement('span');
+                tabEl.className = 'superdoc-tab';
+                tabEl.innerHTML = '&nbsp;';
+                tabEl.style.display = 'inline-block';
+                tabEl.style.wordSpacing = '0px';
+                tabEl.style.width = `${listTabWidth}px`;
+                lineEl.prepend(tabEl);
+              } else if (suffix === 'space') {
+                const spaceEl = this.doc!.createElement('span');
+                spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.wordSpacing = '0px';
+                spaceEl.textContent = '\u00A0';
+                lineEl.prepend(spaceEl);
+              }
+              lineEl.prepend(markerContainer);
             }
-            if (marker.run.letterSpacing != null) {
-              markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-            }
-            markerContainer.appendChild(markerEl);
-
-            const suffix = marker.suffix ?? 'tab';
-            if (suffix === 'tab') {
-              const tabEl = this.doc!.createElement('span');
-              tabEl.className = 'superdoc-tab';
-              tabEl.innerHTML = '&nbsp;';
-              tabEl.style.display = 'inline-block';
-              tabEl.style.wordSpacing = '0px';
-              tabEl.style.width = `${listTabWidth}px`;
-
-              lineEl.prepend(tabEl);
-            } else if (suffix === 'space') {
-              // Insert a non-breaking space in the inline flow to separate marker and text.
-              // Wrap it so it can opt out of inherited `word-spacing` used for justification.
-              const spaceEl = this.doc!.createElement('span');
-              spaceEl.classList.add('superdoc-marker-suffix-space');
-              spaceEl.style.wordSpacing = '0px';
-              spaceEl.textContent = '\u00A0';
-
-              lineEl.prepend(spaceEl);
-            }
-            lineEl.prepend(markerContainer);
           }
-        }
-        this.capturePaintSnapshotLine(lineEl, context, {
-          inTableFragment: false,
-          inTableParagraph: false,
+          this.capturePaintSnapshotLine(lineEl, context, {
+            inTableFragment: false,
+            inTableParagraph: false,
+          });
+          fragmentEl.appendChild(lineEl);
         });
-        fragmentEl.appendChild(lineEl);
-      });
+      }
 
       return fragmentEl;
     } catch (error) {
@@ -5420,6 +5382,7 @@ export class DomPainter {
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
+   * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
    * @returns The rendered line element
    */
   private renderLine(
@@ -5430,6 +5393,7 @@ export class DomPainter {
     lineIndex?: number,
     skipJustify?: boolean,
     resolvedListTextStartPx?: number,
+    indentOffsetOverride?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -5710,25 +5674,32 @@ export class DomPainter {
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
-      const indentLeft = paraIndent?.left ?? 0;
-      const firstLine = paraIndent?.firstLine ?? 0;
-      const hanging = paraIndent?.hanging ?? 0;
-      const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
-      const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
-      const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
-      const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
-      const isListParagraph = Boolean(wordLayout?.marker);
-      const fallbackListTextStartPx =
-        typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
-          ? wordLayout.marker.textStartX
-          : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-            ? wordLayout.textStartPx
-            : undefined;
-      const listIndentOffset = isFirstLineOfPara
-        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
-        : indentLeft;
-      const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+      let indentOffset: number;
+      if (indentOffsetOverride != null) {
+        // Resolved path: indentOffset was pre-computed by the resolver.
+        indentOffset = indentOffsetOverride;
+      } else {
+        // Legacy path: derive from block attrs.
+        const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+        const indentLeft = paraIndent?.left ?? 0;
+        const firstLine = paraIndent?.firstLine ?? 0;
+        const hanging = paraIndent?.hanging ?? 0;
+        const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
+        const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
+        const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
+        const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
+        const isListParagraph = Boolean(wordLayout?.marker);
+        const fallbackListTextStartPx =
+          typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
+            ? wordLayout.marker.textStartX
+            : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
+              ? wordLayout.textStartPx
+              : undefined;
+        const listIndentOffset = isFirstLineOfPara
+          ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+          : indentLeft;
+        indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+      }
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;

@@ -1,17 +1,11 @@
 import {
   resolveListMarkerGeometry,
   resolveListTextStartPx,
+  computeTabWidth,
   type MinimalMarker,
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
 } from '@superdoc/common/list-marker-utils';
-
-/**
- * Default tab interval in pixels (0.5 inch at 96 DPI).
- * Used by the legacy painter path for marker suffix tabs that do not yet route
- * through the shared list geometry helper.
- */
-const DEFAULT_TAB_INTERVAL_PX = 48;
 
 type PainterListTextStartParams = {
   wordLayout: MinimalWordLayout | undefined;
@@ -78,50 +72,5 @@ export const resolvePainterListTextStartPx = ({
     (_markerText: string, marker: MinimalMarker) => resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
   );
 
-/**
- * Compute the width of the tab separator between a list marker and its text content.
- *
- * This legacy painter path is still used for marker modes whose rendering contract
- * differs from the shared geometry helper today, such as right/center-justified
- * markers and firstLineIndentMode paragraphs.
- */
-export const computeTabWidth = (
-  currentPos: number,
-  justification: string,
-  tabs: number[] | undefined,
-  hangingIndent: number | undefined,
-  firstLineIndent: number | undefined,
-  leftIndent: number,
-): number => {
-  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-  let tabWidth: number;
-  if (justification === 'left') {
-    const explicitTabs = [...(tabs ?? [])];
-    if (hangingIndent && hangingIndent > 0) {
-      explicitTabs.push(leftIndent);
-      explicitTabs.sort((a, b) => a - b);
-    }
-    let targetTabStop: number | undefined;
-
-    for (const tab of explicitTabs) {
-      if (tab > currentPos) {
-        targetTabStop = tab;
-        break;
-      }
-    }
-
-    if (targetTabStop === undefined) {
-      targetTabStop = nextDefaultTabStop;
-    }
-    tabWidth = targetTabStop - currentPos;
-  } else if (justification === 'right') {
-    if (firstLineIndent != null && firstLineIndent > 0) {
-      tabWidth = nextDefaultTabStop - currentPos;
-    } else {
-      tabWidth = hangingIndent ?? 0;
-    }
-  } else {
-    tabWidth = nextDefaultTabStop - currentPos;
-  }
-  return tabWidth;
-};
+// Re-export computeTabWidth from shared module
+export { computeTabWidth };

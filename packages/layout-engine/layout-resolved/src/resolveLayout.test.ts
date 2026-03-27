@@ -126,7 +126,7 @@ describe('resolveLayout', () => {
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
       const item = result.pages[0].items[0];
-      expect(item).toEqual({
+      expect(item).toMatchObject({
         kind: 'fragment',
         id: 'para:p1:0:2',
         pageIndex: 0,
@@ -139,6 +139,9 @@ describe('resolveLayout', () => {
         blockId: 'p1',
         fragmentIndex: 0,
       });
+      // Verify resolved paragraph content is populated
+      expect((item as any).content).toBeDefined();
+      expect((item as any).content.lines).toHaveLength(2);
     });
 
     it('resolves a paragraph fragment with remeasured lines', () => {
@@ -428,6 +431,566 @@ describe('resolveLayout', () => {
       };
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
       expect(result.pages[0].items[0].zIndex).toBeUndefined();
+    });
+  });
+
+  describe('paragraph content resolution', () => {
+    const makeLine = (
+      overrides: Partial<import('@superdoc/contracts').Line> = {},
+    ): import('@superdoc/contracts').Line => ({
+      fromRun: 0,
+      fromChar: 0,
+      toRun: 0,
+      toChar: 10,
+      width: 400,
+      ascent: 12,
+      descent: 4,
+      lineHeight: 20,
+      ...overrides,
+    });
+
+    it('resolves plain paragraph with correct line count and indent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [{ kind: 'text', text: 'Hello world' }] }];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.content).toBeDefined();
+      expect(item.content.lines).toHaveLength(2);
+      expect(item.content.lines[0].lineIndex).toBe(0);
+      expect(item.content.lines[1].lineIndex).toBe(1);
+      expect(item.content.marker).toBeUndefined();
+      expect(item.content.dropCap).toBeUndefined();
+    });
+
+    it('resolves paragraph with left indent as paddingLeft', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello' }],
+          attrs: { indent: { left: 36 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const line0 = (result.pages[0].items[0] as any).content.lines[0];
+      expect(line0.paddingLeftPx).toBe(36);
+      expect(line0.textIndentPx).toBe(0);
+    });
+
+    it('resolves paragraph with hanging indent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test' }],
+          attrs: { indent: { left: 0, hanging: 36 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: textIndent = -36 (firstLine(0) - hanging(36))
+      expect(content.lines[0].textIndentPx).toBe(-36);
+      // Body line: paddingLeft = hanging value
+      expect(content.lines[1].paddingLeftPx).toBe(36);
+    });
+
+    it('resolves paragraph with firstLine indent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test' }],
+          attrs: { indent: { left: 36, firstLine: 72 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: paddingLeft = leftIndent, textIndent = firstLine
+      expect(content.lines[0].paddingLeftPx).toBe(36);
+      expect(content.lines[0].textIndentPx).toBe(72);
+      // Body line: paddingLeft = leftIndent, no textIndent
+      expect(content.lines[1].paddingLeftPx).toBe(36);
+      expect(content.lines[1].textIndentPx).toBe(0);
+    });
+
+    it('resolves suppressFirstLineIndent with zero firstLineOffset', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello' }],
+          attrs: { indent: { left: 36, firstLine: 72 }, suppressFirstLineIndent: true } as any,
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const line0 = (result.pages[0].items[0] as any).content.lines[0];
+      // suppressFirstLineIndent means firstLineOffset = 0, so textIndent = 0
+      expect(line0.textIndentPx).toBe(0);
+    });
+
+    it('resolves last-line skip justify correctly', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 0,
+                toLine: 2,
+                x: 72,
+                y: 100,
+                width: 468,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [{ kind: 'text', text: 'Hello world test' }] }];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.lines[0].skipJustify).toBe(false);
+      expect(content.lines[1].skipJustify).toBe(true); // last line of last fragment
+    });
+
+    it('does not skip justify when continuesOnNext', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 100,
+                width: 468,
+                continuesOnNext: true,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [{ kind: 'text', text: 'Hello' }] }];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.lines[0].skipJustify).toBe(false);
+    });
+
+    it('does not skip justify when paragraph ends with lineBreak', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello' }, { kind: 'lineBreak' }],
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.lines[0].skipJustify).toBe(false);
+      expect(content.paragraphEndsWithLineBreak).toBe(true);
+    });
+
+    it('resolves drop cap on first fragment', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello' }],
+          attrs: {
+            dropCapDescriptor: {
+              mode: 'drop' as const,
+              lines: 3,
+              run: { text: 'H', fontFamily: 'Arial', fontSize: 72 },
+            },
+          },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+          dropCap: { width: 50, height: 60, lines: 3, mode: 'drop' as const },
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.dropCap).toBeDefined();
+      expect(content.dropCap.text).toBe('H');
+      expect(content.dropCap.mode).toBe('drop');
+      expect(content.dropCap.fontFamily).toBe('Arial');
+      expect(content.dropCap.fontSize).toBe(72);
+      expect(content.dropCap.width).toBe(50);
+      expect(content.dropCap.height).toBe(60);
+    });
+
+    it('omits drop cap on continuation fragment', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 1,
+                toLine: 2,
+                x: 72,
+                y: 100,
+                width: 468,
+                continuesFromPrev: true,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world' }],
+          attrs: {
+            dropCapDescriptor: {
+              mode: 'drop' as const,
+              lines: 3,
+              run: { text: 'H', fontFamily: 'Arial', fontSize: 72 },
+            },
+          },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+          dropCap: { width: 50, height: 60, lines: 3, mode: 'drop' as const },
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.dropCap).toBeUndefined();
+    });
+
+    it('resolves list marker on first fragment', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 100,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'List item' }],
+          attrs: {
+            indent: { left: 36, hanging: 36 },
+            wordLayout: {
+              marker: {
+                markerText: '1.',
+                justification: 'left',
+                suffix: 'tab',
+                run: { fontFamily: 'Arial', fontSize: 12 },
+              },
+            },
+          },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.marker).toBeDefined();
+      expect(content.marker.text).toBe('1.');
+      expect(content.marker.justification).toBe('left');
+      expect(content.marker.suffix).toBe('tab');
+      expect(content.marker.run.fontFamily).toBe('Arial');
+      expect(content.marker.run.fontSize).toBe(12);
+      expect(content.lines[0].isListFirstLine).toBe(true);
+    });
+
+    it('omits marker on continuation fragment', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 1,
+                toLine: 2,
+                x: 72,
+                y: 100,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+                continuesFromPrev: true,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'List item continued' }],
+          attrs: {
+            indent: { left: 36, hanging: 36 },
+            wordLayout: {
+              marker: {
+                markerText: '1.',
+                justification: 'left',
+                suffix: 'tab',
+                run: { fontFamily: 'Arial', fontSize: 12 },
+              },
+            },
+          },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.marker).toBeUndefined();
+      expect(content.lines[0].isListFirstLine).toBe(false);
+    });
+
+    it('does not resolve content for table fragments', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 't1',
+                fromRow: 0,
+                toRow: 1,
+                x: 72,
+                y: 100,
+                width: 468,
+                height: 200,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 't1',
+          rows: [],
+        } as any,
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'table',
+          rows: [],
+          totalHeight: 200,
+        } as any,
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.content).toBeUndefined();
+    });
+
+    it('resolves available width from fragment width minus positive indents', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello' }],
+          attrs: { indent: { left: 36, right: 36 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine()],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const line0 = (result.pages[0].items[0] as any).content.lines[0];
+      // availableWidth = fragment.width - max(0, left) - max(0, right) = 468 - 36 - 36 = 396
+      expect(line0.availableWidth).toBe(396);
     });
   });
 });

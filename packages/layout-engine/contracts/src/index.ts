@@ -1971,6 +1971,10 @@ export type {
   ResolvedPaintItem,
   ResolvedGroupItem,
   ResolvedFragmentItem,
+  ResolvedParagraphContent,
+  ResolvedTextLineItem,
+  ResolvedDropCapItem,
+  ResolvedListMarkerItem,
 } from './resolved-layout.js';
 
 export * as Engines from './engines/index.js';

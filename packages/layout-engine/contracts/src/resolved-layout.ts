@@ -1,4 +1,4 @@
-import type { FlowMode, Fragment } from './index.js';
+import type { FlowMode, Fragment, Line } from './index.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -69,4 +69,101 @@ export type ResolvedFragmentItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy content rendering. */
   fragmentIndex: number;
+  /** Pre-resolved paragraph content for non-table paragraph fragments. */
+  content?: ResolvedParagraphContent;
+};
+
+/** Resolved paragraph content for non-table paragraph/list-item fragments. */
+export type ResolvedParagraphContent = {
+  /** The lines to render, with all layout data pre-resolved. */
+  lines: ResolvedTextLineItem[];
+  /** Drop cap rendering data. Only present on first fragment of a paragraph with a drop cap. */
+  dropCap?: ResolvedDropCapItem;
+  /** List marker rendering data. Only present on first fragment of a list paragraph. */
+  marker?: ResolvedListMarkerItem;
+  /** Whether this fragment continues from a previous page. */
+  continuesFromPrev?: boolean;
+  /** Whether this fragment continues on the next page. */
+  continuesOnNext?: boolean;
+  /** Whether the source paragraph ends with a lineBreak run. */
+  paragraphEndsWithLineBreak?: boolean;
+};
+
+/** A single resolved text line with pre-computed rendering geometry. */
+export type ResolvedTextLineItem = {
+  /** The source Line data (segments, leaders, bars, dimensions, run indices). */
+  line: Line;
+  /** Global line index within the paragraph (fragment.fromLine + localIndex). */
+  lineIndex: number;
+  /** Pre-computed available width for justify calculations. */
+  availableWidth: number;
+  /** Whether to skip justification for this line (last line of paragraph). */
+  skipJustify: boolean;
+  /** Pre-computed CSS paddingLeft in pixels. */
+  paddingLeftPx: number;
+  /** Pre-computed CSS paddingRight in pixels. */
+  paddingRightPx: number;
+  /** Pre-computed CSS textIndent in pixels (0 when not applicable). */
+  textIndentPx: number;
+  /** Whether this is a list first line (indent handled by marker, not CSS). */
+  isListFirstLine: boolean;
+  /** Resolved text-start position for list first lines with explicit segment positioning. */
+  resolvedListTextStartPx?: number;
+  /** Whether this line has explicit segment positioning (tabs). */
+  hasExplicitSegmentPositioning: boolean;
+  /** Pre-computed indent offset for the segment positioning path in renderLine. */
+  indentOffset: number;
+};
+
+/** Resolved drop cap rendering data. */
+export type ResolvedDropCapItem = {
+  /** Drop cap text content. */
+  text: string;
+  /** Drop cap mode. */
+  mode: 'drop' | 'margin';
+  /** Font family. */
+  fontFamily: string;
+  /** Font size in pixels. */
+  fontSize: number;
+  /** Bold styling. */
+  bold?: boolean;
+  /** Italic styling. */
+  italic?: boolean;
+  /** Text color. */
+  color?: string;
+  /** Vertical position offset in pixels. */
+  position?: number;
+  /** Measured width in pixels. */
+  width?: number;
+  /** Measured height in pixels. */
+  height?: number;
+};
+
+/** Resolved list marker rendering data with pre-computed positioning. */
+export type ResolvedListMarkerItem = {
+  /** Marker text content (e.g., "1.", "a)", bullet). */
+  text: string;
+  /** Horizontal justification. */
+  justification: 'left' | 'right' | 'center';
+  /** Suffix type after marker. */
+  suffix: 'tab' | 'space' | 'nothing';
+  /** Whether marker should be hidden (vanish property). */
+  vanish?: boolean;
+  /** Pre-computed left position of marker container in pixels. */
+  markerStartPx: number;
+  /** Pre-computed tab/space suffix width in pixels. */
+  suffixWidthPx: number;
+  /** CSS paddingLeft for the first line when marker is present. */
+  firstLinePaddingLeftPx: number;
+  /** Extra padding adjustment for center-justified markers. */
+  centerPaddingAdjustPx?: number;
+  /** Marker run styling. */
+  run: {
+    fontFamily: string;
+    fontSize: number;
+    bold?: boolean;
+    italic?: boolean;
+    color?: string;
+    letterSpacing?: number;
+  };
 };

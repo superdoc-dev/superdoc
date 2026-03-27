@@ -19,6 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*"
   },
   "devDependencies": {

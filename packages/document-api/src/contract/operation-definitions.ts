@@ -166,8 +166,8 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Create a single paragraph, heading, or table in the document. Returns a nodeId for chaining subsequent creates and for use as a block target in superdoc_format. ' +
       'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" only when the user asks for regular body text. ' +
       'Before creating, call superdoc_get_content blocks to read formatting from regular body text paragraphs (non-empty, non-title blocks with alignment "justify" or "left"). ' +
-      'After creating, re-fetch blocks with superdoc_get_content to get a fresh ref for the new block, then call superdoc_format with action "inline" using the body text values. ' +
-      'For body paragraphs: set bold:false, use body text alignment (usually "justify"). For headings: set bold:true, use heading alignment (often "center"), and scale fontSize up from body text. ' +
+      'After creating, re-fetch blocks with superdoc_get_content to get a fresh ref for the new block, then apply TWO format calls: (1) superdoc_format action "inline" for character styling, AND (2) superdoc_format action "set_alignment" with the block target for paragraph alignment. Both calls are REQUIRED. ' +
+      'For body paragraphs: inline {bold:false, ...body values}, alignment "justify". For headings: inline {bold:true, fontSize scaled up, ...body values}, alignment "center". ' +
       'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +
       'When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. ' +
       'Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',

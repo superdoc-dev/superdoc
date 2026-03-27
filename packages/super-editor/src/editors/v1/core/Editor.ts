@@ -1620,6 +1620,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // This may override the setEditable calls above when read-only protection
     // is enforced or when permission ranges allow editing in protected docs.
     applyEffectiveEditability(this);
+
+    this.emit('documentModeChange', {
+      editor: this,
+      documentMode: cleanedMode as 'editing' | 'viewing' | 'suggesting',
+    });
   }
 
   /**

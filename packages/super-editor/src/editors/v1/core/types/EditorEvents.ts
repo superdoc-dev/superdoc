@@ -51,6 +51,11 @@ export interface PaginationPayload {
   [key: string]: unknown;
 }
 
+export interface DocumentModeChangePayload {
+  editor: Editor;
+  documentMode: 'editing' | 'viewing' | 'suggesting';
+}
+
 /**
  * Payload for list definitions change
  */
@@ -114,6 +119,9 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when pagination updates */
   paginationUpdate: [PaginationPayload];
+
+  /** Called when document mode changes */
+  documentModeChange: [DocumentModeChangePayload];
 
   /** Called when an exception occurs */
   exception: [{ error: Error; editor: Editor }];

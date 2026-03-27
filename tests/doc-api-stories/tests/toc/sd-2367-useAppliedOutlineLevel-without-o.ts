@@ -11,7 +11,7 @@ import { unwrap, useStoryHarness } from '../harness';
 const TIMEOUT_MS = 60_000;
 
 describe('SD-2367: useAppliedOutlineLevel without \\o switch', () => {
-  const { client, outPath } = useStoryHarness('toc/sd-2367-useAppliedOutlineLevel', {
+  const { client, outPath, runCli } = useStoryHarness('toc/sd-2367-useAppliedOutlineLevel', {
     preserveResults: true,
   });
 
@@ -21,96 +21,95 @@ describe('SD-2367: useAppliedOutlineLevel without \\o switch', () => {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  function assertSuccess(label: string, result: any): void {
+    if (result?.success === true || result?.receipt?.success === true) return;
+    const code = result?.failure?.code ?? result?.receipt?.failure?.code ?? 'UNKNOWN';
+    throw new Error(`${label} did not report success (code: ${code}).`);
+  }
+
+  async function callDocOperation<T>(operationId: string, input: Record<string, unknown>): Promise<T> {
+    const normalizedInput = { ...input };
+    if (typeof normalizedInput.out === 'string' && normalizedInput.out.length > 0 && normalizedInput.force == null) {
+      normalizedInput.force = true;
+    }
+    const envelope = await runCli(['call', `doc.${operationId}`, '--input-json', JSON.stringify(normalizedInput)]);
+    return unwrap<T>(unwrap<any>(envelope?.data));
+  }
+
   it(
     'TOC with \\u only collects paragraphs that have outlineLevel set',
     async () => {
+      // Step 1: Build a doc with headings via SDK session
       const sessionId = makeSessionId('sd2367');
       await api.doc.open({ sessionId });
 
-      // Insert normal paragraphs (no heading style)
       const p1 = unwrap<any>(await api.doc.insert({ sessionId, value: 'Normal paragraph' }));
-      expect(p1?.receipt?.success).toBe(true);
+      assertSuccess('insert', p1);
 
       const p2 = unwrap<any>(
         await api.doc.create.heading({
           sessionId,
           level: 1,
           at: { kind: 'documentEnd' },
-          text: 'Custom Section A',
+          text: 'Section A',
         }),
       );
-      expect(p2?.receipt?.success).toBe(true);
+      assertSuccess('create.heading 1', p2);
 
       const p3 = unwrap<any>(
         await api.doc.create.heading({
           sessionId,
           level: 2,
           at: { kind: 'documentEnd' },
-          text: 'Custom Section B',
+          text: 'Section B',
         }),
       );
-      expect(p3?.receipt?.success).toBe(true);
+      assertSuccess('create.heading 2', p3);
 
-      // Save the doc so we can use CLI calls
       const docPath = outPath('sd2367-source.docx');
       await api.doc.save({ sessionId, out: docPath, force: true });
 
-      // Discover the paragraphs to get their nodeIds for setOutlineLevel
-      const blocksResult = unwrap<any>(await api.doc.blocks.list({ sessionId, filter: { nodeType: 'paragraph' } }));
-      const paragraphs = blocksResult?.items ?? [];
-      expect(paragraphs.length).toBeGreaterThanOrEqual(3);
+      // Step 2: Find the first normal paragraph and set outlineLevel via CLI
+      const findResult = await callDocOperation<any>('find', {
+        doc: docPath,
+        query: { select: { type: 'node', nodeType: 'paragraph' } },
+      });
+      const paragraphs = findResult?.items ?? [];
+      expect(paragraphs.length).toBeGreaterThanOrEqual(1);
 
-      // Set outlineLevel on the first normal paragraph (not a heading style)
       const firstParagraph = paragraphs[0];
-      const setResult = unwrap<any>(
-        await api.doc.format.paragraph.setOutlineLevel({
-          sessionId,
-          target: firstParagraph.address,
-          outlineLevel: 0, // outline level 0 → TOC level 1
-        }),
-      );
-      expect(setResult?.receipt?.success).toBe(true);
+      const setResult = await callDocOperation<any>('format.paragraph.setOutlineLevel', {
+        doc: docPath,
+        out: docPath,
+        target: firstParagraph.address,
+        outlineLevel: 0, // OOXML level 0 → TOC level 1
+      });
+      assertSuccess('setOutlineLevel', setResult);
 
-      // Save after setting outlineLevel
-      await api.doc.save({ sessionId, out: docPath, force: true });
+      // Step 3: Create TOC with \u only (no \o)
+      const createResult = await callDocOperation<any>('create.tableOfContents', {
+        doc: docPath,
+        out: docPath,
+        at: { kind: 'documentStart' },
+        config: {
+          useAppliedOutlineLevel: true,
+          hyperlinks: true,
+          hideInWebView: true,
+          // NO outlineLevels — the SD-2367 scenario
+        },
+      });
+      assertSuccess('create.tableOfContents', createResult);
 
-      // Create a TOC WITHOUT \o — only \u (useAppliedOutlineLevel)
-      // This is the bug scenario: TOC \u \h \z
-      const createResult = unwrap<any>(
-        await api.doc.create.tableOfContents({
-          sessionId,
-          at: { kind: 'documentStart' },
-          config: {
-            useAppliedOutlineLevel: true,
-            hyperlinks: true,
-            hideInWebView: true,
-            // NO outlineLevels — this is the key part
-          },
-        }),
-      );
-
-      if (createResult?.success !== true && createResult?.receipt?.success !== true) {
-        const code = createResult?.failure?.code ?? createResult?.receipt?.failure?.code ?? 'UNKNOWN';
-        throw new Error(`create.tableOfContents did not report success (code: ${code}).`);
-      }
-
-      // Save with TOC
+      // Step 4: Verify TOC has entries
       const resultPath = outPath('sd2367-result.docx');
-      await api.doc.save({ sessionId, out: resultPath, force: true });
+      const listResult = await callDocOperation<any>('toc.list', { doc: docPath });
+      expect(listResult?.total).toBeGreaterThanOrEqual(1);
 
-      // Verify: the TOC should have entries (not be empty)
-      const tocList = unwrap<any>(await api.doc.toc.list({ sessionId }));
-      expect(tocList?.total).toBeGreaterThanOrEqual(1);
+      const tocTarget = listResult.items[0].address;
+      const tocInfo = await callDocOperation<any>('toc.get', { doc: docPath, target: tocTarget });
 
-      const tocTarget = tocList.items[0].address;
-      const tocInfo = unwrap<any>(await api.doc.toc.get({ sessionId, target: tocTarget }));
-
-      // The TOC should contain entries from paragraphs with outlineLevel
-      // Before the fix, this would be 0 (bug). After the fix, > 0.
+      // Before fix: entryCount was 0 (bug). After fix: > 0.
       expect(tocInfo?.properties?.entryCount).toBeGreaterThan(0);
-
-      // Verify the instruction does NOT contain \o (no outline range)
-      // but DOES contain \u
       expect(tocInfo?.properties?.instruction).toContain('\\u');
     },
     TIMEOUT_MS,

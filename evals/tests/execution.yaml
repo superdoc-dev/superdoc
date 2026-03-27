@@ -382,7 +382,11 @@
       value: |
         const d = JSON.parse(output);
         if (!d.documentText) return { pass: false, score: 0, reason: 'No content' };
-        return { pass: true, score: 1, reason: 'Conversion attempted' };
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const hasSetType = listCalls.some(tc => tc.args?.action === 'set_type');
+        const hasCreate = listCalls.some(tc => tc.args?.action === 'create');
+        if (!hasSetType && !hasCreate) return { pass: false, score: 0, reason: 'No list conversion call found' };
+        return { pass: true, score: 1, reason: hasSetType ? 'Used set_type' : 'Used create' };
     - type: javascript
       value: file://lib/checks.cjs:traceAllOk
     - type: javascript

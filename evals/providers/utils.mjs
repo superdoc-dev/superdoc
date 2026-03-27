@@ -76,6 +76,9 @@ export function cleanArgs(args) {
 
 // --- Ref revision bump (handles REVISION_MISMATCH after create→format) ---
 
+// V4 ref format prefix — matches the encoding in
+// super-editor/src/document-api-adapters/story-runtime/story-ref-codec.ts
+// Update this if the ref codec version changes (e.g., v5).
 const REF_PREFIX = 'text:v4:';
 const MAX_REF_RETRIES = 3;
 

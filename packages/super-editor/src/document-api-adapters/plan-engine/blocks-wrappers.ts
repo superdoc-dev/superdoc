@@ -29,6 +29,7 @@ import {
   type BlockCandidate,
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
+import { computeTextContentLength } from '../helpers/text-offset-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
@@ -112,8 +113,9 @@ function extractBlockFormatting(node: ProseMirrorNode): {
     return false;
   });
 
-  // Default to black when no explicit color is set
-  if (!color) color = '#000000';
+  // Filter out the OOXML "auto" sentinel — it means "use the theme default"
+  // and does not represent an explicit color choice.
+  if (color === 'auto') color = undefined;
 
   let headingLevel: number | undefined;
   if (typeof styleId === 'string') {
@@ -239,7 +241,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
   const rev = getRevision(editor);
 
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
-    const textLength = candidate.node.textContent.length;
+    const textLength = computeTextContentLength(candidate.node);
     const ref =
       textLength > 0
         ? encodeV4Ref({

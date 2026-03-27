@@ -3042,7 +3042,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               fontFamily: { type: 'string', description: 'Font family from first text run.' },
               fontSize: { type: 'number', description: 'Font size from first text run.' },
               bold: { type: 'boolean', description: 'True if text is bold.' },
-              color: { type: 'string', description: "Text color (e.g. '#000000'). Defaults to black when not set." },
+              color: { type: 'string', description: "Text color when explicitly set (e.g. '#000000')." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
               headingLevel: { type: 'number', description: 'Heading level (1-6).' },
               ref: {

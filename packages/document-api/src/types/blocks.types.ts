@@ -20,7 +20,7 @@ export interface BlockListEntry {
   bold?: boolean;
   /** True if the block's text is underlined. */
   underline?: boolean;
-  /** Text color (defaults to '#000000' when not explicitly set). */
+  /** Text color when explicitly set in the document. */
   color?: string;
   /** Paragraph alignment. */
   alignment?: string;

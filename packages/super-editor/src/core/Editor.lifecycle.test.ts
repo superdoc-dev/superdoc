@@ -199,6 +199,46 @@ describe('Editor Lifecycle API', () => {
         await editor.open(undefined, getBlankDocOptions());
         expect(editor.lifecycleState).toBe('ready');
       });
+
+      it('isolates extension storage across editors created from the same extension list', async () => {
+        const sharedExtensions = getStarterExtensions();
+        const editorA = createTestEditor({ extensions: sharedExtensions });
+        const editorB = createTestEditor({ extensions: sharedExtensions });
+
+        try {
+          await editorA.open(undefined, getBlankDocOptions());
+          await editorB.open(undefined, getBlankDocOptions());
+
+          editorA.storage.image.media = {
+            ...editorA.storage.image.media,
+            'word/media/image1.png': 'base64-image-a',
+          };
+
+          editorB.storage.image.media = {
+            ...editorB.storage.image.media,
+            'word/media/image2.png': 'base64-image-b',
+          };
+
+          expect(editorA.storage.image.media).not.toBe(editorB.storage.image.media);
+
+          editorB.destroy();
+
+          expect(editorA.storage.image.media['word/media/image1.png']).toBe('base64-image-a');
+        } finally {
+          if (!editorA.isDestroyed) {
+            if (editorA.lifecycleState === 'ready') {
+              editorA.close();
+            }
+            editorA.destroy();
+          }
+          if (!editorB.isDestroyed) {
+            if (editorB.lifecycleState === 'ready') {
+              editorB.close();
+            }
+            editorB.destroy();
+          }
+        }
+      });
     });
 
     describe('Source Types', () => {

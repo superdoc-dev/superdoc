@@ -2777,7 +2777,7 @@ const diffCoverageSchema: JsonSchema = objectSchema(
     comments: { type: 'boolean' },
     styles: { type: 'boolean' },
     numbering: { type: 'boolean' },
-    headerFooters: { type: 'boolean', const: false },
+    headerFooters: { type: 'boolean' },
   },
   ['body', 'comments', 'styles', 'numbering', 'headerFooters'],
 );
@@ -2785,18 +2785,23 @@ const diffCoverageSchema: JsonSchema = objectSchema(
 const diffSummarySchema: JsonSchema = objectSchema(
   {
     hasChanges: { type: 'boolean' },
-    changedComponents: { type: 'array', items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering'] } },
+    changedComponents: {
+      type: 'array',
+      items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'] },
+    },
     body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    headerFooters: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    parts: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
   },
-  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering'],
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'],
 );
 
 const diffSnapshotSchema: JsonSchema = objectSchema(
   {
-    version: { type: 'string', const: 'sd-diff-snapshot/v1' },
+    version: { type: 'string', enum: ['sd-diff-snapshot/v1', 'sd-diff-snapshot/v2'] },
     engine: { type: 'string', enum: ['super-editor'] },
     fingerprint: { type: 'string' },
     coverage: diffCoverageSchema,
@@ -2807,7 +2812,7 @@ const diffSnapshotSchema: JsonSchema = objectSchema(
 
 const diffPayloadSchema: JsonSchema = objectSchema(
   {
-    version: { type: 'string', const: 'sd-diff-payload/v1' },
+    version: { type: 'string', enum: ['sd-diff-payload/v1', 'sd-diff-payload/v2'] },
     engine: { type: 'string', enum: ['super-editor'] },
     baseFingerprint: { type: 'string' },
     targetFingerprint: { type: 'string' },

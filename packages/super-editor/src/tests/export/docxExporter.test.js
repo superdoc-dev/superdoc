@@ -41,6 +41,29 @@ describe('DocxExporter', () => {
     expect(xml).toContain('Format=&lt;&lt;NUM&gt;&gt;_&lt;&lt;VER&gt;&gt;');
   });
 
+  it.each([
+    { label: 'null', stub: { declaration: null } },
+    { label: 'undefined', stub: {} },
+  ])('uses default XML declaration when converter.declaration is $label', ({ stub }) => {
+    const exporter = new DocxExporter(stub);
+
+    const data = {
+      name: 'w:document',
+      attributes: {},
+      elements: [
+        {
+          name: 'w:t',
+          elements: [{ type: 'text', text: 'Hello' }],
+        },
+      ],
+    };
+
+    const xml = exporter.schemaToXml(data);
+
+    expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    expect(xml).toContain('<w:t>Hello</w:t>');
+  });
+
   it('encodes all ampersands in text nodes including entity-like sequences', () => {
     const exporter = new DocxExporter(createConverterStub());
 

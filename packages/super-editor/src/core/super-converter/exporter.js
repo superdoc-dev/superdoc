@@ -39,6 +39,7 @@ import { translateVectorShape, translateShapeGroup } from '@converter/v3/handler
 import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
 import { translator as wFootnoteReferenceTranslator } from './v3/handlers/w/footnoteReference/footnoteReference-translator.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { DEFAULT_XML_DECLARATION } from './constants.js';
 
 const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
   pageSize: Object.freeze({ width: '12240', height: '15840' }),
@@ -586,11 +587,7 @@ export class DocxExporter {
 
   #generate_xml_as_list(data, debug = false) {
     const json = JSON.parse(JSON.stringify(data));
-    const declaration = this.converter.declaration?.attributes ?? {
-      version: '1.0',
-      encoding: 'UTF-8',
-      standalone: 'yes',
-    };
+    const declaration = this.converter.declaration?.attributes ?? DEFAULT_XML_DECLARATION.attributes;
     const xmlTag = `<?xml${Object.entries(declaration)
       .map(([key, value]) => ` ${key}="${value}"`)
       .join('')}?>`;

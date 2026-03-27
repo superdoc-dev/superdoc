@@ -12,20 +12,25 @@ import type { Transaction } from 'prosemirror-state';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import type { DiffSnapshot, DiffPayload, DiffApplyResult, DiffCoverage } from '@superdoc/document-api';
 import type { CommentInput } from '../algorithm/comment-diffing';
+import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
+import type { PartsDiff, PartsState } from '../algorithm/parts-diffing';
+import { capturePartsState } from '../algorithm/parts-diffing';
+import { captureHeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { DiffResult } from '../computeDiff';
 import { computeDiff } from '../computeDiff';
 import { replayDiffs, type ReplayDiffsResult } from '../replayDiffs';
 import { buildCanonicalDiffableState } from './canonicalize';
 import { computeFingerprint } from './fingerprint';
 import { buildDiffSummary } from './summary';
-import { V1_COVERAGE, coverageEquals } from './coverage';
+import { V1_COVERAGE, V2_COVERAGE, coverageEquals } from './coverage';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const SNAPSHOT_VERSION = 'sd-diff-snapshot/v1' as const;
-const PAYLOAD_VERSION = 'sd-diff-payload/v1' as const;
+const SNAPSHOT_VERSION_V2 = 'sd-diff-snapshot/v2' as const;
+const PAYLOAD_VERSION_V1 = 'sd-diff-payload/v1' as const;
+const PAYLOAD_VERSION_V2 = 'sd-diff-payload/v2' as const;
 const ENGINE_ID = 'super-editor' as const;
 
 // ---------------------------------------------------------------------------
@@ -38,11 +43,36 @@ export interface DiffServiceEditor {
     comments?: CommentInput[];
     translatedLinkedStyles?: StylesDocumentProperties | null;
     translatedNumbering?: NumberingProperties | null;
+    headers?: Record<string, unknown>;
+    footers?: Record<string, unknown>;
+    headerIds?: Record<string, unknown>;
+    footerIds?: Record<string, unknown>;
+    convertedXml?: Record<string, unknown>;
+    numbering?: Record<string, unknown>;
+    bodySectPr?: Record<string, unknown> | null;
+    savedTagsToRestore?: Array<Record<string, unknown>>;
+    headerFooterModified?: boolean;
+    documentModified?: boolean;
+    exportToXmlJson?: (opts: {
+      data: unknown;
+      editor: { schema: Schema; getUpdatedJson: () => unknown };
+      editorSchema: Schema;
+      isHeaderFooter: boolean;
+      comments?: unknown[];
+      commentDefinitions?: unknown[];
+      isFinalDoc?: boolean;
+    }) => { result?: { elements?: Array<{ elements?: unknown[] }> } };
   } | null;
   emit?: (event: string, payload: unknown) => void;
   options?: {
     documentId?: string | null;
     user?: unknown;
+    mediaFiles?: Record<string, unknown>;
+  };
+  storage?: {
+    image?: {
+      media?: Record<string, unknown>;
+    };
   };
 }
 
@@ -62,6 +92,50 @@ function getEditorNumbering(editor: DiffServiceEditor): NumberingProperties | nu
   return editor.converter?.translatedNumbering ?? null;
 }
 
+/**
+ * Captures the current editor's header/footer state for diffing.
+ *
+ * @param editor Editor whose converter and section XML should be read.
+ * @returns Canonical header/footer snapshot for the editor.
+ */
+function getEditorHeaderFooters(editor: DiffServiceEditor): HeaderFooterState {
+  return captureHeaderFooterState(editor);
+}
+
+function getEditorPartsState(editor: DiffServiceEditor, headerFooters: HeaderFooterState | null): PartsState {
+  return capturePartsState(editor, headerFooters);
+}
+
+/**
+ * Builds the canonical fingerprint input for one coverage profile.
+ *
+ * @param doc ProseMirror document snapshot.
+ * @param comments Comment snapshot.
+ * @param styles Styles snapshot.
+ * @param numbering Numbering snapshot.
+ * @param headerFooters Header/footer snapshot.
+ * @param coverage Coverage flags that decide which components participate.
+ * @returns Canonical diffable state used for fingerprinting.
+ */
+function buildCanonicalStateForCoverage(
+  doc: PMNode,
+  comments: CommentInput[],
+  styles: StylesDocumentProperties | null,
+  numbering: NumberingProperties | null,
+  headerFooters: HeaderFooterState | null,
+  partsState: PartsState | null,
+  coverage: DiffCoverage,
+) {
+  return buildCanonicalDiffableState(
+    doc,
+    comments,
+    styles,
+    numbering,
+    coverage.headerFooters ? headerFooters : null,
+    coverage.headerFooters ? partsState : null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Capture
 // ---------------------------------------------------------------------------
@@ -79,15 +153,25 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
   const comments = getEditorComments(editor);
   const styles = getEditorStyles(editor);
   const numbering = getEditorNumbering(editor);
+  const headerFooters = getEditorHeaderFooters(editor);
+  const partsState = getEditorPartsState(editor, headerFooters);
 
-  const canonical = buildCanonicalDiffableState(doc, comments, styles, numbering);
+  const canonical = buildCanonicalStateForCoverage(
+    doc,
+    comments,
+    styles,
+    numbering,
+    headerFooters,
+    partsState,
+    V2_COVERAGE,
+  );
   const fingerprint = computeFingerprint(canonical);
 
   return {
-    version: SNAPSHOT_VERSION,
+    version: SNAPSHOT_VERSION_V2,
     engine: ENGINE_ID,
     fingerprint,
-    coverage: { ...V1_COVERAGE },
+    coverage: { ...V2_COVERAGE },
     // Deep-clone every slot so the snapshot is immutable.  doc.toJSON()
     // already returns a fresh tree; the rest are live references that would
     // drift if the editor keeps mutating after capture.
@@ -96,6 +180,8 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
       comments: comments as unknown as Record<string, unknown>[],
       styles: styles as unknown as Record<string, unknown> | null,
       numbering: numbering as unknown as Record<string, unknown> | null,
+      headerFooters: headerFooters as unknown as Record<string, unknown>,
+      partsState: partsState as unknown as Record<string, unknown>,
     }),
   };
 }
@@ -111,9 +197,11 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
 export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: DiffSnapshot): DiffPayload {
   validateEngine(targetSnapshot.engine);
   validateSnapshotVersion(targetSnapshot.version);
+  validateSnapshotFingerprints(targetSnapshot);
 
+  const expectedCoverage = getCoverageForSnapshotVersion(targetSnapshot.version);
   const targetCoverage = targetSnapshot.coverage;
-  validateCoverageMatch(V1_COVERAGE, targetCoverage);
+  validateCoverageMatch(expectedCoverage, targetCoverage);
 
   // Structurally validate payload slots before use — the payload is opaque
   // and may have been deserialized from external JSON.
@@ -122,6 +210,8 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const targetComments = (targetSnapshot.payload.comments ?? []) as CommentInput[];
   const targetStyles = targetSnapshot.payload.styles as StylesDocumentProperties | null;
   const targetNumbering = targetSnapshot.payload.numbering as NumberingProperties | null;
+  const targetHeaderFooters = (targetSnapshot.payload.headerFooters ?? null) as HeaderFooterState | null;
+  const targetPartsState = (targetSnapshot.payload.partsState ?? null) as PartsState | null;
   const targetDoc = parseDocPayload(editor.state.schema, targetSnapshot.payload.doc);
 
   // Re-derive target fingerprint from payload to guard against tampered wrappers.
@@ -130,7 +220,15 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   // INVALID_INPUT rather than a raw TypeError.
   let reDerivedFingerprint: string;
   try {
-    const targetCanonical = buildCanonicalDiffableState(targetDoc, targetComments, targetStyles, targetNumbering);
+    const targetCanonical = buildCanonicalStateForCoverage(
+      targetDoc,
+      targetComments,
+      targetStyles,
+      targetNumbering,
+      targetHeaderFooters,
+      targetSnapshot.version === SNAPSHOT_VERSION_V2 ? targetPartsState : null,
+      targetCoverage,
+    );
     reDerivedFingerprint = computeFingerprint(targetCanonical);
   } catch (err) {
     if (err instanceof DiffServiceError) throw err;
@@ -145,13 +243,22 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       `Target snapshot fingerprint does not match re-derived value. The snapshot may have been tampered with.`,
     );
   }
-
   // Compute base fingerprint
   const baseDoc = editor.state.doc;
   const baseComments = getEditorComments(editor);
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
-  const baseCanonical = buildCanonicalDiffableState(baseDoc, baseComments, baseStyles, baseNumbering);
+  const baseHeaderFooters = targetCoverage.headerFooters ? getEditorHeaderFooters(editor) : null;
+  const basePartsState = targetCoverage.headerFooters ? getEditorPartsState(editor, baseHeaderFooters) : null;
+  const baseCanonical = buildCanonicalStateForCoverage(
+    baseDoc,
+    baseComments,
+    baseStyles,
+    baseNumbering,
+    baseHeaderFooters,
+    targetSnapshot.version === SNAPSHOT_VERSION_V2 ? basePartsState : null,
+    targetCoverage,
+  );
   const baseFingerprint = computeFingerprint(baseCanonical);
 
   // Compute raw diff.  Wrap in try-catch so malformed nested comment bodies
@@ -169,6 +276,10 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       targetStyles,
       baseNumbering,
       targetNumbering,
+      baseHeaderFooters,
+      targetHeaderFooters,
+      basePartsState,
+      targetPartsState,
     );
   } catch (err) {
     if (err instanceof DiffServiceError) throw err;
@@ -184,19 +295,21 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     commentDiffs: rawDiff.commentDiffs as unknown as Record<string, unknown>[],
     stylesDiff: rawDiff.stylesDiff as unknown as Record<string, unknown> | null,
     numberingDiff: rawDiff.numberingDiff as unknown as Record<string, unknown> | null,
+    headerFootersDiff: rawDiff.headerFootersDiff as unknown as Record<string, unknown> | null,
+    partsDiff: rawDiff.partsDiff as unknown as Record<string, unknown> | null,
   }) as Record<string, unknown>;
 
   return {
-    version: PAYLOAD_VERSION,
+    version: getPayloadVersionForCoverage(targetCoverage),
     engine: ENGINE_ID,
     baseFingerprint,
     targetFingerprint: targetSnapshot.fingerprint,
-    coverage: { ...V1_COVERAGE },
+    coverage: { ...targetCoverage },
     summary,
     // Detach the payload from editor-owned objects before returning it across
     // the API boundary. Comment diffs can otherwise retain live comment refs.
     payload,
-  };
+  } as DiffPayload;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,13 +339,25 @@ export function applyDiffPayload(
 ): ApplyDiffResult {
   validateEngine(diffPayload.engine);
   validatePayloadVersion(diffPayload.version);
+  validateCoverageForPayloadVersion(diffPayload);
+  validatePayloadFingerprints(diffPayload);
 
   // Verify base fingerprint matches current document
   const baseDoc = editor.state.doc;
   const baseComments = getEditorComments(editor);
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
-  const baseCanonical = buildCanonicalDiffableState(baseDoc, baseComments, baseStyles, baseNumbering);
+  const baseHeaderFooters = getEditorHeaderFooters(editor);
+  const basePartsState = getEditorPartsState(editor, baseHeaderFooters);
+  const baseCanonical = buildCanonicalStateForCoverage(
+    baseDoc,
+    baseComments,
+    baseStyles,
+    baseNumbering,
+    baseHeaderFooters,
+    diffPayload.version === PAYLOAD_VERSION_V2 ? basePartsState : null,
+    diffPayload.coverage,
+  );
   const currentFingerprint = computeFingerprint(baseCanonical);
 
   if (currentFingerprint !== diffPayload.baseFingerprint) {
@@ -242,7 +367,6 @@ export function applyDiffPayload(
         `The document may have changed since the diff was computed. Re-run diff.compare against the current state.`,
     );
   }
-
   // Reconstruct internal DiffResult from opaque payload with structural validation
   const rawDiff = parseDiffPayloadContents(diffPayload.payload);
 
@@ -282,6 +406,7 @@ export function applyDiffPayload(
     schema: editor.state.schema,
     comments: stagedComments,
     editor: staging as unknown as Parameters<typeof replayDiffs>[0]['editor'],
+    trackedChangesRequested: trackedRequested,
   });
 
   tr.setMeta('inputType', 'programmatic');
@@ -314,10 +439,10 @@ export function applyDiffPayload(
       appliedOperations: replayResult.appliedDiffs,
       baseFingerprint: diffPayload.baseFingerprint,
       targetFingerprint: diffPayload.targetFingerprint,
-      coverage: { ...V1_COVERAGE },
+      coverage: { ...diffPayload.coverage },
       summary: verifiedSummary,
       diagnostics: replayResult.warnings,
-    },
+    } as DiffApplyResult,
     tr,
   };
 }
@@ -337,6 +462,12 @@ const STAGED_CONVERTER_KEYS = [
   'translatedNumbering',
   'convertedXml',
   'numbering',
+  'headers',
+  'footers',
+  'headerIds',
+  'footerIds',
+  'bodySectPr',
+  'savedTagsToRestore',
   // promoteToGuid() mutates these on the converter during style/numbering
   // replay; they must be committed back since Editor.dispatch() only calls
   // promoteToGuid for body-changing transactions (tr.docChanged).
@@ -364,6 +495,25 @@ function createStagingEditor(
 ): { staging: DiffServiceEditor; stagedComments: CommentInput[]; commit: () => void } {
   const pendingEvents: Array<[string, unknown]> = [];
   const stagedComments = comments.map((c) => ({ ...c }));
+  const stagedOptions: DiffServiceEditor['options'] = editor.options
+    ? {
+        ...editor.options,
+        mediaFiles: editor.options.mediaFiles ? structuredClone(editor.options.mediaFiles) : editor.options.mediaFiles,
+      }
+    : editor.options;
+  const stagedStorage: DiffServiceEditor['storage'] = editor.storage
+    ? {
+        ...editor.storage,
+        image: editor.storage.image
+          ? {
+              ...editor.storage.image,
+              media: editor.storage.image.media
+                ? structuredClone(editor.storage.image.media)
+                : editor.storage.image.media,
+            }
+          : editor.storage.image,
+      }
+    : editor.storage;
 
   // Build a staging converter that inherits non-mutable properties from
   // the real converter via Object.create, then deep-clones only the
@@ -381,6 +531,7 @@ function createStagingEditor(
     }
 
     // Replay also sets documentModified (primitive) — seed from current value
+    cloned.headerFooterModified = raw.headerFooterModified;
     cloned.documentModified = raw.documentModified;
     // Point cloned converter's comments at the staged array
     cloned.comments = stagedComments;
@@ -393,7 +544,8 @@ function createStagingEditor(
     emit: (event: string, payload: unknown) => {
       pendingEvents.push([event, payload]);
     },
-    options: editor.options,
+    options: stagedOptions,
+    storage: stagedStorage,
     converter: stagedConverter,
   };
 
@@ -406,7 +558,15 @@ function createStagingEditor(
       for (const key of STAGED_CONVERTER_KEYS) {
         realRaw[key] = stagedRaw[key];
       }
+      realRaw.headerFooterModified = stagedRaw.headerFooterModified;
       realRaw.documentModified = stagedRaw.documentModified;
+    }
+
+    if (editor.options && stagedOptions && 'mediaFiles' in stagedOptions) {
+      editor.options.mediaFiles = stagedOptions.mediaFiles;
+    }
+    if (editor.storage?.image && stagedStorage?.image) {
+      editor.storage.image.media = stagedStorage.image.media;
     }
 
     // Apply comment mutations to the real array.  Deep-clone each entry
@@ -468,6 +628,8 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   const commentDiffs = payload.commentDiffs;
   const stylesDiff = payload.stylesDiff;
   const numberingDiff = payload.numberingDiff;
+  const headerFootersDiff = payload.headerFootersDiff;
+  const partsDiff = payload.partsDiff;
 
   if (!Array.isArray(docDiffs)) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.docDiffs must be an array.');
@@ -492,6 +654,16 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.numberingDiff must be a plain object or null.');
   }
+  if (
+    headerFootersDiff !== null &&
+    headerFootersDiff !== undefined &&
+    (typeof headerFootersDiff !== 'object' || Array.isArray(headerFootersDiff))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Diff payload.headerFootersDiff must be a plain object or null.');
+  }
+  if (partsDiff !== null && partsDiff !== undefined && (typeof partsDiff !== 'object' || Array.isArray(partsDiff))) {
+    throw new DiffServiceError('INVALID_INPUT', 'Diff payload.partsDiff must be a plain object or null.');
+  }
 
   // Deep-clone commentDiffs so replay never holds references to caller-owned
   // objects.  Without this, commentJSON/newCommentJSON pushed into
@@ -502,6 +674,8 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
     commentDiffs: structuredClone(commentDiffs) as DiffResult['commentDiffs'],
     stylesDiff: (stylesDiff ?? null) as DiffResult['stylesDiff'],
     numberingDiff: (numberingDiff ?? null) as DiffResult['numberingDiff'],
+    headerFootersDiff: (headerFootersDiff ?? null) as DiffResult['headerFootersDiff'],
+    partsDiff: (partsDiff ?? null) as PartsDiff | null,
   };
 }
 
@@ -563,20 +737,32 @@ function validateEngine(engine: string): void {
 }
 
 function validateSnapshotVersion(version: string): void {
-  if (version !== SNAPSHOT_VERSION) {
+  if (version !== 'sd-diff-snapshot/v1' && version !== SNAPSHOT_VERSION_V2) {
     throw new DiffServiceError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported snapshot version "${version}". Expected "${SNAPSHOT_VERSION}".`,
+      `Unsupported snapshot version "${version}". Expected "sd-diff-snapshot/v1" or "${SNAPSHOT_VERSION_V2}".`,
     );
   }
 }
 
 function validatePayloadVersion(version: string): void {
-  if (version !== PAYLOAD_VERSION) {
+  if (version !== PAYLOAD_VERSION_V1 && version !== PAYLOAD_VERSION_V2) {
     throw new DiffServiceError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported diff version "${version}". Expected "${PAYLOAD_VERSION}".`,
+      `Unsupported diff version "${version}". Expected "${PAYLOAD_VERSION_V1}" or "${PAYLOAD_VERSION_V2}".`,
     );
+  }
+}
+
+function validateSnapshotFingerprints(snapshot: DiffSnapshot): void {
+  if (typeof snapshot.fingerprint !== 'string') {
+    throw new DiffServiceError('INVALID_INPUT', 'Snapshot fingerprint must be a string.');
+  }
+}
+
+function validatePayloadFingerprints(payload: DiffPayload): void {
+  if (typeof payload.baseFingerprint !== 'string' || typeof payload.targetFingerprint !== 'string') {
+    throw new DiffServiceError('INVALID_INPUT', 'Diff payload fingerprints must be strings.');
   }
 }
 
@@ -606,6 +792,20 @@ function validateSnapshotPayload(payload: Record<string, unknown>): void {
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.numbering must be a plain object or null.');
   }
+  if (
+    payload.headerFooters !== null &&
+    payload.headerFooters !== undefined &&
+    (typeof payload.headerFooters !== 'object' || Array.isArray(payload.headerFooters))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.headerFooters must be a plain object or null.');
+  }
+  if (
+    payload.partsState !== null &&
+    payload.partsState !== undefined &&
+    (typeof payload.partsState !== 'object' || Array.isArray(payload.partsState))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.partsState must be a plain object or null.');
+  }
 }
 
 function validateCoverageMatch(base: DiffCoverage, target: DiffCoverage): void {
@@ -615,6 +815,25 @@ function validateCoverageMatch(base: DiffCoverage, target: DiffCoverage): void {
       `Coverage mismatch between base and target. Both must use the same coverage configuration.`,
     );
   }
+}
+
+function validateCoverageForPayloadVersion(diffPayload: DiffPayload): void {
+  const expectedCoverage = diffPayload.version === PAYLOAD_VERSION_V1 ? V1_COVERAGE : V2_COVERAGE;
+  if (!coverageEquals(diffPayload.coverage, expectedCoverage)) {
+    throw new DiffServiceError(
+      'INVALID_INPUT',
+      `Coverage mismatch for payload version "${diffPayload.version}". ` +
+        `Expected ${JSON.stringify(expectedCoverage)}, got ${JSON.stringify(diffPayload.coverage)}.`,
+    );
+  }
+}
+
+function getCoverageForSnapshotVersion(version: DiffSnapshot['version']): DiffCoverage {
+  return version === 'sd-diff-snapshot/v1' ? V1_COVERAGE : V2_COVERAGE;
+}
+
+function getPayloadVersionForCoverage(coverage: DiffCoverage): DiffPayload['version'] {
+  return coverage.headerFooters ? PAYLOAD_VERSION_V2 : PAYLOAD_VERSION_V1;
 }
 
 // ---------------------------------------------------------------------------

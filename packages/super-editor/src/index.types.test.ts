@@ -589,7 +589,12 @@ vi.mock('./core/Editor', () => ({
       tr: { setSelection: vi.fn().mockReturnThis() },
     },
     view: {
-      dom: { dispatchEvent: vi.fn(() => true), focus: vi.fn() },
+      dom: {
+        dispatchEvent: vi.fn(() => true),
+        focus: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
       focus: vi.fn(),
       dispatch: vi.fn(),
     },

@@ -673,7 +673,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const pageContentHeight = state.contentBottom - state.topMargin;
       const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
       const fullHeight = linesHeight + borderExpansion.top + borderExpansion.bottom;
-      const fitsOnBlankPage = fullHeight + baseSpacingBefore <= pageContentHeight;
+      // Use overlap model: spacing and border top share space (ECMA-376 §17.3.1.42)
+      const heightOnBlankPage = linesHeight + Math.max(baseSpacingBefore, borderExpansion.top) + borderExpansion.bottom;
+      const fitsOnBlankPage = heightOnBlankPage <= pageContentHeight;
       const remainingHeightAfterSpacing = state.contentBottom - (state.cursorY + neededSpacingBefore);
       if (fitsOnBlankPage && state.page.fragments.length > 0 && fullHeight > remainingHeightAfterSpacing) {
         state = advanceColumn(state);
@@ -682,6 +684,10 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         continue;
       }
     }
+
+    // Track whether spacing is applied in THIS iteration (not a previous one).
+    // Continuation fragments after a page break don't re-apply spacing.
+    const spacingAppliedThisFragment = !appliedSpacingBefore && spacingBefore > 0;
 
     if (!appliedSpacingBefore && spacingBefore > 0) {
       while (!appliedSpacingBefore) {
@@ -821,13 +827,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Expand width: negative indents on both sides expand the fragment width
     // (e.g., -48px left + -72px right = 120px wider)
     const adjustedWidth = effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
+    // Border top overlaps with spacing: only offset by the uncovered portion.
+    // On continuation fragments (after page break), spacing wasn't applied — use full expansion.
+    const spacingForOverlap = spacingAppliedThisFragment ? spacingBefore : 0;
+    const extraTop = Math.max(0, borderExpansion.top - spacingForOverlap);
+
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
       fromLine,
       toLine: slice.toLine,
       x: adjustedX,
-      y: state.cursorY + borderExpansion.top,
+      y: state.cursorY + extraTop,
       width: adjustedWidth,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
@@ -875,10 +886,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
     state.page.fragments.push(fragment);
 
-    // Border top expansion overlaps with spacingBefore (ECMA-376 §17.3.1.42).
-    // Only add the portion not already covered by spacing.
-    const extraTop = Math.max(0, borderExpansion.top - spacingBefore);
-    state.cursorY += fragmentHeight + extraTop + borderExpansion.bottom;
+    state.cursorY += extraTop + fragmentHeight + borderExpansion.bottom;
     lastState = state;
     fromLine = slice.toLine;
   }

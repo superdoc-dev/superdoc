@@ -61,8 +61,6 @@ export { measureCharacterX } from './text-measurement';
 export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
-export { LayoutVersionManager } from './layout-version-manager';
-export type { VersionedLayoutState, LayoutVersionMetrics } from './layout-version-manager';
 export { LayoutVersionLogger } from './instrumentation';
 
 // Font Metrics Cache
@@ -88,26 +86,6 @@ export type { PageTransform, PmEditorView } from './pm-dom-fallback';
 // Page Geometry Helper
 export { PageGeometryHelper } from './page-geometry-helper';
 export type { PageGeometryConfig } from './page-geometry-helper';
-
-// Layout Scheduler
-export { LayoutScheduler, Priority } from './layout-scheduler';
-export type { LayoutRequest, ScheduledTask, TaskStatus, QueueStats } from './layout-scheduler';
-
-// Layout Coordinator
-export { LayoutCoordinator } from './layout-coordinator';
-export type { LayoutResult, P0Executor, P1Executor, WorkerExecutor, LayoutCoordinatorDeps } from './layout-coordinator';
-
-// Layout Worker Manager
-export { LayoutWorkerManager } from './layout-worker';
-export type { SerializedDoc, Range, WorkerMessage, WorkerResult, WorkerLayoutResult } from './layout-worker';
-
-// DOM Reconciler
-export { DomReconciler } from './dom-reconciler';
-export type { ReconciliationResult } from './dom-reconciler';
-
-// Layout Pipeline
-export { LayoutPipeline } from './layout-pipeline';
-export type { Transaction, LayoutPipelineConfig } from './layout-pipeline';
 
 // Dirty Tracker
 export { DirtyTracker } from './dirty-tracker';

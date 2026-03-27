@@ -141,9 +141,7 @@ jobs:
         working-directory: packages/super-editor
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          VITEST_MAX_WORKERS: '1'
-          VITEST_MIN_WORKERS: '1'
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}
+        run: pnpm exec vitest run --pool forks --minForks 1 --maxForks 1 --shard=${{ matrix.shard }}
 
       - name: Run other package vitest tests
         if: matrix.name == 'other-packages'

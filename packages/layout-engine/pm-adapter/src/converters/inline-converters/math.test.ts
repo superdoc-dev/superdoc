@@ -55,12 +55,15 @@ describe('mathInlineNodeToRun', () => {
     expect(empty!.width).toBe(20);
   });
 
-  it('returns null when position is missing', () => {
+  it('returns run without pmStart/pmEnd when position is missing', () => {
     const node = { type: 'mathInline', attrs: { textContent: 'x' }, marks: [] };
     const positions = new WeakMap(); // no entry for node
     const params = { ...makeParams({}), node, positions };
     const run = mathInlineNodeToRun(params);
-    expect(run).toBeNull();
+    expect(run).not.toBeNull();
+    expect(run!.kind).toBe('math');
+    expect(run!.pmStart).toBeUndefined();
+    expect(run!.pmEnd).toBeUndefined();
   });
 
   it('passes through SDT metadata', () => {

@@ -1,4 +1,4 @@
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, createListIdAllocator } from '@helpers/list-numbering-helpers.js';
 
 const removeWhitespaces = (node) => {
   const children = node.childNodes;
@@ -48,25 +48,6 @@ export function flattenListsInHtml(html, editor, domDocument) {
   }
 
   return doc.body.innerHTML;
-}
-
-function createListIdAllocator(editor) {
-  const existingIds = new Set(
-    Object.keys(editor?.converter?.numbering?.definitions || {})
-      .map((value) => Number(value))
-      .filter(Number.isFinite),
-  );
-  let nextId = Number(ListHelpers.getNewListId(editor));
-
-  return () => {
-    while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
-      nextId = Number.isFinite(nextId) ? nextId + 1 : Number(ListHelpers.getNewListId(editor));
-    }
-    const allocatedId = nextId;
-    existingIds.add(allocatedId);
-    nextId += 1;
-    return allocatedId;
-  };
 }
 
 function restoreCopiedListParagraphDefinitions(container, editor) {

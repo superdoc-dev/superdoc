@@ -7,7 +7,7 @@ import { warnNoDOM } from './helpers/domWarnings.js';
 import { getTextContentFromNodes } from './helpers/getTextContentFromNodes.js';
 import { isRegExp } from './utilities/isRegExp.js';
 import { handleDocxPaste, wrapTextsInRuns } from './inputRules/docx-paste/docx-paste.js';
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, createListIdAllocator } from '@helpers/list-numbering-helpers.js';
 import { flattenListsInHtml, unflattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { handleGoogleDocsHtml } from './inputRules/google-docs-paste/google-docs-paste.js';
 import {
@@ -53,43 +53,42 @@ export function isSuperdocOriginClipboardHtml(html) {
   return false;
 }
 
-/** Apply pasted body `sectPr` when target has single-column layout. */
-function tryApplyEmbeddedBodySectPr(editor, view, bodySectPr) {
+/**
+ * Apply pasted multi-column `bodySectPr` only when the document is still single-column.
+ * Caller supplies how the clone is written (own `tr` vs dispatch).
+ *
+ * @param {object} editor
+ * @param {object | null | undefined} bodySectPr
+ * @param {import('prosemirror-model').Node} docForCurrentAttrs
+ * @param {(clone: object) => void} applyClone
+ */
+function applyEmbeddedBodySectPrWhenAllowed(editor, bodySectPr, docForCurrentAttrs, applyClone) {
   if (!bodySectPr || typeof bodySectPr !== 'object') return;
 
   const incomingCols = getSectPrColumns(bodySectPr);
   if (!incomingCols?.count || incomingCols.count <= 1) return;
 
-  const current = view.state.doc.attrs?.bodySectPr;
+  const current = docForCurrentAttrs.attrs?.bodySectPr;
   const currentCols = current && getSectPrColumns(current);
   if (currentCols?.count > 1) return;
 
   const clone = JSON.parse(JSON.stringify(bodySectPr));
-  const tr = view.state.tr.setDocAttribute('bodySectPr', clone);
-  const converter = editor?.converter;
-  if (converter) {
-    converter.bodySectPr = clone;
+  applyClone(clone);
+  if (editor?.converter) {
+    editor.converter.bodySectPr = clone;
   }
-  view.dispatch(tr);
 }
 
-/** Like tryApplyEmbeddedBodySectPr but on `tr` (one dispatch with slice paste meta). */
+function tryApplyEmbeddedBodySectPr(editor, view, bodySectPr) {
+  applyEmbeddedBodySectPrWhenAllowed(editor, bodySectPr, view.state.doc, (clone) => {
+    view.dispatch(view.state.tr.setDocAttribute('bodySectPr', clone));
+  });
+}
+
 function applyEmbeddedBodySectPrToTransaction(editor, tr, bodySectPr, docBeforePaste) {
-  if (!bodySectPr || typeof bodySectPr !== 'object') return;
-
-  const incomingCols = getSectPrColumns(bodySectPr);
-  if (!incomingCols?.count || incomingCols.count <= 1) return;
-
-  const current = docBeforePaste.attrs?.bodySectPr;
-  const currentCols = current && getSectPrColumns(current);
-  if (currentCols?.count > 1) return;
-
-  const clone = JSON.parse(JSON.stringify(bodySectPr));
-  tr.setDocAttribute('bodySectPr', clone);
-  const converter = editor?.converter;
-  if (converter) {
-    converter.bodySectPr = clone;
-  }
+  applyEmbeddedBodySectPrWhenAllowed(editor, bodySectPr, docBeforePaste, (clone) => {
+    tr.setDocAttribute('bodySectPr', clone);
+  });
 }
 
 export class InputRule {
@@ -573,15 +572,25 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
       for (let i = 0; i < node.childNodes.length; i += 1) {
         const current = node.childNodes[i];
         if (current?.nodeType === Node.COMMENT_NODE && current.nodeValue?.includes('[if !supportLists]')) {
-          let j = i + 1;
-          while (j < node.childNodes.length) {
+          const nodesToStrip = [];
+          let endifComment = null;
+          for (let j = i + 1; j < node.childNodes.length; j += 1) {
             const next = node.childNodes[j];
             if (next?.nodeType === Node.COMMENT_NODE && next.nodeValue?.includes('[endif]')) {
-              node.removeChild(next);
+              endifComment = next;
               break;
             }
-            node.removeChild(next);
+            nodesToStrip.push(next);
           }
+          if (!endifComment) {
+            node.removeChild(current);
+            i -= 1;
+            continue;
+          }
+          for (const n of nodesToStrip) {
+            node.removeChild(n);
+          }
+          node.removeChild(endifComment);
           node.removeChild(current);
           i -= 1;
           continue;
@@ -677,8 +686,6 @@ function handleCutEvent(view, event, editor) {
   const { from, to } = view.state.selection;
   if (from === to) return false;
 
-  event.preventDefault();
-
   try {
     const slice = view.state.doc.slice(from, to);
     const fragment = slice.content;
@@ -702,12 +709,13 @@ function handleCutEvent(view, event, editor) {
     clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson));
     clipboardData.setData('text/plain', fragment.textBetween(0, fragment.size, '\n\n'));
 
+    event.preventDefault();
     view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
+    return true;
   } catch (error) {
     console.warn('Failed to handle cut:', error);
+    return false;
   }
-
-  return true;
 }
 
 const BULLET_MARKER_CHARS = new Set(['•', '◦', '▪', '\u2022', '\u25E6', '\u25AA']);
@@ -735,25 +743,6 @@ function lvlTextForRemap(fmt, ilvl, lr) {
 }
 
 /** Remap pasted list numIds and rebuild defs so target doc’s abstract ids don’t clash. */
-function createListIdAllocator(editor) {
-  const existingIds = new Set(
-    Object.keys(editor?.converter?.numbering?.definitions || {})
-      .map((value) => Number(value))
-      .filter(Number.isFinite),
-  );
-  let nextId = Number(ListHelpers.getNewListId(editor));
-
-  return () => {
-    while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
-      nextId = Number.isFinite(nextId) ? nextId + 1 : Number(ListHelpers.getNewListId(editor));
-    }
-    const allocatedId = nextId;
-    existingIds.add(allocatedId);
-    nextId += 1;
-    return allocatedId;
-  };
-}
-
 function remapPastedListNumberingInFragment(fragment, editor) {
   if (!editor?.converter || !fragment.size) {
     return fragment;

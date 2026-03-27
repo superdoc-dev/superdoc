@@ -14,6 +14,24 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     setLvlOverride: setLvlOverrideMock,
     getListDefinitionDetails: getListDefinitionDetailsMock,
   },
+  /** Mirrors `createListIdAllocator` from list-numbering-helpers (uses mocked getNewListId). */
+  createListIdAllocator: (editor) => {
+    const existingIds = new Set(
+      Object.keys(editor?.converter?.numbering?.definitions || {})
+        .map((value) => Number(value))
+        .filter(Number.isFinite),
+    );
+    let nextId = Number(getNewListIdMock(editor));
+    return () => {
+      while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
+        nextId = Number.isFinite(nextId) ? nextId + 1 : Number(getNewListIdMock(editor));
+      }
+      const allocatedId = nextId;
+      existingIds.add(allocatedId);
+      nextId += 1;
+      return allocatedId;
+    };
+  },
 }));
 
 import { flattenListsInHtml, createSingleItemList, unflattenListsInHtml } from './html-helpers.js';

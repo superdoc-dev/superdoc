@@ -93,6 +93,21 @@ describe('InputRule helpers', () => {
     expect(div?.querySelector('span')?.textContent).toBe('ok');
   });
 
+  it('does not strip siblings when Word list conditional is missing [endif]', () => {
+    const html = '<div><!--[if !supportLists]--><span>•</span><p id="keep">Body</p></div>';
+    const sanitized = sanitizeHtml(html);
+    const p = sanitized.querySelector('#keep');
+    expect(p).not.toBeNull();
+    expect(p?.textContent).toBe('Body');
+  });
+
+  it('still strips Word list conditional when [endif] is present', () => {
+    const html = '<div><!--[if !supportLists]--><span>•</span><!--[endif]--><p id="after">Next</p></div>';
+    const sanitized = sanitizeHtml(html);
+    expect(sanitized.querySelector('span')).toBeNull();
+    expect(sanitized.querySelector('#after')?.textContent).toBe('Next');
+  });
+
   it('handles single paragraph HTML paste inside a paragraph', () => {
     const { editor, view } = createEditorContext(doc(p('Existing')));
 

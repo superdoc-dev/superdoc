@@ -73,35 +73,19 @@ jobs:
 
   unit-tests:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: superdoc-ci-4cpu
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: super-editor-1
-            shard: '1/12'
+            shard: '1/4'
           - name: super-editor-2
-            shard: '2/12'
+            shard: '2/4'
           - name: super-editor-3
-            shard: '3/12'
+            shard: '3/4'
           - name: super-editor-4
-            shard: '4/12'
-          - name: super-editor-5
-            shard: '5/12'
-          - name: super-editor-6
-            shard: '6/12'
-          - name: super-editor-7
-            shard: '7/12'
-          - name: super-editor-8
-            shard: '8/12'
-          - name: super-editor-9
-            shard: '9/12'
-          - name: super-editor-10
-            shard: '10/12'
-          - name: super-editor-11
-            shard: '11/12'
-          - name: super-editor-12
-            shard: '12/12'
+            shard: '4/4'
           - name: other-packages
             shard: ''
     steps:
@@ -140,12 +124,8 @@ jobs:
         if: matrix.name != 'other-packages'
         working-directory: packages/super-editor
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
-        run: >-
-          pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1
-          --shard=${{ matrix.shard }}
-          --exclude='**/decrypt-docx.integration*'
-          --exclude='**/contract-conformance*'
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1 --shard=${{ matrix.shard }}
 
       - name: Run other package vitest tests
         if: matrix.name == 'other-packages'

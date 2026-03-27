@@ -27,7 +27,7 @@ export const MathBlock = Node.create({
         rendered: false,
       },
       justification: {
-        default: 'center',
+        default: 'centerGroup',
         rendered: false,
       },
     };

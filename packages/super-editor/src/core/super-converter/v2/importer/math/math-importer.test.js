@@ -97,7 +97,7 @@ describe('mathNodeHandler', () => {
       };
 
       const result = handler({ nodes: [oMathParaNode] });
-      expect(result.nodes[0].attrs.justification).toBe('center');
+      expect(result.nodes[0].attrs.justification).toBe('centerGroup');
     });
   });
 

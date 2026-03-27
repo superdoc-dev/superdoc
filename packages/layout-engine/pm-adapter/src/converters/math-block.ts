@@ -17,7 +17,7 @@ export function handleMathBlockNode(node: PMNode, context: NodeHandlerContext): 
   const { blocks, recordBlockKind, nextBlockId, positions } = context;
 
   const textContent = String(node.attrs?.textContent ?? '');
-  const justification = String(node.attrs?.justification ?? 'center');
+  const justification = String(node.attrs?.justification ?? 'centerGroup');
   const { width, height } = estimateMathDimensions(textContent);
 
   const pos = positions.get(node);

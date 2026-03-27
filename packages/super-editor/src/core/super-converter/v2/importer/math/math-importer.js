@@ -9,9 +9,9 @@ import { extractMathText } from './extract-math-text.js';
 function extractJustification(oMathParaNode) {
   const elements = oMathParaNode.elements || [];
   const paraPr = elements.find((el) => el.name === 'm:oMathParaPr');
-  if (!paraPr || !Array.isArray(paraPr.elements)) return 'center';
+  if (!paraPr || !Array.isArray(paraPr.elements)) return 'centerGroup';
   const jc = paraPr.elements.find((el) => el.name === 'm:jc');
-  if (!jc || !jc.attributes) return 'center';
+  if (!jc || !jc.attributes) return 'centerGroup';
   return jc.attributes['m:val'] || 'center';
 }
 

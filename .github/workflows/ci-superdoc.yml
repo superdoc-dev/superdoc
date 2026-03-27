@@ -77,33 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: super-editor-1
-            shard: '1/12'
-          - name: super-editor-2
-            shard: '2/12'
-          - name: super-editor-3
-            shard: '3/12'
-          - name: super-editor-4
-            shard: '4/12'
-          - name: super-editor-5
-            shard: '5/12'
-          - name: super-editor-6
-            shard: '6/12'
-          - name: super-editor-7
-            shard: '7/12'
-          - name: super-editor-8
-            shard: '8/12'
-          - name: super-editor-9
-            shard: '9/12'
-          - name: super-editor-10
-            shard: '10/12'
-          - name: super-editor-11
-            shard: '11/12'
-          - name: super-editor-12
-            shard: '12/12'
-          - name: other-packages
-            shard: ''
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v6
 
@@ -136,36 +110,16 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Run super-editor tests (shard ${{ matrix.shard }})
-        if: matrix.name != 'other-packages'
-        working-directory: packages/super-editor
+      - name: Run vitest (shard ${{ matrix.shard }}/5)
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          VITEST_MAX_WORKERS: '1'
-          VITEST_MIN_WORKERS: '1'
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}
-
-      - name: Run other package vitest tests
-        if: matrix.name == 'other-packages'
-        env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
-          VITEST_MAX_WORKERS: '1'
-          VITEST_MIN_WORKERS: '1'
         run: >-
-          pnpm exec vitest run
-          --project superdoc
-          --project @superdoc/ai
-          --project @superdoc/collaboration-yjs
-          --project @superdoc/contracts
-          --project @superdoc/layout-bridge
-          --project @superdoc/measuring-dom
-          --project @superdoc/painter-dom
-          --project @superdoc/pm-adapter
-          --project @superdoc/layout-tests
-          --project @superdoc-ext/vscode-ext
+          pnpm exec vitest run --shard=${{ matrix.shard }}/5
+          --exclude='**/decrypt-docx.integration*'
+          --exclude='**/contract-conformance*'
 
       - name: Run bun tests
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         run: |
           pnpm -r --parallel \
             --filter @superdoc/document-api \
@@ -176,24 +130,24 @@ jobs:
             test
 
       - name: Run SDK scripts tests
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         run: pnpm --prefix packages/sdk run test:scripts
 
       - name: Run memory profiling tests (non-blocking)
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         continue-on-error: true
         run: pnpm --filter @superdoc/layout-tests run test:memory
 
       - name: Run slow tests
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         run: pnpm test:slow
 
       - name: Install Playwright for UMD smoke test
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
 
       - name: Run UMD smoke test
-        if: matrix.name == 'other-packages'
+        if: matrix.shard == 1
         working-directory: packages/superdoc/tests/umd-smoke
         run: pnpm test
 

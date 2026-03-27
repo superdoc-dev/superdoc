@@ -112,18 +112,8 @@ jobs:
 
       - name: Run vitest (shard ${{ matrix.shard }}/5)
         env:
-          NODE_OPTIONS: '--max-old-space-size=5120'
-        run: |
-          for sub in $(seq 1 6); do
-            SUB=$(( (${{ matrix.shard }} - 1) * 6 + sub ))
-            pnpm exec vitest run --shard=$SUB/30 --exclude='**/decrypt-docx.integration*'
-          done
-
-      - name: Run encryption integration tests
-        if: matrix.shard == 2
-        env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
-        run: pnpm exec vitest run packages/super-editor/src/core/ooxml-encryption/decrypt-docx.integration.test.ts
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: bash scripts/ci-test-shard.sh ${{ matrix.shard }} 5 20
 
       - name: Run bun tests
         if: matrix.shard == 1

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { clickToPosition } from '@superdoc/layout-bridge';
+import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
 import { TextSelection } from 'prosemirror-state';
 
 import {
@@ -8,6 +9,17 @@ import {
   type EditorInputDependencies,
   type EditorInputCallbacks,
 } from '../pointer-events/EditorInputManager.js';
+
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: vi.fn(() => ({
+    pos: 12,
+    layoutEpoch: 1,
+    pageIndex: 0,
+    blockId: 'body-1',
+    column: 0,
+    lineIndex: -1,
+  })),
+}));
 
 vi.mock('@superdoc/layout-bridge', () => ({
   clickToPosition: vi.fn(() => ({ pos: 12, layoutEpoch: 1, pageIndex: 0, blockId: 'body-1' })),
@@ -161,11 +173,13 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   });
 
   it('does not change editor selection when hit-test resolves to a footnote block', () => {
-    (clickToPosition as unknown as Mock).mockReturnValue({
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
       pageIndex: 0,
       blockId: 'footnote-1-1',
+      column: 0,
+      lineIndex: -1,
     });
 
     const target = document.createElement('span');
@@ -189,11 +203,13 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   });
 
   it('does not change editor selection when hit-test resolves to a semantic footnote block', () => {
-    (clickToPosition as unknown as Mock).mockReturnValue({
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
       pageIndex: 0,
       blockId: '__sd_semantic_footnote-1-1',
+      column: 0,
+      lineIndex: -1,
     });
 
     const target = document.createElement('span');
@@ -216,7 +232,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   });
 
   it('does not change editor selection on semantic footnotes heading click', () => {
-    (clickToPosition as unknown as Mock).mockReturnValue(null);
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 
     const headingEl = document.createElement('div');
     headingEl.setAttribute('data-block-id', '__sd_semantic_footnotes_heading');

@@ -24,7 +24,8 @@ import type { SelectionDebugHudState } from '../selection/SelectionDebug.js';
 import type { EpochPositionMapper } from '../layout/EpochPositionMapper.js';
 import type { HeaderFooterSessionManager } from '../header-footer/HeaderFooterSessionManager.js';
 
-import { clickToPosition, getFragmentAtPosition } from '@superdoc/layout-bridge';
+import { getFragmentAtPosition } from '@superdoc/layout-bridge';
+import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
 import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
@@ -970,16 +971,16 @@ export class EditorInputManager {
     // Get hit position
     const viewportHost = this.#deps.getViewportHost();
     const pageGeometryHelper = this.#deps.getPageGeometryHelper();
-    const rawHit = clickToPosition(
-      layoutState.layout,
-      layoutState.blocks,
-      layoutState.measures,
-      { x, y },
-      viewportHost,
-      event.clientX,
-      event.clientY,
-      pageGeometryHelper ?? undefined,
-    );
+    const rawHit = resolvePointerPositionHit({
+      layout: layoutState.layout,
+      blocks: layoutState.blocks,
+      measures: layoutState.measures,
+      containerPoint: { x, y },
+      domContainer: viewportHost,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      geometryHelper: pageGeometryHelper ?? undefined,
+    });
 
     const doc = editor.state?.doc;
     const epochMapper = this.#deps.getEpochMapper();
@@ -1773,16 +1774,16 @@ export class EditorInputManager {
     const viewportHost = this.#deps.getViewportHost();
     const pageGeometryHelper = this.#deps.getPageGeometryHelper();
 
-    const rawHit = clickToPosition(
-      layoutState.layout,
-      layoutState.blocks,
-      layoutState.measures,
-      { x: normalized.x, y: normalized.y },
-      viewportHost,
+    const rawHit = resolvePointerPositionHit({
+      layout: layoutState.layout,
+      blocks: layoutState.blocks,
+      measures: layoutState.measures,
+      containerPoint: { x: normalized.x, y: normalized.y },
+      domContainer: viewportHost,
       clientX,
       clientY,
-      pageGeometryHelper ?? undefined,
-    );
+      geometryHelper: pageGeometryHelper ?? undefined,
+    });
 
     if (!rawHit) return;
 

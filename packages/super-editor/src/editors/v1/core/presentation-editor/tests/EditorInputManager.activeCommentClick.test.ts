@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { comments_module_events } from '@superdoc/common';
 import { clickToPosition } from '@superdoc/layout-bridge';
+import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
 import { TextSelection } from 'prosemirror-state';
 
 import {
@@ -9,6 +10,17 @@ import {
   type EditorInputDependencies,
   type EditorInputCallbacks,
 } from '../pointer-events/EditorInputManager.js';
+
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: vi.fn(() => ({
+    pos: 24,
+    layoutEpoch: 1,
+    pageIndex: 0,
+    blockId: 'body-1',
+    column: 0,
+    lineIndex: -1,
+  })),
+}));
 
 vi.mock('@superdoc/layout-bridge', () => ({
   clickToPosition: vi.fn(() => ({ pos: 24, layoutEpoch: 1, pageIndex: 0, blockId: 'body-1' })),
@@ -170,7 +182,7 @@ describe('EditorInputManager - repeated active comment clicks', () => {
       type: comments_module_events.SELECTED,
       activeCommentId: 'comment-1',
     });
-    expect(clickToPosition).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
     expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
@@ -189,7 +201,7 @@ describe('EditorInputManager - repeated active comment clicks', () => {
       'commentsUpdate',
       expect.objectContaining({ activeCommentId: 'comment-1' }),
     );
-    expect(clickToPosition).toHaveBeenCalled();
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
     expect(viewportHost.setPointerCapture).toHaveBeenCalled();
   });

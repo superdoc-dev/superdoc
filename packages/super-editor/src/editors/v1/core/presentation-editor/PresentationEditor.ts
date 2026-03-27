@@ -78,13 +78,14 @@ import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adap
 import {
   incrementalLayout,
   selectionToRects,
-  clickToPosition,
   getFragmentAtPosition,
   extractIdentifierFromConverter,
   buildMultiSectionIdentifier,
   layoutHeaderFooterWithCache as _layoutHeaderFooterWithCache,
   PageGeometryHelper,
+  clickToPositionGeometry,
 } from '@superdoc/layout-bridge';
+import { resolvePointerPositionHit } from './input/PositionHitResolver.js';
 import type {
   HeaderFooterIdentifier,
   HeaderFooterLayoutResult,
@@ -2030,17 +2031,7 @@ export class PresentationEditor extends EventEmitter {
         x: localX,
         y: headerPageIndex * headerPageHeight + (localY - headerPageIndex * headerPageHeight),
       };
-      const hit =
-        clickToPosition(
-          context.layout,
-          context.blocks,
-          context.measures,
-          headerPoint,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-        ) ?? null;
+      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
       return hit;
     }
 
@@ -2048,16 +2039,16 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
     const rawHit =
-      clickToPosition(
-        this.#layoutState.layout,
-        this.#layoutState.blocks,
-        this.#layoutState.measures,
-        normalized,
-        this.#viewportHost,
+      resolvePointerPositionHit({
+        layout: this.#layoutState.layout,
+        blocks: this.#layoutState.blocks,
+        measures: this.#layoutState.measures,
+        containerPoint: normalized,
+        domContainer: this.#viewportHost,
         clientX,
         clientY,
-        this.#pageGeometryHelper ?? undefined,
-      ) ?? null;
+        geometryHelper: this.#pageGeometryHelper ?? undefined,
+      }) ?? null;
     if (!rawHit) {
       return null;
     }
@@ -5627,16 +5618,16 @@ export class PresentationEditor extends EventEmitter {
       extraPages: dragLastRawHit ? [dragLastRawHit.pageIndex] : undefined,
     });
 
-    const refined = clickToPosition(
+    const refined = resolvePointerPositionHit({
       layout,
-      this.#layoutState.blocks,
-      this.#layoutState.measures,
-      { x: normalized.x, y: normalized.y },
-      this.#viewportHost,
-      pointer.clientX,
-      pointer.clientY,
-      this.#pageGeometryHelper ?? undefined,
-    );
+      blocks: this.#layoutState.blocks,
+      measures: this.#layoutState.measures,
+      containerPoint: { x: normalized.x, y: normalized.y },
+      domContainer: this.#viewportHost,
+      clientX: pointer.clientX,
+      clientY: pointer.clientY,
+      geometryHelper: this.#pageGeometryHelper ?? undefined,
+    });
     if (!refined) return;
 
     if (this.#isSelectionAwareVirtualizationEnabled() && this.#getPageElement(refined.pageIndex) == null) {

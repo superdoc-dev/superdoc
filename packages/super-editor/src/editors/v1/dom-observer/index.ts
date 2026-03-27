@@ -20,3 +20,4 @@ export {
   deduplicateOverlappingRects,
 } from './DomSelectionGeometry.js';
 export { getPageElementByIndex } from './PageDom.js';
+export { clickToPositionDom, findPageElement, readLayoutEpochFromDom } from './DomPointerMapping.js';

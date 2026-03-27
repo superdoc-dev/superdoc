@@ -15,6 +15,7 @@ type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
 const {
   createDefaultConverter,
   mockClickToPosition,
+  mockResolvePointerPositionHit,
   mockIncrementalLayout,
   mockToFlowBlocks,
   mockSelectionToRects,
@@ -126,6 +127,7 @@ const {
   return {
     createDefaultConverter,
     mockClickToPosition: vi.fn(() => null),
+    mockResolvePointerPositionHit: vi.fn(() => null),
     mockIncrementalLayout: vi.fn(async () => ({ layout: { pages: [] }, measures: [] })),
     mockToFlowBlocks: vi.fn(() => ({ blocks: [], bookmarks: new Map() })),
     mockSelectionToRects: vi.fn(() => []),
@@ -165,6 +167,11 @@ const {
     MockFlowBlockCache,
   };
 });
+
+// Mock PositionHitResolver
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: (...args: unknown[]) => mockResolvePointerPositionHit(...args),
+}));
 
 // Mock Editor class
 vi.mock('../../Editor', () => {
@@ -248,6 +255,7 @@ vi.mock('@superdoc/layout-bridge', () => ({
     Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
   clickToPosition: mockClickToPosition,
+  clickToPositionGeometry: vi.fn(() => null),
   createDragHandler: vi.fn(() => {
     // Return a noop cleanup function; tests drive drag/drop through DOM listeners.
     return () => {};
@@ -2007,9 +2015,17 @@ describe('PresentationEditor', () => {
 
       mockIncrementalLayout.mockResolvedValue(layoutResult);
 
-      // Mock clickToPosition to return a position hit
+      // Mock clickToPosition / resolvePointerPositionHit to return a position hit
       const mockHit = { pos: 42 };
       mockClickToPosition.mockReturnValue(mockHit);
+      mockResolvePointerPositionHit.mockReturnValue({
+        pos: 42,
+        layoutEpoch: 0,
+        pageIndex: 0,
+        blockId: '',
+        column: 0,
+        lineIndex: -1,
+      });
 
       editor = new PresentationEditor({
         element: container,
@@ -2039,6 +2055,7 @@ describe('PresentationEditor', () => {
 
       // Clear mock to track fresh calls
       mockClickToPosition.mockClear();
+      mockResolvePointerPositionHit.mockClear();
 
       const clickEvent = new MouseEvent('pointerdown', {
         bubbles: true,
@@ -2049,8 +2066,8 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(clickEvent);
 
-      // Verify clickToPosition was called (normal flow)
-      expect(mockClickToPosition).toHaveBeenCalled();
+      // Verify resolvePointerPositionHit was called (normal flow)
+      expect(mockResolvePointerPositionHit).toHaveBeenCalled();
     });
 
     it('should handle case where editor view DOM is not available when layout is not ready', () => {
@@ -4026,6 +4043,11 @@ describe('PresentationEditor', () => {
           .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
           .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
           .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
+        mockResolvePointerPositionHit.mockReset();
+        mockResolvePointerPositionHit
+          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
+          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
         viewport.dispatchEvent(
           new MouseEvent('pointerdown', {
@@ -4063,7 +4085,7 @@ describe('PresentationEditor', () => {
         );
 
         // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-        expect(mockClickToPosition).toHaveBeenCalledTimes(3);
+        expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
       });
     });
 

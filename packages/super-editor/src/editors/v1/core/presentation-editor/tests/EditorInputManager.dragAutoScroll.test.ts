@@ -6,6 +6,17 @@ import {
   type EditorInputCallbacks,
 } from '../pointer-events/EditorInputManager.js';
 
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: vi.fn(() => ({
+    pos: 5,
+    layoutEpoch: 1,
+    pageIndex: 0,
+    blockId: '',
+    column: 0,
+    lineIndex: -1,
+  })),
+}));
+
 vi.mock('@superdoc/layout-bridge', () => ({
   clickToPosition: vi.fn(() => ({ pos: 5, layoutEpoch: 1, pageIndex: 0 })),
   getFragmentAtPosition: vi.fn(() => null),

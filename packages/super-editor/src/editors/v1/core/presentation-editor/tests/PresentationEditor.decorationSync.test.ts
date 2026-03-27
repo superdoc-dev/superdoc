@@ -156,6 +156,11 @@ const {
   };
 });
 
+// Mock PositionHitResolver
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: (...args: unknown[]) => mockClickToPosition(...args),
+}));
+
 vi.mock('../../Editor.js', () => {
   return {
     Editor: vi.fn().mockImplementation(() => {
@@ -224,6 +229,7 @@ vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
   selectionToRects: mockSelectionToRects,
   clickToPosition: mockClickToPosition,
+  clickToPositionGeometry: vi.fn(() => null),
   createDragHandler: vi.fn(() => () => {}),
   getFragmentAtPosition: vi.fn(() => null),
   computeLinePmRange: vi.fn(() => ({ from: 0, to: 0 })),

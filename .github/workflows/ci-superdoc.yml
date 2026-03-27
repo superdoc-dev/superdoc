@@ -112,7 +112,7 @@ jobs:
 
       - name: Run vitest (shard ${{ matrix.shard }}/5)
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=5120'
         run: |
           for sub in $(seq 1 6); do
             SUB=$(( (${{ matrix.shard }} - 1) * 6 + sub ))

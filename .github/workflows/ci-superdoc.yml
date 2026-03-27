@@ -113,7 +113,7 @@ jobs:
       - name: Run vitest (shard ${{ matrix.shard }}/5)
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-        run: bash scripts/ci-test-shard.sh ${{ matrix.shard }} 5 10
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/5 --exclude='**/decrypt-docx.integration*'
 
       - name: Run bun tests
         if: matrix.shard == 1

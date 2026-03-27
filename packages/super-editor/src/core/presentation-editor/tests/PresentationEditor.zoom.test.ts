@@ -186,6 +186,8 @@ vi.mock('../../Editor', () => {
         dom: {
           dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
         },
         focus: vi.fn(),
         dispatch: vi.fn(),

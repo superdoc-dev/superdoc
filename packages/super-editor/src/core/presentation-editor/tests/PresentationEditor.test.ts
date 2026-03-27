@@ -213,6 +213,8 @@ vi.mock('../../Editor', () => {
         dom: {
           dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
         },
         focus: vi.fn(),
         dispatch: vi.fn(),
@@ -3550,6 +3552,8 @@ describe('PresentationEditor', () => {
       let mockEditorInstance: (typeof Editor extends new (...args: unknown[]) => infer E ? E : never) &
         Record<string, unknown>;
       let handleUpdate: (payload: { transaction: { docChanged: boolean } }) => void;
+      let triggerCompositionStart: () => void;
+      let triggerCompositionEnd: () => void;
 
       beforeEach(async () => {
         mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
@@ -3565,6 +3569,12 @@ describe('PresentationEditor', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
+        // Extract the composition callbacks that #setupCompositionDeferral
+        // registered via addEventListener on the mock dom.
+        const addCalls = (mockEditorInstance.view.dom.addEventListener as Mock).mock.calls;
+        triggerCompositionStart = addCalls.find((c) => c[0] === 'compositionstart')![1];
+        triggerCompositionEnd = addCalls.find((c) => c[0] === 'compositionend')![1];
+
         const onCalls = mockEditorInstance.on as unknown as Mock;
         const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
         handleUpdate = updateCall![1] as typeof handleUpdate;
@@ -3577,18 +3587,14 @@ describe('PresentationEditor', () => {
           return 1;
         });
 
-        mockEditorInstance.view.dom.dispatchEvent(
-          new CompositionEvent('compositionstart', { data: '', bubbles: true }),
-        );
+        triggerCompositionStart();
         handleUpdate({ transaction: { docChanged: true } });
 
         expect(rafSpy).toHaveBeenCalled();
         if (rafCallback) rafCallback(performance.now());
 
         // compositionend should schedule a new rerender
-        mockEditorInstance.view.dom.dispatchEvent(
-          new CompositionEvent('compositionend', { data: '你', bubbles: true }),
-        );
+        triggerCompositionEnd();
         expect(rafSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
 
         rafSpy.mockRestore();
@@ -3601,15 +3607,11 @@ describe('PresentationEditor', () => {
           return 1;
         });
 
-        mockEditorInstance.view.dom.dispatchEvent(
-          new CompositionEvent('compositionstart', { data: '', bubbles: true }),
-        );
+        triggerCompositionStart();
         handleUpdate({ transaction: { docChanged: true } });
         const duringCompositionCalls = mockIncrementalLayout.mock.calls.length;
 
-        mockEditorInstance.view.dom.dispatchEvent(
-          new CompositionEvent('compositionend', { data: '你', bubbles: true }),
-        );
+        triggerCompositionEnd();
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         expect(duringCompositionCalls).toBe(initialLayoutCalls);
@@ -3621,11 +3623,9 @@ describe('PresentationEditor', () => {
       it('does not schedule rerender on compositionend without pending changes', () => {
         const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
 
-        mockEditorInstance.view.dom.dispatchEvent(
-          new CompositionEvent('compositionstart', { data: '', bubbles: true }),
-        );
+        triggerCompositionStart();
         rafSpy.mockClear();
-        mockEditorInstance.view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+        triggerCompositionEnd();
 
         expect(rafSpy).not.toHaveBeenCalled();
 

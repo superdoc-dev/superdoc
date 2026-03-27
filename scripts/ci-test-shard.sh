@@ -32,11 +32,21 @@ PROJECTS=(
   apps/vscode-ext
 )
 
+# Files that must run solo (high memory usage, e.g. crypto operations).
+# These are excluded from batched runs and executed individually at the end.
+SOLO_FILES=(
+  'packages/super-editor/src/core/ooxml-encryption/decrypt-docx.integration.test.ts'
+)
+
 # Discover all test files and sort by size descending (heaviest first)
 ALL_FILES=$(
   for dir in "${PROJECTS[@]}"; do
     if [ -d "$dir" ]; then
       find "$dir" -name '*.test.ts' -o -name '*.test.js' | while read -r f; do
+        # Skip solo files
+        for solo in "${SOLO_FILES[@]}"; do
+          [ "$f" = "$solo" ] && continue 2
+        done
         size=$(wc -c < "$f")
         echo "$size $f"
       done
@@ -69,5 +79,15 @@ for ((start=0; start<total; start+=BATCH_SIZE)); do
 
   pnpm exec vitest run "${batch[@]}"
 done
+
+# Run solo files (only on shard 1 to avoid duplication)
+if [ "$SHARD_INDEX" -eq 1 ]; then
+  for solo in "${SOLO_FILES[@]}"; do
+    if [ -f "$solo" ]; then
+      echo "--- Solo: $solo ---"
+      pnpm exec vitest run "$solo"
+    fi
+  done
+fi
 
 echo "=== Shard $SHARD_INDEX/$TOTAL_SHARDS complete: $total files in $batch_num batches ==="

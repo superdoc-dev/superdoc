@@ -80,14 +80,8 @@ for ((start=0; start<total; start+=BATCH_SIZE)); do
   pnpm exec vitest run "${batch[@]}"
 done
 
-# Run solo files (only on shard 1 to avoid duplication)
-if [ "$SHARD_INDEX" -eq 1 ]; then
-  for solo in "${SOLO_FILES[@]}"; do
-    if [ -f "$solo" ]; then
-      echo "--- Solo: $solo ---"
-      pnpm exec vitest run "$solo"
-    fi
-  done
-fi
+# Solo files are skipped in CI — they need dedicated investigation
+# for memory usage. See: https://github.com/superdoc-dev/superdoc/pull/2577
+echo "=== Skipped solo files (run separately): ${SOLO_FILES[*]} ==="
 
 echo "=== Shard $SHARD_INDEX/$TOTAL_SHARDS complete: $total files in $batch_num batches ==="

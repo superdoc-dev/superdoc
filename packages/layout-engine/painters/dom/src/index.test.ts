@@ -8,6 +8,7 @@ import type {
   ParagraphMeasure,
   FlowRunLink,
   Fragment,
+  ResolvedLayout,
   TableBlock,
   TableMeasure,
 } from '@superdoc/contracts';
@@ -3999,6 +4000,156 @@ describe('DomPainter', () => {
 
     const marker = mount.querySelector('.superdoc-list-marker');
     expect(marker?.textContent).toBe('1.');
+  });
+
+  it('preserves marker-adjusted list-item wrapper geometry during resolved incremental updates', () => {
+    const listBlock: FlowBlock = {
+      kind: 'list',
+      id: 'list-1',
+      listType: 'number',
+      items: [
+        {
+          id: 'item-1',
+          marker: { kind: 'number', text: '1.', level: 0, order: 1 },
+          paragraph: block,
+        },
+      ],
+    };
+
+    const listMeasure: Measure = {
+      kind: 'list',
+      items: [
+        {
+          itemId: 'item-1',
+          markerWidth: 30,
+          markerTextWidth: 18,
+          indentLeft: 0,
+          paragraph: measure as ParagraphMeasure,
+        },
+      ],
+      totalHeight: measure.totalHeight,
+    };
+
+    const initialLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'list-item',
+              blockId: 'list-1',
+              itemId: 'item-1',
+              fromLine: 0,
+              toLine: 1,
+              x: 100,
+              y: 40,
+              width: 260,
+              markerWidth: 30,
+            },
+          ],
+        },
+      ],
+    };
+
+    const updatedLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'list-item',
+              blockId: 'list-1',
+              itemId: 'item-1',
+              fromLine: 0,
+              toLine: 1,
+              x: 120,
+              y: 55,
+              width: 280,
+              markerWidth: 30,
+            },
+          ],
+        },
+      ],
+    };
+
+    const initialResolvedLayout: ResolvedLayout = {
+      version: 1,
+      flowMode: 'paginated',
+      pageGap: 0,
+      pages: [
+        {
+          id: 'page-0',
+          index: 0,
+          number: 1,
+          width: 400,
+          height: 500,
+          items: [
+            {
+              kind: 'fragment',
+              id: 'list-item:list-1:item-1:0:1',
+              pageIndex: 0,
+              x: 100,
+              y: 40,
+              width: 260,
+              height: 20,
+              fragmentKind: 'list-item',
+              blockId: 'list-1',
+              fragmentIndex: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    const updatedResolvedLayout: ResolvedLayout = {
+      version: 1,
+      flowMode: 'paginated',
+      pageGap: 0,
+      pages: [
+        {
+          id: 'page-0',
+          index: 0,
+          number: 1,
+          width: 400,
+          height: 500,
+          items: [
+            {
+              kind: 'fragment',
+              id: 'list-item:list-1:item-1:0:1',
+              pageIndex: 0,
+              x: 120,
+              y: 55,
+              width: 280,
+              height: 20,
+              fragmentKind: 'list-item',
+              blockId: 'list-1',
+              fragmentIndex: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+
+    painter.setResolvedLayout?.(initialResolvedLayout);
+    painter.paint(initialLayout, mount);
+
+    const initialWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
+    expect(initialWrapper.style.left).toBe('70px');
+    expect(initialWrapper.style.top).toBe('40px');
+    expect(initialWrapper.style.width).toBe('290px');
+
+    painter.setResolvedLayout?.(updatedResolvedLayout);
+    painter.paint(updatedLayout, mount);
+
+    const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
+    expect(updatedWrapper).toBe(initialWrapper);
+    expect(updatedWrapper.style.left).toBe('90px');
+    expect(updatedWrapper.style.top).toBe('55px');
+    expect(updatedWrapper.style.width).toBe('310px');
   });
 
   it('applies run-level decorations and hyperlinks', () => {

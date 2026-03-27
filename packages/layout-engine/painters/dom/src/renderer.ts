@@ -48,6 +48,8 @@ import type {
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
+  ResolvedFragmentItem,
+  ResolvedPage,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
@@ -1285,10 +1287,24 @@ export class DomPainter {
 
   /**
    * Stores the resolved layout for the next-generation paint pipeline.
-   * In PR4 this is stored but not yet consumed by paint().
+   * When set, the painter sources page dimensions and fragment wrapper positioning
+   * from resolved data, falling back to legacy Layout when null.
    */
   public setResolvedLayout(resolvedLayout: ResolvedLayout | null): void {
     this.resolvedLayout = resolvedLayout;
+  }
+
+  /** Returns the resolved page for a given index, or null if resolved data is unavailable. */
+  private getResolvedPage(pageIndex: number): ResolvedPage | null {
+    return this.resolvedLayout?.pages[pageIndex] ?? null;
+  }
+
+  /** Returns the resolved fragment item for a given page/fragment index, or undefined. */
+  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedFragmentItem | undefined {
+    const page = this.getResolvedPage(pageIndex);
+    if (!page) return undefined;
+    const item = page.items[fragmentIndex];
+    return item?.kind === 'fragment' ? item : undefined;
   }
 
   /**
@@ -1760,7 +1776,10 @@ export class DomPainter {
     if (!this.currentLayout) return;
     const N = this.currentLayout.pages.length;
     if (N !== this.virtualHeights.length) {
-      this.virtualHeights = this.currentLayout.pages.map((p) => p.size?.h ?? this.currentLayout!.pageSize.h);
+      this.virtualHeights = this.currentLayout.pages.map((p, i) => {
+        const resolved = this.getResolvedPage(i);
+        return resolved?.height ?? p.size?.h ?? this.currentLayout!.pageSize.h;
+      });
     }
     // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
     // Use virtualGap to match CSS gap on virtualPagesEl.
@@ -1917,7 +1936,8 @@ export class DomPainter {
     // Insert or patch needed pages
     for (const i of mounted) {
       const page = layout.pages[i];
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(i);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
         const newState = this.createPageState(page, pageSize, i);
@@ -2020,7 +2040,8 @@ export class DomPainter {
     if (!this.doc) return;
     mount.innerHTML = '';
     layout.pages.forEach((page, pageIndex) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(pageIndex);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const pageEl = this.renderPage(pageSize.w, pageSize.h, page, pageIndex);
       mount.appendChild(pageEl);
     });
@@ -2032,7 +2053,10 @@ export class DomPainter {
     const pages = layout.pages;
     if (pages.length === 0) return;
 
-    const firstPageSize = pages[0].size ?? layout.pageSize;
+    const firstResolved = this.getResolvedPage(0);
+    const firstPageSize = firstResolved
+      ? { w: firstResolved.width, h: firstResolved.height }
+      : (pages[0].size ?? layout.pageSize);
     const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0], 0);
     mount.appendChild(firstPageEl);
 
@@ -2042,13 +2066,19 @@ export class DomPainter {
       applyStyles(spreadEl, spreadStyles);
 
       const leftPage = pages[i];
-      const leftPageSize = leftPage.size ?? layout.pageSize;
+      const leftResolved = this.getResolvedPage(i);
+      const leftPageSize = leftResolved
+        ? { w: leftResolved.width, h: leftResolved.height }
+        : (leftPage.size ?? layout.pageSize);
       const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage, i);
       spreadEl.appendChild(leftPageEl);
 
       if (i + 1 < pages.length) {
         const rightPage = pages[i + 1];
-        const rightPageSize = rightPage.size ?? layout.pageSize;
+        const rightResolved = this.getResolvedPage(i + 1);
+        const rightPageSize = rightResolved
+          ? { w: rightResolved.width, h: rightResolved.height }
+          : (rightPage.size ?? layout.pageSize);
         const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage, i + 1);
         spreadEl.appendChild(rightPageEl);
       }
@@ -2090,7 +2120,10 @@ export class DomPainter {
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index)));
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      el.appendChild(
+        this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
+      );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
     return el;
@@ -2446,7 +2479,8 @@ export class DomPainter {
     this.pageStates = [];
 
     layout.pages.forEach((page, pageIndex) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(pageIndex);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const pageState = this.createPageState(page, pageSize, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
@@ -2461,7 +2495,8 @@ export class DomPainter {
     const nextStates: PageDomState[] = [];
 
     layout.pages.forEach((page, index) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(index);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const prevState = this.pageStates[index];
       if (!prevState) {
         const newState = this.createPageState(page, pageSize, index);
@@ -2510,6 +2545,7 @@ export class DomPainter {
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
 
       if (current) {
         existing.delete(key);
@@ -2536,7 +2572,7 @@ export class DomPainter {
           mappingUnreliable;
 
         if (needsRebuild) {
-          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
+          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = fragmentSignature(fragment, this.blockLookup);
@@ -2545,7 +2581,7 @@ export class DomPainter {
           this.updatePositionAttributes(current.element, this.currentMapping);
         }
 
-        this.updateFragmentElement(current.element, fragment, contextBase.section);
+        this.updateFragmentElement(current.element, fragment, contextBase.section, resolvedItem);
         if (sdtBoundary?.widthOverride != null) {
           current.element.style.width = `${sdtBoundary.widthOverride}px`;
         }
@@ -2557,7 +2593,7 @@ export class DomPainter {
         return;
       }
 
-      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
+      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
       nextFragments.push({
         key,
@@ -2655,7 +2691,14 @@ export class DomPainter {
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index));
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      const fragmentEl = this.renderFragment(
+        fragment,
+        contextBase,
+        sdtBoundary,
+        betweenBorderFlags.get(index),
+        resolvedItem,
+      );
       el.appendChild(fragmentEl);
       return {
         key: fragmentKey(fragment),
@@ -2702,21 +2745,22 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     if (fragment.kind === 'para') {
-      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo);
+      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
     }
     if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo);
+      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
     }
     if (fragment.kind === 'image') {
-      return this.renderImageFragment(fragment, context);
+      return this.renderImageFragment(fragment, context, resolvedItem);
     }
     if (fragment.kind === 'drawing') {
-      return this.renderDrawingFragment(fragment, context);
+      return this.renderDrawingFragment(fragment, context, resolvedItem);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context, sdtBoundary);
+      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem);
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -2735,6 +2779,7 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -2772,7 +2817,11 @@ export class DomPainter {
           ? { ...fragmentStyles, overflow: 'visible' }
           : fragmentStyles;
       applyStyles(fragmentEl, styles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+      }
 
       // Add TOC-specific styling class
       if (isTocEntry) {
@@ -3220,6 +3269,7 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -3242,10 +3292,14 @@ export class DomPainter {
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
       applyStyles(fragmentEl, fragmentStyles);
-      fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
-      fragmentEl.style.top = `${fragment.y}px`;
-      fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
-      fragmentEl.dataset.blockId = fragment.blockId;
+      if (resolvedItem) {
+        this.applyResolvedListItemWrapperFrame(fragmentEl, fragment, resolvedItem, context.section);
+      } else {
+        fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
+        fragmentEl.style.top = `${fragment.y}px`;
+        fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
+        fragmentEl.dataset.blockId = fragment.blockId;
+      }
       fragmentEl.dataset.itemId = fragment.itemId;
 
       const paragraphMetadata = item.paragraph.attrs?.sdt;
@@ -3352,7 +3406,11 @@ export class DomPainter {
     }
   }
 
-  private renderImageFragment(fragment: ImageFragment, context: FragmentRenderContext): HTMLElement {
+  private renderImageFragment(
+    fragment: ImageFragment,
+    context: FragmentRenderContext,
+    resolvedItem?: ResolvedFragmentItem,
+  ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
       if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
@@ -3368,13 +3426,17 @@ export class DomPainter {
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
       applyStyles(fragmentEl, fragmentStyles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
-      fragmentEl.style.height = `${fragment.height}px`;
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        fragmentEl.style.height = `${fragment.height}px`;
+      }
       this.applySdtDataset(fragmentEl, block.attrs?.sdt);
       this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
 
-      // Apply z-index for anchored images
-      if (fragment.isAnchored && fragment.zIndex != null) {
+      // Apply z-index for anchored images (legacy path — resolved path handles this in applyResolvedFragmentFrame)
+      if (!resolvedItem && fragment.isAnchored && fragment.zIndex != null) {
         fragmentEl.style.zIndex = String(fragment.zIndex);
       }
 
@@ -3462,7 +3524,11 @@ export class DomPainter {
     }
   }
 
-  private renderDrawingFragment(fragment: DrawingFragment, context: FragmentRenderContext): HTMLElement {
+  private renderDrawingFragment(
+    fragment: DrawingFragment,
+    context: FragmentRenderContext,
+    resolvedItem?: ResolvedFragmentItem,
+  ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
       if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
@@ -3478,12 +3544,17 @@ export class DomPainter {
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-drawing-fragment');
       applyStyles(fragmentEl, fragmentStyles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
-      fragmentEl.style.height = `${fragment.height}px`;
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        fragmentEl.style.height = `${fragment.height}px`;
+      }
       fragmentEl.style.position = 'absolute';
       fragmentEl.style.overflow = 'hidden';
 
-      if (fragment.isAnchored && fragment.zIndex != null) {
+      // z-index for anchored drawings (legacy path — resolved path handles this in applyResolvedFragmentFrame)
+      if (!resolvedItem && fragment.isAnchored && fragment.zIndex != null) {
         fragmentEl.style.zIndex = String(fragment.zIndex);
       }
 
@@ -4298,6 +4369,7 @@ export class DomPainter {
     fragment: TableFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -4306,6 +4378,7 @@ export class DomPainter {
     // Wrap applyFragmentFrame to capture section from context
     // This ensures table cell fragments receive proper section context for PM position validation
     const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
+      // Table cell inner fragments always use legacy applyFragmentFrame (they are not resolved yet)
       this.applyFragmentFrame(el, frag, context.section);
     };
 
@@ -4365,7 +4438,7 @@ export class DomPainter {
       return this.createDrawingPlaceholder();
     };
 
-    return renderTableFragmentElement({
+    const el = renderTableFragmentElement({
       doc: this.doc,
       fragment,
       context,
@@ -4385,6 +4458,14 @@ export class DomPainter {
       applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
       applyStyles,
     });
+
+    // Override outer wrapper positioning with resolved data when available.
+    // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
+    if (resolvedItem) {
+      this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+    }
+
+    return el;
   }
 
   /**
@@ -6118,13 +6199,27 @@ export class DomPainter {
    *                  Affects PM position validation - only body sections validate PM positions.
    *                  If undefined, defaults to 'body' section behavior.
    */
-  private updateFragmentElement(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
-    this.applyFragmentFrame(el, fragment, section);
-    if (fragment.kind === 'image') {
-      el.style.height = `${fragment.height}px`;
+  private updateFragmentElement(
+    el: HTMLElement,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+    resolvedItem?: ResolvedFragmentItem,
+  ): void {
+    if (fragment.kind === 'list-item' && resolvedItem) {
+      this.applyResolvedListItemWrapperFrame(el, fragment, resolvedItem, section);
+      return;
     }
-    if (fragment.kind === 'drawing') {
-      el.style.height = `${fragment.height}px`;
+
+    if (resolvedItem) {
+      this.applyResolvedFragmentFrame(el, resolvedItem, fragment, section);
+    } else {
+      this.applyFragmentFrame(el, fragment, section);
+      if (fragment.kind === 'image') {
+        el.style.height = `${fragment.height}px`;
+      }
+      if (fragment.kind === 'drawing') {
+        el.style.height = `${fragment.height}px`;
+      }
     }
   }
 
@@ -6181,6 +6276,88 @@ export class DomPainter {
         delete el.dataset.continuesOnNext;
       }
     }
+  }
+
+  /**
+   * Applies PM position data attributes from a legacy Fragment.
+   * Extracted from applyFragmentFrame for use in the resolved wrapper path.
+   */
+  private applyFragmentPmAttributes(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
+    // Footnote content is read-only: prevent cursor placement and typing
+    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+      el.setAttribute('contenteditable', 'false');
+    }
+
+    if (fragment.kind === 'para') {
+      if (section === 'body' || section === undefined) {
+        assertFragmentPmPositions(fragment, 'paragraph fragment');
+      }
+      if (fragment.pmStart != null) {
+        el.dataset.pmStart = String(fragment.pmStart);
+      } else {
+        delete el.dataset.pmStart;
+      }
+      if (fragment.pmEnd != null) {
+        el.dataset.pmEnd = String(fragment.pmEnd);
+      } else {
+        delete el.dataset.pmEnd;
+      }
+      if (fragment.continuesFromPrev) {
+        el.dataset.continuesFromPrev = 'true';
+      } else {
+        delete el.dataset.continuesFromPrev;
+      }
+      if (fragment.continuesOnNext) {
+        el.dataset.continuesOnNext = 'true';
+      } else {
+        delete el.dataset.continuesOnNext;
+      }
+    }
+  }
+
+  /**
+   * Applies fragment wrapper positioning from a ResolvedFragmentItem.
+   * Uses resolved data for spatial properties and delegates PM attributes to the legacy path.
+   */
+  private applyResolvedFragmentFrame(
+    el: HTMLElement,
+    item: ResolvedFragmentItem,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+  ): void {
+    el.style.left = `${item.x}px`;
+    el.style.top = `${item.y}px`;
+    el.style.width = `${item.width}px`;
+    el.dataset.blockId = item.blockId;
+    el.dataset.layoutEpoch = String(this.layoutEpoch);
+
+    if (item.zIndex != null) {
+      el.style.zIndex = String(item.zIndex);
+    }
+
+    if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
+      el.style.height = `${item.height}px`;
+    }
+
+    this.applyFragmentPmAttributes(el, fragment, section);
+  }
+
+  /**
+   * Applies the resolved wrapper frame for a list-item fragment.
+   *
+   * List-item wrappers intentionally extend into the marker gutter. The resolved
+   * fragment item stores the paragraph content box, so the marker-width expansion
+   * must be applied consistently on both initial render and incremental updates.
+   */
+  private applyResolvedListItemWrapperFrame(
+    el: HTMLElement,
+    fragment: ListItemFragment,
+    item: ResolvedFragmentItem,
+    section?: 'body' | 'header' | 'footer',
+  ): void {
+    this.applyResolvedFragmentFrame(el, item, fragment, section);
+    el.style.left = `${item.x - fragment.markerWidth}px`;
+    el.style.width = `${item.width + fragment.markerWidth}px`;
   }
 
   /**

@@ -4207,6 +4207,8 @@ export class PresentationEditor extends EventEmitter {
         resolvedLayout = resolveLayout({
           layout,
           flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+          blocks: blocksForLayout,
+          measures,
         });
 
         headerLayouts = result.headers;

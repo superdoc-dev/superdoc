@@ -1965,6 +1965,12 @@ export const extractHeaderFooterSpace = (
 };
 
 // Resolved layout types for the next-generation paint pipeline
-export type { ResolvedLayout, ResolvedPage, ResolvedPaintItem, ResolvedGroupItem } from './resolved-layout.js';
+export type {
+  ResolvedLayout,
+  ResolvedPage,
+  ResolvedPaintItem,
+  ResolvedGroupItem,
+  ResolvedFragmentItem,
+} from './resolved-layout.js';
 
 export * as Engines from './engines/index.js';

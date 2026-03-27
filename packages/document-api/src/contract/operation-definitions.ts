@@ -197,6 +197,8 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Use "set_flow_options" with pageBreakBefore:true to start a paragraph on a new page. ' +
       'Supports "dryRun" and "changeMode: tracked" for inline formatting. Paragraph-level actions do NOT support tracked changes. ' +
       'Do NOT use a search ref for paragraph-level actions; they require a block target with nodeId. ' +
+      'Do NOT use {kind:"block", start:{kind:"nodeEdge",...}} or selection-like structures for paragraph actions. ONLY {kind:"block", nodeType, nodeId} is accepted. ' +
+      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls. Format one block at a time. ' +
       'Do NOT hardcode formatting values; always read them from superdoc_get_content blocks and replicate.',
     inputExamples: [
       { action: 'inline', ref: '<handle.ref>', inline: { bold: true } },

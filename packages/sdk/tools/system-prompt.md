@@ -177,6 +177,9 @@ When formatting newly created content, use the right source:
 
 ## Constraints
 
+- **Format calls must be sequential, one per turn.** Each format call bumps the document revision and invalidates all outstanding refs. Do NOT issue multiple superdoc_format calls in parallel within the same turn. Format one block, then re-fetch if needed for the next block.
+- **set_alignment target must be `{kind: "block", nodeType, nodeId}`.** NEVER use `{kind: "block", start: {kind: "nodeEdge", ...}}` or any selection-like structure. Only the flat block target with nodeType and nodeId is accepted.
+- **Always format ALL created items.** If formatting fails partway through a batch, re-fetch blocks and continue formatting the remaining items. Do not stop after a partial failure.
 - **Search patterns are plain text.** Do not include `#`, `**`, or formatting markers.
 - **`select.type` must be "text" or "node".** To find headings: `{type: "node", nodeType: "heading"}`, NOT `{type: "heading"}`.
 - **`within` scopes to a single block**, not a section. To find text in a section, search the full document.

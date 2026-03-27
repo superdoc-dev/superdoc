@@ -1,0 +1,182 @@
+---
+title: Headless toolbar
+sidebarTitle: Custom toolbar
+keywords: "headless toolbar, custom toolbar, toolbar api, superdoc toolbar, experimental toolbar"
+---
+
+Build your own toolbar UI on top of SuperDoc. You own the rendering, layout, and styling. SuperDoc provides toolbar state, active context, and command access.
+
+## When to use it
+
+Use the headless toolbar when you need to build your own toolbar UI on top of SuperDoc.
+
+This API gives you the editor state and command access you need to build your own toolbar. You render the controls yourself, decide where they live, and connect them to your design system.
+
+Common use cases:
+
+- A toolbar built with your own React, Vue, or vanilla components
+- A product-specific layout instead of the default toolbar structure
+- Floating, inline, or contextual formatting controls
+- Different toolbar variants for desktop and mobile
+- A reduced command set for a focused editing experience
+
+## Quick start
+
+The headless toolbar does not render any UI for you. You create the controls yourself and connect them to a `SuperDoc` instance through `createHeadlessToolbar()`.
+
+```ts
+import { SuperDoc } from 'superdoc';
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/document.docx',
+  toolbar: null,
+});
+
+const toolbar = createHeadlessToolbar({
+  superdoc,
+  commands: ['bold', 'italic', 'underline', 'font-size', 'link', 'undo', 'redo'],
+});
+
+const unsubscribe = toolbar.subscribe(({ snapshot }) => {
+  renderToolbar(snapshot);
+});
+
+toolbar.execute?.('bold');
+toolbar.execute?.('italic');
+
+// Later, when the toolbar is no longer needed:
+unsubscribe();
+toolbar.destroy();
+```
+
+This gives you a live `snapshot` with the current editing context and UI state for the command ids you requested.
+
+## Create a toolbar controller
+
+Call `createHeadlessToolbar()` with your `SuperDoc` instance and the built-in command ids you want to track in the snapshot.
+
+```ts
+const toolbar = createHeadlessToolbar({
+  superdoc,
+  commands: ['bold', 'italic', 'underline', 'font-size', 'link', 'undo', 'redo'],
+});
+```
+
+`superdoc` is required. It is the host object the controller uses to resolve the active editor, selection context, and document surface.
+
+`commands` is optional. It defines which built-in item ids should be included in `snapshot.commands`.
+
+The controller gives you the following methods:
+
+- `getSnapshot()` returns the current toolbar state
+- `subscribe(listener)` pushes the current snapshot immediately and on later updates
+- `execute(id, payload?)` runs built-in toolbar semantics for supported item ids
+- `destroy()` removes internal subscriptions
+
+`commands` only controls which built-in items are derived into `snapshot.commands`. It does not limit direct access to `snapshot.context?.target.commands` or `snapshot.context?.target.doc`.
+
+## Read toolbar state
+
+The controller exposes a live `snapshot` object with two main parts:
+
+- `snapshot.context` for the current editing target
+- `snapshot.commands` for built-in command UI state
+
+Use `subscribe()` when your UI should react to selection changes, mode changes, or command state updates.
+
+```ts
+const unsubscribe = toolbar.subscribe(({ snapshot }) => {
+  console.log(snapshot.context);
+  console.log(snapshot.commands.bold);
+});
+```
+
+`snapshot.context` tells you where the user is editing and which execution surface is currently active.
+
+It includes:
+
+- `target.commands` for direct command execution
+- `target.doc` for document-level operations when available
+- `surface` as `'body'`, `'header'`, or `'footer'`
+- `isEditable` to help disable your controls in read-only contexts
+- `selectionEmpty` to distinguish caret state from range selection
+
+`snapshot.commands` contains derived UI state for the built-in ids you passed in `commands`.
+
+Each command entry has:
+
+- `active` for toggle state such as bold or italic
+- `disabled` for unavailable actions
+- `value` for controls such as font size, alignment, zoom, or document mode
+
+## Run actions
+
+There are two ways to run actions from a headless toolbar.
+
+Use `toolbar.execute()` as the default path for built-in toolbar semantics:
+
+```ts
+toolbar.execute?.('bold');
+toolbar.execute?.('text-align', 'center');
+toolbar.execute?.('document-mode', 'viewing');
+```
+
+Use `snapshot.context?.target.commands` when you want direct command execution:
+
+```ts
+snapshot.context?.target.commands?.toggleBold?.();
+snapshot.context?.target.commands?.setTextAlign?.('center');
+```
+
+Use direct commands for custom flows or when you want to work with the editor command surface directly.
+
+## Build custom controls
+
+Use `snapshot.commands` to drive the state of your UI controls.
+
+```ts
+const bold = snapshot.commands.bold;
+
+<button
+  type="button"
+  aria-pressed={bold?.active}
+  disabled={bold?.disabled}
+  onClick={() => toolbar.execute?.('bold')}
+>
+  Bold
+</button>
+```
+
+This keeps your UI fully custom while still using SuperDoc as the source of truth for toolbar state.
+
+## Use helpers for richer flows
+
+Use `headlessToolbarHelpers` when a toolbar item needs more than simple button state and `execute()`.
+
+```ts
+import { headlessToolbarHelpers } from 'superdoc/headless-toolbar';
+```
+
+Current helpers cover two richer flows:
+
+- Linked styles with `getQuickFormatList()` and `generateLinkedStyleString()`
+- Image insertion with `getFileOpener()` and `processAndInsertImageFile()`
+
+These helpers are useful when your UI owns the picker, dialog, or upload flow, but you still want to reuse the built-in SuperDoc logic behind those actions.
+
+## Supported command ids
+
+The headless toolbar supports built-in ids across the main formatting and document control groups.
+
+Current coverage includes:
+
+- Text formatting such as bold, italic, underline, strikethrough, text color, and highlight color
+- Paragraph controls such as text align, line height, linked style, bullet list, numbered list, and indentation
+- Insert and document actions such as link, image, zoom, ruler, document mode, undo, and redo
+- Track changes actions such as accept and reject for the current selection
+- Table actions such as insert, add or delete rows and columns, merge cells, split cells, remove borders, and table fix
+
+For the current built-in item ids, see the public types exported from `superdoc/headless-toolbar`.

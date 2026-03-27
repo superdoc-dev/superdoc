@@ -22,6 +22,7 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   'superdoc/docx-zipper',
   'superdoc/file-zipper',
   'superdoc/style.css',
+  'superdoc/headless-toolbar',
   '@superdoc-dev/ai',
   '@superdoc-dev/esign',
   '@superdoc-dev/esign/styles.css',

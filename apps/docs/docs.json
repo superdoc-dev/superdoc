@@ -242,6 +242,7 @@
               "guides/general/storage",
               "guides/general/stable-navigation",
               "guides/general/custom-themes",
+              "guides/general/custom-toolbar",
               {
                 "group": "Proofing",
                 "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]

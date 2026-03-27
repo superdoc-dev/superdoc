@@ -366,6 +366,16 @@ describe('VerticalNavigation', () => {
 describe('resolvePositionAtGoalX', () => {
   const makeEditor = (rectFn) => ({
     presentationEditor: { computeCaretLayoutRect: rectFn },
+    state: {
+      doc: {
+        resolve: () => ({
+          parent: {
+            type: { name: 'paragraph' },
+            attrs: { paragraphProperties: {} },
+          },
+        }),
+      },
+    },
   });
 
   it('returns the position whose X is closest to goalX', () => {
@@ -414,5 +424,54 @@ describe('resolvePositionAtGoalX', () => {
     const editor = makeEditor((pos) => ({ x: 50 }));
     const result = resolvePositionAtGoalX(editor, 10, 10, 50);
     expect(result).toEqual({ pos: 10 });
+  });
+
+  describe('RTL support', () => {
+    const makeRtlEditor = (rectFn, isRtl) => ({
+      presentationEditor: { computeCaretLayoutRect: rectFn },
+      state: {
+        doc: {
+          resolve: () => ({
+            parent: {
+              type: { name: 'paragraph' },
+              attrs: {
+                paragraphProperties: isRtl ? { rightToLeft: true } : {},
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    it('finds correct position in RTL line (X decreases with position)', () => {
+      // RTL: position 10 → x=40, position 14 → x=0 (X decreases with PM position)
+      const editor = makeRtlEditor((pos) => ({ x: (14 - pos) * 10 }), true);
+      const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+      // goalX=25: pos 11 has x=30 (dist=5), pos 12 has x=20 (dist=5)
+      // Binary search with inverted direction should find pos 11 or 12
+      expect(result.pos).toBeGreaterThanOrEqual(11);
+      expect(result.pos).toBeLessThanOrEqual(12);
+    });
+
+    it('returns pmStart for RTL when goalX matches the rightmost position', () => {
+      // RTL: pmStart has highest X
+      const editor = makeRtlEditor((pos) => ({ x: (14 - pos) * 10 }), true);
+      const result = resolvePositionAtGoalX(editor, 10, 14, 40);
+      expect(result).toEqual({ pos: 10 });
+    });
+
+    it('returns pmEnd for RTL when goalX matches the leftmost position', () => {
+      // RTL: pmEnd has lowest X
+      const editor = makeRtlEditor((pos) => ({ x: (14 - pos) * 10 }), true);
+      const result = resolvePositionAtGoalX(editor, 10, 14, 0);
+      expect(result).toEqual({ pos: 14 });
+    });
+
+    it('does not invert search for LTR paragraphs', () => {
+      // LTR: X increases with position (same as existing tests)
+      const editor = makeRtlEditor((pos) => ({ x: (pos - 10) * 10 }), false);
+      const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+      expect(result).toEqual({ pos: 12 });
+    });
   });
 });

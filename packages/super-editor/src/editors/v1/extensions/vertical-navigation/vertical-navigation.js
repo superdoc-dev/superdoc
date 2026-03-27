@@ -379,9 +379,12 @@ export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
   let bestPos = pmStart;
   let bestDist = Infinity;
 
-  // Binary search: characters within a single line have monotonically increasing X.
-  // NOTE: assumes LTR text. For RTL, X decreases with position so the search
-  // direction would be inverted. bestPos/bestDist tracking limits the impact.
+  // Detect RTL: in RTL lines, X decreases as PM position increases, so the
+  // binary search comparison must be inverted.
+  const $start = editor.state.doc.resolve(pmStart);
+  const paraNode = $start.parent.type.name === 'paragraph' ? $start.parent : $start.node(-1);
+  const isRtl = paraNode?.attrs?.paragraphProperties?.rightToLeft === true;
+
   let lo = pmStart;
   let hi = pmEnd;
 
@@ -403,9 +406,13 @@ export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
     }
 
     if (rect.x < goalX) {
-      lo = mid + 1;
+      // In LTR, X < goalX means search higher positions (further right).
+      // In RTL, X < goalX means search lower positions (further right in RTL).
+      if (isRtl) hi = mid - 1;
+      else lo = mid + 1;
     } else if (rect.x > goalX) {
-      hi = mid - 1;
+      if (isRtl) lo = mid + 1;
+      else hi = mid - 1;
     } else {
       // Exact match
       break;

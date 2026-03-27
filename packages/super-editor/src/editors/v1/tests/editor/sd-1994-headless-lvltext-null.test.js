@@ -138,4 +138,45 @@ describe('SD-1994 reproduction: headless docx + markdown JSON ordered lists', ()
 
     editor.destroy();
   }, 60_000);
+
+  it('does not loop when a headless docx editor encounters a missing numbering definition', async () => {
+    const buffer = await loadDocxFixture('blank-doc.docx');
+    const [content, , mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+
+    const editor = new Editor({
+      mode: 'docx',
+      isHeadless: true,
+      documentId: 'sd-2061-missing-numbering-definition',
+      extensions: getStarterExtensions(),
+      content,
+      mediaFiles,
+      fonts,
+      jsonOverride: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                numberingProperties: {
+                  numId: 0,
+                  ilvl: 0,
+                },
+              },
+              listRendering: null,
+            },
+            content: [{ type: 'text', text: 'List item with missing numbering definition' }],
+          },
+        ],
+      },
+    });
+
+    const firstParagraph = editor.getJSON()?.content?.[0];
+
+    expect(firstParagraph?.type).toBe('paragraph');
+    expect(firstParagraph?.attrs?.paragraphProperties?.numberingProperties).toEqual({ numId: 0, ilvl: 0 });
+    expect(firstParagraph?.attrs?.listRendering ?? null).toBeNull();
+
+    editor.destroy();
+  }, 60_000);
 });

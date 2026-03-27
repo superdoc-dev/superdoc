@@ -206,6 +206,19 @@ export function createNumberingPlugin(editor) {
         }
       };
 
+      const normalizeListRendering = (listRendering) => listRendering ?? null;
+
+      const serializeListRendering = (listRendering) => JSON.stringify(normalizeListRendering(listRendering));
+
+      const updateListRenderingIfNeeded = (node, pos, nextListRendering) => {
+        if (serializeListRendering(node?.attrs?.listRendering) === serializeListRendering(nextListRendering)) {
+          return;
+        }
+
+        tr.setNodeAttribute(pos, 'listRendering', normalizeListRendering(nextListRendering));
+        bumpBlockRev(node, pos);
+      };
+
       // Generate new list properties
       numberingManager.enableCache();
       try {
@@ -221,9 +234,8 @@ export function createNumberingPlugin(editor) {
 
           if (!definitionDetails || Object.keys(definitionDetails).length === 0) {
             // Treat as normal paragraph if definition is missing
-            tr.setNodeAttribute(pos, 'listRendering', null);
-            bumpBlockRev(node, pos);
-            return;
+            updateListRenderingIfNeeded(node, pos, null);
+            return false;
           }
 
           let { lvlText, customFormat, listNumberingType, suffix, justification, abstractId } = definitionDetails;
@@ -254,11 +266,8 @@ export function createNumberingPlugin(editor) {
             ...(customFormat ? { customFormat } : {}),
           };
 
-          if (JSON.stringify(node.attrs.listRendering) !== JSON.stringify(newListRendering)) {
-            // Updating rendering attrs for node view usage
-            tr.setNodeAttribute(pos, 'listRendering', newListRendering);
-            bumpBlockRev(node, pos);
-          }
+          // Updating rendering attrs for node view usage
+          updateListRenderingIfNeeded(node, pos, newListRendering);
 
           return false; // no need to descend into a paragraph
         });

@@ -259,7 +259,7 @@ describe('numberingPlugin', () => {
     expect(result).toBe(tr);
   });
 
-  it('clears list rendering when the definition details are missing', () => {
+  it('does not write list rendering when a missing definition is already cleared', () => {
     const editor = createEditor();
     const plugin = createNumberingPlugin(editor);
     const { appendTransaction } = plugin.spec;
@@ -267,6 +267,43 @@ describe('numberingPlugin', () => {
     const paragraph = {
       type: { name: 'paragraph' },
       attrs: {
+        listRendering: null,
+        paragraphProperties: {
+          numberingProperties: { numId: 2, ilvl: 0 },
+        },
+      },
+    };
+
+    const doc = makeDoc([{ node: paragraph, pos: 7 }]);
+    const tr = createTransaction();
+    const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+    ListHelpers.getListDefinitionDetails.mockReturnValue(null);
+
+    const result = appendTransaction(transactions, {}, { doc, tr });
+
+    expect(tr.setNodeAttribute).not.toHaveBeenCalled();
+    expect(generateOrderedListIndex).not.toHaveBeenCalled();
+    expect(docxNumberingHelpers.normalizeLvlTextChar).not.toHaveBeenCalled();
+    expect(numberingManager.calculateCounter).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+  });
+
+  it('clears stale list rendering when the definition details are missing', () => {
+    const editor = createEditor();
+    const plugin = createNumberingPlugin(editor);
+    const { appendTransaction } = plugin.spec;
+
+    const paragraph = {
+      type: { name: 'paragraph' },
+      attrs: {
+        listRendering: {
+          markerText: '1.',
+          suffix: '.',
+          justification: 'left',
+          path: [1],
+          numberingType: 'decimal',
+        },
         paragraphProperties: {
           numberingProperties: { numId: 2, ilvl: 0 },
         },
@@ -341,7 +378,7 @@ describe('numberingPlugin', () => {
       expect(tr.setNodeAttribute).toHaveBeenCalledWith(3, 'sdBlockRev', 6);
     });
 
-    it('increments sdBlockRev when listRendering is cleared due to missing definition', () => {
+    it('does not bump sdBlockRev when a missing definition is already cleared', () => {
       const editor = createEditor();
       const plugin = createNumberingPlugin(editor);
       const { appendTransaction } = plugin.spec;
@@ -350,6 +387,40 @@ describe('numberingPlugin', () => {
         type: { name: 'paragraph' },
         attrs: {
           sdBlockRev: 10,
+          listRendering: null,
+          paragraphProperties: {
+            numberingProperties: { numId: 2, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 5 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      ListHelpers.getListDefinitionDetails.mockReturnValue(null);
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).not.toHaveBeenCalled();
+    });
+
+    it('increments sdBlockRev when stale listRendering is cleared due to a missing definition', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockRev: 10,
+          listRendering: {
+            markerText: '1.',
+            suffix: '.',
+            justification: 'left',
+            path: [1],
+            numberingType: 'decimal',
+          },
           paragraphProperties: {
             numberingProperties: { numId: 2, ilvl: 0 },
           },

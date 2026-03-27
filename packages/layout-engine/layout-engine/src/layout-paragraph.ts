@@ -167,6 +167,17 @@ const asSafeNumber = (value: unknown): number => {
 };
 
 /**
+ * Simple hash of paragraph borders for between-border group detection.
+ * Two paragraphs form a group when their border hashes match (ECMA-376 §17.3.1.5).
+ */
+const hashBorders = (borders?: ParagraphBorders): string | undefined => {
+  if (!borders) return undefined;
+  const side = (b?: { style?: string; width?: number; color?: string; space?: number }) =>
+    b ? `${b.style ?? ''},${b.width ?? 0},${b.color ?? ''},${b.space ?? 0}` : '';
+  return `${side(borders.top)}|${side(borders.right)}|${side(borders.bottom)}|${side(borders.left)}|${side(borders.between)}`;
+};
+
+/**
  * Computes the vertical border expansion for a paragraph fragment.
  * The border's `space` attribute (in points) plus the border width extends
  * the visual box beyond the content area. This ensures cursorY accounts
@@ -618,12 +629,29 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   // Compute border expansion once per paragraph (constant across fragments).
   // Border space overlaps with paragraph spacing per ECMA-376 §17.3.1.42:
   // "the space above the text (ignoring any spacing above)"
-  const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
+  const rawBorderExpansion = computeBorderVerticalExpansion(attrs?.borders);
+
+  // Between-border group detection (ECMA-376 §17.3.1.5): when adjacent paragraphs
+  // have identical borders, they form a group — top/bottom borders are suppressed
+  // between group members, so the layout engine should not reserve space for them.
+  const currentBorderHash = hashBorders(attrs?.borders);
+  const inBorderGroup = currentBorderHash != null && currentBorderHash === ensurePage().lastParagraphBorderHash;
+  const borderExpansion = {
+    top: inBorderGroup ? 0 : rawBorderExpansion.top,
+    bottom: rawBorderExpansion.bottom, // bottom suppression is handled when the NEXT paragraph joins the group
+  };
 
   // PHASE 2: Layout the paragraph with the remeasured lines
   while (fromLine < lines.length) {
     let state = ensurePage();
     if (state.trailingSpacing == null) state.trailingSpacing = 0;
+
+    // Reclaim the previous paragraph's bottom border expansion when joining a group.
+    // The previous paragraph already reserved space for its bottom border, but in a
+    // group that border is suppressed — so we move cursorY back to close the gap.
+    if (inBorderGroup && fromLine === 0) {
+      state.cursorY -= rawBorderExpansion.bottom;
+    }
 
     /**
      * Contextual Spacing Logic (OOXML w:contextualSpacing)
@@ -674,9 +702,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const pageContentHeight = state.contentBottom - state.topMargin;
       const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
       const fullHeight = linesHeight + borderExpansion.top + borderExpansion.bottom;
-      // Use overlap model: spacing and border top share space (ECMA-376 §17.3.1.42)
-      const heightOnBlankPage = linesHeight + Math.max(baseSpacingBefore, borderExpansion.top) + borderExpansion.bottom;
-      const fitsOnBlankPage = heightOnBlankPage <= pageContentHeight;
+      const fitsOnBlankPage = fullHeight + baseSpacingBefore <= pageContentHeight;
       const remainingHeightAfterSpacing = state.contentBottom - (state.cursorY + neededSpacingBefore);
       if (fitsOnBlankPage && state.page.fragments.length > 0 && fullHeight > remainingHeightAfterSpacing) {
         state = advanceColumn(state);
@@ -685,10 +711,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         continue;
       }
     }
-
-    // Track whether spacing is applied in THIS iteration (not a previous one).
-    // Continuation fragments after a page break don't re-apply spacing.
-    const spacingAppliedThisFragment = !appliedSpacingBefore && spacingBefore > 0;
 
     if (!appliedSpacingBefore && spacingBefore > 0) {
       while (!appliedSpacingBefore) {
@@ -828,18 +850,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Expand width: negative indents on both sides expand the fragment width
     // (e.g., -48px left + -72px right = 120px wider)
     const adjustedWidth = effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
-    // Border top overlaps with spacing: only offset by the uncovered portion.
-    // On continuation fragments (after page break), spacing wasn't applied — use full expansion.
-    const spacingForOverlap = spacingAppliedThisFragment ? spacingBefore : 0;
-    const extraTop = Math.max(0, borderExpansion.top - spacingForOverlap);
-
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
       fromLine,
       toLine: slice.toLine,
       x: adjustedX,
-      y: state.cursorY + extraTop,
+      y: state.cursorY + borderExpansion.top,
       width: adjustedWidth,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
@@ -887,19 +904,16 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
     state.page.fragments.push(fragment);
 
-    state.cursorY += extraTop + fragmentHeight + borderExpansion.bottom;
+    state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
     lastState = state;
     fromLine = slice.toLine;
   }
 
   if (lastState) {
-    // Border bottom expansion overlaps with spacingAfter (ECMA-376 §17.3.1.7).
-    // Reduce spacing by the portion already consumed by the border.
-    const effectiveSpacingAfter = Math.max(0, spacingAfter - borderExpansion.bottom);
-    if (effectiveSpacingAfter > 0) {
+    if (spacingAfter > 0) {
       let targetState = lastState;
-      let appliedSpacingAfter = effectiveSpacingAfter;
-      if (targetState.cursorY + effectiveSpacingAfter > targetState.contentBottom) {
+      let appliedSpacingAfter = spacingAfter;
+      if (targetState.cursorY + spacingAfter > targetState.contentBottom) {
         if (spacingDebugEnabled) {
           spacingDebugLog('spacingAfter triggers column advance', {
             blockId: block.id,
@@ -912,7 +926,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         targetState = advanceColumn(targetState);
         appliedSpacingAfter = 0;
       } else {
-        targetState.cursorY += effectiveSpacingAfter;
+        targetState.cursorY += spacingAfter;
       }
       targetState.trailingSpacing = appliedSpacingAfter;
       if (spacingDebugEnabled) {
@@ -929,5 +943,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
     lastState.lastParagraphStyleId = styleId;
     lastState.lastParagraphContextualSpacing = contextualSpacing;
+    lastState.lastParagraphBorderHash = currentBorderHash;
   }
 }

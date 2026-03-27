@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { streamSSE } from '../lib/sse-parser';
 import { getStreamUrl } from '../lib/agent-api';
 import type { Trace } from '../types/agent';
@@ -9,14 +9,24 @@ export function useAgentStream(roomId: string) {
   const [traces, setTraces] = useState<Trace[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Abort any active SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const startStream = useCallback(
     async (messageId: string, prompt: string): Promise<string> => {
+      // Abort any previous connection before starting a new one
+      abortRef.current?.abort();
+
       const controller = new AbortController();
       abortRef.current = controller;
       setIsStreaming(true);
       setCurrentResponse('');
 
-      // Create a new trace for this prompt
+      // Create a new trace for this prompt, but skip if one already exists (StrictMode re-mount)
       const trace: Trace = {
         id: messageId,
         prompt,
@@ -24,7 +34,10 @@ export function useAgentStream(roomId: string) {
         status: 'running',
         startedAt: Date.now(),
       };
-      setTraces((prev) => [...prev, trace]);
+      setTraces((prev) => {
+        if (prev.some((t) => t.id === messageId)) return prev;
+        return [...prev, trace];
+      });
 
       const url = getStreamUrl(roomId, messageId);
       let finalOutput = '';
@@ -41,7 +54,11 @@ export function useAgentStream(roomId: string) {
               setTraces((prev) => {
                 const updated = [...prev];
                 const t = updated.find((tr) => tr.id === messageId);
-                if (t) t.turns = [...t.turns, { turnIndex: event.turnIndex, toolCalls: [] }];
+                if (t) {
+                  // Deduplicate: skip if turn already exists
+                  if (t.turns.some((tu) => tu.turnIndex === event.turnIndex)) return prev;
+                  t.turns = [...t.turns, { turnIndex: event.turnIndex, toolCalls: [] }];
+                }
                 return updated;
               });
               break;
@@ -52,6 +69,11 @@ export function useAgentStream(roomId: string) {
                 const t = updated.find((tr) => tr.id === messageId);
                 const turn = t?.turns.find((tu) => tu.turnIndex === event.turnIndex);
                 if (turn) {
+                  // Deduplicate: skip if this tool call already exists in this turn
+                  const exists = turn.toolCalls.some(
+                    (c) => c.toolName === event.toolName && JSON.stringify(c.args) === JSON.stringify(event.args),
+                  );
+                  if (exists) return prev;
                   turn.toolCalls = [
                     ...turn.toolCalls,
                     { toolName: event.toolName, args: event.args, status: 'pending' },

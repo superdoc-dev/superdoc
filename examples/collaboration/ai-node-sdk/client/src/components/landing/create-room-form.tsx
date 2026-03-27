@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, FileText, FilePlus2, RefreshCw } from 'lucide-react';
+import { Upload, FileText, FilePlus2, RefreshCw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ export function CreateRoomForm() {
   const [changeMode, setChangeMode] = useState('direct');
   const [displayName, setDisplayName] = useState('User');
   const [file, setFile] = useState<File | null>(null);
+  const [quickAction, setQuickAction] = useState<'sample' | 'blank' | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,14 +37,20 @@ export function CreateRoomForm() {
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    if (selected) setFile(selected);
+    if (selected) {
+      setFile(selected);
+      setQuickAction(null);
+    }
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped) setFile(dropped);
+    if (dropped) {
+      setFile(dropped);
+      setQuickAction(null);
+    }
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -55,7 +62,9 @@ export function CreateRoomForm() {
     setIsDragOver(false);
   }, []);
 
-  const doStart = (useSample: boolean) => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const useSample = quickAction === 'sample';
     sessionStorage.setItem('displayName', displayName);
     startRoom.mutate({
       roomId: roomName,
@@ -66,20 +75,16 @@ export function CreateRoomForm() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    doStart(false);
-  };
-
   const handleUseSample = (e: React.MouseEvent) => {
     e.preventDefault();
-    doStart(true);
+    setFile(null);
+    setQuickAction('sample');
   };
 
   const handleStartBlank = (e: React.MouseEvent) => {
     e.preventDefault();
     setFile(null);
-    doStart(false);
+    setQuickAction('blank');
   };
 
   return (
@@ -115,9 +120,11 @@ export function CreateRoomForm() {
             isDragOver
               ? 'border-primary/60 bg-primary/5'
               : 'border-muted-foreground/25 hover:border-muted-foreground/40',
-            file && 'border-primary/40 bg-primary/5',
+            (file || quickAction) && 'border-primary/40 bg-primary/5',
           )}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (!quickAction) fileInputRef.current?.click();
+          }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -144,6 +151,36 @@ export function CreateRoomForm() {
                 Remove
               </button>
             </div>
+          ) : quickAction === 'sample' ? (
+            <div className="flex items-center gap-2 text-sm">
+              <FileText className="h-5 w-5 text-primary" />
+              <span className="font-medium">Sample document selected</span>
+              <button
+                type="button"
+                className="ml-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setQuickAction(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : quickAction === 'blank' ? (
+            <div className="flex items-center gap-2 text-sm">
+              <FilePlus2 className="h-5 w-5 text-primary" />
+              <span className="font-medium">Starting with blank document</span>
+              <button
+                type="button"
+                className="ml-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setQuickAction(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
           ) : (
             <>
               <Upload className="h-8 w-8 text-muted-foreground/60 mb-2" />
@@ -158,24 +195,32 @@ export function CreateRoomForm() {
         <div className="flex gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant={quickAction === 'sample' ? 'default' : 'outline'}
             size="sm"
             className="flex-1 text-xs"
             onClick={handleUseSample}
             disabled={startRoom.isPending}
           >
-            <FileText className="h-3.5 w-3.5" />
+            {quickAction === 'sample' ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <FileText className="h-3.5 w-3.5" />
+            )}
             Use sample document
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant={quickAction === 'blank' ? 'default' : 'outline'}
             size="sm"
             className="flex-1 text-xs"
             onClick={handleStartBlank}
             disabled={startRoom.isPending}
           >
-            <FilePlus2 className="h-3.5 w-3.5" />
+            {quickAction === 'blank' ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <FilePlus2 className="h-3.5 w-3.5" />
+            )}
             Start blank
           </Button>
         </div>

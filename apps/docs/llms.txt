@@ -1,0 +1,70 @@
+# SuperDoc
+
+> The document engine for AI agents that need real DOCX and PDF deliverables.
+
+SuperDoc renders, edits, and automates .docx files in the browser, headless on the server, and through stateless APIs. Built on OOXML — not HTML with export bolted on.
+
+## Best for
+
+- Legal redlines and contract review
+- Due diligence memos and reports
+- Proposal and response packs
+- Template-driven document automation
+- Human-in-the-loop agent workflows
+- Signed agreements and verification
+
+## Not for
+
+- Markdown publishing or blogs
+- Note-taking apps
+- Generic text generation
+
+## What agents get
+
+- Structured document operations (read, edit, format, comment, track changes)
+- 12 MCP tools, 9 grouped SDK tools, 360+ underlying document operations
+- Tracked changes and comments as first-class outputs
+- Same document model across browser editor, headless Node, and APIs
+- Stateless API for convert, annotate, sign, and verify
+- Real-time collaboration with Yjs CRDT
+
+## Quick start (MCP)
+
+```
+claude mcp add superdoc -- npx @superdoc-dev/mcp
+```
+
+## Quick start (SDK)
+
+```
+npm install @superdoc-dev/sdk
+```
+
+## Links
+
+- Docs: https://docs.superdoc.dev
+- AI agents guide: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
+- MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
+- LLM tools: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
+- Document API: https://docs.superdoc.dev/document-api/overview
+- Available operations: https://docs.superdoc.dev/document-api/available-operations
+- API reference (backend): https://docs.superdoc.dev/api-reference/introduction
+- SDK docs: https://docs.superdoc.dev/document-engine/sdks
+- CLI: https://docs.superdoc.dev/document-engine/cli
+- GitHub: https://github.com/superdoc-dev/superdoc
+- npm: https://www.npmjs.com/package/superdoc
+- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Full context: https://docs.superdoc.dev/llms-full.txt
+
+## Packages
+
+- superdoc — main library (browser editor)
+- @superdoc-dev/react — React wrapper
+- @superdoc-dev/sdk — Node.js SDK for programmatic access
+- @superdoc-dev/cli — command-line interface
+- @superdoc-dev/mcp — MCP server for AI coding agents
+- superdoc-sdk (PyPI) — Python SDK
+
+## License
+
+AGPLv3 (open source) or Commercial license for proprietary use.

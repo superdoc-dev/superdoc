@@ -225,6 +225,23 @@ describe('collectTocSources', () => {
     expect(sources[0].level).toBe(9); // outlineLevel 8 → tocLevel 9 (0-indexed + 1)
   });
 
+  it('filters applied outline levels by narrow \\o range when both switches present', () => {
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 3, to: 3 }, useAppliedOutlineLevel: true },
+      display: {},
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+    const applied = sources.filter((s) => s.kind === 'appliedOutline');
+
+    // Only p5 (outlineLevel 2 → tocLevel 3) falls in range 3-3
+    // p2, p3 (outlineLevel 1 → tocLevel 2) are excluded
+    expect(applied.length).toBe(1);
+    expect(applied[0].text).toBe('Sub-section');
+    expect(applied[0].level).toBe(3);
+  });
+
   it('returns empty when no switches match any paragraph', () => {
     const config: TocSwitchConfig = {
       source: {},

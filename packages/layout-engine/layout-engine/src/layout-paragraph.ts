@@ -615,6 +615,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
   }
 
+  // Compute border expansion once per paragraph (constant across fragments).
+  // Border space overlaps with paragraph spacing per ECMA-376 §17.3.1.42:
+  // "the space above the text (ignoring any spacing above)"
+  const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
+
   // PHASE 2: Layout the paragraph with the remeasured lines
   while (fromLine < lines.length) {
     let state = ensurePage();
@@ -661,10 +666,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * We use baseSpacingBefore for the blank page check because on a new page there's no
      * previous trailing spacing to collapse with.
      */
-    // Compute border expansion once per paragraph (constant across fragments).
-    // Border space overlaps with paragraph spacing per ECMA-376 §17.3.1.42:
-    // "the space above the text (ignoring any spacing above)"
-    const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
 
     const keepLines = attrs?.keepLines === true;
     if (keepLines && fromLine === 0) {

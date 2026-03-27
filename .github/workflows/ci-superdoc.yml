@@ -127,6 +127,7 @@ jobs:
           NODE_OPTIONS: '--max-old-space-size=8192'
         run: >-
           pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1
+          --reporter=default --reporter=./scripts/ci-file-reporter.js
           --shard=${{ matrix.shard }}
           --exclude='**/decrypt-docx.integration*'
           --exclude='**/contract-conformance*'

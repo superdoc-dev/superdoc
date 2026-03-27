@@ -42,7 +42,7 @@ import {
   type MultiSectionHeaderFooterIdentifier,
   type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
-import { deduplicateOverlappingRects } from '../dom/DomSelectionGeometry.js';
+import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import {
   ensureExplicitHeaderFooterSlot,

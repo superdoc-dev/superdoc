@@ -9,7 +9,7 @@ import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { LinkedStylesPluginKey } from '@extensions/linked-styles/plugin.js';
 import { NodeResizerKey } from '@extensions/noderesizer/noderesizer.js';
 
-import type { DomPositionIndex } from './DomPositionIndex.js';
+import type { DomPositionIndex } from '../../../dom-observer/DomPositionIndex.js';
 
 // ---------------------------------------------------------------------------
 // Types

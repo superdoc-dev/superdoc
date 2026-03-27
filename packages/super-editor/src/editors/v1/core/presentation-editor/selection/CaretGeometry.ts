@@ -19,7 +19,7 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { computeTableCaretLayoutRectFromDom } from '../tables/TableCaretDomGeometry.js';
-import { getPageElementByIndex } from '../dom/PageDom.js';
+import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
 
 /**
  * Represents the geometric layout information for a caret position.

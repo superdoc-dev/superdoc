@@ -20,12 +20,12 @@ import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
-import { DomPositionIndex } from './dom/DomPositionIndex.js';
-import { DomPositionIndexObserverManager } from './dom/DomPositionIndexObserverManager.js';
+import { DomPositionIndex } from '../../dom-observer/DomPositionIndex.js';
+import { DomPositionIndexObserverManager } from '../../dom-observer/DomPositionIndexObserverManager.js';
 import {
   computeDomCaretPageLocal as computeDomCaretPageLocalFromDom,
   computeSelectionRectsFromDom as computeSelectionRectsFromDomFromDom,
-} from './dom/DomSelectionGeometry.js';
+} from '../../dom-observer/DomSelectionGeometry.js';
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
@@ -35,7 +35,7 @@ import {
   normalizeClientPoint as normalizeClientPointFromPointer,
   denormalizeClientPoint as denormalizeClientPointFromPointer,
 } from './dom/PointerNormalization.js';
-import { getPageElementByIndex } from './dom/PageDom.js';
+import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput } from './layout/FootnotesBuilder.js';

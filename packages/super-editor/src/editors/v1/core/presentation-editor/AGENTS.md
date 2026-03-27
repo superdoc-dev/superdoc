@@ -24,5 +24,7 @@ host app scroll container (e.g. .dev-app__main, overflow: auto)  ← actual scro
 | `PresentationEditor.ts` | Main class — lifecycle, layout orchestration, scroll, zoom |
 | `pointer-events/EditorInputManager.ts` | Click/drag handling, link clicks, selection |
 | `utils/AnchorNavigation.ts` | TOC / bookmark navigation logic |
-| `dom/PageDom.ts` | DOM queries for page elements |
+| `../../dom-observer/` | DOM position index, selection geometry, page DOM queries |
+| `dom/CoordinateTransform.ts` | Page-local ↔ overlay coordinate conversion |
+| `dom/DecorationBridge.ts` | Syncs PM decorations onto painted DOM elements |
 | `tests/` | Unit tests for PresentationEditor features |

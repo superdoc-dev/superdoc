@@ -1,4 +1,4 @@
-import { getPageElementByIndex } from './PageDom.js';
+import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
 
 /**
  * Calculates the offset of a page element within the viewport.

@@ -11,7 +11,8 @@ import type {
   ImageFragmentMetadata,
   DrawingBlock,
   DrawingMeasure,
-  DrawingFragment, ParagraphBorders 
+  DrawingFragment,
+  ParagraphBorders,
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -660,12 +661,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * We use baseSpacingBefore for the blank page check because on a new page there's no
      * previous trailing spacing to collapse with.
      */
+    // Compute border expansion once per paragraph (constant across fragments).
+    // Border space overlaps with paragraph spacing per ECMA-376 §17.3.1.42:
+    // "the space above the text (ignoring any spacing above)"
+    const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
+
     const keepLines = attrs?.keepLines === true;
     if (keepLines && fromLine === 0) {
       const prevTrailing = state.trailingSpacing ?? 0;
       const neededSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
       const pageContentHeight = state.contentBottom - state.topMargin;
-      const fullHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
+      const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
+      const fullHeight = linesHeight + borderExpansion.top + borderExpansion.bottom;
       const fitsOnBlankPage = fullHeight + baseSpacingBefore <= pageContentHeight;
       const remainingHeightAfterSpacing = state.contentBottom - (state.cursorY + neededSpacingBefore);
       if (fitsOnBlankPage && state.page.fragments.length > 0 && fullHeight > remainingHeightAfterSpacing) {
@@ -799,7 +806,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       offsetX = narrowestOffsetX;
     }
 
-    const slice = sliceLines(lines, fromLine, state.contentBottom - state.cursorY);
+    // Reserve border expansion from available height so sliceLines doesn't accept
+    // lines that would overflow the page once border space is added.
+    const borderVertical = borderExpansion.top + borderExpansion.bottom;
+    const availableForSlice = Math.max(0, state.contentBottom - state.cursorY - borderVertical);
+    const slice = sliceLines(lines, fromLine, availableForSlice);
     const fragmentHeight = slice.height;
 
     // Apply negative indent adjustment to fragment position and width (similar to table indent handling).
@@ -810,8 +821,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Expand width: negative indents on both sides expand the fragment width
     // (e.g., -48px left + -72px right = 120px wider)
     const adjustedWidth = effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
-    // Account for border space + width that extends the visual box
-    const borderExpansion = computeBorderVerticalExpansion(attrs?.borders);
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
@@ -866,16 +875,22 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
     state.page.fragments.push(fragment);
 
-    state.cursorY += fragmentHeight + borderExpansion.top + borderExpansion.bottom;
+    // Border top expansion overlaps with spacingBefore (ECMA-376 §17.3.1.42).
+    // Only add the portion not already covered by spacing.
+    const extraTop = Math.max(0, borderExpansion.top - spacingBefore);
+    state.cursorY += fragmentHeight + extraTop + borderExpansion.bottom;
     lastState = state;
     fromLine = slice.toLine;
   }
 
   if (lastState) {
-    if (spacingAfter > 0) {
+    // Border bottom expansion overlaps with spacingAfter (ECMA-376 §17.3.1.7).
+    // Reduce spacing by the portion already consumed by the border.
+    const effectiveSpacingAfter = Math.max(0, spacingAfter - borderExpansion.bottom);
+    if (effectiveSpacingAfter > 0) {
       let targetState = lastState;
-      let appliedSpacingAfter = spacingAfter;
-      if (targetState.cursorY + spacingAfter > targetState.contentBottom) {
+      let appliedSpacingAfter = effectiveSpacingAfter;
+      if (targetState.cursorY + effectiveSpacingAfter > targetState.contentBottom) {
         if (spacingDebugEnabled) {
           spacingDebugLog('spacingAfter triggers column advance', {
             blockId: block.id,
@@ -888,7 +903,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         targetState = advanceColumn(targetState);
         appliedSpacingAfter = 0;
       } else {
-        targetState.cursorY += spacingAfter;
+        targetState.cursorY += effectiveSpacingAfter;
       }
       targetState.trailingSpacing = appliedSpacingAfter;
       if (spacingDebugEnabled) {

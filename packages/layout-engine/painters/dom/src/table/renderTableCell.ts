@@ -904,6 +904,8 @@ type TableCellRenderDependencies = {
   tableSdt?: SdtMetadata | null;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
+  /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
+  isRtl?: boolean;
   /** Computed cell width from rescaled columnWidths (overrides cellMeasure.width when present) */
   cellWidth?: number;
   /** Starting line index for partial row rendering (inclusive) */
@@ -992,6 +994,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     applySdtDataset,
     tableSdt,
     tableIndent,
+    isRtl,
     cellWidth,
     fromLine,
     toLine,
@@ -999,9 +1002,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
   const attrs = cell?.attrs;
   const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
-  const paddingLeft = padding.left ?? 4;
+  // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
+  const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
   const paddingTop = padding.top ?? 0;
-  const paddingRight = padding.right ?? 4;
+  const paddingRight = isRtl ? (padding.left ?? 4) : (padding.right ?? 4);
   const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');

@@ -25,6 +25,7 @@ import { renderCellBorderStyle } from '../table-cell/helpers/renderCellBorderSty
  * @property {string} [widthType='auto'] @internal - Internal width type
  * @property {string} [widthUnit='px'] @internal - Internal width unit
  * @property {import('../table-cell/table-cell.js').TableCellProperties} [tableCellProperties] @internal - Raw OOXML cell properties
+ * @property {string[]} [tableCellPropertiesInlineKeys] @internal - Keys present in the cell's w:tcPr (not from table style)
  */
 
 /**
@@ -140,6 +141,12 @@ export const TableHeader = Node.create({
       },
 
       tableCellProperties: {
+        default: null,
+        rendered: false,
+      },
+
+      /** @private - Keys from the cell's w:tcPr (exclude inherited from table style on export) */
+      tableCellPropertiesInlineKeys: {
         default: null,
         rendered: false,
       },

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   Editor,
   BLANK_DOCX_BASE64,
+  DocxEncryptionError,
   getDocumentApiAdapters,
   markdownToPmDoc,
   initPartsRuntime,
@@ -50,7 +51,9 @@ interface ContentOverrideOptions {
 }
 
 /** Options passed through to Editor.open() alongside content overrides. */
-type EditorPassThroughOptions = Record<string, unknown>;
+export interface EditorPassThroughOptions {
+  password?: string;
+}
 
 interface OpenDocumentOptions {
   documentId?: string;
@@ -203,6 +206,11 @@ export async function openDocument(
   } catch (error) {
     commentBridge?.dispose();
     domEnv.dispose();
+    // Preserve DOCX encryption errors so callers get actionable codes
+    // (e.g. DOCX_PASSWORD_REQUIRED) instead of generic DOCUMENT_OPEN_FAILED.
+    if (error instanceof DocxEncryptionError) {
+      throw new CliError(error.code, error.message, { source: meta });
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
       message,
@@ -287,7 +295,7 @@ export async function openCollaborativeDocument(
   doc: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
-  options: { user?: UserIdentity } = {},
+  options: { editorOpenOptions?: EditorPassThroughOptions; user?: UserIdentity } = {},
 ): Promise<OpenedDocument & { bootstrap?: BootstrapResult }> {
   const runtime = createCollaborationRuntime(profile);
 
@@ -340,6 +348,7 @@ export async function openCollaborativeDocument(
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
       isNewFile: shouldSeed,
+      editorOpenOptions: options.editorOpenOptions,
       user: options.user,
     });
 
@@ -429,6 +438,48 @@ export async function getFileChecksum(path: string): Promise<string> {
   }
 
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+export type OptionalExportResult = {
+  output?: { path: string; byteLength: number };
+  warning?: {
+    code: string;
+    path: string;
+    message: string;
+  };
+};
+
+/**
+ * Attempts an optional session export, returning structured success/warning
+ * data instead of throwing on failure.
+ *
+ * @param editor - The editor instance to export from
+ * @param io - CLI I/O for diagnostic warnings
+ * @param outPath - Optional output path; returns `undefined` when absent
+ * @param force - Whether to overwrite an existing file
+ * @returns Export result with output or warning metadata, or `undefined` if no path
+ */
+export async function exportOptionalSessionOutput(
+  editor: EditorWithDoc,
+  io: CliIO,
+  outPath: string | undefined,
+  force: boolean,
+): Promise<OptionalExportResult | undefined> {
+  if (!outPath) return undefined;
+  try {
+    return { output: await exportToPath(editor, outPath, force) };
+  } catch (error) {
+    const code = error instanceof CliError ? error.code : 'FILE_WRITE_ERROR';
+    const message = error instanceof Error ? error.message : String(error);
+    io.warn?.(`[warn] optional export to ${outPath} failed: ${message}\n`);
+    return {
+      warning: {
+        code,
+        path: outPath,
+        message,
+      },
+    };
+  }
 }
 
 export async function exportToPath(editor: Editor, outputPath: string, force = false): Promise<FileOutputMeta> {

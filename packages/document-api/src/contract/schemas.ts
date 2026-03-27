@@ -2788,7 +2788,7 @@ const diffCoverageSchema: JsonSchema = objectSchema(
     comments: { type: 'boolean' },
     styles: { type: 'boolean' },
     numbering: { type: 'boolean' },
-    headerFooters: { type: 'boolean', const: false },
+    headerFooters: { type: 'boolean' },
   },
   ['body', 'comments', 'styles', 'numbering', 'headerFooters'],
 );
@@ -2796,18 +2796,23 @@ const diffCoverageSchema: JsonSchema = objectSchema(
 const diffSummarySchema: JsonSchema = objectSchema(
   {
     hasChanges: { type: 'boolean' },
-    changedComponents: { type: 'array', items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering'] } },
+    changedComponents: {
+      type: 'array',
+      items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'] },
+    },
     body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    headerFooters: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    parts: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
   },
-  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering'],
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'],
 );
 
 const diffSnapshotSchema: JsonSchema = objectSchema(
   {
-    version: { type: 'string', const: 'sd-diff-snapshot/v1' },
+    version: { type: 'string', enum: ['sd-diff-snapshot/v1', 'sd-diff-snapshot/v2'] },
     engine: { type: 'string', enum: ['super-editor'] },
     fingerprint: { type: 'string' },
     coverage: diffCoverageSchema,
@@ -2818,7 +2823,7 @@ const diffSnapshotSchema: JsonSchema = objectSchema(
 
 const diffPayloadSchema: JsonSchema = objectSchema(
   {
-    version: { type: 'string', const: 'sd-diff-payload/v1' },
+    version: { type: 'string', enum: ['sd-diff-payload/v1', 'sd-diff-payload/v2'] },
     engine: { type: 'string', enum: ['super-editor'] },
     baseFingerprint: { type: 'string' },
     targetFingerprint: { type: 'string' },
@@ -7089,6 +7094,104 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema({ diff: diffPayloadSchema }, ['diff']),
     output: diffApplyResultSchema,
     success: diffApplyResultSchema,
+    failure: { type: 'object' },
+  },
+  // --- protection.* ---
+  'protection.get': {
+    input: objectSchema({}),
+    output: objectSchema(
+      {
+        editingRestriction: objectSchema(
+          {
+            mode: { type: 'string', enum: ['none', 'readOnly', 'comments', 'trackedChanges', 'forms'] },
+            enforced: { type: 'boolean' },
+            runtimeEnforced: { type: 'boolean' },
+            passwordProtected: { type: 'boolean' },
+            formattingRestricted: { type: 'boolean' },
+          },
+          ['mode', 'enforced', 'runtimeEnforced', 'passwordProtected', 'formattingRestricted'],
+        ),
+        writeProtection: objectSchema(
+          {
+            enabled: { type: 'boolean' },
+            passwordProtected: { type: 'boolean' },
+          },
+          ['enabled', 'passwordProtected'],
+        ),
+        readOnlyRecommended: { type: 'boolean' },
+      },
+      ['editingRestriction', 'writeProtection', 'readOnlyRecommended'],
+    ),
+  },
+  'protection.setEditingRestriction': {
+    input: objectSchema(
+      {
+        mode: { type: 'string', enum: ['readOnly'] },
+        formattingRestricted: { type: 'boolean' },
+      },
+      ['mode'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'protection.clearEditingRestriction': {
+    input: objectSchema({}),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+
+  // --- permissionRanges.* ---
+  'permissionRanges.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'permissionRanges.get': {
+    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    output: { type: 'object' },
+  },
+  'permissionRanges.create': {
+    input: objectSchema(
+      {
+        target: selectionTargetSchema,
+        principal: objectSchema(
+          {
+            kind: { type: 'string', enum: ['everyone', 'editor'] },
+            id: { type: 'string' },
+          },
+          ['kind'],
+        ),
+        id: { type: 'string' },
+      },
+      ['target', 'principal'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'permissionRanges.remove': {
+    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    output: { type: 'object' },
+    success: { type: 'object' },
+    failure: { type: 'object' },
+  },
+  'permissionRanges.updatePrincipal': {
+    input: objectSchema(
+      {
+        id: { type: 'string' },
+        principal: objectSchema(
+          {
+            kind: { type: 'string', enum: ['everyone', 'editor'] },
+            id: { type: 'string' },
+          },
+          ['kind'],
+        ),
+      },
+      ['id', 'principal'],
+    ),
+    output: { type: 'object' },
+    success: { type: 'object' },
     failure: { type: 'object' },
   },
 };

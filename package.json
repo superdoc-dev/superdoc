@@ -85,7 +85,8 @@
     "docs:sync-engine": "pnpm exec tsx apps/docs/scripts/generate-sdk-overview.ts",
     "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
     "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
-    "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run"
+    "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run",
+    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs"
   },
   "devDependencies": {
     "@clack/prompts": "^1.0.1",

@@ -26,6 +26,7 @@ export function handleTableCellNode({
   const tcPr = node.elements.find((el) => el.name === 'w:tcPr');
   const tableCellProperties = tcPr ? (tcPrTranslator.encode({ ...params, nodes: [tcPr] }) ?? {}) : {};
   attributes['tableCellProperties'] = tableCellProperties;
+  attributes['tableCellPropertiesInlineKeys'] = Object.keys(tableCellProperties);
 
   // Colspan
   const colspan = parseInt(tableCellProperties.gridSpan || 1, 10);

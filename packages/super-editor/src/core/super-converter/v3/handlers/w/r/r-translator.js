@@ -8,6 +8,7 @@ import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-trans
 import { translator as wRPrTranslator } from '../rpr';
 import validXmlAttributes from './attributes/index.js';
 import { handleStyleChangeMarksV2 } from '../../../../v2/importer/markImporter.js';
+import { getParagraphStyleRunPropertiesFromStylesXml } from '@converter/export-helpers/run-properties-export.js';
 import { encodeMarksFromRPr, resolveRunProperties } from '../../../../styles.js';
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:r';
@@ -96,12 +97,29 @@ const ensureReferenceRunFormatting = (runNode, referenceXmlName) => {
 
 /*
  * Wraps the provided content in a SuperDoc run node.
+ * runProperties = resolved (from combine). runPropertiesInlineKeys = keys marked inline at combine (export only these).
+ * runPropertiesStyleKeys = keys from the run's style in styles.xml (export omits these).
+ * runPropertiesOverrideKeys = keys that override the style (inline ∩ style); export includes these to preserve user overrides.
  */
-const createRunNodeWithContent = (content, encodedAttrs, runLevelMarks, runProperties) => {
+const createRunNodeWithContent = (
+  content,
+  encodedAttrs,
+  runLevelMarks,
+  resolvedRunProperties,
+  inlineKeysFromCombine,
+  runPropertiesStyleKeys = null,
+  runPropertiesOverrideKeys = null,
+) => {
   const node = {
     type: SD_KEY_NAME,
     content,
-    attrs: { ...encodedAttrs, runProperties },
+    attrs: {
+      ...encodedAttrs,
+      runProperties: resolvedRunProperties,
+      runPropertiesInlineKeys: inlineKeysFromCombine,
+      runPropertiesStyleKeys: runPropertiesStyleKeys?.length ? runPropertiesStyleKeys : null,
+      runPropertiesOverrideKeys: runPropertiesOverrideKeys?.length ? runPropertiesOverrideKeys : null,
+    },
   };
   if (runLevelMarks.length) {
     node.marks = runLevelMarks.map((mark) => cloneMark(mark));
@@ -116,9 +134,12 @@ const encode = (params, encodedAttrs = {}) => {
 
   const elements = Array.isArray(runNode.elements) ? runNode.elements : [];
 
-  // Parsing run properties
+  // Inline export allow-list = keys from encoded w:rPr only. Do not add keys that appear only
+  // after resolveRunProperties (e.g. resolved lang): baseline comparison still inflated document.xml
+  // on real documents. Plan-engine / explicit w:rPr continue to seed keys where needed.
   const rPrNode = elements.find((child) => child?.name === 'w:rPr');
-  const runProperties = rPrNode ? wRPrTranslator.encode({ ...params, nodes: [rPrNode] }) : {};
+  const encodedRunProperties = (rPrNode ? wRPrTranslator.encode({ ...params, nodes: [rPrNode] }) : undefined) ?? {};
+  const runPropertiesInlineKeysFromCombine = Object.keys(encodedRunProperties);
 
   // Resolving run properties following style hierarchy
   const paragraphProperties = params?.extraParams?.paragraphProperties || {};
@@ -140,7 +161,7 @@ const encode = (params, encodedAttrs = {}) => {
   }
   const resolvedRunProperties = resolveRunProperties(
     params,
-    runProperties ?? {},
+    encodedRunProperties,
     paragraphProperties,
     tableInfo,
     false,
@@ -203,9 +224,31 @@ const encode = (params, encodedAttrs = {}) => {
 
   const filtered = contentWithRunMarks.filter(Boolean);
 
+  // Keys from the run's style (styleId) in styles.xml — don't export these (already in styles.xml)
+  let runPropertiesStyleKeys = null;
+  if (encodedRunProperties?.styleId && params?.docx) {
+    const styleRPr = getParagraphStyleRunPropertiesFromStylesXml(params.docx, encodedRunProperties.styleId, params);
+    if (styleRPr && Object.keys(styleRPr).length > 0) {
+      runPropertiesStyleKeys = Object.keys(styleRPr);
+    }
+  }
+  // Keys that were in w:rPr and also in the style = explicit overrides; preserve on export
+  const runPropertiesOverrideKeys =
+    runPropertiesStyleKeys?.length && runPropertiesInlineKeysFromCombine?.length
+      ? runPropertiesInlineKeysFromCombine.filter((k) => runPropertiesStyleKeys.includes(k))
+      : null;
+
   const containsBreakNodes = filtered.some((child) => child?.type === 'lineBreak');
   if (!containsBreakNodes) {
-    const defaultNode = createRunNodeWithContent(filtered, encodedAttrs, runLevelMarks, runProperties);
+    const defaultNode = createRunNodeWithContent(
+      filtered,
+      encodedAttrs,
+      runLevelMarks,
+      resolvedRunProperties,
+      runPropertiesInlineKeysFromCombine,
+      runPropertiesStyleKeys,
+      runPropertiesOverrideKeys,
+    );
     return defaultNode;
   }
 
@@ -218,7 +261,15 @@ const encode = (params, encodedAttrs = {}) => {
    */
   const finalizeTextChunk = () => {
     if (!currentChunk.length) return;
-    const chunkNode = createRunNodeWithContent(currentChunk, encodedAttrs, runLevelMarks, runProperties);
+    const chunkNode = createRunNodeWithContent(
+      currentChunk,
+      encodedAttrs,
+      runLevelMarks,
+      resolvedRunProperties,
+      runPropertiesInlineKeysFromCombine,
+      runPropertiesStyleKeys,
+      runPropertiesOverrideKeys,
+    );
     if (chunkNode) splitRuns.push(chunkNode);
     currentChunk = [];
   };
@@ -226,7 +277,15 @@ const encode = (params, encodedAttrs = {}) => {
   filtered.forEach((child) => {
     if (child?.type === 'lineBreak') {
       finalizeTextChunk();
-      const breakNode = createRunNodeWithContent([child], encodedAttrs, runLevelMarks, runProperties);
+      const breakNode = createRunNodeWithContent(
+        [child],
+        encodedAttrs,
+        runLevelMarks,
+        resolvedRunProperties,
+        runPropertiesInlineKeysFromCombine,
+        runPropertiesStyleKeys,
+        runPropertiesOverrideKeys,
+      );
       if (breakNode) splitRuns.push(breakNode);
     } else {
       currentChunk.push(child);
@@ -257,6 +316,26 @@ const decode = (params, decodedAttrs = {}) => {
 
   const runAttrs = runNodeForExport.attrs || {};
   const runProperties = runAttrs.runProperties || {};
+  const inlineKeys = runAttrs.runPropertiesInlineKeys;
+  const styleKeys = runAttrs.runPropertiesStyleKeys;
+  const overrideKeys = runAttrs.runPropertiesOverrideKeys;
+
+  // Export run properties that were inline or that override the style (so user overrides are preserved).
+  // Exclude keys that are style-only (in styleKeys but not in overrideKeys).
+  // Old collaboration payloads often omit runPropertiesInlineKeys — fall back to all keys on runProperties
+  // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
+  const candidateKeys =
+    inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+
+  const shouldExport = (key) =>
+    key in (runProperties || {}) &&
+    (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
+      (Array.isArray(overrideKeys) && overrideKeys.includes(key)));
+
+  const exportKeys = candidateKeys.filter(shouldExport);
+
+  const runPropertiesToExport =
+    exportKeys.length > 0 ? Object.fromEntries(exportKeys.map((k) => [k, runProperties[k]])) : {};
 
   // Decode child nodes within the run
   const exportParams = {
@@ -269,12 +348,14 @@ const decode = (params, decodedAttrs = {}) => {
   }
   const childElements = translateChildNodes(exportParams) || [];
 
-  // Parse marks back into run properties
-  // and combine with any direct run properties
-  let runPropertiesElement = wRPrTranslator.decode({
-    ...params,
-    node: { attrs: { runProperties: runProperties } },
-  });
+  // Only emit w:rPr when we have inline overrides; omit when empty so we don't write empty or inherited-only rPr.
+  let runPropertiesElement =
+    Object.keys(runPropertiesToExport).length > 0
+      ? wRPrTranslator.decode({
+          ...params,
+          node: { attrs: { runProperties: runPropertiesToExport } },
+        })
+      : null;
 
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;
   const applyBaseRunProps = (runNode) => applyRunPropertiesTemplate(runNode, runPropsTemplate);

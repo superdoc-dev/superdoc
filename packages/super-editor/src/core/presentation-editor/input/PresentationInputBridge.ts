@@ -155,7 +155,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
-    if (event.isComposing || event.keyCode === 229) {
+    if (this.#isCompositionKeyboardEvent(event)) {
       return;
     }
     if (this.#isPlainCharacterKey(event)) {
@@ -180,7 +180,7 @@ export class PresentationInputBridge {
 
   /**
    * Forwards text input events (beforeinput) to the hidden editor.
-   * Skips composition events and uses microtask deferral for cooperative handling.
+   * Uses microtask deferral for cooperative handling.
    *
    * @param event - The input event from the layout surface
    */
@@ -194,11 +194,8 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
-    if ((event as InputEvent).isComposing) {
-      return;
-    }
 
-    queueMicrotask(() => {
+    const dispatchSyntheticEvent = () => {
       // Only re-check mutable state - surface check was already done
       if (event.defaultPrevented) {
         return;
@@ -218,7 +215,14 @@ export class PresentationInputBridge {
         synthetic = new Event(event.type, { bubbles: true, cancelable: true });
       }
       this.#dispatchToTarget(event, synthetic);
-    });
+    };
+
+    if ((event as InputEvent).isComposing) {
+      dispatchSyntheticEvent();
+      return;
+    }
+
+    queueMicrotask(dispatchSyntheticEvent);
   }
 
   /**
@@ -383,5 +387,13 @@ export class PresentationInputBridge {
    */
   #isPlainCharacterKey(event: KeyboardEvent): boolean {
     return event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+  }
+
+  /**
+   * Detects keyboard events that represent IME/dead-key composition rather than
+   * a command the hidden editor should process directly.
+   */
+  #isCompositionKeyboardEvent(event: KeyboardEvent): boolean {
+    return event.isComposing || event.keyCode === 229 || event.key === 'Dead' || event.key === 'Compose';
   }
 }

@@ -23,7 +23,7 @@ export interface DiffCoverage {
   comments: boolean;
   styles: boolean;
   numbering: boolean;
-  headerFooters: false;
+  headerFooters: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ export interface DiffCoverage {
 
 /** Versioned, fingerprinted snapshot of a document's diffable state. */
 export interface DiffSnapshot {
-  version: 'sd-diff-snapshot/v1';
+  version: 'sd-diff-snapshot/v1' | 'sd-diff-snapshot/v2';
   engine: DiffEngineId;
   fingerprint: string;
   coverage: DiffCoverage;
@@ -47,16 +47,18 @@ export interface DiffSnapshot {
 /** Coarse change summary for a diff payload. */
 export interface DiffSummary {
   hasChanges: boolean;
-  changedComponents: Array<'body' | 'comments' | 'styles' | 'numbering'>;
+  changedComponents: Array<'body' | 'comments' | 'styles' | 'numbering' | 'headerFooters' | 'parts'>;
   body: { hasChanges: boolean };
   comments: { hasChanges: boolean };
   styles: { hasChanges: boolean };
   numbering: { hasChanges: boolean };
+  headerFooters: { hasChanges: boolean };
+  parts: { hasChanges: boolean };
 }
 
 /** Versioned diff payload describing changes from a base to a target document. */
 export interface DiffPayload {
-  version: 'sd-diff-payload/v1';
+  version: 'sd-diff-payload/v1' | 'sd-diff-payload/v2';
   engine: DiffEngineId;
   baseFingerprint: string;
   targetFingerprint: string;

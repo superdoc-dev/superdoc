@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { handleEnter } from './keymap.js';
 
 const setupKeymap = async ({ isMacOS, isIOS }) => {
   vi.resetModules();
@@ -25,6 +26,37 @@ const setupKeymap = async ({ isMacOS, isIOS }) => {
 };
 
 describe('Keymap extension', () => {
+  it('falls back when splitRunToParagraph is unavailable', () => {
+    const splitBlock = vi.fn(() => true);
+    const first = vi.fn((resolver) => {
+      const chain = resolver({
+        commands: {
+          newlineInCode: vi.fn(() => false),
+          createParagraphNear: vi.fn(() => false),
+          liftEmptyBlock: vi.fn(() => false),
+          splitBlock,
+        },
+      });
+
+      for (const command of chain) {
+        if (command()) return true;
+      }
+
+      return false;
+    });
+
+    const editor = {
+      view: {
+        state: { tr: { setMeta: vi.fn(() => ({})) } },
+        dispatch: vi.fn(),
+      },
+      commands: { first },
+    };
+
+    expect(handleEnter(editor)).toBe(true);
+    expect(splitBlock).toHaveBeenCalledTimes(1);
+  });
+
   it('maps Ctrl-a to selectAll on macOS', async () => {
     const { bindings, editor } = await setupKeymap({ isMacOS: true, isIOS: false });
 

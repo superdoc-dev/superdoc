@@ -285,6 +285,84 @@ function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
   return { editor, tr, dispatch };
 }
 
+function makeRunAttributePlanEditor(
+  runAttrs: Record<string, unknown>,
+  text = 'Hello',
+): {
+  editor: Editor;
+  tr: {
+    replaceWith: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof vi.fn>;
+    removeMark: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    setNodeMarkup: ReturnType<typeof vi.fn>;
+    mapping: { map: (pos: number, assoc?: number) => number };
+    docChanged: boolean;
+    doc: {
+      nodesBetween: ReturnType<typeof vi.fn>;
+      nodeAt: ReturnType<typeof vi.fn>;
+      resolve: ReturnType<typeof vi.fn>;
+      textContent: string;
+    };
+  };
+  dispatch: ReturnType<typeof vi.fn>;
+  getRunNode: () => any;
+} {
+  const runType = { name: 'run' };
+  let runNode = {
+    type: runType,
+    attrs: runAttrs,
+    marks: [],
+    nodeSize: text.length + 2,
+  };
+
+  const tr = {
+    replaceWith: vi.fn(),
+    delete: vi.fn(),
+    insert: vi.fn(),
+    addMark: vi.fn(),
+    removeMark: vi.fn(),
+    setMeta: vi.fn(),
+    setNodeMarkup: vi.fn((_pos: number, _type: unknown, attrs: Record<string, unknown>, marks: unknown[]) => {
+      runNode = { ...runNode, attrs, marks };
+      return tr;
+    }),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc: {
+      nodesBetween: vi.fn((_from: number, _to: number, callback: (node: any, pos: number) => void) => {
+        callback(runNode, 1);
+      }),
+      nodeAt: vi.fn(() => runNode),
+      resolve: vi.fn(() => ({ marks: () => [] })),
+      textContent: text,
+    },
+  };
+  tr.replaceWith.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.insert.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+  tr.removeMark.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+  const editor = {
+    state: {
+      doc: tr.doc,
+      tr,
+      schema: {
+        marks: {},
+        nodes: { run: runType },
+      },
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, tr, dispatch, getRunNode: () => runNode };
+}
+
 describe('executeTextInsert: setMarks tri-state directives', () => {
   it('maps on/off/clear to canonical mark emission', () => {
     const boldCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
@@ -2120,5 +2198,69 @@ describe('executeCompiledPlan: format.apply textStyle attr gating', () => {
 
     expect(tr.addMark).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('executeStyleApply: run attribute ownership', () => {
+  it('preserves legacy run-attribute ownership when inline metadata is missing', () => {
+    const { editor, tr, getRunNode } = makeRunAttributePlanEditor({
+      runProperties: {
+        lang: { val: 'en-US' },
+        rtl: true,
+      },
+      runPropertiesInlineKeys: null,
+      runPropertiesStyleKeys: null,
+      runPropertiesOverrideKeys: null,
+    });
+
+    const target = makeTarget({ op: 'style.apply' as any, absFrom: 2, absTo: 7 }) as any;
+    const step: StyleApplyStep = {
+      id: 'step-run-lang-legacy',
+      op: 'style.apply',
+      where: { by: 'target', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } } as any,
+      args: { inline: { lang: { val: 'fr-FR' } } as any },
+    };
+
+    const result = executeStyleApply(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(result).toEqual({ changed: true });
+    expect(tr.setNodeMarkup).toHaveBeenCalled();
+    expect(getRunNode().attrs.runProperties).toEqual({
+      lang: { val: 'fr-FR' },
+      rtl: true,
+    });
+    expect(getRunNode().attrs.runPropertiesInlineKeys.sort()).toEqual(['lang', 'rtl'].sort());
+    expect(getRunNode().attrs.runPropertiesOverrideKeys).toBeNull();
+  });
+
+  it('marks only updated style-backed run-attribute keys as inline-owned and style overrides', () => {
+    const { editor, tr, getRunNode } = makeRunAttributePlanEditor({
+      runProperties: {
+        lang: { val: 'en-US' },
+        rtl: true,
+      },
+      runPropertiesInlineKeys: null,
+      runPropertiesStyleKeys: ['lang', 'rtl'],
+      runPropertiesOverrideKeys: null,
+    });
+
+    const target = makeTarget({ op: 'style.apply' as any, absFrom: 2, absTo: 7 }) as any;
+    const step: StyleApplyStep = {
+      id: 'step-run-lang',
+      op: 'style.apply',
+      where: { by: 'target', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } } as any,
+      args: { inline: { lang: { val: 'fr-FR' } } as any },
+    };
+
+    const result = executeStyleApply(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(result).toEqual({ changed: true });
+    expect(tr.setNodeMarkup).toHaveBeenCalled();
+    expect(getRunNode().attrs.runProperties).toEqual({
+      lang: { val: 'fr-FR' },
+      rtl: true,
+    });
+    expect(getRunNode().attrs.runPropertiesInlineKeys).toEqual(['lang']);
+    expect(getRunNode().attrs.runPropertiesOverrideKeys).toEqual(['lang']);
   });
 });

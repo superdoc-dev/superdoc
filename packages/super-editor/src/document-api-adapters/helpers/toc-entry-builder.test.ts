@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildTocEntryParagraphs, type TocSource } from './toc-entry-builder.js';
+import { buildTocEntryParagraphs, collectTocSources, type TocSource } from './toc-entry-builder.js';
 import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 import type { TocSwitchConfig } from '@superdoc/document-api';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 const BASE_SOURCE: TocSource = {
   text: 'Chapter One',
@@ -95,5 +96,160 @@ describe('buildTocEntryParagraphs', () => {
       const props = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
       expect(props.tabStops).toBeUndefined();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectTocSources — mock doc helper
+// ---------------------------------------------------------------------------
+
+interface MockParagraph {
+  sdBlockId: string;
+  text: string;
+  styleId?: string;
+  outlineLevel?: number;
+}
+
+function mockDoc(paragraphs: MockParagraph[]) {
+  const children = paragraphs.map((p) => {
+    const textNode = {
+      type: { name: 'text' },
+      attrs: {},
+      isText: true,
+      text: p.text,
+      descendants: () => {},
+    };
+    return {
+      type: { name: 'paragraph' },
+      attrs: {
+        sdBlockId: p.sdBlockId,
+        paragraphProperties: {
+          ...(p.styleId ? { styleId: p.styleId } : {}),
+          ...(p.outlineLevel !== undefined ? { outlineLevel: p.outlineLevel } : {}),
+        },
+      },
+      isText: false,
+      descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
+        cb(textNode, 0);
+      },
+    };
+  });
+
+  return {
+    type: { name: 'doc' },
+    attrs: {},
+    isText: false,
+    descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
+      let pos = 0;
+      for (const child of children) {
+        const result = cb(child, pos);
+        if (result !== false) {
+          child.descendants((gc, gp) => cb(gc, pos + gp + 1));
+        }
+        pos += 10;
+      }
+    },
+  } as unknown as ProseMirrorNode;
+}
+
+// ---------------------------------------------------------------------------
+// collectTocSources
+// ---------------------------------------------------------------------------
+
+describe('collectTocSources', () => {
+  const doc = mockDoc([
+    { sdBlockId: 'p1', text: 'Normal paragraph', styleId: 'Normal' },
+    { sdBlockId: 'p2', text: 'Abbreviations', styleId: 'Abbreviations', outlineLevel: 1 },
+    { sdBlockId: 'p3', text: 'Definitions', styleId: 'Definitions', outlineLevel: 1 },
+    { sdBlockId: 'p4', text: 'Introduction', styleId: 'Heading1' },
+    { sdBlockId: 'p5', text: 'Sub-section', styleId: 'CustomSubheading', outlineLevel: 2 },
+  ]);
+
+  it('collects applied outline levels when \\u is set but \\o is absent (SD-2367)', () => {
+    const config: TocSwitchConfig = {
+      source: { useAppliedOutlineLevel: true },
+      display: { hyperlinks: true, hideInWebView: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+    const applied = sources.filter((s) => s.kind === 'appliedOutline');
+
+    expect(applied.length).toBe(3);
+    expect(applied.map((s) => s.text)).toEqual(['Abbreviations', 'Definitions', 'Sub-section']);
+    expect(applied.map((s) => s.level)).toEqual([2, 2, 3]);
+  });
+
+  it('collects both headings (\\o) and applied outline levels (\\u) together', () => {
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 1, to: 9 }, useAppliedOutlineLevel: true },
+      display: { hyperlinks: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+    const headings = sources.filter((s) => s.kind === 'heading');
+    const applied = sources.filter((s) => s.kind === 'appliedOutline');
+
+    expect(headings.length).toBe(1);
+    expect(headings[0].text).toBe('Introduction');
+    expect(applied.length).toBe(3);
+  });
+
+  it('collects only headings when \\u is not set', () => {
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 1, to: 3 } },
+      display: { hyperlinks: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0].text).toBe('Introduction');
+    expect(sources[0].kind).toBe('heading');
+  });
+
+  it('respects outline level range when \\u is set without \\o (defaults to 1-9)', () => {
+    const docWithDeepLevel = mockDoc([{ sdBlockId: 'p1', text: 'Deep heading', styleId: 'Custom', outlineLevel: 8 }]);
+
+    const config: TocSwitchConfig = {
+      source: { useAppliedOutlineLevel: true },
+      display: {},
+      preserved: {},
+    };
+
+    const sources = collectTocSources(docWithDeepLevel, config);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0].level).toBe(9); // outlineLevel 8 → tocLevel 9 (0-indexed + 1)
+  });
+
+  it('filters applied outline levels by narrow \\o range when both switches present', () => {
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 3, to: 3 }, useAppliedOutlineLevel: true },
+      display: {},
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+    const applied = sources.filter((s) => s.kind === 'appliedOutline');
+
+    // Only p5 (outlineLevel 2 → tocLevel 3) falls in range 3-3
+    // p2, p3 (outlineLevel 1 → tocLevel 2) are excluded
+    expect(applied.length).toBe(1);
+    expect(applied[0].text).toBe('Sub-section');
+    expect(applied[0].level).toBe(3);
+  });
+
+  it('returns empty when no switches match any paragraph', () => {
+    const config: TocSwitchConfig = {
+      source: {},
+      display: {},
+      preserved: {},
+    };
+
+    const sources = collectTocSources(doc, config);
+    expect(sources.length).toBe(0);
   });
 });

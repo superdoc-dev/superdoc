@@ -3,6 +3,7 @@ import { calculateResolvedParagraphProperties } from '@extensions/paragraph/reso
 import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
 
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { normalizeRunProperties } from './normalizeRunProperties.js';
 
 export function getMarksFromSelection(state, editor) {
   return getSelectionFormattingState(state, editor).resolvedMarks;
@@ -13,7 +14,7 @@ export function getSelectionFormattingState(state, editor) {
 
   if (empty) {
     return getFormattingStateAtPos(state, state.selection.$head.pos, editor, {
-      storedMarks: state.storedMarks || null,
+      storedMarks: state.storedMarks ?? null,
       includeCursorMarksWithStoredMarks: true,
     });
   }
@@ -31,6 +32,8 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const context = getParagraphRunContext($pos, editor);
   const currentRunProperties = context?.runProperties || null;
   const cursorMarks = $pos.marks();
+  const hasStoredMarks = storedMarks !== null;
+  const hasExplicitEmptyStoredMarks = hasStoredMarks && storedMarks.length === 0;
   const resolvedMarks = [];
   const inlineMarks = [];
 
@@ -38,7 +41,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   if (preferParagraphRunProperties) {
     inlineRunProperties = context?.paragraphAttrs?.paragraphProperties?.runProperties || null;
     inlineMarks.push(...createMarksFromRunProperties(state, inlineRunProperties, editor));
-  } else if (storedMarks) {
+  } else if (hasStoredMarks) {
     inlineMarks.push(...storedMarks);
     inlineRunProperties = decodeRPrFromMarks(storedMarks);
   } else if (context?.isEmpty) {
@@ -52,10 +55,20 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
     inlineRunProperties = decodeRPrFromMarks(inlineMarks);
   }
 
+  if (hasExplicitEmptyStoredMarks) {
+    return {
+      resolvedMarks: [],
+      inlineMarks: [],
+      resolvedRunProperties: {},
+      inlineRunProperties: {},
+      styleRunProperties: {},
+    };
+  }
+
   const resolvedFromSelection = getInheritedRunProperties(
     $pos,
     editor,
-    preferParagraphRunProperties || (!storedMarks && context?.isEmpty)
+    preferParagraphRunProperties || (!hasStoredMarks && context?.isEmpty)
       ? context?.paragraphAttrs?.paragraphProperties?.runProperties || null
       : inlineRunProperties,
   );
@@ -63,7 +76,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const styleRunProperties = resolvedFromSelection?.styleRunProperties ?? null;
   const resolvedMarksFromProperties = createMarksFromRunProperties(state, resolvedRunProperties, editor);
   resolvedMarks.push(...mergeResolvedMarksWithInlineFallback(resolvedMarksFromProperties, inlineMarks));
-  if (storedMarks && includeCursorMarksWithStoredMarks) {
+  if (hasStoredMarks && includeCursorMarksWithStoredMarks) {
     resolvedMarks.push(...cursorMarks);
   }
 
@@ -238,11 +251,6 @@ function getParagraphRunContext($pos, editor) {
     tableInfo,
     numberingDefinedInline: Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
   };
-}
-
-function normalizeRunProperties(runProperties) {
-  if (!runProperties || typeof runProperties !== 'object') return null;
-  return Object.keys(runProperties).length > 0 ? runProperties : null;
 }
 
 function getSafeResolutionContext(editor, node, $pos, paragraphAttrs) {

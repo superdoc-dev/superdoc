@@ -4,7 +4,6 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
-import { customSearchHighlightsKey } from '@extensions/search/search.js';
 import { AiPluginKey } from '@extensions/ai/ai-plugin.js';
 import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { LinkedStylesPluginKey } from '@extensions/linked-styles/plugin.js';
@@ -60,7 +59,6 @@ interface DesiredState {
 const EXCLUDED_PLUGIN_KEY_REF_LIST: PluginKey[] = [
   TrackChangesBasePluginKey,
   CommentsPluginKey,
-  customSearchHighlightsKey,
   AiPluginKey,
   CustomSelectionPluginKey,
   LinkedStylesPluginKey,

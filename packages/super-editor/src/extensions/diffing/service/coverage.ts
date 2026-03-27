@@ -1,8 +1,8 @@
 /**
  * Coverage metadata for the diff engine.
  *
- * v1 always covers body, comments, styles, and numbering.
- * Header/footer diffing is not supported in v1.
+ * v1 covers body, comments, styles, and numbering.
+ * v2 adds header/footer diffing.
  */
 
 import type { DiffCoverage } from '@superdoc/document-api';
@@ -14,6 +14,15 @@ export const V1_COVERAGE: DiffCoverage = Object.freeze({
   styles: true,
   numbering: true,
   headerFooters: false,
+});
+
+/** Default v2 coverage — every currently supported component enabled. */
+export const V2_COVERAGE: DiffCoverage = Object.freeze({
+  body: true,
+  comments: true,
+  styles: true,
+  numbering: true,
+  headerFooters: true,
 });
 
 /**

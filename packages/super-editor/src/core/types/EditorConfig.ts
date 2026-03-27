@@ -96,6 +96,16 @@ export interface User {
 
   /** The user's photo URL */
   image: string | null;
+
+  /**
+   * Explicit permission-range principal identifiers for this user.
+   * When set, these are used to match against `w:ed` values on permission range
+   * markers instead of deriving principals from the email address.
+   *
+   * Each entry should match the exact string used in the document's
+   * `w:permStart` `w:ed` attribute (e.g., `"contoso.com\\jdoe"`).
+   */
+  permissionPrincipals?: string[];
 }
 
 /**
@@ -280,8 +290,8 @@ export interface EditorOptions {
   /** Document converter */
   converter?: unknown | null;
 
-  /** Source of the file (File/Blob in browser, Buffer in Node.js) */
-  fileSource?: File | Blob | Buffer | null;
+  /** Source of the file (File/Blob in browser, Buffer/Uint8Array in Node.js) */
+  fileSource?: File | Blob | Buffer | Uint8Array | null;
 
   /** Initial editor state */
   initialState?: EditorState | null;
@@ -482,8 +492,12 @@ export interface EditorOptions {
   /** Called when collaboration is ready */
   onCollaborationReady?: (params: { editor: Editor; ydoc: unknown }) => void;
 
-  /** Called when an exception occurs */
-  onException?: (params: { error: Error; editor: Editor }) => void;
+  /**
+   * Called when an exception occurs.
+   * Return `true` to mark the exception as handled and suppress default logging
+   * for recoverable flows such as password prompts.
+   */
+  onException?: (params: { error: Error; editor: Editor; code?: string }) => boolean | void;
 
   /** Called when list definitions change */
   onListDefinitionsChange?: (params: ListDefinitionsPayload) => void;
@@ -503,6 +517,9 @@ export interface EditorOptions {
    * Must be synchronous.
    */
   linkPopoverResolver?: LinkPopoverResolver;
+
+  /** Password for opening encrypted .docx files. Not stored after initial load. */
+  password?: string;
 
   /**
    * When true, defers document initialization until open() is called.

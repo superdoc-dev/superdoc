@@ -130,11 +130,13 @@ export type CliCategory =
   | 'history'
   | 'session';
 
-/** The 10 CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
+/** The CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
 export const CLI_ONLY_OPERATIONS = [
   'open',
   'save',
   'close',
+  'insertTab',
+  'insertLineBreak',
   'status',
   'describe',
   'describeCommand',

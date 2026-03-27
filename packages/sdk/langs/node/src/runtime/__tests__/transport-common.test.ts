@@ -335,4 +335,19 @@ describe('buildOperationArgv with real generated contract', () => {
     expect(argv).toContain('--user-email');
     expect(argv[argv.indexOf('--user-email') + 1]).toBe('bot@co.com');
   });
+
+  test('generated doc.open spec includes password param', () => {
+    expect(realOpenOp.params.some((p) => p.name === 'password')).toBe(true);
+  });
+
+  test('password emits --password with real doc.open spec', () => {
+    const argv = buildOperationArgv(realOpenOp, { doc: 'secret.docx', password: 'test123' }, {}, undefined);
+    expect(argv).toContain('--password');
+    expect(argv[argv.indexOf('--password') + 1]).toBe('test123');
+  });
+
+  test('password is omitted from argv when not provided', () => {
+    const argv = buildOperationArgv(realOpenOp, { doc: 'plain.docx' }, {}, undefined);
+    expect(argv).not.toContain('--password');
+  });
 });

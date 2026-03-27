@@ -2,6 +2,7 @@
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
+import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
 import { clearInheritedLinkedStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
@@ -102,14 +103,8 @@ export function splitBlockPatch(state, dispatch, editor) {
         // When splitting at the end (creating an empty new paragraph), store the
         // current run's runProperties on the new paragraph so the toolbar and
         // wrapTextInRunsPlugin know which inline formatting to inherit.
-        if (atEnd && $from.parent.type.name === 'run' && $from.parent.attrs.runProperties) {
-          paragraphAttrs = {
-            ...paragraphAttrs,
-            paragraphProperties: {
-              ...(paragraphAttrs.paragraphProperties || {}),
-              runProperties: { ...$from.parent.attrs.runProperties },
-            },
-          };
+        if (atEnd && $from.parent.type.name === 'run') {
+          paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, getSplitRunProperties(state, $from));
         }
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;
@@ -191,6 +186,7 @@ export function splitBlockPatch(state, dispatch, editor) {
  */
 function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   const styleId = paragraphAttrs?.paragraphProperties?.styleId;
+  const explicitStoredMarks = state.storedMarks;
   const hasExplicitStyleReset =
     paragraphAttrs?.paragraphProperties &&
     Object.prototype.hasOwnProperty.call(paragraphAttrs.paragraphProperties, 'styleId') &&
@@ -202,10 +198,18 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   }
 
   if (!editor?.converter && !styleId) {
+    if (explicitStoredMarks !== null) {
+      tr.setStoredMarks(explicitStoredMarks);
+    }
     return;
   }
 
   try {
+    if (explicitStoredMarks !== null) {
+      tr.setStoredMarks(explicitStoredMarks);
+      return;
+    }
+
     const params = {
       docx: editor?.converter?.convertedXml ?? {},
       numbering: editor?.converter?.numbering ?? {},

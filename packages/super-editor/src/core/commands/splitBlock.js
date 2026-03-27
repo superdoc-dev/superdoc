@@ -1,6 +1,7 @@
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '../helpers/defaultBlockAt.js';
+import { getSplitRunProperties, syncSplitParagraphRunProperties } from '../helpers/splitParagraphRunProperties.js';
 import { Attribute } from '../Attribute.js';
 import { clearInheritedLinkedStyleId } from './linkedStyleSplitHelpers.js';
 
@@ -27,21 +28,6 @@ const ensureMarks = (state, splittableMarks) => {
     const filtered = marks.filter((m) => splittableMarks?.includes(m.type.name));
     state.tr.ensureMarks(filtered);
   }
-};
-
-/**
- * Extracts runProperties from the run node at the cursor position.
- * When the cursor is directly inside a paragraph (not inside a run), it
- * looks at the node just before the cursor (which is typically a run node).
- * @param {import('prosemirror-model').ResolvedPos} $from
- * @returns {Record<string, unknown> | null}
- */
-const getRunPropertiesAtCursor = ($from) => {
-  const runNode = $from.nodeBefore;
-  if (runNode?.type.name === 'run' && runNode.attrs.runProperties) {
-    return { ...runNode.attrs.runProperties };
-  }
-  return null;
 };
 
 /**
@@ -87,16 +73,8 @@ export const splitBlock =
       // current run's runProperties on the new paragraph so the toolbar and
       // wrapTextInRunsPlugin know which inline formatting to inherit.
       if (atEnd) {
-        const runProperties = getRunPropertiesAtCursor($from);
-        if (runProperties) {
-          newAttrs = {
-            ...newAttrs,
-            paragraphProperties: {
-              ...(newAttrs.paragraphProperties || {}),
-              runProperties,
-            },
-          };
-        }
+        const runProperties = getSplitRunProperties(state, $from);
+        newAttrs = syncSplitParagraphRunProperties(newAttrs, runProperties);
       }
       if (selection instanceof TextSelection) tr.deleteSelection();
       const deflt = $from.depth === 0 ? null : defaultBlockAt($from.node(-1).contentMatchAt($from.indexAfter(-1)));

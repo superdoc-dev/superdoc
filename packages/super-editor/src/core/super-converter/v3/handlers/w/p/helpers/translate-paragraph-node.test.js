@@ -33,7 +33,10 @@ describe('translateParagraphNode', () => {
     const result = translateParagraphNode(params);
 
     expect(result).toBe(annotationElements);
-    expect(translateChildNodes).toHaveBeenCalledWith(params);
+    expect(translateChildNodes).toHaveBeenCalledWith({
+      ...params,
+      extraParams: { ...params.extraParams, paragraphProperties: params.node?.attrs?.paragraphProperties },
+    });
     expect(generateParagraphProperties).not.toHaveBeenCalled();
   });
 
@@ -51,7 +54,10 @@ describe('translateParagraphNode', () => {
       elements: [paragraphProperties, ...childElements],
       attributes: {},
     });
-    expect(translateChildNodes).toHaveBeenCalledWith(params);
+    expect(translateChildNodes).toHaveBeenCalledWith({
+      ...params,
+      extraParams: { ...params.extraParams, paragraphProperties: params.node?.attrs?.paragraphProperties },
+    });
     expect(generateParagraphProperties).toHaveBeenCalledWith(params);
   });
 
@@ -70,7 +76,10 @@ describe('translateParagraphNode', () => {
       elements: childElements,
       attributes: { 'w:rsidRDefault': '00DE1' },
     });
-    expect(translateChildNodes).toHaveBeenCalledWith(params);
+    expect(translateChildNodes).toHaveBeenCalledWith({
+      ...params,
+      extraParams: { ...params.extraParams, paragraphProperties: params.node?.attrs?.paragraphProperties },
+    });
     expect(generateParagraphProperties).toHaveBeenCalledWith(params);
   });
 });

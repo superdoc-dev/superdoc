@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { normalizeDocPartContent, handleDocPartObj, tableOfContentsHandler } from './handle-doc-part-obj.js';
+import {
+  normalizeDocPartContent,
+  handleDocPartObj,
+  tableOfContentsHandler,
+  genericDocPartHandler,
+} from './handle-doc-part-obj.js';
 
 describe('normalizeDocPartContent', () => {
   it('wraps inline bookmark nodes in paragraphs', () => {
@@ -27,6 +32,39 @@ describe('normalizeDocPartContent', () => {
     ];
     const normalized = normalizeDocPartContent(nodes);
     expect(normalized).toEqual([nodes[0], { type: 'paragraph', content: [nodes[1]] }]);
+  });
+
+  it('wraps commentRangeStart and commentRangeEnd in paragraphs', () => {
+    const nodes = [
+      { type: 'commentRangeStart', attrs: { id: '1' } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'text' }] },
+      { type: 'commentRangeEnd', attrs: { id: '1' } },
+    ];
+    const normalized = normalizeDocPartContent(nodes);
+    expect(normalized).toEqual([
+      { type: 'paragraph', content: [nodes[0]] },
+      nodes[1],
+      { type: 'paragraph', content: [nodes[2]] },
+    ]);
+  });
+
+  it('wraps permStart and permEnd in paragraphs', () => {
+    const nodes = [
+      { type: 'permStart', attrs: { id: '1' } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'protected' }] },
+      { type: 'permEnd', attrs: { id: '1' } },
+    ];
+    const normalized = normalizeDocPartContent(nodes);
+    expect(normalized).toEqual([
+      { type: 'paragraph', content: [nodes[0]] },
+      nodes[1],
+      { type: 'paragraph', content: [nodes[2]] },
+    ]);
+  });
+
+  it('handles empty input', () => {
+    expect(normalizeDocPartContent([])).toEqual([]);
+    expect(normalizeDocPartContent()).toEqual([]);
   });
 });
 
@@ -119,6 +157,100 @@ describe('handleDocPartObj', () => {
     expect(result.attrs.docPartGallery).toBeNull();
     expect(result.attrs.sdtPr).toBeDefined();
     expect(result.attrs.sdtPr.elements.find((el) => el.name === 'w:docPartObj')).toBeDefined();
+  });
+});
+
+describe('genericDocPartHandler', () => {
+  it('normalizes inline nodes in non-TOC docPartObj content', () => {
+    const handler = vi.fn(() => [
+      { type: 'bookmarkStart', attrs: { name: '_GoBack' } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Page Numbers' }] },
+      { type: 'bookmarkEnd', attrs: { name: '_GoBack' } },
+    ]);
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '100' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Page Numbers (Bottom of Page)' } }],
+        },
+      ],
+    };
+    const contentNode = { name: 'w:sdtContent', elements: [] };
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr, docPartGalleryType: 'Page Numbers (Bottom of Page)' },
+      path: [],
+    };
+
+    const result = genericDocPartHandler(params);
+
+    expect(result.type).toEqual('documentPartObject');
+    expect(result.content).toEqual([
+      { type: 'paragraph', content: [{ type: 'bookmarkStart', attrs: { name: '_GoBack' } }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Page Numbers' }] },
+      { type: 'paragraph', content: [{ type: 'bookmarkEnd', attrs: { name: '_GoBack' } }] },
+    ]);
+  });
+
+  it('normalizes commentRangeStart/End in non-TOC docPartObj content', () => {
+    const handler = vi.fn(() => [
+      { type: 'commentRangeStart', attrs: { id: '5' } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Bibliography' }] },
+      { type: 'commentRangeEnd', attrs: { id: '5' } },
+    ]);
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '200' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Bibliographies' } }],
+        },
+      ],
+    };
+    const contentNode = { name: 'w:sdtContent', elements: [] };
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr, docPartGalleryType: 'Bibliographies' },
+      path: [],
+    };
+
+    const result = genericDocPartHandler(params);
+
+    expect(result.content).toEqual([
+      { type: 'paragraph', content: [{ type: 'commentRangeStart', attrs: { id: '5' } }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Bibliography' }] },
+      { type: 'paragraph', content: [{ type: 'commentRangeEnd', attrs: { id: '5' } }] },
+    ]);
+  });
+
+  it('leaves block-only content unchanged', () => {
+    const handler = vi.fn(() => [{ type: 'paragraph', content: [{ type: 'text', text: 'Cover Page' }] }]);
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '300' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Cover Pages' } }],
+        },
+      ],
+    };
+    const contentNode = { name: 'w:sdtContent', elements: [] };
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr, docPartGalleryType: 'Cover Pages' },
+      path: [],
+    };
+
+    const result = genericDocPartHandler(params);
+
+    expect(result.content).toEqual([{ type: 'paragraph', content: [{ type: 'text', text: 'Cover Page' }] }]);
   });
 });
 

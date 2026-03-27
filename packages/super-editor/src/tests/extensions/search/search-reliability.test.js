@@ -3,6 +3,17 @@ import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { getMatchHighlights } from '@extensions/search/prosemirror-search-patched.js';
 import { EditorState, TextSelection } from 'prosemirror-state';
 
+const mockScrollIntoView = (editor) => {
+  const originalDomAtPos = editor.view.domAtPos.bind(editor.view);
+  editor.view.domAtPos = (pos) => {
+    const result = originalDomAtPos(pos);
+    if (result?.node && !result.node.scrollIntoView) {
+      result.node.scrollIntoView = () => {};
+    }
+    return result;
+  };
+};
+
 /**
  * Test suite for search reliability edge cases.
  * Tests stale positions, boundary errors, concurrent calls, and cross-block behavior.
@@ -186,6 +197,42 @@ describe('Search reliability', () => {
           const text = editor.state.doc.textBetween(match.from, match.to);
           expect(text).toBe('word');
         }
+      } finally {
+        editor.destroy();
+      }
+    });
+
+    it('replaceSearchMatch returns refreshed matches from the updated document', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const testDoc = doc.create(null, [
+          paragraph.create(null, [run.create(null, [editor.schema.text('old and old')])]),
+        ]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        mockScrollIntoView(editor);
+
+        const initial = editor.commands.setSearchSession('old');
+        expect(initial.matches).toHaveLength(2);
+        expect(initial.activeMatchIndex).toBe(0);
+
+        const result = editor.commands.replaceSearchMatch('newer');
+
+        expect(editor.state.doc.textContent).toBe('newer and old');
+        expect(result.matches).toHaveLength(1);
+        expect(result.activeMatchIndex).toBe(0);
+        expect(editor.state.doc.textBetween(result.matches[0].from, result.matches[0].to)).toBe('old');
+
+        const { from, to } = editor.state.selection;
+        expect(editor.state.doc.textBetween(from, to)).toBe('old');
       } finally {
         editor.destroy();
       }

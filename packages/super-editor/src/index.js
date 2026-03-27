@@ -14,7 +14,7 @@ import { getMarksFromSelection } from './core/helpers/getMarksFromSelection.js';
 import { getActiveFormatting } from './core/helpers/getActiveFormatting.js';
 import { getStarterExtensions, getRichTextExtensions } from './extensions/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
-import { DocxZipper, helpers } from './core/index.js';
+import { DocxEncryptionError, DocxEncryptionErrorCode, DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
 import { PresentationEditor } from './core/presentation-editor/index.js';
 import { createZip } from './core/super-converter/zipper.js';
@@ -43,6 +43,8 @@ import { registeredHandlers } from './core/super-converter/v3/handlers/index.js'
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { seedEditorStateToYDoc } from './extensions/collaboration/seed-editor-to-ydoc.js';
 import { onCollaborationProviderSynced } from './core/helpers/collaboration-provider-sync.js';
+import { resolveSelectionTarget } from './document-api-adapters/helpers/selection-target-resolver.js';
+import { resolveDefaultInsertTarget } from './document-api-adapters/helpers/adapter-utils.js';
 
 const Extensions = {
   Node,
@@ -74,6 +76,8 @@ export {
   Editor,
   /** @internal */
   PresentationEditor,
+  DocxEncryptionError,
+  DocxEncryptionErrorCode,
 
   // Components
   SuperEditor,
@@ -127,4 +131,10 @@ export {
   seedEditorStateToYDoc,
   /** @internal */
   onCollaborationProviderSynced,
+
+  // CLI/document-api bridge helpers
+  /** @internal */
+  resolveSelectionTarget,
+  /** @internal */
+  resolveDefaultInsertTarget,
 };

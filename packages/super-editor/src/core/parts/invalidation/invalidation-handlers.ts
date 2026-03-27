@@ -9,6 +9,8 @@
 import type { Editor } from '../../Editor.js';
 import type { PartChangedEvent, PartId } from '../types.js';
 import { registerInvalidationHandler } from './part-invalidation-registry.js';
+import { readSettingsRoot, parseProtectionState } from '../../../document-api-adapters/document-settings.js';
+import { applyEffectiveEditability, getProtectionStorage } from '../../../extensions/protection/editability.js';
 
 // ---------------------------------------------------------------------------
 // word/numbering.xml
@@ -85,6 +87,43 @@ function handleNotesInvalidation(editor: Editor, _event: PartChangedEvent): void
 }
 
 // ---------------------------------------------------------------------------
+// word/settings.xml — protection state sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Reparse protection state from settings.xml after a part change,
+ * recompute effective editability, and emit protectionChanged.
+ *
+ * Skips when the mutation originated from a protection adapter
+ * (source starts with 'protection.') to avoid double-emitting
+ * the protectionChanged event — the adapter already emits it.
+ */
+function handleSettingsInvalidation(editor: Editor, event: PartChangedEvent): void {
+  // Protection adapters already update storage, apply editability, and emit
+  // protectionChanged with source: 'local-mutation'. Skip to avoid duplicates.
+  if (event.source.startsWith('protection.')) return;
+
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter) return;
+
+  const settingsRoot = readSettingsRoot(converter);
+  const newState = parseProtectionState(settingsRoot);
+
+  const protStorage = getProtectionStorage(editor);
+  if (protStorage) {
+    protStorage.state = newState;
+  }
+
+  applyEffectiveEditability(editor);
+
+  editor.emit('protectionChanged', {
+    editor,
+    state: newState,
+    source: 'remote-part-sync',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -94,6 +133,7 @@ export function registerStaticInvalidationHandlers(): void {
   registerInvalidationHandler('word/_rels/document.xml.rels', handleRelationshipsInvalidation);
   registerInvalidationHandler('word/footnotes.xml', handleNotesInvalidation);
   registerInvalidationHandler('word/endnotes.xml', handleNotesInvalidation);
+  registerInvalidationHandler('word/settings.xml' as PartId, handleSettingsInvalidation);
 }
 
 /**

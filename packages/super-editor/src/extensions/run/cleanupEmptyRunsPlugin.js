@@ -1,4 +1,4 @@
-import { Plugin } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 
 /**
  * Plugin that removes empty run nodes inside paragraphs after transactions change the document.
@@ -47,6 +47,9 @@ export const cleanupEmptyRunsPlugin = new Plugin({
     const tr = newState.tr;
     // Delete from the end to keep positions stable
     toDelete.sort((a, b) => b.from - a.from).forEach(({ from, to }) => tr.deleteRange(from, to));
+    if (tr.selection instanceof TextSelection && tr.selection.empty && newState.storedMarks !== null) {
+      tr.setStoredMarks(newState.storedMarks);
+    }
     return tr.docChanged ? tr : null;
   },
 });

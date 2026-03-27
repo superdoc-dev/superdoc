@@ -102,6 +102,20 @@ describe('PermissionRanges extension', () => {
     debugSpy?.mockRestore();
   });
 
+  /** settings.xml content with enforced readOnly protection. */
+  const protectedSettingsXml = {
+    type: 'element',
+    name: 'w:settings',
+    elements: [
+      {
+        type: 'element',
+        name: 'w:documentProtection',
+        attributes: { 'w:edit': 'readOnly', 'w:enforcement': '1' },
+        elements: [],
+      },
+    ],
+  };
+
   const createEditor = (content, extraOptions = {}) => {
     const converter = new SuperConverter();
     converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
@@ -118,24 +132,38 @@ describe('PermissionRanges extension', () => {
     return editor;
   };
 
-  it('keeps viewing mode editable when the document contains an everyone range', () => {
-    const instance = createEditor(docWithPermissionRange);
+  /**
+   * Create an editor with enforced read-only protection.
+   * Injects a w:documentProtection element into the converter so
+   * #initProtectionState() parses it during construction.
+   */
+  const createProtectedEditor = (content, extraOptions = {}) => {
+    const converter = new SuperConverter();
+    converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
+    converter.translatedNumbering = { abstracts: {}, definitions: {} };
+    converter.convertedXml = { 'word/settings.xml': protectedSettingsXml };
+
+    return createEditor(content, { ...extraOptions, converter });
+  };
+
+  it('keeps protected viewing mode editable when the document contains an everyone range', () => {
+    const instance = createProtectedEditor(docWithPermissionRange);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);
     const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
     expect(storedRanges.length).toBeGreaterThan(0);
     expect(instance.isEditable).toBe(true);
   });
 
-  it('keeps viewing mode editable when the document contains a block-level everyone range', () => {
-    const instance = createEditor(docWithBlockPermissionRange);
+  it('keeps protected viewing mode editable when the document contains a block-level everyone range', () => {
+    const instance = createProtectedEditor(docWithBlockPermissionRange);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);
     const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
     expect(storedRanges.length).toBeGreaterThan(0);
     expect(instance.isEditable).toBe(true);
   });
 
-  it('keeps viewing mode editable in headless mode when the document contains an everyone range', () => {
-    const instance = createEditor(docWithPermissionRange, { isHeadless: true });
+  it('keeps protected viewing mode editable in headless mode when the document contains an everyone range', () => {
+    const instance = createProtectedEditor(docWithPermissionRange, { isHeadless: true });
     expect(instance.options.isHeadless).toBe(true);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);
     const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
@@ -144,13 +172,23 @@ describe('PermissionRanges extension', () => {
   });
 
   it('stays read-only when there are no approved ranges', () => {
-    const instance = createEditor(docWithoutPermissionRange);
+    const instance = createProtectedEditor(docWithoutPermissionRange);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);
     expect(instance.isEditable).toBe(false);
   });
 
-  it('blocks edits outside the permission range but allows edits inside it', () => {
+  it('permission ranges are inactive when protection is not enforced', () => {
     const instance = createEditor(docWithPermissionRange);
+    expect(instance.options.documentMode).toBe(VIEWING_MODE);
+    // allRanges should have entries but allowedRanges should be empty
+    const allRanges = instance.storage.permissionRanges?.allRanges ?? [];
+    expect(allRanges.length).toBeGreaterThan(0);
+    expect(instance.storage.permissionRanges?.hasAllowedRanges).toBe(false);
+    expect(instance.isEditable).toBe(false);
+  });
+
+  it('blocks edits outside the permission range but allows edits inside it', () => {
+    const instance = createProtectedEditor(docWithPermissionRange);
     const initialJson = instance.state.doc.toJSON();
 
     const lockedPos = findTextPos(instance.state.doc, 'Locked');
@@ -254,7 +292,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('blocks edits outside the block permission range but allows edits inside it', () => {
-    const instance = createEditor(docWithBlockPermissionRange);
+    const instance = createProtectedEditor(docWithBlockPermissionRange);
     const initialJson = instance.state.doc.toJSON();
 
     const lockedPos = findTextPos(instance.state.doc, 'Locked block');
@@ -341,7 +379,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('reconstructs permStart nodes deleted at the range boundary', () => {
-    const instance = createEditor(docWithPermissionRange);
+    const instance = createProtectedEditor(docWithPermissionRange);
     const editablePos = findTextPos(instance.state.doc, 'Editable');
     instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
 
@@ -416,7 +454,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('allows inserting a newline inside the permission range', () => {
-    const instance = createEditor(docWithPermissionRange);
+    const instance = createProtectedEditor(docWithPermissionRange);
     const editablePos = findTextPos(instance.state.doc, 'Editable');
     expect(editablePos).toBeGreaterThan(0);
     const splitPos = editablePos + 'Editable'.length;
@@ -428,7 +466,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('allows inserting a newline at the start of the permission range', () => {
-    const instance = createEditor(docWithPermissionRange);
+    const instance = createProtectedEditor(docWithPermissionRange);
     const editablePos = findTextPos(instance.state.doc, 'Editable');
     expect(editablePos).toBeGreaterThan(0);
     instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
@@ -438,7 +476,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('allows inserting a newline at the end of the permission range', () => {
-    const instance = createEditor(docWithPermissionRange);
+    const instance = createProtectedEditor(docWithPermissionRange);
     const editablePos = findTextPos(instance.state.doc, 'Editable section. ');
     expect(editablePos).toBeGreaterThan(0);
     const splitPos = editablePos + 'Editable section. '.length;
@@ -449,7 +487,7 @@ describe('PermissionRanges extension', () => {
   });
 
   it('allows editing ranges assigned to the current user via w:ed attribute', () => {
-    const instance = createEditor(docWithUserSpecificPermission, {
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
       user: { name: 'Gabriel', email: 'gabriel@superdoc.dev' },
     });
     expect(instance.isEditable).toBe(true);
@@ -457,10 +495,289 @@ describe('PermissionRanges extension', () => {
   });
 
   it('blocks w:ed ranges when the current user does not match', () => {
-    const instance = createEditor(docWithUserSpecificPermission, {
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
       user: { name: 'Viewer', email: 'viewer@example.com' },
     });
     expect(instance.isEditable).toBe(false);
     expect(instance.storage.permissionRanges?.ranges?.length ?? 0).toBe(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Protection clear → mode transition regression tests
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('restores editability when protection is cleared in editing mode', () => {
+    // Start with protection enforced + no allowed ranges → locked
+    const instance = createProtectedEditor(docWithoutPermissionRange);
+    expect(instance.isEditable).toBe(false);
+
+    // Clear protection by removing enforcement from storage
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+
+    // Switch to editing mode — should restore editability
+    instance.setDocumentMode('editing');
+    expect(instance.isEditable).toBe(true);
+  });
+
+  it('does not let stale baseline override host-controlled read-only after mode transitions', () => {
+    // Start protected (no allowed ranges → locked)
+    const instance = createProtectedEditor(docWithoutPermissionRange);
+    expect(instance.isEditable).toBe(false);
+
+    // Clear protection
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+
+    // Switch to viewing
+    instance.setDocumentMode('viewing');
+    expect(instance.isEditable).toBe(false);
+
+    // Switch to editing — baseline should be cleared, normal mode behavior
+    instance.setDocumentMode('editing');
+    expect(instance.isEditable).toBe(true);
+
+    // Back to viewing — should be locked again, not overridden by stale baseline
+    instance.setDocumentMode('viewing');
+    expect(instance.isEditable).toBe(false);
+    expect(instance.storage.protection?.editableBaseline).toBe(null);
+  });
+
+  it('does not override host-controlled read-only when protection is cleared', () => {
+    // Host disables editing explicitly via setEditable(false), without
+    // a mode transition. This simulates a custom UI lock.
+    const instance = createEditor(docWithoutPermissionRange, { documentMode: 'editing' });
+    instance.setEditable(false, false);
+    expect(instance.isEditable).toBe(false);
+
+    // Apply protection via applyEffectiveEditability (e.g., remote part sync).
+    // The editor is already non-editable, so protection must NOT claim it.
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: true,
+        runtimeEnforced: true,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    instance.storage.protection.initialized = true;
+
+    // Trigger recompute WITHOUT setDocumentMode (which would call setEditable(true))
+    const { applyEffectiveEditability } = require('../protection/editability.js');
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(false);
+    // Baseline captured the host's false — protection didn't change it
+    expect(instance.storage.protection?.editableBaseline).toBe(false);
+
+    // Clear protection — should NOT restore editability (baseline was false)
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(false);
+  });
+
+  it('restores host read-only when protection with allowed ranges is cleared', () => {
+    // Host disables editing explicitly
+    const instance = createEditor(docWithPermissionRange, { documentMode: 'editing' });
+    instance.setEditable(false, false);
+    expect(instance.isEditable).toBe(false);
+
+    // Apply protection with an everyone range — protection forces editable
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: true,
+        runtimeEnforced: true,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    instance.storage.protection.initialized = true;
+
+    const { applyEffectiveEditability } = require('../protection/editability.js');
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(true);
+    // Baseline captured the host's false before protection overrode it
+    expect(instance.storage.protection?.editableBaseline).toBe(false);
+
+    // Clear protection — should restore host's read-only, not stay editable
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(false);
+  });
+
+  it('preserves host baseline through multiple protection-state flips', () => {
+    // Baseline: editing mode, editable
+    const instance = createEditor(docWithPermissionRange, { documentMode: 'editing' });
+    expect(instance.isEditable).toBe(true);
+
+    const { applyEffectiveEditability } = require('../protection/editability.js');
+
+    // Enforce protection with NO allowed ranges → locks editor.
+    // Use refilterRanges: false so the everyone ranges don't auto-populate.
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: true,
+        runtimeEnforced: true,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    instance.storage.protection.initialized = true;
+    instance.storage.permissionRanges.hasAllowedRanges = false;
+    applyEffectiveEditability(instance, { refilterRanges: false });
+    expect(instance.isEditable).toBe(false);
+    expect(instance.storage.protection?.editableBaseline).toBe(true);
+
+    // A matching range is added → protection unlocks editor
+    // (simulate by manually setting allowedRanges)
+    instance.storage.permissionRanges.hasAllowedRanges = true;
+    applyEffectiveEditability(instance, { refilterRanges: false });
+    expect(instance.isEditable).toBe(true);
+    // Baseline must still be the original host value, not overwritten
+    expect(instance.storage.protection?.editableBaseline).toBe(true);
+
+    // Range is removed → protection re-locks editor
+    instance.storage.permissionRanges.hasAllowedRanges = false;
+    applyEffectiveEditability(instance, { refilterRanges: false });
+    expect(instance.isEditable).toBe(false);
+    expect(instance.storage.protection?.editableBaseline).toBe(true);
+
+    // Protection cleared → must restore host's original editable=true
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(true);
+    expect(instance.storage.protection?.editableBaseline).toBe(null);
+  });
+
+  it('preserves host read-only baseline through multiple protection-state flips', () => {
+    // Baseline: editing mode, host-locked
+    const instance = createEditor(docWithPermissionRange, { documentMode: 'editing' });
+    instance.setEditable(false, false);
+    expect(instance.isEditable).toBe(false);
+
+    const { applyEffectiveEditability } = require('../protection/editability.js');
+
+    // Enforce protection with allowed ranges → forces editable
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: true,
+        runtimeEnforced: true,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    instance.storage.protection.initialized = true;
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(true);
+    expect(instance.storage.protection?.editableBaseline).toBe(false);
+
+    // Ranges removed → protection re-locks
+    instance.storage.permissionRanges.hasAllowedRanges = false;
+    applyEffectiveEditability(instance, { refilterRanges: false });
+    expect(instance.isEditable).toBe(false);
+    // Baseline is still the host's original false
+    expect(instance.storage.protection?.editableBaseline).toBe(false);
+
+    // Ranges re-added → protection unlocks again
+    instance.storage.permissionRanges.hasAllowedRanges = true;
+    applyEffectiveEditability(instance, { refilterRanges: false });
+    expect(instance.isEditable).toBe(true);
+
+    // Protection cleared → must restore host's read-only (false)
+    instance.storage.protection.state = {
+      editingRestriction: {
+        mode: 'readOnly',
+        enforced: false,
+        runtimeEnforced: false,
+        passwordProtected: false,
+        formattingRestricted: false,
+      },
+      writeProtection: { enabled: false, passwordProtected: false },
+      readOnlyRecommended: false,
+    };
+    applyEffectiveEditability(instance);
+    expect(instance.isEditable).toBe(false);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // permissionPrincipals edge cases
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('treats empty permissionPrincipals array as explicit no-match (no email fallback)', () => {
+    // User with email that would match the ed attribute, but explicit empty principals
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
+      user: { name: 'Gabriel', email: 'gabriel@superdoc.dev', permissionPrincipals: [] },
+    });
+    // Empty array disables email fallback, so the named range should NOT match
+    expect(instance.isEditable).toBe(false);
+    expect(instance.storage.permissionRanges?.ranges?.length ?? 0).toBe(0);
+  });
+
+  it('falls back to email when permissionPrincipals is undefined', () => {
+    const instance = createProtectedEditor(docWithUserSpecificPermission, {
+      user: { name: 'Gabriel', email: 'gabriel@superdoc.dev' },
+    });
+    // No permissionPrincipals → email fallback should match the ed range
+    expect(instance.isEditable).toBe(true);
+    expect(instance.storage.permissionRanges?.ranges?.length).toBeGreaterThan(0);
   });
 });

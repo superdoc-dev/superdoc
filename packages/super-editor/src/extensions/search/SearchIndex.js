@@ -342,4 +342,128 @@ export class SearchIndex {
 
     return matches;
   }
+
+  /**
+   * Pattern matching combining diacritical marks, Hebrew vowel points/cantillation,
+   * and other common combining marks that should be ignored during search.
+   */
+  static DIACRITICS_PATTERN = /[\u0300-\u036f\u0591-\u05bd\u05bf\u05c1\u05c2\u05c4\u05c5\u05c7]/g;
+
+  /**
+   * Strip diacritics / combining marks from a string.
+   * Decomposes to NFD then removes combining marks (Latin, Hebrew, etc.).
+   *
+   * @param {string} str - Input string
+   * @returns {string} String with diacritics removed
+   */
+  static stripDiacritics(str) {
+    return str.normalize('NFD').replace(SearchIndex.DIACRITICS_PATTERN, '');
+  }
+
+  /**
+   * Build an offset map from folded (diacritic-stripped) positions back to
+   * original text positions. NFD decomposition can expand characters
+   * (e.g., 'ä' → 'a' + '\u0308'), so after stripping combining marks the
+   * folded string may be shorter than the original.
+   *
+   * @param {string} original - The original text
+   * @returns {{ folded: string, toOriginal: number[] }}
+   *   folded: the diacritic-stripped text
+   *   toOriginal: array where toOriginal[foldedIdx] = originalIdx
+   */
+  static buildDiacriticOffsetMap(original) {
+    const nfd = original.normalize('NFD');
+    const toOriginal = [];
+    let foldedChars = [];
+
+    // Map from NFD position to original position
+    const nfdToOriginal = [];
+    let origIdx = 0;
+
+    for (let nfdIdx = 0; nfdIdx < nfd.length; ) {
+      const origChar = original[origIdx];
+      const origNfd = origChar.normalize('NFD');
+
+      // All NFD code points from this original character map back to origIdx
+      for (let k = 0; k < origNfd.length; k++) {
+        nfdToOriginal[nfdIdx + k] = origIdx;
+      }
+
+      nfdIdx += origNfd.length;
+      origIdx++;
+    }
+
+    // Now strip combining marks and build the folded → original map
+    // Reuse the same DIACRITICS_PATTERN char-classes for consistency
+    for (let nfdIdx = 0; nfdIdx < nfd.length; nfdIdx++) {
+      const cp = nfd.charCodeAt(nfdIdx);
+      // Skip combining diacritical marks + Hebrew vowels/cantillation
+      if (
+        (cp >= 0x0300 && cp <= 0x036f) ||
+        (cp >= 0x0591 && cp <= 0x05bd) ||
+        cp === 0x05bf ||
+        cp === 0x05c1 ||
+        cp === 0x05c2 ||
+        cp === 0x05c4 ||
+        cp === 0x05c5 ||
+        cp === 0x05c7
+      )
+        continue;
+
+      foldedChars.push(nfd[nfdIdx]);
+      toOriginal.push(nfdToOriginal[nfdIdx]);
+    }
+
+    // Add end sentinel so we can map the end of the last match
+    toOriginal.push(original.length);
+
+    return { folded: foldedChars.join(''), toOriginal };
+  }
+
+  /**
+   * Search the index ignoring diacritics. Folds both the document text and
+   * the query, searches in folded space, then maps match offsets back to
+   * original document offsets.
+   *
+   * @param {string} pattern - Plain text search pattern
+   * @param {Object} options - Search options
+   * @param {boolean} [options.caseSensitive=false] - Case sensitive search
+   * @param {number} [options.maxMatches=1000] - Maximum number of matches
+   * @returns {Array<{start: number, end: number, text: string}>} Matches with original offsets
+   */
+  searchIgnoringDiacritics(pattern, options = {}) {
+    const { caseSensitive = false, maxMatches = 1000 } = options;
+    if (!pattern || typeof pattern !== 'string' || pattern.length === 0) return [];
+
+    // Fold the document text
+    const { folded: foldedText, toOriginal } = SearchIndex.buildDiacriticOffsetMap(this.text);
+
+    // Fold and build regex from the query
+    const foldedQuery = SearchIndex.stripDiacritics(pattern);
+    const flexiblePattern = SearchIndex.toFlexiblePattern(foldedQuery);
+    if (flexiblePattern.length === 0) return [];
+
+    const flags = caseSensitive ? 'g' : 'gi';
+    const regex = new RegExp(flexiblePattern, flags);
+
+    const matches = [];
+    let match;
+    while ((match = regex.exec(foldedText)) !== null && matches.length < maxMatches) {
+      // Map folded offsets back to original text offsets
+      const originalStart = toOriginal[match.index];
+      const originalEnd = toOriginal[match.index + match[0].length];
+
+      matches.push({
+        start: originalStart,
+        end: originalEnd,
+        text: this.text.slice(originalStart, originalEnd),
+      });
+
+      if (match[0].length === 0) {
+        regex.lastIndex++;
+      }
+    }
+
+    return matches;
+  }
 }

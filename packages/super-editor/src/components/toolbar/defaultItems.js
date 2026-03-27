@@ -1023,6 +1023,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.lineHeight,
     hasCaret: false,
     hasInlineTextInput: false,
+    hideLabel: true,
     inlineTextInputVisible: false,
     suppressActiveHighlight: true,
     isWide: false,

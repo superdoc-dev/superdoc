@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translator, config } from './r-translator.js';
 import * as converterStyles from '../../../../styles.js';
+import * as runPropertiesExport from '../../../../export-helpers/run-properties-export.js';
 
 describe('w:r r-translator (node)', () => {
   it('exposes correct metadata', () => {
@@ -154,13 +155,19 @@ describe('w:r r-translator (node)', () => {
     expect(child.attrs).toEqual({ originalName: 'w:custom' });
   });
 
-  it('passes tableInfo and numberingDefinedInline to resolveRunProperties when table context is available', () => {
+  it('passes tableInfo and numberingDefinedInline to resolveRunProperties and preserves inline keys when table context is available', () => {
     const resolveRunPropertiesSpy = vi
       .spyOn(converterStyles, 'resolveRunProperties')
       .mockImplementation(() => ({ bold: true }));
     const runNode = {
       name: 'w:r',
-      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] }],
+      elements: [
+        {
+          name: 'w:rPr',
+          elements: [{ name: 'w:b' }, { name: 'w:color', attributes: { 'w:val': 'FF0000' } }],
+        },
+        { name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] },
+      ],
     };
 
     const params = {
@@ -178,12 +185,12 @@ describe('w:r r-translator (node)', () => {
       },
     };
 
-    translator.encode(params);
+    const result = translator.encode(params);
 
     expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
     expect(resolveRunPropertiesSpy).toHaveBeenCalledWith(
       params,
-      {},
+      { bold: true, color: { val: 'FF0000' } },
       { styleId: 'ListParagraph' },
       {
         rowIndex: 2,
@@ -195,8 +202,37 @@ describe('w:r r-translator (node)', () => {
       false,
       true,
     );
+    expect(result.attrs.runPropertiesInlineKeys).toEqual(['bold', 'color']);
 
     resolveRunPropertiesSpy.mockRestore();
+  });
+
+  it('sets runPropertiesOverrideKeys to keys that are both in w:rPr and in the run style', () => {
+    const getStyleRPrSpy = vi
+      .spyOn(runPropertiesExport, 'getParagraphStyleRunPropertiesFromStylesXml')
+      .mockReturnValue({ color: { val: '0000FF' } });
+    const runNode = {
+      name: 'w:r',
+      elements: [
+        {
+          name: 'w:rPr',
+          elements: [
+            { name: 'w:rStyle', attributes: { 'w:val': 'Heading1' } },
+            { name: 'w:b' },
+            { name: 'w:color', attributes: { 'w:val': 'FF0000' } },
+          ],
+        },
+        { name: 'w:t', elements: [{ type: 'text', text: 'Text' }] },
+      ],
+    };
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'Text', marks: [] }]) },
+      docx: {},
+    };
+    const result = translator.encode(params);
+    expect(result.attrs.runPropertiesOverrideKeys).toEqual(['color']);
+    getStyleRPrSpy.mockRestore();
   });
 
   it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
@@ -392,5 +428,82 @@ describe('w:r r-translator (node)', () => {
         }),
       }),
     );
+  });
+});
+
+describe('w:r r-translator decode (export only inline run properties)', () => {
+  const runWithContent = (attrs) => ({
+    node: {
+      type: 'run',
+      attrs: {
+        rsidR: '00000000',
+        rsidRPr: '00000000',
+        rsidDel: '00000000',
+        ...attrs,
+      },
+      content: [{ type: 'text', text: 'x', marks: [] }],
+    },
+  });
+
+  it('emits w:rPr when runPropertiesInlineKeys is missing (legacy / collab: export all run property keys)', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, color: { val: 'FF0000' } },
+    });
+    const result = translator.decode(params);
+    const elements = result?.elements ?? [];
+    const hasRPr = elements.some((el) => el?.name === 'w:rPr');
+    expect(hasRPr).toBe(true);
+  });
+
+  it('does not emit w:rPr when runPropertiesInlineKeys is empty array', () => {
+    const params = runWithContent({
+      runProperties: { bold: true },
+      runPropertiesInlineKeys: [],
+    });
+    const result = translator.decode(params);
+    const elements = result?.elements ?? [];
+    const hasRPr = elements.some((el) => el?.name === 'w:rPr');
+    expect(hasRPr).toBe(false);
+  });
+
+  it('emits w:rPr with only inline keys not in runPropertiesStyleKeys', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, color: 'FF0000' },
+      runPropertiesInlineKeys: ['bold', 'color'],
+      runPropertiesStyleKeys: ['color'],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    // rPr decoder turns runProperties into OOXML elements; color was filtered out so we should not see w:color
+    const elementNames = (rPr.elements ?? []).map((e) => e.name);
+    expect(elementNames).not.toContain('w:color');
+    expect(elementNames).toContain('w:b');
+  });
+
+  it('emits w:rPr when runPropertiesInlineKeys is set and runPropertiesStyleKeys is empty', () => {
+    const params = runWithContent({
+      runProperties: { bold: true },
+      runPropertiesInlineKeys: ['bold'],
+      runPropertiesStyleKeys: [],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
+  });
+
+  it('emits w:rPr with style key when runPropertiesOverrideKeys includes it (preserves user override)', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, color: { val: 'FF0000' } },
+      runPropertiesInlineKeys: ['bold', 'color'],
+      runPropertiesStyleKeys: ['color'],
+      runPropertiesOverrideKeys: ['color'],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:color');
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
   });
 });

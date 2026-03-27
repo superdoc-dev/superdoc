@@ -190,6 +190,7 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
   const exportStrategy = typeof threadingProfile === 'string' ? threadingProfile : 'word';
   const profile = typeof threadingProfile === 'string' ? null : threadingProfile;
   const hasThreadedComments = comments.some((comment) => comment.threadingParentCommentId || comment.parentCommentId);
+  const hasResolvedComments = comments.some((comment) => comment.resolvedTime || comment.isDone);
 
   // Always generate commentsExtended.xml when exporting comments (unless Google Docs style)
   // This ensures that comments without threading relationships are explicitly marked as
@@ -204,7 +205,9 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
   // If any threaded comments exist, always include commentsExtended.xml so Word can retain threads.
   const shouldIncludeForThreads = hasThreadedComments;
 
-  if (!shouldGenerateCommentsExtended && !shouldIncludeForThreads) {
+  // Word reads w15:done from commentsExtended.xml to determine resolved status.
+  // Without this file, resolved comments appear unresolved when opened in Word.
+  if (!shouldGenerateCommentsExtended && !shouldIncludeForThreads && !hasResolvedComments) {
     return null;
   }
 

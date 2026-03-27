@@ -51,6 +51,8 @@ export interface SuperDocFixture {
 
   /** Type text into the editor */
   type(text: string): Promise<void>;
+  /** Simulate IME/dead-key composition typing through the browser input pipeline */
+  composeText(text: string): Promise<void>;
   /** Press a single key */
   press(key: string): Promise<void>;
   /** Press Enter */
@@ -133,6 +135,55 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
       async type(text: string) {
         await editor.focus();
         await page.keyboard.type(text, { delay: 30 });
+      },
+
+      async composeText(text: string) {
+        const result = await page.evaluate(async (value) => {
+          const superdoc = (window as any).superdoc;
+          const editor = (window as any).editor;
+          const visibleHost =
+            superdoc?.activeEditor?.presentationEditor?.visibleHost ??
+            superdoc?.activeEditor?.visibleHost ??
+            document.querySelector('#editor');
+          const hiddenEditor = editor?.view?.dom as HTMLElement | undefined;
+
+          if (!visibleHost || !hiddenEditor) {
+            throw new Error('Could not resolve visible host or hidden editor DOM for composition input.');
+          }
+
+          editor.view.focus();
+          const beforeText = editor.state?.doc?.textContent ?? '';
+
+          const dispatchComposition = (
+            type: 'compositionstart' | 'compositionupdate' | 'compositionend',
+            data: string,
+          ) => visibleHost.dispatchEvent(new CompositionEvent(type, { data, bubbles: true, cancelable: true }));
+
+          dispatchComposition('compositionstart', '');
+          dispatchComposition('compositionupdate', value);
+
+          hiddenEditor.focus();
+          const inserted = document.execCommand('insertText', false, value);
+
+          dispatchComposition('compositionend', value);
+          // Let ProseMirror's composition/DOM observer pipeline flush to editor.state
+          // before we compare text and decide whether insertion failed.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          return {
+            inserted,
+            beforeText,
+            afterText: editor.state?.doc?.textContent ?? '',
+          };
+        }, text);
+
+        // execCommand may return false outside trusted user gestures on some engines.
+        // Treat this as a failure only if the composed insert also produced no mutation.
+        if (!result.inserted && result.beforeText === result.afterText) {
+          throw new Error(
+            `Composition simulation did not mutate document content (inserted=${String(result.inserted)}, beforeLength=${result.beforeText.length}, afterLength=${result.afterText.length}, text=${JSON.stringify(text)}).`,
+          );
+        }
       },
 
       async press(key: string) {

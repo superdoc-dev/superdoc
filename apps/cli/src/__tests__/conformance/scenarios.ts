@@ -384,7 +384,7 @@ function sampleInlineAliasValue(key: InlineAliasKey): unknown {
     case 'fitText':
       return { val: 12 };
     case 'lang':
-      return { val: 'en-US' };
+      return { val: 'fr-FR' };
     case 'rFonts':
       return { ascii: 'Calibri', hAnsi: 'Calibri' };
     case 'eastAsianLayout':

@@ -94,7 +94,7 @@ export const genericDocPartHandler = (params) => {
 
   const result = {
     type: 'documentPartObject',
-    content: translatedContent,
+    content: normalizeDocPartContent(translatedContent),
     attrs: {
       id,
       docPartGallery,
@@ -109,7 +109,14 @@ const validGalleryTypeMap = {
   'Table of Contents': tableOfContentsHandler,
 };
 
-const inlineNodeTypes = new Set(['bookmarkStart', 'bookmarkEnd']);
+const inlineNodeTypes = new Set([
+  'bookmarkStart',
+  'bookmarkEnd',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'permStart',
+  'permEnd',
+]);
 const SD_TOC_XML_NAME = 'sd:tableOfContents';
 const PARAGRAPH_XML_NAME = 'w:p';
 const PARAGRAPH_PROPERTIES_XML_NAME = 'w:pPr';

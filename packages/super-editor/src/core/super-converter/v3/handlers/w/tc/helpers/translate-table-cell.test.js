@@ -82,6 +82,40 @@ describe('translate-table-cell helpers', () => {
     expect(vMerge.attributes).toEqual({ 'w:val': 'continue' });
   });
 
+  it('generateTableCellProperties does not output w:tcMar when cell had no w:tcMar (tableCellPropertiesInlineKeys excludes cellMargins)', () => {
+    // Cell from DOCX with table style providing margins: only cellWidth was in w:tcPr
+    const node = {
+      attrs: {
+        tableCellProperties: { cellWidth: { value: 1000, type: 'dxa' } },
+        tableCellPropertiesInlineKeys: ['cellWidth'],
+        colwidth: [50],
+        widthUnit: 'px',
+        cellMargins: { top: 96, right: 48, bottom: 0, left: 24 }, // from table style, not inline
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const byName = Object.fromEntries(tcPr.elements.map((e) => [e.name, e]));
+    expect(byName['w:tcMar']).toBeUndefined();
+    expect(byName['w:tcW']).toBeTruthy();
+  });
+
+  it('generateTableCellProperties does not output w:tcMar when tableCellPropertiesInlineKeys is empty array', () => {
+    // Cell had no w:tcPr at all (all props from table style) — margins should stay table-style-only.
+    const node = {
+      attrs: {
+        tableCellProperties: { cellWidth: { value: 1000, type: 'dxa' } },
+        tableCellPropertiesInlineKeys: [],
+        colwidth: [50],
+        widthUnit: 'px',
+        cellMargins: { top: 12, right: 0, bottom: 0, left: 0 },
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const byName = Object.fromEntries(tcPr.elements.map((e) => [e.name, e]));
+    expect(byName['w:tcMar']).toBeUndefined();
+    expect(byName['w:tcW']).toBeTruthy();
+  });
+
   it('translateTableCell wraps children with tcPr as the first element', async () => {
     const params = {
       node: { attrs: { colwidth: [60], widthUnit: 'px' } },

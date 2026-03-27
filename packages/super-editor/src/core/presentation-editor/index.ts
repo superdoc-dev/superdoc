@@ -29,3 +29,18 @@ export type {
   ImageDeselectedEvent,
   TelemetryEvent,
 } from './types.js';
+
+// Proofing types (public contract)
+export type {
+  ProofingProvider,
+  ProofingCapabilities,
+  ProofingCheckRequest,
+  ProofingCheckResult,
+  ProofingSegment,
+  ProofingSegmentMetadata,
+  ProofingIssue,
+  ProofingIssueKind,
+  ProofingConfig,
+  ProofingStatus,
+  ProofingError,
+} from './proofing/types.js';

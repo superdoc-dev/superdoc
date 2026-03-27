@@ -28,46 +28,27 @@ describe('HyperlinkNodeExporter', async () => {
     );
 
     const rPr = hyperLinkNode.elements[0].elements[0];
-    expect(rPr.elements).toEqual([
-      {
-        name: 'w:rStyle',
-        attributes: {
-          'w:val': 'Hyperlink',
-        },
-        elements: undefined,
-        text: undefined,
-        type: undefined,
+    expect(rPr.elements).toHaveLength(4);
+    expect(rPr.elements[0]).toMatchObject({
+      name: 'w:rStyle',
+      attributes: { 'w:val': 'Hyperlink' },
+    });
+    expect(rPr.elements[1]).toMatchObject({
+      name: 'w:rFonts',
+      attributes: {
+        'w:ascii': 'Arial',
+        'w:hAnsi': 'Arial',
+        'w:cs': 'Arial',
       },
-      {
-        name: 'w:rFonts',
-        attributes: {
-          'w:ascii': 'Arial',
-          'w:hAnsi': 'Arial',
-          'w:cs': 'Arial',
-        },
-        elements: undefined,
-        text: undefined,
-        type: undefined,
-      },
-      {
-        name: 'w:sz',
-        attributes: {
-          'w:val': '20',
-        },
-        elements: undefined,
-        text: undefined,
-        type: undefined,
-      },
-      {
-        name: 'w:szCs',
-        attributes: {
-          'w:val': '20',
-        },
-        elements: undefined,
-        text: undefined,
-        type: undefined,
-      },
-    ]);
+    });
+    expect(rPr.elements[2]).toMatchObject({
+      name: 'w:sz',
+      attributes: { 'w:val': '20' },
+    });
+    expect(rPr.elements[3]).toMatchObject({
+      name: 'w:szCs',
+      attributes: { 'w:val': '20' },
+    });
   });
 
   it('exports w:hyperlink linking to bookmark', async () => {

@@ -4,6 +4,8 @@ import {
   type BoundDocApi,
   type DocCloseBoundParams,
   type DocCloseResult,
+  type DocOpenParams as GeneratedDocOpenParams,
+  type DocOpenResult,
   type DocSaveBoundParams,
   type DocSaveResult,
 } from './generated/client.js';
@@ -68,16 +70,11 @@ class BoundRuntime implements RuntimeInvoker {
 class SuperDocDocumentCore {
   private readonly boundRuntime: BoundRuntime;
   private readonly _sessionId: string;
-  private readonly _openResult: Record<string, unknown>;
+  private readonly _openResult: DocOpenResult;
   private readonly client: SuperDocClient;
 
   /** @internal */
-  constructor(
-    boundRuntime: BoundRuntime,
-    sessionId: string,
-    openResult: Record<string, unknown>,
-    client: SuperDocClient,
-  ) {
+  constructor(boundRuntime: BoundRuntime, sessionId: string, openResult: DocOpenResult, client: SuperDocClient) {
     this.boundRuntime = boundRuntime;
     this._sessionId = sessionId;
     this._openResult = openResult;
@@ -90,7 +87,7 @@ class SuperDocDocumentCore {
   }
 
   /** Read-only snapshot of the initial doc.open response metadata. */
-  get openResult(): Record<string, unknown> {
+  get openResult(): DocOpenResult {
     return this._openResult;
   }
 
@@ -129,12 +126,12 @@ function attachBoundDocApi(target: SuperDocDocumentCore, api: BoundDocApi): void
 export const SuperDocDocument: new (
   boundRuntime: BoundRuntime,
   sessionId: string,
-  openResult: Record<string, unknown>,
+  openResult: DocOpenResult,
   client: SuperDocClient,
 ) => SuperDocDocumentInstance = SuperDocDocumentCore as unknown as new (
   boundRuntime: BoundRuntime,
   sessionId: string,
-  openResult: Record<string, unknown>,
+  openResult: DocOpenResult,
   client: SuperDocClient,
 ) => SuperDocDocumentInstance;
 
@@ -144,11 +141,7 @@ export type SuperDocDocument = SuperDocDocumentInstance;
 // Client
 // ---------------------------------------------------------------------------
 
-export interface DocOpenParams {
-  doc?: string;
-  sessionId?: string;
-  [key: string]: unknown;
-}
+export type DocOpenParams = GeneratedDocOpenParams;
 
 export interface DocDescribeCommandParams {
   operationId: string;
@@ -198,8 +191,8 @@ export class SuperDocClient {
       });
     }
 
-    const result = (await this.rawApi.open(params, options)) as Record<string, unknown>;
-    const contextId = result.contextId as string;
+    const result = (await this.rawApi.open(params, options)) as DocOpenResult;
+    const contextId = result.contextId;
 
     const boundRuntime = new BoundRuntime(this.runtime, contextId);
     const handle = new SuperDocDocument(boundRuntime, contextId, result, this);
@@ -245,3 +238,4 @@ export type {
   SuperDocClientOptions,
 } from './runtime/process.js';
 export type { ToolChooserInput, ToolProvider } from './tools.js';
+export type { DocOpenResult } from './generated/client.js';

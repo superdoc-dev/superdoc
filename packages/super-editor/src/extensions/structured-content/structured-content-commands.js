@@ -1,7 +1,9 @@
 import { DOMParser as PMDOMParser } from 'prosemirror-model';
+import { TextSelection } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
 import { htmlHandler } from '@core/InputRule.js';
 import { findParentNode } from '@helpers/findParentNode.js';
+import { getFormattingStateAtPos } from '@core/helpers/getMarksFromSelection.js';
 import { generateRandomSigned32BitIntStrId } from '@core/helpers/generateDocxRandomId.js';
 import { getStructuredContentTagsById } from './structuredContentHelpers/getStructuredContentTagsById.js';
 import { getStructuredContentByGroup } from './structuredContentHelpers/getStructuredContentByGroup.js';
@@ -134,6 +136,31 @@ export const StructuredContentCommands = Extension.create({
               content = schema.text(' ');
             }
 
+            // When content was not provided as structured JSON, wrap the text
+            // in a formatted run inside the SDT so it visually matches the
+            // surrounding text. The run-split logic below prevents an outer run
+            // from wrapping the SDT itself.
+            const runType = schema.nodes.run;
+            // When `options.json` is used the caller already controls the full
+            // node structure, so we skip formatting inference intentionally.
+            if (runType && !options.json && content.isText) {
+              const formattingState = getFormattingStateAtPos(state, from, editor, {
+                storedMarks: state.storedMarks || null,
+              });
+              const runProperties = formattingState.inlineRunProperties || null;
+
+              // Apply resolved marks so calculateInlineRunPropertiesPlugin can diff correctly
+              if (formattingState.resolvedMarks?.length) {
+                const mergedMarks = formattingState.resolvedMarks.reduce(
+                  (set, mark) => mark.addToSet(set),
+                  content.marks,
+                );
+                content = content.mark(mergedMarks);
+              }
+
+              content = runType.create({ runProperties }, content);
+            }
+
             // Handle group parameter: convert to JSON tag
             let tag = options.attrs?.tag || 'inline_text_sdt';
             if (options.attrs?.group) {
@@ -157,7 +184,42 @@ export const StructuredContentCommands = Extension.create({
               from = to = insertPos;
             }
 
-            tr.replaceWith(from, to, node);
+            // If the cursor is inside a run, split the run first so the SDT
+            // is inserted at paragraph level rather than becoming a child of the run.
+            const $from = state.doc.resolve(from);
+            const $to = from === to ? $from : state.doc.resolve(to);
+            const selectionWithinSameRun = runType && $from.parent.type === runType && $from.parent === $to.parent;
+
+            if (selectionWithinSameRun) {
+              const runDepth = $from.depth;
+              const runStart = $from.before(runDepth);
+              const runEnd = $from.after(runDepth);
+              const parentRun = $from.parent;
+              const startOffset = $from.parentOffset;
+              const endOffset = $to.parentOffset;
+
+              const leftContent = parentRun.content.cut(0, startOffset);
+              const rightContent = parentRun.content.cut(endOffset);
+
+              const fragments = [];
+              if (leftContent.size > 0) {
+                fragments.push(runType.create(parentRun.attrs, leftContent, parentRun.marks));
+              }
+              fragments.push(node);
+              if (rightContent.size > 0) {
+                fragments.push(runType.create(parentRun.attrs, rightContent, parentRun.marks));
+              }
+
+              tr.replaceWith(runStart, runEnd, fragments);
+
+              // Place the cursor right after the inserted SDT so subsequent
+              // typing lands in the correct position.
+              const sdtStart = runStart + (leftContent.size > 0 ? leftContent.size + 2 : 0);
+              const cursorPos = sdtStart + node.nodeSize;
+              tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+            } else {
+              tr.replaceWith(from, to, node);
+            }
           }
 
           return true;

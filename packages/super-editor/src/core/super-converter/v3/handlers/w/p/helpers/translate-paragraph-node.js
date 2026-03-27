@@ -84,7 +84,14 @@ function mergeConsecutiveTrackedChanges(elements) {
  * @returns {XmlReadyNode} JSON of the XML-ready paragraph node
  */
 export function translateParagraphNode(params) {
-  let elements = translateChildNodes(params);
+  const exportParams = {
+    ...params,
+    extraParams: {
+      ...params.extraParams,
+      paragraphProperties: params.node?.attrs?.paragraphProperties,
+    },
+  };
+  let elements = translateChildNodes(exportParams);
 
   // Merge consecutive tracked changes with the same ID, including comment markers between them
   elements = mergeConsecutiveTrackedChanges(elements);

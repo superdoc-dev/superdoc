@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -37,6 +37,7 @@
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
+      "source": "./src/super-editor.js",
       "types": "./dist/superdoc/src/super-editor.d.ts",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
@@ -97,8 +98,8 @@
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
-    "@superdoc/common": "workspace:*",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

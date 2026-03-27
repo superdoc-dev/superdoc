@@ -122,6 +122,10 @@ export const handleParagraphNode = (params) => {
   let inlineParagraphProperties = {};
   if (pPr) {
     inlineParagraphProperties = w_pPrTranslator.encode({ ...params, nodes: [pPr] }) || {};
+    // Mark which runProperties were in w:pPr's w:rPr so export can omit style-inherited
+    if (inlineParagraphProperties.runProperties && typeof inlineParagraphProperties.runProperties === 'object') {
+      inlineParagraphProperties.runPropertiesInlineKeys = Object.keys(inlineParagraphProperties.runProperties);
+    }
   }
 
   // Resolve paragraph properties according to styles hierarchy

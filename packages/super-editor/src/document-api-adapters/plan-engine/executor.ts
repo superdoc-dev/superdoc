@@ -529,9 +529,30 @@ function applyRunAttributePatch(
     const currentRunProperties = isRecord(runNode.attrs?.runProperties)
       ? { ...(runNode.attrs.runProperties as Record<string, unknown>) }
       : {};
+    const currentStyleKeys = Array.isArray(runNode.attrs?.runPropertiesStyleKeys)
+      ? runNode.attrs.runPropertiesStyleKeys
+      : [];
+    const currentOverrideKeys = Array.isArray(runNode.attrs?.runPropertiesOverrideKeys)
+      ? runNode.attrs.runPropertiesOverrideKeys
+      : [];
+    const hasInlineOwnershipMetadata = Array.isArray(runNode.attrs?.runPropertiesInlineKeys);
+    let currentInlineKeys: string[];
+    if (hasInlineOwnershipMetadata) {
+      currentInlineKeys = runNode.attrs.runPropertiesInlineKeys;
+    } else if (currentStyleKeys.length > 0) {
+      currentInlineKeys = [
+        ...new Set([
+          ...Object.keys(currentRunProperties).filter((key) => !currentStyleKeys.includes(key)),
+          ...currentOverrideKeys,
+        ]),
+      ];
+    } else {
+      currentInlineKeys = Object.keys(currentRunProperties);
+    }
 
     const nextRunProperties = { ...currentRunProperties };
     let runChanged = false;
+    const changedRunPropertyKeys = new Set<string>();
 
     for (const [runPropertyKey, patchValue] of Object.entries(updates)) {
       const existingValue = nextRunProperties[runPropertyKey];
@@ -545,18 +566,42 @@ function applyRunAttributePatch(
       }
 
       runChanged = true;
+      changedRunPropertyKeys.add(runPropertyKey);
     }
 
     if (!runChanged) continue;
 
     const normalizedNextRunProperties = Object.keys(nextRunProperties).length > 0 ? nextRunProperties : null;
+    const nextInlineKeys = [
+      ...new Set([
+        ...currentInlineKeys.filter((key) => normalizedNextRunProperties && key in normalizedNextRunProperties),
+        ...[...changedRunPropertyKeys].filter(
+          (key) => normalizedNextRunProperties && key in normalizedNextRunProperties,
+        ),
+      ]),
+    ];
+    const nextOverrideKeys = [
+      ...new Set([
+        ...currentOverrideKeys.filter(
+          (key) => normalizedNextRunProperties && key in normalizedNextRunProperties && currentStyleKeys.includes(key),
+        ),
+        ...[...changedRunPropertyKeys].filter(
+          (key) => normalizedNextRunProperties && key in normalizedNextRunProperties && currentStyleKeys.includes(key),
+        ),
+      ]),
+    ];
     const fullRunSelected = patchFrom === runContentFrom && patchTo === runContentTo;
 
     if (fullRunSelected) {
       tr.setNodeMarkup(
         runPos,
         runNode.type,
-        { ...runNode.attrs, runProperties: normalizedNextRunProperties },
+        {
+          ...runNode.attrs,
+          runProperties: normalizedNextRunProperties,
+          runPropertiesInlineKeys: nextInlineKeys.length ? nextInlineKeys : null,
+          runPropertiesOverrideKeys: nextOverrideKeys.length ? nextOverrideKeys : null,
+        },
         runNode.marks,
       );
       changed = true;
@@ -576,7 +621,16 @@ function applyRunAttributePatch(
 
     const middleContent = runNode.content.cut(relativeFrom, relativeTo);
     replacementRuns.push(
-      runType.create({ ...runNode.attrs, runProperties: normalizedNextRunProperties }, middleContent, runNode.marks),
+      runType.create(
+        {
+          ...runNode.attrs,
+          runProperties: normalizedNextRunProperties,
+          runPropertiesInlineKeys: nextInlineKeys.length ? nextInlineKeys : null,
+          runPropertiesOverrideKeys: nextOverrideKeys.length ? nextOverrideKeys : null,
+        },
+        middleContent,
+        runNode.marks,
+      ),
     );
 
     if (relativeTo < runNode.content.size) {

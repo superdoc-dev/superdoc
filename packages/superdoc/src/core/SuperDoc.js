@@ -2,7 +2,7 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -14,15 +14,11 @@ import { createDownload, cleanName } from './helpers/export.js';
 import { initSuperdocYdoc, initCollaborationComments, makeDocumentsCollaborative } from './collaboration/helpers.js';
 import { setupAwarenessHandler } from './collaboration/collaboration.js';
 import { overwriteRoomComments, overwriteRoomLockState } from './collaboration/room-overwrite.js';
-import {
-  createUpgradeSnapshot,
-  revealNewRuntime,
-  teardownUpgradeTransition,
-} from './collaboration/upgrade-transition.js';
 import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
 import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
+import { SurfaceManager } from './surface-manager.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -67,6 +63,8 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').Config} Config */
 /** @typedef {import('./types').ExportParams} ExportParams */
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
+/** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
+/** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
 
 /**
  * SuperDoc class
@@ -91,9 +89,8 @@ export class SuperDoc extends EventEmitter {
   /** @type {HTMLDivElement | null} */
   #mountWrapper = null;
 
-  /** @type {HTMLDivElement | null} — snapshot overlay during upgrade transition */
-  #upgradeOverlay = null;
-
+  /** @type {SurfaceManager} */
+  #surfaceManager;
   /** @type {string} */
   version;
 
@@ -303,6 +300,12 @@ export class SuperDoc extends EventEmitter {
     // Preprocess document
     this.#initDocuments();
 
+    // Surface manager must exist before the first await — openSurface()
+    // can be called while async init is still in flight.
+    this.#surfaceManager = new SurfaceManager({
+      getModuleConfig: () => this.config.modules?.surfaces,
+    });
+
     // Initialize collaboration if configured
     await this.#initCollaboration(this.config.modules);
 
@@ -337,71 +340,21 @@ export class SuperDoc extends EventEmitter {
     this.#initWhiteboard();
     this.#addToolbar();
 
-    // --- Start the rebuildable runtime ---
+    // Mount the runtime once the outer shell is ready.
     this.#startRuntime();
   }
 
   // ---------------------------------------------------------------------------
-  // Rebuildable runtime lifecycle
+  // Runtime mount lifecycle
   // ---------------------------------------------------------------------------
 
   /**
-   * Start (or restart) the Vue app, stores, and editor mount.
-   *
-   * Called once during initial construction and again after
-   * `upgradeToCollaboration()` tears down the previous runtime.
+   * Mount the Vue app, stores, and editor runtime.
    */
   #startRuntime() {
     this.#initVueApp();
     this.readyEditors = 0;
     this.app.mount(this.#mountWrapper);
-  }
-
-  /**
-   * Tear down the current Vue app and stores without destroying the
-   * outer SuperDoc shell (listeners, toolbar, whiteboard, mount wrapper).
-   *
-   * Must be paired with a subsequent `#startRuntime()` call.
-   */
-  #stopRuntime() {
-    // Detach toolbar from current editor before unmount
-    if (this.toolbar && this.activeEditor) {
-      this.toolbar.setActiveEditor(null);
-    }
-    this.activeEditor = null;
-
-    // Close comments list if open (will be reopened after remount if needed)
-    this.removeCommentsList();
-
-    // Tear down Vue app and stores
-    if (this.app) {
-      this.superdocStore.reset();
-      this.app.unmount();
-      delete this.app.config.globalProperties.$config;
-      delete this.app.config.globalProperties.$superdoc;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Upgrade transition (snapshot-overlay-hide-reveal)
-  // DOM logic lives in ./collaboration/upgrade-transition.js; these thin
-  // wrappers manage the #upgradeOverlay instance state.
-  // ---------------------------------------------------------------------------
-
-  #createUpgradeSnapshot() {
-    const result = createUpgradeSnapshot(this.element, this.#mountWrapper);
-    this.#upgradeOverlay = result?.overlay ?? null;
-    return result;
-  }
-
-  #revealNewRuntime(snapshot) {
-    revealNewRuntime(this.#mountWrapper, this.#upgradeOverlay, snapshot);
-    this.#upgradeOverlay = null;
-  }
-
-  #teardownUpgradeTransition(snapshot) {
-    teardownUpgradeTransition(this.#mountWrapper, this.#upgradeOverlay, snapshot);
-    this.#upgradeOverlay = null;
   }
 
   #initWhiteboard() {
@@ -533,6 +486,10 @@ export class SuperDoc extends EventEmitter {
     this.app.config.globalProperties.$documentMode = this.config.documentMode;
 
     this.app.config.globalProperties.$superdoc = this;
+
+    // Provide surface manager to Vue components via app-level provide
+    this.app.provide('surfaceManager', this.#surfaceManager);
+
     this.superdocStore = superdocStore;
     this.commentsStore = commentsStore;
     this.highContrastModeStore = highContrastModeStore;
@@ -603,10 +560,10 @@ export class SuperDoc extends EventEmitter {
       return this.config.documents;
     }
 
-    // Flag this superdoc as collaborative (legacy path sets this directly)
+    // Flag this superdoc as collaborative.
     this.isCollaborative = true;
 
-    // Fallback: internal provider creation (legacy mode)
+    // Fallback: internal provider creation.
     // Start a socket for all documents and general metaMap for this SuperDoc
     if (collaborationModuleConfig.providerType === 'hocuspocus') {
       this.config.socket = new HocuspocusProviderWebsocket({
@@ -718,7 +675,7 @@ export class SuperDoc extends EventEmitter {
   /**
    * Upgrade a local SuperDoc instance into collaboration by overwriting
    * the supplied room with the current local document and comment state,
-   * then remounting the runtime in collaboration mode.
+   * then attaching collaboration to the live editor instance in place.
    *
    * This is a **destructive promotion**: the target room is authoritatively
    * overwritten with the caller's current local state. It is NOT the API
@@ -734,114 +691,57 @@ export class SuperDoc extends EventEmitter {
    */
   async upgradeToCollaboration({ ydoc, provider }) {
     this.#validateUpgradePrerequisites({ ydoc, provider });
-
     this.#isUpgrading = true;
+
     try {
       const sourceEditor = this.#resolveSourceEditor();
 
       await this.#waitForProviderSync(provider);
       this.#assertNotDestroyed();
 
-      // --- Seed the room authoritatively (while local runtime is still alive) ---
+      // --- Seed the room authoritatively (while editor is still local) ---
       seedEditorStateToYDoc(sourceEditor, ydoc);
       overwriteRoomComments(ydoc, this.commentsStore.commentsList);
       overwriteRoomLockState(ydoc, { isLocked: this.isLocked, lockedBy: this.lockedBy });
 
-      // Capture state for rollback and visual continuity
-      const rollbackJson = sourceEditor.getJSON();
-      const rollbackConvertedXml = JSON.parse(JSON.stringify(sourceEditor.converter?.convertedXml ?? {}));
-      const rollbackMediaFiles = { ...(sourceEditor.options?.mediaFiles ?? {}) };
-      const hadCommentsList = Boolean(this.commentsList);
-
-      // --- Snapshot live DOM before the point of no return ---
-      const snapshot = this.#createUpgradeSnapshot();
-
-      // --- Point of no return: teardown + reconfigure + rebuild ---
-      this.#stopRuntime();
+      // --- Attach collaboration config (awareness, flags, config.documents) ---
       this.config.modules.collaboration = { ydoc, provider };
       this.#attachExternalCollaboration(ydoc, provider);
 
+      // --- Update live store documents in place (no Vue unmount) ---
+      this.#setStoreDocumentCollaboration(ydoc, provider);
+
+      // --- Hot-swap collaboration into the live editor ---
+      const editorInstance = this.#resolveUpgradeTarget();
       try {
-        await this.#startRuntimeAndWaitForVisualReady(snapshot, {
-          timeoutMs: 30_000,
-          timeoutMessage: 'SuperDoc: collaborative runtime did not become visually ready within 30 s',
-        });
-      } catch (remountError) {
-        if (this.#destroyed) {
-          this.#teardownUpgradeTransition(snapshot);
-          throw remountError;
-        }
-
-        // --- Rollback: stop the failed collaborative runtime, rebuild local ---
-        this.#stopRuntime();
-        this.#detachCollaboration();
-        this.config.jsonOverride = rollbackJson;
-
-        try {
-          await this.#startRuntimeAndWaitForVisualReady(snapshot, {
-            timeoutMs: 10_000,
-            timeoutMessage: 'SuperDoc: rollback runtime did not become visually ready within 10 s',
-          });
-        } catch {
-          this.#teardownUpgradeTransition(snapshot);
-          throw remountError;
-        }
-
-        this.config.jsonOverride = null;
-        this.#restoreRollbackDocumentState(rollbackConvertedXml, rollbackMediaFiles);
-        this.#revealNewRuntime(snapshot);
-
-        if (hadCommentsList) this.addCommentsList();
-        throw remountError;
+        editorInstance.attachCollaboration({ ydoc, collaborationProvider: provider });
+      } catch (attachError) {
+        // Rollback: undo config/store/awareness mutations.
+        // The editor rolled back its own options and cleaned up side effects.
+        this.#rollbackCollaborationAttach();
+        throw attachError;
       }
 
-      // --- Success: reveal the new collaborative runtime ---
-      this.#revealNewRuntime(snapshot);
+      // --- Wait for collaborationReady so cursors and UI are fully wired ---
+      // The collaborationReady event fires asynchronously after attachCollaboration
+      // returns (via initSyncListener → setTimeout). The returned promise only
+      // resolves once the editor is fully collaborative.
+      //
+      // If the wait times out or is aborted by destroy(), we do NOT rollback.
+      // The attach succeeded — the editor IS collaborative. The timeout only
+      // means secondary setup (cursors, presence) is delayed. Rejecting or
+      // rolling back would strand the instance in a worse state.
+      await this.#waitForCollaborationReady(editorInstance);
 
-      if (hadCommentsList) this.addCommentsList();
+      // If destroy() fired during the readiness wait, bail out before
+      // registering any new listeners/observers against the dead instance.
+      if (this.#destroyed) return;
+
+      // --- Wire collaboration comments (from Yjs, not DOCX re-import) ---
+      initCollaborationComments(this);
     } finally {
       this.#abortUpgrade = null;
       this.#isUpgrading = false;
-      this._upgradeVisualReadyCallback = null;
-    }
-  }
-
-  /**
-   * Start a new runtime behind the snapshot overlay and wait for the
-   * visual-ready callback from the editor layer. Rejects on timeout
-   * or if `destroy()` fires `#abortUpgrade`.
-   *
-   * @param {{ overlay: HTMLDivElement } | null} snapshot
-   * @param {{ timeoutMs: number, timeoutMessage: string }} options
-   * @returns {Promise<void>}
-   */
-  async #startRuntimeAndWaitForVisualReady(snapshot, { timeoutMs, timeoutMessage }) {
-    let timer;
-    try {
-      const promise = new Promise((resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-        this._upgradeVisualReadyCallback = () => {
-          clearTimeout(timer);
-          resolve(undefined);
-        };
-        this.#abortUpgrade = () => {
-          clearTimeout(timer);
-          reject(new Error('SuperDoc: instance was destroyed during upgrade'));
-        };
-      });
-
-      this.#startRuntime();
-
-      if (snapshot) {
-        const newEl = this.#mountWrapper?.querySelector('.superdoc');
-        if (newEl) newEl.classList.add('sd-upgrade-hidden');
-      }
-
-      await promise;
-    } catch (error) {
-      clearTimeout(timer);
-      this._upgradeVisualReadyCallback = null;
-      throw error;
     }
   }
 
@@ -855,27 +755,121 @@ export class SuperDoc extends EventEmitter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Late-upgrade helpers
+  // ---------------------------------------------------------------------------
+
   /**
-   * Restore non-PM document state (parts XML, media files) on the rollback
-   * editor. The PM JSON is restored via `jsonOverride`, but converter parts
-   * and media must be patched explicitly since they were lost during
-   * re-import from the original document source.
+   * Set ydoc/provider on live store document composables.
+   * Each composable uses shallowRef for these fields (use-document.js:28-29),
+   * so we assign to `.value` directly. Vue's reactive proxy auto-unwraps
+   * shallowRefs on property access, so we must use `toRaw()` to reach the
+   * underlying ref objects.
    *
-   * @param {Record<string, unknown>} convertedXml
-   * @param {Record<string, unknown>} mediaFiles
+   * @param {import('yjs').Doc | null} ydoc
+   * @param {import('./types').CollaborationProvider | null} provider
    */
-  #restoreRollbackDocumentState(convertedXml, mediaFiles) {
-    try {
-      const editor = this.#resolveSourceEditor();
-      if (editor.converter && convertedXml) {
-        editor.converter.convertedXml = convertedXml;
+  #setStoreDocumentCollaboration(ydoc, provider) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!Array.isArray(storeDocs)) return;
+    for (const doc of storeDocs) {
+      const raw = toRaw(doc);
+      if (raw.ydoc && typeof raw.ydoc === 'object' && 'value' in raw.ydoc) {
+        raw.ydoc.value = ydoc;
       }
-      if (mediaFiles) {
-        editor.options.mediaFiles = mediaFiles;
+      if (raw.provider && typeof raw.provider === 'object' && 'value' in raw.provider) {
+        raw.provider.value = provider;
       }
-    } catch {
-      // Best-effort — editor may not be resolvable in edge cases
     }
+  }
+
+  /**
+   * Resolve the editor instance that supports `attachCollaboration`.
+   * Prefers PresentationEditor (has cursor/layout support); falls back to raw Editor.
+   *
+   * @returns {import('@superdoc/super-editor').PresentationEditor | import('@superdoc/super-editor').Editor}
+   */
+  #resolveUpgradeTarget() {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) {
+      throw new Error('SuperDoc: no store documents available for upgrade');
+    }
+    const target = storeDocs[0].getPresentationEditor?.() || storeDocs[0].getEditor?.();
+    if (!target?.attachCollaboration) {
+      throw new Error('SuperDoc: editor does not support attachCollaboration');
+    }
+    return target;
+  }
+
+  /**
+   * Undo config/store/awareness mutations if `editor.attachCollaboration()` fails.
+   * The editor itself is still in local mode (the throw happened before or during
+   * reconfigure), so we only need to undo the SuperDoc-layer changes.
+   */
+  #rollbackCollaborationAttach() {
+    this.#detachCollaboration();
+    this.#setStoreDocumentCollaboration(null, null);
+  }
+
+  /**
+   * Wait for the backing editor to emit `collaborationReady` after a live
+   * attach. Resolves immediately if the editor has already fired the event.
+   *
+   * This wait is **non-fatal**: if it times out or is aborted by `destroy()`,
+   * the promise still resolves (not rejects). The attach already succeeded,
+   * so the editor IS collaborative. A timeout only means secondary setup
+   * (cursors, presence) is delayed — rolling back would be worse.
+   *
+   * @param {import('@superdoc/super-editor').Editor | import('@superdoc/super-editor').PresentationEditor} editorInstance
+   * @returns {Promise<void>}
+   */
+  #waitForCollaborationReady(editorInstance) {
+    const TIMEOUT_MS = 10_000;
+
+    // PresentationEditor wraps Editor; get the underlying editor for event listening.
+    const editor = editorInstance.editor ?? editorInstance;
+
+    // If collaborationReady already fired (options flag set by collaboration extension)
+    if (editor.options?.collaborationIsReady) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (typeof editor.off === 'function') editor.off('collaborationReady', onReady);
+      };
+
+      const timer = setTimeout(() => {
+        cleanup();
+        console.warn(
+          '[SuperDoc] collaborationReady did not fire within 10 s after collaboration attach. Continuing — collaboration is active but cursor/presence setup may be delayed.',
+        );
+        resolve(undefined);
+      }, TIMEOUT_MS);
+
+      const onReady = () => {
+        cleanup();
+        resolve(undefined);
+      };
+
+      // Allow destroy() to abort this wait immediately.
+      this.#abortUpgrade = () => {
+        cleanup();
+        resolve(undefined);
+      };
+
+      if (typeof editor.on === 'function') {
+        editor.on('collaborationReady', onReady);
+      } else {
+        cleanup();
+        resolve(undefined);
+      }
+    });
   }
 
   /**
@@ -1672,6 +1666,29 @@ export class SuperDoc extends EventEmitter {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Surface system — generic dialog/floating UI above document content
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Open a surface (dialog or floating) above the document content.
+   *
+   * @template [TResult=unknown]
+   * @param {SurfaceRequest} request
+   * @returns {SurfaceHandle<TResult>}
+   */
+  openSurface(request) {
+    return this.#surfaceManager.open(request);
+  }
+
+  /**
+   * Close a surface by id, or the topmost surface if no id is given.
+   * @param {string} [id]
+   */
+  closeSurface(id) {
+    this.#surfaceManager.close(id);
+  }
+
   /**
    * Destroy the superdoc instance
    * @returns {void}
@@ -1687,13 +1704,10 @@ export class SuperDoc extends EventEmitter {
       this.#abortUpgrade = null;
     }
 
-    // Clean up any in-flight upgrade transition overlay
-    if (this.#upgradeOverlay) {
-      this.#upgradeOverlay.remove();
-      this.#upgradeOverlay = null;
+    // Settle all active surfaces before Vue unmount
+    if (this.#surfaceManager) {
+      this.#surfaceManager.destroy();
     }
-    this._upgradeVisualReadyCallback = null;
-
     // Unmount the app FIRST so editors are destroyed — this triggers each
     // extension's onDestroy() which cancels debounced Y.js writes and
     // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.

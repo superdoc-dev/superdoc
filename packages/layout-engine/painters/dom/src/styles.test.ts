@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ensureNativeSelectionStyles } from './styles.js';
+import { ensureNativeSelectionStyles, ensureSdtContainerStyles } from './styles.js';
 
 /**
  * Tests for style injection functions.
@@ -109,5 +109,24 @@ describe('ensureNativeSelectionStyles', () => {
     const styleEl = document.querySelector('[data-superdoc-native-selection-styles="true"]');
     expect(styleEl).not.toBeNull();
     expect(document.head.contains(styleEl)).toBe(true);
+  });
+});
+
+describe('ensureSdtContainerStyles', () => {
+  it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover');
+    expect(cssText).toContain('.presentation-editor--viewing .superdoc-structured-content-block.sdt-hover');
+    expect(cssText).toContain(
+      '.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-hover',
+    );
+    expect(cssText).toContain(
+      '.presentation-editor--viewing .superdoc-structured-content-inline[data-lock-mode]:hover',
+    );
+    expect(cssText).toContain('background: none;');
   });
 });

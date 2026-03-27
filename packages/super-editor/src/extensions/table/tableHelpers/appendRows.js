@@ -151,7 +151,7 @@ export function extractRowTemplateFormatting(cellNode, schema) {
  * @param {string|any} value - Cell text value
  * @param {RowTemplateFormatting} formatting - Template formatting info
  * @param {boolean} [copyRowStyle=false] - Whether to copy marks from the template row
- * @returns {import('prosemirror-model').Node} Block node ready to insert into the cell
+ * @returns {import('prosemirror-model').Node | import('prosemirror-model').Fragment} Block node(s) ready to insert into the cell
  */
 export function buildFormattedCellBlock(schema, value, { blockType, blockAttrs, textMarks }, copyRowStyle = false) {
   const text = typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -162,6 +162,18 @@ export function buildFormattedCellBlock(schema, value, { blockType, blockAttrs, 
     // Use zero-width space to preserve marks in empty cells when copying style
     const content = marks.length > 0 ? schema.text(ZERO_WIDTH_SPACE, marks) : null;
     return type.createAndFill(blockAttrs || null, content);
+  }
+
+  // Split on newline characters so each line becomes its own paragraph
+  const lines = text.split(/\r?\n/);
+  if (lines.length > 1) {
+    const paragraphs = lines
+      .map((line) => {
+        const content = line ? schema.text(line, marks) : null;
+        return type.createAndFill(blockAttrs || null, content);
+      })
+      .filter(Boolean);
+    return Fragment.from(paragraphs);
   }
 
   const textNode = schema.text(text, marks);

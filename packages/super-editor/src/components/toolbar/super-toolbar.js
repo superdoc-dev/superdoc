@@ -1138,7 +1138,13 @@ export class SuperToolbar extends EventEmitter {
     // until the next selection update (after the user clicks into the editor).
     if (!wasFocused && isMarkToggle) {
       this.pendingMarkCommands.push({ command, argument, item });
-      item?.activate?.();
+      const labelAttr = item?.labelAttr?.value;
+      if (labelAttr && argument) {
+        item?.activate?.({ [labelAttr]: argument });
+      } else {
+        item?.activate?.();
+      }
+
       if (this.activeEditor && !this.activeEditor.options.isHeaderOrFooter) {
         this.activeEditor.focus();
       }

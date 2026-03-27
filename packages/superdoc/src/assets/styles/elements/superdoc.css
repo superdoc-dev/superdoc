@@ -37,3 +37,13 @@
 .sd-upgrade-hidden {
   visibility: hidden !important;
 }
+
+/* --- Search highlights (transient, used in both editor and presentation mode) --- */
+
+.superdoc .ProseMirror-search-match {
+  background: var(--sd-ui-search-match-bg);
+}
+
+.superdoc .ProseMirror-active-search-match {
+  background: var(--sd-ui-search-match-active-bg);
+}

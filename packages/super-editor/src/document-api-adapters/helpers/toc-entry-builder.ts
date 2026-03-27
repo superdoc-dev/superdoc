@@ -83,11 +83,12 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       }
 
       // Check applied outline level (\u switch)
-      if (useApplied && outlineLevels) {
+      if (useApplied) {
+        const effectiveLevels = outlineLevels ?? { from: 1, to: 9 };
         const rawOutlineLevel = paragraphProps?.outlineLevel as number | undefined;
         if (rawOutlineLevel != null) {
           const tocLevel = rawOutlineLevel + 1;
-          if (tocLevel >= outlineLevels.from && tocLevel <= outlineLevels.to) {
+          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
             sources.push({ text: flattenText(node), level: tocLevel, sdBlockId, kind: 'appliedOutline' });
             return true;
           }

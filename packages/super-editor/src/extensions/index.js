@@ -82,6 +82,7 @@ import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
+import { Protection } from './protection/index.js';
 import { VerticalNavigation } from './vertical-navigation/index.js';
 
 // Permissions
@@ -226,6 +227,7 @@ const getStarterExtensions = () => {
     PermStartBlock,
     PermEndBlock,
     PermissionRanges,
+    Protection,
     VerticalNavigation,
     PassthroughInline,
     PassthroughBlock,
@@ -309,6 +311,7 @@ export {
   PassthroughInline,
   PassthroughBlock,
   PermissionRanges,
+  Protection,
   CrossReference,
   SequenceField,
   DocumentStatField,

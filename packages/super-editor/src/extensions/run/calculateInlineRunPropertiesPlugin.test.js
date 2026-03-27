@@ -60,6 +60,9 @@ const makeSchema = () =>
         content: 'inline*',
         attrs: {
           runProperties: { default: null },
+          runPropertiesInlineKeys: { default: null },
+          runPropertiesStyleKeys: { default: null },
+          runPropertiesOverrideKeys: { default: null },
           rsidR: { default: null },
           rsidRPr: { default: null },
           rsidDel: { default: null },
@@ -164,6 +167,75 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
     calculateResolvedParagraphPropertiesMock.mockImplementation(() => ({ paragraph: 'calculated' }));
     getResolvedParagraphPropertiesMock.mockImplementation(() => null);
+  });
+
+  it('keeps importer- or API-seeded runPropertiesInlineKeys when marks change (does not infer keys from runProperties)', () => {
+    decodeRPrFromMarksMock.mockImplementation((marks) => ({
+      bold: marks.some((mark) => mark.type.name === 'bold'),
+    }));
+    resolveRunPropertiesMock.mockImplementation(() => ({}));
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(
+      schema,
+      {
+        runProperties: { lang: { val: 'en-US' }, rtl: true },
+        runPropertiesInlineKeys: ['lang', 'rtl'],
+        runPropertiesStyleKeys: ['lang', 'rtl'],
+        runPropertiesOverrideKeys: ['lang', 'rtl'],
+      },
+      [],
+      'Hello',
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({
+      bold: true,
+      lang: { val: 'en-US' },
+      rtl: true,
+    });
+    expect(runNode?.attrs.runPropertiesInlineKeys.sort()).toEqual(['bold', 'lang', 'rtl'].sort());
+    expect(runNode?.attrs.runPropertiesOverrideKeys?.sort()).toEqual(['lang', 'rtl'].sort());
+  });
+
+  it('preserves run language when adding italic on documents without inline-key metadata', () => {
+    decodeRPrFromMarksMock.mockImplementation((marks) => ({
+      bold: marks.some((mark) => mark.type.name === 'bold'),
+      italic: marks.some((mark) => mark.type.name === 'italic'),
+    }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ bold: false, italic: false }));
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(
+      schema,
+      {
+        runProperties: { lang: { val: 'en-US' }, bold: true },
+        runPropertiesInlineKeys: null,
+        runPropertiesStyleKeys: null,
+        runPropertiesOverrideKeys: null,
+      },
+      [schema.marks.bold.create()],
+      'Hello',
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5);
+
+    const tr = state.tr.addMark(from, to, schema.marks.italic.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toMatchObject({
+      lang: { val: 'en-US' },
+      bold: true,
+      italic: true,
+    });
+    expect(runNode?.attrs.runPropertiesInlineKeys.sort()).toEqual(['bold', 'italic'].sort());
+    expect(runNode?.attrs.runPropertiesOverrideKeys).toBeNull();
   });
 
   it('stores inline run properties when marks differ from paragraph styles', () => {

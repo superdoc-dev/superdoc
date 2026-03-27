@@ -2,6 +2,10 @@ import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../Editor.js';
 import type { DefaultEventMap } from '../EventEmitter.js';
 import type { PartChangedEvent } from '../parts/types.js';
+import type { DocumentProtectionState } from '@superdoc/document-api';
+
+/** Source of a protection state change. */
+export type ProtectionChangeSource = 'init' | 'local-mutation' | 'remote-part-sync';
 
 /**
  * Payload for fonts-resolved events
@@ -133,4 +137,7 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when non-document.xml parts are mutated via the parts system. */
   partChanged: [PartChangedEvent];
+
+  /** Called when document protection state changes (init, local mutation, or remote sync). */
+  protectionChanged: [{ editor: Editor; state: DocumentProtectionState; source: ProtectionChangeSource }];
 }

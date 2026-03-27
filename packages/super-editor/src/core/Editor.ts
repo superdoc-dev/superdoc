@@ -38,11 +38,12 @@ import {
   NoSourcePathError,
   FileSystemNotAvailableError,
   DocumentLoadError,
+  DocxEncryptionError,
 } from './errors/index.js';
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData, cleanupCollaborationSideEffects } from '@extensions/collaboration/collaboration.js';
 import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
 import { onCollaborationProviderSynced } from './helpers/collaboration-provider-sync.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
@@ -67,7 +68,7 @@ import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import type { DocumentApi, ResolveRangeOutput } from '@superdoc/document-api';
-import { createDocumentApi } from '@superdoc/document-api';
+import { createDocumentApi, DEFAULT_PROTECTION_STATE } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import {
   resolveCurrentEditorSelectionRange,
@@ -80,6 +81,8 @@ import { captureSelectionHandle, resolveHandleToSelection, releaseSelectionHandl
 import type { SelectionHandle } from './selection-state.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
+import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
+import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -93,6 +96,29 @@ const CURRENT_APP_VERSION =
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+
+type ExtensionInstanceLike = {
+  type?: string;
+  config?: Record<string, unknown>;
+};
+
+const cloneExtensionInstance = <T>(extension: T): T => {
+  const extensionLike = extension as ExtensionInstanceLike & {
+    constructor?: new (config: Record<string, unknown>) => unknown;
+  };
+  const config = extensionLike?.config;
+  const ExtensionCtor = extensionLike?.constructor;
+
+  if (!config || typeof config !== 'object' || typeof ExtensionCtor !== 'function') {
+    return extension;
+  }
+
+  try {
+    return new ExtensionCtor(config) as T;
+  } catch {
+    return extension;
+  }
+};
 
 /**
  * Given a table cell node, returns the total cell content width in pixels.
@@ -170,6 +196,9 @@ export interface OpenOptions {
    * When omitted, Editor infers the value from the source type.
    */
   isNewFile?: boolean;
+
+  /** Password for opening encrypted .docx files. Cleared from memory after use. */
+  password?: string;
 }
 
 /**
@@ -770,6 +799,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
         jsonOverride: options?.json ?? null,
       };
 
+      // Password for encrypted .docx — threaded to loadXmlData, then cleared
+      const loadOptions = options?.password ? { password: options.password } : undefined;
+
       // Determine source type and load XML data
       if (typeof source === 'string') {
         // Node.js: read file from path
@@ -778,13 +810,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const fs = require('fs') as typeof import('fs');
           const buffer = fs.readFileSync(source);
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(buffer, true))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            buffer,
+            true,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = buffer;
+          resolvedOptions.fileSource = decryptedData ?? buffer;
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
-          this.#sourcePath = source;
+          // When the file was encrypted, clear sourcePath so that save()
+          // cannot silently overwrite the protected original with an
+          // unencrypted ZIP. Callers must use saveTo() or exportDocument().
+          this.#sourcePath = decryptedData ? null : source;
         } else {
           // Browser: fetch the file
           const response = await fetch(source);
@@ -793,11 +832,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
             throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
           }
           const blob = await response.blob();
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(blob))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            blob,
+            false,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = blob;
+          resolvedOptions.fileSource = decryptedData ?? blob;
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           // In browser, path is just a suggested filename
           this.#sourcePath = source.split('/').pop() || null;
@@ -811,23 +854,28 @@ export class Editor extends EventEmitter<EditorEventMap> {
         const hasArrayBuffer = typeof source === 'object' && 'buffer' in source && source.buffer instanceof ArrayBuffer;
 
         if (isNodeBuffer || isBlob || isArrayBuffer || hasArrayBuffer) {
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
             source as File | Blob | Buffer,
             isNodeBuffer,
+            loadOptions,
           ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.fileSource = decryptedData ?? (source as File | Blob | Buffer);
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         } else {
           // Unknown object type - try to load it anyway
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(source as File | Blob | Buffer, false))!;
+          const [docx, _media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(
+            source as File | Blob | Buffer,
+            false,
+            loadOptions,
+          ))!;
           resolvedOptions.content = docx;
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
-          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.fileSource = decryptedData ?? (source as File | Blob | Buffer);
           resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         }
@@ -869,6 +917,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Create converter
       this.#createConverter();
       initPartsRuntime(this);
+      this.#initProtectionState();
 
       // Initialize media
       this.#initMedia();
@@ -922,6 +971,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Set document mode
       this.setDocumentMode(this.options.documentMode!, 'init');
 
+      // Emit protectionChanged with source 'init' for the loaded document
+      this.#emitProtectionInit();
+
       // Initialize collaboration data for new files
       this.initializeCollaborationData();
 
@@ -936,6 +988,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
         this.#registerCopyHandler();
       }
     } catch (error) {
+      // Encryption errors are structured and recoverable — surface them directly
+      // so consumers can inspect error.code (PASSWORD_REQUIRED, PASSWORD_INVALID, etc.)
+      if (error instanceof DocxEncryptionError) {
+        console.debug('[SuperDoc] Document load error:', error.message);
+        throw error;
+      }
       const err = error instanceof Error ? error : new Error(String(error));
       console.debug('[SuperDoc] Document load error:', err.message);
       throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
@@ -991,6 +1049,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
       (this.storage.image as ImageStorage).media = {};
     }
 
+    // Reset protection state
+    const protStorageToReset = getProtectionStorage(this);
+    if (protStorageToReset) {
+      protStorageToReset.state = { ...DEFAULT_PROTECTION_STATE };
+      protStorageToReset.initialized = false;
+      protStorageToReset.editableBaseline = null;
+    }
+
     // Clear source path
     this.#sourcePath = null;
 
@@ -1004,6 +1070,32 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Bootstrap protection state from word/settings.xml into editor.storage.protection.
+   * Must be called after converter and parts runtime are ready, before #createInitialState().
+   */
+  #initProtectionState(): void {
+    const protStorage = getProtectionStorage(this);
+    if (!protStorage) return;
+    const settingsRoot = this.converter ? readSettingsRoot(this.converter) : null;
+    protStorage.state = parseProtectionState(settingsRoot);
+    protStorage.initialized = true;
+  }
+
+  /**
+   * Emit protectionChanged with source 'init' so consumers can react to the
+   * initial protection state. Called after event listeners are registered.
+   */
+  #emitProtectionInit(): void {
+    const protStorage = getProtectionStorage(this);
+    if (!protStorage?.initialized) return;
+    this.emit('protectionChanged', {
+      editor: this,
+      state: protStorage.state,
+      source: 'init',
+    });
+  }
+
+  /**
    * Initialize the editor with the given options
    */
   #init(): void {
@@ -1012,6 +1104,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#createSchema();
     this.#createConverter();
     initPartsRuntime(this);
+    this.#initProtectionState();
     this.#initMedia();
 
     this.on('beforeCreate', this.options.onBeforeCreate!);
@@ -1076,6 +1169,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     this.setDocumentMode(this.options.documentMode!, 'init');
+
+    // Emit protectionChanged with source 'init' so consumers can react
+    // to the initial protection state after all listeners are registered.
+    this.#emitProtectionInit();
 
     if (!this.options.ydoc && !this.options.isChildEditor) {
       this.#initComments();
@@ -1518,6 +1615,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.setOptions({ documentMode: 'editing' });
       if (pm) pm.classList.remove('view-mode');
     }
+
+    // Apply protection-aware editability override.
+    // This may override the setEditable calls above when read-only protection
+    // is enforced or when permission ranges allow editing in protected docs.
+    applyEffectiveEditability(this);
   }
 
   /**
@@ -1827,6 +1929,88 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Late-attach collaboration to a running editor instance.
+   *
+   * Updates editor options so the Collaboration, CollaborationCursor, and
+   * History extensions produce their collaborative plugins on the next
+   * `extensionService.plugins` access, then reconfigures the PM state in place.
+   *
+   * Prerequisites:
+   * - The ydoc must already be seeded with this editor's current state
+   * - The provider must already be synced
+   * - Editor must be mounted (not headless, not destroyed)
+   *
+   * @param options.ydoc  The Y.Doc to bind
+   * @param options.collaborationProvider  The synced collaboration provider
+   */
+  attachCollaboration({
+    ydoc,
+    collaborationProvider,
+  }: {
+    ydoc: YDoc;
+    collaborationProvider: NonNullable<EditorOptions['collaborationProvider']>;
+  }): void {
+    if (this.isDestroyed) {
+      throw new Error('[super-editor] Cannot attach collaboration to a destroyed editor');
+    }
+    if (this.options.ydoc) {
+      throw new Error('[super-editor] Editor already has collaboration attached');
+    }
+    if (this.options.isHeadless) {
+      throw new Error('[super-editor] attachCollaboration is not supported in headless mode');
+    }
+
+    // Snapshot mutable state so we can restore on failure.
+    const prevProvider = this.options.collaborationProvider;
+    const prevShouldLoadComments = this.options.shouldLoadComments;
+    const prevCollaborationIsReady = this.options.collaborationIsReady;
+    const prevState = this._state;
+
+    const rollback = () => {
+      cleanupCollaborationSideEffects(this);
+      this.options.ydoc = undefined;
+      this.options.collaborationProvider = prevProvider;
+      this.options.shouldLoadComments = prevShouldLoadComments;
+      this.options.collaborationIsReady = prevCollaborationIsReady;
+      this._state = prevState;
+      this.view?.updateState(prevState);
+    };
+
+    // 1. Update options so extensions see ydoc/provider on next plugin generation.
+    this.options.ydoc = ydoc;
+    this.options.collaborationProvider = collaborationProvider;
+
+    // 2. Suppress DOCX comment re-import on collaborationReady.
+    //    In local mode shouldLoadComments was set to true (see setOptions()).
+    //    Without this, #onCollaborationReady → #initComments() would re-emit
+    //    commentsLoaded from DOCX data, duplicating the Yjs comment hydration
+    //    that initCollaborationComments() performs at the SuperDoc layer.
+    this.options.shouldLoadComments = false;
+
+    // 3. Regenerate all plugins and reconfigure PM state.
+    //    Side effects (Y.js observers, part-sync, initSyncListener) run during
+    //    the extensionService.plugins getter. On failure, rollback cleans them up.
+    let plugins: Plugin[];
+    try {
+      plugins = [...this.extensionService.plugins];
+    } catch (err) {
+      rollback();
+      throw err;
+    }
+
+    // 4. Reconfigure state with the new plugin set. ProseMirror diffs old vs new.
+    //    Since the ydoc was seeded from this editor's state, doc content is identical
+    //    → no content DOM mutations. Selection is preserved by reconfigure().
+    try {
+      this._state = this.state.reconfigure({ plugins });
+      this.view?.updateState(this._state);
+    } catch (err) {
+      rollback();
+      throw err;
+    }
+  }
+
+  /**
    * Creates extension service.
    */
   #createExtensionService(): void {
@@ -1842,12 +2026,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
     ];
     const externalExtensions = this.options.externalExtensions || [];
 
-    const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {
-      const extensionType = typeof extension?.type === 'string' ? extension.type : undefined;
-      return extensionType ? allowedExtensions.includes(extensionType) : false;
-    });
+    const allExtensions = [...coreExtensions, ...this.options.extensions!]
+      .filter((extension) => {
+        const extensionType = typeof extension?.type === 'string' ? extension.type : undefined;
+        return extensionType ? allowedExtensions.includes(extensionType) : false;
+      })
+      .map((extension) => cloneExtensionInstance(extension));
 
-    this.extensionService = ExtensionService.create(allExtensions, externalExtensions, this);
+    const isolatedExternalExtensions = externalExtensions.map((extension) => cloneExtensionInstance(extension));
+
+    this.extensionService = ExtensionService.create(allExtensions, isolatedExternalExtensions, this);
   }
 
   /**
@@ -2020,14 +2208,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
   static async loadXmlData(
     fileSource: File | Blob | Buffer,
     isNode: boolean = false,
-  ): Promise<[DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>] | undefined> {
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  > {
     if (!fileSource) return;
 
     const zipper = new DocxZipper();
-    const xmlFiles = await zipper.getDocxData(fileSource, isNode);
+    const xmlFiles = await zipper.getDocxData(fileSource, isNode, {
+      password: options?.password,
+    });
     const mediaFiles = zipper.media;
 
-    return [xmlFiles, mediaFiles, zipper.mediaFiles, zipper.fonts];
+    // Return decrypted file data (if any) so callers can store the decrypted
+    // bytes instead of the original encrypted source for later export.
+    return [xmlFiles, mediaFiles, zipper.mediaFiles, zipper.fonts, zipper.decryptedFileData];
   }
 
   /**
@@ -3160,6 +3356,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       mediaFiles,
       fonts,
       isNewFile,
+      password,
       // Everything else is EditorOptions
       ...editorConfig
     } = resolvedConfig;
@@ -3176,6 +3373,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       mediaFiles,
       fonts,
       isNewFile,
+      password,
     };
 
     // Use new API mode for static factory
@@ -3469,11 +3667,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
-    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(newFile))!;
+    const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
-      fileSource: newFile,
+      fileSource: decryptedData ?? newFile,
       content: docx,
       media,
       mediaFiles,

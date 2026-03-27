@@ -57,6 +57,7 @@ export interface GlobalOptions {
   output: OutputMode;
   timeoutMs?: number;
   sessionId?: string;
+  quiet: boolean;
   help: boolean;
   version: boolean;
 }
@@ -64,6 +65,7 @@ export interface GlobalOptions {
 export interface CliIO {
   stdout(message: string): void;
   stderr(message: string): void;
+  warn?(message: string): void;
   readStdinBytes(): Promise<Uint8Array>;
   now(): number;
 }

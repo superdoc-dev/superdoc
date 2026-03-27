@@ -5,6 +5,53 @@ import { TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 
 /**
+ * Check whether the enclosing structural scope (listItem, or paragraph
+ * when outside a list) contains any live (non-tracked-deleted) inline
+ * leaf node (text, tab, line break, image, etc.).
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} cursorPos
+ * @param {import('prosemirror-model').MarkType} trackDeleteMarkType
+ * @returns {boolean}
+ */
+const scopeHasLiveContent = (doc, cursorPos, trackDeleteMarkType) => {
+  const $cursor = doc.resolve(cursorPos);
+
+  // Prefer the nearest listItem ancestor so we cover all blocks in the item.
+  // Fall back to the nearest paragraph when there is no list item.
+  let scopeDepth = 0;
+  let paraDepth = 0;
+  for (let d = $cursor.depth; d > 0; d--) {
+    const name = $cursor.node(d).type.name;
+    if (name === 'listItem' || name === 'list_item') {
+      scopeDepth = d;
+      break;
+    }
+    if (!paraDepth && name === 'paragraph') {
+      paraDepth = d;
+    }
+  }
+  scopeDepth = scopeDepth || paraDepth;
+  if (scopeDepth <= 0) return false;
+
+  const scopeNode = $cursor.node(scopeDepth);
+  const scopeStart = $cursor.before(scopeDepth) + 1;
+  const scopeEnd = scopeStart + scopeNode.content.size;
+
+  let hasLive = false;
+  doc.nodesBetween(scopeStart, scopeEnd, (node) => {
+    if (hasLive) return false;
+    // Check all inline leaf nodes (text, tab, lineBreak, image, footnote, …)
+    // to match the same predicate used by markDeletion.
+    if (!node.isInline || !node.isLeaf) return;
+    if (!node.marks.some((m) => m.type === trackDeleteMarkType)) {
+      hasLive = true;
+    }
+  });
+  return hasLive;
+};
+
+/**
  * Find the closest live (non-tracked-deleted) text character position before
  * the cursor, within the same paragraph.
  *
@@ -127,7 +174,18 @@ export const replaceAroundStep = ({
   const deleteFrom = findPreviousLiveCharPos(doc, state.selection.from, trackDeleteMarkType);
 
   if (deleteFrom === null) {
-    // No live character found — nothing to delete. Skip the structural change.
+    // No live character before the caret. Only allow the structural lift when
+    // the entire enclosing block/list-item has no live content (i.e. it is
+    // truly empty or fully track-deleted). If live content exists after the
+    // cursor, block the step — applying it would be an untracked structural
+    // edit in suggesting mode.
+    if (scopeHasLiveContent(doc, state.selection.from, trackDeleteMarkType)) {
+      return;
+    }
+
+    if (!newTr.maybeStep(step).failed) {
+      map.appendMap(step.getMap());
+    }
     return;
   }
 

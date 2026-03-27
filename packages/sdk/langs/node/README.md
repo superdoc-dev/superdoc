@@ -59,6 +59,16 @@ await doc.close();
 await client.dispose();
 ```
 
+## Encrypted Documents
+
+Pass `password` when opening a password-protected `.docx`:
+
+```ts
+const doc = await client.open({ doc: './secret.docx', password: 'mypassword' });
+```
+
+The password is forwarded only for the initial open and is not persisted. If the password is missing or wrong, the error includes a machine-readable code (`DOCX_PASSWORD_REQUIRED`, `DOCX_PASSWORD_INVALID`).
+
 ## API
 
 ### Client
@@ -80,6 +90,10 @@ await doc.insert(params)
 await doc.save(params)
 await doc.close(params)
 ```
+
+### Collaboration sessions
+
+The SDK supports collaborative editing with `y-websocket`, `hocuspocus`, and `liveblocks` providers. Pass `collabUrl` for the websocket shorthand or a `collaboration` object for explicit provider config. See the [full collaboration docs](https://docs.superdoc.dev/document-engine/sdks#collaboration-sessions) for examples and all options.
 
 ### Operations
 

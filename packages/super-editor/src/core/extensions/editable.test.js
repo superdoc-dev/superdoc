@@ -193,3 +193,51 @@ describe('Editable extension – allowSelectionInViewMode', () => {
     });
   });
 });
+
+describe('Editable extension stale composition recovery', () => {
+  let editor = null;
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+  });
+
+  it('ends a stale composition before a non-composing text commit', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+    }));
+
+    editor.view.input.composing = true;
+
+    const event = new InputEvent('beforeinput', {
+      data: 'é',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    editor.view.dom.dispatchEvent(event);
+
+    expect(editor.view.composing).toBe(false);
+  });
+
+  it('ends a stale composition before a non-composing line break input', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>é</p>',
+    }));
+
+    editor.view.input.composing = true;
+
+    const event = new InputEvent('beforeinput', {
+      inputType: 'insertLineBreak',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    editor.view.dom.dispatchEvent(event);
+
+    expect(editor.view.composing).toBe(false);
+  });
+});

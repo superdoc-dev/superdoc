@@ -88,11 +88,12 @@ describe('normalizeDocumentEntry', () => {
 
   it('normalizes config objects with `data` wrapper', () => {
     const inner = new File([new Blob(['x'], { type: DOCX })], 'wrapped.docx', { type: DOCX });
-    const cfg = { data: { originFileObj: inner }, name: 'prefer-this-name.docx' };
+    const cfg = { data: { originFileObj: inner }, name: 'prefer-this-name.docx', password: 'secret' };
     const out = normalizeDocumentEntry(cfg);
     expect(out.data).toBe(inner);
     expect(out.name).toBe('prefer-this-name.docx');
     expect(out.type).toBe(DOCX);
+    expect(out.password).toBe('secret');
   });
 
   it('passes through URL-based entries unchanged', () => {

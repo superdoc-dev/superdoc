@@ -35,6 +35,24 @@ export const Run = OxmlNode.create({
         rendered: false,
         keepOnSplit: true,
       },
+      /** Keys of runProperties that were in the run's w:rPr (or set by user). Export outputs only these to avoid duplicating style-inherited props in styles.xml. */
+      runPropertiesInlineKeys: {
+        default: null,
+        rendered: false,
+        keepOnSplit: true,
+      },
+      /** Keys from the run's style (w:rStyle/styleId) in styles.xml. Export omits these so we don't duplicate run-style props. */
+      runPropertiesStyleKeys: {
+        default: null,
+        rendered: false,
+        keepOnSplit: true,
+      },
+      /** Keys that override the run's style (in w:rPr at import, or changed by user). Export includes these so user overrides are preserved. */
+      runPropertiesOverrideKeys: {
+        default: null,
+        rendered: false,
+        keepOnSplit: true,
+      },
       rsidR: {
         default: null,
         rendered: false,

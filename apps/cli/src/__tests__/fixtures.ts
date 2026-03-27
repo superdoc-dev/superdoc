@@ -25,10 +25,16 @@ const TOC_SOURCE_DOC_CANDIDATES = [
   path.join(REPO_ROOT, 'test-corpus/layout/toc-with-heading2.docx'),
 ];
 
+const TABLE_SOURCE_DOC_CANDIDATES = [
+  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/super-basic-table.docx'),
+  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/table.docx'),
+];
+
 let resolvedSourceDoc: string | null = null;
 let resolvedListSourceDoc: string | null = null;
 let resolvedPreSeparatedListDoc: string | null = null;
 let resolvedTocSourceDoc: string | null = null;
+let resolvedTableSourceDoc: string | null = null;
 
 async function resolveFixture(candidates: string[], fixtureLabel: string): Promise<string> {
   for (const candidate of candidates) {
@@ -65,4 +71,10 @@ export async function resolveTocDocFixture(): Promise<string> {
   if (resolvedTocSourceDoc != null) return resolvedTocSourceDoc;
   resolvedTocSourceDoc = await resolveFixture(TOC_SOURCE_DOC_CANDIDATES, 'table-of-contents');
   return resolvedTocSourceDoc;
+}
+
+export async function resolveTableDocFixture(): Promise<string> {
+  if (resolvedTableSourceDoc != null) return resolvedTableSourceDoc;
+  resolvedTableSourceDoc = await resolveFixture(TABLE_SOURCE_DOC_CANDIDATES, 'table');
+  return resolvedTableSourceDoc;
 }

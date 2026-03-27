@@ -280,6 +280,43 @@ describe('SuperToolbar sticky mark persistence', () => {
     expect(throwingSetFontSize).not.toHaveBeenCalled();
     expect(toolbar.pendingMarkCommands).toHaveLength(0);
   });
+
+  it('passes activation attrs to activate() for setFontSize when editor is unfocused', () => {
+    mockEditor.view.hasFocus = vi.fn(() => false);
+    const item = {
+      command: 'setFontSize',
+      name: { value: 'fontSize' },
+      labelAttr: { value: 'fontSize' },
+      activate: vi.fn(),
+    };
+
+    toolbar.emitCommand({ item, argument: '24pt' });
+
+    expect(item.activate).toHaveBeenCalledWith({ fontSize: '24pt' });
+  });
+
+  it('passes activation attrs to activate() for setFontFamily when editor is unfocused', () => {
+    mockEditor.view.hasFocus = vi.fn(() => false);
+    const item = {
+      command: 'setFontFamily',
+      name: { value: 'fontFamily' },
+      labelAttr: { value: 'fontFamily' },
+      activate: vi.fn(),
+    };
+
+    toolbar.emitCommand({ item, argument: 'Arial, sans-serif' });
+
+    expect(item.activate).toHaveBeenCalledWith({ fontFamily: 'Arial, sans-serif' });
+  });
+
+  it('calls activate() without attrs for non-font mark toggles when editor is unfocused', () => {
+    mockEditor.view.hasFocus = vi.fn(() => false);
+    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: vi.fn() };
+
+    toolbar.emitCommand({ item });
+
+    expect(item.activate).toHaveBeenCalledWith();
+  });
 });
 
 describe('SuperToolbar error handling for command failures', () => {

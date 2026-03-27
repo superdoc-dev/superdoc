@@ -236,12 +236,20 @@ describe('Diff', () => {
     const formattingDiff = diffs.find(
       (diff) => diff.action === 'modified' && diff.oldText === 'This paragraph formatting will change.',
     );
-    expect(formattingDiff?.contentDiff?.[0]?.runAttrsDiff?.modified).toHaveProperty('runProperties', {
+    const formattingRunAttrsDiff = formattingDiff?.contentDiff?.[0]?.runAttrsDiff;
+    expect(formattingRunAttrsDiff).toBeDefined();
+    expect(formattingRunAttrsDiff.added).toEqual({
+      'runProperties.bold': true,
+      'runProperties.boldCs': true,
+    });
+    expect(formattingRunAttrsDiff.deleted).toEqual({});
+    expect(formattingRunAttrsDiff.modified?.runPropertiesInlineKeys).toEqual({
+      from: ['fontFamily', 'fontSize'],
+      to: ['bold', 'boldCs', 'fontFamily', 'fontSize'],
+    });
+    expect(formattingRunAttrsDiff.modified?.rsidRPr).toMatchObject({
       from: null,
-      to: {
-        bold: true,
-        boldCs: true,
-      },
+      to: expect.any(String),
     });
 
     const upgradedParagraph = diffs.find(

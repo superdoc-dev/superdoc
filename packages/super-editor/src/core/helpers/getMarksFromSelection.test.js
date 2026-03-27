@@ -104,6 +104,24 @@ describe('getMarksFromSelection', () => {
       expect(result.some((mark) => mark.type.name === 'bold')).toBe(false);
     });
 
+    it('treats empty storedMarks as an explicit no-formatting override', () => {
+      const testDoc = customSchema.node('doc', null, [
+        customSchema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }),
+      ]);
+      const baseState = EditorState.create({ schema: customSchema, doc: testDoc });
+      const tr = baseState.tr.setSelection(TextSelection.create(testDoc, 1));
+      tr.setStoredMarks([]);
+      const state = baseState.apply(tr);
+
+      const result = getSelectionFormattingState(state, mockEditor);
+
+      expect(result.inlineMarks).toEqual([]);
+      expect(result.inlineRunProperties).toEqual({});
+      expect(result.resolvedMarks).toEqual([]);
+      expect(result.resolvedRunProperties).toEqual({});
+      expect(result.styleRunProperties).toEqual({});
+    });
+
     it('does not return inherited marks when paragraph has text content', () => {
       const testDoc = customSchema.node('doc', null, [
         customSchema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }, [

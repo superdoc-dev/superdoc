@@ -56,4 +56,23 @@ describe('operation runtime metadata', () => {
     expect(optionNames).toContain('user-name');
     expect(optionNames).toContain('user-email');
   });
+
+  test('doc.open metadata includes password param', () => {
+    const openMeta = CLI_OPERATION_METADATA['doc.open'];
+    const paramNames = openMeta.params.map((p) => p.name);
+    expect(paramNames).toContain('password');
+  });
+
+  test('doc.open password param is not agent-visible', () => {
+    const openMeta = CLI_OPERATION_METADATA['doc.open'];
+    const passwordParam = openMeta.params.find((p) => p.name === 'password');
+    expect(passwordParam).toBeDefined();
+    expect(passwordParam!.agentVisible).toBe(false);
+  });
+
+  test('doc.open option specs include password flag', () => {
+    const openOptions = CLI_OPERATION_OPTION_SPECS['doc.open'];
+    const optionNames = openOptions.map((o) => o.name);
+    expect(optionNames).toContain('password');
+  });
 });

@@ -16,18 +16,24 @@ export const TrackChangesBasePlugin = () => {
           isTrackChangesActive: false,
           onlyOriginalShown: false,
           onlyModifiedShown: false,
+          pendingDeadKeyPlaceholder: null,
           decorations,
         };
       },
 
       apply(tr, oldState, prevEditorState, newEditorState) {
         const meta = tr.getMeta(TrackChangesBasePluginKey);
+        const pendingDeadKeyPlaceholder =
+          meta && Object.prototype.hasOwnProperty.call(meta, 'pendingDeadKeyPlaceholder')
+            ? meta.pendingDeadKeyPlaceholder
+            : oldState.pendingDeadKeyPlaceholder;
 
         // Handle meta commands that require full recalculation
         if (meta && meta.type === 'TRACK_CHANGES_ENABLE') {
           return {
             ...oldState,
             isTrackChangesActive: meta.value === true,
+            pendingDeadKeyPlaceholder,
             decorations: getTrackChangesDecorations(
               newEditorState,
               oldState.onlyOriginalShown,
@@ -41,6 +47,7 @@ export const TrackChangesBasePlugin = () => {
             ...oldState,
             onlyOriginalShown: meta.value === true,
             onlyModifiedShown: false,
+            pendingDeadKeyPlaceholder,
             decorations: getTrackChangesDecorations(newEditorState, meta.value === true, false),
           };
         }
@@ -50,12 +57,16 @@ export const TrackChangesBasePlugin = () => {
             ...oldState,
             onlyOriginalShown: false,
             onlyModifiedShown: meta.value === true,
+            pendingDeadKeyPlaceholder,
             decorations: getTrackChangesDecorations(newEditorState, false, meta.value === true),
           };
         }
 
         if (!tr.docChanged) {
-          return oldState;
+          return {
+            ...oldState,
+            pendingDeadKeyPlaceholder,
+          };
         }
 
         if (!meta) {
@@ -70,6 +81,7 @@ export const TrackChangesBasePlugin = () => {
           if (mightAffectTrackChanges) {
             return {
               ...oldState,
+              pendingDeadKeyPlaceholder,
               decorations: getTrackChangesDecorations(
                 newEditorState,
                 oldState.onlyOriginalShown,
@@ -81,12 +93,14 @@ export const TrackChangesBasePlugin = () => {
           // No changes that affect track changes, just map decorations
           return {
             ...oldState,
+            pendingDeadKeyPlaceholder,
             decorations: oldState.decorations.map(tr.mapping, tr.doc),
           };
         }
 
         return {
           ...oldState,
+          pendingDeadKeyPlaceholder,
           decorations: getTrackChangesDecorations(
             newEditorState,
             oldState.onlyOriginalShown,

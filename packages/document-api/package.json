@@ -10,6 +10,11 @@
       "source": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./scripts/lib/contract-snapshot.ts": {
+      "types": "./scripts/lib/contract-snapshot.ts",
+      "source": "./scripts/lib/contract-snapshot.ts",
+      "default": "./scripts/lib/contract-snapshot.ts"
+    },
     "./types": {
       "types": "./src/types/index.ts",
       "source": "./src/types/index.ts",

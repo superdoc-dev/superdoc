@@ -249,6 +249,18 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
+import {
+  protectionGetAdapter,
+  protectionSetEditingRestrictionAdapter,
+  protectionClearEditingRestrictionAdapter,
+} from './protection-adapter.js';
+import {
+  permissionRangesListAdapter,
+  permissionRangesGetAdapter,
+  permissionRangesCreateAdapter,
+  permissionRangesRemoveAdapter,
+  permissionRangesUpdatePrincipalAdapter,
+} from './permission-ranges-adapter.js';
 
 import {
   footnotesListWrapper,
@@ -711,5 +723,18 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     diff: createDiffAdapter(editor),
     history: createHistoryAdapter(editor),
+    protection: {
+      get: () => protectionGetAdapter(editor),
+      setEditingRestriction: (input, options) => protectionSetEditingRestrictionAdapter(editor, input, options),
+      clearEditingRestriction: (_input, options) =>
+        protectionClearEditingRestrictionAdapter(editor, undefined, options),
+    },
+    permissionRanges: {
+      list: (input) => permissionRangesListAdapter(editor, input),
+      get: (input) => permissionRangesGetAdapter(editor, input),
+      create: (input, options) => permissionRangesCreateAdapter(editor, input, options),
+      remove: (input, options) => permissionRangesRemoveAdapter(editor, input, options),
+      updatePrincipal: (input, options) => permissionRangesUpdatePrincipalAdapter(editor, input, options),
+    },
   };
 }

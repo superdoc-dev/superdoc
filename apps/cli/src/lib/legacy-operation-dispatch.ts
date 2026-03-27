@@ -1,6 +1,7 @@
 import type { CliOperationId } from '../cli';
 import type { CommandContext, CommandExecution } from './types';
 import { runClose } from '../commands/close';
+import { runInsertLineBreak, runInsertTab } from '../commands/insert-inline-special';
 import { runOpen } from '../commands/open';
 import { runSave } from '../commands/save';
 import { runSessionClose } from '../commands/session-close';
@@ -14,6 +15,8 @@ const LEGACY_RUNNERS: Partial<Record<CliOperationId, OperationRunner>> = {
   'doc.open': runOpen,
   'doc.save': runSave,
   'doc.close': runClose,
+  'doc.insertTab': runInsertTab,
+  'doc.insertLineBreak': runInsertLineBreak,
   'doc.session.list': runSessionList,
   'doc.session.save': runSessionSave,
   'doc.session.close': runSessionClose,

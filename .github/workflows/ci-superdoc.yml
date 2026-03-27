@@ -112,7 +112,7 @@ jobs:
 
       - name: Run vitest (shard ${{ matrix.shard }}/5)
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
         run: bash scripts/ci-test-shard.sh ${{ matrix.shard }} 5 10
 
       - name: Run bun tests

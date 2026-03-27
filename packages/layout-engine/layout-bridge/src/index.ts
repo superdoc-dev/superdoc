@@ -178,6 +178,7 @@ export {
 import {
   type Point,
   type PageHit,
+  type FragmentHit,
   type PositionHit,
   isAtomicFragment,
   getAtomicPmRange,

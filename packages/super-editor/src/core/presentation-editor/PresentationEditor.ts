@@ -3939,11 +3939,11 @@ export class PresentationEditor extends EventEmitter {
    * surface during composition causes structural DOM mutations (e.g. decoration
    * span add/remove) on the hidden ProseMirror editor that invalidate the
    * browser's composition range, breaking CJK IME input.
+   *
+   * Tracks composition on BOTH the body editor and any active header/footer
+   * editor so that H/F IME input is also protected.
    */
   #setupCompositionDeferral(): void {
-    const editorDom = this.#editor?.view?.dom;
-    if (!editorDom) return;
-
     const onStart = () => {
       this.#isComposing = true;
     };
@@ -3955,12 +3955,34 @@ export class PresentationEditor extends EventEmitter {
       }
     };
 
-    editorDom.addEventListener('compositionstart', onStart);
-    editorDom.addEventListener('compositionend', onEnd);
+    const cleanups: Array<() => void> = [];
+
+    const addListeners = (dom: HTMLElement) => {
+      dom.addEventListener('compositionstart', onStart);
+      dom.addEventListener('compositionend', onEnd);
+      cleanups.push(() => {
+        dom.removeEventListener('compositionstart', onStart);
+        dom.removeEventListener('compositionend', onEnd);
+      });
+    };
+
+    // Body editor — always present.
+    const bodyDom = this.#editor?.view?.dom;
+    if (bodyDom) addListeners(bodyDom);
+
+    // Header/footer editors — attach when they become active, detach on exit.
+    this.on('headerFooterEditingContext', (data: { kind: string; editor?: { view?: { dom?: HTMLElement } } }) => {
+      // Remove previous H/F listeners (if any) when switching back to body or
+      // to a different H/F editor.  Body listeners are kept for the lifetime of
+      // the PresentationEditor instance.
+      while (cleanups.length > 1) cleanups.pop()!();
+
+      const hfDom = data.kind !== 'body' ? data.editor?.view?.dom : null;
+      if (hfDom) addListeners(hfDom);
+    });
 
     this.#compositionCleanup = () => {
-      editorDom.removeEventListener('compositionstart', onStart);
-      editorDom.removeEventListener('compositionend', onEnd);
+      while (cleanups.length) cleanups.pop()!();
     };
   }
 

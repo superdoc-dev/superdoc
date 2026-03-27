@@ -3547,127 +3547,92 @@ describe('PresentationEditor', () => {
     });
 
     describe('composition deferral (SD-2368)', () => {
-      it('defers layout rerender during IME composition', async () => {
-        const layoutResult = {
-          layout: { pages: [] },
-          measures: [],
-        };
-        mockIncrementalLayout.mockResolvedValue(layoutResult);
+      let mockEditorInstance: (typeof Editor extends new (...args: unknown[]) => infer E ? E : never) &
+        Record<string, unknown>;
+      let handleUpdate: (payload: { transaction: { docChanged: boolean } }) => void;
+
+      beforeEach(async () => {
+        mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
 
         editor = new PresentationEditor({
           element: container,
-          documentId: 'test-composition-defer',
+          documentId: 'test-composition',
         });
 
-        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
 
-        // Wait for initial render
         await new Promise((resolve) => setTimeout(resolve, 100));
 
+        const onCalls = mockEditorInstance.on as unknown as Mock;
+        const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
+        handleUpdate = updateCall![1] as typeof handleUpdate;
+      });
+
+      it('defers layout rerender during IME composition', () => {
         let rafCallback: FrameRequestCallback | null = null;
         const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
           rafCallback = cb;
           return 1;
         });
 
-        // Simulate compositionstart on the editor DOM
         mockEditorInstance.view.dom.dispatchEvent(
           new CompositionEvent('compositionstart', { data: '', bubbles: true }),
         );
-
-        // Trigger a document change that would normally schedule a rerender
-        const onCalls = mockEditorInstance.on as unknown as Mock;
-        const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
-        const handleUpdate = updateCall![1] as (payload: { transaction: { docChanged: boolean } }) => void;
         handleUpdate({ transaction: { docChanged: true } });
 
-        // RAF was scheduled — execute it
         expect(rafSpy).toHaveBeenCalled();
         if (rafCallback) rafCallback(performance.now());
 
-        // flushRerenderQueue should have been called but deferred due to composing
-        // The layout should NOT have been called again after the initial render
-        const layoutCallCount = mockIncrementalLayout.mock.calls.length;
-
-        // Now end composition
+        // compositionend should schedule a new rerender
         mockEditorInstance.view.dom.dispatchEvent(
           new CompositionEvent('compositionend', { data: '你', bubbles: true }),
         );
-
-        // compositionend should schedule a new rerender
         expect(rafSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
 
         rafSpy.mockRestore();
       });
 
       it('resumes rerender after compositionend', async () => {
-        const layoutResult = {
-          layout: { pages: [] },
-          measures: [],
-        };
-        mockIncrementalLayout.mockResolvedValue(layoutResult);
-
-        editor = new PresentationEditor({
-          element: container,
-          documentId: 'test-composition-resume',
-        });
-
-        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
-          (Editor as unknown as MockedEditor).mock.results.length - 1
-        ].value;
-
-        // Wait for initial render
-        await new Promise((resolve) => setTimeout(resolve, 100));
         const initialLayoutCalls = mockIncrementalLayout.mock.calls.length;
-
         const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
           cb(performance.now());
           return 1;
         });
 
-        // Start composition
         mockEditorInstance.view.dom.dispatchEvent(
           new CompositionEvent('compositionstart', { data: '', bubbles: true }),
         );
-
-        // Trigger doc change during composition
-        const onCalls = mockEditorInstance.on as unknown as Mock;
-        const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
-        const handleUpdate = updateCall![1] as (payload: { transaction: { docChanged: boolean } }) => void;
         handleUpdate({ transaction: { docChanged: true } });
-
-        // Layout should not have been called during composition
         const duringCompositionCalls = mockIncrementalLayout.mock.calls.length;
 
-        // End composition — deferred rerender should fire
         mockEditorInstance.view.dom.dispatchEvent(
           new CompositionEvent('compositionend', { data: '你', bubbles: true }),
         );
-
-        // Wait for async rerender
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        const afterCompositionCalls = mockIncrementalLayout.mock.calls.length;
-
-        // Layout was deferred during composition but ran after
         expect(duringCompositionCalls).toBe(initialLayoutCalls);
-        expect(afterCompositionCalls).toBeGreaterThan(initialLayoutCalls);
+        expect(mockIncrementalLayout.mock.calls.length).toBeGreaterThan(initialLayoutCalls);
+
+        rafSpy.mockRestore();
+      });
+
+      it('does not schedule rerender on compositionend without pending changes', () => {
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+
+        mockEditorInstance.view.dom.dispatchEvent(
+          new CompositionEvent('compositionstart', { data: '', bubbles: true }),
+        );
+        rafSpy.mockClear();
+        mockEditorInstance.view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
 
       it('cleans up composition listeners on destroy', () => {
-        editor = new PresentationEditor({
-          element: container,
-          documentId: 'test-composition-cleanup',
-        });
-
-        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
-          (Editor as unknown as MockedEditor).mock.results.length - 1
-        ].value;
-
         const removeListenerSpy = vi.spyOn(mockEditorInstance.view.dom, 'removeEventListener');
 
         editor.destroy();

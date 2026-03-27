@@ -1,4 +1,4 @@
-.PHONY: install dev dev-local dev-server dev-client link-local-sdk rebuild-local-sdk kill clean help
+.PHONY: install dev dev-local dev-server dev-client link-local-sdk rebuild-local-sdk restore-npm-sdk kill clean help
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ kill: ## Kill any running instances
 	@-pkill -f "superdoc.*host" 2>/dev/null || true
 	@sleep 1
 
-dev: check-env kill ## Start with npm SDK (default)
+dev: check-env kill restore-npm-sdk ## Start with npm SDK (default)
 	@echo ""
 	@echo "  Server → http://localhost:8090 + ws://localhost:8081"
 	@echo "  Client → http://localhost:5173"
@@ -98,6 +98,14 @@ dev-server: check-env ## Start server only
 
 dev-client: ## Start client only
 	cd client && $(PNPM) run dev
+
+restore-npm-sdk: ## Restore SDK from npm if currently symlinked
+	@if [ -L server/node_modules/@superdoc-dev/sdk ]; then \
+		echo "  Restoring npm SDK (removing local symlink)..."; \
+		rm -f server/node_modules/@superdoc-dev/sdk; \
+		cd server && npm install --prefer-offline --no-audit --no-fund 2>/dev/null; \
+		echo "  ✓ npm SDK restored"; \
+	fi
 
 # ─── Local SDK ────────────────────────────────────────────────────────────────
 

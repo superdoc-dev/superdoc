@@ -1745,6 +1745,46 @@ _No fields._
 | `operations.mutations.preview.dryRun` | boolean | yes |  |
 | `operations.mutations.preview.reasons` | enum[] | no |  |
 | `operations.mutations.preview.tracked` | boolean | yes |  |
+| `operations.permissionRanges.create` | object | yes |  |
+| `operations.permissionRanges.create.available` | boolean | yes |  |
+| `operations.permissionRanges.create.dryRun` | boolean | yes |  |
+| `operations.permissionRanges.create.reasons` | enum[] | no |  |
+| `operations.permissionRanges.create.tracked` | boolean | yes |  |
+| `operations.permissionRanges.get` | object | yes |  |
+| `operations.permissionRanges.get.available` | boolean | yes |  |
+| `operations.permissionRanges.get.dryRun` | boolean | yes |  |
+| `operations.permissionRanges.get.reasons` | enum[] | no |  |
+| `operations.permissionRanges.get.tracked` | boolean | yes |  |
+| `operations.permissionRanges.list` | object | yes |  |
+| `operations.permissionRanges.list.available` | boolean | yes |  |
+| `operations.permissionRanges.list.dryRun` | boolean | yes |  |
+| `operations.permissionRanges.list.reasons` | enum[] | no |  |
+| `operations.permissionRanges.list.tracked` | boolean | yes |  |
+| `operations.permissionRanges.remove` | object | yes |  |
+| `operations.permissionRanges.remove.available` | boolean | yes |  |
+| `operations.permissionRanges.remove.dryRun` | boolean | yes |  |
+| `operations.permissionRanges.remove.reasons` | enum[] | no |  |
+| `operations.permissionRanges.remove.tracked` | boolean | yes |  |
+| `operations.permissionRanges.updatePrincipal` | object | yes |  |
+| `operations.permissionRanges.updatePrincipal.available` | boolean | yes |  |
+| `operations.permissionRanges.updatePrincipal.dryRun` | boolean | yes |  |
+| `operations.permissionRanges.updatePrincipal.reasons` | enum[] | no |  |
+| `operations.permissionRanges.updatePrincipal.tracked` | boolean | yes |  |
+| `operations.protection.clearEditingRestriction` | object | yes |  |
+| `operations.protection.clearEditingRestriction.available` | boolean | yes |  |
+| `operations.protection.clearEditingRestriction.dryRun` | boolean | yes |  |
+| `operations.protection.clearEditingRestriction.reasons` | enum[] | no |  |
+| `operations.protection.clearEditingRestriction.tracked` | boolean | yes |  |
+| `operations.protection.get` | object | yes |  |
+| `operations.protection.get.available` | boolean | yes |  |
+| `operations.protection.get.dryRun` | boolean | yes |  |
+| `operations.protection.get.reasons` | enum[] | no |  |
+| `operations.protection.get.tracked` | boolean | yes |  |
+| `operations.protection.setEditingRestriction` | object | yes |  |
+| `operations.protection.setEditingRestriction.available` | boolean | yes |  |
+| `operations.protection.setEditingRestriction.dryRun` | boolean | yes |  |
+| `operations.protection.setEditingRestriction.reasons` | enum[] | no |  |
+| `operations.protection.setEditingRestriction.tracked` | boolean | yes |  |
 | `operations.query.match` | object | yes |  |
 | `operations.query.match.available` | boolean | yes |  |
 | `operations.query.match.dryRun` | boolean | yes |  |
@@ -3919,6 +3959,46 @@ _No fields._
     "mutations.preview": {
       "available": true,
       "dryRun": false,
+      "tracked": false
+    },
+    "permissionRanges.create": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "permissionRanges.get": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "permissionRanges.list": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "permissionRanges.remove": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "permissionRanges.updatePrincipal": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "protection.clearEditingRestriction": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "protection.get": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "protection.setEditingRestriction": {
+      "available": true,
+      "dryRun": true,
       "tracked": false
     },
     "query.match": {
@@ -16329,6 +16409,286 @@ _No fields._
           ],
           "type": "object"
         },
+        "permissionRanges.create": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "permissionRanges.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "permissionRanges.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "permissionRanges.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "permissionRanges.updatePrincipal": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "protection.clearEditingRestriction": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "protection.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "protection.setEditingRestriction": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "query.match": {
           "additionalProperties": false,
           "properties": {
@@ -19577,7 +19937,15 @@ _No fields._
         "authorities.entries.remove",
         "diff.capture",
         "diff.compare",
-        "diff.apply"
+        "diff.apply",
+        "protection.get",
+        "protection.setEditingRestriction",
+        "protection.clearEditingRestriction",
+        "permissionRanges.list",
+        "permissionRanges.get",
+        "permissionRanges.create",
+        "permissionRanges.remove",
+        "permissionRanges.updatePrincipal"
       ],
       "type": "object"
     },

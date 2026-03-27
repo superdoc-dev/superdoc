@@ -50,6 +50,8 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Table of Authorities | 11 | 0 | 11 | [Open](/document-api/reference/authorities/index) |
 | Ranges | 1 | 0 | 1 | [Open](/document-api/reference/ranges/index) |
 | Diff | 3 | 0 | 3 | [Open](/document-api/reference/diff/index) |
+| Protection | 3 | 0 | 3 | [Open](/document-api/reference/protection/index) |
+| Permission Ranges | 5 | 0 | 5 | [Open](/document-api/reference/permission-ranges/index) |
 
 ## Available operations
 
@@ -587,3 +589,21 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/capture"><code>diff.capture</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.capture(...)</code></span> | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/compare"><code>diff.compare</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.compare(...)</code></span> | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/apply"><code>diff.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.apply(...)</code></span> | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
+
+#### Protection
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/protection/get"><code>protection.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.protection.get(...)</code></span> | Read the current document protection state including editing restrictions, write protection, and read-only recommendation. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/protection/set-editing-restriction"><code>protection.setEditingRestriction</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.protection.setEditingRestriction(...)</code></span> | Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/protection/clear-editing-restriction"><code>protection.clearEditingRestriction</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.protection.clearEditingRestriction(...)</code></span> | Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity. |
+
+#### Permission Ranges
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/permission-ranges/list"><code>permissionRanges.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.list(...)</code></span> | List all permission ranges in the document. Returns only complete paired ranges (both start and end markers present). |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/permission-ranges/get"><code>permissionRanges.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.get(...)</code></span> | Get detailed information about a specific permission range by ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/permission-ranges/create"><code>permissionRanges.create</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.create(...)</code></span> | Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/permission-ranges/remove"><code>permissionRanges.remove</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.remove(...)</code></span> | Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both). |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/permission-ranges/update-principal"><code>permissionRanges.updatePrincipal</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.updatePrincipal(...)</code></span> | Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker. |

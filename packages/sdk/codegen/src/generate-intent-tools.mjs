@@ -223,6 +223,8 @@ function buildIntentTools(contract) {
 
     const isSingleOp = ops.length === 1;
     const mutates = ops.some(({ operation }) => operation.mutates);
+    const annotations = deriveAnnotations(ops);
+    const inputExamples = meta.inputExamples || [];
 
     if (isSingleOp) {
       // Single-op tool — no action enum, input schema = operation schema
@@ -234,6 +236,8 @@ function buildIntentTools(contract) {
         description: meta.description,
         inputSchema,
         mutates,
+        annotations,
+        inputExamples,
         operations: [{ operationId, intentAction: operation.intentAction, ...extractRequiredConstraints(operation) }],
       });
     } else {
@@ -358,6 +362,8 @@ function buildIntentTools(contract) {
         description: meta.description,
         inputSchema,
         mutates,
+        annotations,
+        inputExamples,
         operations: ops.map(({ operationId, operation }) => ({
           operationId,
           intentAction: operation.intentAction,
@@ -489,11 +495,15 @@ function toOpenAiTool(entry) {
 }
 
 function toAnthropicTool(entry) {
-  return {
+  const tool = {
     name: entry.toolName,
     description: entry.description,
     input_schema: entry.inputSchema,
   };
+  if (entry.inputExamples?.length) {
+    tool.input_examples = entry.inputExamples;
+  }
+  return tool;
 }
 
 function toVercelTool(entry) {
@@ -517,6 +527,33 @@ function toGenericTool(entry) {
       operationCount: entry.operations.length,
       operations: entry.operations.map((op) => op.operationId),
     },
+    annotations: entry.annotations,
+  };
+}
+
+/**
+ * Derive tool-level behavioral annotations from per-operation metadata.
+ * No hardcoded map — annotations stay correct as operations change.
+ *
+ * MCP-aligned fields: readOnlyHint, destructiveHint, idempotentHint, openWorldHint.
+ * SuperDoc-specific fields: reversible, supportsDryRun, supportsTrackedChanges.
+ */
+function deriveAnnotations(ops) {
+  const allReadOnly = ops.every(({ operation }) => !operation.mutates);
+  const anyDryRun = ops.some(({ operation }) => operation.supportsDryRun);
+  const anyTracked = ops.some(({ operation }) => operation.supportsTrackedMode);
+  const allIdempotent = ops.every(({ operation }) => operation.idempotency === 'idempotent');
+  // Destructive if mutations exist but none support dry-run or tracked mode (irreversible)
+  const destructive = !allReadOnly && !anyDryRun && !anyTracked;
+
+  return {
+    readOnlyHint: allReadOnly,
+    destructiveHint: destructive,
+    idempotentHint: allIdempotent,
+    openWorldHint: false, // SuperDoc tools never interact with external systems
+    reversible: !allReadOnly && anyDryRun, // if it supports dry-run, it's undoable
+    supportsDryRun: anyDryRun,
+    supportsTrackedChanges: anyTracked,
   };
 }
 

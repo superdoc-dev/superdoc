@@ -8,7 +8,7 @@ import { getStarterExtensions } from '@extensions/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SHAPE_FIXTURES_DIR = resolve(__dirname, '../../../../layout-engine/test-fixtures/shapes');
+const SHAPE_FIXTURES_DIR = resolve(__dirname, '../../../../../../layout-engine/test-fixtures/shapes');
 
 const SHAPE_FIXTURES = [
   { name: 'basic-vector-shapes.docx', description: 'inline vector shapes' },

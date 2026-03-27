@@ -3,6 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Doc as YDoc } from 'yjs';
+import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 
 const { seedPartsFromEditorSpy } = vi.hoisted(() => ({
   seedPartsFromEditorSpy: vi.fn(),
@@ -33,6 +34,13 @@ function createProviderStub() {
   };
 
   const provider = {
+    awareness: {
+      getStates() {
+        return new Map();
+      },
+      on() {},
+      off() {},
+    },
     synced: false,
     isSynced: false,
     on(event: 'sync' | 'synced', handler: SyncHandler) {
@@ -64,11 +72,13 @@ function createTestEditor(options: Partial<Parameters<(typeof Editor)['prototype
 
 describe('Editor.replaceFile', () => {
   let blankDocData: { docx: unknown; mediaFiles: unknown; fonts: unknown };
+  let initialCollaborativeBuffer: Buffer;
   let replacementBuffer: Buffer;
   let multiSectionReplacementBuffer: Buffer;
 
   beforeAll(async () => {
     blankDocData = await loadTestDataForEditorTests('blank-doc.docx');
+    initialCollaborativeBuffer = await getTestDataAsFileBuffer('advanced-text.docx');
     replacementBuffer = await getTestDataAsFileBuffer('Hello docx world.docx');
     multiSectionReplacementBuffer = await getTestDataAsFileBuffer('multi_section_doc.docx');
   });
@@ -195,6 +205,54 @@ describe('Editor.replaceFile', () => {
       await replacePromise;
 
       expect(editor.state.doc.textContent).toBe(expectedText);
+    } finally {
+      if (editor.lifecycleState === 'ready') {
+        editor.close();
+      }
+      if (expectedEditor.lifecycleState === 'ready') {
+        expectedEditor.close();
+      }
+      editor.destroy();
+      expectedEditor.destroy();
+    }
+  });
+
+  it('replaces an already-seeded collaborative room cleanly', async () => {
+    const provider = createProviderStub();
+    const ydoc = new YDoc();
+
+    const editor = createTestEditor({
+      ydoc,
+      collaborationProvider: provider,
+    });
+    const expectedEditor = createTestEditor();
+    try {
+      await editor.open(initialCollaborativeBuffer, {
+        mode: 'docx',
+        isNewFile: true,
+      });
+
+      provider.emit('synced', true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const roomFragmentBeforeReplace = ydoc.getXmlFragment('supereditor');
+      expect(roomFragmentBeforeReplace.length).toBeGreaterThan(0);
+
+      const initialText = editor.state.doc.textContent;
+
+      await expectedEditor.open(replacementBuffer, { mode: 'docx' });
+      const expectedText = expectedEditor.state.doc.textContent;
+
+      const replacePromise = editor.replaceFile(replacementBuffer);
+      await Promise.resolve();
+
+      provider.emit('synced', true);
+      await replacePromise;
+
+      const sharedRoot = yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('supereditor'), editor.schema);
+      expect(sharedRoot.textContent).toBe(expectedText);
+      expect(editor.state.doc.textContent).toBe(expectedText);
+      expect(editor.state.doc.textContent).not.toBe(initialText);
     } finally {
       if (editor.lifecycleState === 'ready') {
         editor.close();

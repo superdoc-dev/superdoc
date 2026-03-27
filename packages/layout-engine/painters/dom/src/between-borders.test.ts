@@ -469,14 +469,22 @@ describe('computeBetweenBorderFlags', () => {
     expect(flags.size).toBe(2);
   });
 
-  it('does not flag when between border is not defined', () => {
+  it('groups identical borders even when between border is not defined', () => {
+    // ECMA-376 §17.3.1.5: grouping occurs when all border properties are identical.
+    // When no between border is defined, the group renders as a single box (no separator).
     const noBetween: ParagraphBorders = { top: { style: 'solid', width: 1 } };
     const b1 = makeParagraphBlock('b1', noBetween);
     const b2 = makeParagraphBlock('b2', noBetween);
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    const flags = computeBetweenBorderFlags(fragments, lookup);
+    expect(flags.size).toBe(2);
+    // First fragment: bottom border suppressed (no between separator, single box)
+    expect(flags.get(0)?.suppressBottomBorder).toBe(true);
+    expect(flags.get(0)?.showBetweenBorder).toBe(false);
+    // Second fragment: top border suppressed
+    expect(flags.get(1)?.suppressTopBorder).toBe(true);
   });
 
   it('does not flag when border definitions do not match', () => {

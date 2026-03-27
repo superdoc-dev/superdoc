@@ -1,10 +1,6 @@
 import type { ParagraphBlock, MathRun } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext } from '../types.js';
-
-/** Rough width estimate per character for math content (px). */
-const MATH_CHAR_WIDTH = 10;
-/** Default height for math content (px). */
-const MATH_DEFAULT_HEIGHT = 24;
+import { estimateMathDimensions } from './math-constants.js';
 
 const JUSTIFICATION_TO_ALIGN: Record<string, 'left' | 'center' | 'right'> = {
   center: 'center',
@@ -22,7 +18,7 @@ export function handleMathBlockNode(node: PMNode, context: NodeHandlerContext): 
 
   const textContent = String(node.attrs?.textContent ?? '');
   const justification = String(node.attrs?.justification ?? 'center');
-  const width = Math.max(textContent.length * MATH_CHAR_WIDTH, 20);
+  const { width, height } = estimateMathDimensions(textContent);
 
   const pos = positions.get(node);
 
@@ -31,7 +27,7 @@ export function handleMathBlockNode(node: PMNode, context: NodeHandlerContext): 
     ommlJson: node.attrs?.originalXml ?? null,
     textContent,
     width,
-    height: MATH_DEFAULT_HEIGHT,
+    height,
     pmStart: pos?.start,
     pmEnd: pos?.end,
   };

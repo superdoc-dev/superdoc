@@ -38,12 +38,13 @@ export function computeHeaderFooterContentHash(blocks: FlowBlock[]): string {
     if (block.kind === 'paragraph') {
       for (const run of block.runs) {
         // Only TextRun and TabRun have text property; ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun do not
-        if (
+        if (run.kind === 'math') {
+          parts.push(`math:${run.textContent}`);
+        } else if (
           !('src' in run) &&
           run.kind !== 'lineBreak' &&
           run.kind !== 'break' &&
-          run.kind !== 'fieldAnnotation' &&
-          run.kind !== 'math'
+          run.kind !== 'fieldAnnotation'
         ) {
           parts.push(run.text ?? '');
         }

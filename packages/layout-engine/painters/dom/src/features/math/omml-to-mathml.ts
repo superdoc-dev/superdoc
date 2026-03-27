@@ -53,6 +53,9 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:sSup': null, // Superscript
 };
 
+/** OMML argument/container elements that wrap children in <mrow>. */
+const ARGUMENT_ELEMENTS = new Set(['m:e', 'm:num', 'm:den', 'm:sub', 'm:sup', 'm:deg', 'm:lim', 'm:fName', 'm:oMath']);
+
 /**
  * Recursively convert an array of OMML child nodes to a DocumentFragment.
  * Used by object converters to process their argument elements (m:e, m:num, m:den, etc.).
@@ -98,18 +101,6 @@ function convertNode(node: OmmlJsonNode, doc: Document): Node | null {
   }
 
   // Argument/container elements → <mrow>
-  const ARGUMENT_ELEMENTS = new Set([
-    'm:e',
-    'm:num',
-    'm:den',
-    'm:sub',
-    'm:sup',
-    'm:deg',
-    'm:lim',
-    'm:fName',
-    'm:oMath',
-  ]);
-
   if (ARGUMENT_ELEMENTS.has(name)) {
     const children = node.elements ?? [];
     // Single child: unwrap (no extra <mrow>)

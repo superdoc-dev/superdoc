@@ -72,7 +72,7 @@ const OPERATOR_CHARS = new Set([
  * - Everything else → <mi> (identifier)
  */
 function classifyMathText(text: string): 'mn' | 'mo' | 'mi' {
-  if (/^\d+\.?\d*$/.test(text)) return 'mn';
+  if (/^\d*\.?\d+$/.test(text)) return 'mn';
   if (text.length === 1 && OPERATOR_CHARS.has(text)) return 'mo';
   return 'mi';
 }

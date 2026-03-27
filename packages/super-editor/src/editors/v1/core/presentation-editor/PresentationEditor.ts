@@ -4,6 +4,7 @@ import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { applyProofingDecorations, clearProofingDecorations, createDomPainter } from '@superdoc/painter-dom';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
 import type { VisibilitySource } from './proofing/visibility-source.js';
@@ -4161,6 +4162,7 @@ export class PresentationEditor extends EventEmitter {
 
       let layout: Layout;
       let measures: Measure[];
+      let resolvedLayout: ReturnType<typeof resolveLayout>;
       let headerLayouts: HeaderFooterLayoutResult[] | undefined;
       let footerLayouts: HeaderFooterLayoutResult[] | undefined;
       let extraBlocks: FlowBlock[] | undefined;
@@ -4201,6 +4203,12 @@ export class PresentationEditor extends EventEmitter {
         // Gap depends on virtualization mode and must be non-negative.
         layout.pageGap = this.#getEffectivePageGap();
         (layout as Layout & { layoutEpoch?: number }).layoutEpoch = layoutEpoch;
+
+        resolvedLayout = resolveLayout({
+          layout,
+          flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+        });
+
         headerLayouts = result.headers;
         footerLayouts = result.footers;
       } catch (error) {
@@ -4268,6 +4276,7 @@ export class PresentationEditor extends EventEmitter {
       }
 
       const painter = this.#ensurePainter(blocksForLayout, measures);
+      painter.setResolvedLayout?.(resolvedLayout);
       if (!isSemanticFlow && typeof painter.setProviders === 'function') {
         painter.setProviders(
           this.#headerFooterSession?.headerDecorationProvider,

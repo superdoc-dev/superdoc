@@ -120,6 +120,7 @@ const {
       setLayoutMode: vi.fn(),
       setProviders: vi.fn(),
       setData: vi.fn(),
+      setResolvedLayout: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
@@ -284,6 +285,10 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
 describe('PresentationEditor - Zoom Functionality', () => {

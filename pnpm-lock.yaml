@@ -549,7 +549,7 @@ importers:
         version: 14.0.3
       mintlify:
         specifier: 4.2.446
-        version: 4.2.446(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+        version: 4.2.446(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@25.5.0)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
       remark-mdx:
         specifier: ^3.1.1
         version: 3.1.1
@@ -1806,7 +1806,7 @@ importers:
     dependencies:
       nuxt:
         specifier: ^4.3.1
-        version: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1))(rollup@4.59.1)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
+        version: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0))(rollup@4.60.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
       superdoc:
         specifier: workspace:*
         version: link:../../../packages/superdoc
@@ -2139,6 +2139,22 @@ importers:
         specifier: workspace:*
         version: link:../pm-adapter
 
+  packages/layout-engine/layout-resolved:
+    dependencies:
+      '@superdoc/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.1(@microsoft/api-extractor@7.56.1(@types/node@25.5.0))(@swc/core@1.15.18)(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@25.5.0)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.1))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/layout-engine/measuring/dom:
     dependencies:
       '@superdoc/common':
@@ -2388,6 +2404,9 @@ importers:
       '@superdoc/layout-bridge':
         specifier: workspace:*
         version: link:../layout-engine/layout-bridge
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../layout-engine/layout-resolved
       '@superdoc/measuring-dom':
         specifier: workspace:*
         version: link:../layout-engine/measuring/dom
@@ -16629,9 +16648,6 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  mlly@1.8.0:
-    resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
-
   mlly@1.8.2:
     resolution: {integrity: sha512-d+ObxMQFmbt10sretNDytwt85VrbkhhUA/JBGm1MPaWJ65Cl4wOgLaB1NYvJSZ0Ef03MMEU/0xpPMXUIQ29UfA==}
 
@@ -25682,16 +25698,6 @@ snapshots:
       chalk: 4.1.2
       figures: 3.2.0
 
-  '@inquirer/checkbox@4.3.2(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/checkbox@4.3.2(@types/node@25.5.0)':
     dependencies:
       '@inquirer/ansi': 1.0.2
@@ -25717,13 +25723,6 @@ snapshots:
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
 
-  '@inquirer/confirm@5.1.21(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/confirm@5.1.21(@types/node@25.5.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.5.0)
@@ -25737,19 +25736,6 @@ snapshots:
       '@inquirer/type': 4.0.4(@types/node@18.19.130)
     optionalDependencies:
       '@types/node': 18.19.130
-
-  '@inquirer/core@10.3.2(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      cli-width: 4.1.0
-      mute-stream: 2.0.0
-      signal-exit: 4.1.0
-      wrap-ansi: 6.2.0
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/core@10.3.2(@types/node@25.5.0)':
     dependencies:
@@ -25817,14 +25803,6 @@ snapshots:
       chalk: 4.1.2
       external-editor: 3.1.0
 
-  '@inquirer/editor@4.2.23(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/external-editor': 1.0.3(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/editor@4.2.23(@types/node@25.5.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.5.0)
@@ -25848,14 +25826,6 @@ snapshots:
       chalk: 4.1.2
       figures: 3.2.0
 
-  '@inquirer/expand@4.0.23(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/expand@4.0.23(@types/node@25.5.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.5.0)
@@ -25863,13 +25833,6 @@ snapshots:
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 25.5.0
-
-  '@inquirer/external-editor@1.0.3(@types/node@22.19.2)':
-    dependencies:
-      chardet: 2.1.1
-      iconv-lite: 0.7.2
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/external-editor@1.0.3(@types/node@25.5.0)':
     dependencies:
@@ -25895,13 +25858,6 @@ snapshots:
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
 
-  '@inquirer/input@4.3.1(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/input@4.3.1(@types/node@25.5.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.5.0)
@@ -25916,13 +25872,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 18.19.130
 
-  '@inquirer/number@3.0.23(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/number@3.0.23(@types/node@25.5.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.5.0)
@@ -25936,14 +25885,6 @@ snapshots:
       '@inquirer/type': 1.5.5
       ansi-escapes: 4.3.2
       chalk: 4.1.2
-
-  '@inquirer/password@4.0.23(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/password@4.0.23(@types/node@25.5.0)':
     dependencies:
@@ -25965,21 +25906,6 @@ snapshots:
       '@inquirer/rawlist': 1.2.16
       '@inquirer/select': 1.3.3
 
-  '@inquirer/prompts@7.10.1(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/checkbox': 4.3.2(@types/node@22.19.2)
-      '@inquirer/confirm': 5.1.21(@types/node@22.19.2)
-      '@inquirer/editor': 4.2.23(@types/node@22.19.2)
-      '@inquirer/expand': 4.0.23(@types/node@22.19.2)
-      '@inquirer/input': 4.3.1(@types/node@22.19.2)
-      '@inquirer/number': 3.0.23(@types/node@22.19.2)
-      '@inquirer/password': 4.0.23(@types/node@22.19.2)
-      '@inquirer/rawlist': 4.1.11(@types/node@22.19.2)
-      '@inquirer/search': 3.2.2(@types/node@22.19.2)
-      '@inquirer/select': 4.4.2(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
   '@inquirer/prompts@7.10.1(@types/node@25.5.0)':
     dependencies:
       '@inquirer/checkbox': 4.3.2(@types/node@25.5.0)
@@ -25995,34 +25921,26 @@ snapshots:
     optionalDependencies:
       '@types/node': 25.5.0
 
-  '@inquirer/prompts@7.9.0(@types/node@22.19.2)':
+  '@inquirer/prompts@7.9.0(@types/node@25.5.0)':
     dependencies:
-      '@inquirer/checkbox': 4.3.2(@types/node@22.19.2)
-      '@inquirer/confirm': 5.1.21(@types/node@22.19.2)
-      '@inquirer/editor': 4.2.23(@types/node@22.19.2)
-      '@inquirer/expand': 4.0.23(@types/node@22.19.2)
-      '@inquirer/input': 4.3.1(@types/node@22.19.2)
-      '@inquirer/number': 3.0.23(@types/node@22.19.2)
-      '@inquirer/password': 4.0.23(@types/node@22.19.2)
-      '@inquirer/rawlist': 4.1.11(@types/node@22.19.2)
-      '@inquirer/search': 3.2.2(@types/node@22.19.2)
-      '@inquirer/select': 4.4.2(@types/node@22.19.2)
+      '@inquirer/checkbox': 4.3.2(@types/node@25.5.0)
+      '@inquirer/confirm': 5.1.21(@types/node@25.5.0)
+      '@inquirer/editor': 4.2.23(@types/node@25.5.0)
+      '@inquirer/expand': 4.0.23(@types/node@25.5.0)
+      '@inquirer/input': 4.3.1(@types/node@25.5.0)
+      '@inquirer/number': 3.0.23(@types/node@25.5.0)
+      '@inquirer/password': 4.0.23(@types/node@25.5.0)
+      '@inquirer/rawlist': 4.1.11(@types/node@25.5.0)
+      '@inquirer/search': 3.2.2(@types/node@25.5.0)
+      '@inquirer/select': 4.4.2(@types/node@25.5.0)
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 25.5.0
 
   '@inquirer/rawlist@1.2.16':
     dependencies:
       '@inquirer/core': 6.0.0
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
-
-  '@inquirer/rawlist@4.1.11(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/rawlist@4.1.11(@types/node@25.5.0)':
     dependencies:
@@ -26031,15 +25949,6 @@ snapshots:
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 25.5.0
-
-  '@inquirer/search@3.2.2(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/search@3.2.2(@types/node@25.5.0)':
     dependencies:
@@ -26057,16 +25966,6 @@ snapshots:
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       figures: 3.2.0
-
-  '@inquirer/select@4.4.2(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/select@4.4.2(@types/node@25.5.0)':
     dependencies:
@@ -26090,10 +25989,6 @@ snapshots:
   '@inquirer/type@1.5.5':
     dependencies:
       mute-stream: 1.0.0
-
-  '@inquirer/type@3.0.10(@types/node@22.19.2)':
-    optionalDependencies:
-      '@types/node': 22.19.2
 
   '@inquirer/type@3.0.10(@types/node@25.5.0)':
     optionalDependencies:
@@ -26666,11 +26561,11 @@ snapshots:
 
   '@microsoft/tsdoc@0.16.0': {}
 
-  '@mintlify/cli@4.0.1049(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)':
+  '@mintlify/cli@4.0.1049(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@25.5.0)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)':
     dependencies:
-      '@inquirer/prompts': 7.9.0(@types/node@22.19.2)
+      '@inquirer/prompts': 7.9.0(@types/node@25.5.0)
       '@mintlify/common': 1.0.813(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
-      '@mintlify/link-rot': 3.0.983(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+      '@mintlify/link-rot': 3.0.983(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
       '@mintlify/models': 0.0.286
       '@mintlify/prebuild': 1.0.954(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
       '@mintlify/previewing': 4.0.1012(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -26683,7 +26578,7 @@ snapshots:
       front-matter: 4.0.2
       fs-extra: 11.2.0
       ink: 6.3.0(@types/react@19.2.11)(react@19.2.3)
-      inquirer: 12.3.0(@types/node@22.19.2)
+      inquirer: 12.3.0(@types/node@25.5.0)
       js-yaml: 4.1.0
       mdast-util-mdx-jsx: 3.2.0
       react: 19.2.3
@@ -26709,7 +26604,7 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  '@mintlify/common@1.0.661(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/common@1.0.661(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@asyncapi/parser': 3.4.0
       '@mintlify/mdx': 3.0.4(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
@@ -26749,7 +26644,7 @@ snapshots:
       remark-parse: 11.0.0
       remark-rehype: 11.1.1
       remark-stringify: 11.0.0
-      tailwindcss: 3.4.4(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))
+      tailwindcss: 3.4.4(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))
       unified: 11.0.5
       unist-builder: 4.0.0
       unist-util-map: 4.0.0
@@ -26833,12 +26728,12 @@ snapshots:
       - typescript
       - yaml
 
-  '@mintlify/link-rot@3.0.983(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)':
+  '@mintlify/link-rot@3.0.983(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)':
     dependencies:
       '@mintlify/common': 1.0.813(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
       '@mintlify/prebuild': 1.0.954(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
       '@mintlify/previewing': 4.0.1012(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
-      '@mintlify/scraping': 4.0.522(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/scraping': 4.0.522(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/validation': 0.1.640(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       fs-extra: 11.1.0
       unist-util-visit: 4.1.2
@@ -26982,9 +26877,9 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  '@mintlify/scraping@4.0.522(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/scraping@4.0.522(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@mintlify/common': 1.0.661(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/common': 1.0.661(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/openapi-parser': 0.0.8
       fs-extra: 11.1.1
       hast-util-to-mdast: 10.1.0
@@ -27683,7 +27578,7 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  '@nuxt/nitro-server@4.4.2(01179a40a3d882e944a1f2b391293830)':
+  '@nuxt/nitro-server@4.4.2(200bfe6ff4edff37bbb027c847a207fc)':
     dependencies:
       '@babel/plugin-syntax-typescript': 7.28.6(@babel/core@7.29.0)
       '@nuxt/devalue': 2.0.2
@@ -27702,7 +27597,7 @@ snapshots:
       klona: 2.0.6
       mocked-exports: 0.1.1
       nitropack: 2.13.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(rolldown@1.0.0-rc.4)(xml2js@0.6.2)
-      nuxt: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1))(rollup@4.59.1)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
+      nuxt: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0))(rollup@4.60.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
       nypm: 0.6.5
       ohash: 2.0.11
       pathe: 2.0.3
@@ -27770,10 +27665,10 @@ snapshots:
       rc9: 3.0.0
       std-env: 3.10.0
 
-  '@nuxt/vite-builder@4.4.2(357631f24790c9ef65bf65137ed0d8ab)':
+  '@nuxt/vite-builder@4.4.2(39c3c96f7a53ca9c509cdd9dae98c118)':
     dependencies:
       '@nuxt/kit': 4.4.2(magicast@0.5.2)
-      '@rollup/plugin-replace': 6.0.3(rollup@4.59.1)
+      '@rollup/plugin-replace': 6.0.3(rollup@4.60.0)
       '@vitejs/plugin-vue': 6.0.5(rolldown-vite@7.3.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.25(typescript@5.9.3))
       '@vitejs/plugin-vue-jsx': 5.1.5(rolldown-vite@7.3.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.25(typescript@5.9.3))
       autoprefixer: 10.4.27(postcss@8.5.8)
@@ -27788,7 +27683,7 @@ snapshots:
       magic-string: 0.30.21
       mlly: 1.8.2
       mocked-exports: 0.1.1
-      nuxt: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1))(rollup@4.59.1)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
+      nuxt: 4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0))(rollup@4.60.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3)
       nypm: 0.6.5
       pathe: 2.0.3
       pkg-types: 2.3.0
@@ -27806,7 +27701,7 @@ snapshots:
       '@babel/plugin-proposal-decorators': 7.29.0(@babel/core@7.29.0)
       '@babel/plugin-syntax-jsx': 7.28.6(@babel/core@7.29.0)
       rolldown: 1.0.0-rc.4
-      rollup-plugin-visualizer: 7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1)
+      rollup-plugin-visualizer: 7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0)
     transitivePeerDependencies:
       - '@biomejs/biome'
       - '@types/node'
@@ -29502,13 +29397,13 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.4': {}
 
-  '@rollup/plugin-alias@6.0.0(rollup@4.59.1)':
+  '@rollup/plugin-alias@6.0.0(rollup@4.60.0)':
     optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
-  '@rollup/plugin-commonjs@29.0.2(rollup@4.59.1)':
+  '@rollup/plugin-commonjs@29.0.2(rollup@4.60.0)':
     dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.0)
       commondir: 1.0.1
       estree-walker: 2.0.2
       fdir: 6.5.0(picomatch@4.0.3)
@@ -29516,15 +29411,7 @@ snapshots:
       magic-string: 0.30.21
       picomatch: 4.0.3
     optionalDependencies:
-      rollup: 4.59.1
-
-  '@rollup/plugin-inject@5.0.5(rollup@4.59.1)':
-    dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
-      estree-walker: 2.0.2
-      magic-string: 0.30.21
-    optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
   '@rollup/plugin-inject@5.0.5(rollup@4.60.0)':
     dependencies:
@@ -29534,44 +29421,36 @@ snapshots:
     optionalDependencies:
       rollup: 4.60.0
 
-  '@rollup/plugin-json@6.1.0(rollup@4.59.1)':
+  '@rollup/plugin-json@6.1.0(rollup@4.60.0)':
     dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.0)
     optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
-  '@rollup/plugin-node-resolve@16.0.3(rollup@4.59.1)':
+  '@rollup/plugin-node-resolve@16.0.3(rollup@4.60.0)':
     dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.0)
       '@types/resolve': 1.20.2
       deepmerge: 4.3.1
       is-module: 1.0.0
       resolve: 1.22.11
     optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
-  '@rollup/plugin-replace@6.0.3(rollup@4.59.1)':
+  '@rollup/plugin-replace@6.0.3(rollup@4.60.0)':
     dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.0)
       magic-string: 0.30.21
     optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
-  '@rollup/plugin-terser@1.0.0(rollup@4.59.1)':
+  '@rollup/plugin-terser@1.0.0(rollup@4.60.0)':
     dependencies:
       serialize-javascript: 7.0.4
       smob: 1.6.1
       terser: 5.46.1
     optionalDependencies:
-      rollup: 4.59.1
-
-  '@rollup/pluginutils@5.3.0(rollup@4.59.1)':
-    dependencies:
-      '@types/estree': 1.0.8
-      estree-walker: 2.0.2
-      picomatch: 4.0.3
-    optionalDependencies:
-      rollup: 4.59.1
+      rollup: 4.60.0
 
   '@rollup/pluginutils@5.3.0(rollup@4.60.0)':
     dependencies:
@@ -31321,7 +31200,6 @@ snapshots:
   '@types/node@25.5.0':
     dependencies:
       undici-types: 7.18.2
-    optional: true
 
   '@types/normalize-package-data@2.4.4': {}
 
@@ -31843,10 +31721,10 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@vercel/nft@1.4.0(rollup@4.59.1)':
+  '@vercel/nft@1.4.0(rollup@4.60.0)':
     dependencies:
       '@mapbox/node-pre-gyp': 2.0.3
-      '@rollup/pluginutils': 5.3.0(rollup@4.59.1)
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.0)
       acorn: 8.16.0
       acorn-import-attributes: 1.9.5(acorn@8.16.0)
       async-sema: 3.1.1
@@ -36286,7 +36164,7 @@ snapshots:
     dependencies:
       magic-string: 0.30.21
       mlly: 1.8.2
-      rollup: 4.59.1
+      rollup: 4.60.0
 
   flat-cache@3.2.0:
     dependencies:
@@ -37673,12 +37551,12 @@ snapshots:
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
 
-  inquirer@12.3.0(@types/node@22.19.2):
+  inquirer@12.3.0(@types/node@25.5.0):
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/prompts': 7.10.1(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      '@types/node': 22.19.2
+      '@inquirer/core': 10.3.2(@types/node@25.5.0)
+      '@inquirer/prompts': 7.10.1(@types/node@25.5.0)
+      '@inquirer/type': 3.0.10(@types/node@25.5.0)
+      '@types/node': 25.5.0
       ansi-escapes: 4.3.2
       mute-stream: 2.0.0
       run-async: 3.0.0
@@ -39964,9 +39842,9 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
-  mintlify@4.2.446(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3):
+  mintlify@4.2.446(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@25.5.0)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3):
     dependencies:
-      '@mintlify/cli': 4.0.1049(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+      '@mintlify/cli': 4.0.1049(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@25.5.0)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
     transitivePeerDependencies:
       - '@radix-ui/react-popover'
       - '@types/node'
@@ -40002,13 +39880,6 @@ snapshots:
   mkdirp-classic@0.5.3: {}
 
   mkdirp@1.0.4: {}
-
-  mlly@1.8.0:
-    dependencies:
-      acorn: 8.16.0
-      pathe: 2.0.3
-      pkg-types: 1.3.1
-      ufo: 1.6.3
 
   mlly@1.8.2:
     dependencies:
@@ -40293,14 +40164,14 @@ snapshots:
   nitropack@2.13.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(rolldown@1.0.0-rc.4)(xml2js@0.6.2):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.4.2
-      '@rollup/plugin-alias': 6.0.0(rollup@4.59.1)
-      '@rollup/plugin-commonjs': 29.0.2(rollup@4.59.1)
-      '@rollup/plugin-inject': 5.0.5(rollup@4.59.1)
-      '@rollup/plugin-json': 6.1.0(rollup@4.59.1)
-      '@rollup/plugin-node-resolve': 16.0.3(rollup@4.59.1)
-      '@rollup/plugin-replace': 6.0.3(rollup@4.59.1)
-      '@rollup/plugin-terser': 1.0.0(rollup@4.59.1)
-      '@vercel/nft': 1.4.0(rollup@4.59.1)
+      '@rollup/plugin-alias': 6.0.0(rollup@4.60.0)
+      '@rollup/plugin-commonjs': 29.0.2(rollup@4.60.0)
+      '@rollup/plugin-inject': 5.0.5(rollup@4.60.0)
+      '@rollup/plugin-json': 6.1.0(rollup@4.60.0)
+      '@rollup/plugin-node-resolve': 16.0.3(rollup@4.60.0)
+      '@rollup/plugin-replace': 6.0.3(rollup@4.60.0)
+      '@rollup/plugin-terser': 1.0.0(rollup@4.60.0)
+      '@vercel/nft': 1.4.0(rollup@4.60.0)
       archiver: 7.0.1
       c12: 3.3.3(magicast@0.5.2)
       chokidar: 5.0.0
@@ -40342,8 +40213,8 @@ snapshots:
       pkg-types: 2.3.0
       pretty-bytes: 7.1.0
       radix3: 1.1.2
-      rollup: 4.59.1
-      rollup-plugin-visualizer: 7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1)
+      rollup: 4.60.0
+      rollup-plugin-visualizer: 7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0)
       scule: 1.3.0
       semver: 7.7.4
       serve-placeholder: 2.0.2
@@ -40647,16 +40518,16 @@ snapshots:
     optionalDependencies:
       chokidar: 5.0.0
 
-  nuxt@4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1))(rollup@4.59.1)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3):
+  nuxt@4.4.2(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@babel/core@7.29.0)(@babel/plugin-proposal-decorators@7.29.0(@babel/core@7.29.0))(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@parcel/watcher@2.5.6)(@types/node@25.5.0)(@vue/compiler-sfc@3.5.25)(better-sqlite3@12.8.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.8.0)(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0)))(drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(better-sqlite3@12.8.0)(bun-types@1.3.11)(pg@8.20.0))(esbuild@0.27.4)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.10.1)(less@4.4.2)(magicast@0.5.2)(meow@13.2.0)(optionator@0.9.4)(rolldown@1.0.0-rc.4)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0))(rollup@4.60.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(xml2js@0.6.2)(yaml@2.8.3):
     dependencies:
       '@dxup/nuxt': 0.4.0(magicast@0.5.2)(typescript@5.9.3)
       '@nuxt/cli': 3.34.0(@nuxt/schema@4.4.2)(cac@6.7.14)(magicast@0.5.2)
       '@nuxt/devtools': 3.2.4(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(less@4.4.2)(lightningcss@1.32.0)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.25(typescript@5.9.3))
       '@nuxt/kit': 4.4.2(magicast@0.5.2)
-      '@nuxt/nitro-server': 4.4.2(01179a40a3d882e944a1f2b391293830)
+      '@nuxt/nitro-server': 4.4.2(200bfe6ff4edff37bbb027c847a207fc)
       '@nuxt/schema': 4.4.2
       '@nuxt/telemetry': 2.7.0(@nuxt/kit@4.4.2(magicast@0.5.2))
-      '@nuxt/vite-builder': 4.4.2(357631f24790c9ef65bf65137ed0d8ab)
+      '@nuxt/vite-builder': 4.4.2(39c3c96f7a53ca9c509cdd9dae98c118)
       '@unhead/vue': 2.1.12(vue@3.5.25(typescript@5.9.3))
       '@vue/shared': 3.5.25
       c12: 3.3.3(magicast@0.5.2)
@@ -41730,7 +41601,7 @@ snapshots:
   pkg-types@1.3.1:
     dependencies:
       confbox: 0.1.8
-      mlly: 1.8.0
+      mlly: 1.8.2
       pathe: 2.0.3
 
   pkg-types@2.3.0:
@@ -41851,13 +41722,13 @@ snapshots:
       camelcase-css: 2.0.1
       postcss: 8.5.8
 
-  postcss-load-config@4.0.2(postcss@8.5.8)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3)):
+  postcss-load-config@4.0.2(postcss@8.5.8)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3)):
     dependencies:
       lilconfig: 3.1.3
       yaml: 2.8.3
     optionalDependencies:
       postcss: 8.5.8
-      ts-node: 10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3)
+      ts-node: 10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3)
 
   postcss-load-config@6.0.1(jiti@1.21.7)(postcss@8.5.6)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
@@ -43557,7 +43428,7 @@ snapshots:
     optionalDependencies:
       rollup: 4.60.0
 
-  rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.59.1):
+  rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.4)(rollup@4.60.0):
     dependencies:
       open: 11.0.0
       picomatch: 4.0.3
@@ -43565,7 +43436,7 @@ snapshots:
       yargs: 18.0.0
     optionalDependencies:
       rolldown: 1.0.0-rc.4
-      rollup: 4.59.1
+      rollup: 4.60.0
 
   rollup@4.59.1:
     dependencies:
@@ -44828,7 +44699,7 @@ snapshots:
       - tsx
       - yaml
 
-  tailwindcss@3.4.4(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3)):
+  tailwindcss@3.4.4(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3)):
     dependencies:
       '@alloc/quick-lru': 5.2.0
       arg: 5.0.2
@@ -44847,7 +44718,7 @@ snapshots:
       postcss: 8.5.8
       postcss-import: 15.1.0(postcss@8.5.8)
       postcss-js: 4.1.0(postcss@8.5.8)
-      postcss-load-config: 4.0.2(postcss@8.5.8)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3))
+      postcss-load-config: 4.0.2(postcss@8.5.8)(ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3))
       postcss-nested: 6.2.0(postcss@8.5.8)
       postcss-selector-parser: 6.1.2
       resolve: 1.22.11
@@ -45186,14 +45057,14 @@ snapshots:
       '@swc/core': 1.15.18
     optional: true
 
-  ts-node@10.9.2(@swc/core@1.15.18)(@types/node@22.19.2)(typescript@5.9.3):
+  ts-node@10.9.2(@swc/core@1.15.18)(@types/node@25.5.0)(typescript@5.9.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 22.19.2
+      '@types/node': 25.5.0
       acorn: 8.16.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -45231,7 +45102,7 @@ snapshots:
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(yaml@2.8.3)
       resolve-from: 5.0.0
-      rollup: 4.59.1
+      rollup: 4.60.0
       source-map: 0.7.6
       sucrase: 3.35.1
       tinyexec: 0.3.2
@@ -45239,6 +45110,36 @@ snapshots:
       tree-kill: 1.2.2
     optionalDependencies:
       '@microsoft/api-extractor': 7.56.1(@types/node@22.19.2)
+      '@swc/core': 1.15.18
+      postcss: 8.5.8
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - jiti
+      - supports-color
+      - tsx
+      - yaml
+
+  tsup@8.5.1(@microsoft/api-extractor@7.56.1(@types/node@25.5.0))(@swc/core@1.15.18)(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3):
+    dependencies:
+      bundle-require: 5.1.0(esbuild@0.27.4)
+      cac: 6.7.14
+      chokidar: 4.0.3
+      consola: 3.4.2
+      debug: 4.4.3(supports-color@5.5.0)
+      esbuild: 0.27.4
+      fix-dts-default-cjs-exports: 1.0.1
+      joycon: 3.1.1
+      picocolors: 1.1.1
+      postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(yaml@2.8.3)
+      resolve-from: 5.0.0
+      rollup: 4.60.0
+      source-map: 0.7.6
+      sucrase: 3.35.1
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.15
+      tree-kill: 1.2.2
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.56.1(@types/node@25.5.0)
       '@swc/core': 1.15.18
       postcss: 8.5.8
       typescript: 5.9.3
@@ -45474,8 +45375,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici-types@7.18.2:
-    optional: true
+  undici-types@7.18.2: {}
 
   undici@7.20.0: {}
 

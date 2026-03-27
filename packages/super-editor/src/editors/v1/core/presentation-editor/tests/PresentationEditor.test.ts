@@ -27,6 +27,7 @@ const {
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
+  mockResolveLayout,
   mockFlowBlockCacheInstances,
   MockFlowBlockCache,
 } = vi.hoisted(() => {
@@ -139,6 +140,7 @@ const {
       setVirtualizationPins: vi.fn(),
       setProviders: vi.fn(),
       setData: vi.fn(),
+      setResolvedLayout: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
@@ -163,6 +165,7 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
+    mockResolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
     mockFlowBlockCacheInstances,
     MockFlowBlockCache,
   };
@@ -318,6 +321,10 @@ vi.mock('@superdoc/painter-dom', () => ({
 // Mock measuring-dom
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: mockResolveLayout,
 }));
 
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({

@@ -1,4 +1,17 @@
 /**
+ * ===================================================================
+ * COMPATIBILITY ONLY — DO NOT USE FOR NEW CODE
+ * ===================================================================
+ *
+ * The production implementation of DOM pointer mapping now lives in:
+ *   packages/super-editor/src/editors/v1/dom-observer/DomPointerMapping.ts
+ *
+ * This file is retained only for backward compatibility with existing
+ * layout-bridge consumers. It will be removed in a later cleanup PR.
+ *
+ * Do NOT import from this file in super-editor production code.
+ * ===================================================================
+ *
  * DOM-based click-to-position mapping utilities.
  *
  * This module provides pixel-perfect click-to-position mapping by reading actual
@@ -8,6 +21,7 @@
  * after document operations like paragraph joins.
  *
  * @module dom-mapping
+ * @deprecated Use DomPointerMapping from super-editor/dom-observer instead.
  */
 
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
@@ -30,6 +44,43 @@ const CLASS_NAMES = {
   line: DOM_CLASS_NAMES.LINE,
   tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
 } as const;
+
+type ElementsFromPointDocument = Document & {
+  elementsFromPoint?(x: number, y: number): Element[];
+};
+
+type CaretAwareDocument = ElementsFromPointDocument & {
+  caretPositionFromPoint?(x: number, y: number): { offsetNode: Node; offset: number } | null;
+  caretRangeFromPoint?(x: number, y: number): Range | null;
+};
+
+function safeElementsFromPoint(doc: ElementsFromPointDocument, x: number, y: number): Element[] {
+  if (typeof doc.elementsFromPoint !== 'function') {
+    return [];
+  }
+
+  try {
+    return doc.elementsFromPoint(x, y) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function hasElementsFromPoint(doc: ElementsFromPointDocument): boolean {
+  return typeof doc.elementsFromPoint === 'function';
+}
+
+function getContainerDocument(domContainer: HTMLElement): CaretAwareDocument | null {
+  return (domContainer.ownerDocument as CaretAwareDocument | null) ?? null;
+}
+
+function getNodeDocument(node: Node): CaretAwareDocument | null {
+  return (node.ownerDocument as CaretAwareDocument | null) ?? null;
+}
+
+function createRangeForNode(node: Node): Range | null {
+  return getNodeDocument(node)?.createRange() ?? null;
+}
 
 function isRtlLine(lineEl: HTMLElement): boolean {
   return getComputedStyle(lineEl).direction === 'rtl';
@@ -107,21 +158,11 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
     viewCoords: { viewX, viewY },
   });
 
-  // Use elementsFromPoint to find all elements under the click
-  // Note: Must call directly on document to maintain proper 'this' context
-  interface DocumentWithElementsFromPoint {
-    elementsFromPoint?(x: number, y: number): Element[];
-  }
-
   let hitChain: Element[] = [];
-  const doc = document as Document & DocumentWithElementsFromPoint;
-  const hasElementsFromPoint = typeof doc.elementsFromPoint === 'function';
-  if (hasElementsFromPoint) {
-    try {
-      hitChain = doc.elementsFromPoint(viewX, viewY) ?? [];
-    } catch {
-      // elementsFromPoint failed, hitChain remains empty
-    }
+  const doc = getContainerDocument(domContainer);
+  const supportsElementsFromPoint = doc ? hasElementsFromPoint(doc) : false;
+  if (doc) {
+    hitChain = safeElementsFromPoint(doc, viewX, viewY);
   }
 
   if (!Array.isArray(hitChain)) {
@@ -171,7 +212,7 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
   const fragmentEl = hitChain.find((el) => el.classList?.contains?.(CLASS_NAMES.fragment)) as HTMLElement | null;
 
   if (!fragmentEl) {
-    if (hasElementsFromPoint) {
+    if (supportsElementsFromPoint) {
       log('No fragment found in hit chain; returning null to allow geometry mapping');
       return null;
     }
@@ -249,23 +290,12 @@ export function findPageElement(domContainer: HTMLElement, clientX: number, clie
   }
 
   // First try elementsFromPoint to find the page directly
-  interface DocumentWithElementsFromPoint {
-    elementsFromPoint?(x: number, y: number): Element[];
-  }
-
-  const doc = document as Document & DocumentWithElementsFromPoint;
-  if (typeof doc.elementsFromPoint === 'function') {
-    try {
-      const hitChain = doc.elementsFromPoint(clientX, clientY);
-      if (Array.isArray(hitChain)) {
-        const pageEl = hitChain.find((el) => el.classList?.contains?.(CLASS_NAMES.page)) as HTMLElement | null;
-
-        if (pageEl) {
-          return pageEl;
-        }
-      }
-    } catch {
-      // elementsFromPoint may fail in some environments, fall through to fallback
+  const doc = getContainerDocument(domContainer);
+  if (doc) {
+    const hitChain = safeElementsFromPoint(doc, clientX, clientY);
+    const pageEl = hitChain.find((el) => el.classList?.contains?.(CLASS_NAMES.page)) as HTMLElement | null;
+    if (pageEl) {
+      return pageEl;
     }
   }
 
@@ -668,7 +698,10 @@ function findCharIndexAtX(textNode: Text, targetX: number, rtl: boolean): number
   // For LTR the boundary edge is the right side of Range(0, i); for RTL it is the left side.
   // Using the actual rect edges avoids subpixel alignment issues with the container.
   log('findCharIndexAtX: falling back to range binary search, rtl =', rtl);
-  const range = document.createRange();
+  const range = createRangeForNode(textNode);
+  if (!range) {
+    return 0;
+  }
 
   const measureX = (i: number): number => {
     if (i <= 0) {
@@ -714,10 +747,12 @@ function findCharIndexAtX(textNode: Text, targetX: number, rtl: boolean): number
  * reports a node other than the expected text node.
  */
 function caretOffsetFromPoint(x: number, y: number, expectedNode: Text): number | null {
+  const doc = getNodeDocument(expectedNode);
+  if (!doc) {
+    return null;
+  }
+
   // Firefox / spec-track: caretPositionFromPoint
-  const doc = document as Document & {
-    caretPositionFromPoint?(x: number, y: number): { offsetNode: Node; offset: number } | null;
-  };
   if (typeof doc.caretPositionFromPoint === 'function') {
     const cp = doc.caretPositionFromPoint(x, y);
     if (cp && cp.offsetNode === expectedNode) {

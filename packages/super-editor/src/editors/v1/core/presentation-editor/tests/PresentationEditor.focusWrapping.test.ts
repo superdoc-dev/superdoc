@@ -75,6 +75,7 @@ const {
       setLayoutMode: vi.fn(),
       setProviders: vi.fn(),
       setData: vi.fn(),
+      setResolvedLayout: vi.fn(),
     })),
     mockEditorConverterStore: converterStore,
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
@@ -212,6 +213,10 @@ vi.mock('@superdoc/painter-dom', () => ({
 // Mock EditorOverlayManager
 vi.mock('../../header-footer/EditorOverlayManager.js', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
 describe('PresentationEditor - Focus Wrapping (#wrapHiddenEditorFocus)', () => {

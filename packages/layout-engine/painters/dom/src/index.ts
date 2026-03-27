@@ -7,6 +7,7 @@ import type {
   PainterDOM,
   PageMargins,
   PositionMapping,
+  ResolvedLayout,
 } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
@@ -135,6 +136,7 @@ export const createDomPainter = (
   onScroll?: () => void;
   setZoom?: (zoom: number) => void;
   setScrollContainer?: (el: HTMLElement | null) => void;
+  setResolvedLayout?: (resolvedLayout: ResolvedLayout | null) => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
@@ -188,6 +190,9 @@ export const createDomPainter = (
     // Set the external scroll container for correct scrollY calculation
     setScrollContainer(el: HTMLElement | null) {
       painter.setScrollContainer(el);
+    },
+    setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
+      painter.setResolvedLayout(resolvedLayout);
     },
   };
 };

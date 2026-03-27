@@ -121,6 +121,7 @@ vi.mock('@superdoc/painter-dom', () => ({
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
     setData: vi.fn(),
+    setResolvedLayout: vi.fn(),
   })),
   DOM_CLASS_NAMES: {
     PAGE: 'superdoc-page',
@@ -181,6 +182,10 @@ vi.mock('y-prosemirror', () => ({
   },
   absolutePositionToRelativePosition: mockAbsolutePositionToRelativePosition,
   relativePositionToAbsolutePosition: mockRelativePositionToAbsolutePosition,
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
 /**

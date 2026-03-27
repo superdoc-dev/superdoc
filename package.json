@@ -24,7 +24,7 @@
     "test:behavior:html": "pnpm --filter @superdoc-testing/behavior test:html",
     "type-check": "tsc -b tsconfig.references.json",
     "type-check:force": "tsc -b --force tsconfig.references.json",
-    "rebuild:types": "pnpm run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/layout-bridge build",
+    "rebuild:types": "pnpm run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/layout-resolved --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/layout-bridge build",
     "validate:commands": "node scripts/validate-command-types.mjs",
     "unzip": "bash packages/super-editor/src/editors/v1/tests/helpers/unzip.sh",
     "dev": "pnpm --prefix packages/superdoc run dev",

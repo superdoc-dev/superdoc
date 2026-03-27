@@ -97,6 +97,7 @@ vi.mock('@superdoc/painter-dom', () => ({
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
     setData: vi.fn(),
+    setResolvedLayout: vi.fn(),
   })),
   DOM_CLASS_NAMES: { PAGE: '', FRAGMENT: '', LINE: '', INLINE_SDT_WRAPPER: '', BLOCK_SDT: '', DOCUMENT_SECTION: '' },
   applyProofingDecorations: vi.fn(() => false),
@@ -104,6 +105,10 @@ vi.mock('@superdoc/painter-dom', () => ({
 }));
 
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 100, height: 100 })) }));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+}));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
   HeaderFooterEditorManager: vi.fn(() => ({

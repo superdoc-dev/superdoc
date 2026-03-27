@@ -83,6 +83,7 @@ vi.mock('@superdoc/painter-dom', () => ({
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
     setData: vi.fn(),
+    setResolvedLayout: vi.fn(),
   })),
   DOM_CLASS_NAMES: { PAGE: '', FRAGMENT: '', LINE: '', INLINE_SDT_WRAPPER: '', BLOCK_SDT: '', DOCUMENT_SECTION: '' },
   applyProofingDecorations: vi.fn(() => false),
@@ -123,6 +124,10 @@ vi.mock('y-prosemirror', () => ({
   ySyncPluginKey: { getState: vi.fn(() => ({ type: {}, binding: { mapping: new Map() } })) },
   absolutePositionToRelativePosition: vi.fn((pos) => ({ type: 'relative', pos })),
   relativePositionToAbsolutePosition: vi.fn((relPos) => relPos?.pos ?? null),
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
 describe('SD-1313: toFlowBlocks receives media from storage.image.media', () => {

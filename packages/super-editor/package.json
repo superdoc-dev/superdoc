@@ -96,6 +96,7 @@
     "@superdoc/contracts": "workspace:*",
     "@superdoc/document-api": "workspace:*",
     "@superdoc/layout-bridge": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",
     "@superdoc/painter-dom": "workspace:*",
     "@superdoc/pm-adapter": "workspace:*",

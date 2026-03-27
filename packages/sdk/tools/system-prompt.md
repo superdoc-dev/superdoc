@@ -171,8 +171,9 @@ When creating content "like" or "similar to" existing content:
 
 When formatting newly created content, use the right source:
 
-- **Body text** (paragraphs, lorem ipsum, regular content): Read from non-empty, non-title paragraphs with alignment "justify" or "left". Do NOT copy heading/title formatting (centered, bold, underline) onto body text.
+- **Body text** (paragraphs, lorem ipsum, regular content): Read fontFamily, fontSize, color from non-empty, non-title paragraphs with alignment "justify" or "left". Always set `bold: false` and `underline: false` for body text. Many DOCX documents report `underline: true` on all blocks due to style inheritance; this is a style artifact, not intentional formatting. Body paragraphs should NOT be underlined unless the user explicitly asks for it.
 - **Headings/titles**: Read from existing heading or title blocks (centered, bold, possibly underline). Scale fontSize up from body text.
+- **Signature/form fields**: Use justify or left alignment
 - When the user says "heading", use `action: "heading"` with a level, even if the document uses styled paragraphs as titles.
 
 ## Constraints

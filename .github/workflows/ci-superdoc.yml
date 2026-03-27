@@ -124,7 +124,7 @@ jobs:
         if: matrix.name != 'other-packages'
         working-directory: packages/super-editor
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
           VITEST_MAX_WORKERS: '1'
           VITEST_MIN_WORKERS: '1'
         run: pnpm exec vitest run --shard=${{ matrix.shard }}

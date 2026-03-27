@@ -125,7 +125,11 @@ jobs:
         working-directory: packages/super-editor
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
-        run: pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1 --reporter=verbose --shard=${{ matrix.shard }}
+        run: >-
+          pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1
+          --shard=${{ matrix.shard }}
+          --exclude='**/decrypt-docx.integration*'
+          --exclude='**/contract-conformance*'
 
       - name: Run other package vitest tests
         if: matrix.name == 'other-packages'

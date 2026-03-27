@@ -79,13 +79,21 @@ jobs:
       matrix:
         include:
           - name: super-editor-1
-            shard: '1/4'
+            shard: '1/8'
           - name: super-editor-2
-            shard: '2/4'
+            shard: '2/8'
           - name: super-editor-3
-            shard: '3/4'
+            shard: '3/8'
           - name: super-editor-4
-            shard: '4/4'
+            shard: '4/8'
+          - name: super-editor-5
+            shard: '5/8'
+          - name: super-editor-6
+            shard: '6/8'
+          - name: super-editor-7
+            shard: '7/8'
+          - name: super-editor-8
+            shard: '8/8'
           - name: other-packages
             shard: ''
     steps:

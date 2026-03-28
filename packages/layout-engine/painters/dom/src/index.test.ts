@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
+import { DomPainter } from './renderer.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
@@ -1251,6 +1252,109 @@ describe('DomPainter', () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('renders an error placeholder when table-cell line rendering throws', () => {
+    const renderLineError = new Error('renderLine forced error');
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-err',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'cell-para-err',
+                  runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 10 }],
+                },
+              ],
+              attrs: {},
+            },
+          ],
+        },
+      ],
+    };
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          height: 24,
+          cells: [
+            {
+              width: 120,
+              height: 24,
+              gridColumnStart: 0,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 9,
+                      width: 60,
+                      ascent: 10,
+                      descent: 4,
+                      lineHeight: 16,
+                    },
+                  ],
+                  totalHeight: 16,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidths: [120],
+      totalWidth: 120,
+      totalHeight: 24,
+    };
+    const tableLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'table-err',
+              fromRow: 0,
+              toRow: 1,
+              x: 0,
+              y: 0,
+              width: 120,
+              height: 24,
+            },
+          ],
+        },
+      ],
+    };
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      // Intentionally empty - suppress expected error logging during this regression test.
+    });
+    const renderLineSpy = vi.spyOn(DomPainter.prototype as any, 'renderLine').mockImplementation(() => {
+      throw renderLineError;
+    });
+
+    try {
+      const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+      expect(() => painter.paint(tableLayout, mount)).not.toThrow();
+
+      const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
+      expect(placeholder).toBeTruthy();
+      expect(placeholder?.textContent).toContain('[Render Error: table-err]');
+      expect(placeholder?.title).toBe('renderLine forced error');
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    } finally {
+      renderLineSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('applies negative word-spacing for compressed justify lines', () => {

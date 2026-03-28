@@ -82,8 +82,6 @@ vi.mock('@superdoc/painter-dom', () => ({
     setZoom: vi.fn(),
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
-    setData: vi.fn(),
-    setResolvedLayout: vi.fn(),
   })),
   DOM_CLASS_NAMES: { PAGE: '', FRAGMENT: '', LINE: '', INLINE_SDT_WRAPPER: '', BLOCK_SDT: '', DOCUMENT_SECTION: '' },
   applyProofingDecorations: vi.fn(() => false),

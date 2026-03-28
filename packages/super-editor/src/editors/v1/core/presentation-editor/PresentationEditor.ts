@@ -5,7 +5,7 @@ import { DecorationBridge } from './dom/DecorationBridge.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { applyProofingDecorations, clearProofingDecorations, createDomPainter } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
-import type { ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
+import type { DomPainterInput, ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
 import type { VisibilitySource } from './proofing/visibility-source.js';
 import {
@@ -4277,9 +4277,8 @@ export class PresentationEditor extends EventEmitter {
         this.#updateDecorationProviders(layout);
       }
 
-      const painter = this.#ensurePainter(blocksForLayout, measures);
-      painter.setResolvedLayout?.(resolvedLayout);
-      if (!isSemanticFlow && typeof painter.setProviders === 'function') {
+      const painter = this.#ensurePainter();
+      if (!isSemanticFlow) {
         painter.setProviders(
           this.#headerFooterSession?.headerDecorationProvider,
           this.#headerFooterSession?.footerDecorationProvider,
@@ -4327,18 +4326,6 @@ export class PresentationEditor extends EventEmitter {
         footerMeasures.push(...extraMeasures);
       }
 
-      // Pass all blocks (main document + headers + footers + extras) to the painter
-      const painterSetDataStart = perfNow();
-      painter.setData?.(
-        blocksForLayout,
-        measures,
-        headerBlocks.length > 0 ? headerBlocks : undefined,
-        headerMeasures.length > 0 ? headerMeasures : undefined,
-        footerBlocks.length > 0 ? footerBlocks : undefined,
-        footerMeasures.length > 0 ? footerMeasures : undefined,
-      );
-      const painterSetDataEnd = perfNow();
-      perfLog(`[Perf] painter.setData: ${(painterSetDataEnd - painterSetDataStart).toFixed(2)}ms`);
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
@@ -4346,7 +4333,17 @@ export class PresentationEditor extends EventEmitter {
       const mapping = this.#pendingMapping;
       this.#pendingMapping = null;
       const painterPaintStart = perfNow();
-      painter.paint(layout, this.#painterHost, mapping ?? undefined);
+      const paintInput: DomPainterInput = {
+        resolvedLayout,
+        sourceLayout: layout,
+        blocks: blocksForLayout,
+        measures,
+        headerBlocks: headerBlocks.length > 0 ? headerBlocks : undefined,
+        headerMeasures: headerMeasures.length > 0 ? headerMeasures : undefined,
+        footerBlocks: footerBlocks.length > 0 ? footerBlocks : undefined,
+        footerMeasures: footerMeasures.length > 0 ? footerMeasures : undefined,
+      };
+      painter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
@@ -4406,7 +4403,7 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
-  #ensurePainter(blocks: FlowBlock[], measures: Measure[]) {
+  #ensurePainter() {
     if (!this.#domPainter) {
       // Ensure the virtualization gap matches the effective page gap so that
       // DomPainter's spacer/offset math stays consistent with #applyZoom() height calculations.
@@ -4417,8 +4414,6 @@ export class PresentationEditor extends EventEmitter {
         : virtualization;
 
       this.#domPainter = createDomPainter({
-        blocks,
-        measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
         flowMode: this.#layoutOptions.flowMode ?? 'paginated',
         virtualization: normalizedVirtualization,

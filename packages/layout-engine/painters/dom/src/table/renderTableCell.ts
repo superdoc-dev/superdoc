@@ -10,7 +10,6 @@ import type {
   ParagraphIndent,
   ParagraphMeasure,
   PartialRowInfo,
-  RenderedLineInfo,
   SdtMetadata,
   TableBlock,
   TableFragment,
@@ -18,13 +17,10 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx  } from '@superdoc/contracts';
+import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
-import type { FragmentRenderContext } from '../renderer.js';
-import {
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-} from '../features/paragraph-borders/index.js';
+import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
+import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {

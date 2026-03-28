@@ -120,8 +120,6 @@ vi.mock('@superdoc/painter-dom', () => ({
     setZoom: vi.fn(),
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
-    setData: vi.fn(),
-    setResolvedLayout: vi.fn(),
   })),
   DOM_CLASS_NAMES: {
     PAGE: 'superdoc-page',

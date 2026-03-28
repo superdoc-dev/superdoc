@@ -30,7 +30,6 @@ import type {
   ParagraphBorder,
   ParagraphMeasure,
   PositionedDrawingGeometry,
-  PositionMapping,
   Run,
   SdtMetadata,
   ShapeGroupChild,
@@ -223,6 +222,47 @@ function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 // FlowMode is re-exported from @superdoc/contracts
 export type { FlowMode } from '@superdoc/contracts';
+
+/**
+ * Interface for position mapping from ProseMirror transactions.
+ * Used to efficiently update DOM position attributes without full re-render.
+ */
+export interface PositionMapping {
+  /** Transform a position from old to new document coordinates */
+  map(pos: number, bias?: number): number;
+  /** Array of step maps - length indicates transaction complexity */
+  readonly maps: readonly unknown[];
+}
+
+export type RenderedLineInfo = {
+  el: HTMLElement;
+  top: number;
+  height: number;
+};
+
+/**
+ * Input to `DomPainter.paint()`.
+ *
+ * `resolvedLayout` is the canonical resolved data. The remaining fields are
+ * bridge data carried for internal rendering of non-paragraph fragments
+ * (tables, images, drawings) that have not yet been migrated to resolved items.
+ */
+export type DomPainterInput = {
+  resolvedLayout: ResolvedLayout;
+  /** Raw Layout for internal fragment access (bridge — will be removed once all fragment types are resolved). */
+  sourceLayout: Layout;
+  blocks: FlowBlock[];
+  measures: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
+};
+
+type OptionalBlockMeasurePair = {
+  blocks: FlowBlock[];
+  measures: Measure[];
+};
 
 type PageDecorationPayload = {
   fragments: Fragment[];
@@ -1086,14 +1126,14 @@ export class DomPainter {
   private activeCommentId: string | null = null;
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
-  /** Resolved layout for the next-gen paint pipeline (stored but not yet consumed). */
+  /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
 
-  constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
+  constructor(options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
-    this.blockLookup = this.buildBlockLookup(blocks, measures);
+    this.blockLookup = new Map();
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
 
@@ -1216,15 +1256,6 @@ export class DomPainter {
    */
   public getActiveComment(): string | null {
     return this.activeCommentId;
-  }
-
-  /**
-   * Stores the resolved layout for the next-generation paint pipeline.
-   * When set, the painter sources page dimensions and fragment wrapper positioning
-   * from resolved data, falling back to legacy Layout when null.
-   */
-  public setResolvedLayout(resolvedLayout: ResolvedLayout | null): void {
-    this.resolvedLayout = resolvedLayout;
   }
 
   /** Returns the resolved page for a given index, or null if resolved data is unavailable. */
@@ -1386,79 +1417,47 @@ export class DomPainter {
   }
 
   /**
-   * Updates the painter's block and measure data.
-   *
-   * @param blocks - Main document blocks
-   * @param measures - Measures corresponding to main document blocks
-   * @param headerBlocks - Optional header blocks from header/footer layout results
-   * @param headerMeasures - Optional measures corresponding to header blocks
-   * @param footerBlocks - Optional footer blocks from header/footer layout results
-   * @param footerMeasures - Optional measures corresponding to footer blocks
+   * Builds a new block lookup from the input data, merging header/footer blocks,
+   * and tracks which blocks changed since the last paint cycle.
    */
-  public setData(
-    blocks: FlowBlock[],
-    measures: Measure[],
-    headerBlocks?: FlowBlock[],
-    headerMeasures?: Measure[],
-    footerBlocks?: FlowBlock[],
-    footerMeasures?: Measure[],
-  ): void {
-    // Validate main blocks and measures arrays
-    if (blocks.length !== measures.length) {
+  private normalizeOptionalBlockMeasurePair(
+    label: 'header' | 'footer',
+    blocks: FlowBlock[] | undefined,
+    measures: Measure[] | undefined,
+  ): OptionalBlockMeasurePair | undefined {
+    const hasBlocks = blocks !== undefined;
+    const hasMeasures = measures !== undefined;
+
+    if (hasBlocks !== hasMeasures) {
       throw new Error(
-        `setData: blocks and measures arrays must have the same length. ` +
-          `Got blocks.length=${blocks.length}, measures.length=${measures.length}`,
+        `DomPainter.paint requires ${label}Blocks and ${label}Measures to both be provided or both be omitted`,
       );
     }
 
-    // Validate header blocks and measures
-    const hasHeaderBlocks = headerBlocks !== undefined;
-    const hasHeaderMeasures = headerMeasures !== undefined;
-    if (hasHeaderBlocks !== hasHeaderMeasures) {
-      throw new Error(
-        `setData: headerBlocks and headerMeasures must both be provided or both be omitted. ` +
-          `Got headerBlocks=${hasHeaderBlocks ? 'provided' : 'omitted'}, ` +
-          `headerMeasures=${hasHeaderMeasures ? 'provided' : 'omitted'}`,
-      );
-    }
-    if (hasHeaderBlocks && hasHeaderMeasures && headerBlocks!.length !== headerMeasures!.length) {
-      throw new Error(
-        `setData: headerBlocks and headerMeasures arrays must have the same length. ` +
-          `Got headerBlocks.length=${headerBlocks!.length}, headerMeasures.length=${headerMeasures!.length}`,
-      );
+    if (!hasBlocks || !hasMeasures) {
+      return undefined;
     }
 
-    // Validate footer blocks and measures
-    const hasFooterBlocks = footerBlocks !== undefined;
-    const hasFooterMeasures = footerMeasures !== undefined;
-    if (hasFooterBlocks !== hasFooterMeasures) {
-      throw new Error(
-        `setData: footerBlocks and footerMeasures must both be provided or both be omitted. ` +
-          `Got footerBlocks=${hasFooterBlocks ? 'provided' : 'omitted'}, ` +
-          `footerMeasures=${hasFooterMeasures ? 'provided' : 'omitted'}`,
-      );
-    }
-    if (hasFooterBlocks && hasFooterMeasures && footerBlocks!.length !== footerMeasures!.length) {
-      throw new Error(
-        `setData: footerBlocks and footerMeasures arrays must have the same length. ` +
-          `Got footerBlocks.length=${footerBlocks!.length}, footerMeasures.length=${footerMeasures!.length}`,
-      );
-    }
+    return { blocks, measures };
+  }
+
+  private updateBlockLookup(input: DomPainterInput): void {
+    const { blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
 
     // Build lookup for main document blocks
     const nextLookup = this.buildBlockLookup(blocks, measures);
 
-    // Merge header blocks into the lookup if provided
-    if (headerBlocks && headerMeasures) {
-      const headerLookup = this.buildBlockLookup(headerBlocks, headerMeasures);
+    const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
+    if (normalizedHeader) {
+      const headerLookup = this.buildBlockLookup(normalizedHeader.blocks, normalizedHeader.measures);
       headerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
     }
 
-    // Merge footer blocks into the lookup if provided
-    if (footerBlocks && footerMeasures) {
-      const footerLookup = this.buildBlockLookup(footerBlocks, footerMeasures);
+    const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
+    if (normalizedFooter) {
+      const footerLookup = this.buildBlockLookup(normalizedFooter.blocks, normalizedFooter.measures);
       footerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
@@ -1476,7 +1475,13 @@ export class DomPainter {
     this.changedBlocks = changed;
   }
 
-  public paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void {
+  public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
+    const layout = input.sourceLayout;
+    this.resolvedLayout = input.resolvedLayout;
+
+    // Update block lookup and change tracking (absorbs former setData logic)
+    this.updateBlockLookup(input);
+
     if (!(mount instanceof HTMLElement)) {
       throw new Error('DomPainter.paint requires a valid HTMLElement mount');
     }

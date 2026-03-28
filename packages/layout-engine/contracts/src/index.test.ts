@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cloneColumnLayout, extractHeaderFooterSpace, normalizeColumnLayout, widthsEqual } from './index.js';
-import type { FlowBlock, Layout, PainterDOM, PainterPDF } from './index.js';
+import type { FlowBlock, Layout } from './index.js';
 
 describe('contracts', () => {
   it('accepts a basic FlowBlock structure', () => {
@@ -20,7 +20,7 @@ describe('contracts', () => {
     expect(block.id).toBe('block-1');
   });
 
-  it('describes a minimal layout', async () => {
+  it('describes a minimal layout', () => {
     const layout: Layout = {
       pageSize: { w: 612, h: 792 },
       pages: [
@@ -62,25 +62,8 @@ describe('contracts', () => {
       },
     };
 
-    const domPainter: PainterDOM = {
-      paint(received, mount) {
-        mount.dataset.pageCount = String(received.pages.length);
-      },
-    };
-
-    const pdfPainter: PainterPDF = {
-      async render(received) {
-        expect(received.pages.length).toBeGreaterThan(0);
-        return new Blob([JSON.stringify(received)]);
-      },
-    };
-
-    const mount = document.createElement('div');
-    domPainter.paint(layout, mount);
-    expect(mount.dataset.pageCount).toBe('1');
-
-    const blob = await pdfPainter.render(layout);
-    expect(blob).toBeInstanceOf(Blob);
+    expect(layout.pages.length).toBe(1);
+    expect(layout.pages[0].fragments.length).toBe(1);
   });
 
   it('extracts header/footer spacing from margins', () => {

@@ -137,18 +137,7 @@ jobs:
           NODE_OPTIONS: '--max-old-space-size=4096'
           VITEST_MAX_WORKERS: '1'
           VITEST_MIN_WORKERS: '1'
-        run: >-
-          pnpm exec vitest run
-          --project superdoc
-          --project @superdoc/ai
-          --project @superdoc/collaboration-yjs
-          --project @superdoc/contracts
-          --project @superdoc/layout-bridge
-          --project @superdoc/measuring-dom
-          --project @superdoc/painter-dom
-          --project @superdoc/pm-adapter
-          --project @superdoc/layout-tests
-          --project @superdoc-ext/vscode-ext
+        run: pnpm exec vitest run '--project=!*super-editor*'
 
       - name: Run bun tests
         if: matrix.name == 'other-packages'

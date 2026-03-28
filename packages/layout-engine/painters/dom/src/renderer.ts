@@ -570,25 +570,7 @@ const LIST_MARKER_GAP = 8;
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-import { cssToken } from './css-token.js';
-import type { CssToken } from './css-token.js';
-
-type CommentHighlightToken = CssToken;
-
-const COMMENT_HIGHLIGHT_EXTERNAL = cssToken('--sd-comments-highlight-external', '#B1124B40');
-const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE = cssToken('--sd-comments-highlight-external-active', '#B1124B66');
-const COMMENT_HIGHLIGHT_EXTERNAL_FADED = cssToken('--sd-comments-highlight-external-faded', '#B1124B20');
-const COMMENT_HIGHLIGHT_INTERNAL = cssToken('--sd-comments-highlight-internal', '#07838340');
-const COMMENT_HIGHLIGHT_INTERNAL_ACTIVE = cssToken('--sd-comments-highlight-internal-active', '#07838366');
-const COMMENT_HIGHLIGHT_INTERNAL_FADED = cssToken('--sd-comments-highlight-internal-faded', '#07838320');
-const COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER = cssToken(
-  '--sd-comments-highlight-external-nested-border',
-  '#B1124B99',
-);
-const COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER = cssToken(
-  '--sd-comments-highlight-internal-nested-border',
-  '#07838399',
-);
+// Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
 
 type LinkRenderData = {
   href?: string;
@@ -683,7 +665,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
-const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
+// TRACK_CHANGE_FOCUSED_CLASS moved to CommentHighlightDecorator (super-editor).
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -1233,22 +1215,9 @@ export class DomPainter {
    * When null, all comments show depth-based highlighting.
    */
   public setActiveComment(commentId: string | null): void {
-    if (this.activeCommentId !== commentId) {
-      this.activeCommentId = commentId;
-      // Force re-render of all pages by incrementing layout version
-      // This bypasses the virtualization cache check
-      this.layoutVersion += 1;
-      // Clear page states to force full re-render (activeCommentId affects run rendering)
-      // For virtualized mode: remove existing page elements before clearing state
-      // to prevent duplicate pages in the DOM
-      for (const state of this.pageIndexToState.values()) {
-        state.element.remove();
-      }
-      this.pageIndexToState.clear();
-      this.virtualMountedKey = '';
-      // For non-virtualized mode:
-      this.pageStates = [];
-    }
+    this.activeCommentId = commentId;
+    // Highlight styles are now applied post-paint by the editor-side
+    // CommentHighlightDecorator — no page teardown needed.
   }
 
   /**
@@ -4828,33 +4797,25 @@ export class DomPainter {
     const textRun = run as TextRun;
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
-    const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
-
-    if (commentHighlight.color && hasAnyComment) {
-      const runElement = elem as HTMLElement;
-      const previousBackgroundColor = runElement.style.backgroundColor;
-      runElement.style.backgroundColor = commentHighlight.color.css;
-      // jsdom may drop var() values for inline style properties.
-      // Fall back to concrete color to keep rendering/tests stable.
-      if (!runElement.style.backgroundColor || runElement.style.backgroundColor === previousBackgroundColor) {
-        runElement.style.backgroundColor = commentHighlight.color.fallback;
-      }
-      // Add thin visual indicator for nested comments when outer comment is selected.
-      // Use box-shadow instead of border to avoid affecting text layout.
-      if (commentHighlight.hasNestedComments && commentHighlight.nestedBorderColor) {
-        runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.css}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.css}`;
-        if (!runElement.style.boxShadow) {
-          runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.fallback}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.fallback}`;
-        }
-      } else {
-        runElement.style.boxShadow = '';
-      }
-    }
+    // Comment highlight styles are applied post-paint by CommentHighlightDecorator (super-editor).
+    // The painter only stamps metadata attributes below.
     // We still need to preserve the comment ids
     if (hasAnyComment) {
       elem.dataset.commentIds = commentAnnotations.map((c) => c.commentId).join(',');
       if (commentAnnotations.some((c) => c.internal)) {
         elem.dataset.commentInternal = 'true';
+      }
+      // Per-comment internal flag so the editor-side decorator can pick the right color
+      const internalIds = commentAnnotations.filter((c) => c.internal).map((c) => c.commentId);
+      if (internalIds.length > 0) {
+        elem.dataset.commentInternalIds = internalIds.join(',');
+      }
+      // importedId aliases so the decorator can match by either ID
+      const importedEntries = commentAnnotations
+        .filter((c) => c.importedId && c.importedId !== c.commentId)
+        .map((c) => `${c.importedId}=${c.commentId}`);
+      if (importedEntries.length > 0) {
+        elem.dataset.commentImportedIds = importedEntries.join(',');
       }
       elem.classList.add('superdoc-comment-highlight');
     }
@@ -6210,9 +6171,7 @@ export class DomPainter {
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
     }
-    if (this.activeCommentId && meta.id === this.activeCommentId) {
-      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
-    }
+    // track-change-focused class is applied post-paint by CommentHighlightDecorator (super-editor).
   }
 
   /**
@@ -7332,12 +7291,6 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
 };
 
-interface CommentHighlightResult {
-  color?: CommentHighlightToken;
-  nestedBorderColor?: CommentHighlightToken;
-  hasNestedComments?: boolean;
-}
-
 const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
 
 const readClipPathValue = (value: unknown): string => {
@@ -7359,41 +7312,6 @@ const resolveBlockClipPath = (block: unknown): string => {
   if (!block || typeof block !== 'object') return '';
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
-};
-
-const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
-  const comments = run.comments;
-  if (!comments || comments.length === 0) return {};
-
-  // Helper to match comment by ID or importedId
-  const matchesId = (c: { commentId: string; importedId?: string }, id: string) =>
-    c.commentId === id || c.importedId === id;
-
-  // When a comment is selected, only highlight that comment's range
-  if (activeCommentId != null) {
-    const activeComment = comments.find((c) =>
-      matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
-    );
-    if (activeComment) {
-      const nestedComments = comments.filter(
-        (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
-      );
-      return {
-        color: activeComment.internal ? COMMENT_HIGHLIGHT_INTERNAL_ACTIVE : COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE,
-        nestedBorderColor: activeComment.internal
-          ? COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER
-          : COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER,
-        hasNestedComments: nestedComments.length > 0,
-      };
-    }
-    // Active comment is set but this run does not belong to it - show faded highlight.
-    const fadedPrimary = comments[0];
-    return { color: fadedPrimary.internal ? COMMENT_HIGHLIGHT_INTERNAL_FADED : COMMENT_HIGHLIGHT_EXTERNAL_FADED };
-  }
-
-  // No active comment - show uniform light highlight (like Word/Google Docs)
-  const primary = comments[0];
-  return { color: primary.internal ? COMMENT_HIGHLIGHT_INTERNAL : COMMENT_HIGHLIGHT_EXTERNAL };
 };
 
 /**

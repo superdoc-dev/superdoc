@@ -3290,7 +3290,7 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
   });
 
-  it('applies background highlight for comments on tracked-change text', () => {
+  it('stamps comment metadata on tracked-change text', () => {
     const trackedCommentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'tracked-comment-block',
@@ -3314,17 +3314,15 @@ describe('DomPainter', () => {
     );
 
     const painter = createTestPainter({ blocks: [trackedCommentBlock], measures: [paragraphMeasure] });
-    painter.setActiveComment('comment-1');
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-1');
-    // Comments on tracked change text should have normal background-color highlight
-    expect(span.style.backgroundColor).not.toBe('');
+    // Highlight styles are applied post-paint by CommentHighlightDecorator, not the painter
   });
 
-  it('applies comment highlight even when text has Word highlight formatting (SD-2188)', () => {
+  it('stamps comment metadata alongside Word highlight formatting (SD-2188)', () => {
     const highlightedCommentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'highlight-comment-block',
@@ -3350,74 +3348,10 @@ describe('DomPainter', () => {
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-hl');
-    // Comment highlight should override Word highlight (#ffff00 → yellow)
-    const bg = span.style.backgroundColor;
-    expect(bg).not.toBe('');
-    expect(bg).not.toBe('#ffff00');
-    expect(bg).not.toBe('rgb(255, 255, 0)');
-    expect(bg).not.toBe('yellow');
+    // Painter stamps metadata; CommentHighlightDecorator applies highlight colors post-paint
   });
 
-  it('applies active comment highlight over Word highlight when comment is selected (SD-2188)', () => {
-    const block: FlowBlock = {
-      kind: 'paragraph',
-      id: 'active-hl-block',
-      runs: [
-        {
-          text: 'Active highlighted',
-          fontFamily: 'Arial',
-          fontSize: 16,
-          highlight: '#ffff00',
-          comments: [{ commentId: 'comment-active-hl', internal: false, trackedChange: false }],
-        },
-      ],
-    };
-
-    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
-
-    const painter = createTestPainter({ blocks: [block], measures: [paragraphMeasure] });
-    painter.setActiveComment('comment-active-hl');
-    painter.paint(paragraphLayout, mount);
-
-    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span).toBeTruthy();
-    const bg = span.style.backgroundColor;
-    expect(bg).not.toBe('');
-    expect(bg).not.toBe('#ffff00');
-    expect(bg).not.toBe('rgb(255, 255, 0)');
-  });
-
-  it('applies faded comment highlight over Word highlight when another comment is active (SD-2188)', () => {
-    const block: FlowBlock = {
-      kind: 'paragraph',
-      id: 'faded-hl-block',
-      runs: [
-        {
-          text: 'Faded highlighted',
-          fontFamily: 'Arial',
-          fontSize: 16,
-          highlight: '#ffff00',
-          comments: [{ commentId: 'comment-faded-hl', internal: false, trackedChange: false }],
-        },
-      ],
-    };
-
-    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
-
-    const painter = createTestPainter({ blocks: [block], measures: [paragraphMeasure] });
-    // Activate a different comment so this one gets faded
-    painter.setActiveComment('some-other-comment');
-    painter.paint(paragraphLayout, mount);
-
-    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span).toBeTruthy();
-    const bg = span.style.backgroundColor;
-    expect(bg).not.toBe('');
-    expect(bg).not.toBe('#ffff00');
-    expect(bg).not.toBe('rgb(255, 255, 0)');
-  });
-
-  it('applies comment highlight styles for non-tracked-change comments', () => {
+  it('stamps comment metadata for non-tracked-change comments', () => {
     const commentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'comment-block',
@@ -3442,11 +3376,70 @@ describe('DomPainter', () => {
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-2');
-    expect(span.style.backgroundColor).not.toBe('');
+    expect(span.classList.contains('superdoc-comment-highlight')).toBe(true);
   });
 
-  it('highlights only the active comment range when setActiveComment is called', () => {
-    // Single run with comment-A
+  it('stamps internal comment IDs in data-comment-internal-ids', () => {
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'internal-comment-block',
+      runs: [
+        {
+          text: 'Internal text',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [
+            { commentId: 'ext-1', internal: false },
+            { commentId: 'int-1', internal: true },
+          ],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.dataset.commentIds).toBe('ext-1,int-1');
+    expect(span.dataset.commentInternal).toBe('true');
+    expect(span.dataset.commentInternalIds).toBe('int-1');
+  });
+
+  it('stamps imported ID aliases in data-comment-imported-ids', () => {
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'imported-comment-block',
+      runs: [
+        {
+          text: 'Imported text',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [{ commentId: 'uuid-1', importedId: 'w:comment-7', internal: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.dataset.commentIds).toBe('uuid-1');
+    expect(span.dataset.commentImportedIds).toBe('w:comment-7=uuid-1');
+  });
+
+  it('preserves comment metadata across setActiveComment and repaint', () => {
     const commentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'active-comment-block',
@@ -3467,29 +3460,22 @@ describe('DomPainter', () => {
 
     const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
 
-    // Initially (no active comment), should be highlighted
     painter.paint(paragraphLayout, mount);
     let span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span.style.backgroundColor).not.toBe('');
+    expect(span.dataset.commentIds).toBe('comment-A');
 
-    // Select comment-A: should still be highlighted
     painter.setActiveComment('comment-A');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    const activeColor = span.style.backgroundColor;
-    expect(activeColor).not.toBe('');
+    expect(span.dataset.commentIds).toBe('comment-A');
 
-    // Select a different comment (comment-B): should show faded highlight
-    painter.setActiveComment('comment-B');
+    painter.setActiveComment(null);
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    // Inactive comments get a faded background instead of being invisible
-    expect(span.style.backgroundColor).not.toBe('');
-    expect(span.style.backgroundColor).not.toBe(activeColor);
+    expect(span.dataset.commentIds).toBe('comment-A');
   });
 
-  it('shows nested comment indicators when outer comment is selected', () => {
-    // One run with two comments (outer and nested)
+  it('stamps metadata for nested comments (multiple IDs)', () => {
     const nestedCommentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'nested-comment-block',
@@ -3512,51 +3498,11 @@ describe('DomPainter', () => {
     );
 
     const painter = createTestPainter({ blocks: [nestedCommentBlock], measures: [paragraphMeasure] });
-
-    // Select outer comment
-    painter.setActiveComment('outer-comment');
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
-    expect(span.style.backgroundColor).not.toBe('');
-    // Should have box-shadow indicating nested comment
-    expect(span.style.boxShadow).not.toBe('');
-  });
-
-  it('clears active comment highlighting when setActiveComment(null) is called', () => {
-    const commentBlock: FlowBlock = {
-      kind: 'paragraph',
-      id: 'clear-comment-block',
-      runs: [
-        {
-          text: 'Some text',
-          fontFamily: 'Arial',
-          fontSize: 16,
-          comments: [{ commentId: 'comment-X', internal: false }],
-        },
-      ],
-    };
-
-    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
-      commentBlock.id,
-      commentBlock.runs[0].text.length,
-    );
-
-    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
-
-    // First select a comment
-    painter.setActiveComment('comment-X');
-    painter.paint(paragraphLayout, mount);
-
-    // Then deselect
-    painter.setActiveComment(null);
-    painter.paint(paragraphLayout, mount);
-
-    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span).toBeTruthy();
-    // Should still have background (default highlighting)
-    expect(span.style.backgroundColor).not.toBe('');
+    expect(span.dataset.commentIds).toBe('outer-comment,inner-comment');
   });
 
   it('respects trackedChangesMode modifiers for insertions', () => {

@@ -1,6 +1,7 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
+import { CommentHighlightDecorator } from './dom/CommentHighlightDecorator.js';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { PresentationPainterAdapter } from './rendering/PresentationPainterAdapter.js';
@@ -335,6 +336,8 @@ export class PresentationEditor extends EventEmitter {
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   /** Bridges external PM plugin decorations onto painted DOM elements. */
   #decorationBridge = new DecorationBridge();
+  /** Applies comment highlight styles to painter-rendered DOM post-paint. */
+  #commentHighlightDecorator = new CommentHighlightDecorator();
   /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
   #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
@@ -478,6 +481,7 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+    this.#commentHighlightDecorator.setContainer(this.#painterHost);
 
     // Add event listeners for structured content hover coordination
     this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
@@ -489,6 +493,7 @@ export class PresentationEditor extends EventEmitter {
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncCommentHighlights();
         this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
@@ -2793,6 +2798,7 @@ export class PresentationEditor extends EventEmitter {
       }, 'Decoration sync RAF');
     }
     this.#decorationBridge.destroy();
+    this.#commentHighlightDecorator.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
 
@@ -3060,6 +3066,15 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Applies comment highlight styles (background color, box-shadow,
+   * track-change-focused class) to all painter-rendered comment elements.
+   * Called after paint and after observer rebuild.
+   */
+  #syncCommentHighlights(): void {
+    this.#commentHighlightDecorator.apply();
+  }
+
+  /**
    * Runs a full decoration sync: applies external plugin decoration classes
    * and styles to the painted DOM elements via DecorationBridge. Runs are
    * split at decoration boundaries during layout so only the selected portion
@@ -3322,19 +3337,16 @@ export class PresentationEditor extends EventEmitter {
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-    // Listen for comment selection changes to update Layout Engine highlighting
+    // Listen for comment selection changes to update comment highlight styling.
+    // The CommentHighlightDecorator updates inline styles on existing DOM elements
+    // without triggering a full layout → paint cycle (performance win).
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
-      if (this.#painterAdapter.hasPainter) {
-        // Only update active comment when the field is explicitly present in the payload.
-        // This prevents unrelated events (like tracked change updates) from clearing
-        // the active comment selection unexpectedly.
-        if ('activeCommentId' in payload) {
-          const activeId = payload.activeCommentId ?? null;
-          this.#painterAdapter.setActiveComment(activeId);
-          // Mark as needing re-render to apply the new active comment highlighting
-          this.#pendingDocChange = true;
-          this.#scheduleRerender();
-        }
+      // Only update active comment when the field is explicitly present in the payload.
+      // This prevents unrelated events (like tracked change updates) from clearing
+      // the active comment selection unexpectedly.
+      if ('activeCommentId' in payload) {
+        const activeId = payload.activeCommentId ?? null;
+        this.#commentHighlightDecorator.setActiveComment(activeId);
       }
     };
     this.#editor.on('commentsUpdate', handleCommentsUpdate);
@@ -4354,6 +4366,7 @@ export class PresentationEditor extends EventEmitter {
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
       this.#rebuildDomPositionIndex();
+      this.#syncCommentHighlights();
       this.#syncDecorations();
       this.#applyProofingPass();
       this.#domIndexObserverManager?.resume();

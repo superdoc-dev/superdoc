@@ -12,8 +12,8 @@ import type { Layout } from '@superdoc/contracts';
 /**
  * Owns the DomPainter lifecycle on behalf of PresentationEditor.
  *
- * PR3: pure pass-through wrapper. `setActiveComment` and `getPaintSnapshot`
- * are proxied here temporarily and will move to dedicated owners in PR4/PR5.
+ * PR3: pure pass-through wrapper. `getPaintSnapshot` is proxied here
+ * temporarily and will move to a dedicated owner in PR5.
  */
 export class PresentationPainterAdapter {
   #painter: DomPainterHandle | null = null;
@@ -64,11 +64,7 @@ export class PresentationPainterAdapter {
     this.#painter?.setVirtualizationPins(pageIndices);
   }
 
-  // ── Temporary proxies (move in PR4/PR5) ────────────────────────────
-
-  setActiveComment(commentId: string | null): void {
-    this.#painter?.setActiveComment(commentId);
-  }
+  // ── Temporary proxies (move in PR5) ─────────────────────────────────
 
   getPaintSnapshot(): PaintSnapshot | null {
     return this.#painter?.getPaintSnapshot() ?? null;

@@ -6,18 +6,20 @@
  */
 
 import { toCssFontFamily } from '@superdoc/font-utils';
-import type {
-  ParagraphAttrs,
-  ParagraphIndent,
-  DropCapDescriptor,
-  DropCapRun,
-  ParagraphFrame,
+import {
+  normalizeBaselineShift,
+  scaleFontSizeForVerticalText,
+  type VerticalTextAlign,
+  type ParagraphAttrs,
+  type ParagraphIndent,
+  type DropCapDescriptor,
+  type DropCapRun,
+  type ParagraphFrame,
 } from '@superdoc/contracts';
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
 import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
@@ -385,14 +387,12 @@ export const computeRunAttrs = (
     fontFamily =
       runProps.fontFamily?.ascii || runProps.fontFamily?.hAnsi || runProps.fontFamily?.eastAsia || defaultFontFamily;
   }
-  const vertAlign = runProps.vertAlign as 'superscript' | 'subscript' | 'baseline' | undefined;
-  const hasPosition = runProps.position != null && Number.isFinite(runProps.position);
-  let fontSize = runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx;
-
-  // Scale font size for superscript/subscript when no custom position override
-  if (!hasPosition && (vertAlign === 'superscript' || vertAlign === 'subscript')) {
-    fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
-  }
+  const vertAlign = runProps.vertAlign as VerticalTextAlign | undefined;
+  const baselineShift = normalizeBaselineShift(
+    runProps.position != null && Number.isFinite(runProps.position) ? runProps.position / 2 : undefined,
+  );
+  const baseFontSize = runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx;
+  const fontSize = scaleFontSizeForVerticalText(baseFontSize, { vertAlign, baselineShift });
 
   return {
     fontFamily: toCssFontFamily(fontFamily)!,
@@ -415,6 +415,6 @@ export const computeRunAttrs = (
     lang: runProps.lang?.val || undefined,
     vanish: runProps.vanish,
     vertAlign,
-    baselineShift: hasPosition ? runProps.position! / 2 : undefined,
+    baselineShift,
   };
 };

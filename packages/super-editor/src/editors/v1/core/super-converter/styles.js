@@ -13,6 +13,7 @@ import {
 } from '@converter/helpers.js';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.js';
+import { normalizeBaselineShift, SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/contracts';
 import {
   resolveDocxFontFamily,
   resolveRunProperties,
@@ -30,14 +31,6 @@ const getToCssFontFamily = () => {
   // @ts-expect-error - SuperConverter.toCssFontFamily exists but isn't typed
   return SuperConverter.toCssFontFamily;
 };
-
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 /**
  * Encodes run property objects into mark definitions for the editor schema.
@@ -311,6 +304,10 @@ export function encodeCSSFromRPr(runProperties, docx) {
   let hasHighlightTag = false;
   let verticalAlignValue;
   let fontSizeOverride;
+  const normalizedPositionPoints =
+    runProperties.position != null && Number.isFinite(runProperties.position)
+      ? normalizeBaselineShift(halfPointToPoints(runProperties.position))
+      : undefined;
 
   Object.keys(runProperties).forEach((key) => {
     const value = runProperties[key];
@@ -451,8 +448,8 @@ export function encodeCSSFromRPr(runProperties, docx) {
         break;
       }
       case 'vertAlign': {
-        // Skip if position is present - position takes precedence over vertAlign
-        if (runProperties.position != null && Number.isFinite(runProperties.position)) {
+        // Only non-zero positions override the default superscript/subscript offset.
+        if (normalizedPositionPoints != null) {
           break;
         }
         if (value === 'superscript' || value === 'subscript') {
@@ -471,13 +468,9 @@ export function encodeCSSFromRPr(runProperties, docx) {
         break;
       }
       case 'position': {
-        if (value != null && Number.isFinite(value)) {
-          const points = halfPointToPoints(value);
-          if (Number.isFinite(points)) {
-            verticalAlignValue = `${points}pt`;
-            // Position takes precedence over vertAlign, so clear font-size override
-            fontSizeOverride = undefined;
-          }
+        if (normalizedPositionPoints != null) {
+          verticalAlignValue = `${normalizedPositionPoints}pt`;
+          fontSizeOverride = undefined;
         }
         break;
       }

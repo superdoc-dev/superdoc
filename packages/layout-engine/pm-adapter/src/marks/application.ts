@@ -8,10 +8,17 @@
  * - Tracked changes (insert, delete, format)
  */
 
-import type { TextRun, TabRun, RunMark, TrackedChangeMeta, TrackedChangeKind } from '@superdoc/contracts';
+import {
+  normalizeBaselineShift,
+  scaleFontSizeForVerticalText,
+  type TextRun,
+  type TabRun,
+  type RunMark,
+  type TrackedChangeMeta,
+  type TrackedChangeKind,
+} from '@superdoc/contracts';
 import type { UnderlineStyle, PMMark, HyperlinkConfig, ThemeColorPalette } from '../types.js';
 import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
 import { resolveThemeColorValue } from './theme-color.js';
@@ -783,17 +790,21 @@ export const applyTextStyleMark = (
       run.vertAlign = va;
     }
   }
-  // Custom baseline shift (position) — takes precedence over vertAlign for positioning
+  // Custom baseline shift (position) is explicit only when non-zero.
+  // A zero position is an identity value and should behave like "no shift".
   if (attrs.position != null && typeof attrs.position === 'string') {
     const parsed = parseFloat(attrs.position);
     if (Number.isFinite(parsed)) {
-      run.baselineShift = parsed;
+      const normalizedBaselineShift = normalizeBaselineShift(parsed);
+      if (normalizedBaselineShift == null) {
+        delete run.baselineShift;
+      } else {
+        run.baselineShift = normalizedBaselineShift;
+      }
     }
   }
-  // Scale font size for superscript/subscript when no custom position override
-  if (run.baselineShift == null && (run.vertAlign === 'superscript' || run.vertAlign === 'subscript')) {
-    run.fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
-  }
+
+  run.fontSize = scaleFontSizeForVerticalText(run.fontSize, run);
 };
 
 /**

@@ -1,7 +1,17 @@
 // @ts-nocheck
 import { Mark } from '@core/Mark.js';
 import { Attribute } from '@core/Attribute.js';
+import { normalizeBaselineShift } from '@superdoc/contracts';
 import { annotationClass, annotationContentClass } from '../field-annotation/index.js';
+
+const hasExplicitPosition = (position) => {
+  if (typeof position !== 'string') {
+    return false;
+  }
+
+  const parsed = parseFloat(position);
+  return normalizeBaselineShift(parsed) != null;
+};
 
 /**
  * Configuration options for TextStyle
@@ -74,7 +84,8 @@ export const TextStyle = Mark.create({
       /**
        * Vertical alignment for subscript/superscript text (DOCX w:vertAlign).
        * Standard values: 'superscript', 'subscript', 'baseline'.
-       * When both vertAlign and position are present, position takes precedence.
+       * Non-zero position values override the default superscript/subscript offset.
+       * A position of 0 is treated as an identity value.
        * Renders as CSS vertical-align with 65% font-size scaling for super/subscript.
        * @category Attribute
        * @param {string} [vertAlign] - Vertical alignment mode ('superscript' | 'subscript' | 'baseline')
@@ -82,7 +93,7 @@ export const TextStyle = Mark.create({
       vertAlign: {
         default: null,
         renderDOM: (attrs) => {
-          if (!attrs.vertAlign || attrs.position) return {};
+          if (!attrs.vertAlign || hasExplicitPosition(attrs.position)) return {};
           if (attrs.vertAlign === 'superscript') {
             return { style: 'vertical-align: super; font-size: 65%;' };
           }
@@ -106,7 +117,8 @@ export const TextStyle = Mark.create({
        * Custom vertical position offset in points (DOCX w:position).
        * Numeric value specifying vertical offset (positive raises, negative lowers).
        * Format: '{number}pt' (e.g., '2pt', '-1.5pt').
-       * Takes precedence over vertAlign when both are present.
+       * Non-zero position values override the default superscript/subscript offset.
+       * A position of 0 is treated as an identity value.
        * Renders as CSS vertical-align with the exact offset value.
        * @category Attribute
        * @param {string} [position] - Vertical position offset (e.g., '2pt', '-1pt')
@@ -114,7 +126,7 @@ export const TextStyle = Mark.create({
       position: {
         default: null,
         renderDOM: (attrs) => {
-          if (!attrs.position) return {};
+          if (!hasExplicitPosition(attrs.position)) return {};
           return { style: `vertical-align: ${attrs.position};` };
         },
         parseDOM: (el) => {

@@ -206,6 +206,43 @@ describe('measureBlock', () => {
       expect(shiftedMeasure.lines[0].lineHeight).toBeCloseTo(baseMeasure.lines[0].lineHeight, 3);
     });
 
+    it('treats zero baselineShift as identity during superscript measurement', async () => {
+      const baseBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'base-zero-baseline-shift-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {},
+      };
+
+      const superscriptWithZeroShiftBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'zero-baseline-shift-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16 * 0.65,
+            vertAlign: 'superscript',
+            baselineShift: 0,
+          },
+        ],
+        attrs: {},
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(baseBlock, 1000));
+      const superscriptMeasure = expectParagraphMeasure(await measureBlock(superscriptWithZeroShiftBlock, 1000));
+
+      expect(superscriptMeasure.lines[0].ascent).toBeCloseTo(baseMeasure.lines[0].ascent, 3);
+      expect(superscriptMeasure.lines[0].descent).toBeCloseTo(baseMeasure.lines[0].descent, 3);
+      expect(superscriptMeasure.lines[0].lineHeight).toBeCloseTo(baseMeasure.lines[0].lineHeight, 3);
+    });
+
     it('uses content width for wordLayout list first lines with standard hanging indent', async () => {
       // Standard hanging indent pattern: marker is positioned in the hanging area (left of text),
       // NOT inline with text. The marker doesn't consume horizontal space on the first line.

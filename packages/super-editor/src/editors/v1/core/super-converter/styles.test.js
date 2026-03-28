@@ -302,10 +302,16 @@ describe('encodeCSSFromRPr - vertAlign/position edge cases', () => {
 
   it('handles zero position value', () => {
     const css = encodeCSSFromRPr({ position: 0 }, {});
-    expect(css['vertical-align']).toBe('0pt');
+    expect(css['vertical-align']).toBeUndefined();
   });
 
-  it('position takes precedence over vertAlign when both are set', () => {
+  it('treats zero position as identity when combined with vertAlign', () => {
+    const css = encodeCSSFromRPr({ vertAlign: 'superscript', position: 0, fontSize: 20 }, {});
+    expect(css['vertical-align']).toBe('super');
+    expect(css['font-size']).toBe('6.5pt');
+  });
+
+  it('non-zero position takes precedence over vertAlign when both are set', () => {
     const css = encodeCSSFromRPr({ vertAlign: 'superscript', position: 4 }, {});
     expect(css['vertical-align']).toBe('2pt');
     expect(css['font-size']).toBeUndefined();

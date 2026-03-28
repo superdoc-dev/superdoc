@@ -107,6 +107,29 @@ describe('buildReferenceMarkerRun', () => {
     expect(vi.mocked(textNodeToRun)).toHaveBeenCalledTimes(1);
   });
 
+  it('treats a zero baselineShift as identity and still normalizes the marker', () => {
+    vi.mocked(textNodeToRun)
+      .mockReturnValueOnce({
+        text: '1',
+        fontFamily: 'Calibri',
+        fontSize: 18,
+        baselineShift: 0,
+        vertAlign: 'superscript',
+      })
+      .mockReturnValueOnce({
+        text: '1',
+        fontFamily: 'Calibri',
+        fontSize: 24,
+      });
+
+    const run = buildReferenceMarkerRun('1', makeParams());
+
+    expect(run.vertAlign).toBe('superscript');
+    expect(run.baselineShift).toBeUndefined();
+    expect(run.fontSize).toBe(24 * SUBSCRIPT_SUPERSCRIPT_SCALE);
+    expect(vi.mocked(textNodeToRun)).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves inherited styling from the original run context', () => {
     vi.mocked(textNodeToRun)
       .mockReturnValueOnce({

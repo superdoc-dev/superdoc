@@ -39,6 +39,16 @@ export {
   formatInsetClipPathTransform,
   type InsetClipPathScale,
 } from './clip-path-inset.js';
+export {
+  SUBSCRIPT_SUPERSCRIPT_SCALE,
+  normalizeBaselineShift,
+  hasExplicitBaselineShift,
+  isSuperscriptOrSubscript,
+  usesDefaultScriptLayout,
+  scaleFontSizeForVerticalText,
+  resolveBaseFontSizeForVerticalText,
+  type VerticalTextAlign,
+} from './vertical-text.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
@@ -200,7 +210,10 @@ export type RunMarks = {
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
   /** Vertical alignment for superscript/subscript text. */
   vertAlign?: 'superscript' | 'subscript' | 'baseline';
-  /** Custom baseline shift in points (positive = raise, negative = lower). Takes precedence over vertAlign for positioning. */
+  /**
+   * Explicit baseline shift in points (positive = raise, negative = lower).
+   * Rendering normalizes a shift of zero to "no explicit shift".
+   */
   baselineShift?: number;
 };
 

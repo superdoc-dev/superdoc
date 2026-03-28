@@ -463,6 +463,35 @@ describe('DomPainter text style CSS rendering', () => {
       expect(span?.style.verticalAlign).toBe('4pt');
     });
 
+    it('should treat zero baselineShift as identity and keep superscript rendering', () => {
+      const block = createParagraphBlock('para-va-5-zero', [
+        {
+          text: '1st',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'superscript' as const,
+          baselineShift: 0,
+          pmStart: 0,
+          pmEnd: 3,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-5-zero');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.lineHeight).toBe('1');
+      expect(span?.style.verticalAlign).toBe('5.28px');
+    });
+
     it('should apply negative baselineShift', () => {
       const block = createParagraphBlock('para-va-6', [
         {

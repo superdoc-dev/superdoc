@@ -7,7 +7,7 @@
  * preserving explicit custom positioning when the source document provides it.
  */
 
-import type { TextRun } from '@superdoc/contracts';
+import { hasExplicitBaselineShift, type TextRun } from '@superdoc/contracts';
 import type { RunProperties } from '@superdoc/style-engine/ooxml';
 import type { PMMark, PMNode } from '../../types.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../../constants.js';
@@ -73,9 +73,6 @@ const copyReferencePmPositions = (run: TextRun, params: InlineConverterParams): 
   };
 };
 
-const hasExplicitBaselineShift = (run: TextRun): boolean =>
-  typeof run.baselineShift === 'number' && Number.isFinite(run.baselineShift);
-
 const resolveReferenceBaseFontSize = (
   runWithoutVerticalPositioning: TextRun,
   originalRun: TextRun,
@@ -121,7 +118,7 @@ const buildReferenceRunWithoutVerticalPositioning = (displayText: string, params
 export function buildReferenceMarkerRun(displayText: string, params: InlineConverterParams): TextRun {
   const originalRun = buildOriginalReferenceRun(displayText, params);
 
-  if (hasExplicitBaselineShift(originalRun)) {
+  if (hasExplicitBaselineShift(originalRun.baselineShift)) {
     return copyReferencePmPositions(originalRun, params);
   }
 

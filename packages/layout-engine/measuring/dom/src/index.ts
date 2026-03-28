@@ -65,6 +65,7 @@ import {
   type TableBorderValue,
   effectiveTableCellSpacing,
   LeaderDecoration,
+  resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -517,28 +518,8 @@ function calculateEmptyParagraphMetrics(
   };
 }
 
-/**
- * Font size scaling factor applied by pm-adapter for superscript/subscript runs.
- * Must match SUBSCRIPT_SUPERSCRIPT_SCALE in pm-adapter/src/constants.ts.
- */
-const SUPERSCRIPT_SCALE = 0.65;
-
-const hasDefaultSuperscriptOrSubscript = (run: TextRun): boolean =>
-  run.baselineShift == null && (run.vertAlign === 'superscript' || run.vertAlign === 'subscript');
-
-/**
- * Returns the font size to use for line height calculation.
- *
- * Only default superscript/subscript runs should be un-scaled here. When the
- * source document provides an explicit baseline shift, pm-adapter preserves the
- * original font size and stores the custom offset in `baselineShift`, so line
- * measurement must use the run's actual font size as-is.
- */
 function lineHeightFontSize(run: TextRun): number {
-  if (hasDefaultSuperscriptOrSubscript(run)) {
-    return run.fontSize / SUPERSCRIPT_SCALE;
-  }
-  return run.fontSize;
+  return resolveBaseFontSizeForVerticalText(run.fontSize, run);
 }
 
 /**

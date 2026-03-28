@@ -127,13 +127,7 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
-import {
-  DOM_CLASS_NAMES,
-  buildSdtBlockSelector,
-  buildSdtInlineSelector,
-  buildAnnotationTypeSelector,
-  buildAnnotationPmSelector,
-} from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
 import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
@@ -3581,6 +3575,8 @@ export class PresentationEditor extends EventEmitter {
       clearHoverRegion: () => this.#clearHoverRegion(),
       renderHoverRegion: (region) => this.#renderHoverRegion(region),
       focusEditorAfterImageSelection: () => this.#focusEditorAfterImageSelection(),
+      resolveInlineImageElementByPmStart: (pmStart) => this.#painterAdapter.getInlineImageElementByPmStart(pmStart),
+      resolveImageFragmentElementByPmStart: (pmStart) => this.#painterAdapter.getImageFragmentElementByPmStart(pmStart),
       resolveFieldAnnotationSelectionFromElement: (el) => this.#resolveFieldAnnotationSelectionFromElement(el),
       computePendingMarginClick: (pointerId, x, y) => this.#computePendingMarginClick(pointerId, x, y),
       selectWordAt: (pos: number) => this.#selectWordAt(pos),
@@ -4582,22 +4578,20 @@ export class PresentationEditor extends EventEmitter {
 
   #updateHtmlAnnotationMeasurements(layoutEpoch: number): boolean {
     const nextHeights = new Map(this.#htmlAnnotationHeights);
-    const annotations = this.#painterHost.querySelectorAll(buildAnnotationTypeSelector('html'));
     const threshold = 1;
 
     let changed = false;
+    const annotations = this.#painterAdapter.getAnnotationEntitiesByType('html');
     annotations.forEach((annotation) => {
-      const element = annotation as HTMLElement;
-      const pmStart = element.dataset.pmStart;
-      const pmEnd = element.dataset.pmEnd;
-      if (!pmStart || !pmEnd) {
+      const element = annotation.element;
+      if (annotation.pmStart == null || annotation.pmEnd == null) {
         return;
       }
       const height = element.offsetHeight;
       if (height <= 0) {
         return;
       }
-      const key = `${pmStart}-${pmEnd}`;
+      const key = `${annotation.pmStart}-${annotation.pmEnd}`;
       const prev = nextHeights.get(key);
       if (prev != null && Math.abs(prev - height) <= threshold) {
         return;
@@ -4672,7 +4666,7 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const element = this.#painterHost.querySelector(buildAnnotationPmSelector(pmStart)) as HTMLElement | null;
+    const element = this.#painterAdapter.getAnnotationElementByPmStart(pmStart);
     if (!element) {
       this.#clearSelectedFieldAnnotationClass();
       return;
@@ -4749,8 +4743,7 @@ export class PresentationEditor extends EventEmitter {
     let elements: HTMLElement[] = [];
 
     if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
+      elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
     }
 
     if (elements.length === 0) {
@@ -4819,8 +4812,7 @@ export class PresentationEditor extends EventEmitter {
 
     if (!this.#painterHost) return;
 
-    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
+    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
 
     if (elements.length === 0) return;
 
@@ -4844,8 +4836,7 @@ export class PresentationEditor extends EventEmitter {
     const { id } = this.#lastHoveredStructuredContentBlock;
     if (!id) return;
 
-    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
+    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
 
     if (elements.length === 0) {
       this.#lastHoveredStructuredContentBlock = null;
@@ -4963,8 +4954,7 @@ export class PresentationEditor extends EventEmitter {
     let elements: HTMLElement[] = [];
 
     if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(this.#painterHost.querySelectorAll(buildSdtInlineSelector(escapedId))) as HTMLElement[];
+      elements = this.#painterAdapter.getStructuredContentInlineElementsById(id);
     }
 
     if (elements.length === 0) {

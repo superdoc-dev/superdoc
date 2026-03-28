@@ -399,6 +399,48 @@ export type PaintSnapshotTabStyle = {
   borderBottom?: string;
 };
 
+export type PaintSnapshotAnnotationEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  pmStart?: number;
+  pmEnd?: number;
+  fieldId?: string;
+  fieldType?: string;
+  type?: string;
+};
+
+export type PaintSnapshotStructuredContentBlockEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotStructuredContentInlineEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotImageEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  kind: 'inline' | 'fragment';
+  pmStart?: number;
+  pmEnd?: number;
+  blockId?: string;
+};
+
+export type PaintSnapshotEntities = {
+  annotations: PaintSnapshotAnnotationEntity[];
+  structuredContentBlocks: PaintSnapshotStructuredContentBlockEntity[];
+  structuredContentInlines: PaintSnapshotStructuredContentInlineEntity[];
+  images: PaintSnapshotImageEntity[];
+};
+
 export type PaintSnapshotLine = {
   index: number;
   inTableFragment: boolean;
@@ -422,6 +464,7 @@ export type PaintSnapshot = {
   markerCount: number;
   tabCount: number;
   pages: PaintSnapshotPage[];
+  entities: PaintSnapshotEntities;
 };
 
 type PaintSnapshotPageBuilder = {
@@ -461,6 +504,27 @@ function readSnapshotStyleValue(styleValue: string | null | undefined): string |
   return styleValue;
 }
 
+function createEmptyPaintSnapshotEntities(): PaintSnapshotEntities {
+  return {
+    annotations: [],
+    structuredContentBlocks: [],
+    structuredContentInlines: [],
+    images: [],
+  };
+}
+
+function readSnapshotDatasetNumber(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSnapshotPageIndex(element: HTMLElement): number | null {
+  const pageEl = element.closest(`.${DOM_CLASS_NAMES.PAGE}`) as HTMLElement | null;
+  if (!pageEl) return null;
+  return readSnapshotDatasetNumber(pageEl.dataset.pageIndex);
+}
+
 function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   const out = {} as T;
   for (const [key, value] of Object.entries(input)) {
@@ -469,6 +533,123 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
     (out as Record<string, unknown>)[key] = value;
   }
   return out;
+}
+
+function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
+  if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
+    return true;
+  }
+
+  if (!element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE)) {
+    return false;
+  }
+
+  return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
+  const entities = createEmptyPaintSnapshotEntities();
+
+  const annotationElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.ANNOTATION}[data-pm-start]`),
+  );
+  for (const element of annotationElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.annotations.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        fieldId: element.dataset.fieldId || null,
+        fieldType: element.dataset.fieldType || null,
+        type: element.dataset.type || null,
+      }) as PaintSnapshotAnnotationEntity,
+    );
+  }
+
+  const blockSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id]`),
+  );
+  for (const element of blockSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentBlocks.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentBlockEntity,
+    );
+  }
+
+  const inlineSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}[data-sdt-id]`),
+  );
+  for (const element of inlineSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentInlines.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentInlineEntity,
+    );
+  }
+
+  const inlineImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(
+      `.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}[data-pm-start], .${DOM_CLASS_NAMES.INLINE_IMAGE}[data-pm-start]`,
+    ),
+  );
+  for (const element of inlineImageElements) {
+    if (!shouldIncludeInlineImageSnapshotElement(element)) continue;
+
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'inline',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  const fragmentImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start]`),
+  );
+  for (const element of fragmentImageElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'fragment',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        blockId: element.getAttribute('data-sd-block-id'),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  return entities;
 }
 
 function snapshotLineStyleFromElement(lineEl: HTMLElement): PaintSnapshotLineStyle {
@@ -1251,7 +1432,7 @@ export class DomPainter {
     };
   }
 
-  private finalizePaintSnapshotFromBuilder(): void {
+  private finalizePaintSnapshotFromBuilder(rootEl?: HTMLElement): void {
     const builder = this.paintSnapshotBuilder;
     if (!builder) {
       this.lastPaintSnapshot = null;
@@ -1274,6 +1455,7 @@ export class DomPainter {
       markerCount: builder.markerCount,
       tabCount: builder.tabCount,
       pages,
+      entities: rootEl ? collectPaintSnapshotEntitiesFromDomRoot(rootEl) : createEmptyPaintSnapshotEntities(),
     });
     this.paintSnapshotBuilder = null;
   }
@@ -1371,6 +1553,7 @@ export class DomPainter {
       markerCount,
       tabCount,
       pages,
+      entities: collectPaintSnapshotEntitiesFromDomRoot(rootEl),
     };
   }
 
@@ -1506,7 +1689,7 @@ export class DomPainter {
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1516,7 +1699,7 @@ export class DomPainter {
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1550,7 +1733,7 @@ export class DomPainter {
       this.emitPaintSnapshot(this.collectPaintSnapshotFromDomRoot(mount));
       this.paintSnapshotBuilder = null;
     } else {
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
     }
 
     this.currentLayout = layout;

@@ -4,10 +4,12 @@ import type {
   DomPainterInput,
   DomPainterOptions,
   PageDecorationProvider,
+  PaintSnapshotAnnotationEntity,
   PaintSnapshot,
   PositionMapping,
 } from '@superdoc/painter-dom';
 import type { Layout } from '@superdoc/contracts';
+import { PresentationPaintIndex } from './PresentationPaintIndex.js';
 
 /**
  * Owns the DomPainter lifecycle on behalf of PresentationEditor.
@@ -18,6 +20,7 @@ import type { Layout } from '@superdoc/contracts';
 export class PresentationPainterAdapter {
   #painter: DomPainterHandle | null = null;
   #lastPaintSnapshot: PaintSnapshot | null = null;
+  #paintIndex = new PresentationPaintIndex();
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -31,6 +34,7 @@ export class PresentationPainterAdapter {
         ...options,
         onPaintSnapshot: (snapshot) => {
           this.#lastPaintSnapshot = snapshot;
+          this.#paintIndex.update(snapshot);
         },
       });
     }
@@ -39,6 +43,7 @@ export class PresentationPainterAdapter {
   reset(): void {
     this.#painter = null;
     this.#lastPaintSnapshot = null;
+    this.#paintIndex.reset();
   }
 
   // ── Paint orchestration ─────────────────────────────────────────────
@@ -75,5 +80,29 @@ export class PresentationPainterAdapter {
 
   getPaintSnapshot(): PaintSnapshot | null {
     return this.#lastPaintSnapshot;
+  }
+
+  getAnnotationElementByPmStart(pmStart: number): HTMLElement | null {
+    return this.#paintIndex.getAnnotationElementByPmStart(pmStart);
+  }
+
+  getAnnotationEntitiesByType(type: string): PaintSnapshotAnnotationEntity[] {
+    return this.#paintIndex.getAnnotationEntitiesByType(type);
+  }
+
+  getStructuredContentBlockElementsById(id: string): HTMLElement[] {
+    return this.#paintIndex.getStructuredContentBlockElementsById(id);
+  }
+
+  getStructuredContentInlineElementsById(id: string): HTMLElement[] {
+    return this.#paintIndex.getStructuredContentInlineElementsById(id);
+  }
+
+  getInlineImageElementByPmStart(pmStart: number): HTMLElement | null {
+    return this.#paintIndex.getInlineImageElementByPmStart(pmStart);
+  }
+
+  getImageFragmentElementByPmStart(pmStart: number): HTMLElement | null {
+    return this.#paintIndex.getImageFragmentElementByPmStart(pmStart);
   }
 }

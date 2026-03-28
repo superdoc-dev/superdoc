@@ -25,7 +25,14 @@ export type {
   CreateRulerElementOptions,
 } from './ruler/index.js';
 export type { RulerOptions } from './renderer.js';
-export type { PaintSnapshot } from './renderer.js';
+export type {
+  PaintSnapshot,
+  PaintSnapshotAnnotationEntity,
+  PaintSnapshotStructuredContentBlockEntity,
+  PaintSnapshotStructuredContentInlineEntity,
+  PaintSnapshotImageEntity,
+  PaintSnapshotEntities,
+} from './renderer.js';
 export type { DomPainterInput, PositionMapping, RenderedLineInfo } from './renderer.js';
 
 // Re-export utility functions for testing

@@ -73,7 +73,7 @@ jobs:
 
   unit-tests:
     needs: build
-    runs-on: superdoc-ci-4cpu
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -124,10 +124,9 @@ jobs:
         if: matrix.name != 'other-packages'
         working-directory: packages/super-editor
         env:
-          NODE_OPTIONS: '--max-old-space-size=8192'
+          NODE_OPTIONS: '--max-old-space-size=4096'
         run: >-
           pnpm exec vitest run --pool forks --minWorkers 1 --maxWorkers 1
-          --reporter=default --reporter=../../scripts/ci-file-reporter.js
           --shard=${{ matrix.shard }}
           --exclude='**/decrypt-docx.integration*'
           --exclude='**/contract-conformance*'

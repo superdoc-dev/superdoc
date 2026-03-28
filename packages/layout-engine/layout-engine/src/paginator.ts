@@ -18,6 +18,8 @@ export type PageState = {
   trailingSpacing: number;
   lastParagraphStyleId?: string;
   lastParagraphContextualSpacing: boolean;
+  /** Border hash of the last paragraph for between-border group detection. */
+  lastParagraphBorderHash?: string;
 };
 
 export type PaginatorOptions = {

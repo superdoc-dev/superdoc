@@ -38,7 +38,12 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
-import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/dom-contract';
+import {
+  DOM_CLASS_NAMES,
+  buildInlineImagePmSelector,
+  buildAnnotationSelector,
+  DRAGGABLE_SELECTOR,
+} from '@superdoc/dom-contract';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
@@ -1025,8 +1030,8 @@ export class EditorInputManager {
     }
 
     // Handle field annotation clicks
-    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
-    const isDraggableAnnotation = target?.closest?.('[data-draggable="true"]') != null;
+    const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
+    const isDraggableAnnotation = target?.closest?.(DRAGGABLE_SELECTOR) != null;
     this.#suppressFocusInFromDraggable = isDraggableAnnotation;
 
     if (annotationEl) {
@@ -1388,7 +1393,7 @@ export class EditorInputManager {
     if (event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
-    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
+    const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
 
     if (annotationEl) {
       event.preventDefault();

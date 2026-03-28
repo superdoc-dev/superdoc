@@ -88,7 +88,6 @@ import {
   ensureFieldAnnotationStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
-  ensureNativeSelectionStyles,
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -113,7 +112,6 @@ import {
   shouldRebuildForSdtBoundary,
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
-import { SdtGroupedHover } from './utils/sdt-hover.js';
 import {
   computeBetweenBorderFlags,
   getFragmentParagraphBorders,
@@ -1107,7 +1105,6 @@ export class DomPainter {
    * Invalidated when the mount, scroll container, or zoom changes.
    */
   private scrollContainerMountOffset: number | null = null;
-  private sdtHover = new SdtGroupedHover();
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
   private onPaintSnapshotCallback: ((snapshot: PaintSnapshot) => void) | null = null;
@@ -1471,7 +1468,6 @@ export class DomPainter {
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
-    ensureNativeSelectionStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -1668,8 +1664,6 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
-
-    this.sdtHover.bind(mount);
   }
 
   private computeVirtualMetrics(): void {
@@ -1897,8 +1891,6 @@ export class DomPainter {
     // Clear changed blocks now that current visible pages are patched
     this.changedBlocks.clear();
     this.processedLayoutVersion = this.layoutVersion;
-
-    this.sdtHover.reapply();
   }
 
   private updateSpacers(start: number, end: number): void {
@@ -2366,7 +2358,6 @@ export class DomPainter {
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
     this.scrollContainerMountOffset = null;
-    this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
@@ -5153,7 +5144,7 @@ export class DomPainter {
 
     // Create outer annotation wrapper
     const annotation = this.doc.createElement('span');
-    annotation.classList.add('annotation');
+    annotation.classList.add(DOM_CLASS_NAMES.ANNOTATION);
     annotation.setAttribute('aria-label', 'Field annotation');
 
     // Apply pill styling (unless highlighted is explicitly false)
@@ -5226,7 +5217,7 @@ export class DomPainter {
 
     // Create inner content wrapper
     const content = this.doc.createElement('span');
-    content.classList.add('annotation-content');
+    content.classList.add(DOM_CLASS_NAMES.ANNOTATION_CONTENT);
     content.style.pointerEvents = 'none';
     content.setAttribute('contenteditable', 'false');
 
@@ -5330,18 +5321,6 @@ export class DomPainter {
       annotation.dataset.fieldType = run.fieldType;
     }
 
-    // Make field annotation draggable (matching super-editor behavior)
-    annotation.draggable = true;
-    annotation.dataset.draggable = 'true';
-
-    // Store additional data for drag operations
-    if (run.displayLabel) {
-      annotation.dataset.displayLabel = run.displayLabel;
-    }
-    if (run.variant) {
-      annotation.dataset.variant = run.variant;
-    }
-
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'field annotation run');
 
@@ -5354,39 +5333,10 @@ export class DomPainter {
     }
     annotation.dataset.layoutEpoch = String(this.layoutEpoch);
 
-    this.appendAnnotationCaretAnchor(annotation, run);
-
     // Apply SDT metadata
     this.applySdtDataset(annotation, run.sdt);
 
     return annotation;
-  }
-
-  /**
-   * Adds a hidden DOM anchor at pmEnd so caret placement after the annotation is correct.
-   */
-  private appendAnnotationCaretAnchor(annotation: HTMLElement, run: FieldAnnotationRun): void {
-    if (!this.doc || run.pmEnd == null) return;
-
-    const caretAnchor = this.doc.createElement('span');
-    caretAnchor.dataset.pmStart = String(run.pmEnd);
-    caretAnchor.dataset.pmEnd = String(run.pmEnd);
-    caretAnchor.dataset.layoutEpoch = String(this.layoutEpoch);
-    caretAnchor.classList.add('annotation-caret-anchor');
-    caretAnchor.style.position = 'absolute';
-    caretAnchor.style.left = '100%';
-    caretAnchor.style.top = '0';
-    caretAnchor.style.width = '0';
-    caretAnchor.style.height = '1em';
-    caretAnchor.style.overflow = 'hidden';
-    caretAnchor.style.pointerEvents = 'none';
-    caretAnchor.style.userSelect = 'none';
-    caretAnchor.style.opacity = '0';
-    caretAnchor.textContent = '\u200B';
-    if (!annotation.style.position) {
-      annotation.style.position = 'relative';
-    }
-    annotation.appendChild(caretAnchor);
   }
 
   /**

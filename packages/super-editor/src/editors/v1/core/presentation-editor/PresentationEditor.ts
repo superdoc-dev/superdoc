@@ -127,6 +127,18 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
+import {
+  DOM_CLASS_NAMES,
+  buildSdtBlockSelector,
+  buildSdtInlineSelector,
+  buildAnnotationTypeSelector,
+  buildAnnotationPmSelector,
+} from '@superdoc/dom-contract';
+import {
+  ensureEditorNativeSelectionStyles,
+  ensureEditorFieldAnnotationInteractionStyles,
+} from './dom/EditorStyleInjector.js';
+import { FieldAnnotationInteractionLayer } from './dom/FieldAnnotationInteractionLayer.js';
 
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { SelectionHandle } from '../selection-state.js';
@@ -343,6 +355,8 @@ export class PresentationEditor extends EventEmitter {
   #decorationBridge = new DecorationBridge();
   /** Applies comment highlight styles to painter-rendered DOM post-paint. */
   #commentHighlightDecorator = new CommentHighlightDecorator();
+  /** Upgrades annotation DOM elements with editing affordances post-paint. */
+  #fieldAnnotationInteractionLayer = new FieldAnnotationInteractionLayer();
   /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
   #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
@@ -487,6 +501,11 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
     this.#commentHighlightDecorator.setContainer(this.#painterHost);
+    this.#fieldAnnotationInteractionLayer.setContainer(this.#painterHost);
+
+    // Inject editor-owned styles (idempotent, once per document)
+    ensureEditorNativeSelectionStyles(doc);
+    ensureEditorFieldAnnotationInteractionStyles(doc);
 
     // Add event listeners for structured content hover coordination
     this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
@@ -497,8 +516,7 @@ export class PresentationEditor extends EventEmitter {
       windowRoot: win,
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
-        this.#rebuildDomPositionIndex();
-        this.#syncInlineStyleLayers();
+        this.#refreshEditorDomAugmentations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -4441,9 +4459,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
-      this.#rebuildDomPositionIndex();
-      this.#syncInlineStyleLayers();
-      this.#applyProofingPass();
+      this.#refreshEditorDomAugmentations();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
@@ -4566,7 +4582,7 @@ export class PresentationEditor extends EventEmitter {
 
   #updateHtmlAnnotationMeasurements(layoutEpoch: number): boolean {
     const nextHeights = new Map(this.#htmlAnnotationHeights);
-    const annotations = this.#painterHost.querySelectorAll('.annotation[data-type="html"]');
+    const annotations = this.#painterHost.querySelectorAll(buildAnnotationTypeSelector('html'));
     const threshold = 1;
 
     let changed = false;
@@ -4656,8 +4672,7 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const selector = `.annotation[data-pm-start="${pmStart}"]`;
-    const element = this.#painterHost.querySelector(selector) as HTMLElement | null;
+    const element = this.#painterHost.querySelector(buildAnnotationPmSelector(pmStart)) as HTMLElement | null;
     if (!element) {
       this.#clearSelectedFieldAnnotationClass();
       return;
@@ -4735,14 +4750,12 @@ export class PresentationEditor extends EventEmitter {
 
     if (id) {
       const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
+      elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
     }
 
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }
@@ -4758,7 +4771,7 @@ export class PresentationEditor extends EventEmitter {
 
   #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block');
+    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`);
 
     if (!block || !(block instanceof HTMLElement)) return;
 
@@ -4773,17 +4786,19 @@ export class PresentationEditor extends EventEmitter {
 
   #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
 
     if (!block) return;
 
     const relatedTarget = event.relatedTarget as HTMLElement | null;
-    if (
-      relatedTarget &&
-      block.dataset.sdtId &&
-      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
-    ) {
-      return;
+    if (relatedTarget && block.dataset.sdtId) {
+      const escapedCheckId =
+        typeof CSS !== 'undefined' && CSS.escape
+          ? CSS.escape(block.dataset.sdtId)
+          : block.dataset.sdtId.replace(/"/g, '\\"');
+      if (relatedTarget.closest(buildSdtBlockSelector(escapedCheckId))) {
+        return;
+      }
     }
 
     this.#clearHoveredStructuredContentBlockClass();
@@ -4792,7 +4807,7 @@ export class PresentationEditor extends EventEmitter {
   #clearHoveredStructuredContentBlockClass() {
     if (!this.#lastHoveredStructuredContentBlock) return;
     this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
-      element.classList.remove('sdt-group-hover');
+      element.classList.remove(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
     });
     this.#lastHoveredStructuredContentBlock = null;
   }
@@ -4805,19 +4820,69 @@ export class PresentationEditor extends EventEmitter {
     if (!this.#painterHost) return;
 
     const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const elements = Array.from(
-      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-    ) as HTMLElement[];
+    const elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
 
     if (elements.length === 0) return;
 
     elements.forEach((element) => {
       if (!element.classList.contains('ProseMirror-selectednode')) {
-        element.classList.add('sdt-group-hover');
+        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
       }
     });
 
     this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  /**
+   * Re-applies the sdt-group-hover class after a paint cycle.
+   * DOM elements are rebuilt during repaint, so the hover class added by
+   * mouse events is lost. This restores hover state from the cached state.
+   */
+  #reapplySdtGroupHover(): void {
+    if (!this.#lastHoveredStructuredContentBlock || !this.#painterHost) return;
+
+    const { id } = this.#lastHoveredStructuredContentBlock;
+    if (!id) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(this.#painterHost.querySelectorAll(buildSdtBlockSelector(escapedId))) as HTMLElement[];
+
+    if (elements.length === 0) {
+      this.#lastHoveredStructuredContentBlock = null;
+      return;
+    }
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  /**
+   * Runs all editor-owned DOM augmentations after the painter has rendered.
+   *
+   * This is the single entry point for post-paint DOM modifications. Every
+   * editor concern that needs to touch the painted DOM is called from here.
+   *
+   * Order is load-bearing:
+   * 1. Field annotation interaction layer — adds caret-anchor spans with
+   *    data-pm-start/end (must run before position index rebuild)
+   * 2. DOM position index rebuild — indexes ALL elements with pm-position
+   *    attributes, including caret-anchors added in step 1
+   * 3. Inline style layers (comment highlights + decoration bridge)
+   * 4. Proofing pass
+   * 5. SDT hover reapplication — DOM elements rebuilt during repaint lose
+   *    the hover class
+   */
+  #refreshEditorDomAugmentations(): void {
+    this.#fieldAnnotationInteractionLayer.apply(this.#layoutEpoch);
+    this.#rebuildDomPositionIndex();
+    this.#syncInlineStyleLayers();
+    this.#applyProofingPass();
+    this.#reapplySdtGroupHover();
   }
 
   #clearSelectedStructuredContentInlineClass() {
@@ -4899,14 +4964,12 @@ export class PresentationEditor extends EventEmitter {
 
     if (id) {
       const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
+      elements = Array.from(this.#painterHost.querySelectorAll(buildSdtInlineSelector(escapedId))) as HTMLElement[];
     }
 
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }

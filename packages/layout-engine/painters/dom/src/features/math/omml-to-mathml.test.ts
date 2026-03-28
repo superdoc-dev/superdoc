@@ -221,6 +221,7 @@ describe('m:bar converter', () => {
     expect(result).not.toBeNull();
     const mover = result!.querySelector('mover');
     expect(mover).not.toBeNull();
+    expect(mover!.firstElementChild!.textContent).toBe('x');
     const mo = mover!.querySelector('mo');
     expect(mo?.textContent).toBe('\u203E');
   });
@@ -240,11 +241,12 @@ describe('m:bar converter', () => {
     expect(result).not.toBeNull();
     const munder = result!.querySelector('munder');
     expect(munder).not.toBeNull();
+    expect(munder!.firstElementChild!.textContent).toBe('y');
     const mo = munder!.querySelector('mo');
     expect(mo?.textContent).toBe('\u0332');
   });
 
-  it('defaults to overbar when m:barPr is missing', () => {
+  it('defaults to underbar when m:barPr is missing (matches Word behavior)', () => {
     const omml = {
       name: 'm:oMath',
       elements: [{
@@ -256,7 +258,10 @@ describe('m:bar converter', () => {
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
-    const mover = result!.querySelector('mover');
-    expect(mover).not.toBeNull();
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+    expect(munder!.firstElementChild!.textContent).toBe('z');
+    const mo = munder!.querySelector('mo');
+    expect(mo?.textContent).toBe('\u0332');
   });
 });

@@ -9,8 +9,10 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *   m:bar → m:barPr (optional: m:pos@m:val="top"|"bot"), m:e (base expression)
  *
  * MathML output:
- *   top (default): <mover> <mrow>base</mrow> <mo>&#x203E;</mo> </mover>
- *   bot:           <munder> <mrow>base</mrow> <mo>&#x0332;</mo> </munder>
+ *   top:           <mover> <mrow>base</mrow> <mo>&#x203E;</mo> </mover>
+ *   bot (default): <munder> <mrow>base</mrow> <mo>&#x0332;</mo> </munder>
+ *
+ * Word renders an underbar when no position is specified, so the default is "bot".
  *
  * @spec ECMA-376 §22.1.2.7
  */
@@ -20,12 +22,16 @@ export const convertBar: MathObjectConverter = (node, doc, convertChildren) => {
   const barPr = elements.find((e) => e.name === 'm:barPr');
   const pos = barPr?.elements?.find((e) => e.name === 'm:pos');
   const posVal = pos?.attributes?.['m:val'];
-  const isUnder = posVal === 'bot';
+  const isUnder = posVal !== 'top';
 
   const base = elements.find((e) => e.name === 'm:e');
 
   const wrapper = doc.createElementNS(MATHML_NS, isUnder ? 'munder' : 'mover');
-  wrapper.appendChild(convertChildren(base?.elements ?? []));
+
+  const baseContent = convertChildren(base?.elements ?? []);
+  const mrow = doc.createElementNS(MATHML_NS, 'mrow');
+  mrow.appendChild(baseContent);
+  wrapper.appendChild(mrow);
 
   const accent = doc.createElementNS(MATHML_NS, 'mo');
   accent.setAttribute('stretchy', 'true');

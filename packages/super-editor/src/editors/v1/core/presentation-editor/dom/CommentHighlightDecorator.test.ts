@@ -41,6 +41,11 @@ function trackChangeSpan(id: string): HTMLSpanElement {
   return el;
 }
 
+function setActiveCommentAndApply(decorator: CommentHighlightDecorator, commentId: string | null): void {
+  decorator.setActiveComment(commentId);
+  decorator.apply();
+}
+
 /**
  * Simulates a browser that preserves CSS custom property expressions in the
  * inline backgroundColor style. jsdom drops them, so tests need an explicit
@@ -134,7 +139,7 @@ describe('CommentHighlightDecorator', () => {
       const span = commentSpan({ commentIds: ['c-1'] });
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(span.style.backgroundColor).toBe(EXT_ACTIVE);
       expect(span.style.boxShadow).toBe('');
@@ -144,7 +149,7 @@ describe('CommentHighlightDecorator', () => {
       const span = commentSpan({ commentIds: ['c-1'], internalIds: ['c-1'] });
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(span.style.backgroundColor).toBe(INT_ACTIVE);
     });
@@ -154,7 +159,7 @@ describe('CommentHighlightDecorator', () => {
       const other = commentSpan({ commentIds: ['c-2'] });
       container.append(active, other);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(active.style.backgroundColor).toBe(EXT_ACTIVE);
       expect(other.style.backgroundColor).toBe(EXT_FADED);
@@ -165,7 +170,7 @@ describe('CommentHighlightDecorator', () => {
       const other = commentSpan({ commentIds: ['c-2'], internalIds: ['c-2'] });
       container.append(active, other);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(other.style.backgroundColor).toBe(INT_FADED);
     });
@@ -178,7 +183,7 @@ describe('CommentHighlightDecorator', () => {
       const span = commentSpan({ commentIds: ['c-1', 'c-2'] });
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(span.style.backgroundColor).toBe(EXT_ACTIVE);
       expect(span.style.boxShadow).toContain(EXT_NESTED_BDR);
@@ -188,7 +193,7 @@ describe('CommentHighlightDecorator', () => {
       const span = commentSpan({ commentIds: ['c-1', 'c-2'], internalIds: ['c-1'] });
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(span.style.boxShadow).toContain(INT_NESTED_BDR);
     });
@@ -198,7 +203,7 @@ describe('CommentHighlightDecorator', () => {
       span.style.boxShadow = 'stale';
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
 
       expect(span.style.boxShadow).toBe('');
     });
@@ -214,7 +219,7 @@ describe('CommentHighlightDecorator', () => {
       });
       container.appendChild(span);
 
-      decorator.setActiveComment('w:comment-7');
+      setActiveCommentAndApply(decorator, 'w:comment-7');
 
       expect(span.style.backgroundColor).toBe(EXT_ACTIVE);
     });
@@ -227,7 +232,7 @@ describe('CommentHighlightDecorator', () => {
       });
       container.appendChild(span);
 
-      decorator.setActiveComment('w:comment-7');
+      setActiveCommentAndApply(decorator, 'w:comment-7');
 
       expect(span.style.backgroundColor).toBe(INT_ACTIVE);
     });
@@ -240,6 +245,17 @@ describe('CommentHighlightDecorator', () => {
       expect(decorator.setActiveComment('c-1')).toBe(true);
     });
 
+    it('updates state without mutating DOM until apply() runs', () => {
+      const span = commentSpan({ commentIds: ['c-1'] });
+      container.appendChild(span);
+
+      decorator.setActiveComment('c-1');
+      expect(span.style.backgroundColor).toBe('');
+
+      decorator.apply();
+      expect(span.style.backgroundColor).toBe(EXT_ACTIVE);
+    });
+
     it('returns false when value is the same', () => {
       decorator.setActiveComment('c-1');
       expect(decorator.setActiveComment('c-1')).toBe(false);
@@ -249,10 +265,10 @@ describe('CommentHighlightDecorator', () => {
       const span = commentSpan({ commentIds: ['c-1'] });
       container.appendChild(span);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
       expect(span.style.backgroundColor).toBe(EXT_ACTIVE);
 
-      decorator.setActiveComment(null);
+      setActiveCommentAndApply(decorator, null);
       expect(span.style.backgroundColor).toBe(EXT);
     });
 
@@ -268,7 +284,7 @@ describe('CommentHighlightDecorator', () => {
       container.appendChild(span);
 
       try {
-        decorator.setActiveComment('c-1');
+        setActiveCommentAndApply(decorator, 'c-1');
         expect(span.style.backgroundColor).toBe(EXT_ACTIVE_TOKEN);
 
         decorator.apply();
@@ -287,7 +303,7 @@ describe('CommentHighlightDecorator', () => {
       const tc = trackChangeSpan('tc-1');
       container.appendChild(tc);
 
-      decorator.setActiveComment('tc-1');
+      setActiveCommentAndApply(decorator, 'tc-1');
 
       expect(tc.classList.contains('track-change-focused')).toBe(true);
     });
@@ -296,10 +312,10 @@ describe('CommentHighlightDecorator', () => {
       const tc = trackChangeSpan('tc-1');
       container.appendChild(tc);
 
-      decorator.setActiveComment('tc-1');
+      setActiveCommentAndApply(decorator, 'tc-1');
       expect(tc.classList.contains('track-change-focused')).toBe(true);
 
-      decorator.setActiveComment('other');
+      setActiveCommentAndApply(decorator, 'other');
       expect(tc.classList.contains('track-change-focused')).toBe(false);
     });
 
@@ -307,8 +323,8 @@ describe('CommentHighlightDecorator', () => {
       const tc = trackChangeSpan('tc-1');
       container.appendChild(tc);
 
-      decorator.setActiveComment('tc-1');
-      decorator.setActiveComment(null);
+      setActiveCommentAndApply(decorator, 'tc-1');
+      setActiveCommentAndApply(decorator, null);
 
       expect(tc.classList.contains('track-change-focused')).toBe(false);
     });
@@ -322,7 +338,7 @@ describe('CommentHighlightDecorator', () => {
       const tc = trackChangeSpan('c-1');
       container.append(span, tc);
 
-      decorator.setActiveComment('c-1');
+      setActiveCommentAndApply(decorator, 'c-1');
       expect(span.style.backgroundColor).not.toBe('');
       expect(tc.classList.contains('track-change-focused')).toBe(true);
 
@@ -342,6 +358,7 @@ describe('CommentHighlightDecorator', () => {
       // Should not throw
       dec.apply();
       dec.setActiveComment('c-1');
+      dec.apply();
     });
 
     it('skips elements without data-comment-ids', () => {

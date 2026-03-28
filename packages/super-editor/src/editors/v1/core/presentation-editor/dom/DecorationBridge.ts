@@ -959,6 +959,71 @@ export class DecorationBridge {
   }
 
   /**
+   * Ensures a bridge-owned class is present both in the cache and in the live DOM.
+   *
+   * The DOM can temporarily diverge when another visual layer mutates the same
+   * element between bridge syncs. In that case we must re-apply the class even if
+   * our cached applied state already says it should be present.
+   */
+  #ensureDesiredClass(el: HTMLElement, applied: AppliedState, className: string): boolean {
+    const hasCachedClass = applied.classes.has(className);
+    const hasDomClass = el.classList.contains(className);
+
+    if (hasCachedClass && hasDomClass) return false;
+
+    if (!hasCachedClass && hasDomClass) {
+      applied.priorClasses.add(className);
+    }
+
+    el.classList.add(className);
+    applied.classes.add(className);
+    return true;
+  }
+
+  /**
+   * Ensures a bridge-owned data attribute matches both the cache and the live DOM.
+   *
+   * We only capture a prior value the first time the bridge starts owning this
+   * attribute. Later self-healing writes must not replace that original prior
+   * value, or removal would restore the wrong thing.
+   */
+  #ensureDesiredDataAttr(el: HTMLElement, applied: AppliedState, key: string, value: string): boolean {
+    const cachedValue = applied.dataAttrs.get(key);
+    const domValue = el.getAttribute(key);
+
+    if (cachedValue === value && domValue === value) return false;
+
+    if (!applied.dataAttrs.has(key) && domValue !== null) {
+      applied.priorDataAttrs.set(key, domValue);
+    }
+
+    el.setAttribute(key, value);
+    applied.dataAttrs.set(key, value);
+    return true;
+  }
+
+  /**
+   * Ensures a bridge-owned style property matches both the cache and the live DOM.
+   *
+   * This keeps the bridge authoritative even when another layer temporarily
+   * overwrites a property the bridge already owns.
+   */
+  #ensureDesiredStyleProp(el: HTMLElement, applied: AppliedState, prop: string, value: string): boolean {
+    const cachedValue = applied.styleProps.get(prop);
+    const domValue = el.style.getPropertyValue(prop);
+
+    if (cachedValue === value && domValue === value) return false;
+
+    if (!applied.styleProps.has(prop) && domValue) {
+      applied.priorStyleProps.set(prop, domValue);
+    }
+
+    el.style.setProperty(prop, value);
+    applied.styleProps.set(prop, value);
+    return true;
+  }
+
+  /**
    * Diffs desired vs applied state and makes minimal DOM updates.
    * @returns `true` if any DOM mutations were made.
    */
@@ -967,12 +1032,7 @@ export class DecorationBridge {
 
     // Classes: add new, remove stale (restoring painter-owned on removal).
     for (const cls of desired.classes) {
-      if (!applied.classes.has(cls)) {
-        if (el.classList.contains(cls)) applied.priorClasses.add(cls);
-        el.classList.add(cls);
-        applied.classes.add(cls);
-        mutated = true;
-      }
+      if (this.#ensureDesiredClass(el, applied, cls)) mutated = true;
     }
     for (const cls of applied.classes) {
       if (!desired.classes.has(cls)) {
@@ -987,15 +1047,7 @@ export class DecorationBridge {
 
     // Data attributes: add/update new, remove stale (restoring prior values).
     for (const [key, value] of desired.dataAttrs) {
-      if (applied.dataAttrs.get(key) !== value) {
-        if (!applied.dataAttrs.has(key)) {
-          const prior = el.getAttribute(key);
-          if (prior !== null) applied.priorDataAttrs.set(key, prior);
-        }
-        el.setAttribute(key, value);
-        applied.dataAttrs.set(key, value);
-        mutated = true;
-      }
+      if (this.#ensureDesiredDataAttr(el, applied, key, value)) mutated = true;
     }
     for (const key of applied.dataAttrs.keys()) {
       if (!desired.dataAttrs.has(key)) {
@@ -1013,15 +1065,7 @@ export class DecorationBridge {
 
     // Style properties: add/update new, remove stale (restoring prior values).
     for (const [prop, value] of desired.styleProps) {
-      if (applied.styleProps.get(prop) !== value) {
-        if (!applied.styleProps.has(prop)) {
-          const prior = el.style.getPropertyValue(prop);
-          if (prior) applied.priorStyleProps.set(prop, prior);
-        }
-        el.style.setProperty(prop, value);
-        applied.styleProps.set(prop, value);
-        mutated = true;
-      }
+      if (this.#ensureDesiredStyleProp(el, applied, prop, value)) mutated = true;
     }
     for (const prop of applied.styleProps.keys()) {
       if (!desired.styleProps.has(prop)) {

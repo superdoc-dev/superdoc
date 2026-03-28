@@ -4,6 +4,7 @@ import { PluginKey } from 'prosemirror-state';
 
 import { PresentationEditor } from '../PresentationEditor.js';
 import { DecorationBridge } from '../dom/DecorationBridge.js';
+import { CommentHighlightDecorator } from '../dom/CommentHighlightDecorator.js';
 
 // Create a plugin key for our test highlight plugin
 const testHighlightPluginKey = new PluginKey('testHighlight');
@@ -601,6 +602,7 @@ describe('PresentationEditor.decorationSync', () => {
 
   describe('comment highlight interoperability', () => {
     it('re-syncs bridged decorations after comment selection changes', async () => {
+      const commentApplySpy = vi.spyOn(CommentHighlightDecorator.prototype, 'apply');
       const decorationSyncSpy = vi.spyOn(DecorationBridge.prototype, 'sync');
 
       try {
@@ -618,14 +620,25 @@ describe('PresentationEditor.decorationSync', () => {
         const fireCommentsUpdate =
           getRegisteredEditorHandler<(payload: { activeCommentId?: string | null }) => void>('commentsUpdate');
 
+        const applyCallsBeforeSelectionChange = commentApplySpy.mock.calls.length;
         const syncCallsBeforeSelectionChange = decorationSyncSpy.mock.calls.length;
         fireCommentsUpdate({ activeCommentId: 'comment-1' });
+        expect(commentApplySpy.mock.calls.length).toBeGreaterThan(applyCallsBeforeSelectionChange);
         expect(decorationSyncSpy.mock.calls.length).toBeGreaterThan(syncCallsBeforeSelectionChange);
+        expect(commentApplySpy.mock.invocationCallOrder.at(-1)).toBeLessThan(
+          decorationSyncSpy.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
+        );
 
+        const applyCallsBeforeClear = commentApplySpy.mock.calls.length;
         const syncCallsBeforeClear = decorationSyncSpy.mock.calls.length;
         fireCommentsUpdate({ activeCommentId: null });
+        expect(commentApplySpy.mock.calls.length).toBeGreaterThan(applyCallsBeforeClear);
         expect(decorationSyncSpy.mock.calls.length).toBeGreaterThan(syncCallsBeforeClear);
+        expect(commentApplySpy.mock.invocationCallOrder.at(-1)).toBeLessThan(
+          decorationSyncSpy.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
+        );
       } finally {
+        commentApplySpy.mockRestore();
         decorationSyncSpy.mockRestore();
       }
     });

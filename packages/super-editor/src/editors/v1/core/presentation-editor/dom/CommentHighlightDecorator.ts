@@ -108,7 +108,7 @@ function applyBoxShadow(el: HTMLElement, border: HighlightToken): void {
  * ## When to call `apply()`
  * - After every `painter.paint()` (new elements in DOM)
  * - After DomPositionIndex observer rebuild (elements may have been replaced)
- * - Internally by `setActiveComment()` (active state changed)
+ * - After `setActiveComment()` when the caller wants to repaint existing DOM
  */
 export class CommentHighlightDecorator {
   #activeCommentId: string | null = null;
@@ -125,7 +125,6 @@ export class CommentHighlightDecorator {
   setActiveComment(commentId: string | null): boolean {
     if (this.#activeCommentId === commentId) return false;
     this.#activeCommentId = commentId;
-    this.apply();
     return true;
   }
 

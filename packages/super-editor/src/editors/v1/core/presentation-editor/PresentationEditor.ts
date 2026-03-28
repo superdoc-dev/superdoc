@@ -3348,9 +3348,9 @@ export class PresentationEditor extends EventEmitter {
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-    // Listen for comment selection changes to update comment highlight styling.
-    // The CommentHighlightDecorator updates inline styles on existing DOM elements
-    // without triggering a full layout → paint cycle (performance win).
+    // Listen for comment selection changes and re-run the inline style layering
+    // pipeline on the existing DOM. This avoids a full layout → paint cycle
+    // while still restoring bridge-owned inline decoration styles afterward.
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       // Only update active comment when the field is explicitly present in the payload.
       // This prevents unrelated events (like tracked change updates) from clearing
@@ -3359,10 +3359,7 @@ export class PresentationEditor extends EventEmitter {
         const activeId = payload.activeCommentId ?? null;
         const didChange = this.#commentHighlightDecorator.setActiveComment(activeId);
         if (didChange) {
-          // Comment highlights can touch the same inline properties as bridged
-          // decorations (for example background-color), so restore the bridge's
-          // owned styles immediately after comment state changes.
-          this.#syncDecorations();
+          this.#syncInlineStyleLayers();
         }
       }
     };

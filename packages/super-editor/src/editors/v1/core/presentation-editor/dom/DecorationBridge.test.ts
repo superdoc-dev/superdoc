@@ -435,6 +435,51 @@ describe('DecorationBridge', () => {
       expect(span.style.getPropertyValue('color')).toBe('blue');
     });
 
+    it('reapplies a bridge-owned class when live DOM loses it between syncs', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(5, 15);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('highlight');
+      setDecorations([{ from: 5, to: 15, class: 'hl' }]);
+      bridge.sync(mockState([plugin]), index);
+      expect(span.classList.contains('hl')).toBe(true);
+
+      span.classList.remove('hl');
+      bridge.sync(mockState([plugin]), index);
+      expect(span.classList.contains('hl')).toBe(true);
+    });
+
+    it('reapplies a bridge-owned data attribute when live DOM overwrites it between syncs', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(5, 15);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('highlight');
+      setDecorations([{ from: 5, to: 15, attrs: { 'data-owner': 'bridge' } }]);
+      bridge.sync(mockState([plugin]), index);
+      expect(span.getAttribute('data-owner')).toBe('bridge');
+
+      span.setAttribute('data-owner', 'other-layer');
+      bridge.sync(mockState([plugin]), index);
+      expect(span.getAttribute('data-owner')).toBe('bridge');
+    });
+
+    it('reapplies a bridge-owned style property when live DOM overwrites it between syncs', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(5, 15);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('highlight');
+      setDecorations([{ from: 5, to: 15, attrs: { style: 'background-color: yellow;' } }]);
+      bridge.sync(mockState([plugin]), index);
+      expect(span.style.getPropertyValue('background-color')).toBe('yellow');
+
+      span.style.setProperty('background-color', 'pink');
+      bridge.sync(mockState([plugin]), index);
+      expect(span.style.getPropertyValue('background-color')).toBe('yellow');
+    });
+
     it('removes stale style properties when they disappear from decorations', () => {
       const { index, addSpan, rebuild } = createIndex();
       const span = addSpan(5, 15);

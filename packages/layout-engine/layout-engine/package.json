@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@superdoc/common": "workspace:*",
-    "@superdoc/contracts": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*"
+    "@superdoc/contracts": "workspace:*"
   }
 }

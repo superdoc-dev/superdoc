@@ -1,17 +1,7 @@
-import type {
-  FlowBlock,
-  Fragment,
-  Layout,
-  Measure,
-  Page,
-  PainterDOM,
-  PageMargins,
-  PositionMapping,
-  ResolvedLayout,
-} from '@superdoc/contracts';
+import type { FlowBlock, Fragment, Layout, Measure, Page, PageMargins, ResolvedLayout } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
-import type { PaintSnapshot, RulerOptions, FlowMode } from './renderer.js';
+import type { DomPainterInput, PaintSnapshot, PositionMapping, RulerOptions, FlowMode } from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -36,6 +26,7 @@ export type {
 } from './ruler/index.js';
 export type { RulerOptions } from './renderer.js';
 export type { PaintSnapshot } from './renderer.js';
+export type { DomPainterInput, PositionMapping, RenderedLineInfo } from './renderer.js';
 
 // Re-export utility functions for testing
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
@@ -89,8 +80,16 @@ export type PageDecorationProvider = (
 ) => PageDecorationPayload | null;
 
 export type DomPainterOptions = {
-  blocks: FlowBlock[];
-  measures: Measure[];
+  /**
+   * Legacy compatibility: initial body block data.
+   * New callers should pass block data through `paint(input, mount)`.
+   */
+  blocks?: FlowBlock[];
+  /**
+   * Legacy compatibility: initial body measures.
+   * New callers should pass measure data through `paint(input, mount)`.
+   */
+  measures?: Measure[];
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
   flowMode?: FlowMode;
@@ -125,20 +124,113 @@ export type DomPainterOptions = {
   ruler?: RulerOptions;
 };
 
-export const createDomPainter = (
-  options: DomPainterOptions,
-): PainterDOM & {
-  setProviders?: (header?: PageDecorationProvider, footer?: PageDecorationProvider) => void;
-  setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
-  setActiveComment?: (commentId: string | null) => void;
-  getActiveComment?: () => string | null;
-  getPaintSnapshot?: () => PaintSnapshot | null;
-  onScroll?: () => void;
-  setZoom?: (zoom: number) => void;
-  setScrollContainer?: (el: HTMLElement | null) => void;
-  setResolvedLayout?: (resolvedLayout: ResolvedLayout | null) => void;
-} => {
-  const painter = new DomPainter(options.blocks, options.measures, {
+type LegacyDomPainterState = {
+  blocks: FlowBlock[];
+  measures: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
+  resolvedLayout: ResolvedLayout | null;
+};
+
+type BlockMeasurePair = {
+  blocks: FlowBlock[];
+  measures: Measure[];
+};
+
+export type DomPainterHandle = {
+  paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping): void;
+  /**
+   * Legacy compatibility API.
+   * New callers should pass block/measure data via `paint(input, mount)`.
+   */
+  setData(
+    blocks: FlowBlock[],
+    measures: Measure[],
+    headerBlocks?: FlowBlock[],
+    headerMeasures?: Measure[],
+    footerBlocks?: FlowBlock[],
+    footerMeasures?: Measure[],
+  ): void;
+  /**
+   * Legacy compatibility API.
+   * New callers should pass resolved data via `paint(input, mount)`.
+   */
+  setResolvedLayout(resolvedLayout: ResolvedLayout | null): void;
+  setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void;
+  setVirtualizationPins(pageIndices: number[] | null | undefined): void;
+  setActiveComment(commentId: string | null): void;
+  getActiveComment(): string | null;
+  getPaintSnapshot(): PaintSnapshot | null;
+  onScroll(): void;
+  setZoom(zoom: number): void;
+  setScrollContainer(el: HTMLElement | null): void;
+};
+
+function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], measures: Measure[]): void {
+  if (blocks.length !== measures.length) {
+    throw new Error(`${label} blocks and measures must have the same length.`);
+  }
+}
+
+function normalizeOptionalBlockMeasurePair(
+  label: 'header' | 'footer',
+  blocks: FlowBlock[] | undefined,
+  measures: Measure[] | undefined,
+): BlockMeasurePair | undefined {
+  const hasBlocks = blocks !== undefined;
+  const hasMeasures = measures !== undefined;
+
+  if (hasBlocks !== hasMeasures) {
+    throw new Error(`${label}Blocks and ${label}Measures must both be provided or both be omitted.`);
+  }
+
+  if (!hasBlocks || !hasMeasures) {
+    return undefined;
+  }
+
+  assertRequiredBlockMeasurePair(label, blocks, measures);
+  return { blocks, measures };
+}
+
+function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: number | undefined): ResolvedLayout {
+  return {
+    version: 1,
+    flowMode: flowMode ?? 'paginated',
+    pageGap: pageGap ?? 0,
+    pages: [],
+  };
+}
+
+function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
+  return 'resolvedLayout' in value && 'sourceLayout' in value && 'blocks' in value && 'measures' in value;
+}
+
+function buildLegacyPaintInput(
+  layout: Layout,
+  legacyState: LegacyDomPainterState,
+  flowMode: FlowMode | undefined,
+  pageGap: number | undefined,
+): DomPainterInput {
+  return {
+    resolvedLayout: legacyState.resolvedLayout ?? createEmptyResolvedLayout(flowMode, pageGap),
+    sourceLayout: layout,
+    blocks: legacyState.blocks,
+    measures: legacyState.measures,
+    headerBlocks: legacyState.headerBlocks,
+    headerMeasures: legacyState.headerMeasures,
+    footerBlocks: legacyState.footerBlocks,
+    footerMeasures: legacyState.footerMeasures,
+  };
+}
+
+export const createDomPainter = (options: DomPainterOptions): DomPainterHandle => {
+  if ((options.blocks ?? []).length !== (options.measures ?? []).length) {
+    throw new Error('DomPainter requires the same number of blocks and measures');
+  }
+
+  const painter = new DomPainter({
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
     flowMode: options.flowMode,
@@ -149,9 +241,18 @@ export const createDomPainter = (
     ruler: options.ruler,
   });
 
+  const legacyState: LegacyDomPainterState = {
+    blocks: options.blocks ?? [],
+    measures: options.measures ?? [],
+    resolvedLayout: null,
+  };
+
   return {
-    paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping) {
-      painter.paint(layout, mount, mapping);
+    paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping) {
+      const normalizedInput = isDomPainterInput(input)
+        ? input
+        : buildLegacyPaintInput(input, legacyState, options.flowMode, options.pageGap);
+      painter.paint(normalizedInput, mount, mapping);
     },
     setData(
       blocks: FlowBlock[],
@@ -161,9 +262,20 @@ export const createDomPainter = (
       footerBlocks?: FlowBlock[],
       footerMeasures?: Measure[],
     ) {
-      painter.setData(blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures);
+      assertRequiredBlockMeasurePair('body', blocks, measures);
+      const normalizedHeader = normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
+      const normalizedFooter = normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
+
+      legacyState.blocks = blocks;
+      legacyState.measures = measures;
+      legacyState.headerBlocks = normalizedHeader?.blocks;
+      legacyState.headerMeasures = normalizedHeader?.measures;
+      legacyState.footerBlocks = normalizedFooter?.blocks;
+      legacyState.footerMeasures = normalizedFooter?.measures;
     },
-    // Non-standard extension for demo app to avoid re-instantiating on provider changes
+    setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
+      legacyState.resolvedLayout = resolvedLayout;
+    },
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
       painter.setProviders(header, footer);
     },
@@ -179,20 +291,14 @@ export const createDomPainter = (
     getPaintSnapshot() {
       return painter.getPaintSnapshot();
     },
-    // Trigger virtualization update when scroll container is external to the painter
     onScroll() {
       painter.onScroll();
     },
-    // Notify painter of CSS transform scale so virtualization maps scroll correctly
     setZoom(zoom: number) {
       painter.setZoom(zoom);
     },
-    // Set the external scroll container for correct scrollY calculation
     setScrollContainer(el: HTMLElement | null) {
       painter.setScrollContainer(el);
-    },
-    setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
-      painter.setResolvedLayout(resolvedLayout);
     },
   };
 };

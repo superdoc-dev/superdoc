@@ -1,5 +1,7 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
+import { DomPainter } from './renderer.js';
+import type { DomPainterOptions, DomPainterInput } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
@@ -13,6 +15,68 @@ import type {
   TableBlock,
   TableMeasure,
 } from '@superdoc/contracts';
+
+const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
+
+/**
+ * Test-only bridge: accepts old-style `{ blocks, measures, ...options }` and
+ * returns a painter whose `paint()` automatically builds a `DomPainterInput`.
+ * This lets existing tests exercise the new DomPainter code path without
+ * rewriting every call site.
+ */
+function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
+  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
+  const painter = createDomPainter(painterOpts);
+  let currentBlocks: FlowBlock[] = initBlocks ?? [];
+  let currentMeasures: Measure[] = initMeasures ?? [];
+  let currentResolved: ResolvedLayout = emptyResolved;
+  let headerBlocks: FlowBlock[] | undefined;
+  let headerMeasures: Measure[] | undefined;
+  let footerBlocks: FlowBlock[] | undefined;
+  let footerMeasures: Measure[] | undefined;
+
+  return {
+    paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const input: DomPainterInput = {
+        resolvedLayout: currentResolved,
+        sourceLayout: layout,
+        blocks: currentBlocks,
+        measures: currentMeasures,
+        headerBlocks,
+        headerMeasures,
+        footerBlocks,
+        footerMeasures,
+      };
+      painter.paint(input, mount, mapping as any);
+    },
+    setData(
+      blocks: FlowBlock[],
+      measures: Measure[],
+      hb?: FlowBlock[],
+      hm?: Measure[],
+      fb?: FlowBlock[],
+      fm?: Measure[],
+    ) {
+      currentBlocks = blocks;
+      currentMeasures = measures;
+      headerBlocks = hb;
+      headerMeasures = hm;
+      footerBlocks = fb;
+      footerMeasures = fm;
+    },
+    setResolvedLayout(rl: ResolvedLayout | null) {
+      currentResolved = rl ?? emptyResolved;
+    },
+    setProviders: painter.setProviders,
+    setVirtualizationPins: painter.setVirtualizationPins,
+    setActiveComment: painter.setActiveComment,
+    getActiveComment: painter.getActiveComment,
+    getPaintSnapshot: painter.getPaintSnapshot,
+    onScroll: painter.onScroll,
+    setZoom: painter.setZoom,
+    setScrollContainer: painter.setScrollContainer,
+  };
+}
 
 const block: FlowBlock = {
   kind: 'paragraph',
@@ -225,7 +289,7 @@ describe('DomPainter', () => {
   });
 
   it('renders pages and fragments into the mount', () => {
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     expect(mount.classList.contains('superdoc-layout')).toBe(true);
@@ -292,7 +356,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [alignedBlock], measures: [alignedMeasure] });
+    const painter = createTestPainter({ blocks: [alignedBlock], measures: [alignedMeasure] });
     painter.paint(alignedLayout, mount);
 
     const line = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -360,7 +424,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [justifyBlock], measures: [justifyMeasure] });
+    const painter = createTestPainter({ blocks: [justifyBlock], measures: [justifyMeasure] });
     painter.paint(justifyLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -434,7 +498,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [justifyWithBreakBlock], measures: [justifyWithBreakMeasure] });
+    const painter = createTestPainter({ blocks: [justifyWithBreakBlock], measures: [justifyWithBreakMeasure] });
     painter.paint(justifyWithBreakLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -492,7 +556,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [singleLineBlock], measures: [singleLineMeasure] });
+    const painter = createTestPainter({ blocks: [singleLineBlock], measures: [singleLineMeasure] });
     painter.paint(singleLineLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -549,7 +613,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [singleLineWithBreakBlock], measures: [singleLineWithBreakMeasure] });
+    const painter = createTestPainter({ blocks: [singleLineWithBreakBlock], measures: [singleLineWithBreakMeasure] });
     painter.paint(singleLineWithBreakLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -638,7 +702,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [multiFragmentBlock], measures: [multiFragmentMeasure] });
+    const painter = createTestPainter({ blocks: [multiFragmentBlock], measures: [multiFragmentMeasure] });
     painter.paint(multiFragmentLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -724,14 +788,14 @@ describe('DomPainter', () => {
     };
 
     // Test right alignment
-    const rightPainter = createDomPainter({ blocks: [rightAlignBlock], measures: [singleLineMeasure] });
+    const rightPainter = createTestPainter({ blocks: [rightAlignBlock], measures: [singleLineMeasure] });
     rightPainter.paint(rightAlignLayout, mount);
     let line = mount.querySelector('.superdoc-line') as HTMLElement;
     expect(line.style.textAlign).toBe('right');
 
     // Clear and test center alignment
     mount.innerHTML = '';
-    const centerPainter = createDomPainter({ blocks: [centerAlignBlock], measures: [singleLineMeasure] });
+    const centerPainter = createTestPainter({ blocks: [centerAlignBlock], measures: [singleLineMeasure] });
     centerPainter.paint(centerAlignLayout, mount);
     line = mount.querySelector('.superdoc-line') as HTMLElement;
     expect(line.style.textAlign).toBe('center');
@@ -818,7 +882,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [listParaBlock], measures: [listParaMeasure] });
+    const painter = createTestPainter({ blocks: [listParaBlock], measures: [listParaMeasure] });
     painter.paint(listParaLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -915,7 +979,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [listParaBlock], measures: [listParaMeasure] });
+    const painter = createTestPainter({ blocks: [listParaBlock], measures: [listParaMeasure] });
     painter.paint(listParaLayout, mount);
 
     const firstLine = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -998,7 +1062,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [singleLineListBlock], measures: [singleLineListMeasure] });
+    const painter = createTestPainter({ blocks: [singleLineListBlock], measures: [singleLineListMeasure] });
     painter.paint(singleLineListLayout, mount);
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
@@ -1091,7 +1155,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
     painter.paint(tableLayout, mount);
 
     // Find the line inside the table cell
@@ -1202,7 +1266,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
     painter.paint(tableLayout, mount);
 
     // Find both lines inside the table cell
@@ -1214,6 +1278,146 @@ describe('DomPainter', () => {
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
+  });
+
+  it('renders an error placeholder when a legacy table fragment is missing its lookup entry', () => {
+    const missingTableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'missing-table',
+              x: 0,
+              y: 0,
+              width: 200,
+              height: 30,
+              fromRow: 0,
+              toRow: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      // Intentionally empty - suppress expected error logging during this regression test.
+    });
+
+    const painter = createTestPainter({ blocks: [], measures: [] });
+    expect(() => painter.paint(missingTableLayout, mount)).not.toThrow();
+
+    const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.textContent).toContain('[Render Error: missing-table]');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('renders an error placeholder when table-cell line rendering throws', () => {
+    const renderLineError = new Error('renderLine forced error');
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-err',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'cell-para-err',
+                  runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 10 }],
+                },
+              ],
+              attrs: {},
+            },
+          ],
+        },
+      ],
+    };
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          height: 24,
+          cells: [
+            {
+              width: 120,
+              height: 24,
+              gridColumnStart: 0,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 9,
+                      width: 60,
+                      ascent: 10,
+                      descent: 4,
+                      lineHeight: 16,
+                    },
+                  ],
+                  totalHeight: 16,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidths: [120],
+      totalWidth: 120,
+      totalHeight: 24,
+    };
+    const tableLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'table-err',
+              fromRow: 0,
+              toRow: 1,
+              x: 0,
+              y: 0,
+              width: 120,
+              height: 24,
+            },
+          ],
+        },
+      ],
+    };
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      // Intentionally empty - suppress expected error logging during this regression test.
+    });
+    const renderLineSpy = vi.spyOn(DomPainter.prototype as any, 'renderLine').mockImplementation(() => {
+      throw renderLineError;
+    });
+
+    try {
+      const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+      expect(() => painter.paint(tableLayout, mount)).not.toThrow();
+
+      const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
+      expect(placeholder).toBeTruthy();
+      expect(placeholder?.textContent).toContain('[Render Error: table-err]');
+      expect(placeholder?.title).toBe('renderLine forced error');
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    } finally {
+      renderLineSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('applies negative word-spacing for compressed justify lines', () => {
@@ -1277,7 +1481,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [compressBlock], measures: [compressMeasure] });
+    const painter = createTestPainter({ blocks: [compressBlock], measures: [compressMeasure] });
     painter.paint(compressLayout, mount);
 
     const lines = mount.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
@@ -1361,7 +1565,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [negativeIndentBlock], measures: [negativeIndentMeasure] });
+    const painter = createTestPainter({ blocks: [negativeIndentBlock], measures: [negativeIndentMeasure] });
     painter.paint(negativeIndentLayout, mount);
 
     const lines = mount.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
@@ -1382,7 +1586,7 @@ describe('DomPainter', () => {
   });
 
   it('emits pm metadata attributes', () => {
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -1399,7 +1603,8 @@ describe('DomPainter', () => {
   });
 
   it('throws if blocks and measures length mismatch', () => {
-    expect(() => createDomPainter({ blocks: [block], measures: [] })).toThrow(/same number of blocks/);
+    const painter = createTestPainter({ blocks: [block], measures: [] });
+    expect(() => painter.paint(layout, mount)).toThrow(/same number of blocks/);
   });
 
   it('renders placeholder content for empty lines', () => {
@@ -1444,7 +1649,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [blockWithEmptyRun],
       measures: [measureWithEmptyLine],
     });
@@ -1496,7 +1701,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [blockWithEmptyRun],
       measures: [measureWithEmptyLine],
     });
@@ -1539,7 +1744,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+    const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
     painter.paint(imageLayout, mount);
 
     const img = mount.querySelector('img');
@@ -1549,7 +1754,7 @@ describe('DomPainter', () => {
   });
 
   it('annotates fragments and runs with SDT metadata', () => {
-    const painter = createDomPainter({ blocks: [sdtBlock], measures: [sdtMeasure] });
+    const painter = createTestPainter({ blocks: [sdtBlock], measures: [sdtMeasure] });
     painter.paint(sdtLayout, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -1621,7 +1826,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [sectionBlock], measures: [sectionMeasure] });
+    const painter = createTestPainter({ blocks: [sectionBlock], measures: [sectionMeasure] });
     painter.paint(sectionLayout, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -1699,7 +1904,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [tocBlock], measures: [tocMeasure] });
+    const painter = createTestPainter({ blocks: [tocBlock], measures: [tocMeasure] });
     painter.paint(tocLayout, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -1811,7 +2016,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [inlineScBlock], measures: [inlineScMeasure] });
+    const painter = createTestPainter({ blocks: [inlineScBlock], measures: [inlineScMeasure] });
     painter.paint(inlineScLayout, mount);
 
     // Should have exactly ONE wrapper for the grouped runs
@@ -1910,7 +2115,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [markerBlock],
       measures: [markerMeasure],
     });
@@ -1999,7 +2204,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [nestedBlock],
       measures: [nestedMeasure],
     });
@@ -2085,7 +2290,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [tabBlock],
       measures: [tabMeasure],
     });
@@ -2174,7 +2379,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [longMarkerBlock],
       measures: [longMarkerMeasure],
     });
@@ -2267,7 +2472,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [rightMarkerBlock],
       measures: [rightMarkerMeasure],
     });
@@ -2353,7 +2558,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(listLayout, mount);
 
     const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -2435,7 +2640,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(listLayout, mount);
 
     const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -2544,7 +2749,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(listLayout, mount);
 
     const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -2573,7 +2778,7 @@ describe('DomPainter', () => {
   });
 
   it('reuses fragment DOM nodes when layout geometry changes', () => {
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -2600,7 +2805,7 @@ describe('DomPainter', () => {
   });
 
   it('rebuilds fragment DOM when block content changes via setData', () => {
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -2626,7 +2831,7 @@ describe('DomPainter', () => {
       ],
       totalHeight: 20,
     };
-    painter.setData?.([updatedBlock], [updatedMeasure]);
+    painter.setData([updatedBlock], [updatedMeasure]);
 
     const updatedLayout: Layout = {
       ...layout,
@@ -2705,7 +2910,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
+    const painter = createTestPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
     painter.paint(lockedLayout, mount);
 
     const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -2726,7 +2931,7 @@ describe('DomPainter', () => {
       },
     };
 
-    painter.setData?.([updatedLockedBlock], [lockedMeasure]);
+    painter.setData([updatedLockedBlock], [lockedMeasure]);
     painter.paint(lockedLayout, mount);
 
     const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -2734,7 +2939,7 @@ describe('DomPainter', () => {
   });
 
   it('updates fragment positions in virtualized mode when layout changes without block diffs', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 2 },
@@ -2756,7 +2961,7 @@ describe('DomPainter', () => {
         },
       }) as DOMRect;
 
-    painter.setData?.([block], [measure]);
+    painter.setData([block], [measure]);
     painter.paint(layout, virtualMount);
     const fragmentBefore = virtualMount.querySelector('.superdoc-fragment') as HTMLElement;
     expect(fragmentBefore.style.left).toBe('30px');
@@ -2774,7 +2979,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    painter.setData?.([block], [measure]);
+    painter.setData([block], [measure]);
     painter.paint(shiftedLayout, virtualMount);
     const fragmentAfter = virtualMount.querySelector('.superdoc-fragment') as HTMLElement;
 
@@ -2782,7 +2987,7 @@ describe('DomPainter', () => {
   });
 
   it('exposes a paint snapshot after rendering', () => {
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
 
     painter.paint(layout, mount);
 
@@ -2794,7 +2999,7 @@ describe('DomPainter', () => {
   });
 
   it('uses actual page indices when collecting virtualized paint snapshots', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 2 },
@@ -2882,7 +3087,7 @@ describe('DomPainter', () => {
       width: 200,
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block, headerBlock],
       measures: [measure, headerMeasure],
       headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
@@ -2950,7 +3155,7 @@ describe('DomPainter', () => {
       behindDoc: false,
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block, behindDocImageBlock, normalImageBlock],
       measures: [measure, behindDocImageMeasure, normalImageMeasure],
       headerProvider: () => ({
@@ -3019,7 +3224,7 @@ describe('DomPainter', () => {
       isAnchored: true,
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block, behindDocImageBlock],
       measures: [measure, behindDocImageMeasure],
       headerProvider: () => ({
@@ -3073,7 +3278,7 @@ describe('DomPainter', () => {
       trackedBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [trackedBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [trackedBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-line span') as HTMLElement;
@@ -3108,7 +3313,7 @@ describe('DomPainter', () => {
       trackedCommentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [trackedCommentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [trackedCommentBlock], measures: [paragraphMeasure] });
     painter.setActiveComment('comment-1');
     painter.paint(paragraphLayout, mount);
 
@@ -3139,7 +3344,7 @@ describe('DomPainter', () => {
       highlightedCommentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [highlightedCommentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [highlightedCommentBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
@@ -3170,7 +3375,7 @@ describe('DomPainter', () => {
 
     const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
 
-    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [block], measures: [paragraphMeasure] });
     painter.setActiveComment('comment-active-hl');
     painter.paint(paragraphLayout, mount);
 
@@ -3199,7 +3404,7 @@ describe('DomPainter', () => {
 
     const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
 
-    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [block], measures: [paragraphMeasure] });
     // Activate a different comment so this one gets faded
     painter.setActiveComment('some-other-comment');
     painter.paint(paragraphLayout, mount);
@@ -3231,7 +3436,7 @@ describe('DomPainter', () => {
       commentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
@@ -3260,7 +3465,7 @@ describe('DomPainter', () => {
       commentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
 
     // Initially (no active comment), should be highlighted
     painter.paint(paragraphLayout, mount);
@@ -3306,7 +3511,7 @@ describe('DomPainter', () => {
       nestedCommentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [nestedCommentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [nestedCommentBlock], measures: [paragraphMeasure] });
 
     // Select outer comment
     painter.setActiveComment('outer-comment');
@@ -3338,7 +3543,7 @@ describe('DomPainter', () => {
       commentBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
 
     // First select a comment
     painter.setActiveComment('comment-X');
@@ -3380,7 +3585,7 @@ describe('DomPainter', () => {
       finalBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [finalBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [finalBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('[data-track-change-id="change-final"]') as HTMLElement;
@@ -3415,7 +3620,7 @@ describe('DomPainter', () => {
       disabledBlock.runs[0].text.length,
     );
 
-    const painter = createDomPainter({ blocks: [disabledBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [disabledBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-line span') as HTMLElement;
@@ -3458,12 +3663,12 @@ describe('DomPainter', () => {
 
     const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(blockId, originalBlock.runs[0].text.length);
 
-    const painter = createDomPainter({ blocks: [originalBlock], measures: [paragraphMeasure] });
+    const painter = createTestPainter({ blocks: [originalBlock], measures: [paragraphMeasure] });
     painter.paint(paragraphLayout, mount);
 
     expect(mount.querySelector('[data-track-change-id]')).toBeNull();
 
-    painter.setData?.([updatedBlock], [paragraphMeasure]);
+    painter.setData([updatedBlock], [paragraphMeasure]);
     painter.paint(paragraphLayout, mount);
 
     const trackedSpan = mount.querySelector('[data-track-change-id="tc-new"]') as HTMLElement;
@@ -3508,7 +3713,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, footerBlock],
         measures: [measure, footerMeasure],
         footerProvider: () => ({ fragments: [footerFragment], height: 14 }),
@@ -3556,7 +3761,7 @@ describe('DomPainter', () => {
       const contentHeight = 20;
       const footerOffset = 400;
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, footerBlock],
         measures: [measure, footerMeasure],
         footerProvider: () => ({
@@ -3617,7 +3822,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, footerBlock],
         measures: [measure, footerMeasure],
         footerProvider: () => ({ fragments: [footerFragment], height: 14 }),
@@ -3659,7 +3864,7 @@ describe('DomPainter', () => {
         behindDoc: true,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, headerImageBlock],
         measures: [measure, headerImageMeasure],
         headerProvider: () => ({
@@ -3714,7 +3919,7 @@ describe('DomPainter', () => {
       const footerHeight = 80;
       const footerContentHeight = 30;
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, footerImageBlock],
         measures: [measure, footerImageMeasure],
         footerProvider: () => ({
@@ -3787,7 +3992,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, headerBlock],
         measures: [measure, headerMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
@@ -3837,7 +4042,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, headerBlock],
         measures: [measure, headerMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
@@ -3901,7 +4106,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, headerBlock],
         measures: [measure, headerMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
@@ -3958,7 +4163,7 @@ describe('DomPainter', () => {
         width: 200,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block, headerBlock],
         measures: [measure, headerMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
@@ -4024,7 +4229,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
     painter.paint(listLayout, mount);
 
     const marker = mount.querySelector('.superdoc-list-marker');
@@ -4161,9 +4366,9 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
 
-    painter.setResolvedLayout?.(initialResolvedLayout);
+    painter.setResolvedLayout(initialResolvedLayout);
     painter.paint(initialLayout, mount);
 
     const initialWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
@@ -4171,7 +4376,7 @@ describe('DomPainter', () => {
     expect(initialWrapper.style.top).toBe('40px');
     expect(initialWrapper.style.width).toBe('290px');
 
-    painter.setResolvedLayout?.(updatedResolvedLayout);
+    painter.setResolvedLayout(updatedResolvedLayout);
     painter.paint(updatedLayout, mount);
 
     const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
@@ -4288,12 +4493,12 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [anchoredDrawingBlock, inlineDrawingBlock],
       measures: [drawingMeasure, drawingMeasure],
     });
 
-    painter.setResolvedLayout?.(resolvedLayout);
+    painter.setResolvedLayout(resolvedLayout);
     painter.paint(drawingLayout, mount);
 
     const anchoredDrawingEl = mount.querySelector('[data-block-id="drawing-anchored"]') as HTMLElement;
@@ -4383,12 +4588,12 @@ describe('DomPainter', () => {
         },
       });
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [paragraphBlock],
         measures: [paragraphMeasure],
       });
 
-      painter.setResolvedLayout?.(resolvedLayout);
+      painter.setResolvedLayout(resolvedLayout);
       painter.paint(paragraphLayout, mount);
 
       const lineEls = mount.querySelectorAll('.superdoc-line');
@@ -4476,12 +4681,12 @@ describe('DomPainter', () => {
         },
       });
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [paragraphBlock],
         measures: [paragraphMeasure],
       });
 
-      painter.setResolvedLayout?.(resolvedLayout);
+      painter.setResolvedLayout(resolvedLayout);
       painter.paint(paragraphLayout, mount);
 
       const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -4567,12 +4772,12 @@ describe('DomPainter', () => {
         },
       });
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [paragraphBlock],
         measures: [paragraphMeasure],
       });
 
-      painter.setResolvedLayout?.(resolvedLayout);
+      painter.setResolvedLayout(resolvedLayout);
       painter.paint(paragraphLayout, mount);
 
       const dropCapEl = mount.querySelector('.superdoc-drop-cap') as HTMLElement;
@@ -4641,7 +4846,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [decoratedBlock], measures: [decoratedMeasure] });
+    const painter = createTestPainter({ blocks: [decoratedBlock], measures: [decoratedMeasure] });
     painter.paint(decoratedLayout, mount);
 
     const anchor = mount.querySelector('a') as HTMLAnchorElement;
@@ -4717,7 +4922,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(richLayout, mount);
 
     const anchor = mount.querySelector('a') as HTMLAnchorElement;
@@ -4786,7 +4991,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(blockedLayout, mount);
 
     const span = mount.querySelector('.superdoc-fragment span') as HTMLSpanElement;
@@ -4848,7 +5053,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(longUrlLayout, mount);
 
     // Should render as blocked span, not anchor
@@ -4910,7 +5115,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(maxUrlLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -4947,7 +5152,7 @@ describe('DomPainter', () => {
       totalHeight: 18,
     };
 
-    const painter = createDomPainter({ blocks: [blockWithTabs], measures: [measureWithLeaders] });
+    const painter = createTestPainter({ blocks: [blockWithTabs], measures: [measureWithLeaders] });
     const tabLayout: Layout = {
       pageSize: layout.pageSize,
       pages: [
@@ -4998,7 +5203,7 @@ describe('DomPainter', () => {
       runs: [{ text: 'Border test', fontFamily: 'Arial', fontSize: 16 }],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [blockWithBorders],
       measures: [measure],
     });
@@ -5048,7 +5253,7 @@ describe('DomPainter', () => {
       runs: [{ text: 'Shaded paragraph', fontFamily: 'Arial', fontSize: 16 }],
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [shadedBlock],
       measures: [measure],
     });
@@ -5153,7 +5358,7 @@ describe('DomPainter', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
     painter.paint(listLayout, mount);
 
     const content = mount.querySelector('.superdoc-list-content') as HTMLElement;
@@ -5218,7 +5423,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [indentBlock], measures: [indentMeasure] });
+      const painter = createTestPainter({ blocks: [indentBlock], measures: [indentMeasure] });
       painter.paint(indentLayout, mount);
 
       const lines = mount.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
@@ -5287,7 +5492,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [firstLineBlock], measures: [firstLineMeasure] });
+      const painter = createTestPainter({ blocks: [firstLineBlock], measures: [firstLineMeasure] });
       painter.paint(firstLineLayout, mount);
 
       const lines = mount.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
@@ -5355,7 +5560,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [hangingBlock], measures: [hangingMeasure] });
+      const painter = createTestPainter({ blocks: [hangingBlock], measures: [hangingMeasure] });
       painter.paint(hangingLayout, mount);
 
       const lines = mount.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
@@ -5438,7 +5643,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [continuedBlock], measures: [continuedMeasure] });
+      const painter = createTestPainter({ blocks: [continuedBlock], measures: [continuedMeasure] });
       painter.paint(continuedLayout, mount);
 
       const pages = mount.querySelectorAll('.superdoc-page');
@@ -5497,7 +5702,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [doubleIndentBlock], measures: [doubleIndentMeasure] });
+      const painter = createTestPainter({ blocks: [doubleIndentBlock], measures: [doubleIndentMeasure] });
       painter.paint(doubleIndentLayout, mount);
 
       const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -5566,7 +5771,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5637,7 +5842,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      const painter = createTestPainter({ blocks: imageBlocks, measures: imageMeasures });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5718,7 +5923,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      const painter = createTestPainter({ blocks: imageBlocks, measures: imageMeasures });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5786,7 +5991,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      const painter = createTestPainter({ blocks: imageBlocks, measures: imageMeasures });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5857,7 +6062,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5918,7 +6123,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -5976,7 +6181,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6036,7 +6241,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
@@ -6107,7 +6312,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6165,7 +6370,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6223,7 +6428,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6282,7 +6487,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6341,7 +6546,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img');
@@ -6403,7 +6608,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img') as HTMLElement;
@@ -6465,7 +6670,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
 
       const img = mount.querySelector('img') as HTMLElement;
@@ -6524,7 +6729,7 @@ describe('DomPainter', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+        const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
         painter.paint(imageLayout, mount);
 
         const img = mount.querySelector('img');
@@ -6594,7 +6799,7 @@ describe('DomPainter', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+        const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
         painter.paint(imageLayout, mount);
 
         const img = mount.querySelector('img');
@@ -6655,7 +6860,7 @@ describe('DomPainter', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+        const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
         painter.paint(imageLayout, mount);
 
         const img = mount.querySelector('img');
@@ -6716,7 +6921,7 @@ describe('DomPainter', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+        const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
         painter.paint(imageLayout, mount);
 
         const img = mount.querySelector('img');
@@ -6763,7 +6968,7 @@ describe('DomPainter', () => {
     };
 
     it('sets dir="rtl" and defaults text-align to right', () => {
-      const painter = createDomPainter({ blocks: [rtlBlock({})], measures: [rtlMeasure] });
+      const painter = createTestPainter({ blocks: [rtlBlock({})], measures: [rtlMeasure] });
       painter.paint(rtlLayout, mount);
 
       const line = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -6772,7 +6977,7 @@ describe('DomPainter', () => {
     });
 
     it('preserves explicit left alignment on RTL paragraphs', () => {
-      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'left' })], measures: [rtlMeasure] });
+      const painter = createTestPainter({ blocks: [rtlBlock({ alignment: 'left' })], measures: [rtlMeasure] });
       painter.paint(rtlLayout, mount);
 
       const line = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -6781,7 +6986,7 @@ describe('DomPainter', () => {
     });
 
     it('uses text-align right for RTL justified paragraphs', () => {
-      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'justify' })], measures: [rtlMeasure] });
+      const painter = createTestPainter({ blocks: [rtlBlock({ alignment: 'justify' })], measures: [rtlMeasure] });
       painter.paint(rtlLayout, mount);
 
       const line = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -6823,7 +7028,7 @@ describe('DomPainter', () => {
         totalHeight: 20,
       };
 
-      const painter = createDomPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+      const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
       painter.paint(rtlLayout, mount);
 
       const line = mount.querySelector('.superdoc-line') as HTMLElement;
@@ -6892,7 +7097,7 @@ describe('ImageFragment (block-level images)', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [watermarkBlock],
         measures: [watermarkMeasure],
       });
@@ -6949,7 +7154,7 @@ describe('ImageFragment (block-level images)', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [regularBlock],
         measures: [regularMeasure],
       });
@@ -7012,7 +7217,7 @@ describe('ImageFragment (block-level images)', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [regularBlock],
         measures: [regularMeasure],
       });
@@ -7152,7 +7357,7 @@ describe('normalizeAnchor XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     // Should render as blocked span, not anchor
@@ -7171,7 +7376,7 @@ describe('normalizeAnchor XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const span = mount.querySelector('span[data-link-blocked="true"]');
@@ -7188,7 +7393,7 @@ describe('normalizeAnchor XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const span = mount.querySelector('span[data-link-blocked="true"]');
@@ -7205,7 +7410,7 @@ describe('normalizeAnchor XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7223,7 +7428,7 @@ describe('normalizeAnchor XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7300,7 +7505,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     // CRITICAL FIX: Should preserve the sanitized href and URL-encode the unsafe fragment
@@ -7323,7 +7528,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     // CRITICAL FIX: Should preserve the sanitized href and URL-encode the unsafe fragment
@@ -7345,7 +7550,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     // CRITICAL FIX: Should preserve the sanitized href and URL-encode the unsafe fragment
@@ -7367,7 +7572,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7385,7 +7590,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7403,7 +7608,7 @@ describe('appendDocLocation XSS protection', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7482,7 +7687,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7506,7 +7711,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7526,7 +7731,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7547,7 +7752,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7571,7 +7776,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7596,7 +7801,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7616,7 +7821,7 @@ describe('appendDocLocation edge cases', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7700,7 +7905,7 @@ describe('Tooltip truncation signaling', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout([block]);
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7720,7 +7925,7 @@ describe('Tooltip truncation signaling', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout([block]);
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7740,7 +7945,7 @@ describe('Tooltip truncation signaling', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout([block]);
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7817,7 +8022,7 @@ describe('Link accessibility - Focus styles', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     // Check that style tag exists
@@ -7883,7 +8088,7 @@ describe('Link accessibility - Focus styles', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
     painter.paint(testLayout, mount);
 
@@ -7959,7 +8164,7 @@ describe('Link accessibility - ARIA labels', () => {
     const measure = createMeasureForRun(run.text.length);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -7984,7 +8189,7 @@ describe('Link accessibility - ARIA labels', () => {
     const measure = createMeasureForRun(run.text.length);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8009,7 +8214,7 @@ describe('Link accessibility - ARIA labels', () => {
     const measure = createMeasureForRun(run.text.length);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8034,7 +8239,7 @@ describe('Link accessibility - ARIA labels', () => {
     const measure = createMeasureForRun(run.text.length);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8059,7 +8264,7 @@ describe('Link accessibility - ARIA labels', () => {
     const measure = createMeasureForRun(run.text.length);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8134,7 +8339,7 @@ describe('Link accessibility - Role attributes', () => {
     const measure = createMeasureForText(10);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8152,7 +8357,7 @@ describe('Link accessibility - Role attributes', () => {
     const measure = createMeasureForText(12);
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const span = mount.querySelector('span[data-link-blocked="true"]');
@@ -8229,7 +8434,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
     const measure = createMeasureForBlock();
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8253,7 +8458,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
     const measure = createMeasureForBlock();
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8270,7 +8475,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
     const measure = createMeasureForBlock();
     const testLayout = createLayout();
 
-    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(testLayout, mount);
 
     const anchor = mount.querySelector('a');
@@ -8358,7 +8563,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [block1, block2], measures: [measure, measure] });
+    const painter = createTestPainter({ blocks: [block1, block2], measures: [measure, measure] });
     painter.paint(multiLayout, mount);
 
     const anchors = mount.querySelectorAll('a');
@@ -8449,7 +8654,7 @@ describe('Link rendering metrics', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const metrics = linkMetrics.getMetrics();
@@ -8466,7 +8671,7 @@ describe('Link rendering metrics', () => {
     const measure = createMeasureForBlock();
     const layout = createLayout();
 
-    painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
     const metrics = linkMetrics.getMetrics();
@@ -8571,7 +8776,7 @@ describe('Link rendering metrics', () => {
     };
 
     // Create single painter with all blocks
-    painter = createDomPainter({
+    painter = createTestPainter({
       blocks: [validBlock1, blockedBlock, validBlock2],
       measures: [measure, measure, measure],
     });
@@ -8893,14 +9098,14 @@ describe('applyRunDataAttributes', () => {
         totalHeight: 16,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
       });
 
       // Call setData with header and footer blocks
       expect(() => {
-        painter.setData?.([mainBlock], [mainMeasure], [headerBlock], [headerMeasure], [footerBlock], [footerMeasure]);
+        painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure], [footerBlock], [footerMeasure]);
       }).not.toThrow();
     });
 
@@ -8985,14 +9190,14 @@ describe('applyRunDataAttributes', () => {
         pmEnd: 6,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 16 }),
       });
 
       // Set data with header blocks
-      painter.setData?.([mainBlock], [mainMeasure], [headerBlock], [headerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure]);
 
       // Paint should not throw errors about missing blocks
       expect(() => {
@@ -9075,14 +9280,14 @@ describe('applyRunDataAttributes', () => {
         },
       ];
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
       });
 
       // Should handle multiple header and footer blocks without errors
       expect(() => {
-        painter.setData?.([mainBlock], [mainMeasure], headerBlocks, headerMeasures, footerBlocks, footerMeasures);
+        painter.setData([mainBlock], [mainMeasure], headerBlocks, headerMeasures, footerBlocks, footerMeasures);
       }).not.toThrow();
     });
 
@@ -9110,14 +9315,14 @@ describe('applyRunDataAttributes', () => {
         totalHeight: 20,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
       });
 
       // Should handle empty arrays gracefully
       expect(() => {
-        painter.setData?.([mainBlock], [mainMeasure], [], [], [], []);
+        painter.setData([mainBlock], [mainMeasure], [], [], [], []);
       }).not.toThrow();
     });
 
@@ -9145,14 +9350,14 @@ describe('applyRunDataAttributes', () => {
         totalHeight: 20,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
       });
 
       // Should handle undefined parameters (backward compatibility)
       expect(() => {
-        painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, undefined, undefined);
+        painter.setData([mainBlock], [mainMeasure], undefined, undefined, undefined, undefined);
       }).not.toThrow();
     });
 
@@ -9180,14 +9385,14 @@ describe('applyRunDataAttributes', () => {
         totalHeight: 20,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
       });
 
       // Should work with just blocks and measures (original signature)
       expect(() => {
-        painter.setData?.([mainBlock], [mainMeasure]);
+        painter.setData([mainBlock], [mainMeasure]);
       }).not.toThrow();
 
       const layoutData: Layout = {
@@ -9300,14 +9505,14 @@ describe('applyRunDataAttributes', () => {
         pmEnd: 6,
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         headerProvider: () => ({ fragments: [headerFragment], height: 20 }),
         footerProvider: () => ({ fragments: [footerFragment], height: 20 }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], [headerBlock], [headerMeasure], [footerBlock], [footerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure], [footerBlock], [footerMeasure]);
 
       // Paint should successfully render all blocks without errors
       expect(() => {
@@ -9415,7 +9620,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9425,7 +9630,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
       painter.paint(layout, mount);
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
@@ -9530,7 +9735,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9540,7 +9745,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
       painter.paint(layout, mount);
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
@@ -9634,7 +9839,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9644,7 +9849,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
       painter.paint(layout, mount);
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
@@ -9702,7 +9907,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9711,7 +9916,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure]);
+      painter.setData([mainBlock], [mainMeasure]);
       expect(() => {
         painter.paint(layout, mount);
       }).not.toThrow();
@@ -9850,7 +10055,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9862,7 +10067,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, footerBlocks, footerMeasures);
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, footerBlocks, footerMeasures);
       painter.paint(layout, mount);
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
@@ -9961,7 +10166,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [mainBlock],
         measures: [mainMeasure],
         footerProvider: () => ({
@@ -9972,7 +10177,7 @@ describe('applyRunDataAttributes', () => {
         }),
       });
 
-      painter.setData?.([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, [footerBlock], [footerMeasure]);
       painter.paint(layout, mount);
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
@@ -10052,7 +10257,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [lineBreakBlock],
         measures: [lineBreakMeasure],
       });
@@ -10126,7 +10331,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [lineBreakBlock],
         measures: [lineBreakMeasure],
       });
@@ -10186,7 +10391,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [lineBreakBlock],
         measures: [lineBreakMeasure],
       });
@@ -10268,7 +10473,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [multiLineBreakBlock],
         measures: [multiLineBreakMeasure],
       });
@@ -10335,7 +10540,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [lineBreakWithAttrsBlock],
         measures: [lineBreakWithAttrsMeasure],
       });
@@ -10415,7 +10620,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+      const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
       painter.paint(listLayout, mount);
 
       const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10440,7 +10645,7 @@ describe('applyRunDataAttributes', () => {
         },
       };
 
-      painter.setData?.([updatedListBlock], [listMeasure]);
+      painter.setData([updatedListBlock], [listMeasure]);
       painter.paint(listLayout, mount);
 
       const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10512,7 +10717,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+      const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
       painter.paint(listLayout, mount);
 
       const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10535,7 +10740,7 @@ describe('applyRunDataAttributes', () => {
         },
       };
 
-      painter.setData?.([updatedListBlock], [listMeasure]);
+      painter.setData([updatedListBlock], [listMeasure]);
       painter.paint(listLayout, mount);
 
       const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10604,13 +10809,13 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+      const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
       painter.paint(listLayout, mount);
 
       const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
 
       // Set identical data
-      painter.setData?.([listBlock], [listMeasure]);
+      painter.setData([listBlock], [listMeasure]);
       painter.paint(listLayout, mount);
 
       const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10680,7 +10885,7 @@ describe('applyRunDataAttributes', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [listBlock], measures: [listMeasure] });
+      const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
       painter.paint(listLayout, mount);
 
       const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10703,7 +10908,7 @@ describe('applyRunDataAttributes', () => {
         },
       };
 
-      painter.setData?.([updatedListBlock], [listMeasure]);
+      painter.setData([updatedListBlock], [listMeasure]);
       painter.paint(listLayout, mount);
 
       const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10768,7 +10973,7 @@ describe('applyRunDataAttributes', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [blockSdtBlock], measures: [blockSdtMeasure] });
+        const painter = createTestPainter({ blocks: [blockSdtBlock], measures: [blockSdtMeasure] });
         painter.paint(blockSdtLayout, mount);
 
         const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
@@ -10843,7 +11048,7 @@ describe('applyRunDataAttributes', () => {
           pages: [{ number: 1, fragments: baseFragments }],
         };
 
-        const painter = createDomPainter({
+        const painter = createTestPainter({
           blocks: [paraA.block, paraB.block, paraC.block],
           measures: [paraA.measure, paraB.measure, paraC.measure],
         });
@@ -10869,7 +11074,7 @@ describe('applyRunDataAttributes', () => {
           ],
         };
 
-        painter.setData?.(
+        painter.setData(
           [paraA.block, paraB.block, paraC.block, paraD.block],
           [paraA.measure, paraB.measure, paraC.measure, paraD.measure],
         );
@@ -11001,7 +11206,7 @@ describe('applyRunDataAttributes', () => {
           ],
         };
 
-        const painter = createDomPainter({
+        const painter = createTestPainter({
           blocks: [paraA.block, tableBlock, paraB.block],
           measures: [paraA.measure, tableMeasure, paraB.measure],
         });
@@ -11083,7 +11288,7 @@ describe('applyRunDataAttributes', () => {
           ],
         };
 
-        const painter = createDomPainter({ blocks: [inlineSdtBlock], measures: [inlineSdtMeasure] });
+        const painter = createTestPainter({ blocks: [inlineSdtBlock], measures: [inlineSdtMeasure] });
         painter.paint(inlineSdtLayout, mount);
 
         const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;

@@ -62,8 +62,6 @@ const {
       setZoom: vi.fn(),
       setLayoutMode: vi.fn(),
       setProviders: vi.fn(),
-      setData: vi.fn(),
-      setResolvedLayout: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,

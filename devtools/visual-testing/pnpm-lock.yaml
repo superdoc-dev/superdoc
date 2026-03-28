@@ -2006,13 +2006,13 @@ packages:
     resolution: {integrity: sha512-l63NF9y/cLROq/yqKXSLtcMeeyOfnSQlfMSlzFt/K73oIaD8DGaQWd7Z34X9GPiKqP5rbSh84Hl4bOlLcjiSrQ==}
 
   superdoc@file:../../packages/superdoc/superdoc.tgz:
-    resolution: {integrity: sha512-H+zXVDvf1OPb6XJtcZbgrGFpyeEv9nlC3XJG9taawK2/0iYrtLQ2xZ3qc5WStZd5kf3AxSa4gKCGB5UgTl3uxQ==, tarball: file:../../packages/superdoc/superdoc.tgz}
-    version: 1.20.0
+    resolution: {integrity: sha512-VSxckZlguegAfx9nYqI4aDDbix9Kw6Qr9aB5GPYlaOBsx3EDtMDHlRJGnkXHNg1QAEUkQtayHMCx54uZSYcDvg==, tarball: file:../../packages/superdoc/superdoc.tgz}
+    version: 1.23.0
     peerDependencies:
       '@hocuspocus/provider': ^2.13.6
       pdfjs-dist: ^5.4.296
       y-prosemirror: ^1.3.7
-      yjs: 13.6.19
+      yjs: ^13.6.19
 
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}

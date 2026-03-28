@@ -151,22 +151,9 @@ const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
-/**
- * Resolves table cell spacing to pixels (for border-spacing).
- * Handles number (px) or { type, value }. The editor/DOCX decoder often stores value
- * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
- * type is 'dxa' and we convert; otherwise value is treated as px.
- */
-export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
-  if (cellSpacing == null) return 0;
-  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
-  const v = cellSpacing.value;
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  const t = (cellSpacing.type ?? '').toLowerCase();
-  // Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips (large).
-  const asPx = t === 'dxa' && v >= 20 ? twipsToPx(v) : v;
-  return Math.max(0, asPx);
-}
+// Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
+export { getCellSpacingPx } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/contracts';
 
 /**
  * Returns the border width in pixels for a table border value (matches painter border-utils logic).

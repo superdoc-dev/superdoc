@@ -22,7 +22,7 @@ import {
   shouldSuppressOwnSpacing,
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
-import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { getFragmentZIndex } from '@superdoc/contracts';
 
 const spacingDebugEnabled = false;
 /**

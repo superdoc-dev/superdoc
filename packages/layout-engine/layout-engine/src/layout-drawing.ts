@@ -2,7 +2,7 @@ import type { DrawingBlock, DrawingMeasure, DrawingFragment } from '@superdoc/co
 import type { NormalizedColumns } from './layout-image.js';
 import type { PageState } from './paginator.js';
 import { extractBlockPmRange } from './layout-utils.js';
-import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { getFragmentZIndex } from '@superdoc/contracts';
 
 /**
  * Context for laying out a drawing block (vector shape) within the page layout.

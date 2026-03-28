@@ -179,7 +179,7 @@ describe('resolveLayout', () => {
       expect(result.pages[0].items[0].height).toBe(54);
     });
 
-    it('resolves an image fragment with height and zIndex', () => {
+    it('resolves an image fragment with height, zIndex, and pre-extracted block', () => {
       const imageFragment: ImageFragment = {
         kind: 'image',
         blockId: 'img1',
@@ -194,11 +194,12 @@ describe('resolveLayout', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, fragments: [imageFragment] }],
       };
-      const blocks: FlowBlock[] = [{ kind: 'image', id: 'img1', src: 'test.png', width: 300, height: 250 }];
+      const imageBlock = { kind: 'image' as const, id: 'img1', src: 'test.png', width: 300, height: 250 };
+      const blocks: FlowBlock[] = [imageBlock];
       const measures: Measure[] = [{ kind: 'image', width: 300, height: 250 }];
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
-      const item = result.pages[0].items[0];
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedImageItem;
       expect(item).toMatchObject({
         kind: 'fragment',
         id: 'image:img1:100:200',
@@ -206,9 +207,11 @@ describe('resolveLayout', () => {
         height: 250,
         zIndex: 5,
       });
+      // PR7: verify pre-extracted block
+      expect(item.block).toBe(imageBlock);
     });
 
-    it('resolves a drawing fragment with zIndex', () => {
+    it('resolves a drawing fragment with zIndex and pre-extracted block', () => {
       const drawingFragment: DrawingFragment = {
         kind: 'drawing',
         drawingKind: 'vectorShape',
@@ -226,15 +229,25 @@ describe('resolveLayout', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, fragments: [drawingFragment] }],
       };
+      const drawingBlock = {
+        kind: 'drawing' as const,
+        id: 'dr1',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 200, height: 150 },
+      };
+      const blocks: FlowBlock[] = [drawingBlock as any];
+      const measures: Measure[] = [{ kind: 'drawing', width: 200, height: 150 }];
 
-      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
-      const item = result.pages[0].items[0];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedDrawingItem;
       expect(item).toMatchObject({
         id: 'drawing:dr1:50:60',
         fragmentKind: 'drawing',
         height: 150,
         zIndex: 3,
       });
+      // PR7: verify pre-extracted block
+      expect(item.block).toBe(drawingBlock);
     });
 
     it('omits zIndex for non-anchored drawing fragments even when the fragment carries one', () => {
@@ -254,8 +267,20 @@ describe('resolveLayout', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, fragments: [drawingFragment] }],
       };
+      const drawingBlock = {
+        kind: 'drawing' as const,
+        id: 'dr-inline',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 200, height: 150 },
+      };
+      const drawingMeasure = { kind: 'drawing' as const, width: 200, height: 150 };
 
-      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [drawingBlock as any],
+        measures: [drawingMeasure as any],
+      });
       expect(result.pages[0].items[0].zIndex).toBeUndefined();
     });
 
@@ -282,12 +307,184 @@ describe('resolveLayout', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, fragments: [tableFragment] }],
       };
+      const tableBlock = { kind: 'table' as const, id: 'tbl1', rows: [] };
+      const tableMeasure = { kind: 'table' as const, rows: [], columnWidths: [], totalWidth: 0, totalHeight: 0 };
 
-      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
       const item = result.pages[0].items[0];
       expect(item.id).toBe('table:tbl1:0:3:0,0,1-2,3,-1');
       expect(item.height).toBe(300);
       expect(item.fragmentKind).toBe('table');
+    });
+
+    it('resolves a table fragment with pre-extracted block, measure, and computed fields', () => {
+      const tableBlock = {
+        kind: 'table' as const,
+        id: 'tbl1',
+        rows: [{ cells: [{ content: [] }] }],
+        attrs: { cellSpacing: { type: 'px' as const, value: 4 } },
+      };
+      const tableMeasure = {
+        kind: 'table' as const,
+        rows: [{ height: 30, cells: [{ width: 200 }] }],
+        columnWidths: [200, 268],
+        totalWidth: 468,
+        totalHeight: 30,
+      };
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl1',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+        height: 30,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+      expect(item.fragmentKind).toBe('table');
+      expect(item.block).toBe(tableBlock);
+      expect(item.measure).toBe(tableMeasure);
+      // cellSpacingPx: measure has no cellSpacingPx, falls back to getCellSpacingPx(block.attrs.cellSpacing)
+      expect(item.cellSpacingPx).toBe(4);
+      // effectiveColumnWidths: no fragment.columnWidths, so uses measure.columnWidths
+      expect(item.effectiveColumnWidths).toEqual([200, 268]);
+    });
+
+    it('uses measure.cellSpacingPx when present on the table measure', () => {
+      const tableBlock = {
+        kind: 'table' as const,
+        id: 'tbl2',
+        rows: [],
+        attrs: { cellSpacing: { type: 'px' as const, value: 10 } },
+      };
+      const tableMeasure = {
+        kind: 'table' as const,
+        rows: [],
+        columnWidths: [100],
+        totalWidth: 100,
+        totalHeight: 0,
+        cellSpacingPx: 7,
+      };
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl2',
+        fromRow: 0,
+        toRow: 0,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 0,
+      };
+      const layout: Layout = { pageSize: { w: 612, h: 792 }, pages: [{ number: 1, fragments: [tableFragment] }] };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+      // measure.cellSpacingPx (7) takes precedence over block.attrs.cellSpacing (10)
+      expect(item.cellSpacingPx).toBe(7);
+    });
+
+    it('uses fragment.columnWidths over measure.columnWidths when present', () => {
+      const tableBlock = { kind: 'table' as const, id: 'tbl3', rows: [] };
+      const tableMeasure = {
+        kind: 'table' as const,
+        rows: [],
+        columnWidths: [200, 300],
+        totalWidth: 500,
+        totalHeight: 0,
+      };
+      const rescaledWidths = [160, 240];
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl3',
+        fromRow: 0,
+        toRow: 0,
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 0,
+        columnWidths: rescaledWidths,
+      };
+      const layout: Layout = { pageSize: { w: 612, h: 792 }, pages: [{ number: 1, fragments: [tableFragment] }] };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+      expect(item.effectiveColumnWidths).toEqual(rescaledWidths);
+    });
+
+    it('throws when a resolved table fragment is missing its block-map entry', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'missing-table',
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 40,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+
+      expect(() => resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] })).toThrow(
+        '[layout-resolved] Missing block/measure entry for table fragment "missing-table".',
+      );
+    });
+
+    it('throws when a resolved image fragment points at the wrong block kinds', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img-wrong',
+        x: 10,
+        y: 20,
+        width: 100,
+        height: 80,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment] }],
+      };
+      const wrongBlock = { kind: 'paragraph' as const, id: 'img-wrong', runs: [] };
+      const wrongMeasure = { kind: 'paragraph' as const, lines: [], totalHeight: 0 };
+
+      expect(() =>
+        resolveLayout({
+          layout,
+          flowMode: 'paginated',
+          blocks: [wrongBlock as any],
+          measures: [wrongMeasure as any],
+        }),
+      ).toThrow(
+        '[layout-resolved] Expected image fragment "img-wrong" to resolve to image/image, got paragraph/paragraph.',
+      );
     });
 
     it('resolves a list-item fragment with computed height', () => {
@@ -363,8 +560,15 @@ describe('resolveLayout', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, fragments }],
       };
+      const imageBlock = { kind: 'image' as const, id: 'img1', src: 'ordered.png', width: 100, height: 80 };
+      const imageMeasure = { kind: 'image' as const, width: 100, height: 80 };
 
-      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [imageBlock as any],
+        measures: [imageMeasure as any],
+      });
       expect(result.pages[0].items.map((i) => i.id)).toEqual(['para:p1:0:1', 'para:p2:0:1', 'image:img1:200:0']);
       expect(result.pages[0].items[0].fragmentIndex).toBe(0);
       expect(result.pages[0].items[1].fragmentIndex).toBe(1);

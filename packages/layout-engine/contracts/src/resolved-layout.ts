@@ -1,4 +1,4 @@
-import type { FlowMode, Fragment, Line } from './index.js';
+import type { DrawingBlock, FlowMode, Fragment, ImageBlock, Line, TableBlock, TableMeasure } from './index.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -29,7 +29,12 @@ export type ResolvedPage = {
 };
 
 /** Union of all resolved paint item kinds. */
-export type ResolvedPaintItem = ResolvedGroupItem | ResolvedFragmentItem;
+export type ResolvedPaintItem =
+  | ResolvedGroupItem
+  | ResolvedFragmentItem
+  | ResolvedTableItem
+  | ResolvedImageItem
+  | ResolvedDrawingItem;
 
 /** A group of nested resolved paint items (for future use). */
 export type ResolvedGroupItem = {
@@ -138,6 +143,121 @@ export type ResolvedDropCapItem = {
   /** Measured height in pixels. */
   height?: number;
 };
+
+// ============================================================================
+// Kind-specific resolved items (PR7: table, image, drawing)
+// ============================================================================
+
+/**
+ * A resolved table fragment with pre-extracted block/measure data.
+ * Replaces blockLookup.get() in the table render path.
+ */
+export type ResolvedTableItem = {
+  kind: 'fragment';
+  /** Discriminant for table fragments. */
+  fragmentKind: 'table';
+  /** Stable identifier matching fragmentKey() semantics from the painter. */
+  id: string;
+  /** 0-based page index this item belongs to. */
+  pageIndex: number;
+  /** Left position in pixels. */
+  x: number;
+  /** Top position in pixels. */
+  y: number;
+  /** Width in pixels. */
+  width: number;
+  /** Height in pixels (from fragment.height). */
+  height: number;
+  /** Stacking order (tables typically don't have zIndex at fragment level). */
+  zIndex?: number;
+  /** Block ID — written to data-block-id. */
+  blockId: string;
+  /** Index within page.fragments — bridge to legacy rendering. */
+  fragmentIndex: number;
+  /** Pre-extracted TableBlock (replaces blockLookup.get()). */
+  block: TableBlock;
+  /** Pre-extracted TableMeasure (replaces blockLookup.get()). */
+  measure: TableMeasure;
+  /** Pre-computed cell spacing: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing). */
+  cellSpacingPx: number;
+  /** Pre-computed effective column widths: fragment.columnWidths ?? measure.columnWidths. */
+  effectiveColumnWidths: number[];
+};
+
+/**
+ * A resolved image fragment with pre-extracted block data.
+ * Replaces blockLookup.get() in the image render path.
+ */
+export type ResolvedImageItem = {
+  kind: 'fragment';
+  /** Discriminant for image fragments. */
+  fragmentKind: 'image';
+  /** Stable identifier matching fragmentKey() semantics from the painter. */
+  id: string;
+  /** 0-based page index this item belongs to. */
+  pageIndex: number;
+  /** Left position in pixels. */
+  x: number;
+  /** Top position in pixels. */
+  y: number;
+  /** Width in pixels. */
+  width: number;
+  /** Height in pixels. */
+  height: number;
+  /** Stacking order for anchored images. */
+  zIndex?: number;
+  /** Block ID — written to data-block-id. */
+  blockId: string;
+  /** Index within page.fragments — bridge to legacy rendering. */
+  fragmentIndex: number;
+  /** Pre-extracted ImageBlock (replaces blockLookup.get()). */
+  block: ImageBlock;
+};
+
+/**
+ * A resolved drawing fragment with pre-extracted block data.
+ * Replaces blockLookup.get() in the drawing render path.
+ */
+export type ResolvedDrawingItem = {
+  kind: 'fragment';
+  /** Discriminant for drawing fragments. */
+  fragmentKind: 'drawing';
+  /** Stable identifier matching fragmentKey() semantics from the painter. */
+  id: string;
+  /** 0-based page index this item belongs to. */
+  pageIndex: number;
+  /** Left position in pixels. */
+  x: number;
+  /** Top position in pixels. */
+  y: number;
+  /** Width in pixels. */
+  width: number;
+  /** Height in pixels. */
+  height: number;
+  /** Stacking order for anchored drawings. */
+  zIndex?: number;
+  /** Block ID — written to data-block-id. */
+  blockId: string;
+  /** Index within page.fragments — bridge to legacy rendering. */
+  fragmentIndex: number;
+  /** Pre-extracted DrawingBlock (replaces blockLookup.get()). */
+  block: DrawingBlock;
+};
+
+/** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */
+export function isResolvedTableItem(item: ResolvedPaintItem): item is ResolvedTableItem {
+  return item.kind === 'fragment' && 'fragmentKind' in item && item.fragmentKind === 'table' && 'measure' in item;
+}
+
+/** Type guard: checks whether a resolved paint item is a ResolvedImageItem. */
+export function isResolvedImageItem(item: ResolvedPaintItem): item is ResolvedImageItem {
+  return item.kind === 'fragment' && 'fragmentKind' in item && item.fragmentKind === 'image' && 'block' in item;
+}
+
+/** Type guard: checks whether a resolved paint item is a ResolvedDrawingItem. */
+export function isResolvedDrawingItem(item: ResolvedPaintItem): item is ResolvedDrawingItem {
+  return item.kind === 'fragment' && 'fragmentKind' in item && item.fragmentKind === 'drawing' && 'block' in item;
+}
 
 /** Resolved list marker rendering data with pre-computed positioning. */
 export type ResolvedListMarkerItem = {

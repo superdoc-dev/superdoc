@@ -6,16 +6,21 @@ import type {
   Fragment,
   DrawingFragment,
   ImageFragment,
+  TableFragment,
   Line,
   ResolvedLayout,
   ResolvedPage,
-  ResolvedFragmentItem,
+  ResolvedPaintItem,
   ResolvedParagraphContent,
   ListMeasure,
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
 import { resolveParagraphContent } from './resolveParagraph.js';
+import { resolveTableItem } from './resolveTable.js';
+import { resolveImageItem } from './resolveImage.js';
+import { resolveDrawingItem } from './resolveDrawing.js';
+import type { BlockMapEntry } from './resolvedBlockLookup.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -23,8 +28,6 @@ export type ResolveLayoutInput = {
   blocks: FlowBlock[];
   measures: Measure[];
 };
-
-type BlockMapEntry = { block: FlowBlock; measure: Measure };
 
 function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
   const map = new Map<string, BlockMapEntry>();
@@ -124,21 +127,32 @@ function resolveFragmentItem(
   fragmentIndex: number,
   pageIndex: number,
   blockMap: Map<string, BlockMapEntry>,
-): ResolvedFragmentItem {
-  return {
-    kind: 'fragment',
-    id: resolveFragmentId(fragment),
-    pageIndex,
-    x: fragment.x,
-    y: fragment.y,
-    width: fragment.width,
-    height: computeFragmentHeight(fragment, blockMap),
-    zIndex: resolveFragmentZIndex(fragment),
-    fragmentKind: fragment.kind,
-    blockId: fragment.blockId,
-    fragmentIndex,
-    content: resolveParagraphContentIfApplicable(fragment, blockMap),
-  };
+): ResolvedPaintItem {
+  // Route to kind-specific resolvers for types that carry extracted block/measure data.
+  switch (fragment.kind) {
+    case 'table':
+      return resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+    case 'image':
+      return resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
+    case 'drawing':
+      return resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
+    default:
+      // para, list-item — existing generic resolution
+      return {
+        kind: 'fragment',
+        id: resolveFragmentId(fragment),
+        pageIndex,
+        x: fragment.x,
+        y: fragment.y,
+        width: fragment.width,
+        height: computeFragmentHeight(fragment, blockMap),
+        zIndex: resolveFragmentZIndex(fragment),
+        fragmentKind: fragment.kind,
+        blockId: fragment.blockId,
+        fragmentIndex,
+        content: resolveParagraphContentIfApplicable(fragment, blockMap),
+      };
+  }
 }
 
 export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
@@ -1214,6 +1214,43 @@ describe('DomPainter', () => {
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
+  });
+
+  it('renders an error placeholder when a legacy table fragment is missing its lookup entry', () => {
+    const missingTableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'missing-table',
+              x: 0,
+              y: 0,
+              width: 200,
+              height: 30,
+              fromRow: 0,
+              toRow: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      // Intentionally empty - suppress expected error logging during this regression test.
+    });
+
+    const painter = createDomPainter({ blocks: [], measures: [] });
+    expect(() => painter.paint(missingTableLayout, mount)).not.toThrow();
+
+    const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.textContent).toContain('[Render Error: missing-table]');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 
   it('applies negative word-spacing for compressed justify lines', () => {

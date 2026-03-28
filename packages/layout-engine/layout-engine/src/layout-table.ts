@@ -172,28 +172,9 @@ function resolveTableFrame(
  *
  * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-export function rescaleColumnWidths(
-  measureColumnWidths: number[] | undefined,
-  measureTotalWidth: number,
-  fragmentWidth: number,
-): number[] | undefined {
-  if (
-    !measureColumnWidths ||
-    measureColumnWidths.length === 0 ||
-    measureTotalWidth <= fragmentWidth ||
-    measureTotalWidth <= 0
-  ) {
-    return undefined;
-  }
-  const scale = fragmentWidth / measureTotalWidth;
-  const scaled = measureColumnWidths.map((w) => Math.max(1, Math.round(w * scale)));
-  const scaledSum = scaled.reduce((a, b) => a + b, 0);
-  const target = Math.round(fragmentWidth);
-  if (scaledSum !== target && scaled.length > 0) {
-    scaled[scaled.length - 1] = Math.max(1, scaled[scaled.length - 1] + (target - scaledSum));
-  }
-  return scaled;
-}
+// Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
+export { rescaleColumnWidths } from '@superdoc/contracts';
+import { rescaleColumnWidths } from '@superdoc/contracts';
 
 const COLUMN_MIN_WIDTH_PX = 25;
 const COLUMN_MAX_WIDTH_PX = 200;

@@ -41,6 +41,7 @@ import type {
   TableBlock,
   TableCellAttrs,
   TableFragment,
+  TableMeasure,
   MathRun,
   TextRun,
   TrackedChangeKind,
@@ -50,8 +51,18 @@ import type {
   ResolvedLayout,
   ResolvedFragmentItem,
   ResolvedPage,
+  ResolvedPaintItem,
+  ResolvedTableItem,
+  ResolvedImageItem,
+  ResolvedDrawingItem,
 } from '@superdoc/contracts';
-import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
+import {
+  calculateJustifySpacing,
+  computeLinePmRange,
+  getCellSpacingPx,
+  shouldApplyJustify,
+  SPACE_CHARS,
+} from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
@@ -1222,7 +1233,7 @@ export class DomPainter {
   }
 
   /** Returns the resolved fragment item for a given page/fragment index, or undefined. */
-  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedFragmentItem | undefined {
+  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedPaintItem | undefined {
     const page = this.getResolvedPage(pageIndex);
     if (!page) return undefined;
     const item = page.items[fragmentIndex];
@@ -2667,22 +2678,34 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
-    resolvedItem?: ResolvedFragmentItem,
+    resolvedItem?: ResolvedPaintItem,
   ): HTMLElement {
     if (fragment.kind === 'para') {
-      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
+      return this.renderParagraphFragment(
+        fragment,
+        context,
+        sdtBoundary,
+        betweenInfo,
+        resolvedItem as ResolvedFragmentItem | undefined,
+      );
     }
     if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
+      return this.renderListItemFragment(
+        fragment,
+        context,
+        sdtBoundary,
+        betweenInfo,
+        resolvedItem as ResolvedFragmentItem | undefined,
+      );
     }
     if (fragment.kind === 'image') {
-      return this.renderImageFragment(fragment, context, resolvedItem);
+      return this.renderImageFragment(fragment, context, resolvedItem as ResolvedImageItem | undefined);
     }
     if (fragment.kind === 'drawing') {
-      return this.renderDrawingFragment(fragment, context, resolvedItem);
+      return this.renderDrawingFragment(fragment, context, resolvedItem as ResolvedDrawingItem | undefined);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem);
+      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem as ResolvedTableItem | undefined);
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -3371,19 +3394,24 @@ export class DomPainter {
   private renderImageFragment(
     fragment: ImageFragment,
     context: FragmentRenderContext,
-    resolvedItem?: ResolvedFragmentItem,
+    resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
-        throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
-      }
+      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
+      // is a legacy ResolvedFragmentItem without the block field.
+      const block: ImageBlock =
+        resolvedItem?.block ??
+        (() => {
+          const lookup = this.blockLookup.get(fragment.blockId);
+          if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
+            throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
+          }
+          return lookup.block as ImageBlock;
+        })();
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
-
-      const block = lookup.block as ImageBlock;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
@@ -3485,18 +3513,23 @@ export class DomPainter {
   private renderDrawingFragment(
     fragment: DrawingFragment,
     context: FragmentRenderContext,
-    resolvedItem?: ResolvedFragmentItem,
+    resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
-        throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
-      }
+      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
+      // is a legacy ResolvedFragmentItem without the block field.
+      const block: DrawingBlock =
+        resolvedItem?.block ??
+        (() => {
+          const lookup = this.blockLookup.get(fragment.blockId);
+          if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
+            throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
+          }
+          return lookup.block as DrawingBlock;
+        })();
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
-
-      const block = lookup.block as DrawingBlock;
       const isVectorShapeBlock = block.kind === 'drawing' && block.drawingKind === 'vectorShape';
 
       const fragmentEl = this.doc.createElement('div');
@@ -4319,107 +4352,131 @@ export class DomPainter {
     return renderChartToElement(this.doc!, block.chartData, block.geometry);
   }
 
+  private resolveTableRenderData(
+    fragment: TableFragment,
+    resolvedItem?: ResolvedTableItem,
+  ): {
+    block: TableBlock;
+    measure: TableMeasure;
+    cellSpacingPx: number;
+    effectiveColumnWidths: number[];
+  } {
+    if (resolvedItem) {
+      return {
+        block: resolvedItem.block,
+        measure: resolvedItem.measure,
+        cellSpacingPx: resolvedItem.cellSpacingPx,
+        effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
+      };
+    }
+
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
+      throw new Error(`DomPainter: missing table block for fragment ${fragment.blockId}`);
+    }
+
+    const block = lookup.block as TableBlock;
+    const measure = lookup.measure as TableMeasure;
+
+    return {
+      block,
+      measure,
+      cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
+      effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+    };
+  }
+
   private renderTableFragment(
     fragment: TableFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
-    resolvedItem?: ResolvedFragmentItem,
+    resolvedItem?: ResolvedTableItem,
   ): HTMLElement {
-    if (!this.doc) {
-      throw new Error('DomPainter: document is not available');
+    try {
+      if (!this.doc) {
+        throw new Error('DomPainter: document is not available');
+      }
+
+      // Wrap applyFragmentFrame to capture section from context.
+      // Table cell inner fragments always stay on the legacy frame path for now.
+      const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
+        this.applyFragmentFrame(el, frag, context.section);
+      };
+
+      // Word justifies text inside table cells, but not the final line unless the
+      // paragraph ends with an explicit line break.
+      const renderLineForTableCell = (
+        block: ParagraphBlock,
+        line: Line,
+        ctx: FragmentRenderContext,
+        lineIndex: number,
+        isLastLine: boolean,
+        resolvedListTextStartPx?: number,
+      ): HTMLElement => {
+        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+        const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
+
+        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+      };
+
+      /**
+       * Renders drawing content that lives inside a table cell.
+       * Table-cell vector shapes intentionally skip outer geometry transforms.
+       */
+      const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
+        if (block.drawingKind === 'image') {
+          return this.createDrawingImageElement(block);
+        }
+        if (block.drawingKind === 'shapeGroup') {
+          return this.createShapeGroupElement(block, context);
+        }
+        if (block.drawingKind === 'vectorShape') {
+          return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
+        }
+        if (block.drawingKind === 'chart') {
+          return this.createChartElement(block);
+        }
+        return this.createDrawingPlaceholder();
+      };
+
+      const tableRenderData = this.resolveTableRenderData(fragment, resolvedItem);
+
+      const el = renderTableFragmentElement({
+        doc: this.doc,
+        fragment,
+        context,
+        block: tableRenderData.block,
+        measure: tableRenderData.measure,
+        cellSpacingPx: tableRenderData.cellSpacingPx,
+        effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
+        sdtBoundary,
+        renderLine: renderLineForTableCell,
+        captureLineSnapshot: (lineEl, lineContext, options) => {
+          this.capturePaintSnapshotLine(lineEl, lineContext, {
+            inTableFragment: true,
+            inTableParagraph: options?.inTableParagraph ?? false,
+            wrapperEl: options?.wrapperEl,
+          });
+        },
+        renderDrawingContent: renderDrawingContentForTableCell,
+        applyFragmentFrame: applyFragmentFrameWithSection,
+        applySdtDataset: this.applySdtDataset.bind(this),
+        applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+        applyStyles,
+      });
+
+      // Override outer wrapper positioning with resolved data when available.
+      // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+      }
+
+      return el;
+    } catch (error) {
+      console.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
+      return this.createErrorPlaceholder(fragment.blockId, error);
     }
-
-    // Wrap applyFragmentFrame to capture section from context
-    // This ensures table cell fragments receive proper section context for PM position validation
-    const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
-      // Table cell inner fragments always use legacy applyFragmentFrame (they are not resolved yet)
-      this.applyFragmentFrame(el, frag, context.section);
-    };
-
-    // Create a wrapper for renderLine that applies Word's justification rules for table cells.
-    // Word DOES justify text inside table cells, but skips justification on the last line
-    // (unless the paragraph ends with a line break, which shifts the "last line" down).
-    const renderLineForTableCell = (
-      block: ParagraphBlock,
-      line: Line,
-      ctx: FragmentRenderContext,
-      lineIndex: number,
-      isLastLine: boolean,
-      resolvedListTextStartPx?: number,
-    ): HTMLElement => {
-      // Check if paragraph ends with a line break
-      const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-      const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
-
-      // Skip justify only on the last line, unless the paragraph ends with a line break
-      const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
-
-      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
-    };
-
-    /**
-     * Wrapper function for rendering drawing content inside table cells.
-     *
-     * This function delegates to the appropriate DomPainter methods based on the drawing kind:
-     * - 'image': Creates a standard image element with src and object-fit
-     * - 'shapeGroup': Creates a group container with positioned child shapes (images and vectors)
-     * - 'vectorShape': Creates an SVG element for the vector shape (without geometry transforms in table cells)
-     *
-     * For unsupported or unrecognized drawing kinds, returns a placeholder element with diagonal stripes.
-     *
-     * @param block - The DrawingBlock to render
-     * @returns HTMLElement representing the rendered drawing content
-     *
-     * @remarks
-     * This wrapper is specifically designed for table cell rendering where:
-     * - Vector shapes are rendered without geometry transforms (to avoid layout conflicts)
-     * - The returned element will have width: 100% and height: 100% applied by the table cell renderer
-     */
-    const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
-      if (block.drawingKind === 'image') {
-        return this.createDrawingImageElement(block);
-      }
-      if (block.drawingKind === 'shapeGroup') {
-        return this.createShapeGroupElement(block, context);
-      }
-      if (block.drawingKind === 'vectorShape') {
-        // For vectorShapes in table cells, render without geometry transforms
-        return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
-      }
-      if (block.drawingKind === 'chart') {
-        return this.createChartElement(block);
-      }
-      return this.createDrawingPlaceholder();
-    };
-
-    const el = renderTableFragmentElement({
-      doc: this.doc,
-      fragment,
-      context,
-      blockLookup: this.blockLookup,
-      sdtBoundary,
-      renderLine: renderLineForTableCell,
-      captureLineSnapshot: (lineEl, lineContext, options) => {
-        this.capturePaintSnapshotLine(lineEl, lineContext, {
-          inTableFragment: true,
-          inTableParagraph: options?.inTableParagraph ?? false,
-          wrapperEl: options?.wrapperEl,
-        });
-      },
-      renderDrawingContent: renderDrawingContentForTableCell,
-      applyFragmentFrame: applyFragmentFrameWithSection,
-      applySdtDataset: this.applySdtDataset.bind(this),
-      applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
-      applyStyles,
-    });
-
-    // Override outer wrapper positioning with resolved data when available.
-    // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
-    if (resolvedItem) {
-      this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
-    }
-
-    return el;
   }
 
   /**
@@ -6166,15 +6223,18 @@ export class DomPainter {
     el: HTMLElement,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
-    resolvedItem?: ResolvedFragmentItem,
+    resolvedItem?: ResolvedPaintItem,
   ): void {
-    if (fragment.kind === 'list-item' && resolvedItem) {
-      this.applyResolvedListItemWrapperFrame(el, fragment, resolvedItem, section);
+    // Narrow to fragment-kind resolved items (excludes ResolvedGroupItem)
+    const fragmentItem = resolvedItem?.kind === 'fragment' ? resolvedItem : undefined;
+
+    if (fragment.kind === 'list-item' && fragmentItem) {
+      this.applyResolvedListItemWrapperFrame(el, fragment, fragmentItem as ResolvedFragmentItem, section);
       return;
     }
 
-    if (resolvedItem) {
-      this.applyResolvedFragmentFrame(el, resolvedItem, fragment, section);
+    if (fragmentItem) {
+      this.applyResolvedFragmentFrame(el, fragmentItem, fragment, section);
     } else {
       this.applyFragmentFrame(el, fragment, section);
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
@@ -6303,7 +6363,7 @@ export class DomPainter {
 
   private applyResolvedFragmentFrame(
     el: HTMLElement,
-    item: ResolvedFragmentItem,
+    item: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
   ): void {

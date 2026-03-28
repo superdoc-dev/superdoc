@@ -18,15 +18,12 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { effectiveTableCellSpacing } from '@superdoc/contracts';
+import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx  } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
-import { rescaleColumnWidths } from '@superdoc/layout-engine';
-import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import {
   applyParagraphBorderStyles,
   applyParagraphShadingStyles,
-  type BlockLookup,
 } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
@@ -575,7 +572,6 @@ type EmbeddedTableRenderParams = {
  * Version identifier for embedded table block lookups.
  * Used to distinguish nested tables from top-level tables in the block lookup map.
  */
-const EMBEDDED_TABLE_VERSION = 'embedded-table';
 
 /**
  * Renders a nested table that appears inside a table cell.
@@ -639,16 +635,9 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     columnWidths,
     partialRow: paramPartialRow,
   };
-  const blockLookup: BlockLookup = new Map([
-    [
-      table.id,
-      {
-        block: table,
-        measure,
-        version: EMBEDDED_TABLE_VERSION,
-      },
-    ],
-  ]);
+  const effectiveColumnWidths = columnWidths ?? measure.columnWidths;
+  const embeddedCellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(table.attrs?.cellSpacing);
+
   const applyFragmentFrame = (el: HTMLElement, frag: Fragment): void => {
     el.style.left = `${frag.x}px`;
     el.style.top = `${frag.y}px`;
@@ -660,7 +649,10 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     doc,
     fragment,
     context,
-    blockLookup,
+    block: table,
+    measure,
+    cellSpacingPx: embeddedCellSpacingPx,
+    effectiveColumnWidths,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,

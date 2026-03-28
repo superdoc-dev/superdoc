@@ -9,6 +9,15 @@ export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
+// Table column rescaling (moved from layout-engine for cross-stage use)
+export { rescaleColumnWidths } from './table-column-rescale.js';
+
+// Cell spacing resolution (moved from measuring-dom for cross-stage use)
+export { getCellSpacingPx } from './cell-spacing.js';
+
+// OOXML z-index normalization (moved from pm-adapter for cross-stage use)
+export { normalizeZIndex, coerceRelativeHeight, isPlainObject, OOXML_Z_INDEX_BASE } from './ooxml-z-index.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,
@@ -1975,6 +1984,10 @@ export type {
   ResolvedTextLineItem,
   ResolvedDropCapItem,
   ResolvedListMarkerItem,
+  ResolvedTableItem,
+  ResolvedImageItem,
+  ResolvedDrawingItem,
 } from './resolved-layout.js';
+export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
 
 export * as Engines from './engines/index.js';

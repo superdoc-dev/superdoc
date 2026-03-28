@@ -12,11 +12,12 @@ import type { Layout } from '@superdoc/contracts';
 /**
  * Owns the DomPainter lifecycle on behalf of PresentationEditor.
  *
- * PR3: pure pass-through wrapper. `getPaintSnapshot` is proxied here
- * temporarily and will move to a dedicated owner in PR5.
+ * Captures paint snapshots via the `onPaintSnapshot` callback so
+ * PresentationEditor can query them without reaching into the painter.
  */
 export class PresentationPainterAdapter {
   #painter: DomPainterHandle | null = null;
+  #lastPaintSnapshot: PaintSnapshot | null = null;
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -26,12 +27,18 @@ export class PresentationPainterAdapter {
 
   ensurePainter(options: DomPainterOptions): void {
     if (!this.#painter) {
-      this.#painter = createDomPainter(options);
+      this.#painter = createDomPainter({
+        ...options,
+        onPaintSnapshot: (snapshot) => {
+          this.#lastPaintSnapshot = snapshot;
+        },
+      });
     }
   }
 
   reset(): void {
     this.#painter = null;
+    this.#lastPaintSnapshot = null;
   }
 
   // ── Paint orchestration ─────────────────────────────────────────────
@@ -64,9 +71,9 @@ export class PresentationPainterAdapter {
     this.#painter?.setVirtualizationPins(pageIndices);
   }
 
-  // ── Temporary proxies (move in PR5) ─────────────────────────────────
+  // ── Snapshot ───────────────────────────────────────────────────────
 
   getPaintSnapshot(): PaintSnapshot | null {
-    return this.#painter?.getPaintSnapshot() ?? null;
+    return this.#lastPaintSnapshot;
   }
 }

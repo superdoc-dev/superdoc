@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter } from './index.js';
-import type { DomPainterOptions, DomPainterInput } from './index.js';
+import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import type { FlowBlock, Measure, Layout, Fragment, PageMargins, ResolvedLayout } from '@superdoc/contracts';
 
 const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
@@ -8,7 +8,13 @@ const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageG
 /** Test-only bridge: see index.test.ts for full JSDoc. */
 function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
   const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
-  const painter = createDomPainter(painterOpts);
+  let lastPaintSnapshot: PaintSnapshot | null = null;
+  const painter = createDomPainter({
+    ...painterOpts,
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
   let currentBlocks: FlowBlock[] = initBlocks ?? [];
   let currentMeasures: Measure[] = initMeasures ?? [];
   let currentResolved: ResolvedLayout = emptyResolved;
@@ -25,9 +31,9 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
-    setActiveComment: painter.setActiveComment,
-    getActiveComment: painter.getActiveComment,
-    getPaintSnapshot: painter.getPaintSnapshot,
+    getPaintSnapshot() {
+      return lastPaintSnapshot;
+    },
     onScroll: painter.onScroll,
     setZoom: painter.setZoom,
     setScrollContainer: painter.setScrollContainer,

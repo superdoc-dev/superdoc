@@ -324,6 +324,8 @@ type PainterOptions = {
   };
   /** Per-page ruler options */
   ruler?: RulerOptions;
+  /** Called with the paint snapshot after each paint cycle completes. */
+  onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
 
 // BlockLookup lives in the shared types module (single source of truth)
@@ -1104,10 +1106,9 @@ export class DomPainter {
    */
   private scrollContainerMountOffset: number | null = null;
   private sdtHover = new SdtGroupedHover();
-  /** The currently active/selected comment ID for highlighting */
-  private activeCommentId: string | null = null;
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
+  private onPaintSnapshotCallback: ((snapshot: PaintSnapshot) => void) | null = null;
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
 
@@ -1143,6 +1144,8 @@ export class DomPainter {
         this.virtualPaddingTop = Math.max(0, options.virtualization.paddingTop);
       }
     }
+
+    this.onPaintSnapshotCallback = options.onPaintSnapshot ?? null;
   }
 
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
@@ -1209,24 +1212,6 @@ export class DomPainter {
     }
   }
 
-  /**
-   * Sets the active comment ID for highlighting.
-   * When set, only the active comment's range is highlighted.
-   * When null, all comments show depth-based highlighting.
-   */
-  public setActiveComment(commentId: string | null): void {
-    this.activeCommentId = commentId;
-    // Highlight styles are now applied post-paint by the editor-side
-    // CommentHighlightDecorator — no page teardown needed.
-  }
-
-  /**
-   * Gets the currently active comment ID.
-   */
-  public getActiveComment(): string | null {
-    return this.activeCommentId;
-  }
-
   /** Returns the resolved page for a given index, or null if resolved data is unavailable. */
   private getResolvedPage(pageIndex: number): ResolvedPage | null {
     return this.resolvedLayout?.pages[pageIndex] ?? null;
@@ -1245,6 +1230,11 @@ export class DomPainter {
    */
   public getPaintSnapshot(): PaintSnapshot | null {
     return this.lastPaintSnapshot;
+  }
+
+  private emitPaintSnapshot(snapshot: PaintSnapshot): void {
+    this.lastPaintSnapshot = snapshot;
+    this.onPaintSnapshotCallback?.(snapshot);
   }
 
   private beginPaintSnapshot(layout: Layout): void {
@@ -1278,14 +1268,14 @@ export class DomPainter {
       }),
     ) as PaintSnapshotPage[];
 
-    this.lastPaintSnapshot = {
+    this.emitPaintSnapshot({
       formatVersion: builder.formatVersion,
       pageCount: pages.length,
       lineCount: builder.lineCount,
       markerCount: builder.markerCount,
       tabCount: builder.tabCount,
       pages,
-    };
+    });
     this.paintSnapshotBuilder = null;
   }
 
@@ -1489,6 +1479,7 @@ export class DomPainter {
       this.resetState();
     }
     this.layoutVersion += 1;
+
     this.layoutEpoch = layout.layoutEpoch ?? 0;
     this.mount = mount;
     this.beginPaintSnapshot(layout);
@@ -1558,7 +1549,7 @@ export class DomPainter {
     }
 
     if (useDomSnapshotFallback) {
-      this.lastPaintSnapshot = this.collectPaintSnapshotFromDomRoot(mount);
+      this.emitPaintSnapshot(this.collectPaintSnapshotFromDomRoot(mount));
       this.paintSnapshotBuilder = null;
     } else {
       this.finalizePaintSnapshotFromBuilder();

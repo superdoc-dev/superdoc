@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { DomPainter } from './renderer.js';
-import type { DomPainterOptions, DomPainterInput } from './index.js';
+import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
@@ -26,7 +26,13 @@ const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageG
  */
 function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
   const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
-  const painter = createDomPainter(painterOpts);
+  let lastPaintSnapshot: PaintSnapshot | null = null;
+  const painter = createDomPainter({
+    ...painterOpts,
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
   let currentBlocks: FlowBlock[] = initBlocks ?? [];
   let currentMeasures: Measure[] = initMeasures ?? [];
   let currentResolved: ResolvedLayout = emptyResolved;
@@ -69,9 +75,9 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
-    setActiveComment: painter.setActiveComment,
-    getActiveComment: painter.getActiveComment,
-    getPaintSnapshot: painter.getPaintSnapshot,
+    getPaintSnapshot() {
+      return lastPaintSnapshot;
+    },
     onScroll: painter.onScroll,
     setZoom: painter.setZoom,
     setScrollContainer: painter.setScrollContainer,
@@ -3439,7 +3445,7 @@ describe('DomPainter', () => {
     expect(span.dataset.commentImportedIds).toBe('w:comment-7=uuid-1');
   });
 
-  it('preserves comment metadata across setActiveComment and repaint', () => {
+  it('preserves comment metadata across repeated repaints', () => {
     const commentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'active-comment-block',
@@ -3464,12 +3470,10 @@ describe('DomPainter', () => {
     let span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span.dataset.commentIds).toBe('comment-A');
 
-    painter.setActiveComment('comment-A');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span.dataset.commentIds).toBe('comment-A');
 
-    painter.setActiveComment(null);
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span.dataset.commentIds).toBe('comment-A');

@@ -122,6 +122,8 @@ export type DomPainterOptions = {
    * inch marks and optionally margin handles for interactive margin adjustment.
    */
   ruler?: RulerOptions;
+  /** Called with the paint snapshot after each paint cycle completes. */
+  onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
 
 type LegacyDomPainterState = {
@@ -160,9 +162,6 @@ export type DomPainterHandle = {
   setResolvedLayout(resolvedLayout: ResolvedLayout | null): void;
   setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void;
   setVirtualizationPins(pageIndices: number[] | null | undefined): void;
-  setActiveComment(commentId: string | null): void;
-  getActiveComment(): string | null;
-  getPaintSnapshot(): PaintSnapshot | null;
   onScroll(): void;
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
@@ -239,6 +238,7 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     footerProvider: options.footerProvider,
     virtualization: options.virtualization,
     ruler: options.ruler,
+    onPaintSnapshot: options.onPaintSnapshot,
   });
 
   const legacyState: LegacyDomPainterState = {
@@ -281,15 +281,6 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);
-    },
-    setActiveComment(commentId: string | null) {
-      painter.setActiveComment(commentId);
-    },
-    getActiveComment() {
-      return painter.getActiveComment();
-    },
-    getPaintSnapshot() {
-      return painter.getPaintSnapshot();
     },
     onScroll() {
       painter.onScroll();

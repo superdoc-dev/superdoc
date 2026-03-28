@@ -145,7 +145,7 @@ export const VerticalNavigation = Extension.create({
             ) {
               // Hit test produced a position outside the adjacent line's range.
               // Resolve position directly from layout data using binary search at goalX.
-              hit = resolvePositionAtGoalX(editor, adjacent.pmStart, adjacent.pmEnd, goalX);
+              hit = resolvePositionAtGoalX(editor, adjacent.pmStart, adjacent.pmEnd, goalX, adjacent.isRtl);
             }
           }
 
@@ -265,11 +265,16 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const pmStart = Number(adjacentLine.dataset?.pmStart);
   const pmEnd = Number(adjacentLine.dataset?.pmEnd);
 
+  // Read direction from the visual DOM — DomPainter sets dir="rtl" on RTL lines
+  // using fully resolved properties (style cascade, not just inline attrs).
+  const isRtl = adjacentLine.closest?.('[dir="rtl"]') != null;
+
   return {
     clientY,
     pageIndex: Number.isFinite(pageIndex) ? pageIndex : undefined,
     pmStart: Number.isFinite(pmStart) ? pmStart : undefined,
     pmEnd: Number.isFinite(pmEnd) ? pmEnd : undefined,
+    isRtl,
   };
 }
 
@@ -372,16 +377,15 @@ function findAdjacentLineElement(currentLine, direction, caretX) {
  * @param {number} pmStart - Start PM position of the target line.
  * @param {number} pmEnd - End PM position of the target line.
  * @param {number} goalX - Target X coordinate in layout space.
+ * @param {boolean} [isRtl=false] - Whether the target line is RTL. In RTL lines,
+ *   X decreases as PM position increases, so the binary search must be inverted.
  * @returns {{ pos: number } | null}
  */
-export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
+export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX, isRtl = false) {
   const presentationEditor = editor.presentationEditor;
   let bestPos = pmStart;
   let bestDist = Infinity;
 
-  // Binary search: characters within a single line have monotonically increasing X.
-  // NOTE: assumes LTR text. For RTL, X decreases with position so the search
-  // direction would be inverted. bestPos/bestDist tracking limits the impact.
   let lo = pmStart;
   let hi = pmEnd;
 
@@ -403,9 +407,13 @@ export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
     }
 
     if (rect.x < goalX) {
-      lo = mid + 1;
+      // In LTR, X < goalX means search higher positions (further right).
+      // In RTL, X < goalX means search lower positions (further right in RTL).
+      if (isRtl) hi = mid - 1;
+      else lo = mid + 1;
     } else if (rect.x > goalX) {
-      hi = mid - 1;
+      if (isRtl) lo = mid + 1;
+      else hi = mid - 1;
     } else {
       // Exact match
       break;

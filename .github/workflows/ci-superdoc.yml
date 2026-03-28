@@ -199,7 +199,12 @@ jobs:
         run: pnpm run test:cli
 
   validate:
+    if: always()
     needs: [build, unit-tests, cli-tests]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All checks passed"
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi

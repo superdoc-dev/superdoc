@@ -301,4 +301,45 @@ describe('ParagraphNodeView', () => {
     expect(nodeView.dom.getAttribute('data-level')).toBeNull();
     expect(nodeView.dom.classList.contains('sd-editor-dropcap')).toBe(false);
   });
+
+  it('sets dir="rtl" on RTL paragraphs', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphProperties.mockReturnValue({ rightToLeft: true });
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: { rightToLeft: true },
+        listRendering: {},
+      },
+    });
+
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('does not set dir on LTR paragraphs', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphProperties.mockReturnValue({});
+
+    const { nodeView } = mountNodeView();
+
+    expect(nodeView.dom.getAttribute('dir')).toBeNull();
+  });
+
+  it('removes dir="rtl" when paragraph changes from RTL to LTR', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphProperties.mockReturnValueOnce({ rightToLeft: true }).mockReturnValueOnce({});
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: { rightToLeft: true },
+        listRendering: {},
+      },
+    });
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+
+    const ltrNode = createNode({ attrs: { paragraphProperties: {}, listRendering: {} } });
+    nodeView.update(ltrNode, []);
+
+    expect(nodeView.dom.getAttribute('dir')).toBeNull();
+  });
 });

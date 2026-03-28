@@ -141,6 +141,12 @@ export class ParagraphNodeView {
     if (paragraphProperties.styleId) {
       this.dom.setAttribute('styleid', paragraphProperties.styleId);
     }
+
+    if (paragraphProperties.rightToLeft) {
+      this.dom.setAttribute('dir', 'rtl');
+    } else {
+      this.dom.removeAttribute('dir');
+    }
   }
 
   /**

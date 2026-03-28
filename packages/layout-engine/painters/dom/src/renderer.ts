@@ -4739,8 +4739,9 @@ export class DomPainter {
     wrapper.className = 'sd-math';
     wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'middle';
-    wrapper.style.width = `${run.width}px`;
-    wrapper.style.height = `${run.height}px`;
+    // Let browser auto-size to MathML content; estimated dimensions are for layout only
+    wrapper.style.minWidth = `${run.width}px`;
+    wrapper.style.minHeight = `${run.height}px`;
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
 
     const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);

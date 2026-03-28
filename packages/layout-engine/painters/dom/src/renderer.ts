@@ -7261,6 +7261,45 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   return block.id;
 };
 
+const SUPERSCRIPT_SCALE = 0.65;
+const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;
+const DEFAULT_SUBSCRIPT_LOWER_RATIO = 0.14;
+
+const hasVerticalPositioning = (run: TextRun): boolean =>
+  (run.baselineShift != null && Number.isFinite(run.baselineShift)) ||
+  run.vertAlign === 'superscript' ||
+  run.vertAlign === 'subscript';
+
+const applyRunVerticalPositioning = (element: HTMLElement, run: TextRun): void => {
+  // Vertically shifted runs should use a tight inline box. If they inherit the
+  // parent line's full line-height, the glyph remains visually low inside an
+  // oversized inline box even when the superscript/subscript offset is correct.
+  if (hasVerticalPositioning(run)) {
+    element.style.lineHeight = '1';
+  }
+
+  if (run.baselineShift != null && Number.isFinite(run.baselineShift)) {
+    element.style.verticalAlign = `${run.baselineShift}pt`;
+    return;
+  }
+
+  if (run.vertAlign === 'superscript') {
+    const baseFontSize = run.fontSize / SUPERSCRIPT_SCALE;
+    element.style.verticalAlign = `${baseFontSize * DEFAULT_SUPERSCRIPT_RAISE_RATIO}px`;
+    return;
+  }
+
+  if (run.vertAlign === 'subscript') {
+    const baseFontSize = run.fontSize / SUPERSCRIPT_SCALE;
+    element.style.verticalAlign = `${-(baseFontSize * DEFAULT_SUBSCRIPT_LOWER_RATIO)}px`;
+    return;
+  }
+
+  if (run.vertAlign === 'baseline') {
+    element.style.verticalAlign = 'baseline';
+  }
+};
+
 /**
  * Applies run styling properties to a DOM element.
  *
@@ -7320,16 +7359,7 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
     element.style.textDecorationLine = decorations.join(' ');
   }
 
-  // Vertical alignment: custom baseline offset takes precedence over vertAlign
-  if (run.baselineShift != null && Number.isFinite(run.baselineShift)) {
-    element.style.verticalAlign = `${run.baselineShift}pt`;
-  } else if (run.vertAlign === 'superscript') {
-    element.style.verticalAlign = 'super';
-  } else if (run.vertAlign === 'subscript') {
-    element.style.verticalAlign = 'sub';
-  } else if (run.vertAlign === 'baseline') {
-    element.style.verticalAlign = 'baseline';
-  }
+  applyRunVerticalPositioning(element, run);
 };
 
 interface CommentHighlightResult {

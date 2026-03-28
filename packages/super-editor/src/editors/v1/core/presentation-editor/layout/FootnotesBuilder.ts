@@ -11,7 +11,7 @@
  *   placement, and click-to-position functionality.
  *
  * - `data-sd-footnote-number`: A data attribute marking the superscript number
- *   run (e.g., "¹") at the start of footnote content. Used to distinguish the
+ *   run (e.g., "1") at the start of footnote content. Used to distinguish the
  *   marker from actual footnote text during rendering and selection.
  *
  * @module presentation-editor/layout/FootnotesBuilder
@@ -20,6 +20,7 @@
 import type { EditorState } from 'prosemirror-state';
 import type { FlowBlock } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
@@ -42,7 +43,12 @@ type Run = {
   text?: string;
   fontFamily?: string;
   fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  letterSpacing?: number;
   color?: unknown;
+  vertAlign?: 'superscript' | 'subscript' | 'baseline';
+  baselineShift?: number;
   pmStart?: number | null;
   pmEnd?: number | null;
   dataAttrs?: Record<string, string>;
@@ -53,6 +59,10 @@ type ParagraphBlock = FlowBlock & {
   kind: 'paragraph';
   runs?: Run[];
 };
+
+const FOOTNOTE_MARKER_DATA_ATTR = 'data-sd-footnote-number';
+const DEFAULT_MARKER_FONT_FAMILY = 'Arial';
+const DEFAULT_MARKER_FONT_SIZE = 12;
 
 // =============================================================================
 // Public API
@@ -154,7 +164,7 @@ export function buildFootnotesInput(
  * @returns True if the run has the footnote marker data attribute
  */
 function isFootnoteMarker(run: Run): boolean {
-  return Boolean(run.dataAttrs?.['data-sd-footnote-number']);
+  return Boolean(run.dataAttrs?.[FOOTNOTE_MARKER_DATA_ATTR]);
 }
 
 /**
@@ -192,34 +202,13 @@ function resolveDisplayNumber(id: string, footnoteNumberById: Record<string, num
 }
 
 /**
- * Converts digits to their superscript Unicode equivalents.
- * Non-digit characters pass through unchanged.
+ * Converts a footnote display number into the marker text rendered in layout.
  *
- * @example
- * toSuperscriptDigits(123) // "¹²³"
- * toSuperscriptDigits("42") // "⁴²"
- *
- * @param value - The value to convert (coerced to string)
- * @returns String with digits replaced by superscript equivalents
+ * Footnote markers use plain digits with superscript styling. This avoids the
+ * inconsistent baseline and sizing behavior of Unicode superscript glyphs.
  */
-function toSuperscriptDigits(value: unknown): string {
-  const SUPERSCRIPT_MAP: Record<string, string> = {
-    '0': '⁰',
-    '1': '¹',
-    '2': '²',
-    '3': '³',
-    '4': '⁴',
-    '5': '⁵',
-    '6': '⁶',
-    '7': '⁷',
-    '8': '⁸',
-    '9': '⁹',
-  };
-  const str = String(value ?? '');
-  return str
-    .split('')
-    .map((ch) => SUPERSCRIPT_MAP[ch] ?? ch)
-    .join('');
+function resolveMarkerText(value: unknown): string {
+  return String(value ?? '');
 }
 
 /**
@@ -249,12 +238,70 @@ function computeMarkerPositions(
   return { pmStart, pmEnd };
 }
 
+function resolveMarkerFontFamily(firstTextRun: Run | undefined): string {
+  return typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : DEFAULT_MARKER_FONT_FAMILY;
+}
+
+function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
+  if (
+    typeof firstTextRun?.fontSize === 'number' &&
+    Number.isFinite(firstTextRun.fontSize) &&
+    firstTextRun.fontSize > 0
+  ) {
+    return firstTextRun.fontSize;
+  }
+
+  return DEFAULT_MARKER_FONT_SIZE;
+}
+
+function buildMarkerRun(
+  markerText: string,
+  firstTextRun: Run | undefined,
+  positions: { pmStart: number | null; pmEnd: number | null },
+): Run {
+  const markerRun: Run = {
+    kind: 'text',
+    text: markerText,
+    dataAttrs: { [FOOTNOTE_MARKER_DATA_ATTR]: 'true' },
+    fontFamily: resolveMarkerFontFamily(firstTextRun),
+    fontSize: resolveMarkerBaseFontSize(firstTextRun) * SUBSCRIPT_SUPERSCRIPT_SCALE,
+    vertAlign: 'superscript',
+  };
+
+  if (typeof firstTextRun?.bold === 'boolean') markerRun.bold = firstTextRun.bold;
+  if (typeof firstTextRun?.italic === 'boolean') markerRun.italic = firstTextRun.italic;
+  if (typeof firstTextRun?.letterSpacing === 'number' && Number.isFinite(firstTextRun.letterSpacing)) {
+    markerRun.letterSpacing = firstTextRun.letterSpacing;
+  }
+  if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
+  if (positions.pmStart != null) markerRun.pmStart = positions.pmStart;
+  if (positions.pmEnd != null) markerRun.pmEnd = positions.pmEnd;
+
+  return markerRun;
+}
+
+function syncMarkerRun(target: Run, source: Run): void {
+  target.kind = source.kind;
+  target.text = source.text;
+  target.dataAttrs = source.dataAttrs;
+  target.fontFamily = source.fontFamily;
+  target.fontSize = source.fontSize;
+  target.bold = source.bold;
+  target.italic = source.italic;
+  target.letterSpacing = source.letterSpacing;
+  target.color = source.color;
+  target.vertAlign = source.vertAlign;
+  target.baselineShift = source.baselineShift;
+  target.pmStart = source.pmStart ?? target.pmStart;
+  target.pmEnd = source.pmEnd ?? target.pmEnd;
+}
+
 /**
  * Ensures a footnote block has a superscript marker at the start.
  *
  * Word and other editors display footnote content with a leading superscript
- * number (e.g., "¹ This is the footnote text."). This function prepends that
- * marker to the first paragraph's runs.
+ * number rendered as a normal digit with superscript styling. This function
+ * prepends that marker to the first paragraph's runs.
  *
  * If a marker already exists, updates its PM positions if missing.
  * Modifies the blocks array in place.
@@ -273,41 +320,22 @@ function ensureFootnoteMarker(
 
   const runs: Run[] = Array.isArray(firstParagraph.runs) ? firstParagraph.runs : [];
   const displayNumber = resolveDisplayNumber(id, footnoteNumberById);
-  const markerText = toSuperscriptDigits(displayNumber);
+  const markerText = resolveMarkerText(displayNumber);
 
   const baseRun = findRunWithPositions(runs);
-  const { pmStart, pmEnd } = computeMarkerPositions(baseRun, markerText.length);
+  const positions = computeMarkerPositions(baseRun, markerText.length);
+  const firstTextRun = runs.find((run) => typeof run.text === 'string' && !isFootnoteMarker(run));
+  const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun, positions);
 
   // Check if marker already exists
   const existingMarker = runs.find(isFootnoteMarker);
   if (existingMarker) {
-    // Update position info on existing marker if missing
-    if (pmStart != null && pmEnd != null) {
-      if (existingMarker.pmStart == null) existingMarker.pmStart = pmStart;
-      if (existingMarker.pmEnd == null) existingMarker.pmEnd = pmEnd;
-    }
+    syncMarkerRun(existingMarker, normalizedMarkerRun);
     return;
   }
 
-  // Find first text run to inherit font styling from
-  const firstTextRun = runs.find((r) => typeof r.text === 'string');
-
-  // Build the marker run
-  const markerRun: Run = {
-    kind: 'text',
-    text: markerText,
-    dataAttrs: { 'data-sd-footnote-number': 'true' },
-    fontFamily: typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : 'Arial',
-    fontSize:
-      typeof firstTextRun?.fontSize === 'number' && Number.isFinite(firstTextRun.fontSize) ? firstTextRun.fontSize : 12,
-  };
-
-  if (pmStart != null) markerRun.pmStart = pmStart;
-  if (pmEnd != null) markerRun.pmEnd = pmEnd;
-  if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
-
   // Insert marker at the very start of runs
-  runs.unshift(markerRun);
+  runs.unshift(normalizedMarkerRun);
   // Cast needed: local Run type is structurally compatible but not identical
   // to the FlowBlock's Run type from @superdoc/contracts
   (firstParagraph as { runs: Run[] }).runs = runs;

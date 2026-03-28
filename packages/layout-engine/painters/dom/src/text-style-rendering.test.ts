@@ -346,7 +346,9 @@ describe('DomPainter text style CSS rendering', () => {
 
       const span = container.querySelector('span');
       expect(span).toBeTruthy();
-      expect(span?.style.verticalAlign).toBe('super');
+      // Computed pixel offset: baseFontSize (10.4 / 0.65 = 16) * 0.33 = 5.28
+      expect(span?.style.lineHeight).toBe('1');
+      expect(span?.style.verticalAlign).toBe('5.28px');
     });
 
     it('should apply vertical-align sub for subscript', () => {
@@ -373,7 +375,9 @@ describe('DomPainter text style CSS rendering', () => {
 
       const span = container.querySelector('span');
       expect(span).toBeTruthy();
-      expect(span?.style.verticalAlign).toBe('sub');
+      // Computed pixel offset: -(baseFontSize (10.4 / 0.65 = 16) * 0.14) = -2.24
+      expect(span?.style.lineHeight).toBe('1');
+      expect(span?.style.verticalAlign).toBe('-2.24px');
     });
 
     it('should apply vertical-align with pt offset for baselineShift', () => {
@@ -400,6 +404,7 @@ describe('DomPainter text style CSS rendering', () => {
 
       const span = container.querySelector('span');
       expect(span).toBeTruthy();
+      expect(span?.style.lineHeight).toBe('1');
       expect(span?.style.verticalAlign).toBe('3pt');
     });
 

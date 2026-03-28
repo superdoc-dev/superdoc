@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
 import type { ConverterContext } from '@superdoc/pm-adapter';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
 // Mock toFlowBlocks
 vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
@@ -51,6 +52,10 @@ function createMockConverter(footnotes: Array<{ id: string; content: unknown[] }
 
 function createMockConverterContext(footnoteNumberById: Record<string, number>): ConverterContext {
   return { footnoteNumberById } as ConverterContext;
+}
+
+function blocksFromResult(result: ReturnType<typeof buildFootnotesInput>) {
+  return result?.blocksById.get('1');
 }
 
 // =============================================================================
@@ -175,8 +180,32 @@ describe('buildFootnotesInput', () => {
 
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string; dataAttrs?: Record<string, string> }> })
         ?.runs?.[0];
-      expect(firstRun?.text).toBe('¹');
+      expect(firstRun?.text).toBe('1');
       expect(firstRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
+    });
+
+    it('builds the marker as a scaled superscript run instead of a Unicode superscript glyph', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] },
+      ]);
+      const context = createMockConverterContext({ '1': 1 });
+
+      const result = buildFootnotesInput(editorState, converter, context, undefined);
+
+      const firstRun = (
+        blocksFromResult(result)?.[0] as {
+          runs?: Array<{
+            text?: string;
+            fontSize?: number;
+            vertAlign?: string;
+          }>;
+        }
+      )?.runs?.[0];
+
+      expect(firstRun?.text).toBe('1');
+      expect(firstRun?.fontSize).toBe(12 * SUBSCRIPT_SUPERSCRIPT_SCALE);
+      expect(firstRun?.vertAlign).toBe('superscript');
     });
 
     it('uses correct display number from context', () => {
@@ -190,7 +219,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('5');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('³');
+      expect(firstRun?.text).toBe('3');
     });
 
     it('handles multi-digit display numbers', () => {
@@ -204,7 +233,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('1');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('¹²³');
+      expect(firstRun?.text).toBe('123');
     });
 
     it('defaults to 1 when footnoteNumberById is missing entry', () => {
@@ -218,7 +247,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('99');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('¹');
+      expect(firstRun?.text).toBe('1');
     });
 
     it('defaults to 1 when converterContext is undefined', () => {
@@ -231,7 +260,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('1');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('¹');
+      expect(firstRun?.text).toBe('1');
     });
   });
 

@@ -5,6 +5,8 @@
  * These helpers convert to small positive CSS z-index values.
  */
 
+import type { ImageBlock, DrawingBlock } from './index.js';
+
 /** Checks whether `value` is a non-null, non-array object. */
 export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -56,4 +58,23 @@ export function normalizeZIndex(originalAttributes: unknown): number | undefined
   const relativeHeight = coerceRelativeHeight(originalAttributes.relativeHeight);
   if (relativeHeight === undefined) return undefined;
   return Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+}
+
+/**
+ * Resolves floating z-index based on behindDoc flag and raw OOXML value.
+ */
+export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
+  if (behindDoc) return 0;
+  if (raw === undefined) return Math.max(1, fallback);
+  return Math.max(1, raw);
+}
+
+/**
+ * Returns z-index for an image or drawing block.
+ * Uses block.zIndex when present, otherwise derives from originalAttributes.
+ */
+export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
+  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
+  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
 }

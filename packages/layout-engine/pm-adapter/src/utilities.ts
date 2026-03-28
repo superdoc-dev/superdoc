@@ -1443,49 +1443,11 @@ export function normalizeTextInsets(
   return { top, right, bottom, left };
 }
 
-// Canonical implementations moved to @superdoc/contracts; re-imported for local use and re-exported.
-export { OOXML_Z_INDEX_BASE, coerceRelativeHeight, normalizeZIndex } from '@superdoc/contracts';
-import { normalizeZIndex } from '@superdoc/contracts';
-
-/**
- * Resolves the CSS z-index for a floating object based on its behindDoc flag
- * and an OOXML-derived raw value.
- *
- * - behindDoc objects always return 0.
- * - Non-behindDoc objects are clamped to at least 1 so they never share the
- *   behindDoc sentinel value (0).
- *
- * @param behindDoc - Whether the object is behind body text
- * @param raw - OOXML-derived z-index (from normalizeZIndex or block.zIndex)
- * @param fallback - Value to use when raw is undefined (default: 1)
- * @returns Resolved z-index
- */
-export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
-  if (behindDoc) return 0;
-  if (raw === undefined) return Math.max(1, fallback);
-  return Math.max(1, raw);
-}
-
-/**
- * Returns z-index for an image or drawing block.
- *
- * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
- * paragraph handler reuses cached blocks and never calls the image/shape
- * converters, so those blocks never get `zIndex` set. This helper uses
- * `block.zIndex` when present, otherwise derives from
- * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
- * otherwise behindDoc ? 0 : 1.
- *
- * Rendering policy:
- * - behindDoc anchored objects always return 0.
- * - Anchored objects with text wrapping (Square/Tight/Through/TopAndBottom, or
- *   missing wrap metadata) keep OOXML relativeHeight ordering but are clamped
- *   to at least 1 (never 0 unless behindDoc=true).
- * - Front/no-wrap anchored objects (wrap None) also preserve OOXML relativeHeight order.
- */
-export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
-  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
-  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
-
-  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
-}
+// Canonical implementations moved to @superdoc/contracts; re-exported for backward compatibility.
+export {
+  OOXML_Z_INDEX_BASE,
+  coerceRelativeHeight,
+  normalizeZIndex,
+  resolveFloatingZIndex,
+  getFragmentZIndex,
+} from '@superdoc/contracts';

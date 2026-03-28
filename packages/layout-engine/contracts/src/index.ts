@@ -16,7 +16,14 @@ export { rescaleColumnWidths } from './table-column-rescale.js';
 export { getCellSpacingPx } from './cell-spacing.js';
 
 // OOXML z-index normalization (moved from pm-adapter for cross-stage use)
-export { normalizeZIndex, coerceRelativeHeight, isPlainObject, OOXML_Z_INDEX_BASE } from './ooxml-z-index.js';
+export {
+  normalizeZIndex,
+  coerceRelativeHeight,
+  isPlainObject,
+  OOXML_Z_INDEX_BASE,
+  resolveFloatingZIndex,
+  getFragmentZIndex,
+} from './ooxml-z-index.js';
 
 // Export justify utilities
 export {

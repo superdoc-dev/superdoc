@@ -172,8 +172,7 @@ function resolveTableFrame(
  *
  * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-// Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
-export { rescaleColumnWidths } from '@superdoc/contracts';
+// Canonical implementation lives in @superdoc/contracts; imported for local use.
 import { rescaleColumnWidths } from '@superdoc/contracts';
 
 const COLUMN_MIN_WIDTH_PX = 25;

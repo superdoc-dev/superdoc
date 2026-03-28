@@ -28,7 +28,7 @@ import type {
   FlowMode,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { normalizeColumnLayout } from '@superdoc/contracts';
+import { normalizeColumnLayout, getFragmentZIndex  } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -51,7 +51,6 @@ import { createPaginator, type PageState, type ConstraintBoundary } from './pagi
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import { balancePageColumns } from './column-balancing.js';
-import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
 import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
@@ -2789,13 +2788,6 @@ export type { PageNumberFormat, DisplayPageInfo } from './pageNumbering.js';
 export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
-// Export table utilities for reuse by painter-dom
-export { rescaleColumnWidths, getCellLines, getEmbeddedRowLines } from './layout-table.js';
-export {
-  describeCellRenderBlocks,
-  computeCellSliceContentHeight,
-  computeFullCellContentHeight,
-  createCellSliceCursor,
-  type CellRenderBlock,
-  type CellSliceCursor,
-} from './table-cell-slice.js';
+// Table utilities consumed by layout-bridge and cross-package sync tests
+export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';

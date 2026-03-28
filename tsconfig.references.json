@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/word-layout/tsconfig.json" },
     { "path": "packages/layout-engine/contracts/tsconfig.json" },
+    { "path": "packages/layout-engine/dom-contract/tsconfig.json" },
     { "path": "packages/layout-engine/layout-resolved/tsconfig.json" },
     { "path": "packages/layout-engine/geometry-utils/tsconfig.json" },
     { "path": "packages/layout-engine/layout-engine/tsconfig.json" },

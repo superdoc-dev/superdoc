@@ -3,7 +3,7 @@ import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 
 import { Extension } from '@core/Extension.js';
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { VerticalNavigation, VerticalNavigationPluginKey, resolvePositionAtGoalX } from './vertical-navigation.js';
 
 const createSchema = () => {

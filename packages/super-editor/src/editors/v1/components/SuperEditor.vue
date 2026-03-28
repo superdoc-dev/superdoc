@@ -20,7 +20,7 @@ import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
-import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/dom-contract';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';

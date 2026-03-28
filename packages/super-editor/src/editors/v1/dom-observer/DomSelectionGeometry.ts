@@ -1,5 +1,5 @@
 import type { Layout } from '@superdoc/contracts';
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 import type { DomPositionIndex, DomPositionIndexEntry } from './DomPositionIndex.js';
 import { debugLog, getSelectionDebugConfig } from '../core/presentation-editor/selection/SelectionDebug.js';

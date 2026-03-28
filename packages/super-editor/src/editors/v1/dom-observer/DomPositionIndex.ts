@@ -1,4 +1,4 @@
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../core/presentation-editor/selection/SelectionDebug.js';
 

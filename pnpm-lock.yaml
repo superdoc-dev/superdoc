@@ -2104,6 +2104,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@superdoc/dom-contract':
+        specifier: workspace:*
+        version: link:../dom-contract
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../layout-engine
@@ -2141,6 +2144,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@superdoc/pm-adapter':
+        specifier: workspace:*
+        version: link:../pm-adapter
 
   packages/layout-engine/layout-resolved:
     dependencies:
@@ -2404,6 +2410,9 @@ importers:
       '@superdoc/document-api':
         specifier: workspace:*
         version: link:../document-api
+      '@superdoc/dom-contract':
+        specifier: workspace:*
+        version: link:../layout-engine/dom-contract
       '@superdoc/layout-bridge':
         specifier: workspace:*
         version: link:../layout-engine/layout-bridge

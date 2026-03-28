@@ -24,7 +24,7 @@
  * @deprecated Use DomPointerMapping from super-editor/dom-observer instead.
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // Debug logging for click-to-position pipeline (disabled - enable for debugging)
 const DEBUG_CLICK_MAPPING = false;

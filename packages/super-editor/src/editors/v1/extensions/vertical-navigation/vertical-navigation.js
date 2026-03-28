@@ -1,6 +1,6 @@
 import { Extension } from '@core/Extension.js';
 import { Plugin, PluginKey, TextSelection, NodeSelection } from 'prosemirror-state';
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { CellSelection } from 'prosemirror-tables';
 
 export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');

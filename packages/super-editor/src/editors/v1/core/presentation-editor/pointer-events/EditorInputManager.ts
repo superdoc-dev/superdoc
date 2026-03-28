@@ -38,7 +38,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
-import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/dom-contract';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 

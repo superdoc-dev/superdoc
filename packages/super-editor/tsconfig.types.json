@@ -7,6 +7,7 @@
   },
   "references": [
     { "path": "../layout-engine/contracts/tsconfig.json" },
+    { "path": "../layout-engine/dom-contract/tsconfig.json" },
     { "path": "../layout-engine/layout-bridge/tsconfig.types.json" },
     { "path": "../layout-engine/layout-resolved/tsconfig.json" },
     { "path": "../layout-engine/measuring/dom/tsconfig.json" },

@@ -10,7 +10,7 @@
  * @module dom-observer/DomPointerMapping
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // ---------------------------------------------------------------------------
 // Debug logging (disabled by default — flip to true for click-mapping traces)

@@ -94,6 +94,7 @@
   "dependencies": {
     "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
+    "@superdoc/dom-contract": "workspace:*",
     "@superdoc/document-api": "workspace:*",
     "@superdoc/layout-bridge": "workspace:*",
     "@superdoc/layout-resolved": "workspace:*",

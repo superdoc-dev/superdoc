@@ -41,6 +41,29 @@ function trackChangeSpan(id: string): HTMLSpanElement {
   return el;
 }
 
+/**
+ * Simulates a browser that preserves CSS custom property expressions in the
+ * inline backgroundColor style. jsdom drops them, so tests need an explicit
+ * stand-in when verifying token-backed reapplication behavior.
+ */
+function preserveAssignedBackgroundColor(el: HTMLElement): () => void {
+  let value = '';
+
+  Object.defineProperty(el.style, 'backgroundColor', {
+    configurable: true,
+    get() {
+      return value;
+    },
+    set(nextValue: string) {
+      value = nextValue;
+    },
+  });
+
+  return () => {
+    Reflect.deleteProperty(el.style, 'backgroundColor');
+  };
+}
+
 // Fallback color constants (jsdom doesn't support var())
 const EXT = '#B1124B40';
 const EXT_ACTIVE = '#B1124B66';
@@ -50,6 +73,7 @@ const INT_ACTIVE = '#07838366';
 const INT_FADED = '#07838320';
 const EXT_NESTED_BDR = '#B1124B99';
 const INT_NESTED_BDR = '#07838399';
+const EXT_ACTIVE_TOKEN = `var(--sd-comments-highlight-external-active, ${EXT_ACTIVE})`;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -236,6 +260,23 @@ describe('CommentHighlightDecorator', () => {
       expect(decorator.getActiveCommentId()).toBe(null);
       decorator.setActiveComment('c-1');
       expect(decorator.getActiveCommentId()).toBe('c-1');
+    });
+
+    it('keeps CSS-variable-backed colors on repeated apply() calls when the browser accepts them', () => {
+      const span = commentSpan({ commentIds: ['c-1'] });
+      const restoreBackgroundColor = preserveAssignedBackgroundColor(span);
+      container.appendChild(span);
+
+      try {
+        decorator.setActiveComment('c-1');
+        expect(span.style.backgroundColor).toBe(EXT_ACTIVE_TOKEN);
+
+        decorator.apply();
+
+        expect(span.style.backgroundColor).toBe(EXT_ACTIVE_TOKEN);
+      } finally {
+        restoreBackgroundColor();
+      }
     });
   });
 

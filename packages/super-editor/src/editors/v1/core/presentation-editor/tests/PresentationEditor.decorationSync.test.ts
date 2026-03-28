@@ -3,6 +3,7 @@ import { DecorationSet } from 'prosemirror-view';
 import { PluginKey } from 'prosemirror-state';
 
 import { PresentationEditor } from '../PresentationEditor.js';
+import { DecorationBridge } from '../dom/DecorationBridge.js';
 
 // Create a plugin key for our test highlight plugin
 const testHighlightPluginKey = new PluginKey('testHighlight');
@@ -322,6 +323,17 @@ describe('PresentationEditor.decorationSync', () => {
     });
 
   /**
+   * Extracts an event handler that PresentationEditor registered on the mock editor.
+   * Tests use this to simulate real editor events without reaching into private state.
+   */
+  const getRegisteredEditorHandler = <THandler extends (...args: unknown[]) => void>(eventName: string): THandler => {
+    const onCalls: Array<[string, THandler]> = mockEditorOn.mock.calls;
+    const match = onCalls.find(([event]) => event === eventName);
+    if (!match) throw new Error(`No ${eventName} handler registered on mock editor`);
+    return match[1];
+  };
+
+  /**
    * Sets up the editor with the given decorations and returns the painterHost.
    * Handles plugin creation, registration, and editor instantiation.
    */
@@ -541,12 +553,7 @@ describe('PresentationEditor.decorationSync', () => {
      * on the mock editor. This simulates the real customer flow: a command dispatches
      * a setMeta transaction → Editor fires 'transaction' → bridge syncs.
      */
-    const getTransactionHandler = (): (() => void) => {
-      const onCalls: Array<[string, () => void]> = mockEditorOn.mock.calls;
-      const match = onCalls.find(([event]) => event === 'transaction');
-      if (!match) throw new Error('No transaction handler registered on mock editor');
-      return match[1];
-    };
+    const getTransactionHandler = (): (() => void) => getRegisteredEditorHandler('transaction');
 
     it('syncs decorations when a transaction fires (setMeta customer flow)', async () => {
       const { plugin, setDecorations } = createMutableMockPlugin();
@@ -589,6 +596,38 @@ describe('PresentationEditor.decorationSync', () => {
 
       await waitForSync();
       expect(span.classList.contains('highlight-selection')).toBe(false);
+    });
+  });
+
+  describe('comment highlight interoperability', () => {
+    it('re-syncs bridged decorations after comment selection changes', async () => {
+      const decorationSyncSpy = vi.spyOn(DecorationBridge.prototype, 'sync');
+
+      try {
+        setupWithDecorations([{ from: 5, to: 15, attrs: { style: 'background-color: yellow;' } }]);
+        const span = document.createElement('span');
+        span.dataset.pmStart = '5';
+        span.dataset.pmEnd = '15';
+        span.classList.add('superdoc-comment-highlight');
+        span.dataset.commentIds = 'comment-1';
+        span.textContent = 'text';
+        painterHost.appendChild(span);
+
+        await waitForSync();
+
+        const fireCommentsUpdate =
+          getRegisteredEditorHandler<(payload: { activeCommentId?: string | null }) => void>('commentsUpdate');
+
+        const syncCallsBeforeSelectionChange = decorationSyncSpy.mock.calls.length;
+        fireCommentsUpdate({ activeCommentId: 'comment-1' });
+        expect(decorationSyncSpy.mock.calls.length).toBeGreaterThan(syncCallsBeforeSelectionChange);
+
+        const syncCallsBeforeClear = decorationSyncSpy.mock.calls.length;
+        fireCommentsUpdate({ activeCommentId: null });
+        expect(decorationSyncSpy.mock.calls.length).toBeGreaterThan(syncCallsBeforeClear);
+      } finally {
+        decorationSyncSpy.mockRestore();
+      }
     });
   });
 });

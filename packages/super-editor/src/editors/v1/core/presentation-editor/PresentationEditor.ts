@@ -493,8 +493,7 @@ export class PresentationEditor extends EventEmitter {
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
-        this.#syncCommentHighlights();
-        this.#syncDecorations();
+        this.#syncInlineStyleLayers();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -3075,6 +3074,18 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Applies every inline style layer that decorates painter-owned DOM elements.
+   *
+   * Comment highlights intentionally run before the decoration bridge because
+   * bridged inline decorations may own the same CSS properties and must be
+   * restored last.
+   */
+  #syncInlineStyleLayers(): void {
+    this.#syncCommentHighlights();
+    this.#syncDecorations();
+  }
+
+  /**
    * Runs a full decoration sync: applies external plugin decoration classes
    * and styles to the painted DOM elements via DecorationBridge. Runs are
    * split at decoration boundaries during layout so only the selected portion
@@ -3346,7 +3357,13 @@ export class PresentationEditor extends EventEmitter {
       // the active comment selection unexpectedly.
       if ('activeCommentId' in payload) {
         const activeId = payload.activeCommentId ?? null;
-        this.#commentHighlightDecorator.setActiveComment(activeId);
+        const didChange = this.#commentHighlightDecorator.setActiveComment(activeId);
+        if (didChange) {
+          // Comment highlights can touch the same inline properties as bridged
+          // decorations (for example background-color), so restore the bridge's
+          // owned styles immediately after comment state changes.
+          this.#syncDecorations();
+        }
       }
     };
     this.#editor.on('commentsUpdate', handleCommentsUpdate);
@@ -4366,8 +4383,7 @@ export class PresentationEditor extends EventEmitter {
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
       this.#rebuildDomPositionIndex();
-      this.#syncCommentHighlights();
-      this.#syncDecorations();
+      this.#syncInlineStyleLayers();
       this.#applyProofingPass();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();

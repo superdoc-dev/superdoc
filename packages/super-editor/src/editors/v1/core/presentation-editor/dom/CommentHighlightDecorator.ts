@@ -26,6 +26,7 @@ const H = {
 const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
+type InlineStyleProperty = 'backgroundColor' | 'boxShadow';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,23 +54,37 @@ function parseImportedIdMap(value: string | undefined): Map<string, string> {
 }
 
 /**
- * Applies a CSS color token to an element's backgroundColor with a jsdom
- * fallback. jsdom drops var() values, so we detect that and use the concrete
- * fallback instead.
+ * Applies an inline style value with a concrete fallback for environments that
+ * reject CSS custom property expressions (for example jsdom).
+ *
+ * We intentionally clear the previous inline value before assigning the
+ * preferred one. Some engines leave the old serialized value in place when the
+ * new value is invalid, which makes repeated apply() calls look successful even
+ * though the new assignment was ignored.
  */
-function applyBgColor(el: HTMLElement, color: HighlightToken): void {
-  const prev = el.style.backgroundColor;
-  el.style.backgroundColor = color.css;
-  if (!el.style.backgroundColor || el.style.backgroundColor === prev) {
-    el.style.backgroundColor = color.fallback;
+function applyInlineStyleValue(
+  el: HTMLElement,
+  property: InlineStyleProperty,
+  preferredValue: string,
+  fallbackValue: string,
+): void {
+  el.style[property] = '';
+  el.style[property] = preferredValue;
+
+  if (!el.style[property]) {
+    el.style[property] = fallbackValue;
   }
 }
 
+function applyBgColor(el: HTMLElement, color: HighlightToken): void {
+  applyInlineStyleValue(el, 'backgroundColor', color.css, color.fallback);
+}
+
 function applyBoxShadow(el: HTMLElement, border: HighlightToken): void {
-  el.style.boxShadow = `inset 1px 0 0 ${border.css}, inset -1px 0 0 ${border.css}`;
-  if (!el.style.boxShadow) {
-    el.style.boxShadow = `inset 1px 0 0 ${border.fallback}, inset -1px 0 0 ${border.fallback}`;
-  }
+  const preferredValue = `inset 1px 0 0 ${border.css}, inset -1px 0 0 ${border.css}`;
+  const fallbackValue = `inset 1px 0 0 ${border.fallback}, inset -1px 0 0 ${border.fallback}`;
+
+  applyInlineStyleValue(el, 'boxShadow', preferredValue, fallbackValue);
 }
 
 // ---------------------------------------------------------------------------

@@ -4204,11 +4204,16 @@ export class PresentationEditor extends EventEmitter {
         layout.pageGap = this.#getEffectivePageGap();
         (layout as Layout & { layoutEpoch?: number }).layoutEpoch = layoutEpoch;
 
+        // Include footnote-injected blocks (separators, footnote paragraphs) so
+        // resolveLayout can find them when resolving page fragments.
+        const resolveBlocks = extraBlocks ? [...blocksForLayout, ...extraBlocks] : blocksForLayout;
+        const resolveMeasures = extraMeasures ? [...measures, ...extraMeasures] : measures;
+
         resolvedLayout = resolveLayout({
           layout,
           flowMode: this.#layoutOptions.flowMode ?? 'paginated',
-          blocks: blocksForLayout,
-          measures,
+          blocks: resolveBlocks,
+          measures: resolveMeasures,
         });
 
         headerLayouts = result.headers;

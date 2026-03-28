@@ -4,6 +4,15 @@ import { PresentationEditor } from '../PresentationEditor.js';
 let capturedLayoutOptions: any;
 let capturedBlocksForLayout: any[] | undefined;
 
+const { mockIncrementalLayout, mockResolveLayout } = vi.hoisted(() => ({
+  mockIncrementalLayout: vi.fn(async (...args: any[]) => {
+    capturedLayoutOptions = args[3];
+    capturedBlocksForLayout = args[2];
+    return { layout: { pages: [] }, measures: [] };
+  }),
+  mockResolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+}));
+
 vi.mock('../../Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     on: vi.fn(),
@@ -56,11 +65,7 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
 });
 
 vi.mock('@superdoc/layout-bridge', () => ({
-  incrementalLayout: vi.fn(async (...args: any[]) => {
-    capturedLayoutOptions = args[3];
-    capturedBlocksForLayout = args[2];
-    return { layout: { pages: [] }, measures: [] };
-  }),
+  incrementalLayout: mockIncrementalLayout,
   normalizeMargin: (value: number | undefined, fallback: number) =>
     Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: vi.fn(() => []),
@@ -105,7 +110,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 100, height: 100 })) }));
 
 vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+  resolveLayout: mockResolveLayout,
 }));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
@@ -151,6 +156,14 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     document.body.appendChild(container);
     capturedLayoutOptions = undefined;
     capturedBlocksForLayout = undefined;
+    mockIncrementalLayout.mockClear();
+    mockResolveLayout.mockClear();
+    mockIncrementalLayout.mockImplementation(async (...args: any[]) => {
+      capturedLayoutOptions = args[3];
+      capturedBlocksForLayout = args[2];
+      return { layout: { pages: [] }, measures: [] };
+    });
+    mockResolveLayout.mockImplementation(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] }));
   });
 
   afterEach(() => {
@@ -209,5 +222,98 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     const firstRun = semanticBlocks[0]?.runs?.[0];
     expect(firstRun?.pmStart).toBeUndefined();
     expect(firstRun?.pmEnd).toBeUndefined();
+  });
+
+  it('passes footnote-injected lookup blocks to resolveLayout', async () => {
+    mockIncrementalLayout.mockImplementationOnce(async (...args: any[]) => {
+      capturedLayoutOptions = args[3];
+      capturedBlocksForLayout = args[2];
+      return {
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              size: { w: 612, h: 792 },
+              fragments: [
+                {
+                  kind: 'drawing',
+                  blockId: 'footnote-separator-page-1-col-0',
+                  drawingKind: 'vectorShape',
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 1,
+                  geometry: { width: 100, height: 1 },
+                  scale: 1,
+                },
+                {
+                  kind: 'para',
+                  blockId: 'footnote-body-1',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 0,
+                  y: 2,
+                  width: 100,
+                },
+              ],
+            },
+          ],
+        },
+        measures: [],
+        extraBlocks: [
+          { kind: 'paragraph', id: 'footnote-body-1', runs: [{ kind: 'text', text: 'Body' }] },
+          {
+            kind: 'drawing',
+            id: 'footnote-separator-page-1-col-0',
+            drawingKind: 'vectorShape',
+            geometry: { width: 100, height: 1 },
+            shapeKind: 'rect',
+            fillColor: '#000000',
+            strokeColor: null,
+            strokeWidth: 0,
+          },
+        ],
+        extraMeasures: [
+          {
+            kind: 'paragraph',
+            lines: [
+              {
+                fromRun: 0,
+                fromChar: 0,
+                toRun: 0,
+                toChar: 4,
+                width: 100,
+                ascent: 8,
+                descent: 2,
+                lineHeight: 10,
+              },
+            ],
+            totalHeight: 10,
+          },
+          {
+            kind: 'drawing',
+            drawingKind: 'vectorShape',
+            width: 100,
+            height: 1,
+            scale: 1,
+            naturalWidth: 100,
+            naturalHeight: 1,
+            geometry: { width: 100, height: 1 },
+          },
+        ],
+      };
+    });
+
+    editor = new PresentationEditor({ element: container });
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(mockResolveLayout).toHaveBeenCalled();
+    const lastResolveInput = mockResolveLayout.mock.calls.at(-1)?.[0];
+    expect(lastResolveInput).toBeTruthy();
+    expect(lastResolveInput.blocks.map((block: { id: string }) => block.id)).toEqual(
+      expect.arrayContaining(['footnote-body-1', 'footnote-separator-page-1-col-0']),
+    );
+    expect(lastResolveInput.measures).toHaveLength(lastResolveInput.blocks.length);
   });
 });

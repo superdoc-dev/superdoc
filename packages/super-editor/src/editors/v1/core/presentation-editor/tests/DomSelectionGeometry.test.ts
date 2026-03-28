@@ -1545,6 +1545,34 @@ describe('computeDomCaretPageLocal', () => {
         y: 20,
       });
     });
+
+    it('positions caret at right edge for non-text nodes when pos equals pmEnd', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <img data-pm-start="1" data-pm-end="2" />
+          </div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const imgEl = painterHost.querySelector('img') as HTMLElement;
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      imgEl.getBoundingClientRect = vi.fn(() => createRect(10, 20, 100, 100));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 2);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 110, // elRect.right (10 + 100) - pageRect.left (0)
+        y: 20,
+      });
+    });
   });
 
   describe('index rebuild for disconnected elements', () => {

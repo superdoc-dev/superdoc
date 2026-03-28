@@ -582,7 +582,7 @@ export function computeDomCaretPageLocal(
     const elRect = targetEl.getBoundingClientRect();
     // For non-text elements (images, math), position caret at the right edge
     // when pos matches pmEnd (cursor after the element)
-    const atEnd = pos === entry.pmEnd;
+    const atEnd = pos >= entry.pmEnd;
     return {
       pageIndex: Number(page.dataset.pageIndex ?? '0'),
       x: ((atEnd ? elRect.right : elRect.left) - pageRect.left) / zoom,

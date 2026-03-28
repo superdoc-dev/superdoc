@@ -24,7 +24,9 @@ import {
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
 import { getFragmentZIndex } from '@superdoc/contracts';
-import { PX_PER_PT } from '@superdoc/pm-adapter/constants.js';
+
+/** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
+const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
 /**

@@ -30,6 +30,8 @@ describe('convertOmmlToMathml', () => {
     expect(result).not.toBeNull();
     expect(result!.namespaceURI).toBe(MATHML_NS);
     expect(result!.localName).toBe('math');
+    expect(result!.getAttribute('displaystyle')).toBeNull();
+    expect(result!.getAttribute('display')).toBeNull();
 
     // Should contain an <mi> for the identifier 'x'
     const mi = result!.querySelector('mi');
@@ -94,6 +96,8 @@ describe('convertOmmlToMathml', () => {
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
     expect(result!.localName).toBe('math');
+    expect(result!.getAttribute('displaystyle')).toBe('true');
+    expect(result!.getAttribute('display')).toBe('block');
     // The m:oMathParaPr should be skipped (it ends with 'Pr')
     // The m:oMath child should produce content
     expect(result!.textContent).toBe('y');

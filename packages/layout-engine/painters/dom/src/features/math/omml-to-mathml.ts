@@ -31,6 +31,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Implemented ──────────────────────────────────────────────────────────
   'm:r': convertMathRun,
   'm:bar': convertBar, // Bar (overbar/underbar)
+  'm:f': convertFraction, // Fraction (numerator/denominator)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:acc': null, // Accent (diacritical mark above base)
@@ -38,7 +39,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:box': null, // Box (invisible grouping container)
   'm:d': null, // Delimiter (parentheses, brackets, braces)
   'm:eqArr': null, // Equation array (vertical array of equations)
-  'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:func': null, // Function apply (sin, cos, log, etc.)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)

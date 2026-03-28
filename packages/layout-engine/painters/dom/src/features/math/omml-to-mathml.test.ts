@@ -209,13 +209,18 @@ describe('m:bar converter', () => {
   it('renders overbar (top) as <mover> with U+203E', () => {
     const omml = {
       name: 'm:oMath',
-      elements: [{
-        name: 'm:bar',
-        elements: [
-          { name: 'm:barPr', elements: [{ name: 'm:pos', attributes: { 'm:val': 'top' } }] },
-          { name: 'm:e', elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }] },
-        ],
-      }],
+      elements: [
+        {
+          name: 'm:bar',
+          elements: [
+            { name: 'm:barPr', elements: [{ name: 'm:pos', attributes: { 'm:val': 'top' } }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
@@ -226,16 +231,21 @@ describe('m:bar converter', () => {
     expect(mo?.textContent).toBe('\u203E');
   });
 
-  it('renders underbar (bot) as <munder> with U+0332', () => {
+  it('renders underbar (bot) as <munder> with U+2015', () => {
     const omml = {
       name: 'm:oMath',
-      elements: [{
-        name: 'm:bar',
-        elements: [
-          { name: 'm:barPr', elements: [{ name: 'm:pos', attributes: { 'm:val': 'bot' } }] },
-          { name: 'm:e', elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }] },
-        ],
-      }],
+      elements: [
+        {
+          name: 'm:bar',
+          elements: [
+            { name: 'm:barPr', elements: [{ name: 'm:pos', attributes: { 'm:val': 'bot' } }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
@@ -243,18 +253,23 @@ describe('m:bar converter', () => {
     expect(munder).not.toBeNull();
     expect(munder!.firstElementChild!.textContent).toBe('y');
     const mo = munder!.querySelector('mo');
-    expect(mo?.textContent).toBe('\u0332');
+    expect(mo?.textContent).toBe('\u2015');
   });
 
   it('defaults to underbar when m:barPr is missing (matches Word behavior)', () => {
     const omml = {
       name: 'm:oMath',
-      elements: [{
-        name: 'm:bar',
-        elements: [
-          { name: 'm:e', elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }] },
-        ],
-      }],
+      elements: [
+        {
+          name: 'm:bar',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }],
+            },
+          ],
+        },
+      ],
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
@@ -262,6 +277,6 @@ describe('m:bar converter', () => {
     expect(munder).not.toBeNull();
     expect(munder!.firstElementChild!.textContent).toBe('z');
     const mo = munder!.querySelector('mo');
-    expect(mo?.textContent).toBe('\u0332');
+    expect(mo?.textContent).toBe('\u2015');
   });
 });

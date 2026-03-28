@@ -2187,15 +2187,6 @@ importers:
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
-      '@superdoc/layout-engine':
-        specifier: workspace:*
-        version: link:../../layout-engine
-      '@superdoc/measuring-dom':
-        specifier: workspace:*
-        version: link:../../measuring/dom
-      '@superdoc/pm-adapter':
-        specifier: workspace:*
-        version: link:../../pm-adapter
       '@superdoc/preset-geometry':
         specifier: workspace:*
         version: link:../../../preset-geometry
@@ -2203,6 +2194,9 @@ importers:
         specifier: workspace:*
         version: link:../../../../shared/url-validation
     devDependencies:
+      '@superdoc/layout-engine':
+        specifier: workspace:*
+        version: link:../../layout-engine
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@25.5.0)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.1))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)

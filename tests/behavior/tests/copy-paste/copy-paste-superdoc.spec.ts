@@ -174,34 +174,70 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
   });
 
   test('copy-paste preserves list structure', async ({ superdoc }) => {
-    // Create an ordered list
+    // Create an ordered list with two items.
+    // toggleOrderedList selects paragraph content as a side-effect,
+    // so collapse the cursor programmatically before pressing Enter.
     await superdoc.type('First item');
     await superdoc.waitForStable();
     await superdoc.executeCommand('toggleOrderedList');
     await superdoc.waitForStable();
+    const endPos = await superdoc.page.evaluate(() => {
+      const editor = (window as any).editor;
+      return editor.state.selection.to;
+    });
+    await superdoc.setTextSelection(endPos, endPos);
+    await superdoc.waitForStable();
     await superdoc.press('Enter');
+    await superdoc.waitForStable();
     await superdoc.type('Second item');
     await superdoc.waitForStable();
+
+    // Verify list attributes were set (SuperDoc stores lists as paragraph attrs)
+    const listAttrsBefore = await superdoc.page.evaluate(() => {
+      const editor = (window as any).editor;
+      const items: Array<{ text: string; numProps: any }> = [];
+      editor.state.doc.descendants((node: any) => {
+        if (node.type.name === 'paragraph' && node.textContent) {
+          items.push({
+            text: node.textContent,
+            numProps: node.attrs.paragraphProperties?.numberingProperties ?? null,
+          });
+        }
+      });
+      return items;
+    });
+    expect(listAttrsBefore.length).toBe(2);
+    expect(listAttrsBefore[0].numProps).toBeTruthy();
 
     // Select all and copy
     await superdoc.press('Meta+a');
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
-    // Move to end and paste (appending, not replacing)
-    await superdoc.press('End');
+    // Replace all content with pasted copy
+    await superdoc.press('Backspace');
     await superdoc.waitForStable();
-    await superdoc.press('Enter');
-    await superdoc.waitForStable();
-    // Exit list first
-    await superdoc.press('Enter');
-    await superdoc.waitForStable();
-
     await pasteSuperdocClipboard(superdoc, payload);
 
-    // Verify both original and pasted text exist
+    // Verify both items survived with list attributes
     await superdoc.assertTextContains('First item');
     await superdoc.assertTextContains('Second item');
+
+    const listAttrsAfter = await superdoc.page.evaluate(() => {
+      const editor = (window as any).editor;
+      const items: Array<{ text: string; numProps: any }> = [];
+      editor.state.doc.descendants((node: any) => {
+        if (node.type.name === 'paragraph' && node.textContent) {
+          items.push({
+            text: node.textContent,
+            numProps: node.attrs.paragraphProperties?.numberingProperties ?? null,
+          });
+        }
+      });
+      return items;
+    });
+    expect(listAttrsAfter.some((p) => p.text === 'First item' && p.numProps)).toBeTruthy();
+    expect(listAttrsAfter.some((p) => p.text === 'Second item' && p.numProps)).toBeTruthy();
   });
 
   test('cut removes content and paste restores it', async ({ superdoc }) => {
@@ -277,19 +313,18 @@ test.describe('SuperDoc copy-paste with images', () => {
     // Verify media was collected
     expect(payload.sliceJson).toBeTruthy();
 
-    // Move to end and paste
-    await superdoc.press('End');
-    await superdoc.waitForStable();
-    await superdoc.press('Enter');
+    // Replace content with pasted copy (clear + paste)
+    await superdoc.press('Backspace');
     await superdoc.waitForStable();
     await pasteSuperdocClipboard(superdoc, payload);
 
-    // Total images should be double (original + pasted)
+    // Same number of images should survive the round-trip
     const totalImages = await countImages(superdoc);
-    expect(totalImages).toBe(originalImageCount * 2);
+    expect(totalImages).toBe(originalImageCount);
 
-    // Pasted images should have src values (not empty/broken)
+    // All pasted images should have src values (not empty/broken)
     const allSrcs = await getImageSrcs(superdoc);
+    expect(allSrcs.length).toBe(originalSrcs.length);
     for (const src of allSrcs) {
       expect(src).toBeTruthy();
     }
@@ -323,7 +358,9 @@ test.describe('SuperDoc copy-paste with images', () => {
       }
     }, originalMediaKeys);
 
-    // Paste — should trigger renames since bytes differ
+    // Replace content with pasted copy — triggers renames since bytes differ
+    await superdoc.press('Backspace');
+    await superdoc.waitForStable();
     await pasteSuperdocClipboard(superdoc, payload);
 
     // Get current media store

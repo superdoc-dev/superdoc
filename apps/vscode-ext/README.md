@@ -1,8 +1,5 @@
 # SuperDoc for VS Code
 
-[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/superdoc-dev.superdoc-vscode-ext)](https://marketplace.visualstudio.com/items?itemName=superdoc-dev.superdoc-vscode-ext)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/superdoc-dev.superdoc-vscode-ext)](https://marketplace.visualstudio.com/items?itemName=superdoc-dev.superdoc-vscode-ext)
-
 Open, edit, and review Word documents directly in VS Code.
 
 ![SuperDoc VS Code Extension Demo](demo.gif)

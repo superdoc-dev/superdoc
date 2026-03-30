@@ -157,6 +157,12 @@ export function convertOmmlToMathml(ommlJson: unknown, doc: Document): Element |
 
   const root = ommlJson as OmmlJsonNode;
   const mathEl = doc.createElementNS(MATHML_NS, 'math');
+  mathEl.setAttribute('style', 'font-family: "Cambria Math", math');
+
+  if (root.name === 'm:oMathPara') {
+    mathEl.setAttribute('display', 'block');
+    mathEl.setAttribute('displaystyle', 'true');
+  }
 
   // For m:oMathPara, iterate over child m:oMath elements
   // For m:oMath, process directly

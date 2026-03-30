@@ -5,8 +5,8 @@ import { PresentationPostPaintPipeline } from './dom/PresentationPostPaintPipeli
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { PresentationPainterAdapter } from './rendering/PresentationPainterAdapter.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
-import type { DomPainterInput, ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
-import type { ProofingConfig } from './proofing/types.js';
+import type { DomPainterInput, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
+import type { ProofingAnnotation, ProofingConfig } from './proofing/types.js';
 import {
   computeWordSelectionRangeAt,
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,

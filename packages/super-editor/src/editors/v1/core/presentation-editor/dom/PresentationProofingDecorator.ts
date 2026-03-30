@@ -1,11 +1,11 @@
-import { applyProofingDecorations, clearProofingDecorations } from '@superdoc/painter-dom';
-import type { ProofingAnnotation } from '@superdoc/painter-dom';
+import type { ProofingAnnotation } from '../proofing/types.js';
+import { applyProofingDecorations, clearProofingDecorations } from '../proofing/dom/decoration-pass.js';
 
 /**
- * Thin DOM-surface wrapper around the painter proofing decoration pass.
+ * Thin DOM-surface wrapper around the editor-owned proofing decoration pass.
  *
  * Proofing marks are still a post-paint compatibility layer today, but this
- * wrapper keeps the mutation boundary editor-owned and explicit.
+ * wrapper keeps the mutation boundary inside super-editor and explicit.
  */
 export class PresentationProofingDecorator {
   #container: HTMLElement | null = null;

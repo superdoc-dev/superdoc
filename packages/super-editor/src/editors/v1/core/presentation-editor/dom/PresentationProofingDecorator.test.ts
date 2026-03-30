@@ -7,7 +7,7 @@ const { mockApplyProofingDecorations, mockClearProofingDecorations } = vi.hoiste
   mockClearProofingDecorations: vi.fn(() => false),
 }));
 
-vi.mock('@superdoc/painter-dom', () => ({
+vi.mock('../proofing/dom/decoration-pass.js', () => ({
   applyProofingDecorations: mockApplyProofingDecorations,
   clearProofingDecorations: mockClearProofingDecorations,
 }));

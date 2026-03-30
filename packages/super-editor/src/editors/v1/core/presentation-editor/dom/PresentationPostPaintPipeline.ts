@@ -1,8 +1,7 @@
 import type { EditorState, Transaction } from 'prosemirror-state';
 
-import type { ProofingAnnotation } from '@superdoc/painter-dom';
-
 import type { DomPositionIndex } from '../../../dom-observer/DomPositionIndex.js';
+import type { ProofingAnnotation } from '../proofing/types.js';
 import { CommentHighlightDecorator } from './CommentHighlightDecorator.js';
 import { DecorationBridge } from './DecorationBridge.js';
 import { FieldAnnotationInteractionLayer } from './FieldAnnotationInteractionLayer.js';

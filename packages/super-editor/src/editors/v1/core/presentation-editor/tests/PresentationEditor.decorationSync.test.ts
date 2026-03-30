@@ -137,6 +137,10 @@ const {
       setZoom: vi.fn(),
       setLayoutMode: vi.fn(),
       setProviders: vi.fn(),
+      setVirtualizationPins: vi.fn(),
+      getMountedPageIndices: vi.fn(() => []),
+      onScroll: vi.fn(),
+      setScrollContainer: vi.fn(),
     })),
     mockEditorConverterStore: converterStore,
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
@@ -268,8 +272,6 @@ vi.mock('@superdoc/painter-dom', () => ({
     BLOCK_SDT: 'superdoc-structured-content-block',
     DOCUMENT_SECTION: 'superdoc-document-section',
   },
-  applyProofingDecorations: vi.fn(() => false),
-  clearProofingDecorations: vi.fn(() => false),
 }));
 
 vi.mock('../../header-footer/EditorOverlayManager.js', () => ({

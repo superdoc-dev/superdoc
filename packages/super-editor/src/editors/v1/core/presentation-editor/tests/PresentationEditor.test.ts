@@ -138,6 +138,9 @@ const {
       setZoom: vi.fn(),
       setLayoutMode: vi.fn(),
       setVirtualizationPins: vi.fn(),
+      getMountedPageIndices: vi.fn(() => []),
+      onScroll: vi.fn(),
+      setScrollContainer: vi.fn(),
       setProviders: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
@@ -304,15 +307,6 @@ vi.mock('@superdoc/painter-dom', () => ({
     INLINE_SDT_WRAPPER: 'superdoc-structured-content-inline',
     BLOCK_SDT: 'superdoc-structured-content-block',
     DOCUMENT_SECTION: 'superdoc-document-section',
-  },
-  applyProofingDecorations: vi.fn(() => false),
-  clearProofingDecorations: vi.fn(() => false),
-  PROOFING_CSS: {
-    SPELLING: 'sd-proofing-spelling',
-    GRAMMAR: 'sd-proofing-grammar',
-    STYLE: 'sd-proofing-style',
-    DATA_ATTR: 'data-sd-proofing',
-    SPLIT_ATTR: 'data-sd-proofing-split',
   },
 }));
 

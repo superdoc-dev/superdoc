@@ -53,10 +53,6 @@ export {
 } from './pm-position-validation.js';
 export type { PmPositionValidationStats } from './pm-position-validation.js';
 
-// Re-export proofing decoration utilities
-export { applyProofingDecorations, clearProofingDecorations, PROOFING_CSS } from './proofing/index.js';
-export type { ProofingAnnotation } from './proofing/index.js';
-
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 export type { FlowMode } from './renderer.js';
 export type PageDecorationPayload = {

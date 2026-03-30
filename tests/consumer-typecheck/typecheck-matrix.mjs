@@ -153,10 +153,6 @@ for (const scenario of scenarios) {
     icon = '✓';
     status = 'PASS';
     passed++;
-  } else if (srcErrors === 0 && !scenario.mustPass) {
-    icon = '⚠';
-    status = `DEPS (nm:${nmErrors})`;
-    warnings++;
   } else if (srcErrors === 0) {
     icon = '⚠';
     status = `DEPS (nm:${nmErrors})`;

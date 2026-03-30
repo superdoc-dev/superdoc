@@ -609,6 +609,12 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         { polling: 100, timeout: 30_000 },
       );
       await waitForStable(page, 1000);
+
+      // Re-focus the contenteditable — loadDocument destroys and recreates the
+      // SuperDoc instance, which causes focus to land on <body>. Without this,
+      // keyboard shortcuts like Meta+a / Ctrl+a become no-ops.
+      const ce = page.locator('[contenteditable="true"]').first();
+      await ce.focus();
     },
 
     // ----- Assertion methods -----

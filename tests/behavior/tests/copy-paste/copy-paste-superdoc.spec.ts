@@ -42,7 +42,7 @@ async function copySelection(superdoc: SuperDocFixture): Promise<{
       }
     };
     const parsed = JSON.parse(sliceJson);
-    if (Array.isArray(parsed.content)) parsed.content.forEach(walk);
+    if (parsed && Array.isArray(parsed.content)) parsed.content.forEach(walk);
 
     const mediaJson = Object.keys(referencedMedia).length > 0 ? JSON.stringify(referencedMedia) : '';
 

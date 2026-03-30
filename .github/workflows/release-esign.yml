@@ -8,6 +8,12 @@ on:
       - main
     paths:
       - 'packages/esign/**'
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:

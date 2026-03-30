@@ -148,9 +148,9 @@ onMounted(() => init());
 
 <template>
   <div class="example-container">
-    <h1>SuperDoc: Create a custom node with custom command</h1>
+    <h1>SuperDoc: Fields</h1>
 
-    <p>In this example, we create a simple custom node to pass into SuperDoc.</p>
+    <p>Drag field annotations into the document, then update and export them.</p>
 
     <div id="toolbar" class="my-custom-toolbar"></div>
     <div class="editor-and-button">
@@ -167,8 +167,8 @@ onMounted(() => init());
         <textarea
           id="custom-html"
           class="custom-textarea"
-          placeholder="Type some HTML to replace custom nodes with"
-          value="<p>Custom <b>Node</b> Content</p>"
+          placeholder="Type some HTML to replace the field content with"
+          value="<p>Updated <b>field</b> content</p>"
         ></textarea>
 
         <br />
@@ -187,18 +187,6 @@ onMounted(() => init());
 }
 textarea {
   margin-left: 10px;
-}
-.my-custom-node-default-class {
-  background-color: #1355FF;
-  border-radius: 8px;
-  cursor: pointer;
-  color: white;
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 12px;
-}
-.my-custom-node-default-class:hover {
-  background-color: #0a3dff;
 }
 .draggable-field {
   background-color: #1355FF;

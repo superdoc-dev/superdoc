@@ -15,19 +15,7 @@ ProseMirror-based document editor for SuperDoc.
 
 ## Extension Pattern
 
-Extensions use a fluent builder pattern:
-
-```javascript
-export const MyExtension = Mark.create({
-  name: 'my-extension',
-  addOptions() { return { /* config */ }; },
-  addAttributes() { /* DOM mappings */ },
-  parseHTML() { /* HTML → PM */ },
-  renderHTML() { /* PM → HTML */ },
-  addCommands() { return { /* editor.commands.* */ }; },
-  addPmPlugins() { /* state/behavior */ },
-});
-```
+Extensions are implemented as modules that register schema, commands, parsing/rendering hooks, and ProseMirror plugins as needed.
 
 **Example to follow**: `src/editors/v1/extensions/bold/` for marks, `src/editors/v1/extensions/paragraph/` for nodes
 

@@ -39,10 +39,6 @@ h1 {
   padding: 2rem;
 }
 
-.my-custom-mark-class {
-  border-bottom: 1px solid #646cff;
-}
-
 .example-container {
   display: flex;
   flex-direction: column;

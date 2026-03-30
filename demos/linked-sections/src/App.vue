@@ -247,18 +247,6 @@ textarea {
   padding: 10px;
   min-height: 200px;
 }
-.my-custom-node-default-class {
-  background-color: #1355FF;
-  border-radius: 8px;
-  cursor: pointer;
-  color: white;
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 12px;
-}
-.my-custom-node-default-class:hover {
-  background-color: #0a3dff;
-}
 .draggable-field {
   background-color: #1355FF;
   border-radius: 8px;

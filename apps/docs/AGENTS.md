@@ -71,7 +71,7 @@ Example:
 | DOCX fidelity | "Built on OOXML. Real pagination, section breaks, headers/footers. Not rich text with export bolted on." | "Users see documents exactly as they look in Word. No formatting loss, no complaints, no re-work." |
 | Collaboration | "Yjs-based CRDT. Add real-time editing in ~10 lines. Conflicts resolve automatically." | "Teams edit documents together in real time. Built-in conflict resolution means no lost work." |
 | Open source | "AGPLv3. Read the code, fork it, contribute. Commercial license if you need proprietary." | "Open-source foundation means no vendor lock-in. Inspect the code. Switch away anytime." |
-| Extensible | "60+ extensions built-in. Write your own with the plugin API. Full ProseMirror access." | "Adapts to your workflow, not the other way around. Custom extensions, branding, and integrations." |
+| Extensible | "60+ extensions built-in. Configure formatting, collaboration, comments, and workflows without rebuilding the editor." | "Adapts to your workflow, not the other way around. Branding, integrations, and document workflows." |
 | AI | "Bring your own LLM. AI actions with tool use — find, replace, highlight, insert. Streaming built in." | "AI-assisted document workflows with your choice of provider. Your data, your model, your infrastructure." |
 
 ### Quick reference

@@ -16,7 +16,7 @@ It provides:
 
 - **Fluent builder API**: chainable methods to configure name, debounce, hooks, and extensions.
 - **Framework-agnostic**: can be used with Fastify, Express, Koa, or any WebSocket-capable HTTP server.
-- **Pluggable hooks**: `onAuthenticate`, `onLoad`, `onAutoSave`, `onChange`, plus custom extensions.
+- **Pluggable hooks**: `onAuthenticate`, `onLoad`, `onAutoSave`, `onChange`, plus integration-specific configuration.
 - **Debounced persistence**: built-in support for batching state saves.
 - **Awareness & co-presence**: optional user presence through built-in Awareness support.
 - **TypeScript & JSDoc**: fully documented via JSDoc for IDEs and TS consumption.

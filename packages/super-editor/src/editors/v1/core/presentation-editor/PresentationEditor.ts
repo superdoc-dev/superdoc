@@ -5938,15 +5938,20 @@ export class PresentationEditor extends EventEmitter {
       return this.#navigateToTrackedChange(target.entityId);
     }
 
-    const setCursorById = this.getActiveEditor()?.commands?.setCursorById;
-    if (typeof setCursorById !== 'function') return false;
+    if (target.entityType === 'comment') {
+      const setCursorById = this.getActiveEditor()?.commands?.setCursorById;
+      if (typeof setCursorById !== 'function') return false;
 
-    return Boolean(
-      setCursorById(target.entityId, {
-        preferredActiveThreadId: target.entityId,
-        ...(target.entityType === 'comment' ? { activeCommentId: target.entityId } : {}),
-      }),
-    );
+      return Boolean(
+        setCursorById(target.entityId, {
+          preferredActiveThreadId: target.entityId,
+          activeCommentId: target.entityId,
+        }),
+      );
+    }
+
+    const _exhaustive: never = target.entityType;
+    return false;
   }
 
   async #navigateToTrackedChange(id: string): Promise<boolean> {

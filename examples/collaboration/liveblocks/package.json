@@ -8,9 +8,9 @@
     "smoke:python": "python3 ./scripts/smoke-python-sdk.py"
   },
   "dependencies": {
-    "@liveblocks/client": "^3.11.0",
-    "@liveblocks/node": "^3.11.0",
-    "@liveblocks/yjs": "^3.11.0",
+    "@liveblocks/client": "catalog:",
+    "@liveblocks/node": "^3.15.5",
+    "@liveblocks/yjs": "catalog:",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "superdoc": "latest",

@@ -22,8 +22,8 @@ catalog:
   '@fontsource/inter': ^5.2.8
   '@hocuspocus/provider': ^2.13.6
   '@hocuspocus/server': ^2.13.6
-  '@liveblocks/client': ^3.11.0
-  '@liveblocks/yjs': ^3.11.0
+  '@liveblocks/client': ^3.15.5
+  '@liveblocks/yjs': ^3.15.5
   '@linear/sdk': ^53.0.0
   '@playwright/test': ^1.57.0
   '@semantic-release/changelog': ^6.0.3

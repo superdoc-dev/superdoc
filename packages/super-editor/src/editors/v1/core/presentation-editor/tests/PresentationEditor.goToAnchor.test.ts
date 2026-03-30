@@ -663,7 +663,8 @@ describe('PresentationEditor - goToAnchor', () => {
       documentId: 'test-doc',
     });
 
-    mockActiveEditor.commands.setCursorById = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const bodyEditor = editor.getActiveEditor();
+    bodyEditor.commands.setCursorById = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
     mockResolveTrackedChange.mockReturnValueOnce({
       id: 'canonical-tc-id',
@@ -683,13 +684,14 @@ describe('PresentationEditor - goToAnchor', () => {
     });
 
     expect(result).toBe(true);
-    expect(mockActiveEditor.commands.setCursorById).toHaveBeenNthCalledWith(1, 'canonical-tc-id', {
+    expect(bodyEditor.commands.setCursorById).toHaveBeenNthCalledWith(1, 'canonical-tc-id', {
       preferredActiveThreadId: 'canonical-tc-id',
     });
-    expect(mockResolveTrackedChange).toHaveBeenCalledWith(mockActiveEditor, 'canonical-tc-id');
-    expect(mockActiveEditor.commands.setCursorById).toHaveBeenNthCalledWith(2, 'raw-tc-id', {
+    expect(mockResolveTrackedChange).toHaveBeenCalledWith(bodyEditor, 'canonical-tc-id');
+    expect(bodyEditor.commands.setCursorById).toHaveBeenNthCalledWith(2, 'raw-tc-id', {
       preferredActiveThreadId: 'raw-tc-id',
     });
+    expect(mockActiveEditor.commands.setCursorById).toBeUndefined();
   });
 
   it('falls back to scroll + setTextSelection when both setCursorById attempts fail for tracked changes', async () => {
@@ -698,7 +700,8 @@ describe('PresentationEditor - goToAnchor', () => {
       documentId: 'test-doc',
     });
 
-    mockActiveEditor.commands.setCursorById = vi.fn().mockReturnValue(false);
+    const bodyEditor = editor.getActiveEditor();
+    bodyEditor.commands.setCursorById = vi.fn().mockReturnValue(false);
     editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
     editor.scrollToPositionAsync = vi.fn().mockResolvedValue(undefined);
 
@@ -720,12 +723,13 @@ describe('PresentationEditor - goToAnchor', () => {
     });
 
     expect(result).toBe(true);
-    expect(mockActiveEditor.commands.setCursorById).toHaveBeenCalledTimes(2);
+    expect(bodyEditor.commands.setCursorById).toHaveBeenCalledTimes(2);
     expect(editor.scrollToPositionAsync).toHaveBeenCalledWith(88, {
       behavior: 'auto',
       block: 'center',
     });
-    expect(mockActiveEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 88, to: 88 });
-    expect(mockActiveEditor.view?.focus).toHaveBeenCalled();
+    expect(bodyEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 88, to: 88 });
+    expect(bodyEditor.view?.focus).toHaveBeenCalled();
+    expect(mockResolveTrackedChange).toHaveBeenCalledWith(bodyEditor, 'canonical-tc-id');
   });
 });

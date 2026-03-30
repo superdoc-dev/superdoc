@@ -5970,15 +5970,15 @@ export class PresentationEditor extends EventEmitter {
   }
 
   async #navigateToTrackedChange(id: string): Promise<boolean> {
-    const activeEditor = this.getActiveEditor();
-    const setCursorById = activeEditor?.commands?.setCursorById;
-    if (!activeEditor || typeof setCursorById !== 'function') return false;
+    const bodyEditor = this.#resolveBodyEditorForNavigation();
+    const setCursorById = bodyEditor?.commands?.setCursorById;
+    if (!bodyEditor || typeof setCursorById !== 'function') return false;
 
     if (setCursorById(id, { preferredActiveThreadId: id })) {
       return true;
     }
 
-    const resolved = resolveTrackedChange(activeEditor, id);
+    const resolved = resolveTrackedChange(bodyEditor, id);
     if (!resolved) return false;
 
     if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
@@ -5989,8 +5989,8 @@ export class PresentationEditor extends EventEmitter {
       behavior: 'auto',
       block: 'center',
     });
-    activeEditor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
-    activeEditor.view?.focus?.();
+    bodyEditor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
+    bodyEditor.view?.focus?.();
 
     return true;
   }

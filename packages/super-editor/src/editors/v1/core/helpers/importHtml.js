@@ -23,14 +23,13 @@ import { detectUnsupportedContent } from './catchAllSchema.js';
 export function createDocFromHTML(content, editor, options = {}) {
   const { isImport = false } = options;
   let parsedContent;
+  let domDocument =
+    options.document ??
+    editor?.options?.document ??
+    editor?.options?.mockDocument ??
+    (typeof document !== 'undefined' ? document : null);
 
   if (typeof content === 'string') {
-    const domDocument =
-      options.document ??
-      editor?.options?.document ??
-      editor?.options?.mockDocument ??
-      (typeof document !== 'undefined' ? document : null);
-
     // Strip styles
     const tempDiv = htmlHandler(stripHtmlStyles(content, domDocument), editor, domDocument);
 
@@ -46,9 +45,12 @@ export function createDocFromHTML(content, editor, options = {}) {
   }
 
   // Detect unsupported content when opted in (requires an Element for DOM scanning)
+  const domElement =
+    parsedContent?.ownerDocument?.defaultView?.Element ?? domDocument?.defaultView?.Element ?? globalThis.Element;
   if (
     (options.onUnsupportedContent || options.warnOnUnsupportedContent) &&
-    parsedContent instanceof globalThis.Element
+    domElement &&
+    parsedContent instanceof domElement
   ) {
     const unsupported = detectUnsupportedContent(parsedContent, editor.schema);
     if (unsupported.length > 0) {

@@ -82,6 +82,36 @@ describe('Headless HTML/Markdown in Node via injected Document', () => {
     editor.destroy();
   }, 60_000);
 
+  it('initializes from html without browser globals when document is injected', async () => {
+    expect(globalThis.document).toBeUndefined();
+    expect(globalThis.window).toBeUndefined();
+    expect(globalThis.Node).toBeUndefined();
+    expect(globalThis.Element).toBeUndefined();
+
+    const injectedDocument = new JSDOM('').window.document;
+
+    const buffer = await loadDocxFixture('blank-doc.docx');
+    const [content, , mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+
+    const editor = new Editor({
+      mode: 'docx',
+      document: injectedDocument,
+      documentId: 'node-html-injection-test',
+      extensions: getStarterExtensions(),
+      content,
+      mediaFiles,
+      fonts,
+      html: '<p>Hello <strong>HTML</strong></p>',
+      warnOnUnsupportedContent: true,
+    });
+
+    expect(editor.view).toBeUndefined();
+    expect(editor.state.doc.textContent).toContain('Hello');
+    expect(editor.state.doc.textContent).toContain('HTML');
+
+    editor.destroy();
+  }, 60_000);
+
   it('throws a clear error when markdown is provided without a DOM', async () => {
     expect(globalThis.document).toBeUndefined();
     expect(globalThis.window).toBeUndefined();

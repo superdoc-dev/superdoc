@@ -563,6 +563,9 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 
   const container = resolvedDocument.createElement('div');
   container.innerHTML = html;
+  const domNode = resolvedDocument.defaultView?.Node ?? globalThis.Node;
+  const COMMENT_NODE = domNode?.COMMENT_NODE ?? 8;
+  const ELEMENT_NODE = domNode?.ELEMENT_NODE ?? 1;
 
   // Strip Word conditional list-marker spans so paste does not duplicate markers.
   const stripWordListConditionalPrefixes = (root) => {
@@ -571,12 +574,12 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 
       for (let i = 0; i < node.childNodes.length; i += 1) {
         const current = node.childNodes[i];
-        if (current?.nodeType === Node.COMMENT_NODE && current.nodeValue?.includes('[if !supportLists]')) {
+        if (current?.nodeType === COMMENT_NODE && current.nodeValue?.includes('[if !supportLists]')) {
           const nodesToStrip = [];
           let endifComment = null;
           for (let j = i + 1; j < node.childNodes.length; j += 1) {
             const next = node.childNodes[j];
-            if (next?.nodeType === Node.COMMENT_NODE && next.nodeValue?.includes('[endif]')) {
+            if (next?.nodeType === COMMENT_NODE && next.nodeValue?.includes('[endif]')) {
               endifComment = next;
               break;
             }
@@ -596,7 +599,7 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
           continue;
         }
 
-        if (current?.nodeType === Node.ELEMENT_NODE) {
+        if (current?.nodeType === ELEMENT_NODE) {
           stripFromNode(current);
         }
       }

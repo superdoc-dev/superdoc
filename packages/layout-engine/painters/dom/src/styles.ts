@@ -388,9 +388,8 @@ const SDT_CONTAINER_STYLES = `
   border-color: transparent;
 }
 
-/* Group hover (JavaScript-coordinated) */
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
-.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
+/* Group hover (JavaScript-coordinated via PresentationEditor) */
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
   border-color: transparent;
 }
@@ -434,7 +433,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
-.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
   display: inline-flex;
 }
 
@@ -522,10 +521,10 @@ const SDT_CONTAINER_STYLES = `
 
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
- * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
+ * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
  * Inline SDTs use :hover (single element, no coordination needed).
  * Hover is suppressed when the node is selected (SD-1584). */
-.superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
 .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
@@ -545,8 +544,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
-.presentation-editor--viewing .superdoc-structured-content-block.sdt-hover,
-.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-hover {
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover {
   background: none;
   border: none;
 }
@@ -585,11 +583,8 @@ const SDT_CONTAINER_STYLES = `
 `;
 
 const FIELD_ANNOTATION_STYLES = `
-/* Field annotation draggable styles */
-.superdoc-layout .annotation[data-draggable="true"] {
-  user-select: text;
-}
-
+/* Field annotation visual styles — suppress native selection artifacts.
+ * Annotations are atomic inline nodes; native selection and caret look broken. */
 .superdoc-layout .annotation::selection,
 .superdoc-layout .annotation *::selection {
   background: transparent;
@@ -603,29 +598,6 @@ const FIELD_ANNOTATION_STYLES = `
 .superdoc-layout .annotation,
 .superdoc-layout .annotation * {
   caret-color: transparent;
-}
-
-.superdoc-layout .annotation[data-draggable="true"]:hover {
-  opacity: 0.9;
-}
-
-.superdoc-layout .annotation[data-draggable="true"]:active {
-  cursor: grabbing;
-}
-
-/* Drag over indicator for drop targets */
-.superdoc-layout.drag-over {
-  outline: 2px dashed #b015b3;
-  outline-offset: -2px;
-}
-
-/* Drop zone indicator */
-.superdoc-layout .superdoc-drop-indicator {
-  position: absolute;
-  width: 2px;
-  background-color: #b015b3;
-  pointer-events: none;
-  z-index: 1000;
 }
 `;
 
@@ -649,36 +621,12 @@ const IMAGE_SELECTION_STYLES = `
 }
 `;
 
-/**
- * Native Selection Hiding Styles
- *
- * Hides the browser's native text selection highlight on layout engine content.
- * The PresentationEditor renders its own selection overlay for precise control
- * over selection appearance across pages, zoom levels, and virtualization.
- *
- * Without these styles, users would see BOTH the custom selection overlay AND
- * the native browser selection, causing a "double selection" visual artifact.
- */
-const NATIVE_SELECTION_STYLES = `
-/* Hide native browser selection on layout engine content.
- * We render our own selection overlay via PresentationEditor's #localSelectionLayer
- * for precise control over selection geometry across pages and zoom levels. */
-.superdoc-layout *::selection {
-  background: transparent;
-}
-
-.superdoc-layout *::-moz-selection {
-  background: transparent;
-}
-`;
-
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
-let nativeSelectionStylesInjected = false;
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
   if (printStylesInjected || !doc) return;
@@ -738,25 +686,4 @@ export const ensureImageSelectionStyles = (doc: Document | null | undefined) => 
   styleEl.textContent = IMAGE_SELECTION_STYLES;
   doc.head?.appendChild(styleEl);
   imageSelectionStylesInjected = true;
-};
-
-/**
- * Injects styles to hide native browser selection on layout engine content.
- * This prevents the "double selection" visual artifact where both the browser's
- * native selection and our custom overlay are visible simultaneously.
- *
- * The function is idempotent - calling it multiple times on the same document
- * will only inject the styles once. This is tracked via the module-level
- * `nativeSelectionStylesInjected` flag.
- *
- * @param doc - The document to inject styles into. If null or undefined, the function returns early without action.
- * @returns void
- */
-export const ensureNativeSelectionStyles = (doc: Document | null | undefined): void => {
-  if (nativeSelectionStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-native-selection-styles', 'true');
-  styleEl.textContent = NATIVE_SELECTION_STYLES;
-  doc.head?.appendChild(styleEl);
-  nativeSelectionStylesInjected = true;
 };

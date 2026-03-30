@@ -38,7 +38,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
-import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
@@ -324,6 +324,10 @@ export type EditorInputCallbacks = {
   renderHoverRegion?: (region: HeaderFooterRegion) => void;
   /** Focus editor after image selection */
   focusEditorAfterImageSelection?: () => void;
+  /** Resolve a mounted inline image element by pmStart */
+  resolveInlineImageElementByPmStart?: (pmStart: number) => HTMLElement | null;
+  /** Resolve a mounted image fragment element by pmStart */
+  resolveImageFragmentElementByPmStart?: (pmStart: number) => HTMLElement | null;
   /** Resolve field annotation from element */
   resolveFieldAnnotationSelectionFromElement?: (el: HTMLElement) => { node: unknown; pos: number } | null;
   /** Compute pending margin click */
@@ -1025,8 +1029,8 @@ export class EditorInputManager {
     }
 
     // Handle field annotation clicks
-    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
-    const isDraggableAnnotation = target?.closest?.('[data-draggable="true"]') != null;
+    const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
+    const isDraggableAnnotation = target?.closest?.(DRAGGABLE_SELECTOR) != null;
     this.#suppressFocusInFromDraggable = isDraggableAnnotation;
 
     if (annotationEl) {
@@ -1388,7 +1392,7 @@ export class EditorInputManager {
     if (event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
-    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
+    const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
 
     if (annotationEl) {
       event.preventDefault();
@@ -1795,8 +1799,7 @@ export class EditorInputManager {
       // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image.
       // The compound selector lists wrapper before inline-image; querySelector returns the first DOM-order
       // match, and the wrapper is always an ancestor of the image, so it is found first when present.
-      const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(buildInlineImagePmSelector(imgPmStart));
+      const targetElement = this.#callbacks.resolveInlineImageElementByPmStart?.(imgPmStart) ?? null;
       const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
         element: elementForHighlight,
@@ -1833,10 +1836,10 @@ export class EditorInputManager {
       }
 
       if (fragmentHit.fragment.kind === 'image') {
-        const viewportHost = this.#deps?.getViewportHost();
-        const targetElement = viewportHost?.querySelector(
-          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
-        );
+        const targetElement =
+          fragmentHit.fragment.pmStart != null
+            ? (this.#callbacks.resolveImageFragmentElementByPmStart?.(fragmentHit.fragment.pmStart) ?? null)
+            : null;
         if (targetElement) {
           this.#callbacks.emit?.('imageSelected', {
             element: targetElement,

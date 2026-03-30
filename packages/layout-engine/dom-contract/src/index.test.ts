@@ -6,6 +6,13 @@ import {
   DATASET_KEYS,
   buildImagePmSelector,
   buildInlineImagePmSelector,
+  buildSdtBlockSelector,
+  buildSdtInlineSelector,
+  buildAnnotationSelector,
+  buildAnnotationTypeSelector,
+  buildAnnotationPmSelector,
+  SDT_BLOCK_WITH_ID_SELECTOR,
+  DRAGGABLE_SELECTOR,
 } from './index.js';
 
 describe('@superdoc/dom-contract', () => {
@@ -18,10 +25,13 @@ describe('@superdoc/dom-contract', () => {
       BLOCK_SDT: 'superdoc-structured-content-block',
       TABLE_FRAGMENT: 'superdoc-table-fragment',
       DOCUMENT_SECTION: 'superdoc-document-section',
-      SDT_HOVER: 'sdt-hover',
+      SDT_GROUP_HOVER: 'sdt-group-hover',
       IMAGE_FRAGMENT: 'superdoc-image-fragment',
       INLINE_IMAGE: 'superdoc-inline-image',
       INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
+      ANNOTATION: 'annotation',
+      ANNOTATION_CONTENT: 'annotation-content',
+      ANNOTATION_CARET_ANCHOR: 'annotation-caret-anchor',
     });
   });
 
@@ -31,6 +41,14 @@ describe('@superdoc/dom-contract', () => {
       PM_END: 'data-pm-end',
       LAYOUT_EPOCH: 'data-layout-epoch',
       TABLE_BOUNDARIES: 'data-table-boundaries',
+      SDT_ID: 'data-sdt-id',
+      SDT_TYPE: 'data-sdt-type',
+      FIELD_ID: 'data-field-id',
+      FIELD_TYPE: 'data-field-type',
+      DRAGGABLE: 'data-draggable',
+      DISPLAY_LABEL: 'data-display-label',
+      VARIANT: 'data-variant',
+      TYPE: 'data-type',
     });
 
     expect(DATASET_KEYS).toEqual({
@@ -38,6 +56,14 @@ describe('@superdoc/dom-contract', () => {
       PM_END: 'pmEnd',
       LAYOUT_EPOCH: 'layoutEpoch',
       TABLE_BOUNDARIES: 'tableBoundaries',
+      SDT_ID: 'sdtId',
+      SDT_TYPE: 'sdtType',
+      FIELD_ID: 'fieldId',
+      FIELD_TYPE: 'fieldType',
+      DRAGGABLE: 'draggable',
+      DISPLAY_LABEL: 'displayLabel',
+      VARIANT: 'variant',
+      TYPE: 'type',
     });
   });
 
@@ -51,5 +77,33 @@ describe('@superdoc/dom-contract', () => {
     expect(buildInlineImagePmSelector('99')).toBe(
       '.superdoc-inline-image-clip-wrapper[data-pm-start="99"], .superdoc-inline-image[data-pm-start="99"]',
     );
+  });
+
+  it('builds a block SDT selector by escaped id', () => {
+    expect(buildSdtBlockSelector('abc')).toBe('.superdoc-structured-content-block[data-sdt-id="abc"]');
+  });
+
+  it('builds an inline SDT selector by escaped id', () => {
+    expect(buildSdtInlineSelector('abc')).toBe('.superdoc-structured-content-inline[data-sdt-id="abc"]');
+  });
+
+  it('builds the annotation selector with pm-start', () => {
+    expect(buildAnnotationSelector()).toBe('.annotation[data-pm-start]');
+  });
+
+  it('builds an annotation type selector', () => {
+    expect(buildAnnotationTypeSelector('html')).toBe('.annotation[data-type="html"]');
+  });
+
+  it('builds an annotation pm selector', () => {
+    expect(buildAnnotationPmSelector(42)).toBe('.annotation[data-pm-start="42"]');
+  });
+
+  it('exports SDT_BLOCK_WITH_ID_SELECTOR constant', () => {
+    expect(SDT_BLOCK_WITH_ID_SELECTOR).toBe('.superdoc-structured-content-block[data-sdt-id]');
+  });
+
+  it('exports DRAGGABLE_SELECTOR constant', () => {
+    expect(DRAGGABLE_SELECTOR).toBe('[data-draggable="true"]');
   });
 });

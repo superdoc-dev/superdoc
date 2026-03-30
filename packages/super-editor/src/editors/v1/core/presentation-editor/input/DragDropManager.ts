@@ -8,6 +8,7 @@
  */
 
 import { TextSelection } from 'prosemirror-state';
+import { DATASET_KEYS } from '@superdoc/dom-contract';
 import type { Editor } from '../../Editor.js';
 import type { PositionHit } from '@superdoc/layout-bridge';
 
@@ -370,7 +371,7 @@ export class DragDropManager {
     const target = event.target as HTMLElement;
 
     // Only handle draggable field annotations
-    if (!target?.dataset?.draggable || target.dataset.draggable !== 'true') {
+    if (!target?.dataset?.[DATASET_KEYS.DRAGGABLE] || target.dataset[DATASET_KEYS.DRAGGABLE] !== 'true') {
       return;
     }
 

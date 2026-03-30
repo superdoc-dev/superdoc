@@ -27,6 +27,30 @@ export const DATA_ATTRS = {
 
   /** JSON-encoded table boundary metadata for resize overlays. */
   TABLE_BOUNDARIES: 'data-table-boundaries',
+
+  /** SDT unique identifier. */
+  SDT_ID: 'data-sdt-id',
+
+  /** SDT type (fieldAnnotation, structuredContent, documentSection, etc.). */
+  SDT_TYPE: 'data-sdt-type',
+
+  /** Field annotation field identifier. */
+  FIELD_ID: 'data-field-id',
+
+  /** Field annotation field type (signer, text, checkbox, etc.). */
+  FIELD_TYPE: 'data-field-type',
+
+  /** Marks an element as draggable by the editor. */
+  DRAGGABLE: 'data-draggable',
+
+  /** Display label text for drag toast / accessibility. */
+  DISPLAY_LABEL: 'data-display-label',
+
+  /** Field annotation variant (text, image, signature, checkbox, html, link). */
+  VARIANT: 'data-variant',
+
+  /** Element type discriminator (annotation variant, etc.). */
+  TYPE: 'data-type',
 } as const;
 
 /**
@@ -39,4 +63,12 @@ export const DATASET_KEYS = {
   PM_END: 'pmEnd',
   LAYOUT_EPOCH: 'layoutEpoch',
   TABLE_BOUNDARIES: 'tableBoundaries',
+  SDT_ID: 'sdtId',
+  SDT_TYPE: 'sdtType',
+  FIELD_ID: 'fieldId',
+  FIELD_TYPE: 'fieldType',
+  DRAGGABLE: 'draggable',
+  DISPLAY_LABEL: 'displayLabel',
+  VARIANT: 'variant',
+  TYPE: 'type',
 } as const;

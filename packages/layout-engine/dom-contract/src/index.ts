@@ -18,4 +18,14 @@ export type { DomClassName } from './class-names.js';
 
 export { DATA_ATTRS, DATASET_KEYS } from './data-attrs.js';
 
-export { buildImagePmSelector, buildInlineImagePmSelector } from './selectors.js';
+export {
+  buildImagePmSelector,
+  buildInlineImagePmSelector,
+  buildSdtBlockSelector,
+  buildSdtInlineSelector,
+  buildAnnotationSelector,
+  buildAnnotationTypeSelector,
+  buildAnnotationPmSelector,
+  SDT_BLOCK_WITH_ID_SELECTOR,
+  DRAGGABLE_SELECTOR,
+} from './selectors.js';

@@ -6706,8 +6706,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // -------------------------------------------------------------------------
   'bookmarks.list': {
     input: objectSchema({
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
+      ...((refListQuerySchema.properties as Record<string, JsonSchema>) ?? {}),
       in: storyLocatorSchema,
     }),
     output: discoveryOutputSchema,

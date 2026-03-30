@@ -103,6 +103,21 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').PartChangedEvent} PartChangedEvent
  * @typedef {import('@superdoc/super-editor').PartId} PartId
  * @typedef {import('@superdoc/super-editor').PartSectionId} PartSectionId
+ * @typedef {import('@superdoc/super-editor').EditorOptions} EditorOptions
+ * @typedef {import('@superdoc/super-editor').EditorLifecycleState} EditorLifecycleState
+ * @typedef {import('@superdoc/super-editor').User} User
+ * @typedef {import('@superdoc/super-editor').ProseMirrorJSON} ProseMirrorJSON
+ * @typedef {import('@superdoc/super-editor').ExportFormat} ExportFormat
+ * @typedef {import('@superdoc/super-editor').EditorExtension} EditorExtension
+ * @typedef {import('@superdoc/super-editor').ViewLayout} ViewLayout
+ * @typedef {import('@superdoc/super-editor').ViewOptions} ViewOptions
+ * @typedef {import('@superdoc/super-editor').CommentConfig} CommentConfig
+ * @typedef {import('@superdoc/super-editor').CollaborationProvider} CollaborationProvider
+ * @typedef {import('@superdoc/super-editor').LinkPopoverResolver} LinkPopoverResolver
+ * @typedef {import('@superdoc/super-editor').LinkPopoverContext} LinkPopoverContext
+ * @typedef {import('@superdoc/super-editor').LinkPopoverResolution} LinkPopoverResolution
+ * @typedef {import('@superdoc/super-editor').PermissionParams} PermissionParams
+ * @typedef {import('@superdoc/super-editor').FieldValue} FieldValue
  */
 
 // Public exports

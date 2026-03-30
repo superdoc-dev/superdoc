@@ -45,10 +45,34 @@ export type {
 // Parts system types (used by partChanged event handler)
 export type { PartChangedEvent, PartId, PartSectionId } from './editors/v1/core/parts/types.js';
 
-// Editor configuration types
-export type { DocxFileEntry } from './editors/v1/core/types/EditorConfig.js';
-export type { BinaryData, UnsupportedContentItem } from './editors/v1/core/types/EditorTypes.js';
-export type { OpenOptions, SaveOptions, ExportOptions } from './editors/v1/core/Editor.js';
+// Editor configuration and data types
+export type {
+  EditorOptions,
+  User,
+  FieldValue,
+  DocxFileEntry,
+  ViewLayout,
+  ViewOptions,
+  EditorExtension,
+  CollaborationProvider,
+  Awareness,
+  CommentConfig,
+  CommentHighlightColors,
+  CommentHighlightOpacity,
+  PermissionParams,
+  LinkPopoverResolver,
+  LinkPopoverContext,
+  LinkPopoverResolution,
+  ExternalPopoverRenderContext,
+} from './editors/v1/core/types/EditorConfig.js';
+export type {
+  BinaryData,
+  UnsupportedContentItem,
+  ProseMirrorJSON,
+  ExportFormat,
+  PageStyles,
+} from './editors/v1/core/types/EditorTypes.js';
+export type { OpenOptions, SaveOptions, ExportOptions, EditorLifecycleState } from './editors/v1/core/Editor.js';
 
 // PresentationEditor public types
 export type {

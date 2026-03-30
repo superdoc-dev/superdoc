@@ -74,6 +74,26 @@ describe('handleMathBlockNode', () => {
     expect(run.width).toBe(50); // 5 chars * 10px
   });
 
+  it('estimates taller height for fractions', () => {
+    const { context, blocks } = makeContext();
+    const fractionXml = {
+      name: 'm:oMathPara',
+      elements: [{
+        name: 'm:oMath',
+        elements: [{
+          name: 'm:f',
+          elements: [
+            { name: 'm:num', elements: [{ name: 'm:r' }] },
+            { name: 'm:den', elements: [{ name: 'm:r' }] },
+          ],
+        }],
+      }],
+    };
+    handleMathBlockNode(makeNode({ textContent: 'ab', originalXml: fractionXml }) as any, context);
+    const run = (blocks[0] as ParagraphBlock).runs[0] as MathRun;
+    expect(run.height).toBeGreaterThan(24);
+  });
+
   it('generates unique block IDs', () => {
     const { context, blocks } = makeContext();
     handleMathBlockNode(makeNode({ textContent: 'a' }) as any, context);

@@ -19,7 +19,8 @@ export function handleMathBlockNode(node: PMNode, context: NodeHandlerContext): 
 
   const textContent = String(node.attrs?.textContent ?? '');
   const justification = String(node.attrs?.justification ?? 'centerGroup');
-  const { width, height } = estimateMathDimensions(textContent);
+  const ommlJson = node.attrs?.originalXml ?? null;
+  const { width, height } = estimateMathDimensions(textContent, ommlJson);
 
   const pos = positions.get(node);
 

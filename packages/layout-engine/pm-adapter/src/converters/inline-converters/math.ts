@@ -8,7 +8,8 @@ import { estimateMathDimensions } from '../math-constants.js';
  */
 export function mathInlineNodeToRun({ node, positions, sdtMetadata }: InlineConverterParams): MathRun | null {
   const textContent = String(node.attrs?.textContent ?? '');
-  const { width, height } = estimateMathDimensions(textContent);
+  const ommlJson = node.attrs?.originalXml ?? null;
+  const { width, height } = estimateMathDimensions(textContent, ommlJson);
 
   const run: MathRun = {
     kind: 'math',

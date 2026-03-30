@@ -5925,7 +5925,7 @@ export class PresentationEditor extends EventEmitter {
     if (!target || target.kind !== 'entity') return false;
 
     if (target.entityType === 'bookmark') {
-      return this.#navigateToBookmarkTarget(target as BookmarkAddress);
+      return this.#navigateToBookmarkTarget(target);
     }
 
     // Comments and tracked changes are only supported in the document body.

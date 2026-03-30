@@ -52,8 +52,6 @@ jobs:
       matrix:
         demo:
           - cdn
-          - custom-mark
-          - custom-node
           - docx-from-html
           - docxtemplater
           - fields

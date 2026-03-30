@@ -5942,7 +5942,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (target.entityType === 'comment') {
-      const setCursorById = this.getActiveEditor()?.commands?.setCursorById;
+      const bodyEditor = this.#resolveBodyEditorForNavigation();
+      const setCursorById = bodyEditor?.commands?.setCursorById;
       if (typeof setCursorById !== 'function') return false;
 
       return Boolean(
@@ -5955,6 +5956,17 @@ export class PresentationEditor extends EventEmitter {
 
     const _exhaustive: never = target.entityType;
     return false;
+  }
+
+  #resolveBodyEditorForNavigation(): Editor | null {
+    if (!this.#editor) return null;
+
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      this.#exitHeaderFooterMode();
+    }
+
+    return this.#editor;
   }
 
   async #navigateToTrackedChange(id: string): Promise<boolean> {

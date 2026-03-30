@@ -639,7 +639,8 @@ describe('PresentationEditor - goToAnchor', () => {
       documentId: 'test-doc',
     });
 
-    mockActiveEditor.commands.setCursorById = vi.fn(() => true);
+    const bodyEditor = editor.getActiveEditor();
+    bodyEditor.commands.setCursorById = vi.fn(() => true);
     editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
 
     const result = await editor.navigateTo({
@@ -649,10 +650,11 @@ describe('PresentationEditor - goToAnchor', () => {
     });
 
     expect(result).toBe(true);
-    expect(mockActiveEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
+    expect(bodyEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
       preferredActiveThreadId: 'comment-1',
       activeCommentId: 'comment-1',
     });
+    expect(mockActiveEditor.commands.setCursorById).toBeUndefined();
   });
 
   it('routes tracked change navigation through the raw tracked-change id when given a canonical id', async () => {

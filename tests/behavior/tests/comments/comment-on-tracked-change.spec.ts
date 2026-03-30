@@ -3,7 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
 import { assertDocumentApiReady, listComments, listTrackChanges } from '../../helpers/document-api.js';
-import { expectDialogTopNearLocator } from '../../helpers/comments.js';
+import {
+  activateCommentDialog,
+  expectDialogTopNearLocator,
+  expectNoDelayedFloatingCommentMotion,
+  getCommentId,
+} from '../../helpers/comments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/gdocs-comment-on-change.docx');
@@ -108,4 +113,37 @@ test('clicking the tracked-change bubble keeps that overlapping thread active', 
 
   const overlappingHighlight = superdoc.page.locator('.superdoc-comment-highlight', { hasText: 'new text' }).first();
   await expectDialogTopNearLocator(activeDialog, overlappingHighlight, { tolerancePx: 24 });
+});
+
+test('switching highlighted threads does not trigger a second delayed floating-sidebar movement', async ({
+  superdoc,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Motion timing assertions are currently stabilized in Chromium only.');
+
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
+  await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
+
+  const targetCommentId = await getCommentId(superdoc.page, 'Test');
+  const targetDialog = superdoc.page.locator(
+    `.comment-placeholder[data-comment-id="${targetCommentId}"] .comments-dialog`,
+  );
+  const targetHighlight = superdoc.page.locator('.superdoc-comment-highlight', { hasText: 'Test' }).first();
+
+  await activateCommentDialog(superdoc, 'new text');
+  await superdoc.waitForStable();
+
+  await superdoc.clickOnCommentedText('Test');
+  await expectNoDelayedFloatingCommentMotion(superdoc.page, targetCommentId, {
+    ignoreInitialMs: 250,
+    observeForMs: 700,
+    tolerancePx: 4,
+  });
+
+  await expectDialogTopNearLocator(targetDialog, targetHighlight, { tolerancePx: 24 });
+  await expect(targetDialog.locator('.comment-body .comment')).toHaveCount(2);
+  await expect(targetDialog.locator('.comment-body .comment').nth(0)).toContainText('abc');
+  await expect(targetDialog.locator('.comment-body .comment').nth(1)).toContainText('xyz');
 });

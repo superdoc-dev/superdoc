@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loadContract, REPO_ROOT, stripBoundParams, writeGeneratedFile } from './shared.mjs';
 
 const TOOLS_OUTPUT_DIR = path.join(REPO_ROOT, 'packages/sdk/tools');
@@ -495,16 +495,11 @@ function toOpenAiTool(entry) {
 }
 
 function toAnthropicTool(entry) {
-  const tool = {
+  return {
     name: entry.toolName,
     description: entry.description,
     input_schema: entry.inputSchema,
   };
-  // input_examples omitted: Anthropic validates examples against the merged
-  // input_schema, but some examples use target shapes (e.g. kind:"block")
-  // that the merged oneOf schema doesn't expose at the top level.
-  // Re-enable once the schema properly supports all target variants.
-  return tool;
 }
 
 function toVercelTool(entry) {

@@ -119,7 +119,12 @@ export type CommentAddress = {
   kind: 'entity';
   entityType: 'comment';
   entityId: string;
-  /** Story containing this comment. Omit for body (backward compatible). */
+  /**
+   * Story containing this comment. Omit for body (backward compatible).
+   *
+   * **Limitation:** Comments are only supported in the document body.
+   * Passing a non-body story locator will throw an error.
+   */
   story?: StoryLocator;
 };
 
@@ -127,7 +132,12 @@ export type TrackedChangeAddress = {
   kind: 'entity';
   entityType: 'trackedChange';
   entityId: string;
-  /** Story containing this tracked change. Omit for body (backward compatible). */
+  /**
+   * Story containing this tracked change. Omit for body (backward compatible).
+   *
+   * **Limitation:** Tracked changes are only supported in the document body.
+   * Passing a non-body story locator will throw an error.
+   */
   story?: StoryLocator;
 };
 

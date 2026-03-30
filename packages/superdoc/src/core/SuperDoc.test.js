@@ -1398,6 +1398,59 @@ describe('SuperDoc core', () => {
     });
   });
 
+  describe('Navigation API', () => {
+    it('forwards navigateTo to the active document presentation editor', async () => {
+      const { superdocStore } = createAppHarness();
+      const navigateTo = vi.fn().mockResolvedValue(true);
+      const activePresentationEditor = { navigateTo };
+      const inactivePresentationEditor = { navigateTo: vi.fn() };
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          getPresentationEditor: vi.fn(() => inactivePresentationEditor),
+        },
+        {
+          id: 'doc-2',
+          getPresentationEditor: vi.fn(() => activePresentationEditor),
+        },
+      ];
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setActiveEditor({ options: { documentId: 'doc-2' } });
+
+      const address = { kind: 'entity', entityType: 'bookmark', name: '_Paragraph_level_formatting' };
+      await expect(instance.navigateTo(address)).resolves.toBe(true);
+      expect(navigateTo).toHaveBeenCalledWith(address);
+      expect(inactivePresentationEditor.navigateTo).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined when no presentation editor navigation surface is available', async () => {
+      const { superdocStore } = createAppHarness();
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          getPresentationEditor: vi.fn(() => null),
+        },
+      ];
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setActiveEditor({ options: { documentId: 'doc-1' } });
+
+      expect(instance.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' })).toBeUndefined();
+    });
+  });
+
   describe('Web layout mode configuration', () => {
     it('keeps PM fallback when web layout is enabled without semantic flow mode', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

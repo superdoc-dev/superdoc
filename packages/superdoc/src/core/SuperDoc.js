@@ -65,6 +65,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
 /** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
+/** @typedef {import('@superdoc/document-api').NavigableEntityAddress} NavigableEntityAddress */
 
 /**
  * SuperDoc class
@@ -802,6 +803,39 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Resolve the active PresentationEditor when a top-level SuperDoc API needs
+   * viewer/layout capabilities instead of raw editor commands.
+   *
+   * @returns {import('@superdoc/super-editor').PresentationEditor | null}
+   */
+  #resolveActivePresentationEditor() {
+    if (typeof this.activeEditor?.navigateTo === 'function') {
+      return this.activeEditor;
+    }
+
+    const storeDocs = this.superdocStore?.documents;
+    if (!Array.isArray(storeDocs) || storeDocs.length === 0) return null;
+
+    const activeDocumentId = this.activeEditor?.options?.documentId;
+    if (activeDocumentId) {
+      const activeDoc = storeDocs.find((doc) => doc?.id === activeDocumentId);
+      const presentationEditor = activeDoc?.getPresentationEditor?.();
+      if (typeof presentationEditor?.navigateTo === 'function') {
+        return presentationEditor;
+      }
+    }
+
+    for (const doc of storeDocs) {
+      const presentationEditor = doc?.getPresentationEditor?.();
+      if (typeof presentationEditor?.navigateTo === 'function') {
+        return presentationEditor;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Undo config/store/awareness mutations if `editor.attachCollaboration()` fails.
    * The editor itself is still in local mode (the throw happened before or during
    * reconfigure), so we only need to undo the SuperDoc-layer changes.
@@ -1423,6 +1457,18 @@ export class SuperDoc extends EventEmitter {
    */
   goToSearchResult(match) {
     return this.activeEditor?.commands.goToSearchResult(match);
+  }
+
+  /**
+   * Navigate to a bookmark, comment, or tracked change in the active document.
+   * Prefers the active document's PresentationEditor because navigation depends
+   * on rendered layout rather than raw editor commands.
+   *
+   * @param {NavigableEntityAddress} address Navigation target descriptor
+   * @returns {boolean | Promise<boolean> | undefined}
+   */
+  navigateTo(address) {
+    return this.#resolveActivePresentationEditor()?.navigateTo?.(address);
   }
 
   /**

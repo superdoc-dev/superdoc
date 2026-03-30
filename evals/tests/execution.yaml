@@ -351,6 +351,54 @@
       value: file://lib/checks.cjs:traceAllOk
 
 # =============================================================================
+# LISTS — creation, conversion, multi-item
+# =============================================================================
+
+- description: 'List: create 3-item bullet list'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Add a 3-item bullet list at the end of the document with items: "Review timeline", "Approve budget", "Notify stakeholders".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const hasAll = ['Review timeline', 'Approve budget', 'Notify stakeholders'].every(i => t.includes(i));
+        if (!hasAll) return { pass: false, score: 0, reason: 'Missing list items' };
+        return { pass: true, score: 1, reason: 'All items present' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+
+- description: 'List: convert bullet to numbered'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Convert the existing bullet list in the document to a numbered list.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No content' };
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const hasSetType = listCalls.some(tc => tc.args?.action === 'set_type');
+        const hasCreate = listCalls.some(tc => tc.args?.action === 'create');
+        if (!hasSetType && !hasCreate) return { pass: false, score: 0, reason: 'No list conversion call found' };
+        return { pass: true, score: 1, reason: hasSetType ? 'Used set_type' : 'Used create' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const tools = (d.toolCalls || []).map(tc => tc.tool);
+        const hasListCall = tools.some(t => t.includes('list'));
+        if (!hasListCall) return { pass: false, score: 0, reason: `No superdoc_list call. Tools: ${tools.join(' → ')}` };
+        return { pass: true, score: 1, reason: `Used list tool` };
+      metric: tool_selection
+
+# =============================================================================
 # ASPIRATIONAL
 # =============================================================================
 

@@ -28,7 +28,7 @@ import type {
   FlowMode,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { normalizeColumnLayout, getFragmentZIndex  } from '@superdoc/contracts';
+import { normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {

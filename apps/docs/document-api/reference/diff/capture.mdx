@@ -39,13 +39,13 @@ _No fields._
 | `coverage` | object | yes |  |
 | `coverage.body` | `true` | yes | Constant: `true` |
 | `coverage.comments` | boolean | yes |  |
-| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.headerFooters` | boolean | yes |  |
 | `coverage.numbering` | boolean | yes |  |
 | `coverage.styles` | boolean | yes |  |
 | `engine` | enum | yes | `"super-editor"` |
 | `fingerprint` | string | yes |  |
 | `payload` | object | yes |  |
-| `version` | `"sd-diff-snapshot/v1"` | yes | Constant: `"sd-diff-snapshot/v1"` |
+| `version` | enum | yes | `"sd-diff-snapshot/v1"`, `"sd-diff-snapshot/v2"` |
 
 ### Example response
 
@@ -54,7 +54,7 @@ _No fields._
   "coverage": {
     "body": true,
     "comments": true,
-    "headerFooters": false,
+    "headerFooters": true,
     "numbering": true,
     "styles": true
   },
@@ -101,7 +101,6 @@ _No fields._
           "type": "boolean"
         },
         "headerFooters": {
-          "const": false,
           "type": "boolean"
         },
         "numbering": {
@@ -134,7 +133,10 @@ _No fields._
       "type": "object"
     },
     "version": {
-      "const": "sd-diff-snapshot/v1",
+      "enum": [
+        "sd-diff-snapshot/v1",
+        "sd-diff-snapshot/v2"
+      ],
       "type": "string"
     }
   },

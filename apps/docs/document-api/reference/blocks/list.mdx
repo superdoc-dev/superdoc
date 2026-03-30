@@ -130,6 +130,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
             "description": "True if text is bold.",
             "type": "boolean"
           },
+          "color": {
+            "description": "Text color when explicitly set (e.g. '#000000').",
+            "type": "string"
+          },
           "fontFamily": {
             "description": "Font family from first text run.",
             "type": "string"
@@ -164,6 +168,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
           },
           "ordinal": {
             "type": "number"
+          },
+          "ref": {
+            "description": "Ref handle for this block. Pass directly to superdoc_format or superdoc_edit ref param. Only present for non-empty blocks.",
+            "type": "string"
           },
           "styleId": {
             "description": "Named paragraph style.",

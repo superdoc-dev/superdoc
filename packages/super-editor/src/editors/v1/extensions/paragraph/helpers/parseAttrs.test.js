@@ -51,6 +51,26 @@ describe('parseAttrs', () => {
       const result = parseAttrs(node);
       expect(result.paragraphProperties.indent.left).toBe(720);
     });
+
+    it('parses copied section metadata and restores sectPr/pageBreakSource', () => {
+      const node = createMockNode({
+        'data-sd-sect-pr': JSON.stringify({
+          type: 'element',
+          name: 'w:sectPr',
+          elements: [{ type: 'element', name: 'w:cols', attributes: { 'w:num': '2', 'w:space': '720' } }],
+        }),
+        'data-sd-page-break-source': 'sectPr',
+      });
+
+      const result = parseAttrs(node);
+
+      expect(result.paragraphProperties.sectPr).toEqual({
+        type: 'element',
+        name: 'w:sectPr',
+        elements: [{ type: 'element', name: 'w:cols', attributes: { 'w:num': '2', 'w:space': '720' } }],
+      });
+      expect(result.pageBreakSource).toBe('sectPr');
+    });
   });
 
   describe('CSS inline style fallback (Google Docs paste)', () => {

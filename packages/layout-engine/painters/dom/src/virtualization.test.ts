@@ -31,6 +31,7 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
+    getMountedPageIndices: painter.getMountedPageIndices,
     getPaintSnapshot() {
       return lastPaintSnapshot;
     },
@@ -107,6 +108,12 @@ const makeDrawingLayout = (count: number): Layout => ({
     ],
   })),
 });
+
+function getMountedPageIndicesFromDom(mount: HTMLElement): number[] {
+  return Array.from(mount.querySelectorAll('.superdoc-page')).map((page) =>
+    Number((page as HTMLElement).dataset.pageIndex),
+  );
+}
 
 describe('DomPainter virtualization (vertical)', () => {
   let mount: HTMLElement;
@@ -345,6 +352,28 @@ describe('DomPainter virtualization (vertical)', () => {
 
     expect(mount.querySelector('.superdoc-page[data-page-index="10"]')).toBeNull();
     expect(mount.querySelector('[data-virtual-spacer="gap"]')).toBeNull();
+  });
+
+  it('keeps mounted page indices in sync when virtualization pins remount pages', () => {
+    const painter = createTestPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    const layout = makeLayout(12);
+    painter.paint(layout, mount);
+
+    expect(painter.getMountedPageIndices?.()).toEqual(getMountedPageIndicesFromDom(mount));
+
+    painter.setVirtualizationPins?.([10]);
+
+    expect(painter.getMountedPageIndices?.()).toEqual(getMountedPageIndicesFromDom(mount));
+    expect(mount.querySelector('.superdoc-page[data-page-index="10"]')).toBeTruthy();
+
+    painter.setVirtualizationPins?.([]);
+
+    expect(painter.getMountedPageIndices?.()).toEqual(getMountedPageIndicesFromDom(mount));
   });
 
   it('updates providers without remounting pages', () => {

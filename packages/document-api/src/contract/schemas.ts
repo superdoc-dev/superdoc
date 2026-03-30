@@ -127,7 +127,8 @@ function optionalTargetLocatorWithPayload(
         {
           ref: {
             type: 'string',
-            description: 'Handle ref string returned by a prior search/query result.',
+            description:
+              'Handle ref from superdoc_search result (pass handle.ref value directly). Preferred over building a target object.',
           },
           ...payloadProperties,
         },
@@ -767,6 +768,11 @@ const createParagraphSuccessSchema = objectSchema(
     paragraph: paragraphAddressSchema,
     insertionPoint: textAddressSchema,
     trackedChangeRefs: arraySchema(trackChangeRefSchema),
+    ref: {
+      type: 'string',
+      description:
+        'Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.',
+    },
   },
   ['success', 'paragraph', 'insertionPoint'],
 );
@@ -793,6 +799,11 @@ const createHeadingSuccessSchema = objectSchema(
     heading: headingAddressSchema,
     insertionPoint: textAddressSchema,
     trackedChangeRefs: arraySchema(trackChangeRefSchema),
+    ref: {
+      type: 'string',
+      description:
+        'Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.',
+    },
   },
   ['success', 'heading', 'insertionPoint'],
 );
@@ -3036,8 +3047,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               fontFamily: { type: 'string', description: 'Font family from first text run.' },
               fontSize: { type: 'number', description: 'Font size from first text run.' },
               bold: { type: 'boolean', description: 'True if text is bold.' },
+              color: { type: 'string', description: "Text color when explicitly set (e.g. '#000000')." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
               headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+              ref: {
+                type: 'string',
+                description:
+                  'Ref handle for this block. Pass directly to superdoc_format or superdoc_edit ref param. Only present for non-empty blocks.',
+              },
             },
             ['ordinal', 'nodeId', 'nodeType'],
           ),

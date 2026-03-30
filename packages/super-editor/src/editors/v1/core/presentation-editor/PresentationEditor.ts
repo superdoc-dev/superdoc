@@ -1,15 +1,12 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
-import { CommentHighlightDecorator } from './dom/CommentHighlightDecorator.js';
-import { DecorationBridge } from './dom/DecorationBridge.js';
+import { PresentationPostPaintPipeline } from './dom/PresentationPostPaintPipeline.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { PresentationPainterAdapter } from './rendering/PresentationPainterAdapter.js';
-import { applyProofingDecorations, clearProofingDecorations } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
-import type { DomPainterInput, ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
-import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
-import type { VisibilitySource } from './proofing/visibility-source.js';
+import type { DomPainterInput, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
+import type { ProofingAnnotation, ProofingConfig } from './proofing/types.js';
 import {
   computeWordSelectionRangeAt,
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
@@ -127,6 +124,11 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
+import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
+import {
+  ensureEditorNativeSelectionStyles,
+  ensureEditorFieldAnnotationInteractionStyles,
+} from './dom/EditorStyleInjector.js';
 
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { SelectionHandle } from '../selection-state.js';
@@ -339,10 +341,8 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
-  /** Bridges external PM plugin decorations onto painted DOM elements. */
-  #decorationBridge = new DecorationBridge();
-  /** Applies comment highlight styles to painter-rendered DOM post-paint. */
-  #commentHighlightDecorator = new CommentHighlightDecorator();
+  /** Owns the remaining editor-side post-paint DOM mutation pipeline. */
+  #postPaintPipeline = new PresentationPostPaintPipeline();
   /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
   #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
@@ -486,7 +486,11 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
-    this.#commentHighlightDecorator.setContainer(this.#painterHost);
+    this.#postPaintPipeline.setContainer(this.#painterHost);
+
+    // Inject editor-owned styles (idempotent, once per document)
+    ensureEditorNativeSelectionStyles(doc);
+    ensureEditorFieldAnnotationInteractionStyles(doc);
 
     // Add event listeners for structured content hover coordination
     this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
@@ -497,8 +501,7 @@ export class PresentationEditor extends EventEmitter {
       windowRoot: win,
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
-        this.#rebuildDomPositionIndex();
-        this.#syncInlineStyleLayers();
+        this.#refreshEditorDomAugmentations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -2859,8 +2862,7 @@ export class PresentationEditor extends EventEmitter {
         this.#decorationSyncRafHandle = null;
       }, 'Decoration sync RAF');
     }
-    this.#decorationBridge.destroy();
-    this.#commentHighlightDecorator.destroy();
+    this.#postPaintPipeline.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
 
@@ -3032,15 +3034,8 @@ export class PresentationEditor extends EventEmitter {
 
     mgr.setVisibilitySource({
       getVisiblePageIndices: () => {
-        if (!this.#painterHost) return null;
-        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
-        if (pageEls.length === 0) return null;
-        const indices: number[] = [];
-        for (let i = 0; i < pageEls.length; i++) {
-          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
-          if (!isNaN(idx)) indices.push(idx);
-        }
-        return indices.length > 0 ? indices : null;
+        const mountedPageIndices = this.#painterAdapter.getMountedPageIndices();
+        return mountedPageIndices.length > 0 ? mountedPageIndices : null;
       },
     });
 
@@ -3055,23 +3050,9 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
-  /**
-   * Apply the proofing decoration pass after paint or when results change.
-   * Walks rendered spans and applies proofing CSS classes.
-   * Rebuilds DomPositionIndex if any DOM mutations were made.
-   *
-   * Also handles the case where proofing is disabled: clears all markers.
-   */
-  #applyProofingPass(): void {
-    if (!this.#painterHost) return;
-
-    // When proofing is disabled or no manager exists, clear any leftover markers
+  #buildProofingAnnotations(): ProofingAnnotation[] | null {
     if (!this.#proofingManager?.isEnabled) {
-      const cleared = clearProofingDecorations(this.#painterHost);
-      if (cleared) {
-        this.#rebuildDomPositionIndex();
-      }
-      return;
+      return null;
     }
 
     // Compute active word range for caret-token suppression:
@@ -3083,20 +3064,21 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const slices = this.#proofingManager.getPaintSlices(activeWordRange);
-
-    // Convert paint slices to ProofingAnnotation format
-    const annotations: ProofingAnnotation[] = slices.map((s) => ({
+    return slices.map((s) => ({
       pmFrom: s.pmFrom,
       pmTo: s.pmTo,
       kind: s.kind,
     }));
+  }
 
-    const mutated = applyProofingDecorations(this.#painterHost, annotations);
-
-    // Rebuild position index if DOM was mutated (sibling splits)
-    if (mutated) {
-      this.#rebuildDomPositionIndex();
-    }
+  /**
+   * Apply the proofing decoration pass after paint or when results change.
+   * Rebuilds DomPositionIndex if proofing split/un-split the rendered spans.
+   */
+  #applyProofingPass(): void {
+    this.#postPaintPipeline.applyProofingAnnotations(this.#buildProofingAnnotations(), () =>
+      this.#rebuildDomPositionIndex(),
+    );
   }
 
   /**
@@ -3133,7 +3115,7 @@ export class PresentationEditor extends EventEmitter {
    * Called after paint and after observer rebuild.
    */
   #syncCommentHighlights(): void {
-    this.#commentHighlightDecorator.apply();
+    this.#postPaintPipeline.applyCommentHighlights();
   }
 
   /**
@@ -3144,8 +3126,17 @@ export class PresentationEditor extends EventEmitter {
    * restored last.
    */
   #syncInlineStyleLayers(): void {
-    this.#syncCommentHighlights();
-    this.#syncDecorations();
+    const state = this.#editor?.view?.state;
+    if (!state) {
+      this.#syncCommentHighlights();
+      return;
+    }
+
+    try {
+      this.#postPaintPipeline.syncInlineStyleLayers(state, this.#domPositionIndex);
+    } catch (error) {
+      console.warn('[PresentationEditor] Inline style layer sync failed:', error);
+    }
   }
 
   /**
@@ -3162,7 +3153,7 @@ export class PresentationEditor extends EventEmitter {
     if (!state) return;
 
     try {
-      this.#decorationBridge.sync(state, this.#domPositionIndex);
+      this.#postPaintPipeline.syncDecorations(state, this.#domPositionIndex);
     } catch (error) {
       // Sync can call findRangeByText and other doc-dependent logic; if it throws
       // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
@@ -3185,7 +3176,7 @@ export class PresentationEditor extends EventEmitter {
 
     // Cheap identity check: bail if no DecorationSet references changed.
     const state = this.#editor?.view?.state;
-    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+    if (!state || !this.#postPaintPipeline.hasDecorationChanges(state)) return;
 
     // Already scheduled — RAF will handle it.
     if (this.#decorationSyncRafHandle != null) return;
@@ -3280,14 +3271,14 @@ export class PresentationEditor extends EventEmitter {
     // otherwise the bridge applies the class to whole runs and highlights too much.
     const handleTransaction = (event?: { transaction?: Transaction }) => {
       const tr = event?.transaction;
-      this.#decorationBridge.recordTransaction(tr);
+      this.#postPaintPipeline.recordDecorationTransaction(tr);
       const state = this.#editor?.view?.state;
-      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      const decorationChanged = state && this.#postPaintPipeline.hasDecorationChanges(state);
       // Sync immediately whenever decorations changed so e.g. clearFocus removes
       // highlight-selection in the same tick. Only restore when we had a doc change.
       if (decorationChanged) {
         const restoreEmpty = tr ? tr.docChanged === true : false;
-        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+        this.#postPaintPipeline.syncDecorations(state!, this.#domPositionIndex, {
           restoreEmptyDecorations: restoreEmpty,
         });
       } else {
@@ -3420,7 +3411,7 @@ export class PresentationEditor extends EventEmitter {
       // the active comment selection unexpectedly.
       if ('activeCommentId' in payload) {
         const activeId = payload.activeCommentId ?? null;
-        const didChange = this.#commentHighlightDecorator.setActiveComment(activeId);
+        const didChange = this.#postPaintPipeline.setActiveComment(activeId);
         if (didChange) {
           this.#syncInlineStyleLayers();
         }
@@ -3564,6 +3555,8 @@ export class PresentationEditor extends EventEmitter {
       clearHoverRegion: () => this.#clearHoverRegion(),
       renderHoverRegion: (region) => this.#renderHoverRegion(region),
       focusEditorAfterImageSelection: () => this.#focusEditorAfterImageSelection(),
+      resolveInlineImageElementByPmStart: (pmStart) => this.#painterAdapter.getInlineImageElementByPmStart(pmStart),
+      resolveImageFragmentElementByPmStart: (pmStart) => this.#painterAdapter.getImageFragmentElementByPmStart(pmStart),
       resolveFieldAnnotationSelectionFromElement: (el) => this.#resolveFieldAnnotationSelectionFromElement(el),
       computePendingMarginClick: (pointerId, x, y) => this.#computePendingMarginClick(pointerId, x, y),
       selectWordAt: (pos: number) => this.#selectWordAt(pos),
@@ -4220,7 +4213,7 @@ export class PresentationEditor extends EventEmitter {
       // Split runs at decoration boundaries so bridge sync applies background only to the
       // selected portion (like highlight mark) without adding a document mark.
       const state = this.#editor?.view?.state;
-      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      const decorationRanges = state ? this.#postPaintPipeline.collectDecorationRanges(state) : [];
       if (decorationRanges.length > 0) {
         blocks = splitRunsAtDecorationBoundaries(
           blocks,
@@ -4442,9 +4435,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
-      this.#rebuildDomPositionIndex();
-      this.#syncInlineStyleLayers();
-      this.#applyProofingPass();
+      this.#refreshEditorDomAugmentations();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
@@ -4567,22 +4558,20 @@ export class PresentationEditor extends EventEmitter {
 
   #updateHtmlAnnotationMeasurements(layoutEpoch: number): boolean {
     const nextHeights = new Map(this.#htmlAnnotationHeights);
-    const annotations = this.#painterHost.querySelectorAll('.annotation[data-type="html"]');
     const threshold = 1;
 
     let changed = false;
+    const annotations = this.#painterAdapter.getAnnotationEntitiesByType('html');
     annotations.forEach((annotation) => {
-      const element = annotation as HTMLElement;
-      const pmStart = element.dataset.pmStart;
-      const pmEnd = element.dataset.pmEnd;
-      if (!pmStart || !pmEnd) {
+      const element = annotation.element;
+      if (annotation.pmStart == null || annotation.pmEnd == null) {
         return;
       }
       const height = element.offsetHeight;
       if (height <= 0) {
         return;
       }
-      const key = `${pmStart}-${pmEnd}`;
+      const key = `${annotation.pmStart}-${annotation.pmEnd}`;
       const prev = nextHeights.get(key);
       if (prev != null && Math.abs(prev - height) <= threshold) {
         return;
@@ -4657,8 +4646,7 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const selector = `.annotation[data-pm-start="${pmStart}"]`;
-    const element = this.#painterHost.querySelector(selector) as HTMLElement | null;
+    const element = this.#painterAdapter.getAnnotationElementByPmStart(pmStart);
     if (!element) {
       this.#clearSelectedFieldAnnotationClass();
       return;
@@ -4735,15 +4723,12 @@ export class PresentationEditor extends EventEmitter {
     let elements: HTMLElement[] = [];
 
     if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
+      elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
     }
 
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }
@@ -4759,7 +4744,7 @@ export class PresentationEditor extends EventEmitter {
 
   #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block');
+    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`);
 
     if (!block || !(block instanceof HTMLElement)) return;
 
@@ -4774,17 +4759,19 @@ export class PresentationEditor extends EventEmitter {
 
   #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
 
     if (!block) return;
 
     const relatedTarget = event.relatedTarget as HTMLElement | null;
-    if (
-      relatedTarget &&
-      block.dataset.sdtId &&
-      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
-    ) {
-      return;
+    if (relatedTarget && block.dataset.sdtId) {
+      const escapedCheckId =
+        typeof CSS !== 'undefined' && CSS.escape
+          ? CSS.escape(block.dataset.sdtId)
+          : block.dataset.sdtId.replace(/"/g, '\\"');
+      if (relatedTarget.closest(buildSdtBlockSelector(escapedCheckId))) {
+        return;
+      }
     }
 
     this.#clearHoveredStructuredContentBlockClass();
@@ -4793,7 +4780,7 @@ export class PresentationEditor extends EventEmitter {
   #clearHoveredStructuredContentBlockClass() {
     if (!this.#lastHoveredStructuredContentBlock) return;
     this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
-      element.classList.remove('sdt-group-hover');
+      element.classList.remove(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
     });
     this.#lastHoveredStructuredContentBlock = null;
   }
@@ -4805,20 +4792,71 @@ export class PresentationEditor extends EventEmitter {
 
     if (!this.#painterHost) return;
 
-    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const elements = Array.from(
-      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-    ) as HTMLElement[];
+    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
 
     if (elements.length === 0) return;
 
     elements.forEach((element) => {
       if (!element.classList.contains('ProseMirror-selectednode')) {
-        element.classList.add('sdt-group-hover');
+        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
       }
     });
 
     this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  /**
+   * Re-applies the sdt-group-hover class after a paint cycle.
+   * DOM elements are rebuilt during repaint, so the hover class added by
+   * mouse events is lost. This restores hover state from the cached state.
+   */
+  #reapplySdtGroupHover(): void {
+    if (!this.#lastHoveredStructuredContentBlock || !this.#painterHost) return;
+
+    const { id } = this.#lastHoveredStructuredContentBlock;
+    if (!id) return;
+
+    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
+
+    if (elements.length === 0) {
+      this.#lastHoveredStructuredContentBlock = null;
+      return;
+    }
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  /**
+   * Runs all editor-owned DOM augmentations after the painter has rendered.
+   *
+   * This is the single entry point for post-paint DOM modifications. Every
+   * editor concern that needs to touch the painted DOM is called from here.
+   *
+   * Order is load-bearing:
+   * 1. Field annotation interaction layer — adds caret-anchor spans with
+   *    data-pm-start/end (must run before position index rebuild)
+   * 2. DOM position index rebuild — indexes ALL elements with pm-position
+   *    attributes, including caret-anchors added in step 1
+   * 3. Inline style layers (comment highlights + decoration bridge)
+   * 4. Proofing pass
+   * 5. SDT hover reapplication — DOM elements rebuilt during repaint lose
+   *    the hover class
+   */
+  #refreshEditorDomAugmentations(): void {
+    this.#postPaintPipeline.refreshAfterPaint({
+      layoutEpoch: this.#layoutEpoch,
+      editorState: this.#editor?.view?.state,
+      domPositionIndex: this.#domPositionIndex,
+      proofingAnnotations: this.#buildProofingAnnotations(),
+      rebuildDomPositionIndex: () => this.#rebuildDomPositionIndex(),
+      reapplyStructuredContentHover: () => this.#reapplySdtGroupHover(),
+    });
   }
 
   #clearSelectedStructuredContentInlineClass() {
@@ -4899,15 +4937,12 @@ export class PresentationEditor extends EventEmitter {
     let elements: HTMLElement[] = [];
 
     if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
+      elements = this.#painterAdapter.getStructuredContentInlineElementsById(id);
     }
 
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }

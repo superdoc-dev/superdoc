@@ -1,7 +1,18 @@
 import { EditorView } from 'prosemirror-view';
 import type { DirectEditorProps } from 'prosemirror-view';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
+import type { Node as PmNode } from 'prosemirror-model';
+import {
+  annotateFragmentDomWithClipboardData,
+  mergeSerializedClipboardMetadataIntoDomContainer,
+} from '../helpers/clipboardFragmentAnnotate.js';
 import { transformListsInCopiedContent } from '@core/inputRules/html/transform-copied-lists.js';
+import {
+  bodySectPrShouldEmbed,
+  collectReferencedImageMediaForClipboard,
+  embedSliceInHtml,
+  SUPERDOC_MEDIA_MIME,
+} from '../helpers/superdocClipboardSlice.js';
 import { applyStyleIsolationClass } from '../../utils/styleIsolation.js';
 import { canUseDOM } from '../../utils/canUseDOM.js';
 import type { EditorRenderer, EditorRendererAttachParams } from './EditorRenderer.js';
@@ -36,6 +47,337 @@ const DEFAULT_LINE_HEIGHT = 1.2;
  * Listener cleanup function type for tracking registered event listeners.
  */
 type ListenerCleanup = () => void;
+
+const RUNTIME_COPY_STRIP_SELECTOR = ['.list-marker', '.sd-editor-tab', '.ProseMirror-trailingBreak'].join(', ');
+const PARAGRAPH_CONTENT_SELECTOR = 'span.sd-paragraph-content';
+const BLOCK_COPY_CONTEXT_SELECTOR = 'p, div, h1, h2, h3, h4, h5, h6, blockquote, table';
+const WORD_HTML_META = '<meta name="Generator" content="Microsoft Word">';
+
+const WORD_NUM_FMT_BY_LIST_FMT = new Map<string, string>([
+  ['decimal', 'decimal'],
+  ['lowerLetter', 'alpha-lower'],
+  ['upperLetter', 'alpha-upper'],
+  ['lowerRoman', 'roman-lower'],
+  ['upperRoman', 'roman-upper'],
+  ['bullet', 'bullet'],
+]);
+
+function closestCopyBlock(node: Node | null, root: HTMLElement): HTMLElement | null {
+  let current: Node | null = node;
+
+  while (current && current !== root) {
+    if (current.nodeType === Node.ELEMENT_NODE) {
+      const element = current as HTMLElement;
+      if (element.matches(BLOCK_COPY_CONTEXT_SELECTOR)) {
+        return element;
+      }
+    }
+    current = current.parentNode;
+  }
+
+  return null;
+}
+
+function fragmentHasBlockElements(fragment: DocumentFragment): boolean {
+  const container = document.createElement('div');
+  container.appendChild(fragment.cloneNode(true));
+  return Boolean(container.querySelector(BLOCK_COPY_CONTEXT_SELECTOR));
+}
+
+function getInlineTextStyle(element: HTMLElement): string {
+  const styles: string[] = [];
+  const computedStyle = globalThis.getComputedStyle?.(element);
+
+  const color =
+    element.style.color || (computedStyle?.color && computedStyle.color !== 'rgb(0, 0, 0)' ? computedStyle.color : '');
+  const fontFamily = element.style.fontFamily || '';
+  const fontSize =
+    element.style.fontSize ||
+    (computedStyle?.fontSize && computedStyle.fontSize !== '16px' ? computedStyle.fontSize : '');
+  const textTransform =
+    element.style.textTransform ||
+    (computedStyle?.textTransform && computedStyle.textTransform !== 'none' ? computedStyle.textTransform : '');
+  const fontWeight =
+    element.style.fontWeight ||
+    (computedStyle?.fontWeight && computedStyle.fontWeight !== '400' ? computedStyle.fontWeight : '');
+
+  if (color) styles.push(`color: ${color}`);
+  if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+  if (fontSize) styles.push(`font-size: ${fontSize}`);
+  if (textTransform) styles.push(`text-transform: ${textTransform}`);
+  if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+
+  return styles.join('; ');
+}
+
+function wrapInlineOnlyRange(range: Range, view: EditorView): DocumentFragment {
+  const fragment = range.cloneContents();
+  if (fragmentHasBlockElements(fragment)) {
+    return fragment;
+  }
+
+  const startBlock = closestCopyBlock(range.startContainer, view.dom);
+  const endBlock = closestCopyBlock(range.endContainer, view.dom);
+  if (!startBlock || startBlock !== endBlock) {
+    return fragment;
+  }
+
+  const wrapper = startBlock.cloneNode(false) as HTMLElement;
+  const inheritedTextStyle = getInlineTextStyle(startBlock);
+
+  if (inheritedTextStyle) {
+    const span = document.createElement('span');
+    span.setAttribute('style', inheritedTextStyle);
+    span.appendChild(fragment);
+    wrapper.appendChild(span);
+  } else {
+    wrapper.appendChild(fragment);
+  }
+
+  const contextualFragment = document.createDocumentFragment();
+  contextualFragment.appendChild(wrapper);
+  return contextualFragment;
+}
+
+/**
+ * Paragraphs use a NodeView whose DOM is `<p>` wrapping `.sd-paragraph-content`.
+ * `posAtDOM(p, 0)` usually lands inside content, so `doc.nodeAt(pos)` is an inline node — not the block.
+ * Walk resolved parents to find the paragraph for copy-time data-* annotations.
+ */
+function getParagraphNodeFromBlockDom(view: EditorView, blockDom: HTMLElement): PmNode | null {
+  let pos: number;
+  try {
+    pos = view.posAtDOM(blockDom, 0);
+  } catch {
+    return null;
+  }
+  const { doc } = view.state;
+  if (pos < 0 || pos > doc.content.size) {
+    return null;
+  }
+  const $pos = doc.resolve(pos);
+  for (let d = $pos.depth; d > 0; d -= 1) {
+    const n = $pos.node(d);
+    if (n.type.name === 'paragraph') {
+      return n;
+    }
+  }
+  return null;
+}
+
+function normalizeCopiedListMetadata(container: HTMLElement): void {
+  container.querySelectorAll<HTMLElement>('p[data-num-id], p[data-list-numbering-type]').forEach((node) => {
+    const numberingType = node.getAttribute('data-list-numbering-type');
+    const markerText = node.getAttribute('data-marker-type');
+
+    if (numberingType && !node.hasAttribute('data-num-fmt')) {
+      node.setAttribute('data-num-fmt', numberingType);
+    }
+
+    if (markerText && !node.hasAttribute('data-lvl-text')) {
+      node.setAttribute('data-lvl-text', markerText);
+    }
+  });
+}
+
+function annotateCopiedSectionMetadata(container: HTMLElement, view: EditorView): void {
+  const copiedBlocks = Array.from(container.querySelectorAll<HTMLElement>('[data-sd-block-id]'));
+  if (copiedBlocks.length === 0) {
+    return;
+  }
+
+  copiedBlocks.forEach((node) => {
+    const blockId = node.getAttribute('data-sd-block-id');
+    if (!blockId) return;
+
+    const sourceNode = view.dom.querySelector<HTMLElement>(
+      `[data-sd-block-id="${globalThis.CSS?.escape?.(blockId) ?? blockId}"]`,
+    );
+    if (!sourceNode) return;
+
+    const pmNode = getParagraphNodeFromBlockDom(view, sourceNode);
+    const paragraphProperties = pmNode?.attrs?.paragraphProperties;
+    const sectPr = paragraphProperties?.sectPr;
+    if (!sectPr || typeof sectPr !== 'object') {
+      return;
+    }
+
+    node.setAttribute('data-sd-sect-pr', JSON.stringify(sectPr));
+
+    const pageBreakSource = pmNode?.attrs?.pageBreakSource;
+    if (typeof pageBreakSource === 'string' && pageBreakSource.length > 0) {
+      node.setAttribute('data-sd-page-break-source', pageBreakSource);
+    }
+  });
+}
+
+function parseCopiedListPath(pathAttr: string | null): number[] {
+  if (!pathAttr) return [];
+
+  try {
+    const parsed = JSON.parse(pathAttr);
+    return Array.isArray(parsed) ? parsed.map((item) => Number(item)).filter((item) => Number.isFinite(item)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getWordLevelText(level: number, fmt: string, markerText: string, storedLevelText: string | null): string {
+  if (fmt === 'bullet') {
+    return markerText || storedLevelText || '•';
+  }
+
+  if (storedLevelText?.includes('%')) {
+    return storedLevelText;
+  }
+
+  const punctuation = markerText.match(/[.)]$/)?.[0] || '.';
+  return `%${level + 1}${punctuation}`;
+}
+
+function buildWordListPrefix(markerText: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(document.createComment('[if !supportLists]'));
+
+  const span = document.createElement('span');
+  span.textContent = markerText;
+  fragment.appendChild(span);
+
+  fragment.appendChild(document.createComment('[endif]'));
+  return fragment;
+}
+
+function serializeSelectionAsWordHtml(container: HTMLElement): string | null {
+  const copiedListParagraphs = Array.from(
+    container.querySelectorAll<HTMLElement>('p[data-num-id], p[data-list-numbering-type]'),
+  );
+  if (copiedListParagraphs.length === 0) {
+    return null;
+  }
+
+  const wordContainer = container.cloneNode(true) as HTMLElement;
+  const cssRules = ['.MsoNormal {}', '.MsoListParagraph {}'];
+  const seenLevels = new Set<string>();
+
+  wordContainer.querySelectorAll<HTMLElement>('p[data-num-id], p[data-list-numbering-type]').forEach((node) => {
+    const level = Number.parseInt(node.getAttribute('data-level') || '0', 10) || 0;
+    const wordLevel = level + 1;
+    const importedNumId = node.getAttribute('data-num-id') || '1';
+    const abstractId = importedNumId;
+    const fmt = node.getAttribute('data-num-fmt') || node.getAttribute('data-list-numbering-type') || 'decimal';
+    const wordNumFmt = WORD_NUM_FMT_BY_LIST_FMT.get(fmt) || 'decimal';
+    const markerText = node.getAttribute('data-marker-type') || node.getAttribute('data-lvl-text') || '1.';
+    const levelText = getWordLevelText(level, fmt, markerText, node.getAttribute('data-lvl-text'));
+    const levelKey = `${abstractId}:${wordLevel}:${importedNumId}`;
+    const styleAttr = node.getAttribute('style');
+    const msoListStyle = `mso-list:l${abstractId} level${wordLevel} lfo${importedNumId}`;
+
+    node.setAttribute('class', 'MsoListParagraph');
+    node.setAttribute('style', styleAttr ? `${msoListStyle};${styleAttr}` : msoListStyle);
+
+    if (!seenLevels.has(levelKey)) {
+      cssRules.push(
+        `@list l${abstractId}:level${wordLevel} lfo${importedNumId} { mso-level-number-format: ${wordNumFmt}; mso-level-text: "${levelText}"; }`,
+      );
+      seenLevels.add(levelKey);
+    }
+
+    const path = parseCopiedListPath(node.getAttribute('data-list-level'));
+    const startValue = path[level] ?? path[path.length - 1] ?? 1;
+    const markerPrefix = fmt === 'bullet' ? markerText : `${markerText}`.trim() || `${startValue}.`;
+    node.prepend(buildWordListPrefix(markerPrefix));
+  });
+
+  return `${WORD_HTML_META}<style>${cssRules.join('\n')}</style>${wordContainer.innerHTML}`;
+}
+
+/**
+ * `Selection` for ProseMirror `view.root`. `Document` has `getSelection()` in typings; `ShadowRoot`
+ * has it in Chromium but often not in `lib.dom`, so we call it via a narrow cast with fallback.
+ */
+function getSelectionFromViewRoot(root: Document | ShadowRoot | Element): Selection | null {
+  if (root instanceof Document) {
+    return root.getSelection();
+  }
+  if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+    const extended = root as ShadowRoot & { getSelection?: () => Selection | null };
+    if (typeof extended.getSelection === 'function') {
+      return extended.getSelection() ?? null;
+    }
+    return extended.ownerDocument.getSelection();
+  }
+  return typeof document !== 'undefined' ? document.getSelection() : null;
+}
+
+export function buildSelectionClipboardHtml(view: EditorView, editor?: Editor): string | null {
+  const rootSelection = getSelectionFromViewRoot(view.root);
+  if (!rootSelection || rootSelection.isCollapsed || rootSelection.rangeCount === 0) {
+    return null;
+  }
+
+  const container = document.createElement('div');
+  let appendedContent = false;
+
+  for (let index = 0; index < rootSelection.rangeCount; index += 1) {
+    const range = rootSelection.getRangeAt(index);
+    const commonAncestor =
+      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.commonAncestorContainer as Element)
+        : range.commonAncestorContainer.parentElement;
+
+    if (commonAncestor && !view.dom.contains(commonAncestor)) {
+      continue;
+    }
+
+    container.appendChild(wrapInlineOnlyRange(range, view));
+    appendedContent = true;
+  }
+
+  if (!appendedContent) {
+    return null;
+  }
+
+  container.querySelectorAll(RUNTIME_COPY_STRIP_SELECTOR).forEach((node) => {
+    node.parentNode?.removeChild(node);
+  });
+
+  container.querySelectorAll<HTMLElement>(PARAGRAPH_CONTENT_SELECTOR).forEach((node) => {
+    const parent = node.parentNode;
+    if (!parent) return;
+    while (node.firstChild) {
+      parent.insertBefore(node.firstChild, node);
+    }
+    parent.removeChild(node);
+  });
+
+  container
+    .querySelectorAll<HTMLElement>('[contenteditable], [draggable], [spellcheck], [data-pm-slice]')
+    .forEach((node) => {
+      node.removeAttribute('contenteditable');
+      node.removeAttribute('draggable');
+      node.removeAttribute('spellcheck');
+      node.removeAttribute('data-pm-slice');
+    });
+
+  container.querySelectorAll<HTMLElement>('[class]').forEach((node) => {
+    const retainedClasses = (node.getAttribute('class') || '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((className) => !className.startsWith('ProseMirror'));
+
+    if (retainedClasses.length > 0) {
+      node.setAttribute('class', retainedClasses.join(' '));
+    } else {
+      node.removeAttribute('class');
+    }
+  });
+
+  mergeSerializedClipboardMetadataIntoDomContainer(container, view, editor);
+  normalizeCopiedListMetadata(container);
+  annotateCopiedSectionMetadata(container, view);
+
+  return serializeSelectionAsWordHtml(container) || container.innerHTML || null;
+}
 
 /**
  * Standard DOM-based renderer for the SuperDoc editor.
@@ -478,9 +820,9 @@ export class ProseMirrorRenderer implements EditorRenderer {
    * Wraps clipboard operations in try-catch to handle permission errors or API failures.
    * The listener is tracked for cleanup in destroy().
    *
-   * @param _editor - The editor instance (unused, kept for interface compatibility)
+   * @param editor - SuperEditor instance (numbering defs + body section metadata on copy)
    */
-  registerCopyHandler(_editor: Editor): void {
+  registerCopyHandler(editor: Editor): void {
     const dom = this.view?.dom;
     if (!dom || !canUseDOM()) {
       return;
@@ -496,6 +838,27 @@ export class ProseMirrorRenderer implements EditorRenderer {
         if (!this.view) return;
 
         const { from, to } = this.view.state.selection;
+        let sliceJson = '';
+        if (from !== to) {
+          const slice = this.view.state.doc.slice(from, to);
+          sliceJson = JSON.stringify(slice.toJSON());
+          clipboardData.setData('application/x-superdoc-slice', sliceJson);
+          const mediaJson = collectReferencedImageMediaForClipboard(sliceJson, editor);
+          if (mediaJson) {
+            clipboardData.setData(SUPERDOC_MEDIA_MIME, mediaJson);
+          }
+        }
+
+        const richHtml = buildSelectionClipboardHtml(this.view, editor);
+        const bodySectPr = this.view.state.doc.attrs?.bodySectPr;
+        const bodySectPrJson = bodySectPr && bodySectPrShouldEmbed(bodySectPr) ? JSON.stringify(bodySectPr) : '';
+
+        if (richHtml) {
+          clipboardData.setData('text/html', embedSliceInHtml(richHtml, sliceJson, bodySectPrJson));
+          clipboardData.setData('text/plain', getSelectionFromViewRoot(this.view.root)?.toString() ?? '');
+          return;
+        }
+
         const slice = this.view.state.doc.slice(from, to);
         const fragment = slice.content;
 
@@ -503,11 +866,13 @@ export class ProseMirrorRenderer implements EditorRenderer {
         const serializer = PmDOMSerializer.fromSchema(this.view.state.schema);
         div.appendChild(serializer.serializeFragment(fragment));
 
+        annotateFragmentDomWithClipboardData(div, fragment, editor);
+
         const html = transformListsInCopiedContent(div.innerHTML);
 
-        clipboardData.setData('text/html', html);
+        clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson));
+        clipboardData.setData('text/plain', this.view.state.doc.textBetween(from, to, '\n'));
       } catch (error) {
-        // Log but don't crash - fallback to native copy behavior
         console.warn('Failed to transform copied content:', error);
       }
     };

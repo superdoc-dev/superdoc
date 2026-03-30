@@ -4,13 +4,33 @@ let listIdCounter = 0;
 
 const getNewListIdMock = vi.hoisted(() => vi.fn(() => ++listIdCounter));
 const generateNewListDefinitionMock = vi.hoisted(() => vi.fn());
+const setLvlOverrideMock = vi.hoisted(() => vi.fn());
 const getListDefinitionDetailsMock = vi.hoisted(() => vi.fn(() => ({ listNumberingType: 'decimal', lvlText: '%1.' })));
 
 vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     getNewListId: getNewListIdMock,
     generateNewListDefinition: generateNewListDefinitionMock,
+    setLvlOverride: setLvlOverrideMock,
     getListDefinitionDetails: getListDefinitionDetailsMock,
+  },
+  /** Mirrors `createListIdAllocator` from list-numbering-helpers (uses mocked getNewListId). */
+  createListIdAllocator: (editor) => {
+    const existingIds = new Set(
+      Object.keys(editor?.converter?.numbering?.definitions || {})
+        .map((value) => Number(value))
+        .filter(Number.isFinite),
+    );
+    let nextId = Number(getNewListIdMock(editor));
+    return () => {
+      while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
+        nextId = Number.isFinite(nextId) ? nextId + 1 : Number(getNewListIdMock(editor));
+      }
+      const allocatedId = nextId;
+      existingIds.add(allocatedId);
+      nextId += 1;
+      return allocatedId;
+    };
   },
 }));
 
@@ -21,9 +41,10 @@ describe('html list helpers', () => {
 
   beforeEach(() => {
     listIdCounter = 0;
-    getNewListIdMock.mockClear();
-    generateNewListDefinitionMock.mockClear();
-    getListDefinitionDetailsMock.mockClear();
+    getNewListIdMock.mockReset().mockImplementation(() => ++listIdCounter);
+    generateNewListDefinitionMock.mockReset();
+    setLvlOverrideMock.mockReset();
+    getListDefinitionDetailsMock.mockReset().mockReturnValue({ listNumberingType: 'decimal', lvlText: '%1.' });
   });
 
   it('flattens multi-item lists so each list has a single item', () => {
@@ -74,6 +95,60 @@ describe('html list helpers', () => {
     expect(nestedList).not.toBeNull();
     expect(nestedList.querySelectorAll('li').length).toBe(1);
     expect(parsed.querySelectorAll('p[data-num-id]').length).toBe(0);
+  });
+
+  it('rebuilds numbering definitions for copied list paragraphs before parsing', () => {
+    const flattenedHtml = `
+      <p data-num-id="41" data-level="0" data-list-numbering-type="upperRoman" data-list-level="[4]">Item 4</p>
+      <p data-num-id="41" data-level="0" data-list-numbering-type="upperRoman" data-list-level="[5]">Item 5</p>
+    `;
+
+    const restored = flattenListsInHtml(flattenedHtml, editor);
+    const parsed = new DOMParser().parseFromString(`<body>${restored}</body>`, 'text/html');
+    const paragraphs = Array.from(parsed.querySelectorAll('p[data-num-id]'));
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].getAttribute('data-num-id')).toBe('1');
+    expect(paragraphs[1].getAttribute('data-num-id')).toBe('1');
+    expect(paragraphs[0].getAttribute('data-num-fmt')).toBe('upperRoman');
+    expect(paragraphs[0].getAttribute('data-lvl-text')).toBe('%1.');
+    expect(generateNewListDefinitionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        numId: 1,
+        listType: 'orderedList',
+        level: '0',
+        start: '4',
+        text: '%1.',
+        fmt: 'upperRoman',
+        editor,
+      }),
+    );
+    expect(setLvlOverrideMock).toHaveBeenCalledWith(editor, 1, 0, { startOverride: 4 });
+  });
+
+  it('assigns distinct remapped ids to different copied lists even when the helper returns the same next id', () => {
+    getNewListIdMock.mockReturnValue(7);
+
+    const flattenedHtml = `
+      <p data-num-id="41" data-level="0" data-list-numbering-type="decimal">One</p>
+      <p data-num-id="42" data-level="0" data-list-numbering-type="bullet">Two</p>
+    `;
+
+    const restored = flattenListsInHtml(flattenedHtml, editor);
+    const parsed = new DOMParser().parseFromString(`<body>${restored}</body>`, 'text/html');
+    const paragraphs = Array.from(parsed.querySelectorAll('p[data-num-id]'));
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].getAttribute('data-num-id')).toBe('7');
+    expect(paragraphs[1].getAttribute('data-num-id')).toBe('8');
+    expect(generateNewListDefinitionMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ numId: 7, fmt: 'decimal', listType: 'orderedList' }),
+    );
+    expect(generateNewListDefinitionMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ numId: 8, fmt: 'bullet', listType: 'bulletList' }),
+    );
   });
 
   it('preserves start attribute for ordered lists', () => {

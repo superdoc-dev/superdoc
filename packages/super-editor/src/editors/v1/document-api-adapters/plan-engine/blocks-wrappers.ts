@@ -29,10 +29,12 @@ import {
   type BlockCandidate,
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
+import { computeTextContentLength } from '../helpers/text-offset-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getRevision } from './revision-tracker.js';
+import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -72,6 +74,8 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   fontFamily?: string;
   fontSize?: number;
   bold?: boolean;
+  underline?: boolean;
+  color?: string;
   alignment?: string;
   headingLevel?: number;
 } {
@@ -83,22 +87,35 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   let fontFamily: string | undefined;
   let fontSize: number | undefined;
   let bold: boolean | undefined;
+  let underline: boolean | undefined;
+  let color: string | undefined;
 
   node.descendants((child) => {
     if (fontFamily !== undefined) return false;
     const marks = child.marks ?? [];
     if (!child.isText || marks.length === 0) return;
     for (const mark of marks) {
+      const markName = (mark.type as { name?: string }).name;
       const attrs = mark.attrs as Record<string, unknown>;
-      if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
-      if (attrs.fontSize != null) {
-        const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
-        if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
+      // Only read formatting from textStyle marks — other marks (highlight, underline)
+      // have a color attr that means something different (background, line color).
+      if (markName === 'textStyle') {
+        if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
+        if (attrs.fontSize != null) {
+          const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
+          if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
+        }
+        if (typeof attrs.color === 'string' && attrs.color) color = attrs.color;
       }
-      if (attrs.bold === true) bold = true;
+      if (markName === 'bold' && attrs.value === true) bold = true;
+      if (markName === 'underline') underline = true;
     }
     return false;
   });
+
+  // Filter out the OOXML "auto" sentinel — it means "use the theme default"
+  // and does not represent an explicit color choice.
+  if (color === 'auto') color = undefined;
 
   let headingLevel: number | undefined;
   if (typeof styleId === 'string') {
@@ -111,6 +128,8 @@ function extractBlockFormatting(node: ProseMirrorNode): {
     ...(fontFamily ? { fontFamily } : {}),
     ...(fontSize !== undefined ? { fontSize } : {}),
     ...(bold ? { bold } : {}),
+    ...(underline ? { underline } : {}),
+    ...(color ? { color } : {}),
     ...(pProps?.justification ? { alignment: pProps.justification } : {}),
     ...(headingLevel ? { headingLevel } : {}),
   };
@@ -219,16 +238,35 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
   const limit = input?.limit ?? total;
   const paged = filtered.slice(offset, offset + limit);
 
-  const blocks: BlockListEntry[] = paged.map((candidate, i) => ({
-    ordinal: offset + i,
-    nodeId: candidate.nodeId,
-    nodeType: candidate.nodeType,
-    textPreview: extractTextPreview(candidate.node),
-    isEmpty: candidate.node.textContent.length === 0,
-    ...extractBlockFormatting(candidate.node),
-  }));
+  const rev = getRevision(editor);
 
-  return { total, blocks, revision: getRevision(editor) };
+  const blocks: BlockListEntry[] = paged.map((candidate, i) => {
+    const textLength = computeTextContentLength(candidate.node);
+    const ref =
+      textLength > 0
+        ? encodeV4Ref({
+            v: 4,
+            rev,
+            storyKey: 'body',
+            scope: 'block',
+            matchId: candidate.nodeId,
+            segments: [{ blockId: candidate.nodeId, start: 0, end: textLength }],
+            blockIndex: offset + i,
+          })
+        : undefined;
+
+    return {
+      ordinal: offset + i,
+      nodeId: candidate.nodeId,
+      nodeType: candidate.nodeType,
+      textPreview: extractTextPreview(candidate.node),
+      isEmpty: textLength === 0,
+      ...extractBlockFormatting(candidate.node),
+      ...(ref ? { ref } : {}),
+    };
+  });
+
+  return { total, blocks, revision: rev };
 }
 
 // ---------------------------------------------------------------------------

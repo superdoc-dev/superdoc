@@ -30,6 +30,8 @@ describe('convertOmmlToMathml', () => {
     expect(result).not.toBeNull();
     expect(result!.namespaceURI).toBe(MATHML_NS);
     expect(result!.localName).toBe('math');
+    expect(result!.getAttribute('displaystyle')).toBeNull();
+    expect(result!.getAttribute('display')).toBeNull();
 
     // Should contain an <mi> for the identifier 'x'
     const mi = result!.querySelector('mi');
@@ -94,6 +96,8 @@ describe('convertOmmlToMathml', () => {
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
     expect(result!.localName).toBe('math');
+    expect(result!.getAttribute('displaystyle')).toBe('true');
+    expect(result!.getAttribute('display')).toBe('block');
     // The m:oMathParaPr should be skipped (it ends with 'Pr')
     // The m:oMath child should produce content
     expect(result!.textContent).toBe('y');
@@ -231,7 +235,7 @@ describe('m:bar converter', () => {
     expect(mo?.textContent).toBe('\u203E');
   });
 
-  it('renders underbar (bot) as <munder> with U+2015', () => {
+  it('renders underbar (bot) as <munder> with U+203E', () => {
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -253,7 +257,7 @@ describe('m:bar converter', () => {
     expect(munder).not.toBeNull();
     expect(munder!.firstElementChild!.textContent).toBe('y');
     const mo = munder!.querySelector('mo');
-    expect(mo?.textContent).toBe('\u2015');
+    expect(mo?.textContent).toBe('\u203E');
   });
 
   it('defaults to underbar when m:barPr is missing (matches Word behavior)', () => {
@@ -277,6 +281,6 @@ describe('m:bar converter', () => {
     expect(munder).not.toBeNull();
     expect(munder!.firstElementChild!.textContent).toBe('z');
     const mo = munder!.querySelector('mo');
-    expect(mo?.textContent).toBe('\u2015');
+    expect(mo?.textContent).toBe('\u203E');
   });
 });

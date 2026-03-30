@@ -6,6 +6,17 @@ import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
 import { calculateResolvedParagraphProperties } from './resolvedPropertiesCache.js';
 
+function blockRevIsFreshForSlicePaste(rev) {
+  return rev === 0 || rev === '0';
+}
+
+function shouldPreserveSlicePastedListRendering(node, transactions) {
+  if (node.type.name !== 'paragraph' || node.attrs.listRendering == null) return false;
+  if (node.attrs.sdBlockId != null) return false;
+  if (!blockRevIsFreshForSlicePaste(node.attrs.sdBlockRev)) return false;
+  return transactions.some((tr) => tr.getMeta('superdocSlicePaste'));
+}
+
 /**
  * Create a ProseMirror plugin that keeps `listRendering` data in sync with the
  * underlying Word numbering definitions.
@@ -226,6 +237,13 @@ export function createNumberingPlugin(editor) {
           let resolvedProps = calculateResolvedParagraphProperties(editor, node, newState.doc.resolve(pos));
           if (node.type.name !== 'paragraph' || !resolvedProps.numberingProperties) {
             return;
+          }
+
+          // Lossless SuperDoc slice paste: keep markers/list type from the slice. Running
+          // definition lookup first would clear listRendering when numIds are absent in
+          // the target doc, or overwrite markers when the same doc continues counters.
+          if (shouldPreserveSlicePastedListRendering(node, transactions)) {
+            return false;
           }
 
           // Retrieving numbering definition from docx

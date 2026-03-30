@@ -320,6 +320,16 @@
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
     "apps/docs/document-api/reference/mutations/preview.mdx",
+    "apps/docs/document-api/reference/permission-ranges/create.mdx",
+    "apps/docs/document-api/reference/permission-ranges/get.mdx",
+    "apps/docs/document-api/reference/permission-ranges/index.mdx",
+    "apps/docs/document-api/reference/permission-ranges/list.mdx",
+    "apps/docs/document-api/reference/permission-ranges/remove.mdx",
+    "apps/docs/document-api/reference/permission-ranges/update-principal.mdx",
+    "apps/docs/document-api/reference/protection/clear-editing-restriction.mdx",
+    "apps/docs/document-api/reference/protection/get.mdx",
+    "apps/docs/document-api/reference/protection/index.mdx",
+    "apps/docs/document-api/reference/protection/set-editing-restriction.mdx",
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/ranges/index.mdx",
@@ -983,8 +993,28 @@
       "operationIds": ["diff.capture", "diff.compare", "diff.apply"],
       "pagePath": "apps/docs/document-api/reference/diff/index.mdx",
       "title": "Diff"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "protection",
+      "operationIds": ["protection.get", "protection.setEditingRestriction", "protection.clearEditingRestriction"],
+      "pagePath": "apps/docs/document-api/reference/protection/index.mdx",
+      "title": "Protection"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "permissionRanges",
+      "operationIds": [
+        "permissionRanges.list",
+        "permissionRanges.get",
+        "permissionRanges.create",
+        "permissionRanges.remove",
+        "permissionRanges.updatePrincipal"
+      ],
+      "pagePath": "apps/docs/document-api/reference/permission-ranges/index.mdx",
+      "title": "Permission Ranges"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "d4231e3456244bc979f6e72db4da7ca682ec851ea2fefebb48689c299fbad039"
+  "sourceHash": "4a3601ee0f28a73c712fbe06e8b4913a9ae882a71152f9f6e892ea51137fc5e8"
 }

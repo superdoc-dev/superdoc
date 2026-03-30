@@ -1,4 +1,4 @@
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, createListIdAllocator } from '@helpers/list-numbering-helpers.js';
 
 const removeWhitespaces = (node) => {
   const children = node.childNodes;
@@ -39,6 +39,7 @@ export function flattenListsInHtml(html, editor, domDocument) {
   const parser = new DOMParserConstructor();
 
   const doc = removeWhitespaces(parser.parseFromString(html, 'text/html'));
+  restoreCopiedListParagraphDefinitions(doc.body, editor);
 
   // Keep processing until all lists are flattened
   let foundList;
@@ -47,6 +48,64 @@ export function flattenListsInHtml(html, editor, domDocument) {
   }
 
   return doc.body.innerHTML;
+}
+
+function restoreCopiedListParagraphDefinitions(container, editor) {
+  if (!editor?.converter) return;
+
+  const copiedParagraphs = Array.from(container.querySelectorAll('p[data-list-numbering-type], p[data-num-id]'));
+  if (copiedParagraphs.length === 0) return;
+
+  const allocateListId = createListIdAllocator(editor);
+  const remappedNumIds = new Map();
+  const generatedLevels = new Set();
+
+  copiedParagraphs.forEach((node) => {
+    const originalNumId = node.getAttribute('data-num-id') || '__copied-list__';
+    let numId = remappedNumIds.get(originalNumId);
+    if (numId == null) {
+      numId = allocateListId();
+      remappedNumIds.set(originalNumId, numId);
+    }
+
+    const level = Number.parseInt(node.getAttribute('data-level') || '0', 10) || 0;
+    const fmt = node.getAttribute('data-num-fmt') || node.getAttribute('data-list-numbering-type') || 'decimal';
+    const listType = fmt === 'bullet' ? 'bulletList' : 'orderedList';
+    const listLevel = parseListLevelAttribute(node.getAttribute('data-list-level'));
+    const start = String(getStartValueForLevel(listLevel, level) || 1);
+    const lvlText =
+      node.getAttribute('data-lvl-text') || getDefaultLvlText(fmt, level, node.getAttribute('data-marker-type'));
+    const generationKey = `${numId}:${level}`;
+
+    if (!generatedLevels.has(generationKey)) {
+      ListHelpers.generateNewListDefinition({
+        numId,
+        listType,
+        level: String(level),
+        start,
+        text: lvlText,
+        fmt,
+        editor,
+      });
+      if (Number(start) > 1) {
+        ListHelpers.setLvlOverride(editor, numId, level, { startOverride: Number(start) });
+      }
+      generatedLevels.add(generationKey);
+    }
+
+    node.setAttribute('data-num-id', String(numId));
+    node.setAttribute('data-level', String(level));
+    node.setAttribute('data-num-fmt', fmt);
+    node.setAttribute('data-lvl-text', lvlText);
+  });
+}
+
+function getDefaultLvlText(fmt, level, markerText) {
+  if (fmt === 'bullet') {
+    return markerText || '•';
+  }
+
+  return `%${level + 1}.`;
 }
 
 /**

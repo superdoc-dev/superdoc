@@ -3,30 +3,70 @@ import { updateNumberingProperties } from './changeListLevel.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
-import { TextSelection } from 'prosemirror-state';
+import { Selection, TextSelection } from 'prosemirror-state';
+import { computeToggleListSelectionRange } from './toggleListSelection.js';
+
+function numFmtIsBullet(numFmt) {
+  if (numFmt == null) return false;
+  const v = String(numFmt).toLowerCase();
+  return v === 'bullet' || v === 'image' || v === 'none';
+}
+
+function getParagraphListKind(node, editor) {
+  const paraProps = getResolvedParagraphProperties(node);
+  if (!paraProps?.numberingProperties || !node.attrs.listRendering) {
+    return null;
+  }
+  const { numId, ilvl = 0 } = paraProps.numberingProperties;
+  const details = ListHelpers.getListDefinitionDetails({ numId, level: ilvl, editor });
+  const fmt = details?.listNumberingType ?? node.attrs.listRendering?.numberingType;
+  if (fmt == null) {
+    return null;
+  }
+  return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
+}
+
+function paragraphMatchesToggleListType(node, editor, listType) {
+  const kind = getParagraphListKind(node, editor);
+  if (!kind) return false;
+  if (listType === 'bulletList') return kind === 'bullet';
+  if (listType === 'orderedList') return kind === 'ordered';
+  return false;
+}
+
+/**
+ * Previous paragraph sibling of the anchor block: `doc.resolve(pos).nodeBefore` where `pos`
+ * is the gap before the first selected paragraph (or before the paragraph containing `from`).
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} from
+ * @param {Array<{ node: import('prosemirror-model').Node, pos: number }>} paragraphsInSelection
+ * @returns {import('prosemirror-model').Node | null}
+ */
+function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
+  let pos = paragraphsInSelection.length > 0 ? paragraphsInSelection[0].pos : null;
+  if (pos == null && from > 0) {
+    const $from = doc.resolve(from);
+    for (let d = $from.depth; d > 0; d -= 1) {
+      if ($from.node(d).type.name === 'paragraph') {
+        pos = $from.before(d);
+        break;
+      }
+    }
+  }
+  if (pos == null) return null;
+  const nb = doc.resolve(pos).nodeBefore;
+  return nb?.type?.name === 'paragraph' ? nb : null;
+}
 
 export const toggleList =
   (listType) =>
   ({ editor, state, tr, dispatch }) => {
-    // 1. Find first paragraph in selection that is a list of the same type
-    let predicate;
-    if (listType === 'orderedList') {
-      predicate = (n) => {
-        const paraProps = getResolvedParagraphProperties(n);
-        return (
-          paraProps.numberingProperties && n.attrs.listRendering && n.attrs.listRendering.numberingType !== 'bullet'
-        );
-      };
-    } else if (listType === 'bulletList') {
-      predicate = (n) => {
-        const paraProps = getResolvedParagraphProperties(n);
-        return (
-          paraProps.numberingProperties && n.attrs.listRendering && n.attrs.listRendering.numberingType === 'bullet'
-        );
-      };
-    } else {
+    if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
+
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -55,15 +95,10 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    // 2. If not found, check if the paragraph right before the selection is a list of the same type
     if (!firstListNode && from > 0) {
-      const $from = state.doc.resolve(from);
-      const parentIndex = $from.index(-1);
-      if (parentIndex > 0) {
-        const beforeNode = $from.node(-1).child(parentIndex - 1);
-        if (beforeNode && beforeNode.type.name === 'paragraph' && predicate(beforeNode)) {
-          firstListNode = beforeNode;
-        }
+      const beforeNode = getPrecedingParagraphForListReuse(state.doc, from, paragraphsInSelection);
+      if (beforeNode && predicate(beforeNode)) {
+        firstListNode = beforeNode;
       }
     }
     // 3. Resolve numbering properties
@@ -113,36 +148,40 @@ export const toggleList =
       updateNumberingProperties(sharedNumberingProperties, node, pos, editor, tr);
     }
 
-    // Preserve selection spanning all affected paragraphs so the user can toggle back
+    // Restore a natural post-toggle selection.
+    // Collapsed caret toggles should keep a caret. Ranged toggles should keep a range.
     if (paragraphsInSelection.length > 0) {
       const firstPara = paragraphsInSelection[0];
       const lastPara = paragraphsInSelection[paragraphsInSelection.length - 1];
-      // Map positions through the transaction
-      const mappedFirstPos = tr.mapping.map(firstPara.pos);
-      const mappedLastPos = tr.mapping.map(lastPara.pos);
-      // Get the updated nodes from the transformed document
-      const $firstPos = tr.doc.resolve(mappedFirstPos);
-      const $lastPos = tr.doc.resolve(mappedLastPos);
-      const firstNode = $firstPos.nodeAfter;
-      const lastNode = $lastPos.nodeAfter;
-      if (firstNode && lastNode) {
-        // Find first text position in first paragraph and last text position in last paragraph
-        let selFrom = mappedFirstPos + 1;
-        let selTo = mappedLastPos + lastNode.nodeSize - 1;
-        // Adjust selFrom to skip into actual text content (skip run wrapper if present)
-        if (firstNode.firstChild && firstNode.firstChild.type.name === 'run') {
-          selFrom = mappedFirstPos + 2; // paragraph + run opening
-        }
-        // Adjust selTo to be at end of text content
-        if (lastNode.lastChild && lastNode.lastChild.type.name === 'run') {
-          selTo = mappedLastPos + lastNode.nodeSize - 2; // before run and paragraph closing
-        }
-        if (selFrom >= 0 && selTo <= tr.doc.content.size && selFrom <= selTo) {
-          try {
-            tr.setSelection(TextSelection.create(tr.doc, selFrom, selTo));
-          } catch {
-            // Fallback: if selection fails, just leave the selection as-is
+      // `toggleList()` only updates paragraph attributes via `setNodeMarkup()`,
+      // so the paragraph boundaries stay stable inside the transaction.
+      const firstParagraphPos = firstPara.pos;
+      const lastParagraphPos = lastPara.pos;
+      const firstNode = tr.doc.nodeAt(firstParagraphPos);
+      const lastNode = tr.doc.nodeAt(lastParagraphPos);
+      const restoredSelectionRange = computeToggleListSelectionRange({
+        selectionWasCollapsed: selection.empty,
+        affectedParagraphCount: paragraphsInSelection.length,
+        firstParagraphPos,
+        lastParagraphPos,
+        firstNode,
+        lastNode,
+      });
+
+      if (
+        restoredSelectionRange &&
+        restoredSelectionRange.from >= 0 &&
+        restoredSelectionRange.to <= tr.doc.content.size &&
+        restoredSelectionRange.from <= restoredSelectionRange.to
+      ) {
+        try {
+          if (selection.empty && paragraphsInSelection.length === 1) {
+            tr.setSelection(Selection.near(tr.doc.resolve(restoredSelectionRange.to), -1));
+          } else {
+            tr.setSelection(TextSelection.create(tr.doc, restoredSelectionRange.from, restoredSelectionRange.to));
           }
+        } catch {
+          // If the target position is not valid, keep ProseMirror's default selection.
         }
       }
     }

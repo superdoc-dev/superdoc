@@ -25,6 +25,26 @@ import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
+import { getRevision } from './revision-tracker.js';
+import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
+
+// ---------------------------------------------------------------------------
+// Ref minting — create a text-scoped ref for the created block so the
+// caller can immediately use it with superdoc_format without searching.
+// ---------------------------------------------------------------------------
+
+function mintBlockRef(editor: Editor, storyKey: string, nodeId: string, textLength: number): string {
+  const rev = getRevision(editor);
+  return encodeV4Ref({
+    v: 4,
+    rev,
+    storyKey,
+    scope: 'block',
+    matchId: `create:${nodeId}`,
+    segments: [{ blockId: nodeId, start: 0, end: textLength }],
+    blockIndex: 0,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Command types (internal to the wrapper)
@@ -101,6 +121,7 @@ function buildParagraphCreateSuccess(
   paragraphNodeId: string,
   trackedChangeRefs?: CreateParagraphSuccessResult['trackedChangeRefs'],
   story?: StoryLocator,
+  ref?: string,
 ): CreateParagraphSuccessResult {
   return {
     success: true,
@@ -117,6 +138,7 @@ function buildParagraphCreateSuccess(
       ...(story && { story }),
     },
     trackedChangeRefs,
+    ...(ref ? { ref } : {}),
   };
 }
 
@@ -124,6 +146,7 @@ function buildHeadingCreateSuccess(
   headingNodeId: string,
   trackedChangeRefs?: CreateHeadingSuccessResult['trackedChangeRefs'],
   story?: StoryLocator,
+  ref?: string,
 ): CreateHeadingSuccessResult {
   return {
     success: true,
@@ -140,6 +163,7 @@ function buildHeadingCreateSuccess(
       ...(story && { story }),
     },
     trackedChangeRefs,
+    ...(ref ? { ref } : {}),
   };
 }
 
@@ -245,7 +269,9 @@ export function createParagraphWrapper(
 
     if (runtime.commit) runtime.commit(editor);
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
-    return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
+    const textLen = input.text?.length ?? 0;
+    const ref = textLen > 0 ? mintBlockRef(storyEditor, runtime.storyKey, canonicalId, textLen) : undefined;
+    return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory, ref);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
   }
@@ -352,7 +378,9 @@ export function createHeadingWrapper(
 
     if (runtime.commit) runtime.commit(editor);
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
-    return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
+    const textLen = input.text?.length ?? 0;
+    const ref = textLen > 0 ? mintBlockRef(storyEditor, runtime.storyKey, canonicalId, textLen) : undefined;
+    return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory, ref);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
   }

@@ -1,0 +1,128 @@
+---
+title: permissionRanges.updatePrincipal
+sidebarTitle: permissionRanges.updatePrincipal
+description: Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker.
+
+- Operation ID: `permissionRanges.updatePrincipal`
+- API member path: `editor.doc.permissionRanges.updatePrincipal(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a PermissionRangeMutationResult with the updated range info on success.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+| `principal` | object | yes |  |
+| `principal.id` | string | no |  |
+| `principal.kind` | enum | yes | `"everyone"`, `"editor"` |
+
+### Example request
+
+```json
+{
+  "id": "id-001",
+  "principal": {
+    "id": "id-001",
+    "kind": "everyone"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "principal": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "everyone",
+            "editor"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "principal"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

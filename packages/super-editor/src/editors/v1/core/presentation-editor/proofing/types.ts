@@ -168,3 +168,42 @@ export type ProofingPaintSlice = {
   /** The primary issue for context-menu resolution. */
   issue: StoredIssue;
 };
+
+// =============================================================================
+// Internal: DOM Decoration Pass
+// =============================================================================
+
+/**
+ * Minimal proofing range input for the editor-owned DOM decoration pass.
+ *
+ * This is intentionally separate from `ProofingPaintSlice`: the DOM mutator
+ * only needs positions plus the issue kind, not the backing issue payload.
+ */
+export type ProofingAnnotation = {
+  pmFrom: number;
+  pmTo: number;
+  kind: ProofingIssueKind;
+};
+
+/**
+ * CSS class names and data attributes used by proofing DOM decorations.
+ */
+export const PROOFING_CSS = {
+  SPELLING: 'sd-proofing-spelling',
+  GRAMMAR: 'sd-proofing-grammar',
+  STYLE: 'sd-proofing-style',
+  DATA_ATTR: 'data-sd-proofing',
+  SPLIT_ATTR: 'data-sd-proofing-split',
+} as const;
+
+/** Map a proofing issue kind to its DOM decoration CSS class. */
+export function cssClassForKind(kind: ProofingIssueKind): string {
+  switch (kind) {
+    case 'spelling':
+      return PROOFING_CSS.SPELLING;
+    case 'grammar':
+      return PROOFING_CSS.GRAMMAR;
+    case 'style':
+      return PROOFING_CSS.STYLE;
+  }
+}

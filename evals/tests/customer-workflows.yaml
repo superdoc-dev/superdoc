@@ -16,7 +16,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'In the Indemnification section, change "Each Party shall mutually indemnify" to "The Receiving Party shall indemnify the Disclosing Party". Remove the word "mutually" from that section.'
+    task: 'In the Indemnification section, change "Each Party shall mutually indemnify" to "The Receiving Party shall indemnify the Disclosing Party".'
   assert:
     - type: javascript
       value: |
@@ -668,7 +668,45 @@
       metric: tool_usage
 
 # =============================================================================
-# I. CROSS-DOMAIN COMPOUND (Real customer multi-feature workflows)
+# I. PAGE CREATION & STYLE REPLICATION
+# Workflow: create new exhibit pages matching existing formatting
+# =============================================================================
+
+- description: 'Employment: create Exhibit X page matching Exhibit A style with summary'
+  vars:
+    fixture: doc-template.docx
+    keepFile: true
+    task: 'The document has an "Exhibit A" page near the end (centered, bold). Create a new page at the end for "Exhibit X" that matches the same style as Exhibit A (centered, bold paragraph — NOT a heading). Below it, add a summary paragraph describing what the document covers.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Exhibit X'))
+          return { pass: false, score: 0, reason: 'Exhibit X not created' };
+        if (!t.includes('Exhibit A'))
+          return { pass: false, score: 0, reason: 'Collateral: Exhibit A removed' };
+        return { pass: true, score: 1, reason: 'Exhibit X page created' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.toolCalls) return { pass: true, score: 0.5, reason: 'No tool calls data' };
+        const tools = d.toolCalls.map(tc => tc.tool);
+        const hasCreate = tools.includes('superdoc_create');
+        const hasFormat = tools.includes('superdoc_format');
+        if (!hasCreate) return { pass: false, score: 0, reason: 'No superdoc_create call' };
+        if (!hasFormat) return { pass: false, score: 0, reason: 'No superdoc_format call — formatting not applied' };
+        const formatCount = tools.filter(t => t === 'superdoc_format').length;
+        if (formatCount < 3) return { pass: false, score: 0.5, reason: `Only ${formatCount} format calls — expected at least 3 (inline + alignment + page break)` };
+        return { pass: true, score: 1, reason: `Tools: ${tools.join(' → ')}` };
+      metric: tool_usage
+
+# =============================================================================
+# J. CROSS-DOMAIN COMPOUND (Real customer multi-feature workflows)
 # =============================================================================
 
 - description: 'Offer: counter-offer workflow (salary + equity + deadline)'

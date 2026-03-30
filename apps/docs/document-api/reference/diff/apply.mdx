@@ -26,12 +26,12 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `diff` | object(version="sd-diff-payload/v1") | yes |  |
+| `diff` | object | yes |  |
 | `diff.baseFingerprint` | string | yes |  |
 | `diff.coverage` | object | yes |  |
 | `diff.coverage.body` | `true` | yes | Constant: `true` |
 | `diff.coverage.comments` | boolean | yes |  |
-| `diff.coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `diff.coverage.headerFooters` | boolean | yes |  |
 | `diff.coverage.numbering` | boolean | yes |  |
 | `diff.coverage.styles` | boolean | yes |  |
 | `diff.engine` | enum | yes | `"super-editor"` |
@@ -43,12 +43,16 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 | `diff.summary.comments` | object | yes |  |
 | `diff.summary.comments.hasChanges` | boolean | yes |  |
 | `diff.summary.hasChanges` | boolean | yes |  |
+| `diff.summary.headerFooters` | object | yes |  |
+| `diff.summary.headerFooters.hasChanges` | boolean | yes |  |
 | `diff.summary.numbering` | object | yes |  |
 | `diff.summary.numbering.hasChanges` | boolean | yes |  |
+| `diff.summary.parts` | object | yes |  |
+| `diff.summary.parts.hasChanges` | boolean | yes |  |
 | `diff.summary.styles` | object | yes |  |
 | `diff.summary.styles.hasChanges` | boolean | yes |  |
 | `diff.targetFingerprint` | string | yes |  |
-| `diff.version` | `"sd-diff-payload/v1"` | yes | Constant: `"sd-diff-payload/v1"` |
+| `diff.version` | enum | yes | `"sd-diff-payload/v1"`, `"sd-diff-payload/v2"` |
 
 ### Example request
 
@@ -59,7 +63,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
     "coverage": {
       "body": true,
       "comments": true,
-      "headerFooters": false,
+      "headerFooters": true,
       "numbering": true,
       "styles": true
     },
@@ -76,7 +80,13 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
         "hasChanges": true
       },
       "hasChanges": true,
+      "headerFooters": {
+        "hasChanges": true
+      },
       "numbering": {
+        "hasChanges": true
+      },
+      "parts": {
         "hasChanges": true
       },
       "styles": {
@@ -98,7 +108,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 | `coverage` | object | yes |  |
 | `coverage.body` | `true` | yes | Constant: `true` |
 | `coverage.comments` | boolean | yes |  |
-| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.headerFooters` | boolean | yes |  |
 | `coverage.numbering` | boolean | yes |  |
 | `coverage.styles` | boolean | yes |  |
 | `diagnostics` | string[] | yes |  |
@@ -109,8 +119,12 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 | `summary.comments` | object | yes |  |
 | `summary.comments.hasChanges` | boolean | yes |  |
 | `summary.hasChanges` | boolean | yes |  |
+| `summary.headerFooters` | object | yes |  |
+| `summary.headerFooters.hasChanges` | boolean | yes |  |
 | `summary.numbering` | object | yes |  |
 | `summary.numbering.hasChanges` | boolean | yes |  |
+| `summary.parts` | object | yes |  |
+| `summary.parts.hasChanges` | boolean | yes |  |
 | `summary.styles` | object | yes |  |
 | `summary.styles.hasChanges` | boolean | yes |  |
 | `targetFingerprint` | string | yes |  |
@@ -124,7 +138,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
   "coverage": {
     "body": true,
     "comments": true,
-    "headerFooters": false,
+    "headerFooters": true,
     "numbering": true,
     "styles": true
   },
@@ -142,7 +156,13 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
       "hasChanges": true
     },
     "hasChanges": true,
+    "headerFooters": {
+      "hasChanges": true
+    },
     "numbering": {
+      "hasChanges": true
+    },
+    "parts": {
       "hasChanges": true
     },
     "styles": {
@@ -188,7 +208,6 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
               "type": "boolean"
             },
             "headerFooters": {
-              "const": false,
               "type": "boolean"
             },
             "numbering": {
@@ -238,7 +257,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
                   "body",
                   "comments",
                   "styles",
-                  "numbering"
+                  "numbering",
+                  "headerFooters",
+                  "parts"
                 ],
                 "type": "string"
               },
@@ -259,7 +280,31 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
             "hasChanges": {
               "type": "boolean"
             },
+            "headerFooters": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            },
             "numbering": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            },
+            "parts": {
               "additionalProperties": false,
               "properties": {
                 "hasChanges": {
@@ -290,7 +335,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
             "body",
             "comments",
             "styles",
-            "numbering"
+            "numbering",
+            "headerFooters",
+            "parts"
           ],
           "type": "object"
         },
@@ -298,7 +345,10 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
           "type": "string"
         },
         "version": {
-          "const": "sd-diff-payload/v1",
+          "enum": [
+            "sd-diff-payload/v1",
+            "sd-diff-payload/v2"
+          ],
           "type": "string"
         }
       },
@@ -344,7 +394,6 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
           "type": "boolean"
         },
         "headerFooters": {
-          "const": false,
           "type": "boolean"
         },
         "numbering": {
@@ -390,7 +439,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
               "body",
               "comments",
               "styles",
-              "numbering"
+              "numbering",
+              "headerFooters",
+              "parts"
             ],
             "type": "string"
           },
@@ -411,7 +462,31 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
         "hasChanges": {
           "type": "boolean"
         },
+        "headerFooters": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
         "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "parts": {
           "additionalProperties": false,
           "properties": {
             "hasChanges": {
@@ -442,7 +517,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
         "body",
         "comments",
         "styles",
-        "numbering"
+        "numbering",
+        "headerFooters",
+        "parts"
       ],
       "type": "object"
     },
@@ -485,7 +562,6 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
           "type": "boolean"
         },
         "headerFooters": {
-          "const": false,
           "type": "boolean"
         },
         "numbering": {
@@ -531,7 +607,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
               "body",
               "comments",
               "styles",
-              "numbering"
+              "numbering",
+              "headerFooters",
+              "parts"
             ],
             "type": "string"
           },
@@ -552,7 +630,31 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
         "hasChanges": {
           "type": "boolean"
         },
+        "headerFooters": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
         "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "parts": {
           "additionalProperties": false,
           "properties": {
             "hasChanges": {
@@ -583,7 +685,9 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
         "body",
         "comments",
         "styles",
-        "numbering"
+        "numbering",
+        "headerFooters",
+        "parts"
       ],
       "type": "object"
     },

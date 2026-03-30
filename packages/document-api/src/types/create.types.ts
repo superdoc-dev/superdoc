@@ -21,6 +21,8 @@ export interface CreateParagraphSuccessResult {
   paragraph: BlockNodeAddress;
   insertionPoint: TextAddress;
   trackedChangeRefs?: ReceiptInsert[];
+  /** Stable ref handle for the created block. Pass directly to superdoc_format or superdoc_edit without searching. */
+  ref?: string;
 }
 
 export interface CreateParagraphFailureResult {
@@ -47,6 +49,8 @@ export interface CreateHeadingSuccessResult {
   heading: BlockNodeAddress;
   insertionPoint: TextAddress;
   trackedChangeRefs?: ReceiptInsert[];
+  /** Stable ref handle for the created block. Pass directly to superdoc_format or superdoc_edit without searching. */
+  ref?: string;
 }
 
 export interface CreateHeadingFailureResult {

@@ -120,6 +120,33 @@ export const getNewListId = (editor, grouping = 'definitions') => {
 };
 
 /**
+ * Allocator for unique list `numId`s when remapping pasted or HTML-copied lists.
+ * Seeds from existing `editor.converter.numbering.definitions` and tracks ids
+ * allocated in this batch so two paths (slice paste vs HTML) stay consistent.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @returns {() => number}
+ */
+export const createListIdAllocator = (editor) => {
+  const existingIds = new Set(
+    Object.keys(editor?.converter?.numbering?.definitions || {})
+      .map((value) => Number(value))
+      .filter(Number.isFinite),
+  );
+  let nextId = Number(getNewListId(editor));
+
+  return () => {
+    while (!Number.isFinite(nextId) || existingIds.has(nextId)) {
+      nextId = Number.isFinite(nextId) ? nextId + 1 : Number(getNewListId(editor));
+    }
+    const allocatedId = nextId;
+    existingIds.add(allocatedId);
+    nextId += 1;
+    return allocatedId;
+  };
+};
+
+/**
  * Get the details of a list definition based on the numId and level.
  * Read-only — no migration needed (section 3.1).
  */
@@ -452,6 +479,7 @@ export const ListHelpers = {
   generateNewListDefinition,
   getBasicNumIdTag,
   getNewListId,
+  createListIdAllocator,
   hasListDefinition,
   removeListDefinitions,
 

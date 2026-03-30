@@ -287,6 +287,12 @@ const transformWordLists = (container, editor) => {
     if (item.hasAttribute('data-spacing')) {
       pElement.setAttribute('data-spacing', item.getAttribute('data-spacing'));
     }
+    if (item.hasAttribute('data-sd-sect-pr')) {
+      pElement.setAttribute('data-sd-sect-pr', item.getAttribute('data-sd-sect-pr'));
+    }
+    if (item.hasAttribute('data-sd-page-break-source')) {
+      pElement.setAttribute('data-sd-page-break-source', item.getAttribute('data-sd-page-break-source'));
+    }
     if (item.hasAttribute('data-text-styles')) {
       const textStyles = JSON.parse(item.getAttribute('data-text-styles'));
       Object.keys(textStyles).forEach((key) => {

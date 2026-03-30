@@ -75,9 +75,7 @@ export function resolveRunProperties(
   if (!params.translatedLinkedStyles?.styles) {
     return inlineRpr ?? {};
   }
-  if (!inlineRpr) {
-    inlineRpr = {} as RunProperties;
-  }
+  inlineRpr = inlineRpr ? { ...inlineRpr } : ({} as RunProperties);
   // Getting properties from style
   const paragraphStyleId = resolvedPpr?.styleId as string | undefined;
   const paragraphStyleProps = resolveStyleChain('runProperties', params, paragraphStyleId) as RunProperties;
@@ -158,9 +156,7 @@ export function resolveParagraphProperties(
   inlineProps: ParagraphProperties | null | undefined,
   tableInfo: TableInfo | null | undefined,
 ): ParagraphProperties {
-  if (!inlineProps) {
-    inlineProps = {} as ParagraphProperties;
-  }
+  inlineProps = inlineProps ? { ...inlineProps } : ({} as ParagraphProperties);
   if (!params.translatedLinkedStyles?.styles) {
     return inlineProps;
   }

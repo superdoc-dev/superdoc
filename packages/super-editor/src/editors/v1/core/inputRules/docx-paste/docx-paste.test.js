@@ -146,6 +146,86 @@ describe('handleDocxPaste', () => {
     expect(replaceSelectionWith).toHaveBeenCalledWith(parseResult, true);
     expect(dispatch).toHaveBeenCalledWith('next-tr');
   });
+
+  it('strips CSS string quotes from bullet level text before normalizing markers', () => {
+    const html = `
+      <html>
+        <head>
+          <style>
+            .MsoNormal {}
+            .MsoListParagraph {}
+            @list l0:level1 lfo1 {
+              mso-level-number-format: bullet;
+              mso-level-text: "•";
+            }
+          </style>
+        </head>
+        <body>
+          <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1">
+            <!--[if !supportLists]--><span>•</span><!--[endif]-->
+            Bullet item
+          </p>
+        </body>
+      </html>
+    `;
+
+    const dispatch = vi.fn();
+    const replaceSelectionWith = vi.fn(() => 'next-tr');
+    const editor = {
+      schema: {},
+      converter: { convertedXml: '<xml />' },
+      view: { dispatch },
+    };
+    const view = { state: { tr: { replaceSelectionWith } } };
+
+    handleDocxPaste(html, editor, view);
+
+    expect(normalizeLvlTextCharMock).toHaveBeenCalledWith('•');
+  });
+
+  it('preserves copied section metadata when rebuilding Word list paragraphs', () => {
+    const html = `
+      <html>
+        <head>
+          <style>
+            .MsoNormal {}
+            .MsoListParagraph {}
+            @list l0:level1 lfo1 {
+              mso-level-number-format: decimal;
+              mso-level-text: "%1.";
+            }
+          </style>
+        </head>
+        <body>
+          <p
+            class="MsoListParagraph"
+            data-sd-sect-pr='{"type":"element","name":"w:sectPr","elements":[{"type":"element","name":"w:cols","attributes":{"w:num":"2","w:space":"720"}}]}'
+            data-sd-page-break-source="sectPr"
+            style="mso-list:l0 level1 lfo1"
+          >
+            <!--[if !supportLists]--><span>1.</span><!--[endif]-->
+            Section list item
+          </p>
+        </body>
+      </html>
+    `;
+
+    const dispatch = vi.fn();
+    const replaceSelectionWith = vi.fn(() => 'next-tr');
+    const editor = {
+      schema: {},
+      converter: { convertedXml: '<xml />' },
+      view: { dispatch },
+    };
+    const view = { state: { tr: { replaceSelectionWith } } };
+
+    handleDocxPaste(html, editor, view);
+
+    const parsedNode = parseSpy.mock.calls[0][0];
+    const generatedParagraph = parsedNode.querySelector('p[data-list-level]');
+    expect(generatedParagraph?.getAttribute('data-sd-sect-pr')).toContain('"w:sectPr"');
+    expect(generatedParagraph?.getAttribute('data-sd-page-break-source')).toBe('sectPr');
+  });
 });
 
 describe('wrapTextsInRuns', () => {

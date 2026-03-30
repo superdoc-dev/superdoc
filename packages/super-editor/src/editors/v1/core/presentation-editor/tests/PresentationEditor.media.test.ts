@@ -82,10 +82,12 @@ vi.mock('@superdoc/painter-dom', () => ({
     setZoom: vi.fn(),
     setLayoutMode: vi.fn(),
     setProviders: vi.fn(),
+    setVirtualizationPins: vi.fn(),
+    getMountedPageIndices: vi.fn(() => []),
+    onScroll: vi.fn(),
+    setScrollContainer: vi.fn(),
   })),
   DOM_CLASS_NAMES: { PAGE: '', FRAGMENT: '', LINE: '', INLINE_SDT_WRAPPER: '', BLOCK_SDT: '', DOCUMENT_SECTION: '' },
-  applyProofingDecorations: vi.fn(() => false),
-  clearProofingDecorations: vi.fn(() => false),
 }));
 
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 100, height: 100 })) }));

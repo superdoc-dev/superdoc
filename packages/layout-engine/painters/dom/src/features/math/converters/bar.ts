@@ -10,7 +10,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *
  * MathML output:
  *   top:           <mover> <mrow>base</mrow> <mo>&#x203E;</mo> </mover>
- *   bot (default): <munder> <mrow>base</mrow> <mo>&#x2015;</mo> </munder>
+ *   bot (default): <munder> <mrow>base</mrow> <mo>&#x203E;</mo> </munder>
  *
  * Word renders an underbar when no position is specified, so the default is "bot".
  *
@@ -35,8 +35,8 @@ export const convertBar: MathObjectConverter = (node, doc, convertChildren) => {
 
   const accent = doc.createElementNS(MATHML_NS, 'mo');
   accent.setAttribute('stretchy', 'true');
-  // U+203E = overline, U+2015 = horizontal bar (underbar)
-  accent.textContent = isUnder ? '\u2015' : '\u203E';
+  // U+203E = overline (stretchable in MathML, used for both over and under)
+  accent.textContent = '\u203E';
   wrapper.appendChild(accent);
 
   return wrapper;

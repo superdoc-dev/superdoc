@@ -88,7 +88,6 @@ import {
   ensureFieldAnnotationStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
-  ensureNativeSelectionStyles,
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -113,7 +112,6 @@ import {
   shouldRebuildForSdtBoundary,
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
-import { SdtGroupedHover } from './utils/sdt-hover.js';
 import {
   computeBetweenBorderFlags,
   getFragmentParagraphBorders,
@@ -401,6 +399,48 @@ export type PaintSnapshotTabStyle = {
   borderBottom?: string;
 };
 
+export type PaintSnapshotAnnotationEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  pmStart?: number;
+  pmEnd?: number;
+  fieldId?: string;
+  fieldType?: string;
+  type?: string;
+};
+
+export type PaintSnapshotStructuredContentBlockEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotStructuredContentInlineEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotImageEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  kind: 'inline' | 'fragment';
+  pmStart?: number;
+  pmEnd?: number;
+  blockId?: string;
+};
+
+export type PaintSnapshotEntities = {
+  annotations: PaintSnapshotAnnotationEntity[];
+  structuredContentBlocks: PaintSnapshotStructuredContentBlockEntity[];
+  structuredContentInlines: PaintSnapshotStructuredContentInlineEntity[];
+  images: PaintSnapshotImageEntity[];
+};
+
 export type PaintSnapshotLine = {
   index: number;
   inTableFragment: boolean;
@@ -424,6 +464,7 @@ export type PaintSnapshot = {
   markerCount: number;
   tabCount: number;
   pages: PaintSnapshotPage[];
+  entities: PaintSnapshotEntities;
 };
 
 type PaintSnapshotPageBuilder = {
@@ -463,6 +504,27 @@ function readSnapshotStyleValue(styleValue: string | null | undefined): string |
   return styleValue;
 }
 
+function createEmptyPaintSnapshotEntities(): PaintSnapshotEntities {
+  return {
+    annotations: [],
+    structuredContentBlocks: [],
+    structuredContentInlines: [],
+    images: [],
+  };
+}
+
+function readSnapshotDatasetNumber(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSnapshotPageIndex(element: HTMLElement): number | null {
+  const pageEl = element.closest(`.${DOM_CLASS_NAMES.PAGE}`) as HTMLElement | null;
+  if (!pageEl) return null;
+  return readSnapshotDatasetNumber(pageEl.dataset.pageIndex);
+}
+
 function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   const out = {} as T;
   for (const [key, value] of Object.entries(input)) {
@@ -471,6 +533,123 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
     (out as Record<string, unknown>)[key] = value;
   }
   return out;
+}
+
+function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
+  if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
+    return true;
+  }
+
+  if (!element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE)) {
+    return false;
+  }
+
+  return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
+  const entities = createEmptyPaintSnapshotEntities();
+
+  const annotationElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.ANNOTATION}[data-pm-start]`),
+  );
+  for (const element of annotationElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.annotations.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        fieldId: element.dataset.fieldId || null,
+        fieldType: element.dataset.fieldType || null,
+        type: element.dataset.type || null,
+      }) as PaintSnapshotAnnotationEntity,
+    );
+  }
+
+  const blockSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id]`),
+  );
+  for (const element of blockSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentBlocks.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentBlockEntity,
+    );
+  }
+
+  const inlineSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}[data-sdt-id]`),
+  );
+  for (const element of inlineSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentInlines.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentInlineEntity,
+    );
+  }
+
+  const inlineImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(
+      `.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}[data-pm-start], .${DOM_CLASS_NAMES.INLINE_IMAGE}[data-pm-start]`,
+    ),
+  );
+  for (const element of inlineImageElements) {
+    if (!shouldIncludeInlineImageSnapshotElement(element)) continue;
+
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'inline',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  const fragmentImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start]`),
+  );
+  for (const element of fragmentImageElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'fragment',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        blockId: element.getAttribute('data-sd-block-id'),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  return entities;
 }
 
 function snapshotLineStyleFromElement(lineEl: HTMLElement): PaintSnapshotLineStyle {
@@ -1107,10 +1286,10 @@ export class DomPainter {
    * Invalidated when the mount, scroll container, or zoom changes.
    */
   private scrollContainerMountOffset: number | null = null;
-  private sdtHover = new SdtGroupedHover();
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
   private onPaintSnapshotCallback: ((snapshot: PaintSnapshot) => void) | null = null;
+  private mountedPageIndices: number[] = [];
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
 
@@ -1234,6 +1413,24 @@ export class DomPainter {
     return this.lastPaintSnapshot;
   }
 
+  /**
+   * Returns the page indices that are currently mounted in the DOM.
+   *
+   * Unlike paint snapshots, this reflects virtualization remounts that happen
+   * during scroll without waiting for a full paint cycle.
+   */
+  public getMountedPageIndices(): number[] {
+    return [...this.mountedPageIndices];
+  }
+
+  private createAllPageIndices(pageCount: number): number[] {
+    return Array.from({ length: pageCount }, (_, pageIndex) => pageIndex);
+  }
+
+  private setMountedPageIndices(pageIndices: number[]): void {
+    this.mountedPageIndices = [...pageIndices];
+  }
+
   private emitPaintSnapshot(snapshot: PaintSnapshot): void {
     this.lastPaintSnapshot = snapshot;
     this.onPaintSnapshotCallback?.(snapshot);
@@ -1254,7 +1451,7 @@ export class DomPainter {
     };
   }
 
-  private finalizePaintSnapshotFromBuilder(): void {
+  private finalizePaintSnapshotFromBuilder(rootEl?: HTMLElement): void {
     const builder = this.paintSnapshotBuilder;
     if (!builder) {
       this.lastPaintSnapshot = null;
@@ -1277,6 +1474,7 @@ export class DomPainter {
       markerCount: builder.markerCount,
       tabCount: builder.tabCount,
       pages,
+      entities: rootEl ? collectPaintSnapshotEntitiesFromDomRoot(rootEl) : createEmptyPaintSnapshotEntities(),
     });
     this.paintSnapshotBuilder = null;
   }
@@ -1374,6 +1572,7 @@ export class DomPainter {
       markerCount,
       tabCount,
       pages,
+      entities: collectPaintSnapshotEntitiesFromDomRoot(rootEl),
     };
   }
 
@@ -1471,7 +1670,6 @@ export class DomPainter {
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
-    ensureNativeSelectionStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -1497,6 +1695,7 @@ export class DomPainter {
       } else {
         this.patchLayout(layout);
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1510,7 +1709,8 @@ export class DomPainter {
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1520,7 +1720,8 @@ export class DomPainter {
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1548,13 +1749,14 @@ export class DomPainter {
         this.patchLayout(layout);
         useDomSnapshotFallback = true;
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
     }
 
     if (useDomSnapshotFallback) {
       this.emitPaintSnapshot(this.collectPaintSnapshotFromDomRoot(mount));
       this.paintSnapshotBuilder = null;
     } else {
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
     }
 
     this.currentLayout = layout;
@@ -1668,8 +1870,6 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
-
-    this.sdtHover.bind(mount);
   }
 
   private computeVirtualMetrics(): void {
@@ -1734,6 +1934,7 @@ export class DomPainter {
 
     if (N === 0) {
       this.mount.innerHTML = '';
+      this.setMountedPageIndices([]);
       this.processedLayoutVersion = this.layoutVersion;
       return;
     }
@@ -1817,6 +2018,7 @@ export class DomPainter {
     this.virtualMountedKey = mountedKey;
     this.virtualStart = start;
     this.virtualEnd = end;
+    this.setMountedPageIndices(mounted);
 
     // Update spacers + rebuild gap spacers
     this.updateSpacersForMountedPages(mounted);
@@ -1897,8 +2099,6 @@ export class DomPainter {
     // Clear changed blocks now that current visible pages are patched
     this.changedBlocks.clear();
     this.processedLayoutVersion = this.layoutVersion;
-
-    this.sdtHover.reapply();
   }
 
   private updateSpacers(start: number, end: number): void {
@@ -2366,11 +2566,11 @@ export class DomPainter {
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
     this.scrollContainerMountOffset = null;
-    this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
     this.lastPaintSnapshot = null;
+    this.mountedPageIndices = [];
   }
 
   private fullRender(layout: Layout): void {
@@ -5153,7 +5353,7 @@ export class DomPainter {
 
     // Create outer annotation wrapper
     const annotation = this.doc.createElement('span');
-    annotation.classList.add('annotation');
+    annotation.classList.add(DOM_CLASS_NAMES.ANNOTATION);
     annotation.setAttribute('aria-label', 'Field annotation');
 
     // Apply pill styling (unless highlighted is explicitly false)
@@ -5226,7 +5426,7 @@ export class DomPainter {
 
     // Create inner content wrapper
     const content = this.doc.createElement('span');
-    content.classList.add('annotation-content');
+    content.classList.add(DOM_CLASS_NAMES.ANNOTATION_CONTENT);
     content.style.pointerEvents = 'none';
     content.setAttribute('contenteditable', 'false');
 
@@ -5323,23 +5523,12 @@ export class DomPainter {
 
     // Apply data attributes for field tracking
     annotation.dataset.type = run.variant;
+    annotation.dataset.displayLabel = run.displayLabel;
     if (run.fieldId) {
       annotation.dataset.fieldId = run.fieldId;
     }
     if (run.fieldType) {
       annotation.dataset.fieldType = run.fieldType;
-    }
-
-    // Make field annotation draggable (matching super-editor behavior)
-    annotation.draggable = true;
-    annotation.dataset.draggable = 'true';
-
-    // Store additional data for drag operations
-    if (run.displayLabel) {
-      annotation.dataset.displayLabel = run.displayLabel;
-    }
-    if (run.variant) {
-      annotation.dataset.variant = run.variant;
     }
 
     // Assert PM positions are present for cursor fallback
@@ -5354,39 +5543,10 @@ export class DomPainter {
     }
     annotation.dataset.layoutEpoch = String(this.layoutEpoch);
 
-    this.appendAnnotationCaretAnchor(annotation, run);
-
     // Apply SDT metadata
     this.applySdtDataset(annotation, run.sdt);
 
     return annotation;
-  }
-
-  /**
-   * Adds a hidden DOM anchor at pmEnd so caret placement after the annotation is correct.
-   */
-  private appendAnnotationCaretAnchor(annotation: HTMLElement, run: FieldAnnotationRun): void {
-    if (!this.doc || run.pmEnd == null) return;
-
-    const caretAnchor = this.doc.createElement('span');
-    caretAnchor.dataset.pmStart = String(run.pmEnd);
-    caretAnchor.dataset.pmEnd = String(run.pmEnd);
-    caretAnchor.dataset.layoutEpoch = String(this.layoutEpoch);
-    caretAnchor.classList.add('annotation-caret-anchor');
-    caretAnchor.style.position = 'absolute';
-    caretAnchor.style.left = '100%';
-    caretAnchor.style.top = '0';
-    caretAnchor.style.width = '0';
-    caretAnchor.style.height = '1em';
-    caretAnchor.style.overflow = 'hidden';
-    caretAnchor.style.pointerEvents = 'none';
-    caretAnchor.style.userSelect = 'none';
-    caretAnchor.style.opacity = '0';
-    caretAnchor.textContent = '\u200B';
-    if (!annotation.style.position) {
-      annotation.style.position = 'relative';
-    }
-    annotation.appendChild(caretAnchor);
   }
 
   /**

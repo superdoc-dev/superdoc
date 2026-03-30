@@ -25,7 +25,14 @@ export type {
   CreateRulerElementOptions,
 } from './ruler/index.js';
 export type { RulerOptions } from './renderer.js';
-export type { PaintSnapshot } from './renderer.js';
+export type {
+  PaintSnapshot,
+  PaintSnapshotAnnotationEntity,
+  PaintSnapshotStructuredContentBlockEntity,
+  PaintSnapshotStructuredContentInlineEntity,
+  PaintSnapshotImageEntity,
+  PaintSnapshotEntities,
+} from './renderer.js';
 export type { DomPainterInput, PositionMapping, RenderedLineInfo } from './renderer.js';
 
 // Re-export utility functions for testing
@@ -45,10 +52,6 @@ export {
   globalValidationStats,
 } from './pm-position-validation.js';
 export type { PmPositionValidationStats } from './pm-position-validation.js';
-
-// Re-export proofing decoration utilities
-export { applyProofingDecorations, clearProofingDecorations, PROOFING_CSS } from './proofing/index.js';
-export type { ProofingAnnotation } from './proofing/index.js';
 
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 export type { FlowMode } from './renderer.js';
@@ -162,6 +165,7 @@ export type DomPainterHandle = {
   setResolvedLayout(resolvedLayout: ResolvedLayout | null): void;
   setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void;
   setVirtualizationPins(pageIndices: number[] | null | undefined): void;
+  getMountedPageIndices(): number[];
   onScroll(): void;
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
@@ -281,6 +285,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);
+    },
+    getMountedPageIndices() {
+      return painter.getMountedPageIndices();
     },
     onScroll() {
       painter.onScroll();

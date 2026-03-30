@@ -1,3 +1,18 @@
+function normalizeCssValue(value) {
+  if (!value) return value;
+
+  const trimmedValue = value.trim();
+  if (
+    trimmedValue.length >= 2 &&
+    ((trimmedValue.startsWith('"') && trimmedValue.endsWith('"')) ||
+      (trimmedValue.startsWith("'") && trimmedValue.endsWith("'")))
+  ) {
+    return trimmedValue.slice(1, -1);
+  }
+
+  return trimmedValue;
+}
+
 export const extractListLevelStyles = (cssText, listId, level, numId) => {
   const pattern = new RegExp(`@list\\s+l${listId}:level${level}(?:\\s+lfo${numId})?\\s*\\{([^}]+)\\}`, 'i');
   const match = cssText.match(pattern);
@@ -11,7 +26,7 @@ export const extractListLevelStyles = (cssText, listId, level, numId) => {
   const styleMap = {};
   for (const style of rawStyles) {
     const [key, value] = style.split(':').map((s) => s.trim());
-    styleMap[key] = value;
+    styleMap[key] = normalizeCssValue(value);
   }
 
   return styleMap;
@@ -28,7 +43,7 @@ export const extractParagraphStyles = (cssText, selector) => {
   const styleMap = {};
   for (const style of rawStyles) {
     const [key, value] = style.split(':').map((s) => s.trim());
-    styleMap[key] = value;
+    styleMap[key] = normalizeCssValue(value);
   }
   return styleMap;
 };

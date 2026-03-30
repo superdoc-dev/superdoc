@@ -60,6 +60,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 | `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
 | `paragraph.nodeId` | string | yes |  |
 | `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `ref` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
 
@@ -90,6 +91,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
     "nodeId": "node-def456",
     "nodeType": "paragraph"
   },
+  "ref": "handle:abc123",
   "success": true,
   "trackedChangeRefs": [
     {
@@ -211,6 +213,10 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
         "paragraph": {
           "$ref": "#/$defs/ParagraphAddress"
         },
+        "ref": {
+          "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+          "type": "string"
+        },
         "success": {
           "const": true
         },
@@ -275,6 +281,10 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
     },
     "paragraph": {
       "$ref": "#/$defs/ParagraphAddress"
+    },
+    "ref": {
+      "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+      "type": "string"
     },
     "success": {
       "const": true

@@ -689,4 +689,41 @@ describe('PresentationEditor - goToAnchor', () => {
       preferredActiveThreadId: 'raw-tc-id',
     });
   });
+
+  it('falls back to scroll + setTextSelection when both setCursorById attempts fail for tracked changes', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    mockActiveEditor.commands.setCursorById = vi.fn().mockReturnValue(false);
+    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
+    editor.scrollToPositionAsync = vi.fn().mockResolvedValue(undefined);
+
+    mockResolveTrackedChange.mockReturnValueOnce({
+      id: 'canonical-tc-id',
+      rawId: 'raw-tc-id',
+      from: 88,
+      to: 96,
+      hasInsert: true,
+      hasDelete: false,
+      hasFormat: false,
+      attrs: {},
+    });
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'canonical-tc-id',
+    });
+
+    expect(result).toBe(true);
+    expect(mockActiveEditor.commands.setCursorById).toHaveBeenCalledTimes(2);
+    expect(editor.scrollToPositionAsync).toHaveBeenCalledWith(88, {
+      behavior: 'auto',
+      block: 'center',
+    });
+    expect(mockActiveEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 88, to: 88 });
+    expect(mockActiveEditor.view?.focus).toHaveBeenCalled();
+  });
 });

@@ -732,4 +732,26 @@ describe('PresentationEditor - goToAnchor', () => {
     expect(bodyEditor.view?.focus).toHaveBeenCalled();
     expect(mockResolveTrackedChange).toHaveBeenCalledWith(bodyEditor, 'canonical-tc-id');
   });
+
+  it('returns false for bookmark navigation in note stories', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-in-footnote',
+      story: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+    });
+
+    expect(result).toBe(false);
+    expect(mockResolveBookmarkTarget).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PresentationEditor] navigateTo does not yet support bookmark navigation in footnote stories.',
+    );
+  });
 });

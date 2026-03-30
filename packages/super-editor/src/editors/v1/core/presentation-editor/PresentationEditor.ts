@@ -6001,6 +6001,17 @@ export class PresentationEditor extends EventEmitter {
       return this.goToAnchor(target.name);
     }
 
+    // Note stories are rendered into layout, but they do not currently expose
+    // a visible interactive editor surface that can receive selection/focus.
+    // Returning false is more accurate than reporting success after moving the
+    // selection in a detached headless note runtime.
+    if (story.storyType === 'footnote' || story.storyType === 'endnote') {
+      console.warn(
+        `[PresentationEditor] navigateTo does not yet support bookmark navigation in ${story.storyType} stories.`,
+      );
+      return false;
+    }
+
     if (!this.#editor) return false;
 
     try {

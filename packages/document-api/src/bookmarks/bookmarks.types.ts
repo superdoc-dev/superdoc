@@ -12,7 +12,13 @@ export interface BookmarkAddress {
   kind: 'entity';
   entityType: 'bookmark';
   name: string;
-  /** Story containing this bookmark. Omit for body (backward compatible). */
+  /**
+   * Story containing this bookmark. Omit for body (backward compatible).
+   *
+   * **Limitation:** `navigateTo()` currently supports bookmark navigation only
+   * in the body and header/footer stories. Footnote/endnote bookmark
+   * navigation currently returns `false`.
+   */
   story?: StoryLocator;
 }
 

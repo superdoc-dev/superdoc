@@ -1464,6 +1464,9 @@ export class SuperDoc extends EventEmitter {
    * Prefers the active document's PresentationEditor because navigation depends
    * on rendered layout rather than raw editor commands.
    *
+   * Note: bookmark navigation currently supports the body and header/footer
+   * stories. Footnote/endnote bookmark navigation returns `false`.
+   *
    * @param {NavigableEntityAddress} address Navigation target descriptor
    * @returns {Promise<boolean>}
    */

@@ -3,6 +3,7 @@ import type {
   TextAddress,
   SelectionTarget,
   MatchContext,
+  NavigableEntityAddress,
   TrackChangeType,
   CommentsListResult,
   TrackChangesListResult,
@@ -338,6 +339,17 @@ export async function listTrackChanges(
 
     return { ...result, changes };
   }, query) as Promise<TrackChangesListResult>;
+}
+
+export async function navigateToEntity(page: Page, target: NavigableEntityAddress): Promise<boolean> {
+  return page.evaluate((payload) => {
+    const navigationHost = (window as any).superdoc;
+    if (typeof navigationHost?.navigateTo !== 'function') {
+      throw new Error('Navigation API is unavailable: expected superdoc.navigateTo().');
+    }
+
+    return navigationHost.navigateTo(payload);
+  }, target);
 }
 
 export async function listItems(page: Page, query: ListsListQuery = {}): Promise<ListsListResult> {

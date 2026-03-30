@@ -33,7 +33,6 @@ describe('resolveToolbarSources', () => {
         },
       },
       getActiveEditor: () => headerEditor,
-      getEffectiveSelectionContext: () => ({ surface: 'header' }),
     };
 
     const result = resolveToolbarSources({

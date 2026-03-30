@@ -484,12 +484,12 @@ const superdoc = new SuperDoc({
 
 ### `setZoom`
 
-Set the editor zoom level programmatically.
+Set the editor zoom level programmatically through the owning `SuperDoc` instance.
 
 <CodeGroup>
 
 ```javascript Usage
-toolbar.setZoom(150); // 150%
+superdoc.setZoom(150); // 150%
 ```
 
 ```javascript Full Example
@@ -501,8 +501,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   toolbar: '#toolbar',
   onReady: (superdoc) => {
-    const toolbar = superdoc.toolbar;
-    toolbar.setZoom(150); // 150%
+    superdoc.setZoom(150); // 150%
   },
 });
 ```
@@ -536,38 +535,6 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
-## Events
-
-### `superdoc-command`
-
-Fired when a SuperDoc-level command is executed (zoom, document mode).
-
-<CodeGroup>
-
-```javascript Usage
-toolbar.on('superdoc-command', ({ item, argument }) => {
-  console.log(`Command: ${item.command}, arg: ${argument}`);
-});
-```
-
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
-
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  toolbar: '#toolbar',
-  onReady: (superdoc) => {
-    const toolbar = superdoc.toolbar;
-    toolbar.on('superdoc-command', ({ item, argument }) => {
-      console.log(`Command: ${item.command}, arg: ${argument}`);
-    });
-  },
-});
-```
-
-</CodeGroup>
 
 ### `exception`
 

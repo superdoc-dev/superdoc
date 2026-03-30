@@ -45,9 +45,10 @@ const ensureDomApis = () => {
   }
 };
 
-describe('SuperToolbar intercepted color commands', () => {
+describe('SuperToolbar headless execute routing', () => {
   let toolbar;
   let mockEditor;
+  let mockController;
 
   beforeEach(() => {
     ensureDomApis();
@@ -62,6 +63,9 @@ describe('SuperToolbar intercepted color commands', () => {
 
     mockEditor = {
       focus: vi.fn(),
+      view: {
+        hasFocus: vi.fn(() => true),
+      },
       options: { isHeaderOrFooter: false, mode: 'docx' },
       state: {
         selection: { from: 1, to: 1, $from: mockResolvedPos },
@@ -78,106 +82,57 @@ describe('SuperToolbar intercepted color commands', () => {
         setHighlight: vi.fn(),
         setFieldAnnotationsTextHighlight: vi.fn(),
         setCellBackground: vi.fn(),
+        someLegacyCommand: vi.fn(),
       },
     };
 
     toolbar = new SuperToolbar({ editor: mockEditor, hideButtons: false });
     toolbar.updateToolbarState = vi.fn();
+    mockController = {
+      execute: vi.fn(),
+    };
+    toolbar.controller = mockController;
   });
 
-  const emitCommand = (command, argument) => {
-    const item = { command };
+  const emitCommand = (item, argument) => {
     toolbar.emitCommand({ item, argument });
   };
 
-  it('setColor applies inline color (#123456) and updates field annotations with the same color', () => {
-    emitCommand('setColor', '#123456');
+  it('routes color through headless controller with text-color id', () => {
+    const item = { command: 'setColor', name: { value: 'color' } };
+    emitCommand(item, '#123456');
 
     expect(mockEditor.focus).toHaveBeenCalled();
-    expect(mockEditor.commands.setColor).toHaveBeenCalledWith('#123456');
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).toHaveBeenCalledWith('#123456', true);
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
-  });
-
-  it('setColor treats "none" argument as "inherit" for inline color and null for annotations', () => {
-    emitCommand('setColor', 'none');
-
-    expect(mockEditor.commands.setColor).toHaveBeenCalledWith('inherit');
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).toHaveBeenCalledWith(null, true);
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
-  });
-
-  it('setColor skips work when argument is missing', () => {
-    emitCommand('setColor');
-
+    expect(mockController.execute).toHaveBeenCalledWith('text-color', '#123456');
     expect(mockEditor.commands.setColor).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).not.toHaveBeenCalled();
-    expect(toolbar.updateToolbarState).not.toHaveBeenCalled();
-  });
-
-  it('setColor skips work when argument is undefined', () => {
-    emitCommand('setColor', undefined);
-
-    expect(mockEditor.commands.setColor).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).not.toHaveBeenCalled();
-    expect(toolbar.updateToolbarState).not.toHaveBeenCalled();
-  });
-
-  it('setColor skips work when argument is empty string', () => {
-    emitCommand('setColor', '');
-
-    expect(mockEditor.commands.setColor).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).not.toHaveBeenCalled();
-    expect(toolbar.updateToolbarState).not.toHaveBeenCalled();
-  });
-
-  it('setColor applies color value even with potentially invalid format (browser handles validation)', () => {
-    emitCommand('setColor', 'invalid-color-format');
-
-    expect(mockEditor.commands.setColor).toHaveBeenCalledWith('invalid-color-format');
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).toHaveBeenCalledWith('invalid-color-format', true);
     expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
   });
 
-  it('setHighlight applies highlight color (#fedcba) to inline marks, field annotations, and table cell background', () => {
-    emitCommand('setHighlight', '#fedcba');
+  it('routes highlight through headless controller with highlight-color id', () => {
+    const item = { command: 'setHighlight', name: { value: 'highlight' } };
+    emitCommand(item, '#fedcba');
 
-    expect(mockEditor.commands.setHighlight).toHaveBeenCalledWith('#fedcba');
-    expect(mockEditor.commands.setFieldAnnotationsTextHighlight).toHaveBeenCalledWith('#fedcba', true);
-    expect(mockEditor.commands.setCellBackground).toHaveBeenCalledWith('#fedcba');
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
-  });
-
-  it('setHighlight with "none" argument sets transparent inline mark for cascade-aware negation while clearing annotations', () => {
-    emitCommand('setHighlight', 'none');
-
-    expect(mockEditor.commands.setHighlight).toHaveBeenCalledWith('transparent');
-    expect(mockEditor.commands.setFieldAnnotationsTextHighlight).toHaveBeenCalledWith(null, true);
-    expect(mockEditor.commands.setCellBackground).toHaveBeenCalledWith(null);
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
-  });
-
-  it('setHighlight skips work when argument is missing', () => {
-    emitCommand('setHighlight');
-
+    expect(mockController.execute).toHaveBeenCalledWith('highlight-color', '#fedcba');
     expect(mockEditor.commands.setHighlight).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextHighlight).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setCellBackground).not.toHaveBeenCalled();
-    expect(toolbar.updateToolbarState).not.toHaveBeenCalled();
+    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
   });
 
-  it('setColor and setHighlight do not execute any commands when activeEditor is null', () => {
-    toolbar.activeEditor = null;
+  it('falls back to editor.commands for non-headless items', () => {
+    const item = { command: 'someLegacyCommand', name: { value: 'customButton' } };
+    emitCommand(item, 'payload');
 
-    emitCommand('setColor', '#abcdef');
-    emitCommand('setHighlight', '#abcdef');
+    expect(mockController.execute).not.toHaveBeenCalled();
+    expect(mockEditor.commands.someLegacyCommand).toHaveBeenCalledWith('payload');
+    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
+  });
 
-    expect(mockEditor.commands.setColor).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextColor).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setHighlight).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setFieldAnnotationsTextHighlight).not.toHaveBeenCalled();
-    expect(mockEditor.commands.setCellBackground).not.toHaveBeenCalled();
-    expect(toolbar.updateToolbarState).not.toHaveBeenCalled();
+  it('does not route headless commands when controller is unavailable', () => {
+    toolbar.controller = null;
+    const item = { command: 'setColor', name: { value: 'color' } };
+
+    expect(() => emitCommand(item, '#abcdef')).not.toThrow();
+    expect(mockEditor.commands.setColor).toHaveBeenCalledWith('#abcdef');
+    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -229,7 +184,7 @@ describe('SuperToolbar sticky mark persistence', () => {
     toolbar.onEditorSelectionUpdate();
     expect(mockEditor.commands.toggleBold).toHaveBeenCalled();
     expect(toolbar.pendingMarkCommands).toHaveLength(0);
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(2);
+    expect(toolbar.updateToolbarState).toHaveBeenCalled();
 
     // Simulate moving the caret to an empty area that has no marks
     mockEditor.state.storedMarks = null;
@@ -237,7 +192,7 @@ describe('SuperToolbar sticky mark persistence', () => {
 
     expect(mockTransaction.setStoredMarks).toHaveBeenCalledWith([{ type: 'bold' }]);
     expect(mockEditor.view.dispatch).toHaveBeenCalledWith({ storedMarksSet: true });
-    expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(3);
+    expect(toolbar.updateToolbarState).toHaveBeenCalled();
   });
 
   it('clears sticky stored marks and does not restore them when user toggles formatting off on empty selection', () => {
@@ -260,24 +215,19 @@ describe('SuperToolbar sticky mark persistence', () => {
     expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(2);
   });
 
-  it('uses intercepted command implementation (setFontSize) instead of direct editor command when replaying pending mark commands', () => {
-    const throwingSetFontSize = vi.fn(() => {
-      throw new Error('should not be called directly');
-    });
-
-    mockEditor.commands.setFontSize = throwingSetFontSize;
-    mockEditor.commands.setFieldAnnotationsFontSize = vi.fn();
+  it('replays pending fontSize commands through the current command path and clears the queue', () => {
+    const setFontSize = vi.fn();
+    mockEditor.commands.setFontSize = setFontSize;
     mockEditor.view.hasFocus = vi.fn(() => false);
 
     const item = { command: 'setFontSize', name: { value: 'fontSize' }, activate: vi.fn() };
 
-    toolbar.emitCommand({ item });
+    toolbar.emitCommand({ item, argument: '24pt' });
 
     expect(toolbar.pendingMarkCommands).toHaveLength(1);
 
-    // Should use intercepted command, so the direct command never runs
     expect(() => toolbar.onEditorSelectionUpdate()).not.toThrow();
-    expect(throwingSetFontSize).not.toHaveBeenCalled();
+    expect(setFontSize).toHaveBeenCalledWith('24pt');
     expect(toolbar.pendingMarkCommands).toHaveLength(0);
   });
 

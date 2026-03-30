@@ -22,6 +22,7 @@ class MockToolbar {
   constructor() {
     this.activeEditor = null;
   }
+  destroy() {}
   on() {}
   once() {}
   updateToolbarState() {}

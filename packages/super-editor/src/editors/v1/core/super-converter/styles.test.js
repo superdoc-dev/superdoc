@@ -444,6 +444,18 @@ describe('decodeRPrFromMarks', () => {
     expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24 });
   });
 
+  it('should handle sparse mark snapshots with missing attrs', () => {
+    const marks = [{ type: 'bold' }, { type: 'italic' }, { type: 'textStyle' }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ bold: true, italic: true });
+  });
+
+  it('should skip null or undefined marks without throwing', () => {
+    const marks = [null, { type: 'bold', attrs: { value: true } }, undefined];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ bold: true });
+  });
+
   it('should decode underline marks', () => {
     const marks = [{ type: 'underline', attrs: { underlineType: 'single', underlineColor: '#FF0000' } }];
     const rPr = decodeRPrFromMarks(marks);

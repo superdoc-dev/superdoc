@@ -1,5 +1,6 @@
 import type { Position } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
@@ -11,6 +12,8 @@ export interface BookmarkAddress {
   kind: 'entity';
   entityType: 'bookmark';
   name: string;
+  /** Story containing this bookmark. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 // ---------------------------------------------------------------------------
@@ -20,6 +23,8 @@ export interface BookmarkAddress {
 export interface BookmarkListInput {
   limit?: number;
   offset?: number;
+  /** Restrict listing to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
 }
 
 export interface BookmarkGetInput {

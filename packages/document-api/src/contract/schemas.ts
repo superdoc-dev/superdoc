@@ -382,6 +382,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       kind: { const: 'entity' },
       entityType: { const: 'comment' },
       entityId: { type: 'string' },
+      story: ref('StoryLocator'),
     },
     ['kind', 'entityType', 'entityId'],
   ),
@@ -390,6 +391,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       kind: { const: 'entity' },
       entityType: { const: 'trackedChange' },
       entityId: { type: 'string' },
+      story: ref('StoryLocator'),
     },
     ['kind', 'entityType', 'entityId'],
   ),
@@ -2541,7 +2543,12 @@ function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure:
 
 // --- Bookmark schemas ---
 const bookmarkAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  {
+    kind: { const: 'entity' },
+    entityType: { const: 'bookmark' },
+    name: { type: 'string' },
+    story: ref('StoryLocator'),
+  },
   ['kind', 'entityType', 'name'],
 );
 
@@ -6698,7 +6705,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // Bookmarks
   // -------------------------------------------------------------------------
   'bookmarks.list': {
-    input: refListQuerySchema,
+    input: objectSchema({
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+      in: storyLocatorSchema,
+    }),
     output: discoveryOutputSchema,
   },
   'bookmarks.get': {

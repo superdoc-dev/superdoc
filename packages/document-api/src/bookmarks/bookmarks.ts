@@ -2,6 +2,7 @@ import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { assertTargetPresent } from '../validation-primitives.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import type {
   BookmarkAddress,
   BookmarkGetInput,
@@ -43,6 +44,9 @@ function validateBookmarkTarget(target: unknown, operationName: string): asserts
       { target },
     );
   }
+  if (t.story !== undefined) {
+    validateStoryLocator(t.story, `${operationName}.target.story`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -50,6 +54,9 @@ function validateBookmarkTarget(target: unknown, operationName: string): asserts
 // ---------------------------------------------------------------------------
 
 export function executeBookmarksList(adapter: BookmarksAdapter, query?: BookmarkListInput): BookmarksListResult {
+  if (query?.in !== undefined) {
+    validateStoryLocator(query.in, 'bookmarks.list.in');
+  }
   return adapter.list(query);
 }
 

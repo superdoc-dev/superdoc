@@ -119,12 +119,33 @@ export type CommentAddress = {
   kind: 'entity';
   entityType: 'comment';
   entityId: string;
+  /** Story containing this comment. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type TrackedChangeAddress = {
   kind: 'entity';
   entityType: 'trackedChange';
   entityId: string;
+  /** Story containing this tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;
+
+export type BookmarkNavigationAddress = {
+  kind: 'entity';
+  entityType: 'bookmark';
+  name: string;
+  /** Story containing this bookmark. Omit for body (backward compatible). */
+  story?: StoryLocator;
+};
+
+/**
+ * Address for in-document navigation targets exposed by viewer/editor APIs.
+ *
+ * This is additive to the document-api mutation/read contracts and is used by
+ * higher-level navigation entrypoints that can target bookmarks, comments, or
+ * tracked changes through a single method.
+ */
+export type NavigableEntityAddress = BookmarkNavigationAddress | CommentAddress | TrackedChangeAddress;

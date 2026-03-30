@@ -5929,12 +5929,12 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Comments and tracked changes are only supported in the document body.
-    // Reject non-body story locators early with a clear error.
     if ('story' in target && target.story && target.story.storyType !== 'body') {
-      throw new Error(
-        `navigateTo does not support non-body stories for ${target.entityType}. ` +
+      console.warn(
+        `[PresentationEditor] navigateTo does not support non-body stories for ${target.entityType}. ` +
           `Only bookmarks support cross-story navigation.`,
       );
+      return false;
     }
 
     if (target.entityType === 'trackedChange') {

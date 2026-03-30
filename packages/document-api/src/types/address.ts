@@ -124,7 +124,7 @@ export type CommentAddress = {
    * Story containing this comment. Omit for body (backward compatible).
    *
    * **Limitation:** Comments are only supported in the document body.
-   * Passing a non-body story locator will throw an error.
+   * Passing a non-body story locator will return `false` from `navigateTo`.
    */
   story?: StoryLocator;
 };
@@ -137,7 +137,7 @@ export type TrackedChangeAddress = {
    * Story containing this tracked change. Omit for body (backward compatible).
    *
    * **Limitation:** Tracked changes are only supported in the document body.
-   * Passing a non-body story locator will throw an error.
+   * Passing a non-body story locator will return `false` from `navigateTo`.
    */
   story?: StoryLocator;
 };

@@ -6,6 +6,13 @@ vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => ({
     steps: [{ effect: handler() ? 'changed' : 'noop' }],
   })),
+  resolveWriteStoryRuntime: vi.fn((editor: Editor) => ({
+    locator: { kind: 'story', storyType: 'body' },
+    storyKey: 'story:body',
+    editor,
+    kind: 'body',
+  })),
+  disposeEphemeralWriteRuntime: vi.fn(),
 }));
 
 vi.mock('./revision-tracker.js', () => ({
@@ -36,10 +43,20 @@ vi.mock('../helpers/bookmark-resolver.js', () => ({
   buildBookmarkDiscoveryItem: vi.fn(),
 }));
 
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+  resolveStoryRuntime: vi.fn((editor: Editor) => ({
+    locator: { kind: 'story', storyType: 'body' },
+    storyKey: 'story:body',
+    editor,
+    kind: 'body',
+  })),
+}));
+
 import { bookmarksInsertWrapper } from './bookmark-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { findAllBookmarks } from '../helpers/bookmark-resolver.js';
+import { resolveWriteStoryRuntime } from './plan-wrappers.js';
 
 type BookmarkNode = {
   type: { name: string };
@@ -146,6 +163,38 @@ describe('bookmarksInsertWrapper', () => {
       attrs: { name: 'bm-table', id: '0', colFirst: 1, colLast: 3 },
       nodeSize: 1,
     });
+  });
+
+  it('returns a story-qualified bookmark address and commits non-body story inserts', () => {
+    const { editor } = makeEditor();
+    const commit = vi.fn();
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+      storyKey: 'story:footnote:fn-1',
+      editor,
+      kind: 'note',
+      commit,
+    });
+
+    const result = bookmarksInsertWrapper(editor, {
+      name: 'bm-footnote',
+      at: {
+        kind: 'text',
+        story: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+        segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }],
+      },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookmark: {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-footnote',
+        story: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+      },
+    });
+    expect(commit).toHaveBeenCalledWith(editor);
   });
 
   it('returns NO_OP when a bookmark with the same name already exists', () => {

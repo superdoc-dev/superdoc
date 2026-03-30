@@ -3,7 +3,14 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { BookmarkAddress, BookmarkDomain, BookmarkInfo, DiscoveryItem, Position } from '@superdoc/document-api';
+import type {
+  BookmarkAddress,
+  BookmarkDomain,
+  BookmarkInfo,
+  DiscoveryItem,
+  Position,
+  StoryLocator,
+} from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 
@@ -17,6 +24,18 @@ export interface ResolvedBookmark {
   name: string;
   bookmarkId: string;
   endPos: number | null;
+}
+
+function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
+  if (!locator || locator.storyType === 'body') return undefined;
+  return locator;
+}
+
+function buildBookmarkAddress(name: string, story?: StoryLocator): BookmarkAddress {
+  const normalizedStory = normalizeStory(story);
+  return normalizedStory
+    ? { kind: 'entity', entityType: 'bookmark', name, story: normalizedStory }
+    : { kind: 'entity', entityType: 'bookmark', name };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +107,11 @@ function nodePositionToPosition(doc: ProseMirrorNode, pos: number): Position {
   return { blockId: '', offset: pos };
 }
 
-export function extractBookmarkInfo(doc: ProseMirrorNode, resolved: ResolvedBookmark): BookmarkInfo {
+export function extractBookmarkInfo(
+  doc: ProseMirrorNode,
+  resolved: ResolvedBookmark,
+  story?: StoryLocator,
+): BookmarkInfo {
   const from = nodePositionToPosition(doc, resolved.pos);
   const to = resolved.endPos !== null ? nodePositionToPosition(doc, resolved.endPos) : from;
 
@@ -96,7 +119,7 @@ export function extractBookmarkInfo(doc: ProseMirrorNode, resolved: ResolvedBook
   const colLast = resolved.node.attrs?.colLast as number | undefined;
 
   const info: BookmarkInfo = {
-    address: { kind: 'entity', entityType: 'bookmark', name: resolved.name },
+    address: buildBookmarkAddress(resolved.name, story),
     name: resolved.name,
     bookmarkId: resolved.bookmarkId,
     range: { from, to },
@@ -117,6 +140,7 @@ export function buildBookmarkDiscoveryItem(
   doc: ProseMirrorNode,
   resolved: ResolvedBookmark,
   evaluatedRevision: string,
+  story?: StoryLocator,
 ): DiscoveryItem<BookmarkDomain> {
   const from = nodePositionToPosition(doc, resolved.pos);
   const to = resolved.endPos !== null ? nodePositionToPosition(doc, resolved.endPos) : from;
@@ -125,7 +149,7 @@ export function buildBookmarkDiscoveryItem(
   const colLast = resolved.node.attrs?.colLast as number | undefined;
 
   const domain: BookmarkDomain = {
-    address: { kind: 'entity', entityType: 'bookmark', name: resolved.name },
+    address: buildBookmarkAddress(resolved.name, story),
     name: resolved.name,
     bookmarkId: resolved.bookmarkId,
     range: { from, to },

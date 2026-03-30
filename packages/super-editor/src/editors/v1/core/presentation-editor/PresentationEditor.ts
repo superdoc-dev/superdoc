@@ -5891,13 +5891,16 @@ export class PresentationEditor extends EventEmitter {
           const activeEditor = this.#editor;
           if (!activeEditor?.state?.doc) return null;
 
-          const resolved = resolveBookmarkTarget(activeEditor.state.doc, {
-            kind: 'entity',
-            entityType: 'bookmark',
-            name,
-          });
-
-          return resolved?.pos ?? null;
+          try {
+            const resolved = resolveBookmarkTarget(activeEditor.state.doc, {
+              kind: 'entity',
+              entityType: 'bookmark',
+              name,
+            });
+            return resolved?.pos ?? null;
+          } catch {
+            return null;
+          }
         },
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,

@@ -27,6 +27,12 @@ async function copySelection(superdoc: SuperDocFixture): Promise<{
   return superdoc.page.evaluate(() => {
     const editor = (window as any).editor;
     const { from, to } = editor.state.selection;
+    if (from === to) {
+      throw new Error(
+        'copySelection requires a non-empty editor selection. Ensure the editor is focused and content is selected first.',
+      );
+    }
+
     const slice = editor.state.doc.slice(from, to);
     const sliceJson = JSON.stringify(slice.toJSON());
 
@@ -34,15 +40,21 @@ async function copySelection(superdoc: SuperDocFixture): Promise<{
     const media = editor.storage?.image?.media ?? {};
     const referencedMedia: Record<string, string> = {};
     const walk = (node: any) => {
+      if (!node || typeof node !== 'object') return;
+
       if (node.type === 'image' && node.attrs?.src && media[node.attrs.src]) {
         referencedMedia[node.attrs.src] = media[node.attrs.src];
       }
-      if (node.content) {
-        for (const child of node.content) walk(child);
+
+      if (Array.isArray(node.content)) {
+        for (const child of node.content) {
+          walk(child);
+        }
       }
     };
     const parsed = JSON.parse(sliceJson);
-    if (Array.isArray(parsed.content)) parsed.content.forEach(walk);
+    const rootNodes = Array.isArray(parsed?.content) ? parsed.content : [];
+    rootNodes.forEach(walk);
 
     const mediaJson = Object.keys(referencedMedia).length > 0 ? JSON.stringify(referencedMedia) : '';
 
@@ -89,6 +101,19 @@ async function pasteSuperdocClipboard(
     },
   );
 
+  await superdoc.waitForStable();
+}
+
+/**
+ * Places a collapsed caret at the logical end of the document.
+ */
+async function moveCaretToDocumentEnd(superdoc: SuperDocFixture): Promise<void> {
+  const docEnd = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    return editor.state.doc.content.size;
+  });
+
+  await superdoc.setTextSelection(docEnd, docEnd);
   await superdoc.waitForStable();
 }
 
@@ -158,7 +183,7 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
     await superdoc.waitForStable();
 
     // Select all and copy
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
@@ -179,18 +204,18 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
     await superdoc.waitForStable();
     await superdoc.executeCommand('toggleOrderedList');
     await superdoc.waitForStable();
+
     await superdoc.press('Enter');
     await superdoc.type('Second item');
     await superdoc.waitForStable();
 
     // Select all and copy
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
     // Move to end and paste (appending, not replacing)
-    await superdoc.press('End');
-    await superdoc.waitForStable();
+    await moveCaretToDocumentEnd(superdoc);
     await superdoc.press('Enter');
     await superdoc.waitForStable();
     // Exit list first
@@ -209,7 +234,7 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
     await superdoc.waitForStable();
 
     // Select all and copy (simulate cut = copy + delete)
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
@@ -229,17 +254,15 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
     await superdoc.type('Paragraph two');
     await superdoc.waitForStable();
 
-    // Get original paragraph identities
     const originalIds = await getParagraphIdentities(superdoc);
 
     // Select all and copy
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
     // Move to end and paste
-    await superdoc.press('End');
-    await superdoc.waitForStable();
+    await moveCaretToDocumentEnd(superdoc);
     await superdoc.press('Enter');
     await superdoc.waitForStable();
     await pasteSuperdocClipboard(superdoc, payload);
@@ -248,7 +271,6 @@ test.describe('SuperDoc-to-SuperDoc copy-paste', () => {
     const allIds = await getParagraphIdentities(superdoc);
 
     // Pasted paragraphs should have null/fresh IDs, not duplicates of the originals
-    const originalParaIds = originalIds.map((id) => id.paraId).filter(Boolean);
     const pastedIds = allIds.slice(originalIds.length);
     for (const pasted of pastedIds) {
       // paraId should be null (stripped by stripSuperdocSliceBlockIdentities)
@@ -266,11 +288,8 @@ test.describe('SuperDoc copy-paste with images', () => {
     const originalImageCount = await countImages(superdoc);
     expect(originalImageCount).toBeGreaterThan(0);
 
-    // Get original image srcs
-    const originalSrcs = await getImageSrcs(superdoc);
-
     // Select all and copy
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 
@@ -278,10 +297,7 @@ test.describe('SuperDoc copy-paste with images', () => {
     expect(payload.sliceJson).toBeTruthy();
 
     // Move to end and paste
-    await superdoc.press('End');
-    await superdoc.waitForStable();
-    await superdoc.press('Enter');
-    await superdoc.waitForStable();
+    await moveCaretToDocumentEnd(superdoc);
     await pasteSuperdocClipboard(superdoc, payload);
 
     // Total images should be double (original + pasted)
@@ -307,7 +323,7 @@ test.describe('SuperDoc copy-paste with images', () => {
     const originalMediaKeys = Object.keys(originalMedia);
 
     // Select all and copy
-    await superdoc.press('Meta+a');
+    await superdoc.selectAll();
     await superdoc.waitForStable();
     const payload = await copySelection(superdoc);
 

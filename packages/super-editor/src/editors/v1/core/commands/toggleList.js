@@ -3,7 +3,8 @@ import { updateNumberingProperties } from './changeListLevel.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
-import { TextSelection } from 'prosemirror-state';
+import { Selection, TextSelection } from 'prosemirror-state';
+import { computeToggleListSelectionRange } from './toggleListSelection.js';
 
 function numFmtIsBullet(numFmt) {
   if (numFmt == null) return false;
@@ -147,36 +148,40 @@ export const toggleList =
       updateNumberingProperties(sharedNumberingProperties, node, pos, editor, tr);
     }
 
-    // Preserve selection spanning all affected paragraphs so the user can toggle back
+    // Restore a natural post-toggle selection.
+    // Collapsed caret toggles should keep a caret. Ranged toggles should keep a range.
     if (paragraphsInSelection.length > 0) {
       const firstPara = paragraphsInSelection[0];
       const lastPara = paragraphsInSelection[paragraphsInSelection.length - 1];
-      // Map positions through the transaction
-      const mappedFirstPos = tr.mapping.map(firstPara.pos);
-      const mappedLastPos = tr.mapping.map(lastPara.pos);
-      // Get the updated nodes from the transformed document
-      const $firstPos = tr.doc.resolve(mappedFirstPos);
-      const $lastPos = tr.doc.resolve(mappedLastPos);
-      const firstNode = $firstPos.nodeAfter;
-      const lastNode = $lastPos.nodeAfter;
-      if (firstNode && lastNode) {
-        // Find first text position in first paragraph and last text position in last paragraph
-        let selFrom = mappedFirstPos + 1;
-        let selTo = mappedLastPos + lastNode.nodeSize - 1;
-        // Adjust selFrom to skip into actual text content (skip run wrapper if present)
-        if (firstNode.firstChild && firstNode.firstChild.type.name === 'run') {
-          selFrom = mappedFirstPos + 2; // paragraph + run opening
-        }
-        // Adjust selTo to be at end of text content
-        if (lastNode.lastChild && lastNode.lastChild.type.name === 'run') {
-          selTo = mappedLastPos + lastNode.nodeSize - 2; // before run and paragraph closing
-        }
-        if (selFrom >= 0 && selTo <= tr.doc.content.size && selFrom <= selTo) {
-          try {
-            tr.setSelection(TextSelection.create(tr.doc, selFrom, selTo));
-          } catch {
-            // Fallback: if selection fails, just leave the selection as-is
+      // `toggleList()` only updates paragraph attributes via `setNodeMarkup()`,
+      // so the paragraph boundaries stay stable inside the transaction.
+      const firstParagraphPos = firstPara.pos;
+      const lastParagraphPos = lastPara.pos;
+      const firstNode = tr.doc.nodeAt(firstParagraphPos);
+      const lastNode = tr.doc.nodeAt(lastParagraphPos);
+      const restoredSelectionRange = computeToggleListSelectionRange({
+        selectionWasCollapsed: selection.empty,
+        affectedParagraphCount: paragraphsInSelection.length,
+        firstParagraphPos,
+        lastParagraphPos,
+        firstNode,
+        lastNode,
+      });
+
+      if (
+        restoredSelectionRange &&
+        restoredSelectionRange.from >= 0 &&
+        restoredSelectionRange.to <= tr.doc.content.size &&
+        restoredSelectionRange.from <= restoredSelectionRange.to
+      ) {
+        try {
+          if (selection.empty && paragraphsInSelection.length === 1) {
+            tr.setSelection(Selection.near(tr.doc.resolve(restoredSelectionRange.to), -1));
+          } else {
+            tr.setSelection(TextSelection.create(tr.doc, restoredSelectionRange.from, restoredSelectionRange.to));
           }
+        } catch {
+          // If the target position is not valid, keep ProseMirror's default selection.
         }
       }
     }

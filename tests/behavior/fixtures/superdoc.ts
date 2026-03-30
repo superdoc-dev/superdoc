@@ -123,6 +123,14 @@ async function waitForStable(page: Page, ms?: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function createFixture(page: Page, editor: Locator, modKey: string) {
+  const focusEditorDom = async (): Promise<void> => {
+    await editor.focus();
+    await page.waitForFunction(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.getAttribute('contenteditable') === 'true';
+    });
+  };
+
   const normalizeHexColor = (value: unknown): string | null => {
     let raw: string | null = null;
     if (typeof value === 'string') raw = value;
@@ -410,8 +418,12 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
     // ----- Interaction methods -----
 
+    async focusEditor() {
+      await focusEditorDom();
+    },
+
     async type(text: string) {
-      await editor.focus();
+      await focusEditorDom();
       await page.keyboard.type(text);
     },
 
@@ -448,6 +460,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async selectAll() {
+      await focusEditorDom();
       await page.keyboard.press(`${modKey}+a`);
     },
 
@@ -588,6 +601,20 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         },
         { cmd: name, cmdArgs: args },
       );
+
+      const selection = await page.evaluate(() => {
+        const editor = (window as any).editor;
+        return {
+          from: editor.state.selection.from,
+          to: editor.state.selection.to,
+        };
+      });
+
+      // Programmatic commands update ProseMirror state immediately, but the
+      // hidden editor DOM can retain an older browser selection. Re-applying
+      // the current PM selection keeps the next keyboard event aligned with
+      // the command result.
+      await fixture.setTextSelection(selection.from, selection.to);
     },
 
     async waitForStable(ms?: number) {

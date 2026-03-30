@@ -1,5 +1,6 @@
 import type { BlockNodeType } from './base.js';
 import type { StoryLocator } from './story.types.js';
+import type { BookmarkAddress } from '../bookmarks/bookmarks.types.js';
 
 export type Range = {
   /** Inclusive start offset (0-based, UTF-16 code units). */
@@ -143,14 +144,6 @@ export type TrackedChangeAddress = {
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;
 
-export type BookmarkNavigationAddress = {
-  kind: 'entity';
-  entityType: 'bookmark';
-  name: string;
-  /** Story containing this bookmark. Omit for body (backward compatible). */
-  story?: StoryLocator;
-};
-
 /**
  * Address for in-document navigation targets exposed by viewer/editor APIs.
  *
@@ -158,4 +151,4 @@ export type BookmarkNavigationAddress = {
  * higher-level navigation entrypoints that can target bookmarks, comments, or
  * tracked changes through a single method.
  */
-export type NavigableEntityAddress = BookmarkNavigationAddress | CommentAddress | TrackedChangeAddress;
+export type NavigableEntityAddress = BookmarkAddress | CommentAddress | TrackedChangeAddress;

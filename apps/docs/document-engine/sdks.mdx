@@ -675,6 +675,16 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
 | `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
 | `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
+| `doc.protection.get` | `protection get` | Read the current document protection state including editing restrictions, write protection, and read-only recommendation. |
+| `doc.protection.setEditingRestriction` | `protection set-editing-restriction` | Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1. |
+| `doc.protection.clearEditingRestriction` | `protection clear-editing-restriction` | Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity. |
+| `doc.permissionRanges.list` | `permission-ranges list` | List all permission ranges in the document. Returns only complete paired ranges (both start and end markers present). |
+| `doc.permissionRanges.get` | `permission-ranges get` | Get detailed information about a specific permission range by ID. |
+| `doc.permissionRanges.create` | `permission-ranges create` | Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target. |
+| `doc.permissionRanges.remove` | `permission-ranges remove` | Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both). |
+| `doc.permissionRanges.updatePrincipal` | `permission-ranges update-principal` | Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker. |
+| `doc.insertTab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.insertLineBreak` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 
 #### Format
 
@@ -1125,6 +1135,16 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
 | `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
 | `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
+| `doc.protection.get` | `protection get` | Read the current document protection state including editing restrictions, write protection, and read-only recommendation. |
+| `doc.protection.set_editing_restriction` | `protection set-editing-restriction` | Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1. |
+| `doc.protection.clear_editing_restriction` | `protection clear-editing-restriction` | Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity. |
+| `doc.permission_ranges.list` | `permission-ranges list` | List all permission ranges in the document. Returns only complete paired ranges (both start and end markers present). |
+| `doc.permission_ranges.get` | `permission-ranges get` | Get detailed information about a specific permission range by ID. |
+| `doc.permission_ranges.create` | `permission-ranges create` | Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target. |
+| `doc.permission_ranges.remove` | `permission-ranges remove` | Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both). |
+| `doc.permission_ranges.update_principal` | `permission-ranges update-principal` | Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker. |
+| `doc.insert_tab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.insert_line_break` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 
 #### Format
 

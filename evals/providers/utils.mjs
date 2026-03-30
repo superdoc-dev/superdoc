@@ -74,6 +74,52 @@ export function cleanArgs(args) {
   return rest;
 }
 
+// --- Ref revision bump (handles REVISION_MISMATCH after create→format) ---
+
+// V4 ref format prefix — matches the encoding in
+// super-editor/src/document-api-adapters/story-runtime/story-ref-codec.ts
+// Update this if the ref codec version changes (e.g., v5).
+const REF_PREFIX = 'text:v4:';
+const MAX_REF_RETRIES = 3;
+
+function bumpRefRevision(ref, targetRev) {
+  if (!ref.startsWith(REF_PREFIX)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(ref.slice(REF_PREFIX.length), 'base64').toString());
+    payload.rev = targetRev;
+    return REF_PREFIX + Buffer.from(JSON.stringify(payload)).toString('base64');
+  } catch { return null; }
+}
+
+function bumpAllRefs(args, targetRev) {
+  const patched = { ...args };
+  for (const [key, value] of Object.entries(patched)) {
+    if (typeof value === 'string' && value.startsWith(REF_PREFIX)) {
+      const bumped = bumpRefRevision(value, targetRev);
+      if (bumped) patched[key] = bumped;
+    }
+  }
+  return patched;
+}
+
+/** Dispatch with automatic ref revision bump on REVISION_MISMATCH. */
+export async function dispatchWithRetry(sdk, doc, toolName, args) {
+  let currentArgs = args;
+  for (let attempt = 0; attempt <= MAX_REF_RETRIES; attempt++) {
+    try {
+      return await sdk.dispatchSuperDocTool(doc, toolName, currentArgs);
+    } catch (err) {
+      const msg = err.message ?? '';
+      if (attempt < MAX_REF_RETRIES && msg.includes('REVISION_MISMATCH')) {
+        const match = msg.match(/for revision (\d+)/);
+        if (match) { currentArgs = bumpAllRefs(currentArgs, match[1]); continue; }
+      }
+      throw err;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 // --- SDK fingerprint (for cache invalidation) ---
 
 const SDK_TOOLS_DIR = resolve(EVALS_ROOT, '..', 'packages/sdk/tools');

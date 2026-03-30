@@ -18,7 +18,11 @@ export const insertHeadingAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
-      paragraphProperties: { styleId: `Heading${level}` },
+      paragraphProperties: {
+        styleId: `Heading${level}`,
+        // Explicitly suppress outline numbering that some templates link to heading styles
+        numberingProperties: { numId: '0', ilvl: '0' },
+      },
     };
     const normalizedText = typeof text === 'string' ? text : '';
     const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;

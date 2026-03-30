@@ -399,7 +399,7 @@ describe('Tools policy integrity', () => {
 
 describe('agentVisible param annotation integrity', () => {
   // Global params hidden across all operations that define them.
-  const GLOBALLY_HIDDEN_PARAMS = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
+  const GLOBALLY_HIDDEN_PARAMS = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end', 'offset']);
 
   // Per-operation params hidden only on specific operations (generic names
   // like "type" or "kind" must be scoped to avoid masking accidental hiding).

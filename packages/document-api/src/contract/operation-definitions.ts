@@ -90,34 +90,244 @@ export interface OperationDefinitionEntry {
 // Intent group metadata — tool-level names and descriptions
 // ---------------------------------------------------------------------------
 
-export type IntentGroupMeta = { toolName: string; description: string };
+export interface IntentGroupMeta {
+  toolName: string;
+  description: string;
+  /**
+   * Concrete input examples for LLM tool calling (e.g. Anthropic's input_examples).
+   * Each example must be a valid input object for this tool.
+   * Kept here (source of truth) and propagated to provider formats during codegen.
+   */
+  inputExamples?: Record<string, unknown>[];
+}
 
 export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
-  search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
+  search: {
+    toolName: 'superdoc_search',
+    description:
+      'Refs expire after any mutation; always re-search before the next edit. ' +
+      'Find text patterns or nodes in the document and get ref handles for targeting edits and formatting. ' +
+      'Use this to locate content before calling superdoc_edit or superdoc_format. ' +
+      'Text search returns handle.ref covering only the matched substring. Node search finds blocks by type (paragraph, heading, table, listItem, etc.). ' +
+      'The "require" parameter controls match cardinality: "first" returns one match, "all" returns every match, "exactlyOne" fails if not exactly one match. ' +
+      'Supports scoping via "within" to search inside a single block. ' +
+      'Do NOT use regex or markdown formatting markers (#, **, etc.) in search patterns; patterns are plain text only. ' +
+      'Do NOT use this tool when you already have a ref from superdoc_get_content blocks or superdoc_create; use that ref directly.',
+    inputExamples: [
+      { select: { type: 'text', pattern: 'Introduction' }, require: 'first' },
+      { select: { type: 'text', pattern: 'total amount' }, require: 'all' },
+      { select: { type: 'node', nodeType: 'heading' }, require: 'all' },
+      {
+        select: { type: 'text', pattern: 'contract' },
+        within: { kind: 'block', nodeType: 'paragraph', nodeId: 'abc123' },
+        require: 'first',
+      },
+    ],
+  },
   get_content: {
     toolName: 'superdoc_get_content',
     description:
-      'Read document content. Use action "info" for structure and styles, "blocks" for all block IDs and types, "text" or "markdown" for content. Call info or blocks before editing.',
+      'Read document content in various formats. Call this first in any workflow to understand document structure before making edits. ' +
+      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'Action "text" and "markdown" return the full document as plain text or Markdown. Action "html" returns HTML. ' +
+      'Action "info" returns document metadata: word count, paragraph count, page count, outline, available styles, and capability flags. ' +
+      'The "blocks" action supports pagination via "offset" and "limit", and filtering via "nodeTypes". Other actions ignore these parameters. ' +
+      'This tool never modifies the document. ' +
+      'Do NOT call superdoc_edit or superdoc_format without first reading blocks to get valid refs and formatting reference values.',
+    inputExamples: [
+      { action: 'blocks' },
+      { action: 'blocks', offset: 0, limit: 20, nodeTypes: ['heading', 'paragraph'] },
+      { action: 'text' },
+      { action: 'info' },
+    ],
   },
-  edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
+  edit: {
+    toolName: 'superdoc_edit',
+    description:
+      'Refs expire after any mutation; always re-search before the next edit. ' +
+      'Modify document text: insert new content, replace existing text, delete a range, or undo/redo. ' +
+      'Use this for single text modifications. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
+      'For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
+      'Insert supports plain text (default), markdown, or html via the "type" parameter. Use "placement" (before, after, insideStart, insideEnd) to control position relative to the target. ' +
+      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes. ' +
+      'Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
+    inputExamples: [
+      { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
+      { action: 'insert', value: 'Appended paragraph.', placement: 'insideEnd' },
+      { action: 'insert', ref: '<block.ref>', value: 'Inserted before.', placement: 'before' },
+      { action: 'delete', ref: '<handle.ref>' },
+      { action: 'undo' },
+    ],
+  },
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create one paragraph or heading per call. After creating, search for it and apply formatting (fontFamily, fontSize) from neighboring blocks. For multiple paragraphs, use superdoc_mutations with text.insert steps instead of calling create repeatedly.',
+      'You MUST call superdoc_format after this tool to match document styling. ' +
+      'Create a single paragraph, heading, or table in the document. Returns a nodeId for chaining subsequent creates and for use as a block target in superdoc_format. ' +
+      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" only when the user asks for regular body text. ' +
+      'Before creating, call superdoc_get_content blocks to read formatting from regular body text paragraphs (non-empty, non-title blocks with alignment "justify" or "left"). ' +
+      'After creating, re-fetch blocks with superdoc_get_content to get a fresh ref for the new block, then apply TWO format calls: (1) superdoc_format action "inline" for character styling, AND (2) superdoc_format action "set_alignment" with the block target for paragraph alignment. Both calls are REQUIRED. ' +
+      'For body paragraphs: inline {bold:false, underline:false, fontFamily, fontSize, color from body blocks}, alignment "justify". Ignore underline:true from blocks data for body text; it is a style artifact. For headings: inline {bold:true, underline:true, fontSize scaled up, fontFamily, color}, alignment "center". ' +
+      'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +
+      'When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. ' +
+      'Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
+    inputExamples: [
+      { action: 'paragraph', text: 'New paragraph content.', at: { kind: 'documentEnd' } },
+      {
+        action: 'heading',
+        text: 'Section Title',
+        level: 2,
+        at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' } },
+      },
+      {
+        action: 'paragraph',
+        text: 'Chained item.',
+        at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: '<previousNodeId>' } },
+      },
+      { action: 'table', rows: 3, columns: 4, at: { kind: 'documentEnd' } },
+    ],
   },
   format: {
     toolName: 'superdoc_format',
     description:
-      'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a styleId from superdoc_get_content info to apply a named paragraph style.',
+      'Change text and paragraph formatting. Use this after superdoc_create to style new content, or with a search ref to restyle existing text. ' +
+      'Action "inline" applies character formatting (bold, italic, underline, color, fontSize, fontFamily, highlight, strike, vertAlign) to a text range via "ref". ' +
+      'Action "set_style" applies a named paragraph style by styleId (get available styles from superdoc_get_content info). ' +
+      'Actions "set_alignment", "set_indentation", "set_spacing", "set_direction", and "set_flow_options" change paragraph-level properties and require a block target: {kind:"block", nodeType:"paragraph", nodeId:"<nodeId>"}, NOT a ref. ' +
+      'Use "set_flow_options" with pageBreakBefore:true to start a paragraph on a new page. ' +
+      'Supports "dryRun" and "changeMode: tracked" for inline formatting. Paragraph-level actions do NOT support tracked changes. ' +
+      'Do NOT use a search ref for paragraph-level actions; they require a block target with nodeId. ' +
+      'Do NOT use {kind:"block", start:{kind:"nodeEdge",...}} or selection-like structures for paragraph actions. ONLY {kind:"block", nodeType, nodeId} is accepted. ' +
+      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls. Format one block at a time. ' +
+      'Do NOT hardcode formatting values; always read them from superdoc_get_content blocks and replicate.',
+    inputExamples: [
+      { action: 'inline', ref: '<handle.ref>', inline: { bold: true } },
+      {
+        action: 'inline',
+        ref: '<create.ref>',
+        inline: { fontFamily: 'Calibri', fontSize: 11, color: '#000000', bold: false },
+      },
+      {
+        action: 'set_alignment',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        alignment: 'center',
+      },
+      {
+        action: 'set_flow_options',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        pageBreakBefore: true,
+      },
+      {
+        action: 'set_spacing',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        lineSpacing: { rule: 'auto', value: 1.5 },
+      },
+    ],
   },
   table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
-  list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
-  comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
-  track_changes: { toolName: 'superdoc_track_changes', description: 'Review and resolve tracked changes' },
+  list: {
+    toolName: 'superdoc_list',
+    description:
+      'Create and manipulate bullet and numbered lists. ' +
+      'To create a list: first create all paragraphs at the SAME location using superdoc_create (chain each using the previous nodeId as the "at" target). ' +
+      'Then call action "create" with mode:"fromParagraphs", a preset ("disc" for bullet, "decimal" for numbered), and a range target: {from:{kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to:{kind:"block", nodeType:"paragraph", nodeId:"<last>"}}. ' +
+      'The range converts ALL paragraphs between from and to into list items. Make sure no other content exists between them. ' +
+      'Action "set_type" converts between bullet and ordered (target any item in the list, kind:"ordered" or "bullet"). ' +
+      'Action "insert" adds a new item before/after a target list item. ' +
+      'Actions "indent" and "outdent" change nesting level; "set_level" jumps to a specific level (0-8). ' +
+      'Action "detach" converts a list item back to a plain paragraph. ' +
+      'Do NOT target paragraphs with indent/outdent/set_type; these actions require a listItem target.',
+    inputExamples: [
+      {
+        action: 'create',
+        mode: 'fromParagraphs',
+        preset: 'disc',
+        target: {
+          from: { kind: 'block', nodeType: 'paragraph', nodeId: '<firstId>' },
+          to: { kind: 'block', nodeType: 'paragraph', nodeId: '<lastId>' },
+        },
+      },
+      { action: 'set_type', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, kind: 'ordered' },
+      {
+        action: 'insert',
+        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
+        position: 'after',
+        text: 'New list item',
+      },
+      { action: 'indent', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+    ],
+  },
+  comment: {
+    toolName: 'superdoc_comment',
+    description:
+      'Manage document comment threads: create, read, update, and delete. ' +
+      'To create a comment, first use superdoc_search to find the target text, then pass action "create" with the comment text and a target: {kind:"text", blockId:"<blockId>", range:{start:<N>, end:<N>}} using the blockId and highlightRange from the search result. ' +
+      'For threaded replies, pass "parentId" with the parent comment ID. ' +
+      'Action "list" returns all comments with optional pagination (limit, offset) and filtering (includeResolved:true to include resolved). ' +
+      'Action "get" retrieves a single comment by ID. Action "update" changes status to "resolved" or marks as internal. Action "delete" removes a comment or reply by ID. ' +
+      'Do NOT pass "ref", "id", or "parentId" when creating a new top-level comment; only "action", "text", and "target" are needed.',
+    inputExamples: [
+      {
+        action: 'create',
+        text: 'Please review this section.',
+        target: { kind: 'text', blockId: '<blockId>', range: { start: 5, end: 25 } },
+      },
+      { action: 'list', limit: 20, offset: 0 },
+      { action: 'update', id: '<commentId>', status: 'resolved' },
+      { action: 'delete', id: '<commentId>' },
+    ],
+  },
+  track_changes: {
+    toolName: 'superdoc_track_changes',
+    description:
+      'Review and resolve tracked changes (insertions, deletions, format changes) in the document. ' +
+      'Action "list" returns all tracked changes with optional filtering by type (insert, delete, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. ' +
+      'Action "decide" accepts or rejects changes. Pass decision:"accept" to apply the change permanently, or decision:"reject" to discard it. ' +
+      'Target a single change with {id:"<changeId>"} or all changes at once with {scope:"all"}. ' +
+      'Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.',
+    inputExamples: [
+      { action: 'list' },
+      { action: 'list', type: 'insert', limit: 10 },
+      { action: 'decide', decision: 'accept', target: { id: '<changeId>' } },
+      { action: 'decide', decision: 'reject', target: { scope: 'all' } },
+    ],
+  },
   link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
   image: { toolName: 'superdoc_image', description: 'Image placement and properties' },
   section: { toolName: 'superdoc_section', description: 'Page layout, margins, columns' },
-  mutations: { toolName: 'superdoc_mutations', description: 'Atomic multi-step batch edits (escape hatch)' },
+  mutations: {
+    toolName: 'superdoc_mutations',
+    description:
+      'All steps succeed or all fail; no partial application. ' +
+      'Execute multiple text edits atomically in a single batch. Use this INSTEAD OF multiple sequential superdoc_edit calls when you need 2+ text changes that should succeed or fail together. ' +
+      'Each step has an id (e.g. "s1"), an op (text.rewrite, text.insert, text.delete, format.apply, assert), a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."}), and "args" with operation-specific parameters. ' +
+      'Action "preview" dry-runs the plan without modifying the document. Action "apply" executes it. ' +
+      'CRITICAL: split mutations by phase. Text mutations (text.rewrite, text.insert, text.delete) go in one call. Formatting (format.apply) goes in a separate call with fresh refs from a new superdoc_search. ' +
+      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step. Overlapping steps fail with PLAN_CONFLICT_OVERLAP. ' +
+      'Do NOT use this for single edits; use superdoc_edit instead. ' +
+      'Do NOT mix text mutations and formatting in the same call.',
+    inputExamples: [
+      {
+        action: 'apply',
+        atomic: true,
+        changeMode: 'direct',
+        steps: [
+          {
+            id: 's1',
+            op: 'text.rewrite',
+            where: { by: 'select', select: { type: 'text', pattern: 'old term' }, require: 'all' },
+            args: { replacement: { text: 'new term' } },
+          },
+          {
+            id: 's2',
+            op: 'text.delete',
+            where: { by: 'select', select: { type: 'text', pattern: ' (deprecated)' }, require: 'all' },
+            args: {},
+          },
+        ],
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -1207,6 +1417,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-flow-options.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_flow_options',
   },
   'format.paragraph.setTabStop': {
     memberPath: 'format.paragraph.setTabStop',
@@ -2151,6 +2363,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/table.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'table',
   },
 
   // -------------------------------------------------------------------------

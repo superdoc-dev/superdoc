@@ -21,6 +21,7 @@ import {
   resolveOutputPath,
   cleanArgs,
   writeCache,
+  dispatchWithRetry,
 } from './utils.mjs';
 
 const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
@@ -73,12 +74,24 @@ async function runAgentLoop(sdk, doc, activeToolMap, task, model) {
   const toolLog = [];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const response = await openai.chat.completions.create({
-      model,
-      messages,
-      tools: [...activeToolMap.values()],
-      temperature: 0,
-    });
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await openai.chat.completions.create({
+          model,
+          messages,
+          tools: [...activeToolMap.values()],
+          temperature: 0,
+        });
+        break;
+      } catch (err) {
+        if (attempt < 2 && (err.status === 429 || err.status >= 500 || err.message?.includes('Gateway'))) {
+          await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
+    }
 
     const message = response.choices[0].message;
     messages.push(message);
@@ -92,7 +105,7 @@ async function runAgentLoop(sdk, doc, activeToolMap, task, model) {
 
       let result;
       try {
-        result = await sdk.dispatchSuperDocTool(doc, toolName, cleanArgs(toolArgs));
+        result = await dispatchWithRetry(sdk, doc, toolName, cleanArgs(toolArgs));
       } catch (err) {
         result = { ok: false, error: err.message };
       }

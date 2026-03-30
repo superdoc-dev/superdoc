@@ -610,7 +610,10 @@ describe('blocksListWrapper', () => {
   it('extracts formatting (fontFamily, fontSize, bold) from first text run marks', () => {
     const textNode = createNode('text', [], {
       text: 'Styled',
-      marks: [{ attrs: { fontFamily: 'Arial', fontSize: 12, bold: true } }],
+      marks: [
+        { type: { name: 'textStyle' }, attrs: { fontFamily: 'Arial', fontSize: 12 } },
+        { type: { name: 'bold' }, attrs: { value: true } },
+      ],
     });
     const paragraph = createNode('paragraph', [textNode], {
       attrs: {

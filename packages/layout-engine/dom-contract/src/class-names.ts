@@ -36,8 +36,11 @@ export const DOM_CLASS_NAMES = {
   /** Document section container. */
   DOCUMENT_SECTION: 'superdoc-document-section',
 
-  /** Hover highlight applied to all fragments of the same block SDT. */
-  SDT_HOVER: 'sdt-hover',
+  /**
+   * Grouped hover highlight applied to all fragments of the same block SDT.
+   * Set by PresentationEditor's hover coordination via event delegation.
+   */
+  SDT_GROUP_HOVER: 'sdt-group-hover',
 
   /** Block-level image fragment (ImageBlock). */
   IMAGE_FRAGMENT: 'superdoc-image-fragment',
@@ -47,6 +50,15 @@ export const DOM_CLASS_NAMES = {
 
   /** Clip wrapper around a cropped inline image. */
   INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
+
+  /** Field annotation outer wrapper. */
+  ANNOTATION: 'annotation',
+
+  /** Field annotation inner content wrapper. */
+  ANNOTATION_CONTENT: 'annotation-content',
+
+  /** Hidden caret anchor span appended after field annotation content. */
+  ANNOTATION_CARET_ANCHOR: 'annotation-caret-anchor',
 } as const;
 
 /** Union of all DOM contract class name values. */

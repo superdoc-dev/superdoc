@@ -609,16 +609,17 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   ],
   // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
   'doc.insert': [
-    ...TEXT_TARGET_FLAT_PARAMS,
+    ...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN,
     {
       name: 'offset',
       kind: 'flag',
       type: 'number',
       description: 'Character offset for insertion (alias for --start/--end with same value).',
+      agentVisible: false as const,
     },
   ],
-  'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.replace': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
+  'doc.delete': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
   'doc.styles.apply': [
     {
       name: 'target',

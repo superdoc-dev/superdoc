@@ -26,17 +26,17 @@ Returns a DiffPayload with a summary and opaque payload.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `targetSnapshot` | object(version="sd-diff-snapshot/v1") | yes |  |
+| `targetSnapshot` | object | yes |  |
 | `targetSnapshot.coverage` | object | yes |  |
 | `targetSnapshot.coverage.body` | `true` | yes | Constant: `true` |
 | `targetSnapshot.coverage.comments` | boolean | yes |  |
-| `targetSnapshot.coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `targetSnapshot.coverage.headerFooters` | boolean | yes |  |
 | `targetSnapshot.coverage.numbering` | boolean | yes |  |
 | `targetSnapshot.coverage.styles` | boolean | yes |  |
 | `targetSnapshot.engine` | enum | yes | `"super-editor"` |
 | `targetSnapshot.fingerprint` | string | yes |  |
 | `targetSnapshot.payload` | object | yes |  |
-| `targetSnapshot.version` | `"sd-diff-snapshot/v1"` | yes | Constant: `"sd-diff-snapshot/v1"` |
+| `targetSnapshot.version` | enum | yes | `"sd-diff-snapshot/v1"`, `"sd-diff-snapshot/v2"` |
 
 ### Example request
 
@@ -46,7 +46,7 @@ Returns a DiffPayload with a summary and opaque payload.
     "coverage": {
       "body": true,
       "comments": true,
-      "headerFooters": false,
+      "headerFooters": true,
       "numbering": true,
       "styles": true
     },
@@ -66,7 +66,7 @@ Returns a DiffPayload with a summary and opaque payload.
 | `coverage` | object | yes |  |
 | `coverage.body` | `true` | yes | Constant: `true` |
 | `coverage.comments` | boolean | yes |  |
-| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.headerFooters` | boolean | yes |  |
 | `coverage.numbering` | boolean | yes |  |
 | `coverage.styles` | boolean | yes |  |
 | `engine` | enum | yes | `"super-editor"` |
@@ -78,12 +78,16 @@ Returns a DiffPayload with a summary and opaque payload.
 | `summary.comments` | object | yes |  |
 | `summary.comments.hasChanges` | boolean | yes |  |
 | `summary.hasChanges` | boolean | yes |  |
+| `summary.headerFooters` | object | yes |  |
+| `summary.headerFooters.hasChanges` | boolean | yes |  |
 | `summary.numbering` | object | yes |  |
 | `summary.numbering.hasChanges` | boolean | yes |  |
+| `summary.parts` | object | yes |  |
+| `summary.parts.hasChanges` | boolean | yes |  |
 | `summary.styles` | object | yes |  |
 | `summary.styles.hasChanges` | boolean | yes |  |
 | `targetFingerprint` | string | yes |  |
-| `version` | `"sd-diff-payload/v1"` | yes | Constant: `"sd-diff-payload/v1"` |
+| `version` | enum | yes | `"sd-diff-payload/v1"`, `"sd-diff-payload/v2"` |
 
 ### Example response
 
@@ -93,7 +97,7 @@ Returns a DiffPayload with a summary and opaque payload.
   "coverage": {
     "body": true,
     "comments": true,
-    "headerFooters": false,
+    "headerFooters": true,
     "numbering": true,
     "styles": true
   },
@@ -110,7 +114,13 @@ Returns a DiffPayload with a summary and opaque payload.
       "hasChanges": true
     },
     "hasChanges": true,
+    "headerFooters": {
+      "hasChanges": true
+    },
     "numbering": {
+      "hasChanges": true
+    },
+    "parts": {
       "hasChanges": true
     },
     "styles": {
@@ -152,7 +162,6 @@ Returns a DiffPayload with a summary and opaque payload.
               "type": "boolean"
             },
             "headerFooters": {
-              "const": false,
               "type": "boolean"
             },
             "numbering": {
@@ -185,7 +194,10 @@ Returns a DiffPayload with a summary and opaque payload.
           "type": "object"
         },
         "version": {
-          "const": "sd-diff-snapshot/v1",
+          "enum": [
+            "sd-diff-snapshot/v1",
+            "sd-diff-snapshot/v2"
+          ],
           "type": "string"
         }
       },
@@ -226,7 +238,6 @@ Returns a DiffPayload with a summary and opaque payload.
           "type": "boolean"
         },
         "headerFooters": {
-          "const": false,
           "type": "boolean"
         },
         "numbering": {
@@ -276,7 +287,9 @@ Returns a DiffPayload with a summary and opaque payload.
               "body",
               "comments",
               "styles",
-              "numbering"
+              "numbering",
+              "headerFooters",
+              "parts"
             ],
             "type": "string"
           },
@@ -297,7 +310,31 @@ Returns a DiffPayload with a summary and opaque payload.
         "hasChanges": {
           "type": "boolean"
         },
+        "headerFooters": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
         "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "parts": {
           "additionalProperties": false,
           "properties": {
             "hasChanges": {
@@ -328,7 +365,9 @@ Returns a DiffPayload with a summary and opaque payload.
         "body",
         "comments",
         "styles",
-        "numbering"
+        "numbering",
+        "headerFooters",
+        "parts"
       ],
       "type": "object"
     },
@@ -336,7 +375,10 @@ Returns a DiffPayload with a summary and opaque payload.
       "type": "string"
     },
     "version": {
-      "const": "sd-diff-payload/v1",
+      "enum": [
+        "sd-diff-payload/v1",
+        "sd-diff-payload/v2"
+      ],
       "type": "string"
     }
   },

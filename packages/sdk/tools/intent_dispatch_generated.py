@@ -53,6 +53,8 @@ def dispatch_intent_tool(
             return execute('doc.format.paragraph.setIndentation', rest)
         elif action == 'set_spacing':
             return execute('doc.format.paragraph.setSpacing', rest)
+        elif action == 'set_flow_options':
+            return execute('doc.format.paragraph.setFlowOptions', rest)
         elif action == 'set_direction':
             return execute('doc.format.paragraph.setDirection', rest)
         else:
@@ -64,6 +66,8 @@ def dispatch_intent_tool(
             return execute('doc.create.paragraph', rest)
         elif action == 'heading':
             return execute('doc.create.heading', rest)
+        elif action == 'table':
+            return execute('doc.create.table', rest)
         else:
             raise SuperDocError(f'Unknown action for superdoc_create: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_create', 'action': action})
     elif tool_name == 'superdoc_list':

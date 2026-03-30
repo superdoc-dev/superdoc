@@ -1378,7 +1378,7 @@ export class PresentationEditor extends EventEmitter {
       this.#scheduleRerender();
     }
     this.#updatePermissionOverlay();
-    this.emit('documentModeChange', { documentMode: mode });
+    this.emit('documentModeChange', { editor: this.#editor, documentMode: mode });
   }
 
   #syncDocumentModeClass() {

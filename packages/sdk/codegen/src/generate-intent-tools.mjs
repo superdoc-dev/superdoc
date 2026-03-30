@@ -500,9 +500,10 @@ function toAnthropicTool(entry) {
     description: entry.description,
     input_schema: entry.inputSchema,
   };
-  if (entry.inputExamples?.length) {
-    tool.input_examples = entry.inputExamples;
-  }
+  // input_examples omitted: Anthropic validates examples against the merged
+  // input_schema, but some examples use target shapes (e.g. kind:"block")
+  // that the merged oneOf schema doesn't expose at the top level.
+  // Re-enable once the schema properly supports all target variants.
   return tool;
 }
 

@@ -159,12 +159,11 @@ export function bookmarksInsertWrapper(
       { expectedRevision: options?.expectedRevision },
     );
 
-    if (runtime.commit) runtime.commit(editor);
-
     if (!receiptApplied(receipt)) {
       return bookmarkFailure('NO_OP', 'Insert operation produced no change.');
     }
 
+    if (runtime.commit) runtime.commit(editor);
     return bookmarkSuccess(address);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
@@ -217,12 +216,11 @@ export function bookmarksRenameWrapper(
       { expectedRevision: options?.expectedRevision },
     );
 
-    if (runtime.commit) runtime.commit(editor);
-
     if (!receiptApplied(receipt)) {
       return bookmarkFailure('NO_OP', 'Rename operation produced no change.');
     }
 
+    if (runtime.commit) runtime.commit(editor);
     return bookmarkSuccess(newAddress);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
@@ -272,12 +270,11 @@ export function bookmarksRemoveWrapper(
       { expectedRevision: options?.expectedRevision },
     );
 
-    if (runtime.commit) runtime.commit(editor);
-
     if (!receiptApplied(receipt)) {
       return bookmarkFailure('NO_OP', 'Remove operation produced no change.');
     }
 
+    if (runtime.commit) runtime.commit(editor);
     return bookmarkSuccess(address);
   } finally {
     disposeEphemeralWriteRuntime(runtime);

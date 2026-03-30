@@ -1465,10 +1465,12 @@ export class SuperDoc extends EventEmitter {
    * on rendered layout rather than raw editor commands.
    *
    * @param {NavigableEntityAddress} address Navigation target descriptor
-   * @returns {boolean | Promise<boolean> | undefined}
+   * @returns {Promise<boolean>}
    */
-  navigateTo(address) {
-    return this.#resolveActivePresentationEditor()?.navigateTo?.(address);
+  async navigateTo(address) {
+    const editor = this.#resolveActivePresentationEditor();
+    if (!editor) return false;
+    return editor.navigateTo(address);
   }
 
   /**

@@ -1430,7 +1430,7 @@ describe('SuperDoc core', () => {
       expect(inactivePresentationEditor.navigateTo).not.toHaveBeenCalled();
     });
 
-    it('returns undefined when no presentation editor navigation surface is available', async () => {
+    it('returns false when no presentation editor navigation surface is available', async () => {
       const { superdocStore } = createAppHarness();
       superdocStore.documents = [
         {
@@ -1447,7 +1447,9 @@ describe('SuperDoc core', () => {
 
       instance.setActiveEditor({ options: { documentId: 'doc-1' } });
 
-      expect(instance.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' })).toBeUndefined();
+      await expect(instance.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' })).resolves.toBe(
+        false,
+      );
     });
   });
 

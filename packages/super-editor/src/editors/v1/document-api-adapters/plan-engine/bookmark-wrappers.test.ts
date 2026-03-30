@@ -36,12 +36,16 @@ vi.mock('../helpers/index-cache.js', () => ({
   clearIndexCache: vi.fn(),
 }));
 
-vi.mock('../helpers/bookmark-resolver.js', () => ({
-  findAllBookmarks: vi.fn(() => []),
-  resolveBookmarkTarget: vi.fn(),
-  extractBookmarkInfo: vi.fn(),
-  buildBookmarkDiscoveryItem: vi.fn(),
-}));
+vi.mock('../helpers/bookmark-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../helpers/bookmark-resolver.js')>();
+  return {
+    ...actual,
+    findAllBookmarks: vi.fn(() => []),
+    resolveBookmarkTarget: vi.fn(),
+    extractBookmarkInfo: vi.fn(),
+    buildBookmarkDiscoveryItem: vi.fn(),
+  };
+});
 
 vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: vi.fn((editor: Editor) => ({
@@ -52,11 +56,11 @@ vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   })),
 }));
 
-import { bookmarksInsertWrapper } from './bookmark-wrappers.js';
+import { bookmarksInsertWrapper, bookmarksRenameWrapper, bookmarksRemoveWrapper } from './bookmark-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { findAllBookmarks } from '../helpers/bookmark-resolver.js';
-import { resolveWriteStoryRuntime } from './plan-wrappers.js';
+import { findAllBookmarks, resolveBookmarkTarget } from '../helpers/bookmark-resolver.js';
+import { resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 
 type BookmarkNode = {
   type: { name: string };
@@ -81,6 +85,8 @@ function makeEditor(existingNodes: BookmarkNode[] = []): {
   const tr = {
     insert: vi.fn((_pos: number, _node: unknown) => tr),
     delete: vi.fn((_from: number, _to: number) => tr),
+    setNodeMarkup: vi.fn(() => tr),
+    doc: { nodeAt: vi.fn(() => ({ nodeSize: 1 })) },
   };
 
   const startCreate = vi.fn((attrs: Record<string, unknown>) => ({ type: 'bookmarkStart', attrs, nodeSize: 1 }));
@@ -224,5 +230,88 @@ describe('bookmarksInsertWrapper', () => {
         code: 'CAPABILITY_UNAVAILABLE',
       }),
     );
+  });
+});
+
+describe('bookmarksRenameWrapper', () => {
+  it('returns a story-qualified address and commits non-body story renames', () => {
+    const { editor } = makeEditor();
+    const commit = vi.fn();
+    const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
+
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: footnoteLocator,
+      storyKey: 'story:footnote:fn-1',
+      editor,
+      kind: 'note',
+      commit,
+    });
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'old-name',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'old-name', id: '1' } } as never,
+    });
+
+    vi.mocked(findAllBookmarks).mockReturnValueOnce([]);
+
+    const result = bookmarksRenameWrapper(editor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'old-name', story: footnoteLocator },
+      newName: 'new-name',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookmark: {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'new-name',
+        story: footnoteLocator,
+      },
+    });
+    expect(commit).toHaveBeenCalledWith(editor);
+    expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+});
+
+describe('bookmarksRemoveWrapper', () => {
+  it('returns a story-qualified address and commits non-body story removals', () => {
+    const { editor } = makeEditor();
+    const commit = vi.fn();
+    const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
+
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: footnoteLocator,
+      storyKey: 'story:footnote:fn-1',
+      editor,
+      kind: 'note',
+      commit,
+    });
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'bm-remove',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'bm-remove', id: '1' }, nodeSize: 1 } as never,
+    });
+
+    const result = bookmarksRemoveWrapper(editor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'bm-remove', story: footnoteLocator },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookmark: {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-remove',
+        story: footnoteLocator,
+      },
+    });
+    expect(commit).toHaveBeenCalledWith(editor);
+    expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
   });
 });

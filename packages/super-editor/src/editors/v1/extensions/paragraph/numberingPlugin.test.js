@@ -664,5 +664,69 @@ describe('numberingPlugin', () => {
       expect(numberingManager.enableCache).toHaveBeenCalled();
       expect(numberingManager.disableCache).toHaveBeenCalled();
     });
+
+    it('preserves listRendering for freshly pasted slice paragraphs', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const pastedNode = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockId: null,
+          sdBlockRev: 0,
+          listRendering: {
+            markerText: '1.',
+            numberingType: 'decimal',
+          },
+          paragraphProperties: {
+            numberingProperties: { numId: '99', ilvl: '0' },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: pastedNode, pos: 0 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn((key) => key === 'superdocSlicePaste') }];
+
+      ListHelpers.getListDefinitionDetails.mockReturnValue(null);
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).not.toHaveBeenCalled();
+    });
+
+    it('recalculates listRendering for non-slice-pasted paragraphs', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const normalNode = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockId: 'existing-id',
+          sdBlockRev: 5,
+          listRendering: {
+            markerText: '1.',
+            numberingType: 'decimal',
+          },
+          paragraphProperties: {
+            numberingProperties: { numId: '10', ilvl: '0' },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: normalNode, pos: 0 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        0: { numFmt: 'decimal', lvlText: '%1.', start: '1', suffix: '\t', justification: 'left' },
+      });
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalled();
+    });
   });
 });

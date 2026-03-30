@@ -1,7 +1,13 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import {
   collectReferencedImageMediaForClipboard,
   applySuperdocClipboardMedia,
+  embedSliceInHtml,
+  extractSliceFromHtml,
+  stripSliceFromHtml,
+  extractBodySectPrFromHtml,
+  bodySectPrShouldEmbed,
   SUPERDOC_MEDIA_MIME,
 } from './superdocClipboardSlice.js';
 
@@ -164,5 +170,82 @@ describe('superdocClipboardSlice image media', () => {
     expect(newSrc).not.toBe('word/media/pic.png');
     expect(editor.storage.image.media['word/media/pic.png']).toBe('data:image/png;base64,OLD');
     expect(editor.storage.image.media[newSrc]).toBe('data:image/png;base64,NEW');
+  });
+});
+
+describe('HTML slice embed/extract round-trip', () => {
+  const sampleSlice = JSON.stringify({ content: [{ type: 'paragraph' }], openStart: 0, openEnd: 0 });
+  const sampleHtml = '<p>Hello world</p>';
+
+  it('extractSliceFromHtml recovers what embedSliceInHtml embedded', () => {
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice);
+    const extracted = extractSliceFromHtml(embedded);
+    expect(extracted).toBe(sampleSlice);
+  });
+
+  it('stripSliceFromHtml removes embedded divs and preserves the original HTML', () => {
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice);
+    expect(embedded).toContain('data-superdoc-slice');
+    const stripped = stripSliceFromHtml(embedded);
+    expect(stripped).toBe(sampleHtml);
+    expect(stripped).not.toContain('data-superdoc-slice');
+  });
+
+  it('round-trips Unicode content (CJK, emoji)', () => {
+    const unicodeSlice = JSON.stringify({ text: '你好世界 🎉' });
+    const embedded = embedSliceInHtml(sampleHtml, unicodeSlice);
+    const extracted = extractSliceFromHtml(embedded);
+    expect(extracted).toBe(unicodeSlice);
+  });
+
+  it('embedSliceInHtml with bodySectPr embeds both and extractBodySectPrFromHtml recovers it', () => {
+    const sectPr = JSON.stringify({ cols: { num: 2, space: 720, equalWidth: true } });
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice, sectPr);
+    expect(embedded).toContain('data-sd-body-sect-pr');
+    expect(embedded).toContain('data-superdoc-slice');
+
+    const extractedSectPr = extractBodySectPrFromHtml(embedded);
+    expect(extractedSectPr).toEqual(JSON.parse(sectPr));
+
+    const extractedSlice = extractSliceFromHtml(embedded);
+    expect(extractedSlice).toBe(sampleSlice);
+  });
+
+  it('stripSliceFromHtml removes both slice and bodySectPr divs', () => {
+    const sectPr = JSON.stringify({ cols: { num: 2 } });
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice, sectPr);
+    const stripped = stripSliceFromHtml(embedded);
+    expect(stripped).toBe(sampleHtml);
+  });
+
+  it('extractSliceFromHtml returns null for plain HTML without embedded data', () => {
+    expect(extractSliceFromHtml(sampleHtml)).toBeNull();
+    expect(extractSliceFromHtml('')).toBeNull();
+    expect(extractSliceFromHtml(null)).toBeNull();
+  });
+
+  it('embedSliceInHtml without sliceJson returns the HTML unchanged', () => {
+    expect(embedSliceInHtml(sampleHtml, null)).toBe(sampleHtml);
+    expect(embedSliceInHtml(sampleHtml, '')).toBe(sampleHtml);
+  });
+});
+
+describe('bodySectPrShouldEmbed', () => {
+  const makeColsSectPr = (num) => ({
+    name: 'w:sectPr',
+    elements: [{ name: 'w:cols', attributes: { 'w:num': String(num) } }],
+  });
+
+  it('returns true for multi-column sectPr', () => {
+    expect(bodySectPrShouldEmbed(makeColsSectPr(2))).toBe(true);
+  });
+
+  it('returns false for single-column sectPr', () => {
+    expect(bodySectPrShouldEmbed(makeColsSectPr(1))).toBe(false);
+  });
+
+  it('returns false for null/undefined', () => {
+    expect(bodySectPrShouldEmbed(null)).toBe(false);
+    expect(bodySectPrShouldEmbed(undefined)).toBe(false);
   });
 });

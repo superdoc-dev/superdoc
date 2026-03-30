@@ -91,6 +91,18 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
  * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
  * @typedef {import('@superdoc/super-editor').ExtensionCommandMap} ExtensionCommandMap
+ * @typedef {import('@superdoc/super-editor').Comment} Comment
+ * @typedef {import('@superdoc/super-editor').CommentsPayload} CommentsPayload
+ * @typedef {import('@superdoc/super-editor').CommentLocationsPayload} CommentLocationsPayload
+ * @typedef {import('@superdoc/super-editor').FontsResolvedPayload} FontsResolvedPayload
+ * @typedef {import('@superdoc/super-editor').PaginationPayload} PaginationPayload
+ * @typedef {import('@superdoc/super-editor').EditorEventMap} EditorEventMap
+ * @typedef {import('@superdoc/super-editor').ListDefinitionsPayload} ListDefinitionsPayload
+ * @typedef {import('@superdoc/super-editor').ProtectionChangeSource} ProtectionChangeSource
+ * @typedef {import('@superdoc/super-editor').DocumentProtectionState} DocumentProtectionState
+ * @typedef {import('@superdoc/super-editor').PartChangedEvent} PartChangedEvent
+ * @typedef {import('@superdoc/super-editor').PartId} PartId
+ * @typedef {import('@superdoc/super-editor').PartSectionId} PartSectionId
  */
 
 // Public exports

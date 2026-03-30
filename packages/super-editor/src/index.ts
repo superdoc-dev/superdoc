@@ -12,7 +12,7 @@ export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
 
 // Document API types
-export type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+export type { ResolveRangeOutput, DocumentApi, DocumentProtectionState } from '@superdoc/document-api';
 
 // Selection handle types
 export type { SelectionHandle } from './editors/v1/core/selection-state.js';
@@ -29,6 +29,21 @@ export type {
   CoreCommandMap,
   ExtensionCommandMap,
 } from './editors/v1/core/types/ChainedCommands.js';
+
+// Editor event types (used by consumers to type event handlers)
+export type {
+  Comment,
+  CommentsPayload,
+  CommentLocationsPayload,
+  FontsResolvedPayload,
+  PaginationPayload,
+  ListDefinitionsPayload,
+  ProtectionChangeSource,
+  EditorEventMap,
+} from './editors/v1/core/types/EditorEvents.js';
+
+// Parts system types (used by partChanged event handler)
+export type { PartChangedEvent, PartId, PartSectionId } from './editors/v1/core/parts/types.js';
 
 // Editor configuration types
 export type { DocxFileEntry } from './editors/v1/core/types/EditorConfig.js';

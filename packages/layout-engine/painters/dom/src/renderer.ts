@@ -1289,6 +1289,7 @@ export class DomPainter {
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
   private onPaintSnapshotCallback: ((snapshot: PaintSnapshot) => void) | null = null;
+  private mountedPageIndices: number[] = [];
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
 
@@ -1410,6 +1411,24 @@ export class DomPainter {
    */
   public getPaintSnapshot(): PaintSnapshot | null {
     return this.lastPaintSnapshot;
+  }
+
+  /**
+   * Returns the page indices that are currently mounted in the DOM.
+   *
+   * Unlike paint snapshots, this reflects virtualization remounts that happen
+   * during scroll without waiting for a full paint cycle.
+   */
+  public getMountedPageIndices(): number[] {
+    return [...this.mountedPageIndices];
+  }
+
+  private createAllPageIndices(pageCount: number): number[] {
+    return Array.from({ length: pageCount }, (_, pageIndex) => pageIndex);
+  }
+
+  private setMountedPageIndices(pageIndices: number[]): void {
+    this.mountedPageIndices = [...pageIndices];
   }
 
   private emitPaintSnapshot(snapshot: PaintSnapshot): void {
@@ -1676,6 +1695,7 @@ export class DomPainter {
       } else {
         this.patchLayout(layout);
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1690,6 +1710,7 @@ export class DomPainter {
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1700,6 +1721,7 @@ export class DomPainter {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1727,6 +1749,7 @@ export class DomPainter {
         this.patchLayout(layout);
         useDomSnapshotFallback = true;
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
     }
 
     if (useDomSnapshotFallback) {
@@ -1911,6 +1934,7 @@ export class DomPainter {
 
     if (N === 0) {
       this.mount.innerHTML = '';
+      this.setMountedPageIndices([]);
       this.processedLayoutVersion = this.layoutVersion;
       return;
     }
@@ -1994,6 +2018,7 @@ export class DomPainter {
     this.virtualMountedKey = mountedKey;
     this.virtualStart = start;
     this.virtualEnd = end;
+    this.setMountedPageIndices(mounted);
 
     // Update spacers + rebuild gap spacers
     this.updateSpacersForMountedPages(mounted);
@@ -2545,6 +2570,7 @@ export class DomPainter {
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
     this.lastPaintSnapshot = null;
+    this.mountedPageIndices = [];
   }
 
   private fullRender(layout: Layout): void {
@@ -5497,6 +5523,7 @@ export class DomPainter {
 
     // Apply data attributes for field tracking
     annotation.dataset.type = run.variant;
+    annotation.dataset.displayLabel = run.displayLabel;
     if (run.fieldId) {
       annotation.dataset.fieldId = run.fieldId;
     }

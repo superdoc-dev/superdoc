@@ -124,6 +124,10 @@ export class PresentationPainterAdapter {
   }
 
   getMountedPageIndices(): number[] {
+    const mountedPageIndices = this.#painter?.getMountedPageIndices();
+    if (mountedPageIndices) {
+      return [...mountedPageIndices];
+    }
     return this.#lastPaintSnapshot?.pages.map((page) => page.index) ?? [];
   }
 

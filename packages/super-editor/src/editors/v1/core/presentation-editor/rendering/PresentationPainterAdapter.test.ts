@@ -12,6 +12,7 @@ const { mockCreateDomPainter, mockPainterHandle } = vi.hoisted(() => {
     setScrollContainer: vi.fn(),
     setVirtualizationPins: vi.fn(),
     onScroll: vi.fn(),
+    getMountedPageIndices: vi.fn(() => []),
   };
 
   return {
@@ -61,7 +62,16 @@ describe('PresentationPainterAdapter', () => {
     expect(mockPainterHandle.setVirtualizationPins).toHaveBeenCalledWith([1, 2]);
   });
 
-  it('reports mounted page indices from the latest paint snapshot', () => {
+  it('prefers mounted page indices from the live painter handle', () => {
+    const adapter = new PresentationPainterAdapter();
+    adapter.ensurePainter({});
+
+    mockPainterHandle.getMountedPageIndices.mockReturnValue([2, 5]);
+
+    expect(adapter.getMountedPageIndices()).toEqual([2, 5]);
+  });
+
+  it('falls back to the latest paint snapshot when the painter has no mounted page state', () => {
     const adapter = new PresentationPainterAdapter();
     adapter.ensurePainter({});
 
@@ -86,6 +96,8 @@ describe('PresentationPainterAdapter', () => {
         images: [],
       },
     });
+
+    mockPainterHandle.getMountedPageIndices.mockReturnValue(undefined);
 
     expect(adapter.getMountedPageIndices()).toEqual([2, 5]);
   });

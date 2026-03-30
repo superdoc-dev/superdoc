@@ -6,17 +6,37 @@ describe('FieldAnnotationInteractionLayer', () => {
   let container: HTMLElement;
   let layer: FieldAnnotationInteractionLayer;
 
-  function createAnnotation(opts: { pmStart: string; pmEnd: string; type?: string }): HTMLElement {
+  type AnnotationFixtureOptions = {
+    pmStart: string;
+    pmEnd?: string;
+    type?: string;
+    displayLabel?: string;
+    renderedText?: string;
+    contentKind?: 'text' | 'image';
+  };
+
+  function createAnnotation(opts: AnnotationFixtureOptions): HTMLElement {
     const ann = document.createElement('span');
     ann.classList.add(DOM_CLASS_NAMES.ANNOTATION);
     ann.dataset.pmStart = opts.pmStart;
-    ann.dataset.pmEnd = opts.pmEnd;
+    if (opts.pmEnd) {
+      ann.dataset.pmEnd = opts.pmEnd;
+    }
     ann.dataset.layoutEpoch = '1';
     if (opts.type) ann.dataset.type = opts.type;
+    if (opts.displayLabel !== undefined) {
+      ann.dataset.displayLabel = opts.displayLabel;
+    }
 
     const content = document.createElement('span');
     content.classList.add(DOM_CLASS_NAMES.ANNOTATION_CONTENT);
-    content.textContent = 'Field Label';
+    if (opts.contentKind === 'image') {
+      const img = document.createElement('img');
+      img.alt = opts.renderedText ?? '';
+      content.appendChild(img);
+    } else {
+      content.textContent = opts.renderedText ?? 'Field Label';
+    }
     ann.appendChild(content);
 
     container.appendChild(ann);
@@ -45,6 +65,20 @@ describe('FieldAnnotationInteractionLayer', () => {
     const ann = createAnnotation({ pmStart: '10', pmEnd: '15' });
     layer.apply(1);
     expect(ann.dataset.displayLabel).toBe('Field Label');
+  });
+
+  it('preserves canonical display labels for non-text annotations', () => {
+    const ann = createAnnotation({
+      pmStart: '10',
+      pmEnd: '15',
+      type: 'image',
+      displayLabel: 'Photo Field',
+      contentKind: 'image',
+    });
+
+    layer.apply(1);
+
+    expect(ann.dataset.displayLabel).toBe('Photo Field');
   });
 
   it('mirrors data-type as data-variant', () => {
@@ -110,10 +144,7 @@ describe('FieldAnnotationInteractionLayer', () => {
   });
 
   it('handles annotations without pmEnd (no caret anchor)', () => {
-    const ann = document.createElement('span');
-    ann.classList.add(DOM_CLASS_NAMES.ANNOTATION);
-    ann.dataset.pmStart = '10';
-    container.appendChild(ann);
+    const ann = createAnnotation({ pmStart: '10', renderedText: '' });
 
     layer.apply(1);
     expect(ann.draggable).toBe(true);

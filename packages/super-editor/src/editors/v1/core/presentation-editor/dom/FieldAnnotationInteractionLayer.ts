@@ -18,6 +18,41 @@
 import { DOM_CLASS_NAMES, DATASET_KEYS, buildAnnotationSelector } from '@superdoc/dom-contract';
 
 const INTERACTION_EPOCH_KEY = 'interactionEpoch';
+const DISPLAY_LABEL_SOURCE_KEY = 'displayLabelSource';
+const DISPLAY_LABEL_SOURCE = {
+  CANONICAL: 'canonical',
+  DERIVED: 'derived',
+} as const;
+
+type ResolvedDisplayLabel = {
+  source: (typeof DISPLAY_LABEL_SOURCE)[keyof typeof DISPLAY_LABEL_SOURCE];
+  value: string;
+};
+
+function resolveAnnotationDisplayLabel(
+  annotation: HTMLElement,
+  contentEl: Element | null,
+): ResolvedDisplayLabel | null {
+  const existingLabel = annotation.dataset[DATASET_KEYS.DISPLAY_LABEL];
+  const existingLabelSource = annotation.dataset[DISPLAY_LABEL_SOURCE_KEY];
+
+  if (existingLabel !== undefined && existingLabelSource !== DISPLAY_LABEL_SOURCE.DERIVED) {
+    return {
+      source: DISPLAY_LABEL_SOURCE.CANONICAL,
+      value: existingLabel,
+    };
+  }
+
+  const derivedLabel = contentEl?.textContent?.trim() ?? '';
+  if (derivedLabel.length === 0) {
+    return null;
+  }
+
+  return {
+    source: DISPLAY_LABEL_SOURCE.DERIVED,
+    value: derivedLabel,
+  };
+}
 
 export class FieldAnnotationInteractionLayer {
   #container: HTMLElement | null = null;
@@ -51,11 +86,10 @@ export class FieldAnnotationInteractionLayer {
 
       // Derive display label from rendered content
       const contentEl = annotation.querySelector(`.${DOM_CLASS_NAMES.ANNOTATION_CONTENT}`);
-      if (contentEl) {
-        const label = contentEl.textContent?.trim() ?? '';
-        if (label) {
-          annotation.dataset[DATASET_KEYS.DISPLAY_LABEL] = label;
-        }
+      const displayLabel = resolveAnnotationDisplayLabel(annotation, contentEl);
+      if (displayLabel !== null) {
+        annotation.dataset[DATASET_KEYS.DISPLAY_LABEL] = displayLabel.value;
+        annotation.dataset[DISPLAY_LABEL_SOURCE_KEY] = displayLabel.source;
       }
 
       // Mirror data-type as data-variant for drag payload compatibility
@@ -84,6 +118,7 @@ export class FieldAnnotationInteractionLayer {
       delete annotation.dataset[DATASET_KEYS.DISPLAY_LABEL];
       delete annotation.dataset[DATASET_KEYS.VARIANT];
       delete annotation.dataset[INTERACTION_EPOCH_KEY];
+      delete annotation.dataset[DISPLAY_LABEL_SOURCE_KEY];
 
       // Remove caret anchor
       const anchor = annotation.querySelector(`.${DOM_CLASS_NAMES.ANNOTATION_CARET_ANCHOR}`);

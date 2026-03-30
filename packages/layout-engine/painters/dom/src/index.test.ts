@@ -3232,6 +3232,7 @@ describe('DomPainter', () => {
       type: 'text',
     });
     expect(snapshot?.entities.annotations[0]?.element.classList.contains('annotation')).toBe(true);
+    expect(snapshot?.entities.annotations[0]?.element.dataset.displayLabel).toBe('Client Name');
 
     expect(snapshot?.entities.structuredContentInlines).toHaveLength(1);
     expect(snapshot?.entities.structuredContentInlines[0]).toMatchObject({

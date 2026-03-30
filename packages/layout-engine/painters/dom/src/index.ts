@@ -169,6 +169,7 @@ export type DomPainterHandle = {
   setResolvedLayout(resolvedLayout: ResolvedLayout | null): void;
   setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void;
   setVirtualizationPins(pageIndices: number[] | null | undefined): void;
+  getMountedPageIndices(): number[];
   onScroll(): void;
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
@@ -288,6 +289,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);
+    },
+    getMountedPageIndices() {
+      return painter.getMountedPageIndices();
     },
     onScroll() {
       painter.onScroll();

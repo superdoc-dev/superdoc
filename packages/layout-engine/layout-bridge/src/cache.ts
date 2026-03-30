@@ -273,6 +273,11 @@ const hashRuns = (block: FlowBlock): string => {
         return `fa:${fieldAnnotationKey(run)}`;
       }
 
+      // MathRun: use textContent as cache key so equation edits invalidate
+      if (run.kind === 'math') {
+        return `math:${run.textContent}:${run.width}:${run.height}`;
+      }
+
       // Text is used verbatim without normalization - whitespace affects measurements
       // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
       const text = 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' ? '' : (run.text ?? '');

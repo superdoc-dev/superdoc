@@ -33,6 +33,7 @@ import {
   handleParagraphNode,
 } from './converters/index.js';
 import { chartNodeToDrawingBlock, handleChartNode } from './converters/chart.js';
+import { handleMathBlockNode } from './converters/math-block.js';
 import {
   handleTableOfContentsNode,
   handleIndexNode,
@@ -79,6 +80,7 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
   chart: handleChartNode,
+  mathBlock: handleMathBlockNode,
 };
 
 const converters: NestedConverters = {

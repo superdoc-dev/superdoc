@@ -337,6 +337,13 @@ describe('computeRunAttrs', () => {
     expect(result.fontSize).toBe(base.fontSize);
   });
 
+  it('treats zero position as an identity value for superscript scaling', () => {
+    const base = computeRunAttrs({ fontSize: 24 } as never);
+    const result = computeRunAttrs({ fontSize: 24, vertAlign: 'superscript', position: 0 } as never);
+    expect(result.fontSize).toBeCloseTo(base.fontSize * 0.65);
+    expect(result.baselineShift).toBeUndefined();
+  });
+
   it('converts position from half-points to points as baselineShift', () => {
     const result = computeRunAttrs({ position: 6 } as never);
     expect(result.baselineShift).toBe(3);
@@ -344,6 +351,11 @@ describe('computeRunAttrs', () => {
 
   it('does not set baselineShift when position is absent', () => {
     const result = computeRunAttrs({ fontSize: 24 } as never);
+    expect(result.baselineShift).toBeUndefined();
+  });
+
+  it('does not set baselineShift for zero position', () => {
+    const result = computeRunAttrs({ position: 0 } as never);
     expect(result.baselineShift).toBeUndefined();
   });
 });

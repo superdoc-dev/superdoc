@@ -21,14 +21,14 @@ PM Doc (hidden) → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 |--------|-------|
 | How something looks | `pm-adapter/` (data) + `painters/dom/` (rendering) |
 | Style resolution | `style-engine/` |
-| Editing behavior | `super-editor/src/extensions/` |
+| Editing behavior | `super-editor/src/editors/v1/extensions/` |
 
 **Do NOT** add ProseMirror decoration plugins for visual styling — DomPainter handles rendering.
 
 ### State Communication
 
 State flows from super-editor → Layout Engine via:
-- `PresentationEditor.ts` listens to editor events (`super-editor/src/core/presentation-editor/`)
+- `PresentationEditor.ts` listens to editor events (`super-editor/src/editors/v1/core/presentation-editor/`)
 - Calls DomPainter methods to update state
 - DomPainter re-renders with new state
 
@@ -58,10 +58,10 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 | Task | Location |
 |------|----------|
 | React integration | `packages/react/src/SuperDocEditor.tsx` |
-| Editing features | `super-editor/src/extensions/` |
+| Editing features | `super-editor/src/editors/v1/extensions/` |
 | Presentation mode visuals | `layout-engine/painters/dom/src/features/feature-registry.ts` → feature module |
 | Rendering orchestration | `layout-engine/painters/dom/src/renderer.ts` |
-| DOCX import/export | `super-editor/src/core/super-converter/` |
+| DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
@@ -86,7 +86,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 
 - **Visual rendering**: Check `painters/dom/src/features/feature-registry.ts` to find the feature module, then modify it. If no module exists yet, create one (see layout-engine CLAUDE.md). Feed data via `pm-adapter/`
 - **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
-- **Editing commands/behavior**: Modify `super-editor/src/extensions/`
+- **Editing commands/behavior**: Modify `super-editor/src/editors/v1/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
 
 ## Document API Contract

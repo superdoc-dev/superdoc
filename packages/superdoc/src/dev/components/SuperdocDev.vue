@@ -10,7 +10,7 @@ import { getFileObject } from '@superdoc/common';
 import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 import SuperdocLogo from './superdoc-logo.webp?url';
 import { Editor, fieldAnnotationHelpers, getStarterExtensions } from '@superdoc/super-editor';
-import { toolbarIcons } from '../../../../super-editor/src/components/toolbar/toolbarIcons';
+import { toolbarIcons } from '../../../../super-editor/src/editors/v1/components/toolbar/toolbarIcons';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import SidebarSearch from './sidebar/SidebarSearch.vue';

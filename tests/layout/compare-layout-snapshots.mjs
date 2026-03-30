@@ -7,12 +7,18 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { normalizeVersionLabel } from './shared.mjs';
+import {
+  colorizeTerminalStatus,
+  createTerminalPalette,
+  formatTerminalLabelLine,
+  normalizeVersionLabel,
+  pathToPosix,
+  toDisplayPath,
+  toRelativePathIfInsideRoot,
+} from './shared.mjs';
 import { writeProgressBar } from '../../scripts/corpus/shared.mjs';
 
-const cloneDeep = typeof structuredClone === 'function'
-  ? structuredClone
-  : (obj) => JSON.parse(JSON.stringify(obj));
+const cloneDeep = typeof structuredClone === 'function' ? structuredClone : (obj) => JSON.parse(JSON.stringify(obj));
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
@@ -21,6 +27,7 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const DEFAULT_CANDIDATE_ROOT = path.join(REPO_ROOT, 'tests', 'layout', 'candidate');
 const DEFAULT_REFERENCE_BASE = path.join(REPO_ROOT, 'tests', 'layout', 'reference');
 const DEFAULT_REPORTS_ROOT = path.join(REPO_ROOT, 'tests', 'layout', 'reports');
+const DEFAULT_ARTIFACT_ROOT = path.join(REPO_ROOT, 'tmp', 'layout-compare');
 const DEFAULT_VISUAL_WORKDIR = path.join(REPO_ROOT, 'devtools', 'visual-testing');
 const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
   ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
@@ -30,6 +37,7 @@ const NPM_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots-np
 const NPM_PACKAGE_NAME = 'superdoc';
 const DEFAULT_NPM_DIST_TAG = 'next';
 const MAX_RECOMMENDED_JOBS = 8;
+const TERMINAL_PALETTE = createTerminalPalette();
 
 function getRecommendedJobs() {
   const cpuCount =
@@ -55,6 +63,7 @@ Options:
       --candidate-root <path>         Candidate folder (default: ${DEFAULT_CANDIDATE_ROOT})
       --reports-root <path>           Reports parent folder (default: ${DEFAULT_REPORTS_ROOT})
       --report-dir <path>             Exact report output folder (default: auto timestamped)
+      --artifact-dir <path>           Stable agent artifact folder (default: ${DEFAULT_ARTIFACT_ROOT})
       --auto-generate-candidate       Regenerate candidate snapshots before compare (default: on)
       --no-auto-generate-candidate    Do not regenerate candidate snapshots before compare
       --auto-generate-reference       Generate missing reference snapshots automatically (default: on)
@@ -73,6 +82,8 @@ Options:
       --visual-workdir <path>         devtools/visual-testing root (default: ${DEFAULT_VISUAL_WORKDIR})
       --visual-browser <name>         Browser for visual compare (default: chromium)
       --visual-threshold <percent>    Visual diff threshold percent
+      --no-agent-artifact             Skip writing tmp/layout-compare/latest.json
+      --verbose                       Print extra generation details
       --fail-on-diff                  Exit with code 1 when diffs or missing docs are found
   -h, --help                          Show this help
 
@@ -89,16 +100,191 @@ function formatTimestamp(date) {
 }
 
 function safeLabel(value) {
-  return String(value ?? '')
-    .replace(/[^A-Za-z0-9._-]+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '') || 'unknown';
+  return (
+    String(value ?? '')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '') || 'unknown'
+  );
 }
 
-function pathToPosix(value) {
-  return value.split(path.sep).join('/');
+function formatDisplayPath(value) {
+  return toDisplayPath(value, { repoRoot: REPO_ROOT });
 }
 
+function logLine(label, value) {
+  console.log(formatTerminalLabelLine(label, value, { palette: TERMINAL_PALETTE }));
+}
+
+function formatDocCountLabel(count) {
+  return `${count} doc${count === 1 ? '' : 's'}`;
+}
+
+function formatScopeLabel(matchPatterns, docCount) {
+  if (!Array.isArray(matchPatterns) || matchPatterns.length === 0) {
+    return formatDocCountLabel(docCount);
+  }
+  return `${matchPatterns.join(', ')} (${formatDocCountLabel(docCount)})`;
+}
+
+function countGenerationFailures(summary) {
+  const candidateCount = Array.isArray(summary?.candidateGenerationFailures)
+    ? summary.candidateGenerationFailures.length
+    : 0;
+  const referenceCount = Array.isArray(summary?.referenceGenerationFailures)
+    ? summary.referenceGenerationFailures.length
+    : 0;
+
+  return {
+    total: candidateCount + referenceCount,
+    candidate: candidateCount,
+    reference: referenceCount,
+  };
+}
+
+function determineCompareStatus(summary) {
+  const failureCounts = countGenerationFailures(summary);
+  const hasGenerationFailures = failureCounts.total > 0;
+  const visualFailed = summary?.visualComparison?.status === 'failed';
+  const hasMissingDocs =
+    (Array.isArray(summary?.missingInReference) && summary.missingInReference.length > 0) ||
+    (Array.isArray(summary?.missingInCandidate) && summary.missingInCandidate.length > 0);
+  const hasChangedDocs = Number(summary?.changedDocCount ?? 0) > 0;
+
+  if (visualFailed || hasGenerationFailures) {
+    return 'failed';
+  }
+  if (hasChangedDocs || hasMissingDocs) {
+    return 'changed';
+  }
+  return 'clean';
+}
+
+function buildUntestedDocs(summary) {
+  if (Array.isArray(summary?.untestedDocs)) {
+    return summary.untestedDocs;
+  }
+
+  const entriesByPath = new Map();
+
+  const addFailures = (side, failures) => {
+    for (const failure of failures) {
+      const key = String(failure?.path ?? '<unknown>');
+      const existing = entriesByPath.get(key) ?? { path: key };
+      existing[side] = {
+        stage: String(failure?.stage ?? `${side} generation`),
+        message: String(failure?.message ?? 'Unknown generation failure'),
+        ...(typeof failure?.elapsedMs === 'number' ? { elapsedMs: failure.elapsedMs } : {}),
+        ...(Array.isArray(failure?.stackPreview) && failure.stackPreview.length > 0
+          ? { stackPreview: failure.stackPreview }
+          : {}),
+      };
+      entriesByPath.set(key, existing);
+    }
+  };
+
+  addFailures(
+    'candidate',
+    Array.isArray(summary?.candidateGenerationFailures) ? summary.candidateGenerationFailures : [],
+  );
+  addFailures(
+    'reference',
+    Array.isArray(summary?.referenceGenerationFailures) ? summary.referenceGenerationFailures : [],
+  );
+
+  return [...entriesByPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function buildAgentArtifact({ summary, args }) {
+  const failureCounts = countGenerationFailures(summary);
+  const untestedDocs = buildUntestedDocs(summary);
+
+  return {
+    version: 1,
+    generatedAt: summary.generatedAt,
+    status: determineCompareStatus(summary),
+    scope: {
+      reference: {
+        requested: args.reference ?? null,
+        root: formatDisplayPath(summary.referenceRoot),
+        label: summary.referenceLabel,
+        usedExplicitRoot: Boolean(args.referenceRoot),
+      },
+      candidate: {
+        root: formatDisplayPath(summary.candidateRoot),
+      },
+      report: {
+        dir: formatDisplayPath(summary.reportDir),
+        summaryJson: formatDisplayPath(path.join(summary.reportDir, 'summary.json')),
+        summaryMd: formatDisplayPath(path.join(summary.reportDir, 'summary.md')),
+      },
+      matchPatterns: args.matches,
+      limit: args.limit ?? null,
+      pipeline: args.pipeline,
+      jobs: args.jobs,
+    },
+    counts: {
+      candidateDocs: summary.candidateDocCount,
+      referenceDocs: summary.referenceDocCount,
+      matchedDocs: summary.matchedDocCount,
+      changedDocs: summary.changedDocCount,
+      uniqueChangedDocs: summary.uniqueChangeDocCount,
+      widespreadOnlyDocs: summary.widespreadOnlyDocCount,
+      unchangedDocs: summary.unchangedDocCount,
+      untestedDocs: untestedDocs.length,
+      missingInReference: summary.missingInReference.length,
+      missingInCandidate: summary.missingInCandidate.length,
+      generationFailures: failureCounts.total,
+    },
+    changedDocs: summary.changedDocs,
+    untestedDocs,
+    missingInReference: summary.missingInReference,
+    missingInCandidate: summary.missingInCandidate,
+    generationFailures: {
+      total: failureCounts.total,
+      candidate: summary.candidateGenerationFailures,
+      reference: summary.referenceGenerationFailures,
+    },
+    visualComparison: {
+      ...summary.visualComparison,
+      workdir: summary.visualComparison?.workdir ? formatDisplayPath(summary.visualComparison.workdir) : null,
+      docsRoot: summary.visualComparison?.docsRoot ? formatDisplayPath(summary.visualComparison.docsRoot) : null,
+    },
+  };
+}
+
+function buildFailureArtifact({ args, error, candidateRoot, referenceRoot, reportDir }) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    status: 'failed',
+    error: message,
+    scope: {
+      reference: {
+        requested: args.reference ?? null,
+        root: referenceRoot ? formatDisplayPath(referenceRoot) : null,
+        usedExplicitRoot: Boolean(args.referenceRoot),
+      },
+      candidate: {
+        root: candidateRoot ? formatDisplayPath(candidateRoot) : null,
+      },
+      report: {
+        dir: reportDir ? formatDisplayPath(reportDir) : null,
+      },
+      matchPatterns: args.matches,
+      limit: args.limit ?? null,
+      pipeline: args.pipeline,
+      jobs: args.jobs,
+    },
+  };
+}
+
+async function writeJsonFile(targetPath, value) {
+  await fs.mkdir(path.dirname(path.resolve(targetPath)), { recursive: true });
+  await fs.writeFile(path.resolve(targetPath), JSON.stringify(value, null, 2), 'utf8');
+}
 
 function formatPath(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return '$';
@@ -162,6 +348,8 @@ function parseArgs(argv) {
     candidateRoot: DEFAULT_CANDIDATE_ROOT,
     reportsRoot: DEFAULT_REPORTS_ROOT,
     reportDir: null,
+    artifactDir: DEFAULT_ARTIFACT_ROOT,
+    writeAgentArtifact: true,
     autoGenerateCandidate: true,
     autoGenerateReference: true,
     jobs: DEFAULT_JOBS,
@@ -177,6 +365,7 @@ function parseArgs(argv) {
     visualWorkdir: DEFAULT_VISUAL_WORKDIR,
     visualBrowser: 'chromium',
     visualThreshold: null,
+    verbose: false,
     failOnDiff: false,
   };
 
@@ -222,6 +411,11 @@ function parseArgs(argv) {
     }
     if (arg === '--report-dir') {
       args.reportDir = requireValue(arg, next);
+      i += 1;
+      continue;
+    }
+    if (arg === '--artifact-dir') {
+      args.artifactDir = requireValue(arg, next);
       i += 1;
       continue;
     }
@@ -342,6 +536,14 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--no-agent-artifact') {
+      args.writeAgentArtifact = false;
+      continue;
+    }
+    if (arg === '--verbose') {
+      args.verbose = true;
+      continue;
+    }
     if (arg === '--fail-on-diff') {
       args.failOnDiff = true;
       continue;
@@ -454,7 +656,7 @@ async function ensureDefaultCorpusReady(args) {
   const corpusRoot = DEFAULT_INPUT_ROOT;
   const hasCorpus = await pathExists(corpusRoot);
 
-  console.log('[compare] Syncing corpus...');
+  logLine('Corpus', 'syncing test corpus');
   await runCorpusPull();
 
   if (!hasCorpus && !(await pathExists(corpusRoot))) {
@@ -811,8 +1013,16 @@ function collectDiffs(referenceValue, candidateValue, options) {
       return;
     }
 
-    const referenceType = Array.isArray(referenceNode) ? 'array' : referenceNode === null ? 'null' : typeof referenceNode;
-    const candidateType = Array.isArray(candidateNode) ? 'array' : candidateNode === null ? 'null' : typeof candidateNode;
+    const referenceType = Array.isArray(referenceNode)
+      ? 'array'
+      : referenceNode === null
+        ? 'null'
+        : typeof referenceNode;
+    const candidateType = Array.isArray(candidateNode)
+      ? 'array'
+      : candidateNode === null
+        ? 'null'
+        : typeof candidateNode;
     if (referenceType !== candidateType) {
       pushDiff({
         pathSegments,
@@ -851,7 +1061,8 @@ function collectDiffs(referenceValue, candidateValue, options) {
               reference: undefined,
               candidate: summarizeValue(candidateNode[key]),
             })
-          ) break;
+          )
+            break;
           continue;
         }
         if (!(key in candidateNode)) {
@@ -862,7 +1073,8 @@ function collectDiffs(referenceValue, candidateValue, options) {
               reference: summarizeValue(referenceNode[key]),
               candidate: undefined,
             })
-          ) break;
+          )
+            break;
           continue;
         }
         walk(referenceNode[key], candidateNode[key], [...pathSegments, key]);
@@ -953,15 +1165,56 @@ async function readSnapshotGenerationSummary(summaryPath) {
   }
 }
 
+function shouldUseInheritedChildOutput() {
+  return Boolean(process.stdout.isTTY && process.stderr.isTTY);
+}
+
+async function waitForChildProcess(child, { onStdoutLine, onStderrLine } = {}) {
+  const streamTasks = [];
+
+  if (child.stdout && typeof onStdoutLine === 'function') {
+    const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+    streamTasks.push(
+      (async () => {
+        for await (const line of stdoutRl) {
+          onStdoutLine(line);
+        }
+      })(),
+    );
+  }
+
+  if (child.stderr && typeof onStderrLine === 'function') {
+    const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
+    streamTasks.push(
+      (async () => {
+        for await (const line of stderrRl) {
+          onStderrLine(line);
+        }
+      })(),
+    );
+  }
+
+  const exitCode = await new Promise((resolve) => {
+    child.on('close', (code) => resolve(code ?? 1));
+    child.on('error', () => resolve(1));
+  });
+
+  await Promise.all(streamTasks);
+  return exitCode;
+}
+
 function normalizeGenerationFailures({ source, stage, summary }) {
   if (!summary || !Array.isArray(summary.failures)) return [];
 
   return summary.failures.map((entry) => ({
     source,
     stage,
-    path: typeof entry?.path === 'string' ? entry.path : '<unknown>',
+    path: typeof entry?.path === 'string' ? toDisplayDocPath(entry.path, summary.inputRoot) : '<unknown>',
     message: typeof entry?.message === 'string' ? entry.message : summarizeValue(entry?.message ?? entry),
     ...(typeof entry?.elapsedMs === 'number' ? { elapsedMs: entry.elapsedMs } : {}),
+    ...(Array.isArray(entry?.stackPreview) && entry.stackPreview.length > 0
+      ? { stackPreview: entry.stackPreview }
+      : {}),
   }));
 }
 
@@ -978,10 +1231,10 @@ function dedupeGenerationFailures(failures) {
 }
 
 /**
- * Normalizes generation warning text for concise end-of-run reporting.
+ * Normalizes generation failure text for concise end-of-run reporting.
  *
  * @param {unknown} message - Raw error message emitted by snapshot generation.
- * @returns {string} Human-readable warning message.
+ * @returns {string} Human-readable failure message.
  */
 function normalizeGenerationWarningMessage(message) {
   const text = String(message ?? '')
@@ -1003,22 +1256,14 @@ function normalizeGenerationWarningMessage(message) {
  */
 function toDisplayDocPath(docPath, inputRoot) {
   if (typeof docPath !== 'string' || docPath.length === 0) return '<unknown>';
-
-  try {
-    const resolvedInputRoot = path.resolve(inputRoot ?? DEFAULT_INPUT_ROOT);
-    const resolvedDocPath = path.resolve(docPath);
-    const rel = path.relative(resolvedInputRoot, resolvedDocPath);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return pathToPosix(rel);
-    }
-  } catch {}
-
-  return pathToPosix(docPath);
+  const relativePath = toRelativePathIfInsideRoot(docPath, inputRoot ?? DEFAULT_INPUT_ROOT);
+  return relativePath ?? pathToPosix(docPath);
 }
 
 async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
   const summaryDir = await fs.mkdtemp(path.join(os.tmpdir(), 'layout-snapshots-compare-'));
   const summaryPath = path.join(summaryDir, 'reference-generation.summary.json');
+  const wrapperSummaryPath = path.join(summaryDir, 'reference-wrapper.summary.json');
   const childArgs = [
     NPM_EXPORT_SCRIPT_PATH,
     referenceSpecifier,
@@ -1040,54 +1285,47 @@ async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
-  childArgs.push('--summary-file', summaryPath);
+  if (args.verbose) {
+    childArgs.push('--verbose');
+  }
+  childArgs.push('--suppress-run-header', '--suppress-final-summary');
+  childArgs.push('--summary-file', summaryPath, '--wrapper-summary-file', wrapperSummaryPath);
 
   try {
+    const useInheritedOutput = shouldUseInheritedChildOutput();
     const child = spawn(process.execPath, childArgs, {
       cwd: process.cwd(),
       env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: useInheritedOutput ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     });
 
-    let resolvedVersionFolder = null;
-    const collectLine = (line) => {
-      const trimmed = String(line ?? '').trim();
-      const match = trimmed.match(/^\[layout-snapshots:npm\] Version folder:\s*(.+)$/);
-      if (match) {
-        resolvedVersionFolder = match[1].trim();
-      }
-    };
-
-    const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-    const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
-
-    const stdoutDone = (async () => {
-      for await (const line of stdoutRl) {
-        console.log(line);
-        collectLine(line);
-      }
-    })();
-    const stderrDone = (async () => {
-      for await (const line of stderrRl) {
-        console.error(line);
-        collectLine(line);
-      }
-    })();
-
-    const exitCode = await new Promise((resolve) => {
-      child.on('close', (code) => resolve(code ?? 1));
-      child.on('error', () => resolve(1));
-    });
-
-    await Promise.all([stdoutDone, stderrDone]);
-    const summary = await readSnapshotGenerationSummary(summaryPath);
+    const exitCode = await waitForChildProcess(
+      child,
+      useInheritedOutput
+        ? undefined
+        : {
+            onStdoutLine(line) {
+              console.log(line);
+            },
+            onStderrLine(line) {
+              console.error(line);
+            },
+          },
+    );
+    const [summary, wrapperSummary] = await Promise.all([
+      readSnapshotGenerationSummary(summaryPath),
+      readSnapshotGenerationSummary(wrapperSummaryPath),
+    ]);
 
     if (exitCode !== 0) {
       throw new Error(`Reference generation failed with exit code ${exitCode}.`);
     }
 
     return {
-      resolvedVersionFolder,
+      resolvedVersionFolder:
+        typeof wrapperSummary?.versionOutputRoot === 'string' && wrapperSummary.versionOutputRoot.length > 0
+          ? wrapperSummary.versionOutputRoot
+          : null,
       summary,
     };
   } finally {
@@ -1117,35 +1355,33 @@ async function runCandidateGeneration({ candidateRoot, args }) {
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
+  if (args.verbose) {
+    childArgs.push('--verbose');
+  }
+  childArgs.push('--suppress-run-header', '--suppress-final-summary');
   childArgs.push('--summary-file', summaryPath);
 
   try {
+    const useInheritedOutput = shouldUseInheritedChildOutput();
     const child = spawn(process.execPath, childArgs, {
       cwd: process.cwd(),
       env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: useInheritedOutput ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     });
 
-    const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-    const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
-
-    const stdoutDone = (async () => {
-      for await (const line of stdoutRl) {
-        console.log(line);
-      }
-    })();
-    const stderrDone = (async () => {
-      for await (const line of stderrRl) {
-        console.error(line);
-      }
-    })();
-
-    const exitCode = await new Promise((resolve) => {
-      child.on('close', (code) => resolve(code ?? 1));
-      child.on('error', () => resolve(1));
-    });
-
-    await Promise.all([stdoutDone, stderrDone]);
+    const exitCode = await waitForChildProcess(
+      child,
+      useInheritedOutput
+        ? undefined
+        : {
+            onStdoutLine(line) {
+              console.log(line);
+            },
+            onStderrLine(line) {
+              console.error(line);
+            },
+          },
+    );
     const summary = await readSnapshotGenerationSummary(summaryPath);
 
     if (exitCode !== 0) {
@@ -1182,7 +1418,7 @@ async function ensureVisualTestingDependencies(visualWorkdir) {
     return;
   }
 
-  console.log('[compare] Installing visual testing dependencies...');
+  logLine('Visual', 'install dependencies');
 
   const exitCode = await runCommand('pnpm', ['install'], { cwd: visualWorkdir });
   if (exitCode !== 0) {
@@ -1217,7 +1453,7 @@ async function runVisualCompareForChangedDocs({ changedDocPaths, args }) {
     commandArgs.push('--doc', docPath);
   }
 
-  console.log(`[compare] Running visual comparison (${changedDocPaths.length} docs against ${visualReference})...`);
+  logLine('Visual', `${formatDocCountLabel(changedDocPaths.length)} against ${visualReference}`);
 
   const exitCode = await runCommand('pnpm', commandArgs, {
     cwd: visualWorkdir,
@@ -1246,6 +1482,7 @@ function buildReportMarkdown(summary) {
   const referenceGenerationFailures = Array.isArray(summary.referenceGenerationFailures)
     ? summary.referenceGenerationFailures
     : [];
+  const untestedDocs = buildUntestedDocs(summary);
 
   const lines = [];
   lines.push('# Layout Snapshot Diff Report');
@@ -1267,8 +1504,9 @@ function buildReportMarkdown(summary) {
   lines.push(`- Unchanged docs: ${summary.unchangedDocCount}`);
   lines.push(`- Missing in reference: ${summary.missingInReference.length}`);
   lines.push(`- Missing in candidate: ${summary.missingInCandidate.length}`);
-  lines.push(`- Candidate generation warnings: ${candidateGenerationFailures.length}`);
-  lines.push(`- Reference generation warnings: ${referenceGenerationFailures.length}`);
+  lines.push(`- Untested docs: ${untestedDocs.length}`);
+  lines.push(`- Candidate generation failures: ${candidateGenerationFailures.length}`);
+  lines.push(`- Reference generation failures: ${referenceGenerationFailures.length}`);
   lines.push('');
 
   if (summary.missingInReference.length > 0) {
@@ -1293,7 +1531,9 @@ function buildReportMarkdown(summary) {
   if (Array.isArray(summary.widespreadDiffs) && summary.widespreadDiffs.length > 0) {
     lines.push('## Widespread Changes');
     lines.push('');
-    lines.push('These diff patterns appear in 50%+ of changed docs. They typically represent schema evolution, not regressions.');
+    lines.push(
+      'These diff patterns appear in 50%+ of changed docs. They typically represent schema evolution, not regressions.',
+    );
     lines.push('');
     for (const wd of summary.widespreadDiffs) {
       lines.push(`- \`${wd.path}\` (${wd.kind}) — ${wd.docCount} docs`);
@@ -1331,8 +1571,34 @@ function buildReportMarkdown(summary) {
     lines.push('');
   }
 
+  if (untestedDocs.length > 0) {
+    lines.push(`## Untested Docs (${untestedDocs.length})`);
+    lines.push('');
+    for (const doc of untestedDocs) {
+      if (doc.candidate) {
+        const elapsed =
+          typeof doc.candidate.elapsedMs === 'number'
+            ? ` | elapsed: ${(doc.candidate.elapsedMs / 1000).toFixed(2)}s`
+            : '';
+        lines.push(
+          `- ${doc.path} | candidate failed (${normalizeGenerationWarningMessage(doc.candidate.message)})${elapsed}`,
+        );
+      }
+      if (doc.reference) {
+        const elapsed =
+          typeof doc.reference.elapsedMs === 'number'
+            ? ` | elapsed: ${(doc.reference.elapsedMs / 1000).toFixed(2)}s`
+            : '';
+        lines.push(
+          `- ${doc.path} | reference failed (${normalizeGenerationWarningMessage(doc.reference.message)})${elapsed}`,
+        );
+      }
+    }
+    lines.push('');
+  }
+
   if (candidateGenerationFailures.length > 0) {
-    lines.push('## Candidate Generation Warnings');
+    lines.push('## Candidate Generation Failures');
     lines.push('');
     for (const failure of candidateGenerationFailures) {
       const stage = String(failure?.stage ?? 'candidate generation');
@@ -1340,13 +1606,16 @@ function buildReportMarkdown(summary) {
       const message = normalizeGenerationWarningMessage(failure?.message);
       const elapsed =
         typeof failure?.elapsedMs === 'number' ? ` | elapsed: ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
-      lines.push(`- ${pathLabel} | stage: ${stage} | skipped (${message})${elapsed}`);
+      lines.push(`- ${pathLabel} | stage: ${stage} | failed (${message})${elapsed}`);
+      if (Array.isArray(failure?.stackPreview) && failure.stackPreview.length > 0) {
+        lines.push(`  stack: ${failure.stackPreview.join(' | ')}`);
+      }
     }
     lines.push('');
   }
 
   if (referenceGenerationFailures.length > 0) {
-    lines.push('## Reference Generation Warnings');
+    lines.push('## Reference Generation Failures');
     lines.push('');
     for (const failure of referenceGenerationFailures) {
       const stage = String(failure?.stage ?? 'reference generation');
@@ -1354,7 +1623,10 @@ function buildReportMarkdown(summary) {
       const message = normalizeGenerationWarningMessage(failure?.message);
       const elapsed =
         typeof failure?.elapsedMs === 'number' ? ` | elapsed: ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
-      lines.push(`- ${pathLabel} | stage: ${stage} | skipped (${message})${elapsed}`);
+      lines.push(`- ${pathLabel} | stage: ${stage} | failed (${message})${elapsed}`);
+      if (Array.isArray(failure?.stackPreview) && failure.stackPreview.length > 0) {
+        lines.push(`  stack: ${failure.stackPreview.join(' | ')}`);
+      }
     }
     lines.push('');
   }
@@ -1362,182 +1634,162 @@ function buildReportMarkdown(summary) {
   return `${lines.join('\n')}\n`;
 }
 
+function formatChangedDocSummary(doc) {
+  const parts = [`${doc.diffCount} diff${doc.diffCount === 1 ? '' : 's'}`];
+  if (Array.isArray(doc.pagesChanged) && doc.pagesChanged.length > 0) {
+    parts.push(`pages ${doc.pagesChanged.join(',')}`);
+  }
+  if (doc.pageCountChanged) {
+    parts.push('page count changed');
+  }
+  if (doc.widespreadOnly) {
+    parts.push('widespread-only');
+  }
+
+  return `${doc.path} | ${parts.join(' | ')}`;
+}
+
+function buildCompareResultSummary(summary) {
+  const untestedDocs = buildUntestedDocs(summary);
+  const parts = [
+    colorizeTerminalStatus(determineCompareStatus(summary), { palette: TERMINAL_PALETTE }),
+    `${summary.changedDocCount} changed`,
+    `${summary.unchangedDocCount} unchanged`,
+  ];
+
+  if (untestedDocs.length > 0) {
+    parts.push(`${untestedDocs.length} untested`);
+  }
+
+  if (summary.missingInReference.length > 0) {
+    parts.push(`${summary.missingInReference.length} missing reference`);
+  }
+  if (summary.missingInCandidate.length > 0) {
+    parts.push(`${summary.missingInCandidate.length} missing candidate`);
+  }
+
+  const visualStatus = summary.visualComparison?.status ?? 'skipped';
+  parts.push(`visual ${colorizeTerminalStatus(visualStatus, { palette: TERMINAL_PALETTE })}`);
+
+  return parts.join(' | ');
+}
+
+function buildCompareScopeSummary({ matchPatterns, matchedDocCount, referenceLabel }) {
+  return `${formatScopeLabel(matchPatterns, matchedDocCount)} | ${TERMINAL_PALETTE.version(referenceLabel)} vs candidate`;
+}
+
+function printCompareSummary({ summary, artifactPath }) {
+  const failureCounts = countGenerationFailures(summary);
+  const untestedDocs = buildUntestedDocs(summary);
+
+  console.log('');
+  if (untestedDocs.length > 0) {
+    console.log(TERMINAL_PALETTE.error(`Untested (${untestedDocs.length})`));
+    for (const doc of untestedDocs) {
+      if (doc.candidate) {
+        console.log(`- ${doc.path} | candidate failed | ${normalizeGenerationWarningMessage(doc.candidate.message)}`);
+      }
+      if (doc.reference) {
+        console.log(`- ${doc.path} | reference failed | ${normalizeGenerationWarningMessage(doc.reference.message)}`);
+      }
+    }
+    console.log('');
+  }
+
+  if (summary.uniqueChangeDocCount > 0) {
+    console.log(TERMINAL_PALETTE.warning('Changed'));
+    for (const doc of summary.changedDocs.filter((entry) => !entry.widespreadOnly)) {
+      console.log(`- ${formatChangedDocSummary(doc)}`);
+    }
+    console.log('');
+  }
+
+  logLine('Result', buildCompareResultSummary(summary));
+
+  if (summary.widespreadOnlyDocCount > 0) {
+    logLine('Changed', `${summary.uniqueChangeDocCount} unique | ${summary.widespreadOnlyDocCount} widespread-only`);
+  }
+  if (failureCounts.total > 0) {
+    logLine('Untested', TERMINAL_PALETTE.error(`${untestedDocs.length} doc${untestedDocs.length === 1 ? '' : 's'}`));
+    logLine(
+      'Failures',
+      TERMINAL_PALETTE.error(`${failureCounts.total} generation failure${failureCounts.total === 1 ? '' : 's'}`),
+    );
+  }
+
+  logLine('Report', TERMINAL_PALETTE.path(formatDisplayPath(summary.reportDir)));
+  if (artifactPath) {
+    logLine('Artifact', TERMINAL_PALETTE.path(formatDisplayPath(artifactPath)));
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  await ensureDefaultCorpusReady(args);
   const candidateRoot = path.resolve(args.candidateRoot);
   const referenceBase = path.resolve(args.referenceBase);
-
-  if (!args.reference && !args.referenceRoot) {
-    process.stdout.write(`[compare] Resolving reference version (npm ${NPM_PACKAGE_NAME}@${DEFAULT_NPM_DIST_TAG})...`);
-    args.reference = await resolveNpmDistTagVersion({
-      packageName: NPM_PACKAGE_NAME,
-      distTag: DEFAULT_NPM_DIST_TAG,
-    });
-    console.log(` ${args.reference}`);
-  }
-
+  const artifactPath = args.writeAgentArtifact ? path.join(path.resolve(args.artifactDir), 'latest.json') : null;
   let referenceRoot = args.referenceRoot ? path.resolve(args.referenceRoot) : null;
-  let resolvedReferenceLabel = args.reference ? normalizeVersionLabel(args.reference) : path.basename(referenceRoot ?? 'reference');
-  let candidateGenerated = false;
-  let referenceGenerated = false;
-  const candidateGenerationFailures = [];
-  const referenceGenerationFailures = [];
+  let reportDir = null;
 
-  if (!referenceRoot && args.reference) {
-    referenceRoot = path.join(referenceBase, normalizeVersionLabel(args.reference));
-  }
+  try {
+    await ensureDefaultCorpusReady(args);
 
-  if (args.autoGenerateCandidate) {
-    process.stdout.write('[compare] Building SuperDoc...');
-    const packResult = await runCommandCapture('pnpm', ['run', 'pack:es'], { cwd: REPO_ROOT });
-    if (packResult.exitCode !== 0) {
-      console.log(' FAILED');
-      console.error(packResult.output);
-      throw new Error(`"pnpm run pack:es" failed with exit code ${packResult.exitCode}.`);
-    }
-    console.log(' done');
-
-    console.log('[compare] Generating candidate snapshots...');
-    const candidateGeneration = await runCandidateGeneration({
-      candidateRoot,
-      args,
-    });
-    candidateGenerationFailures.push(
-      ...normalizeGenerationFailures({
-        source: 'candidate',
-        stage: 'candidate generation',
-        summary: candidateGeneration.summary,
-      }),
-    );
-    candidateGenerated = true;
-    if (!(await pathExists(candidateRoot))) {
-      throw new Error(`Candidate generation completed but folder not found: ${candidateRoot}`);
-    }
-  } else if (!(await pathExists(candidateRoot))) {
-    throw new Error(`Candidate root does not exist: ${candidateRoot}`);
-  }
-
-  if (!(await pathExists(referenceRoot))) {
-    if (!args.reference || !args.autoGenerateReference) {
-      throw new Error(`Reference root does not exist: ${referenceRoot}`);
+    if (!args.reference && !args.referenceRoot) {
+      args.reference = await resolveNpmDistTagVersion({
+        packageName: NPM_PACKAGE_NAME,
+        distTag: DEFAULT_NPM_DIST_TAG,
+      });
+      logLine('Reference', `npm ${DEFAULT_NPM_DIST_TAG} -> ${TERMINAL_PALETTE.version(args.reference)}`);
     }
 
-    console.log('[compare] Generating reference snapshots...');
-    const referenceGeneration = await runNpmReferenceGeneration({
-      referenceSpecifier: args.reference,
-      args,
-    });
-    referenceGenerationFailures.push(
-      ...normalizeGenerationFailures({
-        source: 'reference',
-        stage: 'reference generation',
-        summary: referenceGeneration.summary,
-      }),
-    );
-    referenceGenerated = true;
-    const resolved = await resolveGeneratedReferenceRoot({
-      generatedFolder: referenceGeneration.resolvedVersionFolder,
-      referenceBase,
-      reference: args.reference,
-      errorContext: 'Reference generation',
-    });
-    referenceRoot = resolved.root;
-    resolvedReferenceLabel = resolved.label;
-  } else if (!args.referenceRoot) {
-    resolvedReferenceLabel = path.basename(referenceRoot);
-  }
+    let resolvedReferenceLabel = args.reference
+      ? normalizeVersionLabel(args.reference)
+      : path.basename(referenceRoot ?? 'reference');
+    let candidateGenerated = false;
+    let referenceGenerated = false;
+    const candidateGenerationFailures = [];
+    const referenceGenerationFailures = [];
 
-  let candidateFiles = await listSnapshotFiles(candidateRoot);
-  let referenceFiles = await listSnapshotFiles(referenceRoot);
-  let candidatePaths = [...candidateFiles.keys()].sort();
-  let referencePaths = [...referenceFiles.keys()].sort();
-  const hasMatchPatterns = args.matches.length > 0;
-
-  if (hasMatchPatterns) {
-    candidatePaths = candidatePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
-    referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
-  }
-
-  if (hasMatchPatterns && candidatePaths.length === 0) {
-    throw new Error(
-      `No candidate snapshots matched --match patterns (${args.matches.join(', ')}) in ${candidateRoot}.`,
-    );
-  }
-
-  if (typeof args.limit === 'number') {
-    const limitedCandidatePaths = candidatePaths.slice(0, args.limit);
-    const limitedCandidateSet = new Set(limitedCandidatePaths);
-    candidatePaths = limitedCandidatePaths;
-    referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
-  }
-
-  let relation = buildPathRelation(candidatePaths, referencePaths);
-
-  if (
-    relation.missingInReference.length > 0 &&
-    args.reference &&
-    args.autoGenerateReference &&
-    !args.referenceRoot &&
-    !referenceGenerated
-  ) {
-    console.log(`[compare] Generating reference snapshots (${relation.missingInReference.length} missing)...`);
-    const referenceGeneration = await runNpmReferenceGeneration({
-      referenceSpecifier: args.reference,
-      args,
-    });
-    referenceGenerationFailures.push(
-      ...normalizeGenerationFailures({
-        source: 'reference',
-        stage: 'reference regeneration',
-        summary: referenceGeneration.summary,
-      }),
-    );
-    referenceGenerated = true;
-    const resolved = await resolveGeneratedReferenceRoot({
-      generatedFolder: referenceGeneration.resolvedVersionFolder,
-      referenceBase,
-      reference: args.reference,
-      errorContext: 'Reference regeneration',
-    });
-    referenceRoot = resolved.root;
-    resolvedReferenceLabel = resolved.label;
-
-    referenceFiles = await listSnapshotFiles(referenceRoot);
-    referencePaths = [...referenceFiles.keys()].sort();
-    if (hasMatchPatterns) {
-      referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
-    }
-    if (typeof args.limit === 'number') {
-      const limitedCandidateSet = new Set(candidatePaths);
-      referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
-    }
-    relation = buildPathRelation(candidatePaths, referencePaths);
-  }
-
-  if (args.reference && args.autoGenerateReference && !args.referenceRoot && relation.matched.length > 0) {
-    const needsPaintSnapshotRefresh = await referenceNeedsPaintSnapshotRefresh({
-      matchedPaths: relation.matched,
-      candidateFiles,
-      referenceFiles,
-    });
-    const needsPipelineRefresh = await referenceNeedsPipelineRefresh({
-      matchedPaths: relation.matched,
-      candidateFiles,
-      referenceFiles,
-      expectedPipeline: args.pipeline,
-    });
-
-    const refreshReasons = [];
-    if (needsPaintSnapshotRefresh) {
-      refreshReasons.push('missing paintSnapshot metadata');
-    }
-    if (needsPipelineRefresh) {
-      refreshReasons.push(`pipeline mismatch (expected ${args.pipeline})`);
+    if (!referenceRoot && args.reference) {
+      referenceRoot = path.join(referenceBase, normalizeVersionLabel(args.reference));
     }
 
-    if (refreshReasons.length > 0) {
-      console.log(`[compare] Refreshing reference snapshots (${refreshReasons.join('; ')})...`);
+    if (args.autoGenerateCandidate) {
+      logLine('Candidate', 'build local package');
+      const packResult = await runCommandCapture('pnpm', ['run', 'pack:es'], { cwd: REPO_ROOT });
+      if (packResult.exitCode !== 0) {
+        if (packResult.output.trim()) {
+          process.stderr.write(packResult.output);
+        }
+        throw new Error(`"pnpm run pack:es" failed with exit code ${packResult.exitCode}.`);
+      }
+
+      logLine('Candidate', 'generate snapshots');
+      const candidateGeneration = await runCandidateGeneration({
+        candidateRoot,
+        args,
+      });
+      candidateGenerationFailures.push(
+        ...normalizeGenerationFailures({
+          source: 'candidate',
+          stage: 'candidate generation',
+          summary: candidateGeneration.summary,
+        }),
+      );
+      candidateGenerated = true;
+      if (!(await pathExists(candidateRoot))) {
+        throw new Error(`Candidate generation completed but folder not found: ${candidateRoot}`);
+      }
+    } else if (!(await pathExists(candidateRoot))) {
+      throw new Error(`Candidate root does not exist: ${candidateRoot}`);
+    }
+
+    if (!(await pathExists(referenceRoot))) {
+      if (!args.reference || !args.autoGenerateReference) {
+        throw new Error(`Reference root does not exist: ${referenceRoot}`);
+      }
+
+      logLine('Reference', 'generate snapshots');
       const referenceGeneration = await runNpmReferenceGeneration({
         referenceSpecifier: args.reference,
         args,
@@ -1545,7 +1797,7 @@ async function main() {
       referenceGenerationFailures.push(
         ...normalizeGenerationFailures({
           source: 'reference',
-          stage: 'reference refresh',
+          stage: 'reference generation',
           summary: referenceGeneration.summary,
         }),
       );
@@ -1554,7 +1806,65 @@ async function main() {
         generatedFolder: referenceGeneration.resolvedVersionFolder,
         referenceBase,
         reference: args.reference,
-        errorContext: 'Reference refresh',
+        errorContext: 'Reference generation',
+      });
+      referenceRoot = resolved.root;
+      resolvedReferenceLabel = resolved.label;
+    } else if (!args.referenceRoot) {
+      resolvedReferenceLabel = path.basename(referenceRoot);
+    }
+
+    let candidateFiles = await listSnapshotFiles(candidateRoot);
+    let referenceFiles = await listSnapshotFiles(referenceRoot);
+    let candidatePaths = [...candidateFiles.keys()].sort();
+    let referencePaths = [...referenceFiles.keys()].sort();
+    const hasMatchPatterns = args.matches.length > 0;
+
+    if (hasMatchPatterns) {
+      candidatePaths = candidatePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+      referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+    }
+
+    if (hasMatchPatterns && candidatePaths.length === 0) {
+      throw new Error(
+        `No candidate snapshots matched --match patterns (${args.matches.join(', ')}) in ${candidateRoot}.`,
+      );
+    }
+
+    if (typeof args.limit === 'number') {
+      const limitedCandidatePaths = candidatePaths.slice(0, args.limit);
+      const limitedCandidateSet = new Set(limitedCandidatePaths);
+      candidatePaths = limitedCandidatePaths;
+      referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
+    }
+
+    let relation = buildPathRelation(candidatePaths, referencePaths);
+
+    if (
+      relation.missingInReference.length > 0 &&
+      args.reference &&
+      args.autoGenerateReference &&
+      !args.referenceRoot &&
+      !referenceGenerated
+    ) {
+      logLine('Reference', `generate missing snapshots (${relation.missingInReference.length})`);
+      const referenceGeneration = await runNpmReferenceGeneration({
+        referenceSpecifier: args.reference,
+        args,
+      });
+      referenceGenerationFailures.push(
+        ...normalizeGenerationFailures({
+          source: 'reference',
+          stage: 'reference regeneration',
+          summary: referenceGeneration.summary,
+        }),
+      );
+      referenceGenerated = true;
+      const resolved = await resolveGeneratedReferenceRoot({
+        generatedFolder: referenceGeneration.resolvedVersionFolder,
+        referenceBase,
+        reference: args.reference,
+        errorContext: 'Reference regeneration',
       });
       referenceRoot = resolved.root;
       resolvedReferenceLabel = resolved.label;
@@ -1570,313 +1880,387 @@ async function main() {
       }
       relation = buildPathRelation(candidatePaths, referencePaths);
     }
-  }
 
-  const uniqueCandidateGenerationFailures = dedupeGenerationFailures(candidateGenerationFailures);
-  const uniqueReferenceGenerationFailures = dedupeGenerationFailures(referenceGenerationFailures);
-  const generationFailures = [...uniqueCandidateGenerationFailures, ...uniqueReferenceGenerationFailures];
+    if (args.reference && args.autoGenerateReference && !args.referenceRoot && relation.matched.length > 0) {
+      const needsPaintSnapshotRefresh = await referenceNeedsPaintSnapshotRefresh({
+        matchedPaths: relation.matched,
+        candidateFiles,
+        referenceFiles,
+      });
+      const needsPipelineRefresh = await referenceNeedsPipelineRefresh({
+        matchedPaths: relation.matched,
+        candidateFiles,
+        referenceFiles,
+        expectedPipeline: args.pipeline,
+      });
 
-  const reportsRoot = path.resolve(args.reportsRoot);
-  const reportDir = args.reportDir
-    ? path.resolve(args.reportDir)
-    : path.join(reportsRoot, `${formatTimestamp(new Date())}-${safeLabel(resolvedReferenceLabel)}-vs-candidate`);
+      const refreshReasons = [];
+      if (needsPaintSnapshotRefresh) {
+        refreshReasons.push('missing paintSnapshot metadata');
+      }
+      if (needsPipelineRefresh) {
+        refreshReasons.push(`pipeline mismatch (expected ${args.pipeline})`);
+      }
 
-  await fs.rm(reportDir, { recursive: true, force: true }).catch(() => {});
-  await fs.mkdir(reportDir, { recursive: true });
-  await fs.mkdir(path.join(reportDir, 'docs'), { recursive: true });
+      if (refreshReasons.length > 0) {
+        logLine('Reference', `refresh snapshots (${refreshReasons.join('; ')})`);
+        const referenceGeneration = await runNpmReferenceGeneration({
+          referenceSpecifier: args.reference,
+          args,
+        });
+        referenceGenerationFailures.push(
+          ...normalizeGenerationFailures({
+            source: 'reference',
+            stage: 'reference refresh',
+            summary: referenceGeneration.summary,
+          }),
+        );
+        referenceGenerated = true;
+        const resolved = await resolveGeneratedReferenceRoot({
+          generatedFolder: referenceGeneration.resolvedVersionFolder,
+          referenceBase,
+          reference: args.reference,
+          errorContext: 'Reference refresh',
+        });
+        referenceRoot = resolved.root;
+        resolvedReferenceLabel = resolved.label;
 
-  const matchLabel = hasMatchPatterns ? ` matching "${args.matches.join('", "')}"` : '';
-  const limitLabel = typeof args.limit === 'number' ? ` (limit ${args.limit})` : '';
-  console.log(`[compare] Comparing ${relation.matched.length} documents${matchLabel}${limitLabel}...`);
-
-  const pendingReports = [];
-  /** @type {Map<string, { kind: string, count: number }>} */
-  const diffPatternCounts = new Map();
-  let unchangedDocCount = 0;
-  const isTTY = process.stdout.isTTY;
-  const totalToCompare = relation.matched.length;
-  const compareStartedAt = Date.now();
-
-  for (let i = 0; i < totalToCompare; i += 1) {
-    const relPath = relation.matched[i];
-    const candidateFile = candidateFiles.get(relPath);
-    const referenceFile = referenceFiles.get(relPath);
-
-    let candidateRaw;
-    let referenceRaw;
-    try {
-      candidateRaw = JSON.parse(await fs.readFile(candidateFile, 'utf8'));
-      referenceRaw = JSON.parse(await fs.readFile(referenceFile, 'utf8'));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const docReport = {
-        path: relPath,
-        parseError: message,
-        candidateFile,
-        referenceFile,
-        diffCount: 1,
-        pagesChanged: [],
-      };
-      const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
-      pendingReports.push({ docReport, reportPath, allDiffEntries: [] });
-      if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
-      continue;
-    }
-
-    const candidate = normalizeDocSnapshot(candidateRaw);
-    const reference = normalizeDocSnapshot(referenceRaw);
-    const { diffs, truncated } = collectDiffs(reference, candidate, {
-      numericTolerance: args.numericTolerance,
-      maxDiffEntries: args.maxDiffEntries,
-    });
-
-    if (diffs.length === 0) {
-      unchangedDocCount += 1;
-      if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
-      continue;
-    }
-
-    const blockPagesMap = getPagesByBlockIndex(candidate);
-    const grouped = groupDiffsByPage(diffs, blockPagesMap);
-    const pagesChanged = [...grouped.perPage.keys()].sort((a, b) => a - b);
-
-    function mapDiffEntry(entry) {
-      const fp = formatPath(entry.pathSegments);
-      return {
-        path: fp,
-        kind: entry.kind,
-        reference: summarizeValue(entry.reference),
-        candidate: summarizeValue(entry.candidate),
-        ...(typeof entry.delta === 'number' ? { delta: entry.delta } : {}),
-      };
-    }
-
-    const docReport = {
-      path: relPath,
-      candidateFile,
-      referenceFile,
-      pageCount: {
-        candidate: Array.isArray(candidate?.layoutSnapshot?.layout?.pages)
-          ? candidate.layoutSnapshot.layout.pages.length
-          : 0,
-        reference: Array.isArray(reference?.layoutSnapshot?.layout?.pages)
-          ? reference.layoutSnapshot.layout.pages.length
-          : 0,
-      },
-      diffCount: diffs.length,
-      truncated,
-      pagesChanged,
-      globalDiffs: grouped.global.map(mapDiffEntry),
-      pageDiffs: Object.fromEntries(
-        [...grouped.perPage.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([pageNumber, entries]) => [
-            String(pageNumber),
-            entries.map(mapDiffEntry),
-          ]),
-      ),
-    };
-
-    // Accumulate diff patterns for widespread detection
-    const docPatterns = new Set();
-    const allDiffEntries = [
-      ...docReport.globalDiffs,
-      ...Object.values(docReport.pageDiffs).flat(),
-    ];
-    for (const d of allDiffEntries) {
-      const normalized = normalizePathForPattern(d.path);
-      const key = `${normalized}||${d.kind}`;
-      if (!docPatterns.has(key)) {
-        docPatterns.add(key);
-        const existing = diffPatternCounts.get(key);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          diffPatternCounts.set(key, { kind: d.kind, count: 1 });
+        referenceFiles = await listSnapshotFiles(referenceRoot);
+        referencePaths = [...referenceFiles.keys()].sort();
+        if (hasMatchPatterns) {
+          referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
         }
+        if (typeof args.limit === 'number') {
+          const limitedCandidateSet = new Set(candidatePaths);
+          referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
+        }
+        relation = buildPathRelation(candidatePaths, referencePaths);
       }
     }
 
-    const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
-    pendingReports.push({ docReport, reportPath, allDiffEntries });
+    const uniqueCandidateGenerationFailures = dedupeGenerationFailures(candidateGenerationFailures);
+    const uniqueReferenceGenerationFailures = dedupeGenerationFailures(referenceGenerationFailures);
+    const reportsRoot = path.resolve(args.reportsRoot);
+    reportDir = args.reportDir
+      ? path.resolve(args.reportDir)
+      : path.join(reportsRoot, `${formatTimestamp(new Date())}-${safeLabel(resolvedReferenceLabel)}-vs-candidate`);
 
-    if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
-  }
+    await fs.rm(reportDir, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(reportDir, { recursive: true });
+    await fs.mkdir(path.join(reportDir, 'docs'), { recursive: true });
 
-  if (isTTY && totalToCompare > 0) process.stdout.write('\n');
+    logLine(
+      'Compare',
+      buildCompareScopeSummary({
+        matchPatterns: args.matches,
+        matchedDocCount: relation.matched.length,
+        referenceLabel: resolvedReferenceLabel,
+      }),
+    );
 
-  // ---- Widespread diff detection ----
-  const totalChangedDocs = pendingReports.length;
-  const widespreadThreshold = Math.max(1, Math.ceil(totalChangedDocs * 0.5));
-  /** @type {Array<{ path: string, kind: string, docCount: number }>} */
-  const widespreadDiffs = [];
-  const widespreadPathKeys = new Set();
+    const candidateUsesDefaultRoot = path.resolve(candidateRoot) === path.resolve(DEFAULT_CANDIDATE_ROOT);
+    const referenceUsesDefaultRoot =
+      !args.referenceRoot &&
+      path.resolve(referenceRoot) === path.resolve(path.join(referenceBase, resolvedReferenceLabel));
 
-  for (const [key, { kind, count }] of diffPatternCounts) {
-    if (count >= widespreadThreshold && totalChangedDocs >= 4) {
-      const normalizedPath = key.split('||')[0];
-      widespreadDiffs.push({ path: normalizedPath, kind, docCount: count });
-      widespreadPathKeys.add(key);
+    if (args.verbose || !referenceUsesDefaultRoot) {
+      logLine('Baseline', TERMINAL_PALETTE.path(formatDisplayPath(referenceRoot)));
     }
-  }
-
-  // ---- Mark widespread diffs and write per-doc reports ----
-  const changedDocs = [];
-
-  for (const { docReport, reportPath, allDiffEntries } of pendingReports) {
-    // Mark each diff as widespread or not (factual, based on pattern frequency)
-    for (const d of allDiffEntries) {
-      const normalized = normalizePathForPattern(d.path);
-      const key = `${normalized}||${d.kind}`;
-      d.widespread = widespreadPathKeys.has(key);
+    if (args.verbose || !candidateUsesDefaultRoot) {
+      logLine('Candidate', TERMINAL_PALETTE.path(formatDisplayPath(candidateRoot)));
     }
 
-    // Flag page count changes (parse-error reports have no pageCount)
-    const pageCountChanged = docReport.pageCount
-      ? docReport.pageCount.candidate !== docReport.pageCount.reference
-      : false;
-    if (pageCountChanged) docReport.pageCountChanged = true;
+    const pendingReports = [];
+    /** @type {Map<string, { kind: string, count: number }>} */
+    const diffPatternCounts = new Map();
+    let unchangedDocCount = 0;
+    const isTTY = process.stdout.isTTY;
+    const totalToCompare = relation.matched.length;
+    const compareStartedAt = Date.now();
 
-    // Write report
-    await fs.mkdir(path.dirname(reportPath), { recursive: true });
-    await fs.writeFile(reportPath, JSON.stringify(docReport, null, 2), 'utf8');
+    for (let i = 0; i < totalToCompare; i += 1) {
+      const relPath = relation.matched[i];
+      const candidateFile = candidateFiles.get(relPath);
+      const referenceFile = referenceFiles.get(relPath);
 
-    // A doc is "widespread-only" if every diff is a widespread pattern
-    const widespreadOnly = allDiffEntries.length > 0 && allDiffEntries.every((d) => d.widespread);
+      let candidateRaw;
+      let referenceRaw;
+      try {
+        candidateRaw = JSON.parse(await fs.readFile(candidateFile, 'utf8'));
+        referenceRaw = JSON.parse(await fs.readFile(referenceFile, 'utf8'));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const docReport = {
+          path: relPath,
+          parseError: message,
+          candidateFile,
+          referenceFile,
+          diffCount: 1,
+          pagesChanged: [],
+        };
+        const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
+        pendingReports.push({ docReport, reportPath, allDiffEntries: [] });
+        if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
+        continue;
+      }
 
-    changedDocs.push({
-      path: docReport.path,
-      diffCount: docReport.diffCount,
-      pagesChanged: docReport.pagesChanged,
-      pageCountChanged,
-      widespreadOnly,
-      reportFile: pathToPosix(path.relative(reportDir, reportPath)),
-    });
-  }
-
-  const uniqueChangeDocs = changedDocs.filter((d) => !d.widespreadOnly);
-  const widespreadOnlyDocs = changedDocs.filter((d) => d.widespreadOnly);
-
-  const changedDocPaths = collectChangedDocRelativePaths(uniqueChangeDocs);
-  const visualReference = args.visualReference ?? args.reference;
-  const visualEligible = args.visualOnChange && changedDocPaths.length > 0 && Boolean(visualReference);
-
-  let visualSkipReason = null;
-  if (!args.visualOnChange) {
-    visualSkipReason = 'Disabled via --no-visual-on-change.';
-  } else if (changedDocPaths.length === 0) {
-    visualSkipReason = 'No changed docs.';
-  } else if (!visualReference) {
-    visualSkipReason = 'No --reference/--visual-reference provided.';
-  }
-
-  let visualComparison = {
-    enabled: args.visualOnChange,
-    executed: false,
-    status: 'skipped',
-    reason: visualSkipReason,
-    changedDocCount: changedDocPaths.length,
-    docs: changedDocPaths,
-    workdir: null,
-    docsRoot: null,
-    reference: null,
-    error: null,
-  };
-
-  if (visualEligible) {
-    console.log('');
-    try {
-      const visualRun = await runVisualCompareForChangedDocs({
-        changedDocPaths,
-        args,
+      const candidate = normalizeDocSnapshot(candidateRaw);
+      const reference = normalizeDocSnapshot(referenceRaw);
+      const { diffs, truncated } = collectDiffs(reference, candidate, {
+        numericTolerance: args.numericTolerance,
+        maxDiffEntries: args.maxDiffEntries,
       });
-      visualComparison = {
-        ...visualComparison,
-        executed: true,
-        status: 'success',
-        reason: null,
-        ...visualRun,
+
+      if (diffs.length === 0) {
+        unchangedDocCount += 1;
+        if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
+        continue;
+      }
+
+      const blockPagesMap = getPagesByBlockIndex(candidate);
+      const grouped = groupDiffsByPage(diffs, blockPagesMap);
+      const pagesChanged = [...grouped.perPage.keys()].sort((a, b) => a - b);
+
+      function mapDiffEntry(entry) {
+        const fp = formatPath(entry.pathSegments);
+        return {
+          path: fp,
+          kind: entry.kind,
+          reference: summarizeValue(entry.reference),
+          candidate: summarizeValue(entry.candidate),
+          ...(typeof entry.delta === 'number' ? { delta: entry.delta } : {}),
+        };
+      }
+
+      const docReport = {
+        path: relPath,
+        candidateFile,
+        referenceFile,
+        pageCount: {
+          candidate: Array.isArray(candidate?.layoutSnapshot?.layout?.pages)
+            ? candidate.layoutSnapshot.layout.pages.length
+            : 0,
+          reference: Array.isArray(reference?.layoutSnapshot?.layout?.pages)
+            ? reference.layoutSnapshot.layout.pages.length
+            : 0,
+        },
+        diffCount: diffs.length,
+        truncated,
+        pagesChanged,
+        globalDiffs: grouped.global.map(mapDiffEntry),
+        pageDiffs: Object.fromEntries(
+          [...grouped.perPage.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([pageNumber, entries]) => [String(pageNumber), entries.map(mapDiffEntry)]),
+        ),
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      visualComparison = {
-        ...visualComparison,
-        executed: true,
-        status: 'failed',
-        reason: message,
-        error: message,
-      };
-      console.error(`[compare] Visual compare failed: ${message}`);
+
+      // Accumulate diff patterns for widespread detection
+      const docPatterns = new Set();
+      const allDiffEntries = [...docReport.globalDiffs, ...Object.values(docReport.pageDiffs).flat()];
+      for (const d of allDiffEntries) {
+        const normalized = normalizePathForPattern(d.path);
+        const key = `${normalized}||${d.kind}`;
+        if (!docPatterns.has(key)) {
+          docPatterns.add(key);
+          const existing = diffPatternCounts.get(key);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            diffPatternCounts.set(key, { kind: d.kind, count: 1 });
+          }
+        }
+      }
+
+      const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
+      pendingReports.push({ docReport, reportPath, allDiffEntries });
+
+      if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
+    }
+
+    if (isTTY && totalToCompare > 0) process.stdout.write('\n');
+
+    // ---- Widespread diff detection ----
+    const totalChangedDocs = pendingReports.length;
+    const widespreadThreshold = Math.max(1, Math.ceil(totalChangedDocs * 0.5));
+    /** @type {Array<{ path: string, kind: string, docCount: number }>} */
+    const widespreadDiffs = [];
+    const widespreadPathKeys = new Set();
+
+    for (const [key, { kind, count }] of diffPatternCounts) {
+      if (count >= widespreadThreshold && totalChangedDocs >= 4) {
+        const normalizedPath = key.split('||')[0];
+        widespreadDiffs.push({ path: normalizedPath, kind, docCount: count });
+        widespreadPathKeys.add(key);
+      }
+    }
+
+    // ---- Mark widespread diffs and write per-doc reports ----
+    const changedDocs = [];
+
+    for (const { docReport, reportPath, allDiffEntries } of pendingReports) {
+      // Mark each diff as widespread or not (factual, based on pattern frequency)
+      for (const d of allDiffEntries) {
+        const normalized = normalizePathForPattern(d.path);
+        const key = `${normalized}||${d.kind}`;
+        d.widespread = widespreadPathKeys.has(key);
+      }
+
+      // Flag page count changes (parse-error reports have no pageCount)
+      const pageCountChanged = docReport.pageCount
+        ? docReport.pageCount.candidate !== docReport.pageCount.reference
+        : false;
+      if (pageCountChanged) docReport.pageCountChanged = true;
+
+      // Write report
+      await fs.mkdir(path.dirname(reportPath), { recursive: true });
+      await fs.writeFile(reportPath, JSON.stringify(docReport, null, 2), 'utf8');
+
+      // A doc is "widespread-only" if every diff is a widespread pattern
+      const widespreadOnly = allDiffEntries.length > 0 && allDiffEntries.every((d) => d.widespread);
+
+      changedDocs.push({
+        path: docReport.path,
+        diffCount: docReport.diffCount,
+        pagesChanged: docReport.pagesChanged,
+        pageCountChanged,
+        widespreadOnly,
+        reportFile: pathToPosix(path.relative(reportDir, reportPath)),
+      });
+    }
+
+    const uniqueChangeDocs = changedDocs.filter((d) => !d.widespreadOnly);
+    const widespreadOnlyDocs = changedDocs.filter((d) => d.widespreadOnly);
+
+    const changedDocPaths = collectChangedDocRelativePaths(uniqueChangeDocs);
+    const visualReference = args.visualReference ?? args.reference;
+    const visualEligible = args.visualOnChange && changedDocPaths.length > 0 && Boolean(visualReference);
+
+    let visualSkipReason = null;
+    if (!args.visualOnChange) {
+      visualSkipReason = 'Disabled via --no-visual-on-change.';
+    } else if (changedDocPaths.length === 0) {
+      visualSkipReason = 'No changed docs.';
+    } else if (!visualReference) {
+      visualSkipReason = 'No --reference/--visual-reference provided.';
+    }
+
+    let visualComparison = {
+      enabled: args.visualOnChange,
+      executed: false,
+      status: 'skipped',
+      reason: visualSkipReason,
+      changedDocCount: changedDocPaths.length,
+      docs: changedDocPaths,
+      workdir: null,
+      docsRoot: null,
+      reference: null,
+      error: null,
+    };
+
+    if (visualEligible) {
+      console.log('');
+      try {
+        const visualRun = await runVisualCompareForChangedDocs({
+          changedDocPaths,
+          args,
+        });
+        visualComparison = {
+          ...visualComparison,
+          executed: true,
+          status: 'success',
+          reason: null,
+          ...visualRun,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        visualComparison = {
+          ...visualComparison,
+          executed: true,
+          status: 'failed',
+          reason: message,
+          error: message,
+        };
+        console.error(
+          formatTerminalLabelLine('Visual', TERMINAL_PALETTE.error(`failed: ${message}`), {
+            palette: TERMINAL_PALETTE,
+          }),
+        );
+        process.exitCode = 1;
+      }
+    }
+
+    const summary = {
+      generatedAt: new Date().toISOString(),
+      reportDir,
+      candidateRoot,
+      referenceRoot,
+      referenceLabel: resolvedReferenceLabel,
+      candidateGenerated,
+      referenceGenerated,
+      limit: args.limit ?? null,
+      matchPatterns: args.matches,
+      candidateDocCount: candidatePaths.length,
+      referenceDocCount: referencePaths.length,
+      matchedDocCount: relation.matched.length,
+      changedDocCount: changedDocs.length,
+      uniqueChangeDocCount: uniqueChangeDocs.length,
+      widespreadOnlyDocCount: widespreadOnlyDocs.length,
+      unchangedDocCount,
+      widespreadDiffs,
+      missingInReference: relation.missingInReference,
+      missingInCandidate: relation.missingInCandidate,
+      changedDocs,
+      changedDocPaths,
+      candidateGenerationFailures: uniqueCandidateGenerationFailures,
+      referenceGenerationFailures: uniqueReferenceGenerationFailures,
+      untestedDocs: buildUntestedDocs({
+        candidateGenerationFailures: uniqueCandidateGenerationFailures,
+        referenceGenerationFailures: uniqueReferenceGenerationFailures,
+      }),
+      visualComparison,
+    };
+
+    await writeJsonFile(path.join(reportDir, 'summary.json'), summary);
+    await fs.writeFile(path.join(reportDir, 'summary.md'), buildReportMarkdown(summary), 'utf8');
+    if (artifactPath) {
+      await writeJsonFile(
+        artifactPath,
+        buildAgentArtifact({
+          summary,
+          args,
+        }),
+      );
+    }
+
+    printCompareSummary({
+      summary,
+      artifactPath,
+    });
+
+    const hasUntestedDocs = summary.untestedDocs.length > 0;
+    const hasDiffs =
+      changedDocs.length > 0 || relation.missingInReference.length > 0 || relation.missingInCandidate.length > 0;
+    if (hasUntestedDocs) {
       process.exitCode = 1;
     }
-  }
-
-  const summary = {
-    generatedAt: new Date().toISOString(),
-    reportDir,
-    candidateRoot,
-    referenceRoot,
-    referenceLabel: resolvedReferenceLabel,
-    candidateGenerated,
-    referenceGenerated,
-    limit: args.limit ?? null,
-    matchPatterns: args.matches,
-    candidateDocCount: candidatePaths.length,
-    referenceDocCount: referencePaths.length,
-    matchedDocCount: relation.matched.length,
-    changedDocCount: changedDocs.length,
-    uniqueChangeDocCount: uniqueChangeDocs.length,
-    widespreadOnlyDocCount: widespreadOnlyDocs.length,
-    unchangedDocCount,
-    widespreadDiffs,
-    missingInReference: relation.missingInReference,
-    missingInCandidate: relation.missingInCandidate,
-    changedDocs,
-    changedDocPaths,
-    candidateGenerationFailures: uniqueCandidateGenerationFailures,
-    referenceGenerationFailures: uniqueReferenceGenerationFailures,
-    visualComparison,
-  };
-
-  await fs.writeFile(path.join(reportDir, 'summary.json'), JSON.stringify(summary, null, 2), 'utf8');
-  await fs.writeFile(path.join(reportDir, 'summary.md'), buildReportMarkdown(summary), 'utf8');
-
-  // ---- Print per-doc changes (unique changes only, not widespread-only docs) ----
-  if (uniqueChangeDocs.length > 0) {
-    console.log('');
-    console.log('[compare] Changed documents:');
-    for (const doc of uniqueChangeDocs) {
-      const pages = doc.pagesChanged?.length ? ` | pages ${doc.pagesChanged.join(',')}` : '';
-      const pageFlag = doc.pageCountChanged ? ' | PAGE COUNT CHANGED' : '';
-      console.log(`[compare]   ${doc.path} (${doc.diffCount} diffs${pages}${pageFlag})`);
+    if (args.failOnDiff && hasDiffs) {
+      process.exitCode = 1;
     }
-  }
-
-  // ---- Results summary ----
-  console.log('');
-  console.log(`[compare] Changed:   ${changedDocs.length}`);
-  if (widespreadOnlyDocs.length > 0) {
-    console.log(`[compare]   Unique: ${uniqueChangeDocs.length}  Widespread-only: ${widespreadOnlyDocs.length}`);
-  }
-  console.log(`[compare] Unchanged: ${unchangedDocCount}`);
-  if (relation.missingInReference.length > 0) {
-    console.log(`[compare] Missing reference: ${relation.missingInReference.length}`);
-  }
-  if (relation.missingInCandidate.length > 0) {
-    console.log(`[compare] Missing candidate: ${relation.missingInCandidate.length}`);
-  }
-  if (visualComparison.executed || visualComparison.enabled) {
-    console.log(`[compare] Visual: ${visualComparison.status}`);
-  }
-  if (generationFailures.length > 0) {
-    console.log(`[compare] Generation warnings: ${generationFailures.length}`);
-  }
-  console.log(`[compare] Report: ${reportDir}`);
-
-  const hasDiffs =
-    changedDocs.length > 0 || relation.missingInReference.length > 0 || relation.missingInCandidate.length > 0;
-  if (args.failOnDiff && hasDiffs) {
-    process.exitCode = 1;
+  } catch (error) {
+    if (artifactPath) {
+      await writeJsonFile(
+        artifactPath,
+        buildFailureArtifact({
+          args,
+          error,
+          candidateRoot,
+          referenceRoot,
+          reportDir,
+        }),
+      ).catch(() => {});
+    }
+    throw error;
   }
 }
 
@@ -1885,12 +2269,14 @@ function isDirectExecution() {
   return path.resolve(process.argv[1]) === SCRIPT_PATH;
 }
 
-export { normalizeGenerationWarningMessage, toDisplayDocPath };
+export { buildAgentArtifact, determineCompareStatus, normalizeGenerationWarningMessage, toDisplayDocPath };
 
 if (isDirectExecution()) {
   main().catch((error) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    console.error(`[compare] Fatal: ${message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      formatTerminalLabelLine('Compare', TERMINAL_PALETTE.error(`failed: ${message}`), { palette: TERMINAL_PALETTE }),
+    );
     process.exit(1);
   });
 }

@@ -65,6 +65,7 @@ import {
   type TableBorderValue,
   effectiveTableCellSpacing,
   LeaderDecoration,
+  resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -151,22 +152,9 @@ const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
-/**
- * Resolves table cell spacing to pixels (for border-spacing).
- * Handles number (px) or { type, value }. The editor/DOCX decoder often stores value
- * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
- * type is 'dxa' and we convert; otherwise value is treated as px.
- */
-export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
-  if (cellSpacing == null) return 0;
-  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
-  const v = cellSpacing.value;
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  const t = (cellSpacing.type ?? '').toLowerCase();
-  // Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips (large).
-  const asPx = t === 'dxa' && v >= 20 ? twipsToPx(v) : v;
-  return Math.max(0, asPx);
-}
+// Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
+export { getCellSpacingPx } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/contracts';
 
 /**
  * Returns the border width in pixels for a table border value (matches painter border-utils logic).
@@ -530,20 +518,26 @@ function calculateEmptyParagraphMetrics(
   };
 }
 
+function lineHeightFontSize(run: TextRun): number {
+  return resolveBaseFontSizeForVerticalText(run.fontSize, run);
+}
+
 /**
  * Extract FontInfo from a TextRun for typography metrics calculation.
+ * Uses the line-height font size so that superscript/subscript runs
+ * produce metrics based on their original (un-scaled) base font.
  */
 function getFontInfoFromRun(run: TextRun): FontInfo {
   return {
     fontFamily: normalizeFontFamily(run.fontFamily),
-    fontSize: normalizeFontSize(run.fontSize),
+    fontSize: normalizeFontSize(lineHeightFontSize(run)),
     bold: run.bold,
     italic: run.italic,
   };
 }
 
 /**
- * Update maxFontInfo when a new run has a larger font size.
+ * Update maxFontInfo when a new run has a larger effective font size for line height.
  * Returns the updated FontInfo if this run has the max font size, otherwise returns the existing info.
  */
 function updateMaxFontInfo(
@@ -551,7 +545,7 @@ function updateMaxFontInfo(
   currentMaxInfo: FontInfo | undefined,
   newRun: TextRun,
 ): FontInfo | undefined {
-  if (newRun.fontSize >= currentMaxSize) {
+  if (lineHeightFontSize(newRun) >= currentMaxSize) {
     return getFontInfoFromRun(newRun);
   }
   return currentMaxInfo;
@@ -733,6 +727,14 @@ function measureTabAlignmentGroup(
 
       result.runs.push({ runIndex: i, width: imageWidth });
       result.totalWidth += imageWidth;
+      continue;
+    }
+
+    // Measure math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathWidth = (run as { width: number }).width ?? 20;
+      result.runs.push({ runIndex: i, width: mathWidth });
+      result.totalWidth += mathWidth;
       continue;
     }
 
@@ -1632,6 +1634,24 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       continue;
     }
 
+    // Handle math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathRun = run as { width: number; height: number };
+      const mathWidth = mathRun.width ?? 20;
+      const mathHeight = mathRun.height ?? 24;
+
+      if (currentLine) {
+        currentLine.toRun = runIndex;
+        currentLine.toChar = 1;
+        currentLine.width = roundValue(currentLine.width + mathWidth);
+        currentLine.maxImageHeight = Math.max(currentLine.maxImageHeight ?? 0, mathHeight);
+        if (!currentLine.segments) currentLine.segments = [];
+        currentLine.segments.push({ runIndex, fromChar: 0, toChar: 1, width: mathWidth });
+      }
+      pendingRunSpacing = 0;
+      continue;
+    }
+
     // Handle field annotation runs (pill-styled form fields)
     if (isFieldAnnotationRun(run)) {
       // Use displayLabel for text measurement, with fallback defaults
@@ -1808,7 +1828,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: spacesEndChar,
             width: spacesWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
@@ -1841,7 +1861,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toRun: runIndex,
               toChar: spacesEndChar,
               width: spacesWidth,
-              maxFontSize: run.fontSize,
+              maxFontSize: lineHeightFontSize(run),
               maxFontInfo: getFontInfoFromRun(run),
               maxWidth: getEffectiveWidth(bodyContentWidth),
               segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
@@ -1852,7 +1872,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.toChar = spacesEndChar;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + spacesWidth);
             currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             appendSegment(currentLine.segments, runIndex, spacesStartChar, spacesEndChar, spacesWidth);
             currentLine.spaceCount += spacesLength;
           }
@@ -1920,7 +1940,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toRun: runIndex,
               toChar: spaceEndChar,
               width: singleSpaceWidth,
-              maxFontSize: run.fontSize,
+              maxFontSize: lineHeightFontSize(run),
               maxFontInfo: getFontInfoFromRun(run),
               maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
               segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
@@ -1957,7 +1977,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toRun: runIndex,
                 toChar: spaceEndChar,
                 width: singleSpaceWidth,
-                maxFontSize: run.fontSize,
+                maxFontSize: lineHeightFontSize(run),
                 maxFontInfo: getFontInfoFromRun(run),
                 maxWidth: getEffectiveWidth(bodyContentWidth),
                 segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
@@ -1969,7 +1989,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toChar = spaceEndChar;
               currentLine.width = roundValue(currentLine.width + boundarySpacing + singleSpaceWidth);
               currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               // If in an active tab alignment group, use explicit X positioning
               let spaceExplicitX: number | undefined;
               if (inActiveTabGroup && activeTabGroup) {
@@ -2062,7 +2082,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toRun = runIndex;
               currentLine.toChar = chunkEndChar;
               currentLine.width = roundValue(currentLine.width + chunk.width);
-              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               currentLine.maxFontInfo = getFontInfoFromRun(run);
               currentLine.segments.push({
                 runIndex,
@@ -2109,7 +2129,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toRun: runIndex,
                 toChar: chunkEndChar,
                 width: chunk.width,
-                maxFontSize: run.fontSize,
+                maxFontSize: lineHeightFontSize(run),
                 maxFontInfo: getFontInfoFromRun(run),
                 maxWidth: getEffectiveWidth(contentWidth),
                 segments: [{ runIndex, fromChar: chunkStartChar, toChar: chunkEndChar, width: chunk.width }],
@@ -2157,7 +2177,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
@@ -2254,7 +2274,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
@@ -2287,7 +2307,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.toChar = wordEndNoSpace;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + wordOnlyWidth);
             currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             // Determine explicit X position:
             // - If in active tab group, use currentX from the group (for ALL words in group)
             // - Otherwise, only use segmentStartX for first word after a tab
@@ -2339,7 +2359,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           }
           currentLine.width = roundValue(targetWidth);
           currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
           appendSegment(currentLine.segments, runIndex, wordStartChar, newToChar, wordCommitWidth, explicitX);
           if (shouldIncludeDelimiterSpace) {
             currentLine.spaceCount += 1;
@@ -2379,7 +2399,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: charPosInRun,
             width: 0,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [],
@@ -2398,7 +2418,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         currentLine.width = roundValue(currentLine.width + tabAdvance);
 
         currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
         currentLine.toRun = runIndex;
         currentLine.toChar = charPosInRun;
         charPosInRun += 1;

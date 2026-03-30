@@ -109,8 +109,8 @@ Always verify API names against the source code before documenting. Key source f
 |---|---|
 | SuperDoc methods | `packages/superdoc/src/core/SuperDoc.js` |
 | SuperDoc config | `packages/superdoc/src/core/types/index.js` |
-| Editor methods | `packages/super-editor/src/core/Editor.ts` |
-| Extensions | `packages/super-editor/src/extensions/` |
+| Editor methods | `packages/super-editor/src/editors/v1/core/Editor.ts` |
+| Extensions | `packages/super-editor/src/editors/v1/extensions/` |
 
 ## Mintlify components
 

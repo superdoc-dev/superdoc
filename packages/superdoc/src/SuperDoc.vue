@@ -37,6 +37,7 @@ import AiLayer from './components/AiLayer/AiLayer.vue';
 import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
+import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
@@ -116,8 +117,12 @@ const {
   syncTrackedChangeComments,
   addComment,
   getComment,
+  resolveCommentPositionEntry,
   belongsToDocument,
   COMMENT_EVENTS,
+  requestInstantSidebarAlignment,
+  peekInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
 } = commentsStore;
 const { proxy } = getCurrentInstance();
 commentsStore.proxy = proxy;
@@ -847,6 +852,36 @@ const normalizeReplayCommentModelPayload = (payload = {}) => {
   return normalizedPayload;
 };
 
+const syncInstantSidebarAlignmentFromEditorSelection = (commentId) => {
+  if (Number.isFinite(peekInstantSidebarAlignment())) {
+    return;
+  }
+
+  if (commentId == null) {
+    clearInstantSidebarAlignment();
+    return;
+  }
+
+  const layersElement = layers.value;
+  const { entry } = resolveCommentPositionEntry(commentId);
+  const targetClientY = getVisibleThreadAnchorClientY(layersElement, entry);
+
+  if (Number.isFinite(targetClientY)) {
+    requestInstantSidebarAlignment(targetClientY, commentId);
+    return;
+  }
+
+  clearInstantSidebarAlignment();
+};
+
+const isSameActiveCommentSelection = (commentId) => {
+  if (commentId == null || activeComment.value == null) {
+    return false;
+  }
+
+  return String(activeComment.value) === String(commentId);
+};
+
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
@@ -1019,6 +1054,10 @@ const onEditorCommentsUpdate = (params = {}) => {
 
   if (type === 'trackedChange') {
     handleTrackedChangeUpdate({ superdoc: proxy.$superdoc, params });
+  }
+
+  if (shouldSyncActiveComment && (activeCommentId == null || !isSameActiveCommentSelection(activeCommentId))) {
+    syncInstantSidebarAlignmentFromEditorSelection(activeCommentId);
   }
 
   nextTick(() => {

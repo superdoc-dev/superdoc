@@ -58,10 +58,11 @@ Important:
 - Editor telemetry is disabled by default.
 - Default pipeline is `headless` (no `PresentationEditor` painter path, faster for batch generation).
 - Use `--jobs N` to process documents in parallel worker processes.
-- Each processed doc logs in a 3-line block (`doc`, `pages+took`, `phases`).
+- Interactive TTY runs show a live status view of active docs only; completed `OK` docs disappear immediately while warnings and failures stay visible.
+- CI and non-TTY runs fall back to plain line-by-line logs.
 - Long log lines wrap at 120 chars instead of being truncated.
-- `Complete in ...` is printed as the final line of output.
-- End-of-run output includes average time and phase totals.
+- Default output is compact: `Scope`, `Export`, `Output`, then a final `Result` line.
+- Use `--verbose` to include source/module details plus average and phase timing totals.
 - If the default local module (`packages/superdoc/dist/super-editor.es.js`) is missing, the exporter auto-runs `pnpm run pack:es`.
 
 Candidate output naming:
@@ -119,7 +120,9 @@ Notes:
 
 - Telemetry is forced off in this wrapper.
 - The target version folder is wiped and regenerated on each run.
-- The script prints the final version folder path at the end.
+- Default output is concise by design: one `Reference` line from the wrapper, then the exporter's `Scope` / `Export` / `Result` summary.
+- Use `--verbose` when you want installer details plus per-run timing breakdowns.
+- Interactive runs preserve the exporter's live status view instead of flattening it into scrolling `OK` lines.
 
 ## Compare candidate vs reference
 
@@ -139,9 +142,7 @@ Compare also supports `--limit N`:
 
 When using the default corpus root (`test-corpus` or `SUPERDOC_CORPUS_ROOT`):
 
-- If corpus is missing, compare auto-runs `pnpm corpus:pull`.
-- If corpus exists, compare prompts: `Update corpus folder?`.
-- Use `--update-docs` to skip the prompt and always run `pnpm corpus:pull`.
+- Compare auto-runs `pnpm corpus:pull` before generation so the local corpus stays in sync.
 - If `--input-root` is provided, compare skips this corpus preflight.
 
 When changed docs are detected, compare now automatically runs `devtools/visual-testing` in local mode for only those
@@ -159,20 +160,27 @@ pnpm layout:compare -- --reference 1.13.0-next.15
 # Compare only first 5 docs (generation + compare scope)
 pnpm layout:compare -- --reference 1.13.0-next.15 --limit 5
 
-# Force corpus refresh before compare (skip prompt)
-pnpm layout:compare -- --reference 1.13.0-next.15 --update-docs
-
 # Disable auto visual post-step
 pnpm layout:compare -- --reference 1.13.0-next.15 --no-visual-on-change
 
 # Fail with non-zero exit if any diffs/missing files are found
 pnpm layout:compare -- --reference 1.13.0-next.15 --fail-on-diff
+
+# Print generation detail and timing breakdowns
+pnpm layout:compare -- --reference 1.13.0-next.15 --verbose
 ```
 
 Reports are written under:
 
 - `<repo>/tests/layout/reports/<timestamp>-v.<reference>-vs-candidate/`
 - plus per-document diff files under the report's `docs/` folder
+
+A stable agent-facing artifact is also written to:
+
+- `<repo>/tmp/layout-compare/latest.json`
+
+That file is gitignored and contains a compact machine-readable summary with status, counts, changed docs, untested
+docs, generation failures, and direct pointers back to the full report files.
 
 ## Using packed `superdoc.tgz`
 

@@ -180,3 +180,77 @@ export async function expectDialogTopNearLocator(
     `Expected dialog top ${dialogTop} to be within ${tolerancePx}px of anchor top ${anchorTop}`,
   ).toBeLessThanOrEqual(tolerancePx);
 }
+
+/**
+ * Assert that a specific floating comment thread stops moving after the initial
+ * click-to-focus handoff.
+ *
+ * The old regression scheduled a second alignment around 400ms later, so this
+ * helper samples the dialog's top position on every animation frame, ignores
+ * the initial handoff window, then verifies the thread stays within a small
+ * tolerance for the rest of the observation period.
+ */
+export async function expectNoDelayedFloatingCommentMotion(
+  page: Page,
+  commentId: string,
+  {
+    ignoreInitialMs = 250,
+    observeForMs = 700,
+    tolerancePx = 4,
+  }: {
+    ignoreInitialMs?: number;
+    observeForMs?: number;
+    tolerancePx?: number;
+  } = {},
+): Promise<void> {
+  const selector = `.comment-placeholder[data-comment-id="${commentId}"] .comments-dialog`;
+  await expect(page.locator(selector).first()).toBeVisible({ timeout: 10_000 });
+
+  const samples = await page.evaluate(
+    ({ dialogSelector, durationMs }) => {
+      return new Promise<Array<{ elapsedMs: number; top: number | null }>>((resolve) => {
+        const measurements: Array<{ elapsedMs: number; top: number | null }> = [];
+        const start = performance.now();
+
+        const sample = () => {
+          const elapsedMs = performance.now() - start;
+          const dialog = document.querySelector(dialogSelector);
+          const top = dialog instanceof HTMLElement ? dialog.getBoundingClientRect().top : null;
+          measurements.push({ elapsedMs, top });
+
+          if (elapsedMs >= durationMs) {
+            resolve(measurements);
+            return;
+          }
+
+          requestAnimationFrame(sample);
+        };
+
+        requestAnimationFrame(sample);
+      });
+    },
+    { dialogSelector: selector, durationMs: ignoreInitialMs + observeForMs },
+  );
+
+  const stableSamples = samples
+    .filter((sample) => sample.elapsedMs >= ignoreInitialMs && typeof sample.top === 'number')
+    .map((sample) => sample.top as number);
+
+  expect(
+    stableSamples.length,
+    `Expected floating comment ${commentId} to remain mounted while tracking motion samples.`,
+  ).toBeGreaterThan(0);
+
+  const minTop = Math.min(...stableSamples);
+  const maxTop = Math.max(...stableSamples);
+  const movementPx = maxTop - minTop;
+
+  expect(
+    movementPx,
+    [
+      `Expected floating comment ${commentId} to stop moving after the first ${ignoreInitialMs}ms,`,
+      `but it drifted across a ${movementPx.toFixed(2)}px range`,
+      `during the next ${observeForMs}ms (min ${minTop.toFixed(2)}px, max ${maxTop.toFixed(2)}px).`,
+    ].join(' '),
+  ).toBeLessThanOrEqual(tolerancePx);
+}

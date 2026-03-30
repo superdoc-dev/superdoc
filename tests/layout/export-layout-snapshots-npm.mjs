@@ -6,7 +6,7 @@ import os from 'node:os';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeVersionLabel } from './shared.mjs';
+import { createTerminalPalette, formatTerminalLabelLine, normalizeVersionLabel, toDisplayPath } from './shared.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
@@ -17,6 +17,15 @@ const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
   ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
   : path.join(REPO_ROOT, 'test-corpus');
 const DEFAULT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout', 'reference');
+const TERMINAL_PALETTE = createTerminalPalette();
+
+function formatDisplayPath(value) {
+  return toDisplayPath(value, { repoRoot: REPO_ROOT });
+}
+
+function logLine(label, value) {
+  console.log(formatTerminalLabelLine(label, value, { palette: TERMINAL_PALETTE }));
+}
 
 function printHelp() {
   console.log(`
@@ -30,6 +39,9 @@ Wrapper Options:
       --version <value>      Same as positional version argument
       --installer <name>     auto | bun | npm (default: auto)
       --output-base <path>   Parent folder for versioned snapshots (default: ${DEFAULT_OUTPUT_BASE})
+      --wrapper-summary-file <path>
+                             Write wrapper metadata JSON for callers that need the resolved version folder
+      --verbose              Print installer details and forwarded exporter timing details
       --keep-temp            Keep temporary install directory for debugging
   -h, --help                 Show this help
 
@@ -54,6 +66,28 @@ function runCommand(command, args, options = {}) {
 
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+function runCommandBuffered(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd ?? process.cwd(),
+      env: options.env ?? process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const chunks = [];
+    child.stdout?.on('data', (data) => chunks.push(Buffer.from(data)));
+    child.stderr?.on('data', (data) => chunks.push(Buffer.from(data)));
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({
+        exitCode: code ?? 1,
+        output: Buffer.concat(chunks).toString('utf8'),
+      });
+    });
   });
 }
 
@@ -82,6 +116,8 @@ function parseArgs(argv) {
     version: null,
     installer: 'auto',
     outputBase: DEFAULT_OUTPUT_BASE,
+    wrapperSummaryFile: null,
+    verbose: false,
     keepTemp: false,
     forwarded: [],
   };
@@ -111,6 +147,16 @@ function parseArgs(argv) {
     if (arg === '--output-base' && next) {
       options.outputBase = next;
       i += 1;
+      continue;
+    }
+    if (arg === '--wrapper-summary-file' && next) {
+      options.wrapperSummaryFile = next;
+      i += 1;
+      continue;
+    }
+    if (arg === '--verbose') {
+      options.verbose = true;
+      options.forwarded.push(arg);
       continue;
     }
     if (arg === '--keep-temp') {
@@ -159,6 +205,12 @@ function parseArgs(argv) {
   return options;
 }
 
+async function writeWrapperSummaryFile(summaryFile, summary) {
+  if (!summaryFile) return;
+  await fs.mkdir(path.dirname(path.resolve(summaryFile)), { recursive: true });
+  await fs.writeFile(path.resolve(summaryFile), JSON.stringify(summary), 'utf8');
+}
+
 async function readInstalledVersion(tempDir) {
   const pkgPath = path.join(tempDir, 'node_modules', 'superdoc', 'package.json');
   const raw = await fs.readFile(pkgPath, 'utf8');
@@ -169,7 +221,7 @@ async function readInstalledVersion(tempDir) {
   return String(parsed.version);
 }
 
-async function installSuperdoc({ installer, version, tempDir }) {
+async function installSuperdoc({ installer, version, tempDir, verbose }) {
   const packageJsonPath = path.join(tempDir, 'package.json');
   const cacheRoot = path.join(tempDir, '.cache');
   const bunCacheDir = path.join(cacheRoot, 'bun');
@@ -198,32 +250,56 @@ async function installSuperdoc({ installer, version, tempDir }) {
   );
 
   if (installer === 'bun') {
-    const code = await runCommand('bun', ['add', `superdoc@${version}`], {
+    const installArgs = ['add', `superdoc@${version}`];
+    const installOptions = {
       cwd: tempDir,
       env: {
         ...envBase,
         BUN_INSTALL_CACHE_DIR: bunCacheDir,
       },
-    });
-    if (code !== 0) {
-      throw new Error(`bun add failed with exit code ${code}.`);
+    };
+
+    if (verbose) {
+      const code = await runCommand('bun', installArgs, installOptions);
+      if (code !== 0) {
+        throw new Error(`bun add failed with exit code ${code}.`);
+      }
+      return;
+    }
+
+    const result = await runCommandBuffered('bun', installArgs, installOptions);
+    if (result.exitCode !== 0) {
+      if (result.output.trim()) {
+        process.stderr.write(result.output);
+      }
+      throw new Error(`bun add failed with exit code ${result.exitCode}.`);
     }
     return;
   }
 
-  const code = await runCommand(
-    'npm',
-    ['install', '--no-audit', '--no-fund', '--no-package-lock', `superdoc@${version}`],
-    {
-      cwd: tempDir,
-      env: {
-        ...envBase,
-        npm_config_cache: npmCacheDir,
-      },
+  const installArgs = ['install', '--no-audit', '--no-fund', '--no-package-lock', `superdoc@${version}`];
+  const installOptions = {
+    cwd: tempDir,
+    env: {
+      ...envBase,
+      npm_config_cache: npmCacheDir,
     },
-  );
-  if (code !== 0) {
-    throw new Error(`npm install failed with exit code ${code}.`);
+  };
+
+  if (verbose) {
+    const code = await runCommand('npm', installArgs, installOptions);
+    if (code !== 0) {
+      throw new Error(`npm install failed with exit code ${code}.`);
+    }
+    return;
+  }
+
+  const result = await runCommandBuffered('npm', installArgs, installOptions);
+  if (result.exitCode !== 0) {
+    if (result.output.trim()) {
+      process.stderr.write(result.output);
+    }
+    throw new Error(`npm install failed with exit code ${result.exitCode}.`);
   }
 }
 
@@ -236,14 +312,11 @@ async function main() {
   let keepTemp = options.keepTemp;
 
   try {
-    console.log(`[layout-snapshots:npm] Installer: ${installer}`);
-    console.log(`[layout-snapshots:npm] Requested version: ${options.version}`);
-    console.log(`[layout-snapshots:npm] Temp install dir: ${tempDir}`);
-
     await installSuperdoc({
       installer,
       version: options.version,
       tempDir,
+      verbose: options.verbose,
     });
 
     const installedVersion = await readInstalledVersion(tempDir);
@@ -253,8 +326,11 @@ async function main() {
 
     await fs.access(modulePath);
 
-    console.log(`[layout-snapshots:npm] Resolved version: ${installedVersion}`);
-    console.log(`[layout-snapshots:npm] Snapshot output root: ${versionOutputRoot}`);
+    logLine('Reference', `npm ${options.version} -> ${TERMINAL_PALETTE.version(installedVersion)}`);
+    if (options.verbose) {
+      logLine('Installer', installer);
+      logLine('Temp', TERMINAL_PALETTE.path(formatDisplayPath(tempDir)));
+    }
 
     const forwarded = [...options.forwarded];
     if (!hasFlag(forwarded, ['--input-root', '-i'])) {
@@ -276,8 +352,11 @@ async function main() {
       throw new Error(`Snapshot export failed with exit code ${code}.`);
     }
 
-    console.log(`[layout-snapshots:npm] Done.`);
-    console.log(`[layout-snapshots:npm] Version folder: ${versionOutputRoot}`);
+    await writeWrapperSummaryFile(options.wrapperSummaryFile, {
+      requestedVersion: options.version,
+      resolvedVersion: installedVersion,
+      versionOutputRoot,
+    });
   } catch (error) {
     keepTemp = true;
     throw error;
@@ -285,13 +364,15 @@ async function main() {
     if (!keepTemp) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     } else {
-      console.log(`[layout-snapshots:npm] Temp dir kept: ${tempDir}`);
+      logLine('Temp', `kept at ${TERMINAL_PALETTE.path(formatDisplayPath(tempDir))}`);
     }
   }
 }
 
 main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  console.error(`[layout-snapshots:npm] Fatal: ${message}`);
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(
+    formatTerminalLabelLine('Reference', TERMINAL_PALETTE.error(`failed: ${message}`), { palette: TERMINAL_PALETTE }),
+  );
   process.exit(1);
 });

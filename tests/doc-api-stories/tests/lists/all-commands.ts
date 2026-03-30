@@ -64,7 +64,10 @@ type Scenario = {
 };
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
-const PRE_SEPARATED_FIXTURE = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/pre-separated-list.docx');
+const PRE_SEPARATED_FIXTURE = path.join(
+  REPO_ROOT,
+  'packages/super-editor/src/editors/v1/tests/data/pre-separated-list.docx',
+);
 
 describe('document-api story: all lists commands', () => {
   const { outPath, runCli } = useStoryHarness('lists/all-commands', {

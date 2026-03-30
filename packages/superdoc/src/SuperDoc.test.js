@@ -4,9 +4,12 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
-import { Extension } from '../../super-editor/src/core/Extension.js';
-import { CommentsPlugin, CommentsPluginKey } from '../../super-editor/src/extensions/comment/comments-plugin.js';
-import { CommentMarkName } from '../../super-editor/src/extensions/comment/comments-constants.js';
+import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
+import {
+  CommentsPlugin,
+  CommentsPluginKey,
+} from '../../super-editor/src/editors/v1/extensions/comment/comments-plugin.js';
+import { CommentMarkName } from '../../super-editor/src/editors/v1/extensions/comment/comments-constants.js';
 
 const isRef = (value) => value && typeof value === 'object' && 'value' in value;
 
@@ -184,6 +187,7 @@ const buildCommentsStore = () => ({
   setActiveComment: vi.fn(),
   addComment: vi.fn(),
   getComment: vi.fn(() => null),
+  resolveCommentPositionEntry: vi.fn(() => ({ key: null, entry: null })),
   getCommentDocumentId: vi.fn((comment) => {
     if (!comment) return null;
     if (comment.fileId != null) return String(comment.fileId);
@@ -218,6 +222,9 @@ const buildCommentsStore = () => ({
   },
   processLoadedDocxComments: vi.fn(),
   translateCommentsForExport: vi.fn(() => []),
+  requestInstantSidebarAlignment: vi.fn(),
+  peekInstantSidebarAlignment: vi.fn(() => null),
+  clearInstantSidebarAlignment: vi.fn(),
   getPendingComment: vi.fn(() => ({ commentId: 'pending', selection: { getValues: () => ({}) } })),
   commentsParentElement: null,
   editorCommentIds: [],
@@ -450,7 +457,32 @@ describe('SuperDoc.vue', () => {
     };
 
     // processSelectionChange needs layers to be non-null to proceed past the guard
-    wrapper.vm.$.setupState.layers = document.createElement('div');
+    const layersElement = document.createElement('div');
+    layersElement.getBoundingClientRect = vi.fn(() => ({
+      top: 120,
+      left: 0,
+      right: 800,
+      bottom: 1000,
+      width: 800,
+      height: 880,
+      x: 0,
+      y: 120,
+      toJSON: () => ({}),
+    }));
+    wrapper.vm.$.setupState.layers = layersElement;
+
+    commentsStoreStub.getComment.mockReturnValue({
+      commentId: 'c1',
+      fileId: 'doc-1',
+    });
+    commentsStoreStub.resolveCommentPositionEntry.mockReturnValue({
+      key: 'c1',
+      entry: {
+        bounds: {
+          top: 260,
+        },
+      },
+    });
 
     options.onBeforeCreate({ editor: editorMock });
     expect(superdocStub.broadcastEditorBeforeCreate).toHaveBeenCalled();
@@ -469,6 +501,7 @@ describe('SuperDoc.vue', () => {
 
     options.onCommentsUpdate({ activeCommentId: 'c1', type: 'trackedChange' });
     expect(commentsStoreStub.handleTrackedChangeUpdate).toHaveBeenCalled();
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(380, 'c1');
     await nextTick();
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'c1');
 

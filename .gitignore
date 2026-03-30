@@ -35,7 +35,7 @@ lerna-debug.log*
 .vitepress/.cache
 .vitepress/dist
 
-packages/super-editor/src/tests/data/*/
+packages/super-editor/src/editors/v1/tests/data/*/
 
 packages/word-layout/tests/**/*.js
 packages/word-layout/tests/**/*.d.ts
@@ -75,6 +75,7 @@ tests/layout-snapshots
 tests/layout/candidate/
 tests/layout/reference/
 tests/layout/reports/
+tmp/layout-compare/
 test-corpus/
 .pnpm-store
 devtools/visual-testing/pnpm-lock.yaml

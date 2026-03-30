@@ -233,7 +233,8 @@ const getJustifyAdjustment = (
         'src' in run ||
         run.kind === 'lineBreak' ||
         run.kind === 'break' ||
-        run.kind === 'fieldAnnotation'
+        run.kind === 'fieldAnnotation' ||
+        run.kind === 'math'
       ) {
         return sum;
       }
@@ -268,12 +269,13 @@ const getJustifyAdjustment = (
  * @returns CSS font string (e.g., "italic bold 16px Arial")
  */
 export function getRunFontString(run: Run): string {
-  // TabRun, ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun don't have full styling properties, use defaults
+  // TabRun, ImageRun, LineBreakRun, BreakRun, FieldAnnotationRun, and MathRun don't have full styling properties, use defaults
   if (
     run.kind === 'tab' ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||
     run.kind === 'fieldAnnotation' ||
+    run.kind === 'math' ||
     'src' in run
   ) {
     return 'normal normal 16px Arial';
@@ -327,6 +329,12 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
 
     // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
     if (run.kind === 'fieldAnnotation') {
+      result.push(run);
+      continue;
+    }
+
+    // MathRun handling - math runs are atomic units, no slicing needed
+    if (run.kind === 'math') {
       result.push(run);
       continue;
     }
@@ -410,7 +418,13 @@ export function measureCharacterX(
       1,
       runs.reduce((sum, run) => {
         if (isTabRun(run)) return sum + TAB_CHAR_LENGTH;
-        if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation')
+        if (
+          'src' in run ||
+          run.kind === 'lineBreak' ||
+          run.kind === 'break' ||
+          run.kind === 'fieldAnnotation' ||
+          run.kind === 'math'
+        )
           return sum;
         return sum + (run.text ?? '').length;
       }, 0),
@@ -437,7 +451,11 @@ export function measureCharacterX(
     }
 
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = text.length;
@@ -447,7 +465,8 @@ export function measureCharacterX(
       'src' in run ||
       run.kind === 'lineBreak' ||
       run.kind === 'break' ||
-      run.kind === 'fieldAnnotation'
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? undefined
         : run.textTransform;
     const displayText = applyTextTransform(text, transform);
@@ -549,7 +568,13 @@ function measureCharacterXSegmentBased(
       }
 
       // Handle ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun - these are atomic, use segment width
-      if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation') {
+      if (
+        'src' in run ||
+        run.kind === 'lineBreak' ||
+        run.kind === 'break' ||
+        run.kind === 'fieldAnnotation' ||
+        run.kind === 'math'
+      ) {
         return segmentBaseX + (offsetInSegment >= segmentChars ? (segment.width ?? 0) : 0);
       }
 
@@ -639,7 +664,11 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
   for (const run of runs) {
     const isTab = isTabRun(run);
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = isTab ? TAB_CHAR_LENGTH : text.length;
@@ -714,7 +743,13 @@ export function findCharacterAtX(
       1,
       runs.reduce((sum, run) => {
         if (isTabRun(run)) return sum + TAB_CHAR_LENGTH;
-        if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation')
+        if (
+          'src' in run ||
+          run.kind === 'lineBreak' ||
+          run.kind === 'break' ||
+          run.kind === 'fieldAnnotation' ||
+          run.kind === 'math'
+        )
           return sum;
         return sum + (run.text ?? '').length;
       }, 0),
@@ -756,7 +791,11 @@ export function findCharacterAtX(
     }
 
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = text.length;
@@ -766,7 +805,8 @@ export function findCharacterAtX(
       'src' in run ||
       run.kind === 'lineBreak' ||
       run.kind === 'break' ||
-      run.kind === 'fieldAnnotation'
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? undefined
         : run.textTransform;
     const displayText = applyTextTransform(text, transform);

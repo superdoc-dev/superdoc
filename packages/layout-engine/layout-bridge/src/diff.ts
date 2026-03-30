@@ -405,6 +405,15 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
   for (let i = 0; i < a.runs.length; i += 1) {
     const runA = a.runs[i];
     const runB = b.runs[i];
+    // MathRun: compare textContent (derived from OMML) to detect equation changes
+    if (runA.kind === 'math' || runB.kind === 'math') {
+      if (runA.kind !== runB.kind) return false;
+      if (runA.kind === 'math' && runB.kind === 'math') {
+        if (runA.textContent !== runB.textContent) return false;
+      }
+      continue;
+    }
+
     const leftText =
       'src' in runA || runA.kind === 'lineBreak' || runA.kind === 'break' || runA.kind === 'fieldAnnotation'
         ? ''

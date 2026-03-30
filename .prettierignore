@@ -23,8 +23,8 @@ packages/superdoc/src/components/PdfViewer/helpers/pdfjs-worker.js
 # Test data directories
 **/data/**
 **/data
-packages/super-editor/src/tests/data
-packages/super-editor/src/tests/data/**
+packages/super-editor/src/editors/v1/tests/data
+packages/super-editor/src/editors/v1/tests/data/**
 src/tests/data
 src/tests/data/**
 tests/data

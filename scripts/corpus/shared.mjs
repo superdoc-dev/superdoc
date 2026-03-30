@@ -32,10 +32,25 @@ const WRANGLER_CONFIG_PATHS =
 
 const ACCOUNT_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID'];
 const ACCESS_KEY_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCESS_KEY_ID', 'SD_TESTING_R2_ACCESS_KEY_ID'];
-const SECRET_ACCESS_KEY_ENV_KEYS = [
-  'SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
-  'SD_TESTING_R2_SECRET_ACCESS_KEY',
-];
+const SECRET_ACCESS_KEY_ENV_KEYS = ['SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY', 'SD_TESTING_R2_SECRET_ACCESS_KEY'];
+
+function shouldUseTerminalColors(stream = process.stdout) {
+  if (typeof process.env.NO_COLOR === 'string') {
+    return false;
+  }
+
+  const forcedColor = process.env.FORCE_COLOR;
+  if (typeof forcedColor === 'string') {
+    return forcedColor !== '0';
+  }
+
+  return Boolean(stream?.isTTY);
+}
+
+function applyAnsi(text, ...codes) {
+  if (!shouldUseTerminalColors()) return text;
+  return `\u001B[${codes.join(';')}m${text}\u001B[0m`;
+}
 
 function firstEnv(names) {
   for (const name of names) {
@@ -46,7 +61,10 @@ function firstEnv(names) {
 }
 
 export function normalizePath(value) {
-  return String(value ?? '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+  return String(value ?? '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '');
 }
 
 export function normalizeSegment(value) {
@@ -208,10 +226,7 @@ function resolveS3Credentials() {
 }
 
 async function importAwsSdkClient() {
-  const candidates = [
-    createRequire(import.meta.url),
-    createRequire(path.join(REPO_ROOT, 'tests/visual/package.json')),
-  ];
+  const candidates = [createRequire(import.meta.url), createRequire(path.join(REPO_ROOT, 'tests/visual/package.json'))];
 
   for (const req of candidates) {
     try {
@@ -229,7 +244,7 @@ async function importAwsSdkClient() {
 
 async function createS3R2Client(config) {
   const sdk = await importAwsSdkClient();
-  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } = sdk;
+  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } = sdk;
 
   const s3 = new S3Client({
     region: 'auto',
@@ -289,6 +304,14 @@ async function createS3R2Client(config) {
       const body = fs.readFileSync(filePath);
       await this.putObjectBuffer(key, body, contentType);
     },
+    async deleteObject(key) {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: key,
+        }),
+      );
+    },
     destroy() {
       s3.destroy();
     },
@@ -339,6 +362,10 @@ async function createWranglerR2Client() {
     await runWrangler(args, { accountId });
   };
 
+  const deleteObject = async (key) => {
+    await runWrangler(['r2', 'object', 'delete', `${bucketName}/${key}`, '--remote'], { accountId });
+  };
+
   return {
     accountId,
     bucketName,
@@ -369,6 +396,9 @@ async function createWranglerR2Client() {
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
+    },
+    async deleteObject(key) {
+      return deleteObject(key);
     },
     destroy() {
       // no-op
@@ -445,7 +475,8 @@ export function applyPathFilters(paths, { filters = [], matches = [], excludes =
 
   return paths.filter((candidate) => {
     const value = candidate.toLowerCase();
-    const matchesPrefix = normalizedFilters.length === 0 || normalizedFilters.some((filter) => value.startsWith(filter));
+    const matchesPrefix =
+      normalizedFilters.length === 0 || normalizedFilters.some((filter) => value.startsWith(filter));
     const matchesSubstring = normalizedMatches.length === 0 || normalizedMatches.some((match) => value.includes(match));
     const excluded = normalizedExcludes.some((exclude) => value.startsWith(exclude) || value.includes(exclude));
     return matchesPrefix && matchesSubstring && !excluded;
@@ -478,15 +509,19 @@ export function writeProgressBar(current, total, startedAt, { indent = '' } = {}
   const pct = Math.round((current / total) * 100);
   const barLen = 25;
   const filled = Math.floor(pct / (100 / barLen));
-  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barLen - filled);
+  const filledBar = applyAnsi('\u2588'.repeat(filled), 1, 36);
+  const emptyBar = applyAnsi('\u2591'.repeat(barLen - filled), 2, 90);
+  const bar = `${filledBar}${emptyBar}`;
   let eta = '';
   if (startedAt && current > 0 && current < total) {
     const remaining = ((Date.now() - startedAt) / current) * (total - current);
     if (remaining > 2000) {
-      eta = ` ~ ${formatEta(remaining)} remaining`;
+      eta = ` ${applyAnsi('~', 2, 90)} ${applyAnsi(formatEta(remaining), 2, 90)} ${applyAnsi('remaining', 2, 90)}`;
     }
   }
-  process.stdout.write(`\r${indent}${bar} ${pct}% (${current}/${total})${eta}    `);
+  const percentLabel = applyAnsi(`${pct}%`, 1, 36);
+  const countLabel = applyAnsi(`(${current}/${total})`, 2, 90);
+  process.stdout.write(`\r${indent}${bar} ${percentLabel} ${countLabel}${eta}    `);
 }
 
 export function sortRegistryDocs(docs) {

@@ -6,12 +6,12 @@ ProseMirror-based document editor for SuperDoc.
 
 | Area | Path | Purpose |
 |------|------|---------|
-| Extensions | `src/extensions/` | Feature modules (bold, table, comment, etc.) |
-| Core | `src/core/Editor.ts` | Main editor class and lifecycle |
-| Commands | `src/core/commands/` | Low-level transformation operations |
-| Converter | `src/core/super-converter/` | DOCX import/export |
-| Helpers | `src/core/helpers/` | DOM/schema utilities |
-| Schema | `src/schema/` | Document schema definitions |
+| Extensions | `src/editors/v1/extensions/` | Feature modules (bold, table, comment, etc.) |
+| Core | `src/editors/v1/core/Editor.ts` | Main editor class and lifecycle |
+| Commands | `src/editors/v1/core/commands/` | Low-level transformation operations |
+| Converter | `src/editors/v1/core/super-converter/` | DOCX import/export |
+| Helpers | `src/editors/v1/core/helpers/` | DOM/schema utilities |
+| Schema | `src/editors/v1/schema/` | Document schema definitions |
 
 ## Extension Pattern
 
@@ -29,7 +29,7 @@ export const MyExtension = Mark.create({
 });
 ```
 
-**Example to follow**: `src/extensions/bold/` for marks, `src/extensions/paragraph/` for nodes
+**Example to follow**: `src/editors/v1/extensions/bold/` for marks, `src/editors/v1/extensions/paragraph/` for nodes
 
 ## Key Concepts
 
@@ -44,8 +44,8 @@ export const MyExtension = Mark.create({
 
 | Task | Where to look |
 |------|---------------|
-| Add inline formatting | Create mark extension in `src/extensions/` |
-| Add block element | Create node extension in `src/extensions/` |
+| Add inline formatting | Create mark extension in `src/editors/v1/extensions/` |
+| Add block element | Create node extension in `src/editors/v1/extensions/` |
 | Add keyboard shortcut | Use `addShortcuts()` in extension |
 | Add visual decoration | Use `addPmPlugins()` with DecorationSet |
 | Support new DOCX element | Add handler in `super-converter/v3/handlers/w/` |
@@ -63,10 +63,10 @@ Style cascade resolution belongs in `layout-engine/style-engine/`. See root CLAU
 
 ## Entry Points
 
-- `src/extensions/index.js` - All registered extensions
-- `src/core/Editor.ts` - Main editor class
-- `src/core/CommandService.js` - Command execution
-- `src/core/super-converter/SuperConverter.js` - DOCX conversion
+- `src/editors/v1/extensions/index.js` - All registered extensions
+- `src/editors/v1/core/Editor.ts` - Main editor class
+- `src/editors/v1/core/CommandService.js` - Command execution
+- `src/editors/v1/core/super-converter/SuperConverter.js` - DOCX conversion
 
 ## Testing
 

@@ -199,17 +199,17 @@ export default [
   // Parts boundary enforcement: prevent direct writes to convertedXml outside part-store.ts
   {
     files: [
-      'packages/super-editor/src/**/*.ts',
-      'packages/super-editor/src/**/*.js',
+      'packages/super-editor/src/editors/v1/**/*.ts',
+      'packages/super-editor/src/editors/v1/**/*.js',
     ],
     ignores: [
-      'packages/super-editor/src/core/parts/store/part-store.ts',
+      'packages/super-editor/src/editors/v1/core/parts/store/part-store.ts',
       // Test helpers set up mock convertedXml for part tests
-      'packages/super-editor/src/core/parts/testing/**',
+      'packages/super-editor/src/editors/v1/core/parts/testing/**',
       // Import/export phases are exempt (initial document load and final export)
-      'packages/super-editor/src/core/super-converter/**',
+      'packages/super-editor/src/editors/v1/core/super-converter/**',
       // Validator normalizes rels key paths during document load
-      'packages/super-editor/src/core/super-validator/**',
+      'packages/super-editor/src/editors/v1/core/super-validator/**',
     ],
     rules: {
       'no-restricted-syntax': [
@@ -228,7 +228,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/extensions/**/*.js'],
+    files: ['packages/super-editor/src/editors/v1/extensions/**/*.js'],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
       'no-unused-vars': [
@@ -242,7 +242,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/extensions/types/**/*.ts'],
+    files: ['packages/super-editor/src/editors/v1/extensions/types/**/*.ts'],
     rules: {
       '@typescript-eslint/no-empty-object-type': [
         'off',
@@ -253,7 +253,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/core/types/ChainedCommands.ts'],
+    files: ['packages/super-editor/src/editors/v1/core/types/ChainedCommands.ts'],
     rules: {
       // These empty interfaces are intentionally used for declaration merging
       // Extensions augment them via module augmentation to add typed commands

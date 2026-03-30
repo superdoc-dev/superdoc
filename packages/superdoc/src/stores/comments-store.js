@@ -57,6 +57,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const isFloatingCommentsReady = ref(false);
   const generalCommentIds = ref([]);
   const instantSidebarAlignmentTargetY = ref(null);
+  const instantSidebarAlignmentThreadId = ref(null);
 
   const pendingComment = ref(null);
   const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
@@ -585,8 +586,10 @@ export const useCommentsStore = defineStore('comments', () => {
     }
   };
 
-  const requestInstantSidebarAlignment = (targetY = null) => {
-    instantSidebarAlignmentTargetY.value = Number.isFinite(targetY) ? targetY : null;
+  const requestInstantSidebarAlignment = (targetY = null, threadId = null) => {
+    const hasTargetY = Number.isFinite(targetY);
+    instantSidebarAlignmentTargetY.value = hasTargetY ? targetY : null;
+    instantSidebarAlignmentThreadId.value = hasTargetY && threadId != null ? String(threadId) : null;
   };
 
   const peekInstantSidebarAlignment = () => {
@@ -596,6 +599,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
   const clearInstantSidebarAlignment = () => {
     instantSidebarAlignmentTargetY.value = null;
+    instantSidebarAlignmentThreadId.value = null;
   };
 
   const debounceEmit = (commentId, event, superdoc, delay = 1000) => {
@@ -637,7 +641,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
-    requestInstantSidebarAlignment(targetClientY);
+    requestInstantSidebarAlignment(targetClientY, 'pending');
     activeComment.value = pendingComment.value.commentId;
   };
 
@@ -1438,6 +1442,8 @@ export const useCommentsStore = defineStore('comments', () => {
     visibleConversations,
     skipSelectionUpdate,
     isFloatingCommentsReady,
+    instantSidebarAlignmentTargetY,
+    instantSidebarAlignmentThreadId,
     // Getters
     getConfig,
     documentsWithConverations,

@@ -1,0 +1,22 @@
+{
+  "name": "@superdoc/dom-contract",
+  "version": "0.0.0",
+  "description": "DOM surface contract: class names, data-attribute constants, and selector helpers shared between the painter and editor-side DOM readers.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

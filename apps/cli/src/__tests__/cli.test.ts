@@ -63,7 +63,7 @@ const CLI_PACKAGE_JSON_PATH = join(import.meta.dir, '../../package.json');
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const ENCRYPTED_FIXTURE_SOURCE = join(
   REPO_ROOT,
-  'packages/super-editor/src/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
+  'packages/super-editor/src/editors/v1/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
 );
 const execFileAsync = promisify(execFile);
 const ZIP_MAX_BUFFER_BYTES = 10 * 1024 * 1024;

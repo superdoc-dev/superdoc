@@ -1,6 +1,44 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter } from './index.js';
-import type { FlowBlock, Measure, Layout, Fragment, PageMargins } from '@superdoc/contracts';
+import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
+import type { FlowBlock, Measure, Layout, Fragment, PageMargins, ResolvedLayout } from '@superdoc/contracts';
+
+const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
+
+/** Test-only bridge: see index.test.ts for full JSDoc. */
+function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
+  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
+  let lastPaintSnapshot: PaintSnapshot | null = null;
+  const painter = createDomPainter({
+    ...painterOpts,
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
+  let currentBlocks: FlowBlock[] = initBlocks ?? [];
+  let currentMeasures: Measure[] = initMeasures ?? [];
+  let currentResolved: ResolvedLayout = emptyResolved;
+
+  return {
+    paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const input: DomPainterInput = {
+        resolvedLayout: currentResolved,
+        sourceLayout: layout,
+        blocks: currentBlocks,
+        measures: currentMeasures,
+      };
+      painter.paint(input, mount, mapping as any);
+    },
+    setProviders: painter.setProviders,
+    setVirtualizationPins: painter.setVirtualizationPins,
+    getPaintSnapshot() {
+      return lastPaintSnapshot;
+    },
+    onScroll: painter.onScroll,
+    setZoom: painter.setZoom,
+    setScrollContainer: painter.setScrollContainer,
+  };
+}
 
 // Minimal paragraph block/measure to satisfy painter
 const block: FlowBlock = {
@@ -86,7 +124,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('renders only a window of pages with spacers', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 5, overscan: 0, gap: 72, paddingTop: 0 },
@@ -106,7 +144,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('defaults virtualization gap to 72px when no gap is provided', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 2 },
@@ -125,7 +163,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('updates the window on scroll', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 5, overscan: 0, gap: 72, paddingTop: 0 },
@@ -201,7 +239,7 @@ describe('DomPainter virtualization (vertical)', () => {
       })),
     };
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [sdtBlock],
       measures: [sdtMeasure],
       virtualization: { enabled: true, window: 1, overscan: 0, gap: 72, paddingTop: 0 },
@@ -228,7 +266,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('handles window size larger than total pages', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 10, overscan: 0, gap: 72, paddingTop: 0 },
@@ -241,7 +279,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('handles single page document', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 5, overscan: 0, gap: 72, paddingTop: 0 },
@@ -254,7 +292,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('maintains bounded DOM nodes with large document', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 5, overscan: 1, gap: 72, paddingTop: 0 },
@@ -268,7 +306,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('renders overscan pages correctly', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 3, overscan: 2, gap: 72, paddingTop: 0 },
@@ -283,7 +321,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('pins pages outside the scroll window', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 2, overscan: 0, gap: 72, paddingTop: 0 },
@@ -310,7 +348,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('updates providers without remounting pages', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       // Use non-virtualized path to focus on provider update semantics
@@ -378,7 +416,7 @@ describe('DomPainter virtualization (vertical)', () => {
     const gap = 72;
     const pageCount = 20;
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 3, overscan: 0, gap, paddingTop: 0 },
@@ -433,7 +471,7 @@ describe('DomPainter virtualization (vertical)', () => {
     const pageCount = 20;
     const toolbarHeight = 100;
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 3, overscan: 0, gap, paddingTop: 0 },
@@ -537,7 +575,7 @@ describe('DomPainter virtualization (vertical)', () => {
   it('setScrollContainer triggers immediate updateVirtualWindow', () => {
     const pageCount = 20;
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 3, overscan: 0, gap: 72, paddingTop: 0 },
@@ -599,7 +637,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('renders drawing fragments inside virtualized windows', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [drawingBlock],
       measures: [drawingMeasure],
       virtualization: { enabled: true, window: 2, overscan: 0, gap: 72, paddingTop: 0 },
@@ -623,7 +661,7 @@ describe('DomPainter virtualization (vertical)', () => {
   });
 
   it('disables virtualization rendering paths in semantic flow mode', () => {
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       flowMode: 'semantic',
@@ -671,7 +709,7 @@ describe('DomPainter virtualization (vertical)', () => {
       ],
     }));
 
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       flowMode: 'semantic',
@@ -693,7 +731,7 @@ describe('DomPainter virtualization (vertical)', () => {
     // grows to fit content and scrollTop stays 0, so the scroll container branch
     // must fall through to the viewport-based getBoundingClientRect path.
     const pageCount = 20;
-    const painter = createDomPainter({
+    const painter = createTestPainter({
       blocks: [block],
       measures: [measure],
       virtualization: { enabled: true, window: 5, overscan: 1, gap: 72, paddingTop: 0 },

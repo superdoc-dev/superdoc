@@ -24,16 +24,16 @@ const FIXTURES: FixtureCase[] = [
   { filename: 'sd-1495-auto-page-break-2.docx', headingText: 'TITLE IN HERE' },
 ];
 
-const FIXTURE_DIR = path.join(__dirname, '../../../super-editor/src/tests/data');
+const FIXTURE_DIR = path.join(__dirname, '../../../super-editor/src/editors/v1/tests/data');
 const EXTENSIONS_TO_CONVERT = new Set(['.xml', '.rels']);
 const fixtureCache = new Map<string, { pmDoc: PMNode; converterContext: ConverterContext }>();
 
 async function loadDocxFixture(filename: string): Promise<{ pmDoc: PMNode; converterContext: ConverterContext }> {
-  const { default: DocxZipper } = await import('../../../super-editor/src/core/DocxZipper.js');
+  const { default: DocxZipper } = await import('../../../super-editor/src/editors/v1/core/DocxZipper.js');
   const { createDocumentJson } = await import(
-    '../../../super-editor/src/core/super-converter/v2/importer/docxImporter.js'
+    '../../../super-editor/src/editors/v1/core/super-converter/v2/importer/docxImporter.js'
   );
-  const { parseXmlToJson } = await import('../../../super-editor/src/core/super-converter/v2/docxHelper.js');
+  const { parseXmlToJson } = await import('../../../super-editor/src/editors/v1/core/super-converter/v2/docxHelper.js');
 
   const docxPath = path.join(FIXTURE_DIR, filename);
   const fileBuffer = fs.readFileSync(docxPath);

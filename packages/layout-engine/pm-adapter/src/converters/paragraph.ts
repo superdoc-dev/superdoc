@@ -57,6 +57,7 @@ import { sequenceFieldNodeToRun } from './inline-converters/sequence-field.js';
 import { documentStatFieldNodeToRun } from './inline-converters/document-stat-field.js';
 import { citationNodeToRun } from './inline-converters/citation.js';
 import { authorityEntryNodeToRun } from './inline-converters/authority-entry.js';
+import { mathInlineNodeToRun } from './inline-converters/math.js';
 import { lineBreakNodeToRun } from './inline-converters/line-break.js';
 import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
@@ -916,6 +917,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   table: {
     blockConverter: tableNodeToBlock,
+  },
+  mathInline: {
+    inlineConverter: mathInlineNodeToRun,
   },
 };
 

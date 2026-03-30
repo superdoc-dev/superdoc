@@ -10,6 +10,7 @@ import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { Window } from 'happy-dom';
+import { colorizeTerminalStatus, createTerminalPalette, pathToPosix, toDisplayPath } from './shared.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
@@ -26,11 +27,15 @@ const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'];
 const MAX_LOG_LINE_CHARS = 120;
 const TELEMETRY_DISABLED_LOG_FRAGMENT = '[super-editor] Telemetry: disabled';
 const MAX_RECOMMENDED_JOBS = 8;
+const REPORTER_EVENT_PREFIX = '__layout_snapshots_event__ ';
+const MAX_VISIBLE_WARNING_LINES = 8;
+const MAX_VISIBLE_FAILURE_LINES = 12;
 
 const DEFAULT_PAGE_SIZE = { w: 612, h: 792 };
 const DEFAULT_MARGINS = { top: 72, right: 72, bottom: 72, left: 72 };
 const DEFAULT_PAGE_GAP = 24;
 const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
+const TERMINAL_PALETTE = createTerminalPalette();
 
 const require = createRequire(import.meta.url);
 
@@ -46,8 +51,71 @@ function getRecommendedJobs() {
 
 const DEFAULT_JOBS = getRecommendedJobs();
 
-function pathToPosix(value) {
-  return String(value ?? '').split(path.sep).join('/');
+function formatDocCountLabel(count) {
+  return `${count} doc${count === 1 ? '' : 's'}`;
+}
+
+function formatWorkerCountLabel(count) {
+  return `${count} worker${count === 1 ? '' : 's'}`;
+}
+
+function formatMatchLabel(matches) {
+  if (!Array.isArray(matches) || matches.length === 0) return '';
+  return matches.join(', ');
+}
+
+function formatSnapshotScopeLabel(matches, docCount) {
+  const matchLabel = formatMatchLabel(matches);
+  if (!matchLabel) {
+    return formatDocCountLabel(docCount);
+  }
+  return `${matchLabel} (${formatDocCountLabel(docCount)})`;
+}
+
+function formatOutputPathLabel(value) {
+  return toDisplayPath(value, { repoRoot: REPO_ROOT });
+}
+
+function styleResultValue(value) {
+  return String(value ?? '').replace(/^(clean|changed|failed|running)\b/i, (status) =>
+    colorizeTerminalStatus(status, { palette: TERMINAL_PALETTE }),
+  );
+}
+
+function styleStructuredLine(line) {
+  const normalized = String(line ?? '');
+
+  if (normalized === 'Active') {
+    return TERMINAL_PALETTE.info(normalized);
+  }
+  if (normalized === 'Warnings') {
+    return TERMINAL_PALETTE.warning(normalized);
+  }
+  if (normalized === 'Failures') {
+    return TERMINAL_PALETTE.error(normalized);
+  }
+
+  const labelMatch = normalized.match(/^([A-Za-z]+)(\s{2,})(.*)$/);
+  if (labelMatch) {
+    const [, label, spacing, value] = labelMatch;
+    const renderedLabel = TERMINAL_PALETTE.label(`${label}${spacing}`);
+
+    if (label === 'Result' || label === 'Snapshots') {
+      return `${renderedLabel}${styleResultValue(value)}`;
+    }
+    if (label === 'Output' || label === 'Source' || label === 'Module') {
+      return `${renderedLabel}${TERMINAL_PALETTE.path(value)}`;
+    }
+    if (label === 'Canvas') {
+      return `${renderedLabel}${TERMINAL_PALETTE.warning(value)}`;
+    }
+
+    return `${renderedLabel}${value}`;
+  }
+
+  return normalized.replace(/\bOK\b|\bFAIL\b/g, (status) =>
+    colorizeTerminalStatus(status, { palette: TERMINAL_PALETTE }),
+  );
 }
 
 function normalizeMatchPattern(value) {
@@ -74,6 +142,7 @@ function parseArgs(argv) {
     timeoutMs: 30_000,
     failFast: false,
     telemetryEnabled: false,
+    verbose: false,
     jobs: DEFAULT_JOBS,
     pipeline: DEFAULT_PIPELINE,
 
@@ -82,6 +151,7 @@ function parseArgs(argv) {
     workerManifestPath: null,
     totalDocs: null,
     summaryFile: null,
+    suppressRunHeader: false,
     suppressFinalSummary: false,
     cleanOutput: true,
   };
@@ -178,6 +248,10 @@ function parseArgs(argv) {
       args.failFast = true;
       continue;
     }
+    if (arg === '--verbose') {
+      args.verbose = true;
+      continue;
+    }
     if (arg === '--enable-telemetry') {
       args.telemetryEnabled = true;
       continue;
@@ -193,9 +267,7 @@ function parseArgs(argv) {
       } else if (['0', 'false', 'off', 'disabled'].includes(normalized)) {
         args.telemetryEnabled = false;
       } else {
-        throw new Error(
-          `Invalid value for --telemetry: "${next}". Use one of: on, off, true, false, 1, 0.`,
-        );
+        throw new Error(`Invalid value for --telemetry: "${next}". Use one of: on, off, true, false, 1, 0.`);
       }
       i += 1;
       continue;
@@ -223,6 +295,10 @@ function parseArgs(argv) {
     if (arg === '--summary-file') {
       args.summaryFile = requireValue(arg, next);
       i += 1;
+      continue;
+    }
+    if (arg === '--suppress-run-header') {
+      args.suppressRunHeader = true;
       continue;
     }
     if (arg === '--suppress-final-summary') {
@@ -266,10 +342,14 @@ Options:
       --match <pattern>     Filter docs by relative path substring (repeatable, case-insensitive)
       --timeout-ms <ms>     Per-document layout timeout for presentation mode (default: 30000)
       --fail-fast           Stop on first error
+      --verbose             Print full configuration and timing details
       --telemetry <on|off>  Enable/disable editor telemetry (default: off)
       --enable-telemetry    Shorthand for --telemetry on
       --disable-telemetry   Shorthand for --telemetry off
   -h, --help                Show this help
+      --suppress-run-header Hide the initial Scope / Export / Output header
+      --suppress-final-summary
+                            Hide the final Result / timing summary
 
 Examples:
   bun tests/layout/export-layout-snapshots.mjs
@@ -340,8 +420,8 @@ async function ensureDefaultSuperEditorBuild(args) {
     // Build on-demand when the local dist module is missing.
   }
 
-  logLine(`[layout-snapshots] Missing module at ${modulePath}`);
-  logLine('[layout-snapshots] Running `pnpm run pack:es` to build local artifacts...');
+  logLine(`Build      local module missing at ${formatOutputPathLabel(modulePath)}`);
+  logLine('Build      running pnpm run pack:es');
 
   const exitCode = await runCommand('pnpm', ['run', 'pack:es'], {
     cwd: REPO_ROOT,
@@ -639,7 +719,11 @@ function collectLineMarkers(lineEl) {
   const inlineMarkers = lineEl?.querySelectorAll?.('.superdoc-paragraph-marker') ?? [];
   for (const markerEl of inlineMarkers) {
     if (!(markerEl instanceof HTMLElement)) continue;
-    if (markers.some((existing) => existing.text === markerEl.textContent && existing.leftPx === readPxMetric(markerEl.style.left))) {
+    if (
+      markers.some(
+        (existing) => existing.text === markerEl.textContent && existing.leftPx === readPxMetric(markerEl.style.left),
+      )
+    ) {
       continue;
     }
     markers.push(snapshotMarkerStyle(markerEl));
@@ -788,6 +872,26 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function summarizeFailureDetails(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const stackText = error instanceof Error ? error.stack : null;
+
+  if (typeof stackText !== 'string' || stackText.trim().length === 0) {
+    return { message, stackPreview: [] };
+  }
+
+  const stackPreview = stackText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  return {
+    message,
+    stackPreview,
+  };
+}
+
 function wrapText(text, maxChars = MAX_LOG_LINE_CHARS) {
   const normalized = String(text ?? '');
   if (normalized.length <= maxChars) return [normalized];
@@ -814,23 +918,334 @@ function wrapText(text, maxChars = MAX_LOG_LINE_CHARS) {
 function logLine(text) {
   const lines = wrapText(text);
   for (const line of lines) {
-    console.log(line);
+    console.log(styleStructuredLine(line));
   }
 }
 
 function errorLine(text) {
   const lines = wrapText(text);
   for (const line of lines) {
-    console.error(line);
+    console.error(styleStructuredLine(line));
   }
 }
 
+function formatElapsedCompact(ms) {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
+
+function getDashboardWrapWidth(writer) {
+  const columnCount = Number(writer?.columns);
+  if (!Number.isFinite(columnCount) || columnCount < 40) {
+    return MAX_LOG_LINE_CHARS;
+  }
+
+  return Math.min(MAX_LOG_LINE_CHARS, Math.max(40, columnCount - 2));
+}
+
+function flattenWrappedLines(lines, maxChars) {
+  return lines.flatMap((line) => wrapText(line, maxChars));
+}
+
+function formatWorkerPrefix(workerId) {
+  return Number.isInteger(workerId) && workerId > 0 ? `[w${workerId}] ` : '';
+}
+
+function formatDocSuccessLine({ workerId, progress, relativePath, pageCount, docElapsedMs }) {
+  return `${formatWorkerPrefix(workerId)}${progress} OK  ${relativePath} (${pageCount} page${pageCount !== 1 ? 's' : ''}, ${formatDuration(docElapsedMs)})`;
+}
+
+function formatDocFailureLine({ workerId, progress, relativePath, docElapsedMs }) {
+  return `${formatWorkerPrefix(workerId)}${progress} FAIL  ${relativePath} (${formatDuration(docElapsedMs)})`;
+}
+
+function formatDashboardFailureLine({ workerId, progress, relativePath, docElapsedMs, message }) {
+  return `  ${formatWorkerPrefix(workerId)}${progress} ${relativePath} failed after ${formatDuration(docElapsedMs)}: ${message}`;
+}
+
+function formatActiveDocLine({ workerId, progress, relativePath, startedAtMs }, nowMs) {
+  const elapsedLabel = Number.isFinite(startedAtMs) ? ` (${formatDuration(Math.max(0, nowMs - startedAtMs))})` : '';
+  return `  ${formatWorkerPrefix(workerId)}${progress} ${relativePath}${elapsedLabel}`;
+}
+
+function createReporterEventLine(event) {
+  return `${REPORTER_EVENT_PREFIX}${JSON.stringify(event)}`;
+}
+
+function parseReporterEventLine(line) {
+  if (typeof line !== 'string' || !line.startsWith(REPORTER_EVENT_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const event = JSON.parse(line.slice(REPORTER_EVENT_PREFIX.length));
+    if (!event || typeof event !== 'object' || typeof event.type !== 'string') {
+      return null;
+    }
+    return event;
+  } catch {
+    return null;
+  }
+}
+
+function createRetainedIssueTracker(limit) {
+  const entriesByKey = new Map();
+  const orderedKeys = [];
+  let totalOccurrences = 0;
+
+  return {
+    add({ key, text }) {
+      if (typeof key !== 'string' || typeof text !== 'string' || text.length === 0) return;
+
+      totalOccurrences += 1;
+      const existing = entriesByKey.get(key);
+      if (existing) {
+        existing.count += 1;
+        return;
+      }
+
+      orderedKeys.push(key);
+      entriesByKey.set(key, { text, count: 1 });
+    },
+
+    getTotalOccurrences() {
+      return totalOccurrences;
+    },
+
+    getEntries() {
+      return orderedKeys.map((key) => entriesByKey.get(key));
+    },
+
+    snapshot() {
+      const visibleKeys = orderedKeys.slice(-limit);
+      return {
+        entries: visibleKeys.map((key) => entriesByKey.get(key)),
+        hiddenCount: Math.max(0, orderedKeys.length - visibleKeys.length),
+      };
+    },
+  };
+}
+
+function buildSnapshotStatusLines({
+  totalDocs,
+  jobs,
+  successCount,
+  failureCount,
+  activeDocs,
+  warningSnapshot,
+  warningCount,
+  failureSnapshot,
+  startedAtMs,
+  nowMs = Date.now(),
+}) {
+  const completedCount = successCount + failureCount;
+  const elapsedLabel = formatElapsedCompact(Math.max(0, nowMs - startedAtMs));
+  const lines = [
+    `Snapshots  running ${formatDocCountLabel(totalDocs)} with ${formatWorkerCountLabel(jobs)}`,
+    `Progress   ${completedCount}/${totalDocs} done | ${activeDocs.length} active | ${failureCount} failed | ${warningCount} warnings | ${elapsedLabel}`,
+  ];
+
+  if (activeDocs.length > 0) {
+    lines.push('Active');
+    const sortedActiveDocs = [...activeDocs].sort((left, right) => {
+      const leftWorkerId = Number(left.workerId ?? 0);
+      const rightWorkerId = Number(right.workerId ?? 0);
+      return leftWorkerId - rightWorkerId;
+    });
+
+    for (const activeDoc of sortedActiveDocs) {
+      lines.push(formatActiveDocLine(activeDoc, nowMs));
+    }
+  }
+
+  if (failureSnapshot.entries.length > 0) {
+    lines.push('Failures');
+    for (const entry of failureSnapshot.entries) {
+      const countLabel = entry.count > 1 ? ` (x${entry.count})` : '';
+      lines.push(`${entry.text}${countLabel}`);
+    }
+    if (failureSnapshot.hiddenCount > 0) {
+      lines.push(`  ... ${failureSnapshot.hiddenCount} more failure${failureSnapshot.hiddenCount === 1 ? '' : 's'}`);
+    }
+  }
+
+  if (warningSnapshot.entries.length > 0) {
+    lines.push('Warnings');
+    for (const entry of warningSnapshot.entries) {
+      const countLabel = entry.count > 1 ? ` (x${entry.count})` : '';
+      lines.push(`  ${entry.text}${countLabel}`);
+    }
+    if (warningSnapshot.hiddenCount > 0) {
+      lines.push(`  ... ${warningSnapshot.hiddenCount} more warning${warningSnapshot.hiddenCount === 1 ? '' : 's'}`);
+    }
+  }
+
+  return lines;
+}
+
+function createSnapshotProgressReporter({ interactive, totalDocs, jobs, writer = process.stdout }) {
+  const activeDocsByWorkerId = new Map();
+  const warnings = createRetainedIssueTracker(MAX_VISIBLE_WARNING_LINES);
+  const failures = createRetainedIssueTracker(MAX_VISIBLE_FAILURE_LINES);
+  const startedAtMs = Date.now();
+
+  let successCount = 0;
+  let failureCount = 0;
+  let renderedLineCount = 0;
+
+  const render = () => {
+    if (!interactive) return;
+
+    const lines = buildSnapshotStatusLines({
+      totalDocs,
+      jobs,
+      successCount,
+      failureCount,
+      activeDocs: [...activeDocsByWorkerId.values()],
+      warningSnapshot: warnings.snapshot(),
+      warningCount: warnings.getTotalOccurrences(),
+      failureSnapshot: failures.snapshot(),
+      startedAtMs,
+    });
+    const wrappedLines = flattenWrappedLines(lines, getDashboardWrapWidth(writer));
+    const styledLines = wrappedLines.map((line) => styleStructuredLine(line));
+
+    if (renderedLineCount > 0) {
+      readline.moveCursor(writer, 0, -renderedLineCount);
+      readline.cursorTo(writer, 0);
+      readline.clearScreenDown(writer);
+    }
+
+    writer.write(`${styledLines.join('\n')}\n`);
+    renderedLineCount = styledLines.length;
+  };
+
+  const removeActiveDoc = (workerId) => {
+    if (Number.isInteger(workerId) && workerId > 0) {
+      activeDocsByWorkerId.delete(workerId);
+      return;
+    }
+
+    for (const [activeWorkerId] of activeDocsByWorkerId.entries()) {
+      activeDocsByWorkerId.delete(activeWorkerId);
+      break;
+    }
+  };
+
+  return {
+    recordDocStart({ workerId, progress, relativePath }) {
+      activeDocsByWorkerId.set(workerId ?? 0, {
+        workerId,
+        progress,
+        relativePath,
+        startedAtMs: Date.now(),
+      });
+
+      render();
+    },
+
+    recordDocSuccess(event) {
+      removeActiveDoc(event.workerId);
+      successCount += 1;
+
+      if (interactive) {
+        render();
+        return;
+      }
+
+      logLine(formatDocSuccessLine(event));
+    },
+
+    recordDocFailure(event) {
+      removeActiveDoc(event.workerId);
+      failureCount += 1;
+      failures.add({
+        key: `${event.relativePath}::${event.message}`,
+        text: formatDashboardFailureLine(event),
+      });
+
+      if (interactive) {
+        render();
+        return;
+      }
+
+      logLine(formatDocFailureLine(event));
+      errorLine(`  error: ${event.message}`);
+    },
+
+    recordWorkerLog({ workerId, line, stream = 'stdout' }) {
+      if (typeof line !== 'string' || line.trim().length === 0) return;
+
+      const text = `${formatWorkerPrefix(workerId)}${line.trimEnd()}`;
+      warnings.add({ key: text, text });
+
+      if (interactive) {
+        render();
+        return;
+      }
+
+      if (stream === 'stderr') {
+        errorLine(text);
+        return;
+      }
+
+      logLine(text);
+    },
+
+    finish() {
+      if (!interactive || renderedLineCount === 0) return;
+      writer.write('\n');
+      renderedLineCount = 0;
+    },
+
+    getWarningEntries() {
+      return warnings.getEntries();
+    },
+
+    getWarningCount() {
+      return warnings.getTotalOccurrences();
+    },
+  };
+}
+
+function createWorkerBatchReporter(workerId) {
+  const emit = (event) => {
+    process.stdout.write(`${createReporterEventLine({ ...event, workerId })}\n`);
+  };
+
+  return {
+    recordDocStart({ progress, relativePath }) {
+      emit({ type: 'doc-start', progress, relativePath });
+    },
+
+    recordDocSuccess({ progress, relativePath, pageCount, docElapsedMs }) {
+      emit({
+        type: 'doc-ok',
+        progress,
+        relativePath,
+        pageCount,
+        docElapsedMs,
+      });
+    },
+
+    recordDocFailure({ progress, relativePath, docElapsedMs, message }) {
+      emit({
+        type: 'doc-fail',
+        progress,
+        relativePath,
+        docElapsedMs,
+        message,
+      });
+    },
+  };
+}
+
 function shouldSuppressTelemetryDisabledLog(line, telemetryEnabled) {
-  return (
-    !telemetryEnabled &&
-    typeof line === 'string' &&
-    line.includes(TELEMETRY_DISABLED_LOG_FRAGMENT)
-  );
+  return !telemetryEnabled && typeof line === 'string' && line.includes(TELEMETRY_DISABLED_LOG_FRAGMENT);
 }
 
 function installTelemetryConsoleFilter(telemetryEnabled) {
@@ -860,15 +1275,6 @@ function installTelemetryConsoleFilter(telemetryEnabled) {
       console[method] = original;
     }
   };
-}
-
-function logDocProgress({ progress, relativePath, pageCount, docElapsedMs }) {
-  logLine(`${progress} OK  ${relativePath} (${pageCount} page${pageCount !== 1 ? 's' : ''}, ${formatDuration(docElapsedMs)})`);
-}
-
-function logDocFailure({ progress, relativePath, docElapsedMs, message }) {
-  logLine(`${progress} FAIL  ${relativePath} (${formatDuration(docElapsedMs)})`);
-  errorLine(`  error: ${message}`);
 }
 
 function inchesToPx(value) {
@@ -912,9 +1318,7 @@ function computeDefaultLayoutDefaults(converter) {
 }
 
 function resolveLayoutOptions({ defaults, blocks, sectionMetadata }) {
-  const firstSection = blocks?.find(
-    (block) => block.kind === 'sectionBreak' && block?.attrs?.isFirstSection,
-  );
+  const firstSection = blocks?.find((block) => block.kind === 'sectionBreak' && block?.attrs?.isFirstSection);
 
   const pageSize = firstSection?.pageSize ?? defaults.pageSize;
   const margins = {
@@ -1056,7 +1460,14 @@ function collectHeaderFooterIds(idConfig, docsById) {
   return ids;
 }
 
-function buildHeaderFooterInput({ toFlowBlocks, converter, converterContext, atomNodeTypes, layoutOptions, mediaFiles }) {
+function buildHeaderFooterInput({
+  toFlowBlocks,
+  converter,
+  converterContext,
+  atomNodeTypes,
+  layoutOptions,
+  mediaFiles,
+}) {
   const headers = converter?.headers ?? {};
   const footers = converter?.footers ?? {};
   const headerIds = converter?.headerIds ?? {};
@@ -1215,19 +1626,14 @@ async function resolveRuntimeChunkInfo(superEditorModulePath) {
     };
   }
 
-  throw new Error(
-    `Unable to resolve Editor/getStarterExtensions import mapping from module: ${superEditorModulePath}`,
-  );
+  throw new Error(`Unable to resolve Editor/getStarterExtensions import mapping from module: ${superEditorModulePath}`);
 }
 
 function rewriteRelativeImports(source, chunkDir) {
-  return source.replace(
-    /(from\s+['"]|import\(\s*['"])(\.\.?\/[^'"]+)(['"])/g,
-    (match, prefix, relPath, suffix) => {
-      const absUrl = pathToFileURL(path.resolve(chunkDir, relPath)).href;
-      return `${prefix}${absUrl}${suffix}`;
-    },
-  );
+  return source.replace(/(from\s+['"]|import\(\s*['"])(\.\.?\/[^'"]+)(['"])/g, (match, prefix, relPath, suffix) => {
+    const absUrl = pathToFileURL(path.resolve(chunkDir, relPath)).href;
+    return `${prefix}${absUrl}${suffix}`;
+  });
 }
 
 async function loadRuntimeModule(moduleUrl, { requireHeadlessPrimitives }) {
@@ -1286,22 +1692,11 @@ async function loadRuntimeModule(moduleUrl, { requireHeadlessPrimitives }) {
   }
 }
 
-function writeWithBackpressure(writer, chunk) {
-  return new Promise((resolve) => {
-    const ok = writer.write(chunk);
-    if (ok) {
-      resolve();
-      return;
-    }
-    writer.once('drain', () => resolve());
-  });
-}
-
-function createSerialLineWriter(writer) {
+function createSerialTaskQueue() {
   let queue = Promise.resolve();
   return {
-    push(line) {
-      queue = queue.then(() => writeWithBackpressure(writer, `${line}\n`));
+    push(task) {
+      queue = queue.then(() => task());
       return queue;
     },
     flush() {
@@ -1310,7 +1705,7 @@ function createSerialLineWriter(writer) {
   };
 }
 
-function pipeWithPrefix(stream, prefix, lineWriter, { suppressLine } = {}) {
+function consumeWorkerStream(stream, { workerId, streamName, taskQueue, progressReporter, suppressLine }) {
   if (!stream) return Promise.resolve();
 
   return (async () => {
@@ -1318,10 +1713,34 @@ function pipeWithPrefix(stream, prefix, lineWriter, { suppressLine } = {}) {
     try {
       for await (const line of rl) {
         if (suppressLine?.(line)) continue;
-        const wrapped = wrapText(`${prefix}${line}`);
-        for (const wrappedLine of wrapped) {
-          await lineWriter.push(wrappedLine);
-        }
+        await taskQueue.push(async () => {
+          const event = parseReporterEventLine(line);
+          if (event) {
+            const normalizedEvent = {
+              ...event,
+              workerId: Number.isInteger(event.workerId) ? event.workerId : workerId,
+            };
+
+            if (normalizedEvent.type === 'doc-start') {
+              progressReporter.recordDocStart(normalizedEvent);
+              return;
+            }
+            if (normalizedEvent.type === 'doc-ok') {
+              progressReporter.recordDocSuccess(normalizedEvent);
+              return;
+            }
+            if (normalizedEvent.type === 'doc-fail') {
+              progressReporter.recordDocFailure(normalizedEvent);
+              return;
+            }
+          }
+
+          progressReporter.recordWorkerLog({
+            workerId,
+            line,
+            stream: streamName,
+          });
+        });
       }
     } catch {
       // Best effort forwarding: ignore stream forwarding errors and let worker exit code decide failure.
@@ -1337,10 +1756,10 @@ function chunkDocEntries(entries, jobs) {
   return chunks;
 }
 
-async function runWorkers({ args, moduleUrl, docs, totalDocs, inputRoot, outputRoot }) {
+async function runWorkers({ args, moduleUrl, docs, totalDocs, inputRoot, outputRoot, progressReporter }) {
   const runTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'layout-snapshots-'));
   const chunks = chunkDocEntries(docs, args.jobs).filter((chunk) => chunk.length > 0);
-  const workerLogWriter = createSerialLineWriter(process.stdout);
+  const taskQueue = createSerialTaskQueue();
 
   const workerSpecs = [];
   for (let i = 0; i < chunks.length; i += 1) {
@@ -1401,8 +1820,20 @@ async function runWorkers({ args, moduleUrl, docs, totalDocs, inputRoot, outputR
       });
 
       const suppressLine = (line) => shouldSuppressTelemetryDisabledLog(line, args.telemetryEnabled);
-      const stdoutDone = pipeWithPrefix(child.stdout, `[w${spec.workerId}] `, workerLogWriter, { suppressLine });
-      const stderrDone = pipeWithPrefix(child.stderr, `[w${spec.workerId}] `, workerLogWriter, { suppressLine });
+      const stdoutDone = consumeWorkerStream(child.stdout, {
+        workerId: spec.workerId,
+        streamName: 'stdout',
+        taskQueue,
+        progressReporter,
+        suppressLine,
+      });
+      const stderrDone = consumeWorkerStream(child.stderr, {
+        workerId: spec.workerId,
+        streamName: 'stderr',
+        taskQueue,
+        progressReporter,
+        suppressLine,
+      });
 
       child.on('close', (code) => {
         Promise.all([stdoutDone, stderrDone]).then(() => {
@@ -1417,7 +1848,7 @@ async function runWorkers({ args, moduleUrl, docs, totalDocs, inputRoot, outputR
     });
 
   const results = await Promise.all(workerSpecs.map((spec) => runWorker(spec)));
-  await workerLogWriter.flush();
+  await taskQueue.flush();
 
   const summaries = [];
   for (const result of results) {
@@ -1468,31 +1899,40 @@ async function runWorkers({ args, moduleUrl, docs, totalDocs, inputRoot, outputR
   return merged;
 }
 
-function printFinalSummary({ elapsedMs, successCount, failures, phaseTotals, outputRoot }) {
+function formatPhaseSummary(phaseTotals) {
+  return [
+    `import ${formatDuration(phaseTotals.importMs)}`,
+    `init ${formatDuration(phaseTotals.editorInitMs)}`,
+    `wait ${formatDuration(phaseTotals.layoutWaitMs)}`,
+    `layout ${formatDuration(phaseTotals.layoutMs)}`,
+    `serialize ${formatDuration(phaseTotals.serializeMs)}`,
+    `write ${formatDuration(phaseTotals.writeMs)}`,
+  ].join(' | ');
+}
+
+function printFinalSummary({ elapsedMs, successCount, failures, phaseTotals, outputRoot, warningCount, verbose }) {
   console.log('');
-  logLine(`[layout-snapshots] Success: ${successCount}`);
-  logLine(`[layout-snapshots] Failed:  ${failures.length}`);
-  logLine(`[layout-snapshots] Snapshot output directory: ${outputRoot}`);
-  logLine(`[layout-snapshots] Snapshot files written: ${successCount}`);
+  const processedCount = successCount + failures.length;
+  const runStatus = failures.length > 0 ? 'failed' : 'clean';
+  const warningLabel = warningCount > 0 ? ` | ${warningCount} warning${warningCount === 1 ? '' : 's'}` : '';
 
-  if (successCount > 0) {
+  logLine(
+    `Result     ${runStatus} | ${successCount}/${processedCount} done in ${formatDuration(elapsedMs)}${warningLabel}`,
+  );
+
+  if (verbose && successCount > 0) {
     const avgMs = phaseTotals.totalMs / successCount;
-    const pct = (value) => (phaseTotals.totalMs > 0 ? ((value / phaseTotals.totalMs) * 100).toFixed(1) : '0.0');
-    logLine(`[layout-snapshots] Avg/doc: ${formatDuration(avgMs)}`);
-    logLine(
-      `[layout-snapshots] Phase totals: import ${formatDuration(phaseTotals.importMs)} (${pct(phaseTotals.importMs)}%), editorInit ${formatDuration(phaseTotals.editorInitMs)} (${pct(phaseTotals.editorInitMs)}%), waitLayout ${formatDuration(phaseTotals.layoutWaitMs)} (${pct(phaseTotals.layoutWaitMs)}%), layoutTotal ${formatDuration(phaseTotals.layoutMs)} (${pct(phaseTotals.layoutMs)}%), serialize ${formatDuration(phaseTotals.serializeMs)} (${pct(phaseTotals.serializeMs)}%), write ${formatDuration(phaseTotals.writeMs)} (${pct(phaseTotals.writeMs)}%)`,
-    );
-
+    logLine(`Average    ${formatDuration(avgMs)} / doc`);
+    logLine(`Phases     ${formatPhaseSummary(phaseTotals)}`);
   }
 
   if (failures.length > 0) {
+    logLine('Failures');
     for (const failure of failures) {
       const elapsed = typeof failure.elapsedMs === 'number' ? ` after ${formatDuration(failure.elapsedMs)}` : '';
-      logLine(`- ${failure.path}${elapsed}: ${failure.message}`);
+      logLine(`- ${formatOutputPathLabel(failure.path)}${elapsed}: ${failure.message}`);
     }
   }
-
-  logLine(`[layout-snapshots] Complete in ${(elapsedMs / 1000).toFixed(2)}s`);
 }
 
 async function renderWithPresentation({
@@ -1720,7 +2160,9 @@ async function renderWithHeadless({
       editor?.converter?.themeColors ?? undefined,
     );
 
-    const layoutOptions = footnotesLayoutInput ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput } : baseLayoutOptions;
+    const layoutOptions = footnotesLayoutInput
+      ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
+      : baseLayoutOptions;
 
     const headerFooterInput = buildHeaderFooterInput({
       toFlowBlocks: headlessPrimitives.toFlowBlocks,
@@ -1814,12 +2256,12 @@ async function runDocBatch({
   args,
   inputRoot,
   outputRoot,
-  moduleUrl,
   envInfo,
   moduleExports,
   headlessPrimitives,
   docEntries,
   totalDocs,
+  batchReporter,
 }) {
   const { Editor, PresentationEditor, getStarterExtensions } = moduleExports;
 
@@ -1850,6 +2292,8 @@ async function runDocBatch({
 
     const { relativePath, outputPath } = makeOutputPath(outputRoot, inputRoot, docxPath);
     const progress = `[${globalIndex}/${totalDocs}]`;
+
+    batchReporter?.recordDocStart({ progress, relativePath });
 
     const docStartedAtMs = nowMs();
 
@@ -1934,18 +2378,22 @@ async function runDocBatch({
       phaseTotals.totalMs += docElapsedMs;
 
       const pageCount = rendered.pageCount ?? rendered.snapshot?.layout?.pages?.length ?? 0;
-
-      const phaseLabel =
-        args.pipeline === 'presentation'
-          ? `import ${formatDuration(importMs)}, editorInit ${formatDuration(editorInitMs)}, waitLayout ${formatDuration(layoutWaitMs)}, layoutTotal ${formatDuration(layoutMs)}, serialize ${formatDuration(serializeMs)}, write ${formatDuration(writeMs)}`
-          : `import ${formatDuration(importMs)}, editorInit ${formatDuration(editorInitMs)}, layoutTotal ${formatDuration(layoutMs)}, serialize ${formatDuration(serializeMs)}, write ${formatDuration(writeMs)}`;
-
-      logDocProgress({ progress, relativePath, pageCount, docElapsedMs, phaseLabel });
+      batchReporter?.recordDocSuccess({ progress, relativePath, pageCount, docElapsedMs });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const failureDetails = summarizeFailureDetails(error);
       const docElapsedMs = nowMs() - docStartedAtMs;
-      failures.push({ path: docxPath, message, elapsedMs: docElapsedMs });
-      logDocFailure({ progress, relativePath, docElapsedMs, message });
+      failures.push({
+        path: docxPath,
+        message: failureDetails.message,
+        elapsedMs: docElapsedMs,
+        stackPreview: failureDetails.stackPreview,
+      });
+      batchReporter?.recordDocFailure({
+        progress,
+        relativePath,
+        docElapsedMs,
+        message: failureDetails.message,
+      });
       if (args.failFast) {
         break;
       }
@@ -1973,15 +2421,96 @@ async function loadWorkerDocEntries(args) {
   return parsed.docs;
 }
 
-async function run() {
-  const args = parseArgs(process.argv.slice(2));
-  const restoreConsoleFilter = installTelemetryConsoleFilter(args.telemetryEnabled);
+async function writeSummaryFile(summaryFile, summary) {
+  if (!summaryFile) return;
+  await fs.mkdir(path.dirname(path.resolve(summaryFile)), { recursive: true });
+  await fs.writeFile(path.resolve(summaryFile), JSON.stringify(summary), 'utf8');
+}
+
+async function runRootProcess(args) {
   await ensureDefaultSuperEditorBuild(args);
   const moduleUrl = await resolveModuleUrl(args.module);
   const inputRoot = path.resolve(args.inputRoot);
   const outputRoot = path.resolve(args.outputRoot);
 
+  const allDocxFiles = await listDocxFiles(inputRoot);
+  const matchedDocxFiles = filterDocxFilesByMatchPatterns(allDocxFiles, inputRoot, args.matches);
+  if (args.matches.length > 0 && matchedDocxFiles.length === 0) {
+    throw new Error(`No DOCX files matched --match patterns (${args.matches.join(', ')}) under ${inputRoot}.`);
+  }
+
+  const limitedDocxFiles = args.limit ? matchedDocxFiles.slice(0, args.limit) : matchedDocxFiles;
+  const docEntries = limitedDocxFiles.map((docxPath, index) => ({ path: docxPath, index: index + 1 }));
+  const totalDocs = docEntries.length;
+  const actualWorkerCount = docEntries.length > 0 ? Math.min(args.jobs, docEntries.length) : 0;
+
+  assertSafeOutputRoot(outputRoot);
+  if (args.cleanOutput) {
+    await fs.rm(outputRoot, { recursive: true, force: true });
+  }
+  await fs.mkdir(outputRoot, { recursive: true });
+
+  if (!args.suppressRunHeader) {
+    logLine(`Scope      ${formatSnapshotScopeLabel(args.matches, docEntries.length)}`);
+    logLine(`Export     ${args.pipeline} | ${formatWorkerCountLabel(actualWorkerCount)}`);
+    logLine(`Output     ${formatOutputPathLabel(outputRoot)}`);
+
+    if (args.verbose) {
+      logLine(`Source     ${formatOutputPathLabel(inputRoot)}`);
+      logLine(`Corpus     ${formatDocCountLabel(allDocxFiles.length)} discovered`);
+      logLine(`Module     ${formatOutputPathLabel(moduleUrl)}`);
+      logLine(`Telemetry  ${args.telemetryEnabled ? 'enabled' : 'disabled'}`);
+    }
+  }
+
+  const progressReporter = createSnapshotProgressReporter({
+    interactive: process.stdout.isTTY,
+    totalDocs,
+    jobs: actualWorkerCount,
+  });
+
+  const wallStart = Date.now();
+  let summary;
   try {
+    summary = await runWorkers({
+      args,
+      moduleUrl,
+      docs: docEntries,
+      totalDocs,
+      inputRoot,
+      outputRoot,
+      progressReporter,
+    });
+    summary.elapsedMs = Date.now() - wallStart;
+    summary.totalDocs = totalDocs;
+    summary.inputRoot = inputRoot;
+    summary.outputRoot = outputRoot;
+    summary.matchPatterns = args.matches;
+    summary.pipeline = args.pipeline;
+    summary.warnings = progressReporter.getWarningEntries();
+    summary.warningCount = progressReporter.getWarningCount();
+  } finally {
+    progressReporter.finish();
+  }
+
+  await writeSummaryFile(args.summaryFile, summary);
+
+  if (!args.suppressFinalSummary) {
+    printFinalSummary({
+      ...summary,
+      outputRoot,
+      verbose: args.verbose,
+    });
+  }
+}
+
+async function runWorkerProcess(args) {
+  const restoreConsoleFilter = installTelemetryConsoleFilter(args.telemetryEnabled);
+  const inputRoot = path.resolve(args.inputRoot);
+  const outputRoot = path.resolve(args.outputRoot);
+
+  try {
+    const moduleUrl = await resolveModuleUrl(args.module);
     const runtime = await loadRuntimeModule(moduleUrl, {
       requireHeadlessPrimitives: args.pipeline === 'headless',
     });
@@ -1990,101 +2519,60 @@ async function run() {
 
     const envInfo = installDomEnvironment();
     if (envInfo.usingStubCanvas) {
-      console.warn(
-        '[layout-snapshots] Native canvas is unavailable in this runtime; using approximate text metrics (not pixel-perfect).',
-      );
+      console.warn(styleStructuredLine('Canvas     native canvas unavailable; using approximate text metrics'));
     }
 
-    let allDocxFiles = [];
-    let matchedDocxFiles = [];
-    let docEntries = [];
+    const docEntries = await loadWorkerDocEntries(args);
+    const totalDocs =
+      args.totalDocs && Number.isFinite(args.totalDocs) && args.totalDocs > 0 ? args.totalDocs : docEntries.length;
 
-    if (args.isWorker) {
-      docEntries = await loadWorkerDocEntries(args);
-      allDocxFiles = docEntries.map((entry) => (typeof entry === 'string' ? entry : entry.path));
-      matchedDocxFiles = allDocxFiles;
-    } else {
-      allDocxFiles = await listDocxFiles(inputRoot);
-      matchedDocxFiles = filterDocxFilesByMatchPatterns(allDocxFiles, inputRoot, args.matches);
-      if (args.matches.length > 0 && matchedDocxFiles.length === 0) {
-        throw new Error(
-          `No DOCX files matched --match patterns (${args.matches.join(', ')}) under ${inputRoot}.`,
-        );
-      }
+    const summary = await runDocBatch({
+      args,
+      inputRoot,
+      outputRoot,
+      envInfo,
+      moduleExports,
+      headlessPrimitives,
+      docEntries,
+      totalDocs,
+      batchReporter: createWorkerBatchReporter(args.workerId),
+    });
 
-      const limited = args.limit ? matchedDocxFiles.slice(0, args.limit) : matchedDocxFiles;
-      docEntries = limited.map((docxPath, index) => ({ path: docxPath, index: index + 1 }));
-    }
-
-    const totalDocs = args.totalDocs && Number.isFinite(args.totalDocs) && args.totalDocs > 0 ? args.totalDocs : docEntries.length;
-
-    if (!args.isWorker) {
-      assertSafeOutputRoot(outputRoot);
-      if (args.cleanOutput) {
-        await fs.rm(outputRoot, { recursive: true, force: true });
-      }
-      await fs.mkdir(outputRoot, { recursive: true });
-
-      logLine(`[layout-snapshots] Input root:  ${inputRoot}`);
-      logLine(`[layout-snapshots] Output root: ${outputRoot}`);
-      logLine(`[layout-snapshots] Docs found:  ${allDocxFiles.length}`);
-      if (args.matches.length > 0) {
-        logLine(`[layout-snapshots] Match:      ${args.matches.join(', ')}`);
-        logLine(`[layout-snapshots] Docs matched: ${matchedDocxFiles.length}`);
-      }
-      logLine(`[layout-snapshots] Docs to run: ${docEntries.length}`);
-      logLine(`[layout-snapshots] Module:      ${moduleUrl}`);
-      logLine(`[layout-snapshots] Pipeline:    ${args.pipeline}`);
-      logLine(`[layout-snapshots] Jobs:        ${args.jobs}`);
-      logLine(`[layout-snapshots] Telemetry:   ${args.telemetryEnabled ? 'enabled' : 'disabled'}`);
-    }
-
-    let summary;
-    const wallStart = Date.now();
-
-    if (!args.isWorker && args.jobs > 1) {
-      summary = await runWorkers({
-        args,
-        moduleUrl,
-        docs: docEntries,
-        totalDocs,
-        inputRoot,
-        outputRoot,
-      });
-      summary.elapsedMs = Date.now() - wallStart;
-    } else {
-      summary = await runDocBatch({
-        args,
-        inputRoot,
-        outputRoot,
-        moduleUrl,
-        envInfo,
-        moduleExports,
-        headlessPrimitives,
-        docEntries,
-        totalDocs,
-      });
-    }
-
-    if (args.summaryFile) {
-      await fs.mkdir(path.dirname(path.resolve(args.summaryFile)), { recursive: true });
-      await fs.writeFile(path.resolve(args.summaryFile), JSON.stringify(summary), 'utf8');
-    }
+    await writeSummaryFile(args.summaryFile, summary);
 
     if (!args.suppressFinalSummary) {
       printFinalSummary({
         ...summary,
         outputRoot,
+        verbose: args.verbose,
       });
     }
-
   } finally {
     restoreConsoleFilter();
   }
 }
 
-run().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  errorLine(`[layout-snapshots] Fatal: ${message}`);
-  process.exit(1);
-});
+async function run() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.isWorker) {
+    await runWorkerProcess(args);
+    return;
+  }
+
+  await runRootProcess(args);
+}
+
+function isDirectExecution() {
+  if (!process.argv[1]) return false;
+  return path.resolve(process.argv[1]) === SCRIPT_PATH;
+}
+
+export { buildSnapshotStatusLines, createReporterEventLine, parseReporterEventLine };
+
+if (isDirectExecution()) {
+  run().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLine(`Export     failed: ${message}`);
+    process.exit(1);
+  });
+}

@@ -19,7 +19,7 @@ describe('classify', () => {
 
   it('sensitive: extensions', () => {
     assert.equal(
-      classify(['packages/super-editor/src/extensions/bold/bold.ts']).level,
+      classify(['packages/super-editor/src/editors/v1/extensions/bold/bold.ts']).level,
       'sensitive',
     );
   });
@@ -70,7 +70,7 @@ describe('classify', () => {
   it('critical: super-converter', () => {
     assert.equal(
       classify([
-        'packages/super-editor/src/core/super-converter/v2/importer/foo.js',
+        'packages/super-editor/src/editors/v1/core/super-converter/v2/importer/foo.js',
       ]).level,
       'critical',
     );
@@ -107,7 +107,7 @@ describe('classify', () => {
   it('critical: presentation-editor', () => {
     assert.equal(
       classify([
-        'packages/super-editor/src/core/presentation-editor/PresentationEditor.ts',
+        'packages/super-editor/src/editors/v1/core/presentation-editor/PresentationEditor.ts',
       ]).level,
       'critical',
     );
@@ -130,15 +130,15 @@ describe('classify', () => {
   it('highest risk wins when mixed', () => {
     const result = classify([
       'packages/layout-engine/style-engine/src/resolve.js',
-      'packages/super-editor/src/extensions/bold/bold.ts',
+      'packages/super-editor/src/editors/v1/extensions/bold/bold.ts',
       'apps/docs/guides/foo.mdx',
     ]);
     assert.equal(result.level, 'critical');
   });
 
-  it('super-editor/src/core/ non-critical subpath is sensitive', () => {
+  it('super-editor/src/editors/v1/core/ non-critical subpath is sensitive', () => {
     assert.equal(
-      classify(['packages/super-editor/src/core/helpers/utils.js']).level,
+      classify(['packages/super-editor/src/editors/v1/core/helpers/utils.js']).level,
       'sensitive',
     );
   });
@@ -146,7 +146,7 @@ describe('classify', () => {
   it('downgrade: critical test-only becomes sensitive', () => {
     const result = classify([
       'packages/layout-engine/style-engine/__tests__/resolve.test.js',
-      'packages/super-editor/src/core/super-converter/__tests__/import.test.js',
+      'packages/super-editor/src/editors/v1/core/super-converter/__tests__/import.test.js',
     ]);
     assert.equal(result.level, 'sensitive');
     assert.equal(result.downgraded, true);
@@ -154,7 +154,7 @@ describe('classify', () => {
 
   it('downgrade: sensitive test-only becomes low', () => {
     const result = classify([
-      'packages/super-editor/src/extensions/bold/bold.test.ts',
+      'packages/super-editor/src/editors/v1/extensions/bold/bold.test.ts',
     ]);
     assert.equal(result.level, 'low');
     assert.equal(result.downgraded, true);

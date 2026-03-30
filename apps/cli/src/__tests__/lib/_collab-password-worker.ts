@@ -80,7 +80,7 @@ async function main() {
   const repoRoot = join(import.meta.dir, '../../../../..');
   const encryptedDoc = join(
     repoRoot,
-    'packages/super-editor/src/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
+    'packages/super-editor/src/editors/v1/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
   );
 
   const io = {

@@ -123,6 +123,6 @@ Rendering logic for specific OOXML features is extracted into **feature modules*
 
 - Style-resolved properties flow through: `style-engine` → `pm-adapter` (sets attrs on FlowBlocks) → `DomPainter` (renders to DOM)
 - Do NOT add ProseMirror decoration plugins for visual styling — that bypasses the rendering pipeline
-- Editing behavior (commands, keybindings) stays in `super-editor/src/extensions/`
+- Editing behavior (commands, keybindings) stays in `super-editor/src/editors/v1/extensions/`
 
 See root CLAUDE.md for full architecture.

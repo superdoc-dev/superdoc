@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { unwrap, useStoryHarness } from '../harness';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
-const PRE_SEPARATED_FIXTURE = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/pre-separated-list.docx');
+const PRE_SEPARATED_FIXTURE = path.join(
+  REPO_ROOT,
+  'packages/super-editor/src/editors/v1/tests/data/pre-separated-list.docx',
+);
 const NUMBERING_PART = 'word/numbering.xml';
 
 type ListItemAddress = {

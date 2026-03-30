@@ -131,6 +131,118 @@ describe('measureBlock', () => {
       expect(measure.lines[0].width).toBeGreaterThan(0);
     });
 
+    it('measures default superscript lines from the original base font size', async () => {
+      const baseBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'base-superscript-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {},
+      };
+
+      const superscriptBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'superscript-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16 * 0.65,
+            vertAlign: 'superscript',
+          },
+        ],
+        attrs: {},
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(baseBlock, 1000));
+      const superscriptMeasure = expectParagraphMeasure(await measureBlock(superscriptBlock, 1000));
+
+      expect(superscriptMeasure.lines).toHaveLength(1);
+      expect(superscriptMeasure.lines[0].ascent).toBeCloseTo(baseMeasure.lines[0].ascent, 3);
+      expect(superscriptMeasure.lines[0].descent).toBeCloseTo(baseMeasure.lines[0].descent, 3);
+      expect(superscriptMeasure.lines[0].lineHeight).toBeCloseTo(baseMeasure.lines[0].lineHeight, 3);
+    });
+
+    it('does not unscale custom baselineShift runs during line measurement', async () => {
+      const baseBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'base-baseline-shift-line-height',
+        runs: [
+          {
+            text: 'shifted',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {},
+      };
+
+      const shiftedBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'baseline-shift-line-height',
+        runs: [
+          {
+            text: 'shifted',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            vertAlign: 'superscript',
+            baselineShift: 3,
+          },
+        ],
+        attrs: {},
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(baseBlock, 1000));
+      const shiftedMeasure = expectParagraphMeasure(await measureBlock(shiftedBlock, 1000));
+
+      expect(shiftedMeasure.lines).toHaveLength(1);
+      expect(shiftedMeasure.lines[0].ascent).toBeCloseTo(baseMeasure.lines[0].ascent, 3);
+      expect(shiftedMeasure.lines[0].descent).toBeCloseTo(baseMeasure.lines[0].descent, 3);
+      expect(shiftedMeasure.lines[0].lineHeight).toBeCloseTo(baseMeasure.lines[0].lineHeight, 3);
+    });
+
+    it('treats zero baselineShift as identity during superscript measurement', async () => {
+      const baseBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'base-zero-baseline-shift-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {},
+      };
+
+      const superscriptWithZeroShiftBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'zero-baseline-shift-line-height',
+        runs: [
+          {
+            text: '1',
+            fontFamily: 'Arial',
+            fontSize: 16 * 0.65,
+            vertAlign: 'superscript',
+            baselineShift: 0,
+          },
+        ],
+        attrs: {},
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(baseBlock, 1000));
+      const superscriptMeasure = expectParagraphMeasure(await measureBlock(superscriptWithZeroShiftBlock, 1000));
+
+      expect(superscriptMeasure.lines[0].ascent).toBeCloseTo(baseMeasure.lines[0].ascent, 3);
+      expect(superscriptMeasure.lines[0].descent).toBeCloseTo(baseMeasure.lines[0].descent, 3);
+      expect(superscriptMeasure.lines[0].lineHeight).toBeCloseTo(baseMeasure.lines[0].lineHeight, 3);
+    });
+
     it('uses content width for wordLayout list first lines with standard hanging indent', async () => {
       // Standard hanging indent pattern: marker is positioned in the hanging area (left of text),
       // NOT inline with text. The marker doesn't consume horizontal space on the first line.

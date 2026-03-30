@@ -9,7 +9,10 @@ const execFileAsync = promisify(execFile);
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
 const STORIES_ROOT = path.resolve(import.meta.dirname, '../..');
 const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
-const BASIC_PARAGRAPH_FIXTURE = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+const BASIC_PARAGRAPH_FIXTURE = path.join(
+  REPO_ROOT,
+  'packages/super-editor/src/editors/v1/tests/data/basic-paragraph.docx',
+);
 
 const NUMBERING_PART = 'word/numbering.xml';
 const CONTENT_TYPES_PART = '[Content_Types].xml';

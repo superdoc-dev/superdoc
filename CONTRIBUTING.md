@@ -61,7 +61,7 @@ packages/
   superdoc/              Main entry point (npm: superdoc)
   react/                 React wrapper (@superdoc-dev/react)
   super-editor/          ProseMirror editor core
-    src/
+    src/editors/v1/
       core/
         super-converter/ DOCX import/export (OOXML ↔ ProseMirror)
       extensions/        Editing behaviors (bold, lists, tables, etc.)
@@ -85,8 +85,8 @@ tests/visual/            Visual regression tests (Playwright)
 | How something looks (visual rendering) | `layout-engine/painters/dom/` |
 | Style resolution (fonts, colors, borders) | `layout-engine/style-engine/` |
 | Data flowing from editor to renderer | `layout-engine/pm-adapter/` |
-| Editing behavior (keyboard, commands) | `super-editor/src/extensions/` |
-| DOCX import/export | `super-editor/src/core/super-converter/` |
+| Editing behavior (keyboard, commands) | `super-editor/src/editors/v1/extensions/` |
+| DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | React integration | `packages/react/` |
 | Main entry point (Vue) | `packages/superdoc/` |
 | Visual regression tests | `tests/visual/` |
@@ -108,8 +108,8 @@ These are areas where community contributions are especially welcome. Check [iss
 | Test coverage | Easy-Medium | `tests/visual/` | Add tests for existing features |
 | Rendering parity | Medium | `layout-engine/painters/dom/` | Open a .docx in Word and SuperDoc, fix visual differences |
 | Browser compatibility | Medium | `super-editor/`, `layout-engine/` | Fix Firefox/Safari-specific bugs |
-| Copy/paste | Medium | `super-editor/src/extensions/` | Fix formatting loss when pasting from Word, Google Docs, browsers |
-| DOCX import coverage | Medium-Hard | `super-editor/src/core/super-converter/` | Support additional OOXML tags and elements |
+| Copy/paste | Medium | `super-editor/src/editors/v1/extensions/` | Fix formatting loss when pasting from Word, Google Docs, browsers |
+| DOCX import coverage | Medium-Hard | `super-editor/src/editors/v1/core/super-converter/` | Support additional OOXML tags and elements |
 
 ## Your First PR
 

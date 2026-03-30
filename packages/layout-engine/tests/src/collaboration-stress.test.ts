@@ -23,7 +23,7 @@ import path from 'path';
  */
 const FIXTURES = {
   basic: path.join(__dirname, '../fixtures/sdt-flow-input.json'),
-  trackedChanges: path.join(__dirname, '../../../super-editor/src/tests/data/basic-tracked-change.docx'),
+  trackedChanges: path.join(__dirname, '../../../super-editor/src/editors/v1/tests/data/basic-tracked-change.docx'),
 } as const;
 
 /**

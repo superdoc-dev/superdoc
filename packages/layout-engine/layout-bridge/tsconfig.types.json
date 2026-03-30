@@ -8,6 +8,7 @@
   },
   "references": [
     { "path": "../contracts/tsconfig.json" },
+    { "path": "../dom-contract/tsconfig.json" },
     { "path": "../layout-engine/tsconfig.json" },
     { "path": "../measuring/dom/tsconfig.json" },
     { "path": "../painters/dom/tsconfig.json" },

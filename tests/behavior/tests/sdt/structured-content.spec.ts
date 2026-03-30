@@ -18,7 +18,7 @@ const BLOCK_SDT = '.superdoc-structured-content-block';
 const BLOCK_LABEL = '.superdoc-structured-content__label';
 const INLINE_SDT = '.superdoc-structured-content-inline';
 const INLINE_LABEL = '.superdoc-structured-content-inline__label';
-const HOVER_CLASS = 'sdt-hover';
+const HOVER_CLASS = 'sdt-group-hover';
 
 // ==========================================================================
 // Block SDT Tests
@@ -370,7 +370,7 @@ test.describe('SD-2015: SDT labels must not paint above the toolbar', () => {
 
         // Activate the hover boost (z-index: 9999999).
         sdt.classList.remove('ProseMirror-selectednode');
-        sdt.classList.add('sdt-hover');
+        sdt.classList.add('sdt-group-hover');
         if (label) label.style.display = 'inline-flex';
 
         // Confirm the boost is active.

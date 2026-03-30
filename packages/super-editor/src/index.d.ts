@@ -926,6 +926,11 @@ export declare class PresentationEditor {
   scrollToPosition(pos: number, options?: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition }): boolean;
 
   /**
+   * Return the viewport Y coordinate this thread anchor can actually reach.
+   */
+  getReachableThreadAnchorClientY(threadId: string, targetClientY: number): number | null;
+
+  /**
    * Scroll a comment or tracked-change anchor to a viewport Y coordinate.
    */
   scrollThreadAnchorToClientY(

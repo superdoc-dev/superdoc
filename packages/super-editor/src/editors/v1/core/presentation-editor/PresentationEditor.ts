@@ -121,6 +121,11 @@ import { isHeaderFooterPartId } from '../parts/adapters/header-footer-part-descr
 import type { PartChangedEvent } from '../parts/types.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
+
+type ThreadAnchorScrollPlan = {
+  achievedClientY: number;
+  applyScroll: (behavior: ScrollBehavior) => void;
+};
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
@@ -2450,6 +2455,18 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Return the viewport Y coordinate this thread anchor can actually reach after
+   * scroll bounds clamp the requested target.
+   *
+   * @param threadId - Comment or tracked-change identifier
+   * @param targetClientY - Desired top position in client/viewport coordinates
+   * @returns The reachable client Y, or null when the thread cannot be resolved
+   */
+  getReachableThreadAnchorClientY(threadId: string, targetClientY: number): number | null {
+    return this.#buildThreadAnchorScrollPlan(threadId, targetClientY)?.achievedClientY ?? null;
+  }
+
+  /**
    * Scroll a comment or tracked-change anchor so its top edge lands at the
    * requested viewport Y coordinate.
    *
@@ -2464,35 +2481,80 @@ export class PresentationEditor extends EventEmitter {
     targetClientY: number,
     options: { behavior?: ScrollBehavior } = {},
   ): boolean {
-    if (!threadId || !Number.isFinite(targetClientY)) return false;
+    const scrollPlan = this.#buildThreadAnchorScrollPlan(threadId, targetClientY);
+    if (!scrollPlan) return false;
+
+    const behavior = options.behavior ?? 'auto';
+    scrollPlan.applyScroll(behavior);
+    return true;
+  }
+
+  #buildThreadAnchorScrollPlan(threadId: string, targetClientY: number): ThreadAnchorScrollPlan | null {
+    if (!threadId || !Number.isFinite(targetClientY)) return null;
 
     const threadPosition = this.#collectCommentPositions()[threadId];
-    if (!threadPosition) return false;
+    if (!threadPosition) return null;
 
     const selectionBounds = this.getSelectionBounds(threadPosition.start, threadPosition.end);
     const currentTop = selectionBounds?.bounds?.top;
-    if (!Number.isFinite(currentTop)) return false;
+    if (!Number.isFinite(currentTop)) return null;
 
-    const deltaY = currentTop - targetClientY;
-    if (Math.abs(deltaY) < 1) return true;
-
-    const behavior = options.behavior ?? 'auto';
+    const requestedScrollDelta = currentTop - targetClientY;
     const scrollTarget = this.#scrollContainer ?? this.#visibleHost;
 
     if (scrollTarget instanceof Window) {
-      const currentScrollY = scrollTarget.scrollY ?? scrollTarget.pageYOffset ?? 0;
-      scrollTarget.scrollTo({ top: currentScrollY + deltaY, behavior });
-      return true;
+      return this.#buildWindowThreadAnchorScrollPlan(scrollTarget, currentTop, requestedScrollDelta);
     }
 
     if (scrollTarget instanceof HTMLElement) {
-      const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
-      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, scrollTarget.scrollTop + deltaY));
-      scrollTarget.scrollTo({ top: nextScrollTop, behavior });
-      return true;
+      return this.#buildElementThreadAnchorScrollPlan(scrollTarget, currentTop, requestedScrollDelta);
     }
 
-    return false;
+    return null;
+  }
+
+  #buildWindowThreadAnchorScrollPlan(
+    scrollTarget: Window,
+    currentTop: number,
+    requestedScrollDelta: number,
+  ): ThreadAnchorScrollPlan {
+    const scrollRoot =
+      scrollTarget.document.scrollingElement ??
+      scrollTarget.document.documentElement ??
+      scrollTarget.document.body ??
+      null;
+    const currentScrollTop = scrollTarget.scrollY ?? scrollTarget.pageYOffset ?? scrollRoot?.scrollTop ?? 0;
+    const viewportHeight = scrollTarget.innerHeight ?? scrollRoot?.clientHeight ?? 0;
+    const maxScrollTop = Math.max(0, (scrollRoot?.scrollHeight ?? 0) - viewportHeight);
+    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, currentScrollTop + requestedScrollDelta));
+    const appliedScrollDelta = nextScrollTop - currentScrollTop;
+
+    return {
+      achievedClientY: currentTop - appliedScrollDelta,
+      applyScroll: (behavior) => {
+        if (Math.abs(appliedScrollDelta) < 1) return;
+        scrollTarget.scrollTo({ top: nextScrollTop, behavior });
+      },
+    };
+  }
+
+  #buildElementThreadAnchorScrollPlan(
+    scrollTarget: HTMLElement,
+    currentTop: number,
+    requestedScrollDelta: number,
+  ): ThreadAnchorScrollPlan {
+    const currentScrollTop = scrollTarget.scrollTop;
+    const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, currentScrollTop + requestedScrollDelta));
+    const appliedScrollDelta = nextScrollTop - currentScrollTop;
+
+    return {
+      achievedClientY: currentTop - appliedScrollDelta,
+      applyScroll: (behavior) => {
+        if (Math.abs(appliedScrollDelta) < 1) return;
+        scrollTarget.scrollTo({ top: nextScrollTop, behavior });
+      },
+    };
   }
 
   /**

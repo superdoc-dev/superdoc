@@ -66,16 +66,18 @@ const props = defineProps({
 
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
-const {
-  getCommentAliasIds,
-  getCommentPositionKey,
-  resolveCommentPositionEntry,
-  peekInstantSidebarAlignment,
-  clearInstantSidebarAlignment,
-} = commentsStore;
+const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry, clearInstantSidebarAlignment } =
+  commentsStore;
 
-const { getFloatingComments, activeComment, editorCommentPositions, pendingComment, editingCommentId } =
-  storeToRefs(commentsStore);
+const {
+  getFloatingComments,
+  activeComment,
+  editorCommentPositions,
+  pendingComment,
+  editingCommentId,
+  instantSidebarAlignmentTargetY,
+  instantSidebarAlignmentThreadId,
+} = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
@@ -330,46 +332,72 @@ const setPlaceholderRef = (id, el) => {
 let remeasureTimers = [];
 let scrollTimer = null;
 
+const instantAlignmentKey = computed(() => {
+  if (!instantSidebarAlignmentThreadId.value) {
+    return null;
+  }
+
+  return resolveLayoutKey(instantSidebarAlignmentThreadId.value, instantSidebarAlignmentThreadId.value);
+});
+
+const clearDeferredRemeasureTimers = () => {
+  remeasureTimers.forEach(clearTimeout);
+  remeasureTimers = [];
+};
+
+const remeasureCommentKeys = (keys) => {
+  for (const key of keys.filter(Boolean)) {
+    const el = placeholderRefs.value[key];
+    if (!el) continue;
+    const dialog = el.querySelector('.comments-dialog');
+    if (!dialog) continue;
+    storeHeight(key, dialog.getBoundingClientRect().height);
+  }
+};
+
+const finishInstantSidebarAlignment = () => {
+  clearInstantSidebarAlignment();
+  requestAnimationFrame(() => {
+    setInstantLayoutTransitionsDisabled(false);
+  });
+};
+
+const applyInstantSidebarAlignment = (key, targetY) => {
+  if (!key || !Number.isFinite(targetY)) return;
+
+  setInstantLayoutTransitionsDisabled(true);
+  nextTick(() => {
+    remeasureCommentKeys([key]);
+    alignCommentKeyToClientY(key, targetY, () => {
+      finishInstantSidebarAlignment();
+    });
+  });
+};
+
 // Re-measure when active comment changes. The active dialog expands (reply input, thread)
 // and the previously active one collapses — both change height.
 watch(activeCommentKey, (newKey, oldKey) => {
-  // Cancel stale timers from previous activation
-  remeasureTimers.forEach(clearTimeout);
-  remeasureTimers = [];
-  const instantAlignmentTargetY = newKey ? peekInstantSidebarAlignment() : null;
-  const instantAlignment = Number.isFinite(instantAlignmentTargetY);
-
-  const remeasure = (shouldAlign = false) => {
-    for (const key of [newKey, oldKey].filter(Boolean)) {
-      const el = placeholderRefs.value[key];
-      if (!el) continue;
-      const dialog = el.querySelector('.comments-dialog');
-      if (!dialog) continue;
-      storeHeight(key, dialog.getBoundingClientRect().height);
-    }
-
-    if (!shouldAlign || !newKey) return;
-
-    nextTick(() => {
-      alignCommentKeyToClientY(newKey, instantAlignmentTargetY, () => {
-        clearInstantSidebarAlignment();
-        requestAnimationFrame(() => {
-          setInstantLayoutTransitionsDisabled(false);
-        });
-      });
-    });
-  };
+  clearDeferredRemeasureTimers();
+  const keysToRemeasure = [newKey, oldKey];
+  const hasPendingInstantAlignment =
+    newKey && newKey === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
 
   // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
   // 350ms: after .comment-placeholder transition (300ms ease) completes
   nextTick(() => {
-    if (instantAlignment) {
-      remeasure(true);
-    } else {
-      remeasureTimers.push(setTimeout(remeasure, 50));
-      remeasureTimers.push(setTimeout(remeasure, 350));
+    if (hasPendingInstantAlignment) {
+      remeasureCommentKeys(keysToRemeasure);
+      return;
     }
+
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 50));
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 350));
   });
+});
+
+watch([activeCommentKey, instantAlignmentKey, instantSidebarAlignmentTargetY], ([activeKey, requestKey, targetY]) => {
+  if (!activeKey || !requestKey || activeKey !== requestKey || !Number.isFinite(targetY)) return;
+  applyInstantSidebarAlignment(activeKey, targetY);
 });
 
 // Re-measure when editing state changes. Entering/exiting edit mode changes
@@ -377,23 +405,11 @@ watch(activeCommentKey, (newKey, oldKey) => {
 // We remeasure all visible dialogs because the editing comment's parent dialog
 // might not be the activeComment (e.g., dropdown interaction deactivated it).
 watch(editingCommentId, () => {
-  // Cancel stale timers from previous edit state change
-  remeasureTimers.forEach(clearTimeout);
-  remeasureTimers = [];
-
-  const remeasure = () => {
-    for (const pos of allPositions.value) {
-      const el = placeholderRefs.value[pos.id];
-      if (!el) continue;
-      const dialog = el.querySelector('.comments-dialog');
-      if (!dialog) continue;
-      storeHeight(pos.id, dialog.getBoundingClientRect().height);
-    }
-  };
+  clearDeferredRemeasureTimers();
 
   nextTick(() => {
-    remeasureTimers.push(setTimeout(remeasure, 50));
-    remeasureTimers.push(setTimeout(remeasure, 350));
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 50));
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 350));
   });
 });
 
@@ -414,7 +430,7 @@ watch(activeComment, () => {
   if (!comment) return;
   const key = resolveLayoutKey(comment);
   if (!key) return;
-  const instantAlignment = Number.isFinite(peekInstantSidebarAlignment());
+  const instantAlignment = key === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
   if (instantAlignment) {
     setInstantLayoutTransitionsDisabled(true);
     return;

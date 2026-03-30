@@ -53,8 +53,22 @@ const AUTO_SCROLL_MAX_SPEED_PX = 24;
 /** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
 const SCROLL_DETECTION_TOLERANCE_PX = 1;
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
+const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
+const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
+const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [-COMMENT_THREAD_HIT_TOLERANCE_PX, 0],
+  [COMMENT_THREAD_HIT_TOLERANCE_PX, 0],
+  [0, -COMMENT_THREAD_HIT_TOLERANCE_PX],
+  [0, COMMENT_THREAD_HIT_TOLERANCE_PX],
+];
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
+type CommentThreadHit = {
+  isAmbiguous: boolean;
+  threadId: string | null;
+};
 
 /**
  * Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder).
@@ -83,6 +97,104 @@ function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
     .filter(Boolean);
 }
 
+function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const trackedChangeElement = target.closest(TRACK_CHANGE_SELECTOR);
+  const threadId = trackedChangeElement?.getAttribute('data-track-change-id')?.trim();
+
+  return threadId ? threadId : null;
+}
+
+function resolveCommentThreadHit(target: EventTarget | null): CommentThreadHit {
+  const threadIds = getCommentHighlightThreadIds(target);
+  if (threadIds.length > 1) {
+    return {
+      isAmbiguous: true,
+      threadId: null,
+    };
+  }
+
+  if (threadIds.length === 1) {
+    return {
+      isAmbiguous: false,
+      threadId: threadIds[0],
+    };
+  }
+
+  return {
+    isAmbiguous: false,
+    threadId: resolveTrackChangeThreadId(target),
+  };
+}
+
+function collectElementsNearPointerTarget(target: EventTarget | null, clientX: number, clientY: number): Element[] {
+  const candidates: Element[] = [];
+  const seen = new Set<Element>();
+  const ownerDocument = target instanceof Element ? target.ownerDocument : document;
+  const ownerWindow = ownerDocument.defaultView;
+
+  const addCandidate = (candidate: Element | null): void => {
+    if (!candidate || seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    candidates.push(candidate);
+  };
+
+  if (target instanceof Element) {
+    addCandidate(target);
+  }
+
+  if (typeof ownerDocument.elementsFromPoint !== 'function' || !ownerWindow) {
+    return candidates;
+  }
+
+  const maxX = Math.max(ownerWindow.innerWidth - 1, 0);
+  const maxY = Math.max(ownerWindow.innerHeight - 1, 0);
+
+  for (const [offsetX, offsetY] of COMMENT_THREAD_HIT_SAMPLE_OFFSETS) {
+    const sampleX = clamp(clientX + offsetX, 0, maxX);
+    const sampleY = clamp(clientY + offsetY, 0, maxY);
+    const elements = ownerDocument.elementsFromPoint(sampleX, sampleY);
+
+    for (const element of elements) {
+      addCandidate(element);
+    }
+  }
+
+  return candidates;
+}
+
+function resolveCommentThreadIdNearPointer(
+  target: EventTarget | null,
+  clientX: number,
+  clientY: number,
+): string | null {
+  const directHit = resolveCommentThreadHit(target);
+  if (directHit.isAmbiguous || directHit.threadId) {
+    return directHit.threadId;
+  }
+
+  // Painter output can split one visible annotation into adjacent runs. Sampling
+  // a few nearby points keeps narrow gaps from falling through to generic caret
+  // placement while still refusing ambiguous overlapping highlights.
+  const nearbyElements = collectElementsNearPointerTarget(target, clientX, clientY);
+  for (const element of nearbyElements) {
+    const hit = resolveCommentThreadHit(element);
+    if (hit.isAmbiguous) {
+      return null;
+    }
+    if (hit.threadId) {
+      return hit.threadId;
+    }
+  }
+
+  return null;
+}
+
 function getActiveCommentThreadId(editor: Editor): string | null {
   const pluginState = CommentsPluginKey.getState(editor.state) as { activeThreadId?: unknown } | null;
   const activeThreadId = pluginState?.activeThreadId;
@@ -94,18 +206,17 @@ function getActiveCommentThreadId(editor: Editor): string | null {
   return activeThreadId;
 }
 
-function shouldIgnoreRepeatClickOnActiveComment(target: EventTarget | null, activeThreadId: string | null): boolean {
+function shouldIgnoreRepeatClickOnActiveComment(
+  target: EventTarget | null,
+  clientX: number,
+  clientY: number,
+  activeThreadId: string | null,
+): boolean {
   if (!activeThreadId) {
     return false;
   }
 
-  const clickedThreadIds = getCommentHighlightThreadIds(target);
-
-  if (clickedThreadIds.length !== 1) {
-    return false;
-  }
-
-  return clickedThreadIds[0] === activeThreadId;
+  return resolveCommentThreadIdNearPointer(target, clientX, clientY) === activeThreadId;
 }
 
 // =============================================================================
@@ -924,6 +1035,10 @@ export class EditorInputManager {
     }
 
     const editor = this.#deps.getEditor();
+    if (this.#handleSingleCommentHighlightClick(event, target, editor)) {
+      return;
+    }
+
     if (this.#handleRepeatClickOnActiveComment(event, target, editor)) {
       return;
     }
@@ -2098,16 +2213,42 @@ export class EditorInputManager {
   #handleRepeatClickOnActiveComment(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
     const activeThreadId = getActiveCommentThreadId(editor);
 
-    if (!shouldIgnoreRepeatClickOnActiveComment(target, activeThreadId)) {
+    if (!shouldIgnoreRepeatClickOnActiveComment(target, event.clientX, event.clientY, activeThreadId)) {
       return false;
     }
 
     event.preventDefault();
-    this.#focusEditor();
     editor.emit?.('commentsUpdate', {
       type: comments_module_events.SELECTED,
       activeCommentId: activeThreadId,
     });
+
+    return true;
+  }
+
+  #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+    const clickedThreadId = resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY);
+    if (!clickedThreadId) {
+      return false;
+    }
+
+    const activeThreadId = getActiveCommentThreadId(editor);
+    if (clickedThreadId === activeThreadId) {
+      return false;
+    }
+
+    event.preventDefault();
+
+    const didSetCursor = editor.commands?.setCursorById?.(clickedThreadId, {
+      activeCommentId: clickedThreadId,
+    });
+
+    if (!didSetCursor) {
+      editor.emit?.('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: clickedThreadId,
+      });
+    }
 
     return true;
   }

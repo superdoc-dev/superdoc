@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref, reactive, h, defineComponent, nextTick } from 'vue';
+import { ref, reactive, h, defineComponent, nextTick, customRef } from 'vue';
+import { PresentationEditor } from '@superdoc/super-editor';
 
 let superdocStoreStub;
 let commentsStoreStub;
@@ -101,7 +102,12 @@ vi.mock('@superdoc/core/collaboration/permissions.js', () => ({
   isAllowed: () => true,
 }));
 
-const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], props = {} } = {}) => {
+const mountDialog = async ({
+  baseCommentOverrides = {},
+  extraComments = [],
+  props = {},
+  commentsStoreOverrides = {},
+} = {}) => {
   const baseComment = reactive({
     uid: 'uid-1',
     commentId: 'comment-1',
@@ -140,6 +146,32 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
     clearInstantSidebarAlignment: vi.fn(),
+    getCommentDocumentId: vi.fn(
+      (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
+    ),
+    getCommentAliasIds: vi.fn((commentOrId) => {
+      const rawId = typeof commentOrId === 'object' ? null : commentOrId;
+      const comment =
+        typeof commentOrId === 'object'
+          ? commentOrId
+          : commentsStoreStub.commentsList.find(
+              (item) => item.commentId === commentOrId || item.importedId === commentOrId,
+            );
+
+      return [rawId, comment?.commentId, comment?.importedId].filter(Boolean);
+    }),
+    resolveCommentPositionEntry: vi.fn((commentOrId) => {
+      const positions = commentsStoreStub.editorCommentPositions.value ?? {};
+      const ids = commentsStoreStub.getCommentAliasIds(commentOrId);
+
+      for (const id of ids) {
+        if (positions[id]) {
+          return { key: id, entry: positions[id] };
+        }
+      }
+
+      return { key: null, entry: null };
+    }),
     setActiveComment: vi.fn(),
     getPendingComment: vi.fn(() => ({
       commentId: 'pending-1',
@@ -165,6 +197,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     isFloatingCommentsReady: ref(false),
     hasInitializedLocations: ref(true),
     isCommentHighlighted: ref(false),
+    ...commentsStoreOverrides,
   };
 
   const superdocStub = {
@@ -222,6 +255,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
 describe('CommentDialog.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    PresentationEditor.getInstance.mockReturnValue(null);
     commentInputFocusSpies = [];
   });
 
@@ -253,6 +287,241 @@ describe('CommentDialog.vue', () => {
       superdoc: superdocStub,
       comment: expect.objectContaining({ commentId: 'pending-1' }),
     });
+  });
+
+  it('uses the reachable anchor Y for instant sidebar alignment when scroll is clamped', async () => {
+    const presentation = {
+      getReachableThreadAnchorClientY: vi.fn().mockReturnValue(165),
+      scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tracked-change-1',
+        importedId: 'imported-tracked-change-1',
+        trackedChange: true,
+        trackedChangeType: 'both',
+        trackedChangeText: 'new text',
+        deletedText: 'old text',
+      },
+    });
+
+    expect(presentation.getReachableThreadAnchorClientY).toHaveBeenCalledWith(
+      'imported-tracked-change-1',
+      expect.any(Number),
+    );
+    expect(presentation.scrollThreadAnchorToClientY).toHaveBeenCalledWith(
+      'imported-tracked-change-1',
+      expect.any(Number),
+      { behavior: 'auto' },
+    );
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(165, 'tracked-change-1');
+  });
+
+  it('prefers the actual visible highlight top after the scroll attempt', async () => {
+    const presentation = {
+      getReachableThreadAnchorClientY: vi.fn().mockReturnValue(274),
+      scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const { wrapper } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-1',
+        trackedChange: true,
+        trackedChangeType: 'both',
+        trackedChangeText: 'new text',
+        deletedText: 'old text',
+      },
+      commentsStoreOverrides: {
+        editorCommentPositions: ref({
+          'tracked-change-1': {
+            start: 10,
+            end: 20,
+            pageIndex: 0,
+            bounds: { top: 98, left: 105, right: 176 },
+          },
+          'imported-tracked-change-1': {
+            start: 10,
+            end: 13,
+            pageIndex: 0,
+            bounds: { top: 98, left: 107, right: 162 },
+          },
+        }),
+      },
+    });
+
+    const highlight = document.createElement('span');
+    highlight.className = 'superdoc-comment-highlight';
+    highlight.setAttribute('data-comment-ids', 'imported-tracked-change-1');
+    highlight.getBoundingClientRect = vi.fn(() => ({
+      top: 165,
+      left: 0,
+      right: 200,
+      bottom: 180,
+      width: 200,
+      height: 15,
+      x: 0,
+      y: 165,
+      toJSON: () => ({}),
+    }));
+    document.body.appendChild(highlight);
+
+    await wrapper.trigger('click');
+
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(165, 'tracked-change-1');
+  });
+
+  it('ignores offscreen highlights and falls back to the reachable anchor Y', async () => {
+    const presentation = {
+      getReachableThreadAnchorClientY: vi.fn().mockReturnValue(456),
+      scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const { wrapper } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-1',
+        importedId: 'imported-3f15df8f',
+        trackedChange: true,
+        trackedChangeType: 'both',
+        trackedChangeText: 'new text',
+        deletedText: 'old text',
+      },
+      commentsStoreOverrides: {
+        editorCommentPositions: ref({
+          'tracked-change-1': {
+            start: 10,
+            end: 20,
+            pageIndex: 0,
+            bounds: { top: 98, left: 105, right: 176 },
+          },
+        }),
+      },
+    });
+
+    const offscreenHighlight = document.createElement('span');
+    offscreenHighlight.className = 'superdoc-comment-highlight';
+    offscreenHighlight.setAttribute('data-comment-ids', 'imported-3f15df8f');
+    offscreenHighlight.getBoundingClientRect = vi.fn(() => ({
+      top: -2687,
+      left: 0,
+      right: 200,
+      bottom: -2672,
+      width: 200,
+      height: 15,
+      x: 0,
+      y: -2687,
+      toJSON: () => ({}),
+    }));
+    document.body.appendChild(offscreenHighlight);
+
+    await wrapper.trigger('click');
+
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(456, 'tracked-change-1');
+  });
+
+  it('does not ask the presentation layer to scroll when the bubble is already aligned', async () => {
+    const presentation = {
+      getReachableThreadAnchorClientY: vi.fn().mockReturnValue(274),
+      scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const { wrapper } = await mountDialog({
+      props: {
+        autoFocus: false,
+        parent: {
+          getBoundingClientRect: () => ({
+            top: 69,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: 0,
+            height: 0,
+            x: 0,
+            y: 69,
+            toJSON: () => ({}),
+          }),
+        },
+      },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-1',
+        trackedChange: true,
+        trackedChangeType: 'both',
+        trackedChangeText: 'new text',
+        deletedText: 'old text',
+      },
+      commentsStoreOverrides: {
+        editorCommentPositions: ref({
+          'tracked-change-1': {
+            start: 10,
+            end: 20,
+            pageIndex: 0,
+            bounds: { top: 98, left: 105, right: 176 },
+          },
+        }),
+      },
+    });
+
+    wrapper.element.getBoundingClientRect = vi.fn(() => ({
+      top: 166,
+      left: 0,
+      right: 200,
+      bottom: 280,
+      width: 200,
+      height: 114,
+      x: 0,
+      y: 166,
+      toJSON: () => ({}),
+    }));
+
+    await wrapper.trigger('click');
+
+    expect(presentation.scrollThreadAnchorToClientY).not.toHaveBeenCalled();
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(167, 'tracked-change-1');
+  });
+
+  it('queues instant sidebar alignment before mutating the active thread', async () => {
+    const events = [];
+    const trackedActiveComment = customRef((track, trigger) => {
+      let currentValue = null;
+      return {
+        get() {
+          track();
+          return currentValue;
+        },
+        set(nextValue) {
+          events.push('active');
+          currentValue = nextValue;
+          trigger();
+        },
+      };
+    });
+
+    const presentation = {
+      getReachableThreadAnchorClientY: vi.fn().mockReturnValue(274),
+      scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'comment-1',
+        importedId: 'imported-3f15df8f',
+      },
+      commentsStoreOverrides: {
+        activeComment: trackedActiveComment,
+        requestInstantSidebarAlignment: vi.fn(() => {
+          events.push('request');
+        }),
+      },
+    });
+
+    expect(events.slice(0, 2)).toEqual(['request', 'active']);
   });
 
   it('does not pass preferred thread override for resolved comments', async () => {

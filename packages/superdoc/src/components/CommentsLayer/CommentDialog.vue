@@ -5,6 +5,12 @@ import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { PresentationEditor } from '@superdoc/super-editor';
 import { superdocIcons } from '@superdoc/icons.js';
+import {
+  getPreferredCommentFocusTargetClientY,
+  getVisibleThreadAnchorClientY,
+  getVisibleThreadHighlightClientY,
+  scrollThreadAnchorToFocusTarget,
+} from '@superdoc/helpers/comment-focus.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
@@ -35,8 +41,11 @@ const {
   addComment,
   cancelComment,
   deleteComment,
+  getCommentAliasIds,
   removePendingComment,
+  getCommentDocumentId,
   requestInstantSidebarAlignment,
+  resolveCommentPositionEntry,
   clearInstantSidebarAlignment,
 } = commentsStore;
 const {
@@ -75,6 +84,98 @@ const focusEditInput = (commentId) => {
   input?.focus?.();
 };
 const commentDialogElement = ref(null);
+
+const getCommentFocusThreadId = (comment) => {
+  if (comment.resolvedTime) {
+    return comment.commentId;
+  }
+
+  return comment.importedId || comment.commentId;
+};
+
+const getEntryBoundsCoordinate = (entry, coordinate) => {
+  const value = entry?.bounds?.[coordinate];
+  return Number.isFinite(value) ? value : null;
+};
+
+const entriesShareLine = (entry, candidateEntry) => {
+  if (!entry || !candidateEntry) return false;
+  if (entry.pageIndex !== candidateEntry.pageIndex) return false;
+
+  const entryTop = getEntryBoundsCoordinate(entry, 'top');
+  const candidateTop = getEntryBoundsCoordinate(candidateEntry, 'top');
+
+  return entryTop != null && candidateTop != null && Math.abs(entryTop - candidateTop) < 0.5;
+};
+
+const entriesOverlapHorizontalSpan = (entry, candidateEntry) => {
+  const entryLeft = getEntryBoundsCoordinate(entry, 'left');
+  const candidateLeft = getEntryBoundsCoordinate(candidateEntry, 'left');
+  const entryRight = getEntryBoundsCoordinate(entry, 'right');
+  const candidateRight = getEntryBoundsCoordinate(candidateEntry, 'right');
+
+  if ([entryLeft, candidateLeft, entryRight, candidateRight].some((value) => value == null)) {
+    return false;
+  }
+
+  return candidateLeft < entryRight && entryLeft < candidateRight;
+};
+
+const entriesOverlapRange = (entry, candidateEntry) => {
+  const entryStart = entry?.start;
+  const entryEnd = entry?.end;
+  const candidateStart = candidateEntry?.start;
+  const candidateEnd = candidateEntry?.end;
+
+  if (![entryStart, entryEnd, candidateStart, candidateEnd].every(Number.isFinite)) {
+    return false;
+  }
+
+  return candidateStart <= entryEnd && entryStart <= candidateEnd;
+};
+
+const shouldIncludeThreadAlias = (entry, candidateEntry) => {
+  if (!entry || !candidateEntry) return false;
+  if (candidateEntry.start === entry.start && candidateEntry.end === entry.end) return true;
+  return (
+    entriesShareLine(entry, candidateEntry) &&
+    entriesOverlapHorizontalSpan(entry, candidateEntry) &&
+    entriesOverlapRange(entry, candidateEntry)
+  );
+};
+
+// One logical thread can surface under multiple position keys when tracked-change
+// anchors are split across imported ids and canonical ids. Collect every matching
+// key so the visible highlight lookup stays aligned with the actual rendered text.
+const getThreadHighlightLookupIds = (commentOrId) => {
+  const lookupIds = new Set(getCommentAliasIds(commentOrId));
+  const { key, entry } = resolveCommentPositionEntry(commentOrId);
+
+  if (key) {
+    lookupIds.add(key);
+  }
+
+  if (!entry) {
+    return [...lookupIds];
+  }
+
+  Object.entries(editorCommentPositions.value ?? {}).forEach(([id, candidateEntry]) => {
+    if (shouldIncludeThreadAlias(entry, candidateEntry)) {
+      lookupIds.add(id);
+    }
+  });
+
+  return [...lookupIds];
+};
+
+const isDialogAlreadyAlignedWithTarget = (dialogElement, targetClientY, tolerancePx = 24) => {
+  if (!Number.isFinite(targetClientY) || typeof dialogElement?.getBoundingClientRect !== 'function') {
+    return false;
+  }
+
+  const dialogTop = dialogElement.getBoundingClientRect().top;
+  return Number.isFinite(dialogTop) && Math.abs(dialogTop - targetClientY) <= tolerancePx;
+};
 
 const isActiveComment = computed(() => activeComment.value === props.comment.commentId);
 
@@ -278,27 +379,22 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
-  const COMMENT_FOCUS_VIEWPORT_RATIO = 0.38;
-  const targetClientY = Math.round(window.innerHeight * COMMENT_FOCUS_VIEWPORT_RATIO);
+  const targetClientY = getPreferredCommentFocusTargetClientY();
   const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
-  if (willChangeActiveThread) {
-    requestInstantSidebarAlignment(targetClientY);
-  } else {
-    clearInstantSidebarAlignment();
-  }
-
-  // Update Vue store immediately for responsive UI
-  if (!props.comment.resolvedTime) {
-    activeComment.value = props.comment.commentId;
-  }
+  let instantAlignmentTargetY = targetClientY;
 
   // Move cursor to the comment location and set active comment in a single PM
   // transaction. This prevents a race where position-based comment detection in the
   // plugin clears the activeThreadId before the setActiveComment meta is processed.
   if (editor) {
-    const cursorId = props.comment.resolvedTime
-      ? props.comment.commentId
-      : props.comment.importedId || props.comment.commentId;
+    const { entry: focusEntry } = resolveCommentPositionEntry(props.comment);
+    const visibleAnchorTargetY = getVisibleThreadAnchorClientY(props.parent, focusEntry);
+    const visibleHighlightTargetY = getVisibleThreadHighlightClientY(getThreadHighlightLookupIds(props.comment));
+    const visibleThreadTargetY = Number.isFinite(visibleHighlightTargetY)
+      ? visibleHighlightTargetY
+      : visibleAnchorTargetY;
+    const shouldSkipFocusScroll = isDialogAlreadyAlignedWithTarget(commentDialogElement.value, visibleThreadTargetY);
+    const cursorId = getCommentFocusThreadId(props.comment);
     if (props.comment.resolvedTime) {
       editor.commands?.setCursorById(cursorId);
     } else {
@@ -308,14 +404,35 @@ const setFocus = () => {
         editor.commands?.setActiveComment({ commentId: activeCommentId });
       }
     }
-    const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
-    if (presentation && Number.isFinite(targetClientY)) {
-      const fallbackThreadId = props.comment.commentId;
-      const scrolled = presentation.scrollThreadAnchorToClientY(cursorId, targetClientY, { behavior: 'auto' });
-      if (!scrolled && fallbackThreadId && fallbackThreadId !== cursorId) {
-        presentation.scrollThreadAnchorToClientY(fallbackThreadId, targetClientY, { behavior: 'auto' });
-      }
+    const documentId = getCommentDocumentId(props.comment);
+    const presentation = documentId ? PresentationEditor.getInstance(documentId) : null;
+    const fallbackThreadId = props.comment.commentId;
+    const reachableTargetY = shouldSkipFocusScroll
+      ? null
+      : scrollThreadAnchorToFocusTarget(presentation, cursorId, fallbackThreadId, targetClientY);
+    if (Number.isFinite(visibleHighlightTargetY)) {
+      instantAlignmentTargetY = visibleHighlightTargetY;
+    } else if (Number.isFinite(visibleAnchorTargetY)) {
+      instantAlignmentTargetY = visibleAnchorTargetY;
+    } else if (Number.isFinite(reachableTargetY)) {
+      instantAlignmentTargetY = reachableTargetY;
     }
+  }
+
+  // Keep the floating sidebar aligned with the anchor position the document can
+  // actually reach. Near scroll boundaries the preferred focus Y may be impossible
+  // to achieve, and using that impossible target would visibly separate the bubble
+  // from its highlight.
+  if (willChangeActiveThread) {
+    requestInstantSidebarAlignment(instantAlignmentTargetY, props.comment.commentId);
+  } else {
+    clearInstantSidebarAlignment();
+  }
+
+  // Update Vue store after queuing any one-shot alignment target so the
+  // floating sidebar can react to both state changes in the same flush.
+  if (!props.comment.resolvedTime) {
+    activeComment.value = props.comment.commentId;
   }
 };
 

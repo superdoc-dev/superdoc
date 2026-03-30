@@ -41,12 +41,16 @@ vi.mock('prosemirror-state', async (importOriginal) => {
   };
 });
 
-describe('EditorInputManager - repeated active comment clicks', () => {
+describe('EditorInputManager - single-thread comment highlight clicks', () => {
   let manager: EditorInputManager;
   let viewportHost: HTMLElement;
   let visibleHost: HTMLElement;
+  let editorDom: HTMLDivElement & { focus: Mock };
   let mockEditor: {
     isEditable: boolean;
+    commands: {
+      setCursorById: Mock;
+    };
     state: {
       doc: { content: { size: number }; nodesBetween: Mock };
       tr: { setSelection: Mock; setStoredMarks: Mock };
@@ -66,8 +70,10 @@ describe('EditorInputManager - repeated active comment clicks', () => {
   };
   let mockDeps: EditorInputDependencies;
   let mockCallbacks: EditorInputCallbacks;
+  let originalElementsFromPoint: typeof document.elementsFromPoint | undefined;
 
   beforeEach(() => {
+    originalElementsFromPoint = document.elementsFromPoint?.bind(document);
     viewportHost = document.createElement('div');
     viewportHost.className = 'presentation-editor__viewport';
     viewportHost.setPointerCapture = vi.fn();
@@ -83,8 +89,15 @@ describe('EditorInputManager - repeated active comment clicks', () => {
     container.appendChild(visibleHost);
     document.body.appendChild(container);
 
+    editorDom = Object.assign(document.createElement('div'), {
+      focus: vi.fn(),
+    });
+
     mockEditor = {
       isEditable: true,
+      commands: {
+        setCursorById: vi.fn(() => true),
+      },
       state: {
         doc: {
           content: { size: 100 },
@@ -103,7 +116,7 @@ describe('EditorInputManager - repeated active comment clicks', () => {
       },
       view: {
         dispatch: vi.fn(),
-        dom: document.createElement('div'),
+        dom: editorDom,
         focus: vi.fn(),
         hasFocus: vi.fn(() => false),
       },
@@ -146,6 +159,14 @@ describe('EditorInputManager - repeated active comment clicks', () => {
   afterEach(() => {
     manager.destroy();
     document.body.innerHTML = '';
+    if (originalElementsFromPoint) {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    } else {
+      Reflect.deleteProperty(document, 'elementsFromPoint');
+    }
     vi.clearAllMocks();
   });
 
@@ -156,7 +177,10 @@ describe('EditorInputManager - repeated active comment clicks', () => {
     );
   }
 
-  function dispatchPointerDown(target: HTMLElement): void {
+  function dispatchPointerDown(
+    target: HTMLElement,
+    { clientX = 10, clientY = 10 }: { clientX?: number; clientY?: number } = {},
+  ): void {
     const PointerEventImpl = getPointerEventImpl();
     target.dispatchEvent(
       new PointerEventImpl('pointerdown', {
@@ -164,10 +188,19 @@ describe('EditorInputManager - repeated active comment clicks', () => {
         cancelable: true,
         button: 0,
         buttons: 1,
-        clientX: 10,
-        clientY: 10,
+        clientX,
+        clientY,
       } as PointerEventInit),
     );
+  }
+
+  function stubElementsFromPoint(elements: Element[]): Mock {
+    const elementsFromPoint = vi.fn(() => elements);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+    return elementsFromPoint;
   }
 
   it('treats a click on the already-active single-thread highlight as a no-op', () => {
@@ -186,6 +219,73 @@ describe('EditorInputManager - repeated active comment clicks', () => {
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
     expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).not.toHaveBeenCalled();
+    expect(editorDom.focus).not.toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it('activates an inactive single-thread highlight without falling back to generic selection handling', () => {
+    mockEditor.state.comments$.activeThreadId = 'comment-2';
+
+    const highlight = document.createElement('span');
+    highlight.className = 'superdoc-comment-highlight';
+    highlight.setAttribute('data-comment-ids', 'comment-1');
+    viewportHost.appendChild(highlight);
+
+    dispatchPointerDown(highlight);
+
+    expect(mockEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
+      activeCommentId: 'comment-1',
+    });
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).not.toHaveBeenCalled();
+    expect(editorDom.focus).not.toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it('activates a tracked-change decoration when it owns the clicked visual surface', () => {
+    mockEditor.state.comments$.activeThreadId = 'comment-2';
+
+    const trackedChange = document.createElement('span');
+    trackedChange.className = 'track-delete-dec highlighted';
+    trackedChange.setAttribute('data-track-change-id', 'change-1');
+    viewportHost.appendChild(trackedChange);
+
+    dispatchPointerDown(trackedChange);
+
+    expect(mockEditor.commands.setCursorById).toHaveBeenCalledWith('change-1', {
+      activeCommentId: 'change-1',
+    });
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it('activates a nearby single-thread highlight when a split-run gap receives the pointer event', () => {
+    mockEditor.state.comments$.activeThreadId = 'comment-2';
+
+    const gap = document.createElement('span');
+    gap.className = 'track-delete-dec highlighted';
+    viewportHost.appendChild(gap);
+
+    const highlight = document.createElement('span');
+    highlight.className = 'superdoc-comment-highlight';
+    highlight.setAttribute('data-comment-ids', 'comment-1');
+    viewportHost.appendChild(highlight);
+
+    const elementsFromPoint = stubElementsFromPoint([gap, highlight]);
+
+    dispatchPointerDown(gap, { clientX: 24, clientY: 12 });
+
+    expect(elementsFromPoint).toHaveBeenCalled();
+    expect(mockEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
+      activeCommentId: 'comment-1',
+    });
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
     expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
   });
 
@@ -201,6 +301,27 @@ describe('EditorInputManager - repeated active comment clicks', () => {
       'commentsUpdate',
       expect.objectContaining({ activeCommentId: 'comment-1' }),
     );
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).toHaveBeenCalled();
+  });
+
+  it('does not guess a thread when the nearby hit surface is an overlapping highlight', () => {
+    const gap = document.createElement('span');
+    gap.className = 'track-delete-dec highlighted';
+    viewportHost.appendChild(gap);
+
+    const overlappingHighlight = document.createElement('span');
+    overlappingHighlight.className = 'superdoc-comment-highlight';
+    overlappingHighlight.setAttribute('data-comment-ids', 'comment-1,comment-2');
+    viewportHost.appendChild(overlappingHighlight);
+
+    const elementsFromPoint = stubElementsFromPoint([gap, overlappingHighlight]);
+
+    dispatchPointerDown(gap, { clientX: 24, clientY: 12 });
+
+    expect(elementsFromPoint).toHaveBeenCalled();
+    expect(mockEditor.commands.setCursorById).not.toHaveBeenCalled();
     expect(resolvePointerPositionHit).toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
     expect(viewportHost.setPointerCapture).toHaveBeenCalled();

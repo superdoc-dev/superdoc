@@ -1,15 +1,12 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
-import { CommentHighlightDecorator } from './dom/CommentHighlightDecorator.js';
-import { DecorationBridge } from './dom/DecorationBridge.js';
+import { PresentationPostPaintPipeline } from './dom/PresentationPostPaintPipeline.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { PresentationPainterAdapter } from './rendering/PresentationPainterAdapter.js';
-import { applyProofingDecorations, clearProofingDecorations } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterInput, ProofingAnnotation, LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
-import type { ProofingConfig, ProofingPaintSlice } from './proofing/types.js';
-import type { VisibilitySource } from './proofing/visibility-source.js';
+import type { ProofingConfig } from './proofing/types.js';
 import {
   computeWordSelectionRangeAt,
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
@@ -132,7 +129,6 @@ import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
 } from './dom/EditorStyleInjector.js';
-import { FieldAnnotationInteractionLayer } from './dom/FieldAnnotationInteractionLayer.js';
 
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { SelectionHandle } from '../selection-state.js';
@@ -345,12 +341,8 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
-  /** Bridges external PM plugin decorations onto painted DOM elements. */
-  #decorationBridge = new DecorationBridge();
-  /** Applies comment highlight styles to painter-rendered DOM post-paint. */
-  #commentHighlightDecorator = new CommentHighlightDecorator();
-  /** Upgrades annotation DOM elements with editing affordances post-paint. */
-  #fieldAnnotationInteractionLayer = new FieldAnnotationInteractionLayer();
+  /** Owns the remaining editor-side post-paint DOM mutation pipeline. */
+  #postPaintPipeline = new PresentationPostPaintPipeline();
   /** Proofing session manager — handles provider lifecycle, scheduling, and store. */
   #proofingManager: ProofingSessionManager | null = null;
   /** RAF handle for coalesced decoration sync scheduling. */
@@ -494,8 +486,7 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
-    this.#commentHighlightDecorator.setContainer(this.#painterHost);
-    this.#fieldAnnotationInteractionLayer.setContainer(this.#painterHost);
+    this.#postPaintPipeline.setContainer(this.#painterHost);
 
     // Inject editor-owned styles (idempotent, once per document)
     ensureEditorNativeSelectionStyles(doc);
@@ -2870,8 +2861,7 @@ export class PresentationEditor extends EventEmitter {
         this.#decorationSyncRafHandle = null;
       }, 'Decoration sync RAF');
     }
-    this.#decorationBridge.destroy();
-    this.#commentHighlightDecorator.destroy();
+    this.#postPaintPipeline.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
 
@@ -3043,15 +3033,8 @@ export class PresentationEditor extends EventEmitter {
 
     mgr.setVisibilitySource({
       getVisiblePageIndices: () => {
-        if (!this.#painterHost) return null;
-        const pageEls = this.#painterHost.querySelectorAll('[data-page-index]');
-        if (pageEls.length === 0) return null;
-        const indices: number[] = [];
-        for (let i = 0; i < pageEls.length; i++) {
-          const idx = parseInt(pageEls[i].getAttribute('data-page-index')!, 10);
-          if (!isNaN(idx)) indices.push(idx);
-        }
-        return indices.length > 0 ? indices : null;
+        const mountedPageIndices = this.#painterAdapter.getMountedPageIndices();
+        return mountedPageIndices.length > 0 ? mountedPageIndices : null;
       },
     });
 
@@ -3066,23 +3049,9 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
-  /**
-   * Apply the proofing decoration pass after paint or when results change.
-   * Walks rendered spans and applies proofing CSS classes.
-   * Rebuilds DomPositionIndex if any DOM mutations were made.
-   *
-   * Also handles the case where proofing is disabled: clears all markers.
-   */
-  #applyProofingPass(): void {
-    if (!this.#painterHost) return;
-
-    // When proofing is disabled or no manager exists, clear any leftover markers
+  #buildProofingAnnotations(): ProofingAnnotation[] | null {
     if (!this.#proofingManager?.isEnabled) {
-      const cleared = clearProofingDecorations(this.#painterHost);
-      if (cleared) {
-        this.#rebuildDomPositionIndex();
-      }
-      return;
+      return null;
     }
 
     // Compute active word range for caret-token suppression:
@@ -3094,20 +3063,21 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const slices = this.#proofingManager.getPaintSlices(activeWordRange);
-
-    // Convert paint slices to ProofingAnnotation format
-    const annotations: ProofingAnnotation[] = slices.map((s) => ({
+    return slices.map((s) => ({
       pmFrom: s.pmFrom,
       pmTo: s.pmTo,
       kind: s.kind,
     }));
+  }
 
-    const mutated = applyProofingDecorations(this.#painterHost, annotations);
-
-    // Rebuild position index if DOM was mutated (sibling splits)
-    if (mutated) {
-      this.#rebuildDomPositionIndex();
-    }
+  /**
+   * Apply the proofing decoration pass after paint or when results change.
+   * Rebuilds DomPositionIndex if proofing split/un-split the rendered spans.
+   */
+  #applyProofingPass(): void {
+    this.#postPaintPipeline.applyProofingAnnotations(this.#buildProofingAnnotations(), () =>
+      this.#rebuildDomPositionIndex(),
+    );
   }
 
   /**
@@ -3144,7 +3114,7 @@ export class PresentationEditor extends EventEmitter {
    * Called after paint and after observer rebuild.
    */
   #syncCommentHighlights(): void {
-    this.#commentHighlightDecorator.apply();
+    this.#postPaintPipeline.applyCommentHighlights();
   }
 
   /**
@@ -3155,8 +3125,17 @@ export class PresentationEditor extends EventEmitter {
    * restored last.
    */
   #syncInlineStyleLayers(): void {
-    this.#syncCommentHighlights();
-    this.#syncDecorations();
+    const state = this.#editor?.view?.state;
+    if (!state) {
+      this.#syncCommentHighlights();
+      return;
+    }
+
+    try {
+      this.#postPaintPipeline.syncInlineStyleLayers(state, this.#domPositionIndex);
+    } catch (error) {
+      console.warn('[PresentationEditor] Inline style layer sync failed:', error);
+    }
   }
 
   /**
@@ -3173,7 +3152,7 @@ export class PresentationEditor extends EventEmitter {
     if (!state) return;
 
     try {
-      this.#decorationBridge.sync(state, this.#domPositionIndex);
+      this.#postPaintPipeline.syncDecorations(state, this.#domPositionIndex);
     } catch (error) {
       // Sync can call findRangeByText and other doc-dependent logic; if it throws
       // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
@@ -3196,7 +3175,7 @@ export class PresentationEditor extends EventEmitter {
 
     // Cheap identity check: bail if no DecorationSet references changed.
     const state = this.#editor?.view?.state;
-    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+    if (!state || !this.#postPaintPipeline.hasDecorationChanges(state)) return;
 
     // Already scheduled — RAF will handle it.
     if (this.#decorationSyncRafHandle != null) return;
@@ -3291,14 +3270,14 @@ export class PresentationEditor extends EventEmitter {
     // otherwise the bridge applies the class to whole runs and highlights too much.
     const handleTransaction = (event?: { transaction?: Transaction }) => {
       const tr = event?.transaction;
-      this.#decorationBridge.recordTransaction(tr);
+      this.#postPaintPipeline.recordDecorationTransaction(tr);
       const state = this.#editor?.view?.state;
-      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      const decorationChanged = state && this.#postPaintPipeline.hasDecorationChanges(state);
       // Sync immediately whenever decorations changed so e.g. clearFocus removes
       // highlight-selection in the same tick. Only restore when we had a doc change.
       if (decorationChanged) {
         const restoreEmpty = tr ? tr.docChanged === true : false;
-        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+        this.#postPaintPipeline.syncDecorations(state!, this.#domPositionIndex, {
           restoreEmptyDecorations: restoreEmpty,
         });
       } else {
@@ -3431,7 +3410,7 @@ export class PresentationEditor extends EventEmitter {
       // the active comment selection unexpectedly.
       if ('activeCommentId' in payload) {
         const activeId = payload.activeCommentId ?? null;
-        const didChange = this.#commentHighlightDecorator.setActiveComment(activeId);
+        const didChange = this.#postPaintPipeline.setActiveComment(activeId);
         if (didChange) {
           this.#syncInlineStyleLayers();
         }
@@ -4233,7 +4212,7 @@ export class PresentationEditor extends EventEmitter {
       // Split runs at decoration boundaries so bridge sync applies background only to the
       // selected portion (like highlight mark) without adding a document mark.
       const state = this.#editor?.view?.state;
-      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      const decorationRanges = state ? this.#postPaintPipeline.collectDecorationRanges(state) : [];
       if (decorationRanges.length > 0) {
         blocks = splitRunsAtDecorationBoundaries(
           blocks,
@@ -4869,11 +4848,14 @@ export class PresentationEditor extends EventEmitter {
    *    the hover class
    */
   #refreshEditorDomAugmentations(): void {
-    this.#fieldAnnotationInteractionLayer.apply(this.#layoutEpoch);
-    this.#rebuildDomPositionIndex();
-    this.#syncInlineStyleLayers();
-    this.#applyProofingPass();
-    this.#reapplySdtGroupHover();
+    this.#postPaintPipeline.refreshAfterPaint({
+      layoutEpoch: this.#layoutEpoch,
+      editorState: this.#editor?.view?.state,
+      domPositionIndex: this.#domPositionIndex,
+      proofingAnnotations: this.#buildProofingAnnotations(),
+      rebuildDomPositionIndex: () => this.#rebuildDomPositionIndex(),
+      reapplyStructuredContentHover: () => this.#reapplySdtGroupHover(),
+    });
   }
 
   #clearSelectedStructuredContentInlineClass() {

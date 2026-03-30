@@ -11,16 +11,40 @@ import type {
 import type { Layout } from '@superdoc/contracts';
 import { PresentationPaintIndex } from './PresentationPaintIndex.js';
 
+function normalizePinnedPageIndices(pageIndices: number[] | null | undefined): number[] {
+  return Array.from(new Set((pageIndices ?? []).filter((pageIndex) => Number.isInteger(pageIndex)))).sort(
+    (a, b) => a - b,
+  );
+}
+
+function areNumberListsEqual(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
 /**
- * Owns the DomPainter lifecycle on behalf of PresentationEditor.
+ * Owns the DomPainter lifecycle and render-surface control state on behalf of
+ * PresentationEditor.
  *
- * Captures paint snapshots via the `onPaintSnapshot` callback so
- * PresentationEditor can query them without reaching into the painter.
+ * This adapter is intentionally stateful:
+ * - painter control inputs such as zoom, providers, scroll container, and
+ *   virtualization pins are cached here rather than pushed ad hoc from
+ *   PresentationEditor into the live painter instance
+ * - paint snapshots are captured and indexed here so editor code can query
+ *   mounted painted elements without scraping the DOM
  */
 export class PresentationPainterAdapter {
   #painter: DomPainterHandle | null = null;
   #lastPaintSnapshot: PaintSnapshot | null = null;
   #paintIndex = new PresentationPaintIndex();
+  #headerProvider: PageDecorationProvider | undefined;
+  #footerProvider: PageDecorationProvider | undefined;
+  #zoom = 1;
+  #scrollContainer: HTMLElement | null = null;
+  #virtualizationPins: number[] = [];
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -37,6 +61,7 @@ export class PresentationPainterAdapter {
           this.#paintIndex.update(snapshot);
         },
       });
+      this.#applyPainterSurfaceState();
     }
   }
 
@@ -53,17 +78,27 @@ export class PresentationPainterAdapter {
   }
 
   setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
-    this.#painter?.setProviders(header, footer);
+    if (this.#headerProvider === header && this.#footerProvider === footer) {
+      return;
+    }
+
+    this.#headerProvider = header;
+    this.#footerProvider = footer;
+    this.#applyProviders();
   }
 
   // ── Zoom / scroll ──────────────────────────────────────────────────
 
   setZoom(zoom: number): void {
-    this.#painter?.setZoom(zoom);
+    if (this.#zoom === zoom) return;
+    this.#zoom = zoom;
+    this.#applyZoom();
   }
 
   setScrollContainer(el: HTMLElement | null): void {
-    this.#painter?.setScrollContainer(el);
+    if (this.#scrollContainer === el) return;
+    this.#scrollContainer = el;
+    this.#applyScrollContainer();
   }
 
   onScroll(): void {
@@ -73,13 +108,23 @@ export class PresentationPainterAdapter {
   // ── Virtualization ─────────────────────────────────────────────────
 
   setVirtualizationPins(pageIndices: number[] | null | undefined): void {
-    this.#painter?.setVirtualizationPins(pageIndices);
+    const normalizedPins = normalizePinnedPageIndices(pageIndices);
+    if (areNumberListsEqual(this.#virtualizationPins, normalizedPins)) {
+      return;
+    }
+
+    this.#virtualizationPins = normalizedPins;
+    this.#applyVirtualizationPins();
   }
 
   // ── Snapshot ───────────────────────────────────────────────────────
 
   getPaintSnapshot(): PaintSnapshot | null {
     return this.#lastPaintSnapshot;
+  }
+
+  getMountedPageIndices(): number[] {
+    return this.#lastPaintSnapshot?.pages.map((page) => page.index) ?? [];
   }
 
   getAnnotationElementByPmStart(pmStart: number): HTMLElement | null {
@@ -104,5 +149,28 @@ export class PresentationPainterAdapter {
 
   getImageFragmentElementByPmStart(pmStart: number): HTMLElement | null {
     return this.#paintIndex.getImageFragmentElementByPmStart(pmStart);
+  }
+
+  #applyPainterSurfaceState(): void {
+    this.#applyProviders();
+    this.#applyZoom();
+    this.#applyScrollContainer();
+    this.#applyVirtualizationPins();
+  }
+
+  #applyProviders(): void {
+    this.#painter?.setProviders(this.#headerProvider, this.#footerProvider);
+  }
+
+  #applyZoom(): void {
+    this.#painter?.setZoom(this.#zoom);
+  }
+
+  #applyScrollContainer(): void {
+    this.#painter?.setScrollContainer(this.#scrollContainer);
+  }
+
+  #applyVirtualizationPins(): void {
+    this.#painter?.setVirtualizationPins(this.#virtualizationPins);
   }
 }

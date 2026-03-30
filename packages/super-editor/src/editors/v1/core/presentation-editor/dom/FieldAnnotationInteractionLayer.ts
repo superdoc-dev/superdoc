@@ -36,8 +36,8 @@ export class FieldAnnotationInteractionLayer {
     const epochStr = String(layoutEpoch);
     const annotations = this.#container.querySelectorAll(buildAnnotationSelector());
 
-    for (const el of annotations) {
-      const annotation = el as HTMLElement;
+    for (let index = 0; index < annotations.length; index += 1) {
+      const annotation = annotations[index] as HTMLElement;
 
       // Skip if already upgraded for this epoch
       if (annotation.dataset[INTERACTION_EPOCH_KEY] === epochStr) continue;
@@ -77,8 +77,8 @@ export class FieldAnnotationInteractionLayer {
     if (!this.#container) return;
 
     const annotations = this.#container.querySelectorAll(buildAnnotationSelector());
-    for (const el of annotations) {
-      const annotation = el as HTMLElement;
+    for (let index = 0; index < annotations.length; index += 1) {
+      const annotation = annotations[index] as HTMLElement;
       annotation.removeAttribute('draggable');
       delete annotation.dataset[DATASET_KEYS.DRAGGABLE];
       delete annotation.dataset[DATASET_KEYS.DISPLAY_LABEL];

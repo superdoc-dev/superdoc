@@ -75,6 +75,7 @@ let closeActivityStream = null;
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
+const headerCollapsed = ref(false);
 
 const DEV_THEME_CLASSES = ['sd-theme-docs', 'sd-theme-word', 'sd-theme-blueprint', 'sd-theme-neon-night'];
 
@@ -1323,7 +1324,8 @@ if (scrollTestMode.value) {
 <template>
   <div class="dev-app" :class="{ 'dev-app--scroll-test': scrollTestMode }">
     <div class="dev-app__layout">
-      <div class="dev-app__header">
+      <div v-if="!headerCollapsed" class="dev-app__header">
+        <button class="dev-app__header-toggle" title="Hide header" @click="headerCollapsed = true">▲</button>
         <div class="dev-app__brand">
           <div class="dev-app__logo">
             <img :src="superdocLogo" alt="SuperDoc logo" />
@@ -1487,6 +1489,9 @@ if (scrollTestMode.value) {
         </div>
       </div>
 
+      <button v-if="headerCollapsed" class="dev-app__header-show" title="Show header" @click="headerCollapsed = false">
+        ▼ SuperDoc Dev
+      </button>
       <div class="dev-app__toolbar-ruler-container">
         <div id="toolbar" class="sd-toolbar"></div>
         <div id="ruler-container" class="sd-ruler"></div>
@@ -1608,6 +1613,42 @@ if (scrollTestMode.value) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
   z-index: 120;
+}
+
+.dev-app__header-toggle {
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+.dev-app__header-toggle:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dev-app__header-show {
+  background: #0f172a;
+  color: #94a3b8;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 16px;
+  text-align: center;
+  width: 100%;
+}
+
+.dev-app__header-show:hover {
+  color: #e2e8f0;
+  background: #1e293b;
 }
 
 .dev-app__header::after {

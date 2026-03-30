@@ -76,7 +76,7 @@
     "copy-assets": "cp webview/style.css dist/webview/",
     "build": "pnpm run compile",
     "watch": "pnpm run compile:ext -- --watch",
-    "package": "vsce package --no-dependencies",
+    "package": "vsce package --no-dependencies --no-rewrite-relative-links",
     "publish:vsce": "vsce publish --packagePath *.vsix",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",

@@ -47,12 +47,14 @@ export function createDocFromHTML(content, editor, options = {}) {
   // Detect unsupported content when opted in (requires an Element for DOM scanning)
   const domElement =
     parsedContent?.ownerDocument?.defaultView?.Element ?? domDocument?.defaultView?.Element ?? globalThis.Element;
-  if (
+  const parsedElement =
     (options.onUnsupportedContent || options.warnOnUnsupportedContent) &&
     domElement &&
     parsedContent instanceof domElement
-  ) {
-    const unsupported = detectUnsupportedContent(parsedContent, editor.schema);
+      ? /** @type {Element} */ (/** @type {unknown} */ (parsedContent))
+      : null;
+  if (parsedElement) {
+    const unsupported = detectUnsupportedContent(parsedElement, editor.schema);
     if (unsupported.length > 0) {
       if (options.onUnsupportedContent) {
         options.onUnsupportedContent(unsupported);

@@ -5984,9 +5984,6 @@ export class PresentationEditor extends EventEmitter {
     if (!this.#editor) return false;
 
     try {
-      const runtime = resolveStoryRuntime(this.#editor, story);
-      const resolved = resolveBookmarkTarget(runtime.editor.state.doc, target);
-
       if (story.storyType === 'headerFooterSlot' || story.storyType === 'headerFooterPart') {
         const region = this.#findHeaderFooterRegionForStory(story);
         if (!region) return false;
@@ -5997,11 +5994,17 @@ export class PresentationEditor extends EventEmitter {
 
         const activeEditor = await this.#waitForHeaderFooterEditor(PresentationEditor.ANCHOR_NAV_TIMEOUT_MS);
         if (!activeEditor?.commands?.setTextSelection) return false;
+
+        // Resolve position in the live editor — the story runtime editor used
+        // before activation may be a different instance with different state.
+        const resolved = resolveBookmarkTarget(activeEditor.state.doc, target);
         activeEditor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
         activeEditor.view?.focus?.();
         return true;
       }
 
+      const runtime = resolveStoryRuntime(this.#editor, story);
+      const resolved = resolveBookmarkTarget(runtime.editor.state.doc, target);
       if (typeof runtime.editor.commands?.setTextSelection !== 'function') return false;
       runtime.editor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
       runtime.editor.view?.focus?.();

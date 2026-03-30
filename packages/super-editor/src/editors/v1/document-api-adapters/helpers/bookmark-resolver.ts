@@ -26,12 +26,12 @@ export interface ResolvedBookmark {
   endPos: number | null;
 }
 
-function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
+export function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
   if (!locator || locator.storyType === 'body') return undefined;
   return locator;
 }
 
-function buildBookmarkAddress(name: string, story?: StoryLocator): BookmarkAddress {
+export function buildBookmarkAddress(name: string, story?: StoryLocator): BookmarkAddress {
   const normalizedStory = normalizeStory(story);
   return normalizedStory
     ? { kind: 'entity', entityType: 'bookmark', name, story: normalizedStory }

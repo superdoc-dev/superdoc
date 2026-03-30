@@ -15,7 +15,6 @@ import type {
   BookmarkAddress,
   MutationOptions,
   ReceiptFailureCode,
-  StoryLocator,
 } from '@superdoc/document-api';
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
@@ -23,6 +22,7 @@ import {
   resolveBookmarkTarget,
   extractBookmarkInfo,
   buildBookmarkDiscoveryItem,
+  buildBookmarkAddress,
 } from '../helpers/bookmark-resolver.js';
 import { paginate, resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
@@ -42,18 +42,6 @@ function bookmarkSuccess(address: BookmarkAddress): BookmarkMutationResult {
 
 function bookmarkFailure(code: ReceiptFailureCode, message: string): BookmarkMutationResult {
   return { success: false, failure: { code, message } };
-}
-
-function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
-  if (!locator || locator.storyType === 'body') return undefined;
-  return locator;
-}
-
-function buildBookmarkAddress(name: string, story?: StoryLocator): BookmarkAddress {
-  const normalizedStory = normalizeStory(story);
-  return normalizedStory
-    ? { kind: 'entity', entityType: 'bookmark', name, story: normalizedStory }
-    : { kind: 'entity', entityType: 'bookmark', name };
 }
 
 function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boolean {

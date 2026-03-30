@@ -456,6 +456,12 @@ describe('decodeRPrFromMarks', () => {
     expect(rPr).toEqual({ bold: true });
   });
 
+  it('should skip marks with missing or falsy type', () => {
+    const marks = [{ type: null }, { attrs: { value: true } }, { type: 'bold', attrs: { value: true } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ bold: true });
+  });
+
   it('should decode underline marks', () => {
     const marks = [{ type: 'underline', attrs: { underlineType: 'single', underlineColor: '#FF0000' } }];
     const rPr = decodeRPrFromMarks(marks);

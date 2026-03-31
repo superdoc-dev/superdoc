@@ -43,6 +43,9 @@ const borderSizeToPx = (size?: number): number | undefined => {
   return Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, pixelValue));
 };
 
+const clampPixelBorderWidth = (width: number): number =>
+  Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, width));
+
 /**
  * Normalizes a border/shading color with a default fallback.
  *
@@ -57,17 +60,18 @@ const normalizeColorWithDefault = (color?: string): string => {
 /**
  * Converts an OOXML border specification to layout engine BorderSpec format.
  *
- * Border sizes are assumed to be in eighths of a point (OOXML standard) if >= 8,
- * otherwise treated as already-converted pixel values. Nil/none borders return
- * a special BorderSpec with style 'none' and width 0.
+ * Border sizes emitted by the DOCX translator are already expressed in pixels,
+ * so the pm-adapter simply clamps them to a safe range instead of converting
+ * from eighths-of-a-point. Nil/none borders return a special BorderSpec with
+ * style 'none' and width 0.
  *
  * @param ooxmlBorder - Raw OOXML border object with optional val, size, and color properties
  * @returns BorderSpec with style, width (in pixels), and color, or undefined if invalid
  *
  * @example
  * ```typescript
- * convertBorderSpec({ val: 'single', size: 16, color: 'FF0000' });
- * // { style: 'single', width: 2.67, color: '#FF0000' }
+ * convertBorderSpec({ val: 'single', size: 4, color: 'FF0000' });
+ * // { style: 'single', width: 4, color: '#FF0000' }
  *
  * convertBorderSpec({ val: 'nil' });
  * // { style: 'none', width: 0 }
@@ -101,14 +105,19 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
     return { style: 'none' as BorderStyle, width: 0 };
   }
 
-  if (size == null || size === undefined) return undefined;
+  if (!isFiniteNumber(sizeNumber)) return undefined;
+  const numericSize = sizeNumber as number;
+  if (numericSize <= 0) {
+    return { style: 'none' as BorderStyle, width: 0 };
+  }
 
   // Ensure color has # prefix
   const normalizedColor = normalizeColorWithDefault(colorString);
+  const width = clampPixelBorderWidth(numericSize);
 
   return {
     style: (val as BorderStyle) || 'single',
-    width: size,
+    width,
     color: normalizedColor,
   };
 }
@@ -124,8 +133,8 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
  *
  * @example
  * ```typescript
- * convertTableBorderValue({ val: 'single', size: 16, color: 'FF0000' });
- * // { style: 'single', width: 2.67, color: '#FF0000' }
+ * convertTableBorderValue({ val: 'single', size: 4, color: 'FF0000' });
+ * // { style: 'single', width: 4, color: '#FF0000' }
  *
  * convertTableBorderValue({ val: 'nil' });
  * // { none: true }
@@ -144,13 +153,16 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
     return { none: true };
   }
 
-  if (size == null || size === undefined) return undefined;
+  if (!isFiniteNumber(size)) return undefined;
+  const numericSize = size as number;
+  if (numericSize <= 0) return { none: true };
 
   const normalizedColor = normalizeColorWithDefault(color);
+  const width = clampPixelBorderWidth(numericSize);
 
   return {
     style: (val as BorderStyle) || 'single',
-    width: size as number,
+    width,
     color: normalizedColor,
   };
 }

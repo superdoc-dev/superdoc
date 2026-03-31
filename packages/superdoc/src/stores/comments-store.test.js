@@ -895,13 +895,16 @@ describe('comments-store', () => {
 
     store.syncTrackedChangeComments({ superdoc: {}, editor });
 
-    expect(store.commentsList[0]).toMatchObject({
-      commentId: 'tc-live',
-      trackedChange: true,
-      trackedChangeText: 'tracked-tc-live',
-      trackedChangeType: 'insert',
-    });
-    expect(store.commentsList[1]).toEqual({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' });
+    expect(store.commentsList).toHaveLength(2);
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'tc-live',
+        trackedChange: true,
+        trackedChangeText: 'tracked-tc-live',
+        trackedChangeType: 'insert',
+      }),
+      expect.objectContaining({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' }),
+    ]);
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

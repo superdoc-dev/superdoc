@@ -895,10 +895,45 @@ describe('comments-store', () => {
 
     store.syncTrackedChangeComments({ superdoc: {}, editor });
 
-    expect(store.commentsList).toEqual([
-      { commentId: 'tc-live', trackedChange: true, trackedChangeText: 'Existing', fileId: 'doc-1' },
-      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
-    ]);
+    expect(store.commentsList[0]).toMatchObject({
+      commentId: 'tc-live',
+      trackedChange: true,
+      trackedChangeText: 'tracked-tc-live',
+      trackedChangeType: 'insert',
+    });
+    expect(store.commentsList[1]).toEqual({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' });
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('refreshes tracked-change text from the document during replay sync', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const superdoc = { emit: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-live' } }, from: 0, to: 4 }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-live' } } } }]);
+
+    const existingComment = {
+      commentId: 'tc-live',
+      trackedChange: true,
+      trackedChangeText: 'Old text',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-live' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    const createCall = createOrUpdateTrackedChangeCommentMock.mock.calls[0]?.[0];
+    expect(createCall?.event).toBe('update');
+    expect(existingComment.trackedChangeText).toBe('tracked-tc-live');
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
@@ -1150,16 +1185,12 @@ describe('comments-store', () => {
 
     store.syncTrackedChangeComments({ superdoc: {}, editor });
 
-    expect(store.commentsList).toEqual([
-      {
-        commentId: 'runtime-id-123',
-        importedId: 'tc-live-imported',
-        trackedChange: true,
-        trackedChangeText: 'Existing',
-        fileId: 'doc-1',
-      },
-      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
-    ]);
+    expect(store.commentsList[0]).toMatchObject({
+      commentId: 'runtime-id-123',
+      importedId: 'tc-live-imported',
+      trackedChangeText: 'Existing',
+    });
+    expect(store.commentsList[1]).toEqual({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' });
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
@@ -1189,16 +1220,13 @@ describe('comments-store', () => {
 
     store.syncTrackedChangeComments({ superdoc: {}, editor });
 
-    expect(store.commentsList).toEqual([
-      {
-        commentId: 'runtime-id-123',
-        importedId: 'tc-live-imported',
-        trackedChange: true,
-        trackedChangeText: 'Existing',
-        fileId: 'doc-1',
-      },
-      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
-    ]);
+    expect(store.commentsList[0]).toMatchObject({
+      commentId: 'runtime-id-123',
+      importedId: 'tc-live-imported',
+      trackedChange: true,
+      trackedChangeText: 'tracked-tc-live-imported',
+    });
+    expect(store.commentsList[1]).toEqual({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' });
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

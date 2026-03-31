@@ -101,15 +101,14 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
     return { style: 'none' as BorderStyle, width: 0 };
   }
 
-  const width = borderSizeToPx(sizeNumber);
-  if (width == null) return undefined;
+  if (size == null || size === undefined) return undefined;
 
   // Ensure color has # prefix
   const normalizedColor = normalizeColorWithDefault(colorString);
 
   return {
     style: (val as BorderStyle) || 'single',
-    width,
+    width: size,
     color: normalizedColor,
   };
 }
@@ -145,14 +144,13 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
     return { none: true };
   }
 
-  const width = borderSizeToPx(size);
-  if (width == null) return undefined;
+  if (size == null || size === undefined) return undefined;
 
   const normalizedColor = normalizeColorWithDefault(color);
 
   return {
     style: (val as BorderStyle) || 'single',
-    width,
+    width: size,
     color: normalizedColor,
   };
 }

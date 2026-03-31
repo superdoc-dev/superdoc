@@ -1194,6 +1194,8 @@ describe('comments-store', () => {
         commentId: 'runtime-id-123',
         importedId: 'tc-live-imported',
         trackedChangeText: 'Existing',
+        trackedChange: true,
+        fileId: 'doc-1',
       }),
       expect.objectContaining({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' }),
     ]);

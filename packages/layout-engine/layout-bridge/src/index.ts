@@ -579,13 +579,13 @@ export function selectionToRects(
           const blockAlignment = block.attrs?.alignment;
           const isJustified = blockAlignment === 'justify';
           const alignmentOverride = isListItemFlag && !isJustified ? 'left' : undefined;
-          const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride);
-          const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride);
+          const isFirstLine = index === fragment.fromLine && !fragment.continuesFromPrev;
+          const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride, isFirstLine);
+          const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride, isFirstLine);
 
           // Calculate text indent using shared utility
           const indent = extractParagraphIndent(block.attrs?.indent);
           const wordLayout = getWordLayoutConfig(block);
-          const isFirstLine = index === fragment.fromLine;
           const indentAdjust = calculateTextStartIndent({
             isFirstLine,
             isListItem: isListItemFlag,
@@ -882,11 +882,18 @@ export function selectionToRects(
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
-                const startX = mapPmToX(info.block, line, charOffsetFrom, availableWidth, alignmentOverride);
-                const endX = mapPmToX(info.block, line, charOffsetTo, availableWidth, alignmentOverride);
+                const isFirstLine = index === info.startLine;
+                const startX = mapPmToX(
+                  info.block,
+                  line,
+                  charOffsetFrom,
+                  availableWidth,
+                  alignmentOverride,
+                  isFirstLine,
+                );
+                const endX = mapPmToX(info.block, line, charOffsetTo, availableWidth, alignmentOverride, isFirstLine);
 
                 // Calculate text indent using shared utility
-                const isFirstLine = index === info.startLine;
                 const textIndentAdjust = calculateTextStartIndent({
                   isFirstLine,
                   isListItem: cellIsListItem,
@@ -1331,6 +1338,7 @@ const mapPmToX = (
   offset: number,
   fragmentWidth: number,
   alignmentOverride?: string,
+  isFirstLine?: boolean,
 ): number => {
   if (fragmentWidth <= 0 || line.width <= 0) return 0;
 
@@ -1338,6 +1346,7 @@ const mapPmToX = (
   let paraIndentLeft = 0;
   let paraIndentRight = 0;
   let effectiveLeft = 0;
+  let isListParagraph = false;
   if (block.kind === 'paragraph') {
     const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
     const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
@@ -1345,7 +1354,7 @@ const mapPmToX = (
     paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
     effectiveLeft = paraIndentLeft;
     const wl = getWordLayoutConfig(block);
-    const isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
+    isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
     if (isListParagraph) {
       const explicitTextStart =
         typeof wl?.marker?.textStartX === 'number' && Number.isFinite(wl.marker.textStartX)
@@ -1360,7 +1369,7 @@ const mapPmToX = (
   }
 
   const totalIndent = effectiveLeft + paraIndentRight;
-  const availableWidth = Math.max(0, fragmentWidth - totalIndent);
+  let availableWidth = Math.max(0, fragmentWidth - totalIndent);
 
   // Validation: Warn when indents exceed fragment width (potential layout issue)
   if (totalIndent > fragmentWidth) {
@@ -1369,6 +1378,18 @@ const mapPmToX = (
         `for block ${block.id}. This may indicate a layout miscalculation. ` +
         `Available width clamped to 0.`,
     );
+  }
+
+  // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+  // Skip for list-marker first lines — the renderer doesn't adjust those.
+  if (isFirstLine && block.kind === 'paragraph' && !isListParagraph) {
+    const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+    const firstLineOffset = suppressFLI
+      ? 0
+      : (block.attrs?.indent?.firstLine ?? 0) - (block.attrs?.indent?.hanging ?? 0);
+    if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
+      availableWidth = Math.max(0, availableWidth - firstLineOffset);
+    }
   }
 
   // Use shared text measurement utility for pixel-perfect accuracy

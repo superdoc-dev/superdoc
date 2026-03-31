@@ -769,7 +769,7 @@ export function clickToPositionGeometry(
       const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
 
       const totalIndent = paraIndentLeft + paraIndentRight;
-      const availableWidth = Math.max(0, fragment.width - totalIndent);
+      let availableWidth = Math.max(0, fragment.width - totalIndent);
 
       if (totalIndent > fragment.width) {
         console.warn(
@@ -781,6 +781,19 @@ export function clickToPositionGeometry(
 
       const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
       const isListItem = markerWidth > 0;
+
+      // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+      // Skip for list-marker first lines — the renderer doesn't adjust those (the marker occupies the hanging region).
+      const isFirstLineOfParagraph = lineIndex === 0 && !fragment.continuesFromPrev;
+      if (isFirstLineOfParagraph && !isListItem) {
+        const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = suppressFLI
+          ? 0
+          : (block.attrs?.indent?.firstLine ?? 0) - (block.attrs?.indent?.hanging ?? 0);
+        if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
+          availableWidth = Math.max(0, availableWidth - firstLineOffset);
+        }
+      }
       const paraAlignment = block.attrs?.alignment;
       const isJustified = paraAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
@@ -836,7 +849,7 @@ export function clickToPositionGeometry(
       const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
 
       const totalIndent = paraIndentLeft + paraIndentRight;
-      const availableWidth = Math.max(0, tableHit.fragment.width - totalIndent);
+      let availableWidth = Math.max(0, tableHit.fragment.width - totalIndent);
 
       if (totalIndent > tableHit.fragment.width) {
         console.warn(
@@ -848,6 +861,18 @@ export function clickToPositionGeometry(
 
       const cellMarkerWidth = cellMeasure.marker?.markerWidth ?? 0;
       const isListItem = cellMarkerWidth > 0;
+
+      // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+      // Skip for list-marker first lines — the renderer doesn't adjust those.
+      if (lineIndex === 0 && !isListItem) {
+        const suppressFLI = (cellBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = suppressFLI
+          ? 0
+          : (cellBlock.attrs?.indent?.firstLine ?? 0) - (cellBlock.attrs?.indent?.hanging ?? 0);
+        if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
+          availableWidth = Math.max(0, availableWidth - firstLineOffset);
+        }
+      }
       const cellAlignment = cellBlock.attrs?.alignment;
       const isJustified = cellAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;

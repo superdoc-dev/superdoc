@@ -29,5 +29,6 @@ packages = [
 [tool.setuptools.package-data]
 superdoc = [
   "skills/*.md",
+  "tools/*.md",
   "tools/*.json",
 ]

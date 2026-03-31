@@ -882,7 +882,7 @@ export function selectionToRects(
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
-                const isFirstLine = index === info.startLine;
+                const isFirstLine = index === 0;
                 const startX = mapPmToX(
                   info.block,
                   line,

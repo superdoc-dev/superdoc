@@ -234,6 +234,33 @@ describe('bookmarksInsertWrapper', () => {
 });
 
 describe('bookmarksRenameWrapper', () => {
+  it('renames a body bookmark and returns a plain address without commit', () => {
+    const { editor, tr } = makeEditor();
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'old-name',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'old-name', id: '1' } } as never,
+    });
+
+    vi.mocked(findAllBookmarks).mockReturnValueOnce([]);
+
+    const result = bookmarksRenameWrapper(editor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'old-name' },
+      newName: 'new-name',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookmark: { kind: 'entity', entityType: 'bookmark', name: 'new-name' },
+    });
+    expect(result.success && !('story' in result.bookmark)).toBe(true);
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(5, undefined, { name: 'new-name', id: '1' });
+    expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+
   it('returns a story-qualified address and commits non-body story renames', () => {
     const { editor } = makeEditor();
     const commit = vi.fn();
@@ -277,6 +304,30 @@ describe('bookmarksRenameWrapper', () => {
 });
 
 describe('bookmarksRemoveWrapper', () => {
+  it('removes a body bookmark and returns a plain address without commit', () => {
+    const { editor, tr } = makeEditor();
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'bm-remove',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'bm-remove', id: '1' }, nodeSize: 1 } as never,
+    });
+
+    const result = bookmarksRemoveWrapper(editor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'bm-remove' },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookmark: { kind: 'entity', entityType: 'bookmark', name: 'bm-remove' },
+    });
+    expect(result.success && !('story' in result.bookmark)).toBe(true);
+    expect(tr.delete).toHaveBeenCalled();
+    expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+
   it('returns a story-qualified address and commits non-body story removals', () => {
     const { editor } = makeEditor();
     const commit = vi.fn();

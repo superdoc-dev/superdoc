@@ -3,17 +3,20 @@
  */
 
 import { createHash } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -255,4 +258,53 @@ export function slugify(text) {
     .replace(/-+/g, '-')
     .slice(0, 80)
     .replace(/-$/, '');
+}
+
+/**
+ * Extract plain text from a DOCX file.
+ *
+ * Tries the SuperDoc CLI first (`superdoc get-content --action text`).
+ * Falls back to unzipping the DOCX and parsing `<w:t>` elements from
+ * `word/document.xml`. Returns empty string on all failures (e.g. file
+ * not found, unzip unavailable).
+ *
+ * @param {string} docxPath - Absolute path to the DOCX file.
+ * @returns {string}
+ */
+export function extractDocxText(docxPath) {
+  if (!existsSync(docxPath)) return '';
+
+  // Try SuperDoc CLI first.
+  try {
+    const result = execSync(`superdoc get-content --action text "${docxPath}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
+    });
+    if (result && result.trim().length > 0) return result.trim();
+  } catch {
+    // CLI not available or failed — fall through to unzip fallback.
+  }
+
+  // Fallback: unzip DOCX and parse word/document.xml for <w:t> elements.
+  const tempDir = mkdtempSync(join(tmpdir(), 'superdoc-docx-'));
+  try {
+    execSync(`unzip -q "${docxPath}" word/document.xml -d "${tempDir}"`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000,
+    });
+    const xmlPath = join(tempDir, 'word', 'document.xml');
+    const xml = readFileSync(xmlPath, 'utf8');
+    const matches = xml.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) ?? [];
+    const text = matches
+      .map((m) => m.replace(/<w:t[^>]*>/, '').replace(/<\/w:t>/, ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text;
+  } catch {
+    return '';
+  } finally {
+    try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+  }
 }

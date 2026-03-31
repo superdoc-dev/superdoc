@@ -2496,10 +2496,12 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
 // ---------------------------------------------------------------------------
 
 // --- Shared patterns ---
-const refListQuerySchema = objectSchema({
+const refListQueryProperties = {
   limit: { type: 'integer', minimum: 1 },
   offset: { type: 'integer', minimum: 0 },
-});
+} satisfies Record<string, JsonSchema>;
+
+const refListQuerySchema = objectSchema(refListQueryProperties);
 
 const discoveryOutputSchema: JsonSchema = { type: 'object' };
 
@@ -6706,7 +6708,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // -------------------------------------------------------------------------
   'bookmarks.list': {
     input: objectSchema({
-      ...((refListQuerySchema.properties as Record<string, JsonSchema>) ?? {}),
+      ...refListQueryProperties,
       in: storyLocatorSchema,
     }),
     output: discoveryOutputSchema,

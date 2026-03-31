@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2020',
       lib: {
-        entry: "src/index.js",
+        entry: "src/index.ts",
         formats: ['es'],
         name: "super-editor",
         cssFileName: 'style',
@@ -117,7 +117,7 @@ export default defineConfig(({ mode }) => {
           'y-protocols',
         ],
         input: {
-          'super-editor': 'src/index.js',
+          'super-editor': 'src/index.ts',
           'types': 'src/types.ts',
           'editor': '@core/Editor',
           'converter': '@core/super-converter/SuperConverter',

@@ -47,3 +47,18 @@
 .superdoc .ProseMirror-active-search-match {
   background: var(--sd-ui-search-match-active-bg);
 }
+
+/* Contained Mode - fixed-height container embedding with internal scrolling */
+.superdoc--contained,
+.superdoc--contained .superdoc__layers,
+.superdoc--contained .superdoc__document,
+.superdoc--contained .superdoc__sub-document {
+  height: 100%;
+}
+
+/* Sub-document scroll fallback for non-SuperEditor content (PDF, HTML).
+ * SuperEditor manages its own scroll container via .super-editor-container.contained,
+ * but PDF/HTML viewers don't — they need the sub-document to scroll. */
+.superdoc--contained .superdoc__sub-document {
+  overflow: auto;
+}

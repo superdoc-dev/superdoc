@@ -8,7 +8,7 @@
   ],
   "exports": {
     ".": {
-      "source": "./src/index.js",
+      "source": "./src/index.ts",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/super-editor.es.js"
     },
@@ -72,7 +72,7 @@
       "import": "./dist/style.css"
     },
     "./presentation-editor": {
-      "source": "./src/index.js",
+      "source": "./src/index.ts",
       "import": "./dist/super-editor.es.js",
       "types": "./dist/index.d.ts"
     }

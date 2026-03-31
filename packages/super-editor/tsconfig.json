@@ -20,6 +20,6 @@
       "@translator": ["./src/editors/v1/core/super-converter/v3/node-translator/"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../shared/common/vue-shim.d.ts"],
   "exclude": ["**/*.test.js", "**/*.test.ts"]
 }

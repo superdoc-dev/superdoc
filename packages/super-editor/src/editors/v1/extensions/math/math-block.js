@@ -30,6 +30,10 @@ export const MathBlock = Node.create({
         default: 'centerGroup',
         rendered: false,
       },
+      paragraphProperties: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 });

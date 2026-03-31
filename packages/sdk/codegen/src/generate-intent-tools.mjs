@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loadContract, REPO_ROOT, stripBoundParams, writeGeneratedFile } from './shared.mjs';
 
 const TOOLS_OUTPUT_DIR = path.join(REPO_ROOT, 'packages/sdk/tools');
@@ -495,15 +495,11 @@ function toOpenAiTool(entry) {
 }
 
 function toAnthropicTool(entry) {
-  const tool = {
+  return {
     name: entry.toolName,
     description: entry.description,
     input_schema: entry.inputSchema,
   };
-  if (entry.inputExamples?.length) {
-    tool.input_examples = entry.inputExamples;
-  }
-  return tool;
 }
 
 function toVercelTool(entry) {

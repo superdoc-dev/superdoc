@@ -29,12 +29,15 @@ const handleMathPara = (params) => {
   const originalXml = carbonCopy(xmlNode);
   const textContent = extractMathText(xmlNode);
   const justification = extractJustification(xmlNode);
+  // Use raw inline properties (not resolved) to match how regular paragraphs work.
+  // The style-engine resolves them at render time via computeParagraphAttrs.
+  const paragraphProperties = params.extraParams?.inlineParagraphProperties ?? null;
 
   return {
     nodes: [
       {
         type: 'mathBlock',
-        attrs: { originalXml, textContent, justification },
+        attrs: { originalXml, textContent, justification, paragraphProperties },
         marks: [],
       },
     ],

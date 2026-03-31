@@ -18,6 +18,10 @@ const EditorConstructor = vi.hoisted(() => {
     });
     this.off = vi.fn();
     this.view = { focus: vi.fn() };
+    this.setDocumentMode = vi.fn((mode) => {
+      this.options.documentMode = mode;
+      this.listeners.documentModeChange?.({ documentMode: mode, editor: this });
+    });
     this.destroy = vi.fn();
   });
 
@@ -1324,6 +1328,126 @@ describe('SuperEditor.vue', () => {
         wrapper.vm.handleSuperEditorClick(event);
 
         expect(updateSpy).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should hide image resize overlay and skip image hover updates in viewing mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-image-view-guard',
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const updateSpy = vi.spyOn(wrapper.vm, 'updateImageResizeOverlay');
+
+        Object.defineProperty(wrapper.vm, 'activeEditor', {
+          value: {
+            value: {
+              options: { documentMode: 'viewing' },
+              isEditable: false,
+              view: { focus: vi.fn() },
+            },
+          },
+        });
+        wrapper.vm.getDocumentMode = () => 'viewing';
+        wrapper.vm.isViewingMode = () => true;
+
+        wrapper.vm.imageResizeState.visible = true;
+        wrapper.vm.imageResizeState.imageElement = document.createElement('div');
+        wrapper.vm.imageResizeState.blockId = 'image-block';
+
+        wrapper.vm.handleOverlayUpdates(new MouseEvent('mousemove'));
+
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(wrapper.vm.imageResizeState.visible).toBe(false);
+        expect(wrapper.vm.imageResizeState.imageElement).toBe(null);
+        expect(wrapper.vm.imageResizeState.blockId).toBe(null);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should not apply image selection outline in viewing mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-image-selection-view-guard',
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        Object.defineProperty(wrapper.vm, 'activeEditor', {
+          value: {
+            value: {
+              options: { documentMode: 'viewing' },
+              isEditable: false,
+              view: { focus: vi.fn() },
+            },
+          },
+        });
+        wrapper.vm.getDocumentMode = () => 'viewing';
+        wrapper.vm.isViewingMode = () => true;
+
+        const imageEl = document.createElement('div');
+        wrapper.vm.setSelectedImage(imageEl, 'image-block', 42);
+
+        expect(imageEl.classList.contains('superdoc-image-selected')).toBe(false);
+        expect(wrapper.vm.selectedImageState.element).toBe(null);
+        expect(wrapper.vm.selectedImageState.blockId).toBe(null);
+        expect(wrapper.vm.selectedImageState.pmStart).toBe(null);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should clear image selection when props switch to viewing mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-image-selection-mode-switch',
+            options: { documentMode: 'editing' },
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const imageEl = document.createElement('div');
+        imageEl.classList.add('superdoc-image-selected');
+        wrapper.vm.selectedImageState.element = imageEl;
+        wrapper.vm.selectedImageState.blockId = 'image-block';
+        wrapper.vm.selectedImageState.pmStart = 42;
+        wrapper.vm.imageResizeState.visible = true;
+        wrapper.vm.imageResizeState.imageElement = imageEl;
+        wrapper.vm.imageResizeState.blockId = 'image-block';
+
+        await wrapper.setProps({
+          options: { documentMode: 'viewing' },
+        });
+
+        expect(imageEl.classList.contains('superdoc-image-selected')).toBe(false);
+        expect(wrapper.vm.selectedImageState.element).toBe(null);
+        expect(wrapper.vm.selectedImageState.blockId).toBe(null);
+        expect(wrapper.vm.selectedImageState.pmStart).toBe(null);
+        expect(wrapper.vm.imageResizeState.visible).toBe(false);
+        expect(wrapper.vm.imageResizeState.imageElement).toBe(null);
+        expect(wrapper.vm.imageResizeState.blockId).toBe(null);
 
         wrapper.unmount();
         vi.useRealTimers();

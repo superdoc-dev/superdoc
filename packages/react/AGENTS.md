@@ -45,6 +45,21 @@ export interface SuperDocEditorProps
 | `className` | `string` | - | Wrapper CSS class |
 | `style` | `CSSProperties` | - | Wrapper inline styles |
 
+## Fixed-height container embedding
+
+Pass `contained` to scroll inside a fixed-height parent. The wrapper must have a definite height.
+
+```tsx
+<div style={{ height: 500 }}>
+  <SuperDocEditor
+    document={file}
+    documentMode="viewing"
+    contained
+    style={{ height: '100%' }}
+  />
+</div>
+```
+
 ## SSR Behavior
 
 - Container divs are always rendered (hidden with `display: none` until initialized)

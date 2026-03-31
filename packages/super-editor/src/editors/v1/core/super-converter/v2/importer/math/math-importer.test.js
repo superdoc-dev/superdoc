@@ -99,6 +99,41 @@ describe('mathNodeHandler', () => {
       const result = handler({ nodes: [oMathParaNode] });
       expect(result.nodes[0].attrs.justification).toBe('centerGroup');
     });
+
+    it('captures paragraphProperties from extraParams', () => {
+      const oMathParaNode = {
+        name: 'm:oMathPara',
+        elements: [
+          {
+            name: 'm:oMath',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }],
+          },
+        ],
+      };
+
+      const spacing = { before: 240, after: 160 };
+      const result = handler({
+        nodes: [oMathParaNode],
+        extraParams: { inlineParagraphProperties: { spacing } },
+      });
+
+      expect(result.nodes[0].attrs.paragraphProperties).toEqual({ spacing });
+    });
+
+    it('sets paragraphProperties to null when extraParams is absent', () => {
+      const oMathParaNode = {
+        name: 'm:oMathPara',
+        elements: [
+          {
+            name: 'm:oMath',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'w' }] }] }],
+          },
+        ],
+      };
+
+      const result = handler({ nodes: [oMathParaNode] });
+      expect(result.nodes[0].attrs.paragraphProperties).toBeNull();
+    });
   });
 
   describe('non-math elements', () => {

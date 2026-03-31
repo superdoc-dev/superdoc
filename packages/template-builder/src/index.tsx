@@ -139,7 +139,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               })
             : undefined;
 
-        const success =
+        const success = (
           mode === 'inline'
             ? editor.commands.insertStructuredContentInline?.({
                 attrs: {
@@ -154,7 +154,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                   tag: tagData,
                 },
                 text: field.defaultValue || field.alias,
-              });
+              })
+        ) as boolean | undefined;
 
         if (success) {
           const updatedFields = getTemplateFieldsFromEditor(editor);
@@ -183,7 +184,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const editor = superdocRef.current.activeEditor;
         const success = editor.commands.updateStructuredContentById?.(id, {
           attrs: updates,
-        });
+        }) as boolean | undefined;
 
         if (success) {
           setTemplateFields((prev) => {
@@ -228,7 +229,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         let commandResult = false;
         try {
-          commandResult = editor.commands.deleteStructuredContentById?.(id) ?? false;
+          commandResult = (editor.commands.deleteStructuredContentById?.(id) as boolean | undefined) ?? false;
         } catch (err) {
           console.warn('[TemplateBuilder] Failed to delete structured content:', id, err);
           commandResult = false;

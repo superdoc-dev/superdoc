@@ -79,6 +79,7 @@ export const SuperDocEditor = ({
         selector: `#${containerIdRef.current}`,
         html,
         rulers: true,
+        contained: true,
         onReady: () => {
           setReady(true);
           if (onReady) onReady(editorRef.current);
@@ -151,18 +152,10 @@ export const SuperDocEditor = ({
           )}
         </div>
       )}
-      <div
-        id={containerIdRef.current}
-        style={{ minHeight: height, maxHeight, paddingLeft: '5px', overflow: 'scroll' }}
-      />
+      <div id={containerIdRef.current} style={{ height, maxHeight, paddingLeft: '5px' }} />
       <style jsx>{`
         #${containerIdRef.current} .superdoc__layers {
           max-width: 660px !important;
-        }
-        #${containerIdRef.current} .super-editor-container {
-          min-width: unset !important;
-          min-height: unset !important;
-          width: 100% !important;
         }
         #${containerIdRef.current} .super-editor {
           max-width: 100% !important;
@@ -170,7 +163,6 @@ export const SuperDocEditor = ({
           color: #000;
         }
         #${containerIdRef.current} .editor-element {
-          min-height: ${height} !important;
           width: 100% !important;
           min-width: unset !important;
           transform: none !important;

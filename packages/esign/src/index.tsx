@@ -129,7 +129,10 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     (editor: Editor) => {
       if (!editor) return;
 
-      const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+      const structuredContentHelpers = (editor.helpers as any)?.structuredContentCommands;
+      if (!structuredContentHelpers?.getStructuredContentTags) return;
+
+      const tags = structuredContentHelpers.getStructuredContentTags(editor.state);
 
       const configValues = new Map<string, Types.FieldValue | Types.TableFieldValue>();
 

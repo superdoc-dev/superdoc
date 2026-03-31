@@ -72,6 +72,10 @@ const isWebLayout = computed(() => {
   return props.options.viewOptions?.layout === 'web';
 });
 
+const isContained = computed(() => {
+  return Boolean(props.options.contained);
+});
+
 /**
  * Reactive ruler visibility state.
  * Uses a ref with a deep watcher to ensure proper reactivity when options.rulers changes.
@@ -89,6 +93,7 @@ const currentZoom = ref(1);
  * Stored to ensure proper removal in onBeforeUnmount to prevent memory leaks.
  */
 let zoomChangeHandler = null;
+let documentModeChangeHandler = null;
 
 // Watch for changes in options.rulers with deep option to catch nested changes
 watch(
@@ -130,6 +135,15 @@ watch(
     });
   },
   { immediate: true },
+);
+
+watch(
+  () => props.options?.documentMode,
+  (documentMode) => {
+    if (documentMode === 'viewing') {
+      cleanupViewingModeUi();
+    }
+  },
 );
 
 /**
@@ -320,6 +334,12 @@ const imageResizeState: ImageResizeState = reactive({
   imageElement: null,
   blockId: null,
 });
+
+const cleanupViewingModeUi = () => {
+  hideTableResizeOverlay();
+  hideImageResizeOverlay();
+  clearSelectedImage();
+};
 
 /**
  * Image selection state (for layout-engine rendered images)
@@ -631,6 +651,11 @@ const onTableResizeEnd = () => {
 const updateImageResizeOverlay = (event: MouseEvent): void => {
   if (!editorElem.value) return;
 
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    hideImageResizeOverlay();
+    return;
+  }
+
   // Type guard: ensure event target is an Element
   if (!(event.target instanceof Element)) {
     imageResizeState.visible = false;
@@ -719,6 +744,11 @@ const clearSelectedImage = () => {
  * @returns {void}
  */
 const setSelectedImage = (element, blockId, pmStart) => {
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    clearSelectedImage();
+    return;
+  }
+
   // Remove selection from the previously selected element
   if (selectedImageState.element && selectedImageState.element !== element) {
     selectedImageState.element.classList.remove('superdoc-image-selected');
@@ -747,10 +777,10 @@ const isViewingMode = () => getDocumentMode() === 'viewing';
 
 const handleOverlayUpdates = (event) => {
   if (isViewingMode()) {
-    hideTableResizeOverlay();
-  } else {
-    updateTableResizeOverlay(event);
+    cleanupViewingModeUi();
+    return;
   }
+  updateTableResizeOverlay(event);
   // Don't evaluate image overlay during an active table resize drag —
   // without the oversized table overlay, pointer events can reach images
   // and spuriously activate the image resize overlay mid-drag.
@@ -964,6 +994,16 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     presentationEditor: editor.value instanceof PresentationEditor ? editor.value : null,
   });
 
+  const documentModeEmitter = editor.value instanceof PresentationEditor ? editor.value : activeEditor.value;
+  if (documentModeEmitter?.on) {
+    documentModeChangeHandler = ({ documentMode } = {}) => {
+      if (documentMode === 'viewing') {
+        cleanupViewingModeUi();
+      }
+    };
+    documentModeEmitter.on('documentModeChange', documentModeChangeHandler);
+  }
+
   // Attach layout-engine specific image selection listeners
   if (editor.value instanceof PresentationEditor) {
     const presentationEditor = editor.value;
@@ -1111,7 +1151,7 @@ const handleSuperEditorClick = (event) => {
 
   // Update table resize overlay on click
   if (isViewingMode()) {
-    hideTableResizeOverlay();
+    cleanupViewingModeUi();
   } else {
     updateTableResizeOverlay(event);
   }
@@ -1203,6 +1243,12 @@ const handleMarginChange = ({ side, value }) => {
 onBeforeUnmount(() => {
   clearSelectedImage();
 
+  if (documentModeChangeHandler) {
+    const documentModeEmitter = editor.value instanceof PresentationEditor ? editor.value : activeEditor.value;
+    documentModeEmitter?.off?.('documentModeChange', documentModeChangeHandler);
+    documentModeChangeHandler = null;
+  }
+
   // Clean up zoomChange listener if it exists
   if (editor.value instanceof PresentationEditor && zoomChangeHandler) {
     editor.value.off('zoomChange', zoomChangeHandler);
@@ -1222,7 +1268,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
+  <div
+    class="super-editor-container"
+    :class="{ 'web-layout': isWebLayout, contained: isContained }"
+    :style="containerStyle"
+  >
     <!-- Ruler: teleport to external container if specified, otherwise render inline (hidden in web layout) -->
     <Teleport
       v-if="options.rulerContainer && rulersVisible && !isWebLayout && !!activeEditor"
@@ -1360,5 +1410,21 @@ onBeforeUnmount(() => {
   color: initial;
   overflow: hidden;
   position: relative;
+}
+
+/* Contained mode: fixed-height container embedding with internal scrolling.
+ * The super-editor-container becomes the scroll container (overflow: auto).
+ * The .super-editor overflow is changed from hidden to visible so content
+ * flows through to the scroll container. The visibleHost (.presentation-editor)
+ * stays overflow: visible per PresentationEditor's design — it is NOT the scroller.
+ */
+.super-editor-container.contained {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.super-editor-container.contained .super-editor {
+  overflow: visible;
 }
 </style>

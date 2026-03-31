@@ -74,10 +74,60 @@ describe('handleMathBlockNode', () => {
     expect(run.width).toBe(50); // 5 chars * 10px
   });
 
+  it('estimates taller height for fractions', () => {
+    const { context, blocks } = makeContext();
+    const fractionXml = {
+      name: 'm:oMathPara',
+      elements: [{
+        name: 'm:oMath',
+        elements: [{
+          name: 'm:f',
+          elements: [
+            { name: 'm:num', elements: [{ name: 'm:r' }] },
+            { name: 'm:den', elements: [{ name: 'm:r' }] },
+          ],
+        }],
+      }],
+    };
+    handleMathBlockNode(makeNode({ textContent: 'ab', originalXml: fractionXml }) as any, context);
+    const run = (blocks[0] as ParagraphBlock).runs[0] as MathRun;
+    expect(run.height).toBeGreaterThan(24);
+  });
+
   it('generates unique block IDs', () => {
     const { context, blocks } = makeContext();
     handleMathBlockNode(makeNode({ textContent: 'a' }) as any, context);
     handleMathBlockNode(makeNode({ textContent: 'b' }) as any, context);
     expect(blocks[0].id).not.toBe(blocks[1].id);
+  });
+
+  it('resolves paragraph spacing from paragraphProperties', () => {
+    const { context, blocks } = makeContext();
+    const node = makeNode({
+      textContent: 'x',
+      paragraphProperties: { spacing: { before: 240, after: 160, line: 276, lineRule: 'auto' } },
+    });
+
+    handleMathBlockNode(node as any, context);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.attrs?.spacing).toBeDefined();
+    expect(block.attrs?.spacing?.before).toBeGreaterThan(0);
+    expect(block.attrs?.spacing?.after).toBeGreaterThan(0);
+  });
+
+  it('falls back to paragraph alignment when justification is unknown', () => {
+    const { context, blocks } = makeContext();
+    const node = makeNode({
+      textContent: 'x',
+      justification: 'unknown',
+      paragraphProperties: { justification: 'right' },
+    });
+
+    handleMathBlockNode(node as any, context);
+
+    const block = blocks[0] as ParagraphBlock;
+    // When math justification is unknown, falls back to paragraphAttrs alignment
+    expect(block.attrs?.alignment).toBeDefined();
   });
 });

@@ -82,8 +82,8 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/super-input', replacement: path.resolve(__dirname, '../super-editor/src/editors/v1/components/SuperInput.vue') },
     { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/editors/v1/components/toolbar/AIWriter.vue') },
     { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
-    { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
-    { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
+    { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
+    { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
     // Map @superdoc/<name> to ./src/<name> for internal paths
     ...superdocSrcAliases.map(name => ({

@@ -147,6 +147,7 @@ export const handleParagraphNode = (params) => {
       extraParams: {
         ...params.extraParams,
         paragraphProperties: resolvedParagraphProperties,
+        inlineParagraphProperties,
         numberingDefinedInline: Boolean(inlineParagraphProperties.numberingProperties),
       },
       path: [...(params.path || []), node],

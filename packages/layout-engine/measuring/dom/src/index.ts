@@ -1640,7 +1640,20 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       const mathWidth = mathRun.width ?? 20;
       const mathHeight = mathRun.height ?? 24;
 
-      if (currentLine) {
+      if (!currentLine) {
+        currentLine = {
+          fromRun: runIndex,
+          fromChar: 0,
+          toRun: runIndex,
+          toChar: 1,
+          width: mathWidth,
+          maxFontSize: lastFontSize,
+          maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
+          segments: [{ runIndex, fromChar: 0, toChar: 1, width: mathWidth }],
+          spaceCount: 0,
+          maxImageHeight: mathHeight,
+        };
+      } else {
         currentLine.toRun = runIndex;
         currentLine.toChar = 1;
         currentLine.width = roundValue(currentLine.width + mathWidth);

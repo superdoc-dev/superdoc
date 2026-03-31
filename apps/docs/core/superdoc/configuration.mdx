@@ -395,6 +395,42 @@ new SuperDoc({
   ```
 </ParamField>
 
+<ParamField path="contained" type="boolean" default="false">
+  Enable contained mode for fixed-height container embedding. When `true`, SuperDoc fits within its parent's height and scrolls internally instead of expanding to the document's natural height. Works with DOCX, PDF, and HTML documents.
+
+  Use this when embedding SuperDoc inside a panel, sidebar, or any container with a fixed height (e.g., `height: 400px` or `flex: 1`).
+
+  <CodeGroup>
+
+  ```javascript Usage
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: file,
+    contained: true,
+  });
+  ```
+
+  ```html Full Example
+  <!-- Parent must have a definite height -->
+  <div style="height: 500px;">
+    <div id="editor"></div>
+  </div>
+
+  <script type="module">
+    import { SuperDoc } from 'superdoc';
+    import 'superdoc/style.css';
+
+    new SuperDoc({
+      selector: '#editor',
+      document: yourFile,
+      contained: true,
+    });
+  </script>
+  ```
+
+  </CodeGroup>
+</ParamField>
+
 <ParamField path="layoutMode" type="string" deprecated>
   <Warning>**Removed in v1.0** — Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
 </ParamField>

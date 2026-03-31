@@ -65,7 +65,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
 /** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
-/** @typedef {import('@superdoc/document-api').NavigableEntityAddress} NavigableEntityAddress */
+/** @typedef {import('./types').NavigableEntityAddress} NavigableEntityAddress */
 
 /**
  * SuperDoc class

@@ -49,6 +49,82 @@
  */
 
 /**
+ * @typedef {Object} SectionAddress
+ * @property {'section'} kind
+ * @property {string} sectionId
+ */
+
+/**
+ * @typedef {Object} BodyStoryLocator
+ * @property {'story'} kind
+ * @property {'body'} storyType
+ */
+
+/**
+ * @typedef {Object} HeaderFooterSlotStoryLocator
+ * @property {'story'} kind
+ * @property {'headerFooterSlot'} storyType
+ * @property {SectionAddress} section
+ * @property {'header' | 'footer'} headerFooterKind
+ * @property {'default' | 'first' | 'even'} variant
+ * @property {'effective' | 'explicit'} [resolution]
+ * @property {'materializeIfInherited' | 'editResolvedPart' | 'error'} [onWrite]
+ */
+
+/**
+ * @typedef {Object} HeaderFooterPartStoryLocator
+ * @property {'story'} kind
+ * @property {'headerFooterPart'} storyType
+ * @property {string} refId
+ */
+
+/**
+ * @typedef {Object} FootnoteStoryLocator
+ * @property {'story'} kind
+ * @property {'footnote'} storyType
+ * @property {string} noteId
+ */
+
+/**
+ * @typedef {Object} EndnoteStoryLocator
+ * @property {'story'} kind
+ * @property {'endnote'} storyType
+ * @property {string} noteId
+ */
+
+/**
+ * @typedef {BodyStoryLocator | HeaderFooterSlotStoryLocator | HeaderFooterPartStoryLocator | FootnoteStoryLocator | EndnoteStoryLocator} StoryLocator
+ */
+
+/**
+ * @typedef {Object} BookmarkAddress
+ * @property {'entity'} kind
+ * @property {'bookmark'} entityType
+ * @property {string} name
+ * @property {StoryLocator} [story]
+ */
+
+/**
+ * @typedef {Object} CommentAddress
+ * @property {'entity'} kind
+ * @property {'comment'} entityType
+ * @property {string} entityId
+ * @property {StoryLocator} [story]
+ */
+
+/**
+ * @typedef {Object} TrackedChangeAddress
+ * @property {'entity'} kind
+ * @property {'trackedChange'} entityType
+ * @property {string} entityId
+ * @property {StoryLocator} [story]
+ */
+
+/**
+ * @typedef {BookmarkAddress | CommentAddress | TrackedChangeAddress} NavigableEntityAddress
+ */
+
+/**
  * Context passed to a link popover resolver when a link is clicked.
  * @typedef {Object} LinkPopoverContext
  * @property {Editor} editor The editor instance

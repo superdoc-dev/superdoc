@@ -1,0 +1,440 @@
+# Agent benchmark tests — 18 tasks for Level 3 AI agent comparison.
+#
+# Evaluates real document understanding and editing across 5 provider conditions
+# (Claude Code SDK + Codex). Each task tests one capability dimension.
+#
+# Structure:
+#   - 7 reading tasks: validate agentResponseText, assert documentChanged === false
+#   - 11 editing tasks: validate documentText after edits, assert documentChanged === true
+#
+# Every task includes benchmarkMetrics for efficiency comparison across conditions.
+
+# =============================================================================
+# READING TASKS (7) — validate what the agent said, doc must not change
+# =============================================================================
+
+- description: 'Read: extract all headings'
+  vars:
+    fixture: contract.docx
+    task: 'List all headings in this document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = (d.agentResponseText || '').toLowerCase();
+        const found = ['preamble', 'article', 'signatures'].filter(h => t.includes(h));
+        if (found.length < 2) return { pass: false, score: 0, reason: `Only found: ${found.join(', ')} — expected at least 2 of preamble/article/signatures` };
+        return { pass: true, score: 1, reason: `Headings found: ${found.join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: content of a specific section'
+  vars:
+    fixture: contract.docx
+    task: 'What does the Preamble section say? Give me the full text of that section.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        if (t.length < 50) return { pass: false, score: 0, reason: `Response too short (${t.length} chars) — expected section content` };
+        return { pass: true, score: 1, reason: `Section content returned (${t.length} chars)` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: count items in a bulleted list'
+  vars:
+    fixture: document.docx
+    task: 'How many items are in the bulleted list in this document?'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        const numbers = t.match(/\d+/g) || [];
+        const hasValidCount = numbers.some(n => parseInt(n) >= 3);
+        if (!hasValidCount) return { pass: false, score: 0, reason: `No number >= 3 found in response: "${t.substring(0, 100)}"` };
+        return { pass: true, score: 1, reason: `Count reported: ${numbers.join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: extract all entity names'
+  vars:
+    fixture: nda.docx
+    task: 'List all the company and organization names mentioned in this document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        const hasIqidis = t.includes('Iqidis');
+        const hasTechVentures = t.includes('TechVentures');
+        if (!hasIqidis && !hasTechVentures) return { pass: false, score: 0, reason: 'Neither Iqidis nor TechVentures found in response' };
+        return { pass: true, score: 1, reason: `Entities found: ${[hasIqidis && 'Iqidis', hasTechVentures && 'TechVentures'].filter(Boolean).join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: summarize table data'
+  vars:
+    fixture: table-doc.docx
+    task: 'Summarize the data in the table in this document. What columns and rows does it have?'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        if (t.length < 30) return { pass: false, score: 0, reason: `Response too short (${t.length} chars) — expected table summary` };
+        return { pass: true, score: 1, reason: `Table summary returned (${t.length} chars)` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: list all comments'
+  vars:
+    fixture: comments-doc.docx
+    task: 'List all the comments in this document. Who made them and what do they say?'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        if (t.length < 20) return { pass: false, score: 0, reason: `Response too short (${t.length} chars) — expected comment listing` };
+        return { pass: true, score: 1, reason: `Comments listed (${t.length} chars)` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Read: extract financial figures'
+  vars:
+    fixture: memorandum.docx
+    task: 'What are the financial figures mentioned in this document? List all dollar amounts.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        const has25 = t.includes('25');
+        const has150 = t.includes('150');
+        if (!has25 && !has150) return { pass: false, score: 0, reason: 'Neither 25 (million) nor 150 (million) found in response' };
+        return { pass: true, score: 1, reason: `Financial figures found: ${[has25 && '25M', has150 && '150M'].filter(Boolean).join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified — reading task should not change document' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+# =============================================================================
+# EDITING TASKS (11) — validate documentText after edits, doc must change
+# =============================================================================
+
+- description: 'Edit: replace entity name throughout'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace every instance of "Iqidis" with "SuperDoc Inc" throughout the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('SuperDoc Inc')) return { pass: false, score: 0, reason: 'SuperDoc Inc not found in document' };
+        if (t.includes('Iqidis')) return { pass: false, score: 0, reason: 'Old name Iqidis still present' };
+        return { pass: true, score: 1, reason: 'Entity name replaced correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral damage: TechVentures was removed' };
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'TechVentures intact, document changed' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: add paragraph after a heading'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Find the first heading in the document and add a paragraph immediately after it that says "This section has been reviewed and approved."'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('reviewed and approved')) return { pass: false, score: 0, reason: '"reviewed and approved" not found in document' };
+        return { pass: true, score: 1, reason: 'Paragraph added after heading' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document was modified as expected' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: convert bullet list to numbered list'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Convert the bullet list in this document to a numbered list.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No documentText in output' };
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after list conversion' };
+        return { pass: true, score: 1, reason: 'List conversion attempted and document changed' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.length < 10) return { pass: false, score: 0, reason: 'Document appears empty after edit' };
+        return { pass: true, score: 1, reason: 'Document content preserved' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: add comment to a clause'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a comment to the Indemnification section that says "Legal review required before signing."'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after adding comment' };
+        return { pass: true, score: 1, reason: 'Comment added, document changed' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('indemnification') && !t.includes('Indemnification')) return { pass: false, score: 0, reason: 'Collateral: indemnification section content missing' };
+        return { pass: true, score: 1, reason: 'Indemnification section preserved' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: insert new section with heading + body'
+  vars:
+    fixture: contract.docx
+    keepFile: true
+    task: 'Add a new section at the end of the document with the heading "Force Majeure" and the body text "Neither party shall be liable for delays or failures in performance resulting from causes beyond reasonable control."'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Force Majeure')) return { pass: false, score: 0, reason: 'Force Majeure heading not found' };
+        if (!t.includes('beyond reasonable control')) return { pass: false, score: 0, reason: 'Section body text not found' };
+        return { pass: true, score: 1, reason: 'Force Majeure section added correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document was modified as expected' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: change heading formatting'
+  vars:
+    fixture: report-with-formatting.docx
+    keepFile: true
+    task: 'Change the formatting of the first heading to make it bold and uppercase.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after formatting change' };
+        return { pass: true, score: 1, reason: 'Heading formatting changed, document modified' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.length < 10) return { pass: false, score: 0, reason: 'Document appears empty after edit' };
+        return { pass: true, score: 1, reason: 'Document content preserved' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: add a row to a table'
+  vars:
+    fixture: table-doc.docx
+    keepFile: true
+    task: 'Add a new row to the table with the values "Widget X", "2.0", and "Available" in the respective columns.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Widget X')) return { pass: false, score: 0, reason: '"Widget X" not found in document' };
+        return { pass: true, score: 1, reason: 'New table row added with Widget X' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after adding row' };
+        return { pass: true, score: 1, reason: 'Document was modified as expected' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: delete a specific paragraph'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Delete the last paragraph in the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after deleting paragraph' };
+        return { pass: true, score: 1, reason: 'Paragraph deleted, document changed' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.length < 10) return { pass: false, score: 0, reason: 'Document appears empty — too much content removed' };
+        return { pass: true, score: 1, reason: 'Document still has content after deletion' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: fill multiple placeholders'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'Fill in the placeholder "[Employee Name]" with "Jane Smith" throughout the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Jane Smith')) return { pass: false, score: 0, reason: '"Jane Smith" not found in document' };
+        if (t.includes('[Employee Name]')) return { pass: false, score: 0, reason: 'Placeholder [Employee Name] still present' };
+        return { pass: true, score: 1, reason: 'Placeholder filled with Jane Smith' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after filling placeholders' };
+        return { pass: true, score: 1, reason: 'Document was modified as expected' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: update a financial figure'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Update the acquisition limit from "$25,000,000" to "$30,000,000".'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('30')) return { pass: false, score: 0, reason: 'Updated figure 30 (million) not found' };
+        return { pass: true, score: 1, reason: 'Financial figure updated to 30M' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('150')) return { pass: false, score: 0, reason: 'Collateral: $150M figure was removed' };
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: '$150M intact, document changed' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics
+
+- description: 'Edit: create a tracked change'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Using tracked changes, replace "Confidential Information" with "Proprietary Information" in the first paragraph of the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true after tracked change' };
+        return { pass: true, score: 1, reason: 'Tracked change applied, document modified' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures party name was removed' };
+        return { pass: true, score: 1, reason: 'TechVentures preserved after tracked change' };
+    - type: javascript
+      metric: efficiency
+      value: file://lib/checks.cjs:benchmarkMetrics

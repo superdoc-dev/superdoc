@@ -133,6 +133,13 @@ describe('bookmarksInsertWrapper', () => {
       { type: { name: 'bookmarkEnd' }, attrs: { id: '9' } },
       { type: { name: 'bookmarkStart' }, attrs: { id: 'not-a-number' } },
     ]);
+    const existingEntries = [
+      { name: 'a', bookmarkId: '2', storyKey: 'body' },
+      { name: 'b', bookmarkId: '9', storyKey: 'body' },
+      { name: 'c', bookmarkId: 'not-a-number', storyKey: 'body' },
+    ];
+    // Called twice: once for bookmarkExistsAnywhere, once for allocateBookmarkId.
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce(existingEntries).mockReturnValueOnce(existingEntries);
 
     const result = bookmarksInsertWrapper(editor, makeInput());
 

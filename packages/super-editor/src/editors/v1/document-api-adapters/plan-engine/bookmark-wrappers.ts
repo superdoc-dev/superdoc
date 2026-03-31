@@ -57,14 +57,12 @@ function parseBookmarkId(raw: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function allocateBookmarkId(doc: import('prosemirror-model').Node): string {
+function allocateBookmarkId(editor: Editor): string {
   let maxId = -1;
-  doc.descendants((node) => {
-    if (node.type.name !== 'bookmarkStart' && node.type.name !== 'bookmarkEnd') return true;
-    const id = parseBookmarkId(node.attrs?.id);
+  for (const entry of findAllBookmarksInDocument(editor)) {
+    const id = parseBookmarkId(entry.bookmarkId);
     if (id !== null && id > maxId) maxId = id;
-    return true;
-  });
+  }
   return String(maxId + 1);
 }
 
@@ -142,7 +140,7 @@ export function bookmarksInsertWrapper(
     const receipt = executeDomainCommand(
       storyEditor,
       () => {
-        const bookmarkId = allocateBookmarkId(storyEditor.state.doc);
+        const bookmarkId = allocateBookmarkId(editor);
         const startAttrs: Record<string, unknown> = {
           name: input.name,
           id: bookmarkId,

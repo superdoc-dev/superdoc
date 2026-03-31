@@ -119,8 +119,7 @@ describe('convertOmmlToMathml', () => {
     expect(result!.textContent).toBe('z');
   });
 
-  it('handles unimplemented math objects by extracting child content', () => {
-    // m:f (fraction) is not yet implemented — should fall back to rendering children
+  it('converts m:f (fraction) to <mfrac> with numerator and denominator', () => {
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -149,6 +148,44 @@ describe('convertOmmlToMathml', () => {
     expect(mfrac!.children.length).toBe(2);
     expect(mfrac!.children[0]!.textContent).toBe('a');
     expect(mfrac!.children[1]!.textContent).toBe('b');
+  });
+
+  it('wraps multi-part fraction operands in <mrow> for valid arity', () => {
+    // (a+b)/(c+d) — both numerator and denominator have multiple runs
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:f',
+          elements: [
+            {
+              name: 'm:num',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] },
+              ],
+            },
+            {
+              name: 'm:den',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'c' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'd' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mfrac = result!.querySelector('mfrac');
+    expect(mfrac).not.toBeNull();
+    // <mfrac> must have exactly 2 children (num + den), each wrapped in <mrow>
+    expect(mfrac!.children.length).toBe(2);
+    expect(mfrac!.children[0]!.textContent).toBe('a+b');
+    expect(mfrac!.children[1]!.textContent).toBe('c+d');
   });
 
   it('sets mathvariant=normal for m:nor (normal text) flag', () => {
@@ -282,5 +319,120 @@ describe('m:bar converter', () => {
     expect(munder!.firstElementChild!.textContent).toBe('z');
     const mo = munder!.querySelector('mo');
     expect(mo?.textContent).toBe('\u203E');
+  });
+});
+
+describe('m:sSub converter', () => {
+  it('converts m:sSub to <msub> with base and subscript', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSub',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    expect(msub!.children.length).toBe(2);
+    expect(msub!.children[0]!.textContent).toBe('a');
+    expect(msub!.children[1]!.textContent).toBe('1');
+  });
+
+  it('ignores m:sSubPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSub',
+          elements: [
+            { name: 'm:sSubPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    expect(msub!.children.length).toBe(2);
+    expect(msub!.children[0]!.textContent).toBe('x');
+    expect(msub!.children[1]!.textContent).toBe('n');
+  });
+
+  it('wraps multi-part base and subscript in <mrow> for valid arity', () => {
+    // x_{n+1} — subscript has 3 runs that must be grouped
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSub',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    // <msub> must have exactly 2 children (base + subscript), each wrapped in <mrow>
+    expect(msub!.children.length).toBe(2);
+    expect(msub!.children[0]!.textContent).toBe('x');
+    expect(msub!.children[1]!.textContent).toBe('n+1');
+  });
+
+  it('handles missing m:sub gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSub',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    expect(msub!.children[0]!.textContent).toBe('a');
   });
 });

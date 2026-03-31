@@ -1188,12 +1188,15 @@ describe('comments-store', () => {
 
     store.syncTrackedChangeComments({ superdoc: {}, editor });
 
-    expect(store.commentsList[0]).toMatchObject({
-      commentId: 'runtime-id-123',
-      importedId: 'tc-live-imported',
-      trackedChangeText: 'Existing',
-    });
-    expect(store.commentsList[1]).toEqual({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' });
+    expect(store.commentsList).toHaveLength(2);
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChangeText: 'Existing',
+      }),
+      expect.objectContaining({ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' }),
+    ]);
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

@@ -6020,8 +6020,6 @@ export class PresentationEditor extends EventEmitter {
 
     if (!this.#editor) return false;
 
-    let enteredHeaderFooter = false;
-
     try {
       if (story.storyType === 'headerFooterSlot' || story.storyType === 'headerFooterPart') {
         const region = this.#findHeaderFooterRegionForStory(story);
@@ -6030,17 +6028,24 @@ export class PresentationEditor extends EventEmitter {
         this.#scrollPageIntoView(region.pageIndex);
         await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
         this.#activateHeaderFooterRegion(region);
-        enteredHeaderFooter = true;
 
-        const activeEditor = await this.#waitForHeaderFooterEditor(PresentationEditor.ANCHOR_NAV_TIMEOUT_MS);
-        if (!activeEditor?.commands?.setTextSelection) return false;
+        try {
+          const activeEditor = await this.#waitForHeaderFooterEditor(PresentationEditor.ANCHOR_NAV_TIMEOUT_MS);
+          if (!activeEditor?.commands?.setTextSelection) return false;
 
-        // Resolve position in the live editor — the story runtime editor used
-        // before activation may be a different instance with different state.
-        const resolved = resolveBookmarkTarget(activeEditor.state.doc, target);
-        activeEditor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
-        activeEditor.view?.focus?.();
-        return true;
+          // Resolve position in the live editor — the story runtime editor used
+          // before activation may be a different instance with different state.
+          const resolved = resolveBookmarkTarget(activeEditor.state.doc, target);
+          activeEditor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
+          activeEditor.view?.focus?.();
+          return true;
+        } finally {
+          // If navigation did not succeed, exit header/footer mode so the
+          // editor is not left in a stale activation state.
+          if (!this.#headerFooterSession?.activeEditor) {
+            this.#exitHeaderFooterMode();
+          }
+        }
       }
 
       const runtime = resolveStoryRuntime(this.#editor, story);
@@ -6050,7 +6055,7 @@ export class PresentationEditor extends EventEmitter {
       runtime.editor.view?.focus?.();
       return true;
     } catch (error) {
-      if (enteredHeaderFooter) this.#exitHeaderFooterMode();
+      this.#exitHeaderFooterMode();
       console.error('[PresentationEditor] navigateTo bookmark failed:', error);
       this.emit('error', {
         error,

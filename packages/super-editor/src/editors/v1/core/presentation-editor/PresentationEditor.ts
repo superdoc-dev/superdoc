@@ -6020,6 +6020,8 @@ export class PresentationEditor extends EventEmitter {
 
     if (!this.#editor) return false;
 
+    let enteredHeaderFooter = false;
+
     try {
       if (story.storyType === 'headerFooterSlot' || story.storyType === 'headerFooterPart') {
         const region = this.#findHeaderFooterRegionForStory(story);
@@ -6028,6 +6030,7 @@ export class PresentationEditor extends EventEmitter {
         this.#scrollPageIntoView(region.pageIndex);
         await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
         this.#activateHeaderFooterRegion(region);
+        enteredHeaderFooter = true;
 
         const activeEditor = await this.#waitForHeaderFooterEditor(PresentationEditor.ANCHOR_NAV_TIMEOUT_MS);
         if (!activeEditor?.commands?.setTextSelection) return false;
@@ -6047,6 +6050,7 @@ export class PresentationEditor extends EventEmitter {
       runtime.editor.view?.focus?.();
       return true;
     } catch (error) {
+      if (enteredHeaderFooter) this.#exitHeaderFooterMode();
       console.error('[PresentationEditor] navigateTo bookmark failed:', error);
       this.emit('error', {
         error,

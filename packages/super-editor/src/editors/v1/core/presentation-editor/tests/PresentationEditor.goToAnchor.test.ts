@@ -22,6 +22,8 @@ const {
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
+  mockResolveBookmarkTarget,
+  mockResolveTrackedChange,
 } = vi.hoisted(() => {
   const createDefaultConverter = () => ({
     headers: {
@@ -134,6 +136,8 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
+    mockResolveBookmarkTarget: vi.fn(),
+    mockResolveTrackedChange: vi.fn(),
   };
 });
 
@@ -260,12 +264,27 @@ vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
+vi.mock('../../../document-api-adapters/helpers/bookmark-resolver.js', () => ({
+  resolveBookmarkTarget: mockResolveBookmarkTarget,
+}));
+
+vi.mock('../../../document-api-adapters/helpers/tracked-change-resolver.js', () => ({
+  resolveTrackedChange: mockResolveTrackedChange,
+}));
+
 describe('PresentationEditor - goToAnchor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
   let mockActiveEditor: {
+    state?: {
+      doc?: unknown;
+    };
+    view?: {
+      focus?: Mock;
+    };
     commands: {
       setTextSelection: Mock;
+      setCursorById?: Mock;
     };
   };
 
@@ -285,6 +304,12 @@ describe('PresentationEditor - goToAnchor', () => {
 
     // Create mock active editor with setTextSelection command
     mockActiveEditor = {
+      state: {
+        doc: {},
+      },
+      view: {
+        focus: vi.fn(),
+      },
       commands: {
         setTextSelection: vi.fn(),
       },
@@ -588,5 +613,80 @@ describe('PresentationEditor - goToAnchor', () => {
     // Test with anchor that is just "#"
     const result = await editor.goToAnchor('#');
     expect(result).toBe(false);
+  });
+
+  it('should route bookmark navigation through navigateTo', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    const goToAnchorSpy = vi.spyOn(editor, 'goToAnchor').mockResolvedValue(true);
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark1',
+    });
+
+    expect(result).toBe(true);
+    expect(goToAnchorSpy).toHaveBeenCalledWith('bookmark1');
+  });
+
+  it('should route comment navigation through setCursorById', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    mockActiveEditor.commands.setCursorById = vi.fn(() => true);
+    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'comment',
+      entityId: 'comment-1',
+    });
+
+    expect(result).toBe(true);
+    expect(mockActiveEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
+      preferredActiveThreadId: 'comment-1',
+      activeCommentId: 'comment-1',
+    });
+  });
+
+  it('routes tracked change navigation through the raw tracked-change id when given a canonical id', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    mockActiveEditor.commands.setCursorById = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
+    mockResolveTrackedChange.mockReturnValueOnce({
+      id: 'canonical-tc-id',
+      rawId: 'raw-tc-id',
+      from: 88,
+      to: 96,
+      hasInsert: true,
+      hasDelete: false,
+      hasFormat: false,
+      attrs: {},
+    });
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'canonical-tc-id',
+    });
+
+    expect(result).toBe(true);
+    expect(mockActiveEditor.commands.setCursorById).toHaveBeenNthCalledWith(1, 'canonical-tc-id', {
+      preferredActiveThreadId: 'canonical-tc-id',
+    });
+    expect(mockResolveTrackedChange).toHaveBeenCalledWith(mockActiveEditor, 'canonical-tc-id');
+    expect(mockActiveEditor.commands.setCursorById).toHaveBeenNthCalledWith(2, 'raw-tc-id', {
+      preferredActiveThreadId: 'raw-tc-id',
+    });
   });
 });

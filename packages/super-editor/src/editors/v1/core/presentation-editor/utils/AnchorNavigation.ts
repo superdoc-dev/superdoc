@@ -83,6 +83,7 @@ export type GoToAnchorDeps = {
   blocks: FlowBlock[];
   measures: Measure[];
   bookmarks: Map<string, number>;
+  resolveAnchorPosition?: (anchor: string) => number | null;
   pageGeometryHelper?: PageGeometryHelper;
   painterHost: HTMLElement;
   scrollContainer: Element | Window;
@@ -99,6 +100,7 @@ export async function goToAnchor({
   blocks,
   measures,
   bookmarks,
+  resolveAnchorPosition,
   pageGeometryHelper,
   painterHost,
   scrollContainer,
@@ -114,7 +116,7 @@ export async function goToAnchor({
   const normalized = anchor.startsWith('#') ? anchor.slice(1) : anchor;
   if (!normalized) return false;
 
-  const pmPos = bookmarks.get(normalized);
+  const pmPos = bookmarks.get(normalized) ?? resolveAnchorPosition?.(normalized) ?? null;
   if (pmPos == null) return false;
 
   // Try to get exact position rect for precise scrolling

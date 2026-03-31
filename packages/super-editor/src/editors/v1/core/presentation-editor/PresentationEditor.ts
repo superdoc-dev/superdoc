@@ -115,6 +115,16 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isHeaderFooterPartId } from '../parts/adapters/header-footer-part-descriptor.js';
+import type {
+  BookmarkAddress,
+  NavigableEntityAddress,
+  StoryLocator,
+  ResolveRangeOutput,
+  DocumentApi,
+} from '@superdoc/document-api';
+import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { resolveBookmarkTarget } from '../../document-api-adapters/helpers/bookmark-resolver.js';
+import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import type { PartChangedEvent } from '../parts/types.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
@@ -130,7 +140,6 @@ import {
   ensureEditorFieldAnnotationInteractionStyles,
 } from './dom/EditorStyleInjector.js';
 
-import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
@@ -5878,6 +5887,18 @@ export class PresentationEditor extends EventEmitter {
         blocks: this.#layoutState.blocks,
         measures: this.#layoutState.measures,
         bookmarks: this.#layoutState.bookmarks,
+        resolveAnchorPosition: (name) => {
+          const activeEditor = this.#editor;
+          if (!activeEditor?.state?.doc) return null;
+
+          const resolved = resolveBookmarkTarget(activeEditor.state.doc, {
+            kind: 'entity',
+            entityType: 'bookmark',
+            name,
+          });
+
+          return resolved?.pos ?? null;
+        },
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
         scrollContainer: this.#scrollContainer ?? this.#visibleHost,
@@ -5895,6 +5916,135 @@ export class PresentationEditor extends EventEmitter {
       });
       return false;
     }
+  }
+
+  async navigateTo(target: NavigableEntityAddress): Promise<boolean> {
+    if (!target || target.kind !== 'entity') return false;
+
+    if (target.entityType === 'bookmark') {
+      return this.#navigateToBookmarkTarget(target as BookmarkAddress);
+    }
+
+    if (target.entityType === 'trackedChange') {
+      return this.#navigateToTrackedChange(target.entityId);
+    }
+
+    const setCursorById = this.getActiveEditor()?.commands?.setCursorById;
+    if (typeof setCursorById !== 'function') return false;
+
+    return Boolean(
+      setCursorById(target.entityId, {
+        preferredActiveThreadId: target.entityId,
+        ...(target.entityType === 'comment' ? { activeCommentId: target.entityId } : {}),
+      }),
+    );
+  }
+
+  async #navigateToTrackedChange(id: string): Promise<boolean> {
+    const activeEditor = this.getActiveEditor();
+    const setCursorById = activeEditor?.commands?.setCursorById;
+    if (!activeEditor || typeof setCursorById !== 'function') return false;
+
+    if (setCursorById(id, { preferredActiveThreadId: id })) {
+      return true;
+    }
+
+    const resolved = resolveTrackedChange(activeEditor, id);
+    if (!resolved) return false;
+
+    if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
+      return true;
+    }
+
+    await this.scrollToPositionAsync(resolved.from, {
+      behavior: 'auto',
+      block: 'center',
+    });
+    activeEditor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
+    activeEditor.view?.focus?.();
+
+    return true;
+  }
+
+  async #navigateToBookmarkTarget(target: BookmarkAddress): Promise<boolean> {
+    const story = target.story;
+    if (!story || story.storyType === 'body') {
+      return this.goToAnchor(target.name);
+    }
+
+    if (!this.#editor) return false;
+
+    try {
+      const runtime = resolveStoryRuntime(this.#editor, story);
+      const resolved = resolveBookmarkTarget(runtime.editor.state.doc, target);
+
+      if (story.storyType === 'headerFooterSlot' || story.storyType === 'headerFooterPart') {
+        const region = this.#findHeaderFooterRegionForStory(story);
+        if (!region) return false;
+
+        this.#scrollPageIntoView(region.pageIndex);
+        await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
+        this.#activateHeaderFooterRegion(region);
+
+        const activeEditor = await this.#waitForHeaderFooterEditor(PresentationEditor.ANCHOR_NAV_TIMEOUT_MS);
+        if (!activeEditor?.commands?.setTextSelection) return false;
+        activeEditor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
+        activeEditor.view?.focus?.();
+        return true;
+      }
+
+      if (typeof runtime.editor.commands?.setTextSelection !== 'function') return false;
+      runtime.editor.commands.setTextSelection({ from: resolved.pos, to: resolved.pos });
+      runtime.editor.view?.focus?.();
+      return true;
+    } catch (error) {
+      console.error('[PresentationEditor] navigateTo bookmark failed:', error);
+      this.emit('error', {
+        error,
+        context: 'navigateTo',
+      });
+      return false;
+    }
+  }
+
+  #findHeaderFooterRegionForStory(story: StoryLocator) {
+    if (!this.#headerFooterSession) return null;
+
+    if (story.storyType === 'headerFooterPart') {
+      const allRegions = [
+        ...Array.from(this.#headerFooterSession.headerRegions.values()),
+        ...Array.from(this.#headerFooterSession.footerRegions.values()),
+      ];
+      return allRegions.find((region) => region.headerFooterRefId === story.refId) ?? null;
+    }
+
+    if (story.storyType !== 'headerFooterSlot') {
+      return null;
+    }
+
+    const regions =
+      story.headerFooterKind === 'header'
+        ? this.#headerFooterSession.headerRegions.values()
+        : this.#headerFooterSession.footerRegions.values();
+
+    return (
+      Array.from(regions).find(
+        (region) => region.sectionId === story.section.sectionId && region.sectionType === story.variant,
+      ) ?? null
+    );
+  }
+
+  async #waitForHeaderFooterEditor(timeoutMs: number): Promise<Editor | null> {
+    const startTime = performance.now();
+
+    while (performance.now() - startTime < timeoutMs) {
+      const activeEditor = this.#headerFooterSession?.activeEditor ?? null;
+      if (activeEditor) return activeEditor;
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    return null;
   }
 
   /**

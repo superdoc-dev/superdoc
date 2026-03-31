@@ -3205,6 +3205,20 @@ export class DomPainter {
             availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
           }
 
+          // Adjust availableWidth for first-line text indent (hanging indent).
+          // Only unconditionally for negative offsets; positive offsets are already in line.maxWidth.
+          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
+          if (
+            isFirstLine &&
+            firstLineOffset &&
+            !isListFirstLine &&
+            !hasExplicitSegmentPositioning &&
+            (firstLineOffset < 0 || line.maxWidth == null)
+          ) {
+            availableWidthOverride = Math.max(0, availableWidthOverride - firstLineOffset);
+          }
+
           const isLastLineOfFragment = index === lines.length - 1;
           const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
           const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
@@ -3218,9 +3232,6 @@ export class DomPainter {
             shouldSkipJustifyForLastLine,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
-
-          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
 
           if (!isListFirstLine) {
             if (hasExplicitSegmentPositioning) {

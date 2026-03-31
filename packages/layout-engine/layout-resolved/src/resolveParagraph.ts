@@ -286,6 +286,16 @@ export function resolveParagraphContent(
       }
     }
 
+    // Adjust availableWidth for first-line text indent.
+    // Negative textIndentPx (hanging indent): the measurer sets line.maxWidth to the
+    // correct wider value, but Math.min with fallbackAvailableWidth clamps it back down.
+    // Always adjust to restore the actual available space.
+    // Positive textIndentPx (firstLine indent): the measurer already bakes it into
+    // line.maxWidth, so only adjust on the fallback path (maxWidth not set).
+    if (textIndentPx !== 0 && (textIndentPx < 0 || line.maxWidth == null)) {
+      availableWidth = Math.max(0, availableWidth - textIndentPx);
+    }
+
     // --- indentOffset for segment positioning path (mirrors renderer lines 5635-5653) ---
     const indentLeft = paraIndent?.left ?? 0;
     const firstLine = paraIndent?.firstLine ?? 0;

@@ -1226,6 +1226,11 @@ export class SuperDoc extends EventEmitter {
   /**
    * Scroll the document to a given comment by id.
    *
+   * This is a lightweight DOM-based scroll that does **not** move the editing
+   * caret or depend on the layout engine. Use {@link navigateTo} instead when
+   * you need to place the caret inside the comment range (e.g. for deep links
+   * or programmatic editing).
+   *
    * @param {string} commentId The comment id
    * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
    * @returns {boolean} Whether a matching element was found
@@ -1463,6 +1468,10 @@ export class SuperDoc extends EventEmitter {
    * Navigate to a bookmark, comment, or tracked change in the active document.
    * Prefers the active document's PresentationEditor because navigation depends
    * on rendered layout rather than raw editor commands.
+   *
+   * For comments this moves the caret into the comment range and activates the
+   * thread. If you only need to scroll a comment into view without moving the
+   * caret, use {@link scrollToComment} instead.
    *
    * Note: bookmark navigation currently supports the body and header/footer
    * stories. Footnote/endnote bookmark navigation returns `false`.

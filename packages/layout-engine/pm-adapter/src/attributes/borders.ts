@@ -150,7 +150,7 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
 
   return {
     style: (val as BorderStyle) || 'single',
-    width: size,
+    width: size as number,
     color: normalizedColor,
   };
 }

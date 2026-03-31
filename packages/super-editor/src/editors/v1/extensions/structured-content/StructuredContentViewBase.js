@@ -84,6 +84,7 @@ export class StructuredContentViewBase {
     const isPasteEvent = event.type === 'paste';
     const isCutEvent = event.type === 'cut';
     const isClickEvent = event.type === 'mousedown';
+    const isViewingMode = this.editor?.options?.documentMode === 'viewing';
 
     // ProseMirror tries to drag selectable nodes
     // even if `draggable` is set to `false`
@@ -95,6 +96,12 @@ export class StructuredContentViewBase {
     if (isDraggable && isDragEvent && !isDragging && event.target === this.dom) {
       event.preventDefault();
       return false;
+    }
+
+    // In viewing mode, suppress node-wrapper clicks so SDTs don't become
+    // selected when the PM fallback is used.
+    if (isViewingMode && isClickEvent && isSelectable) {
+      return true;
     }
 
     // we have to store that dragging started

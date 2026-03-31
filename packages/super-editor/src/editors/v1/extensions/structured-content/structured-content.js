@@ -145,7 +145,7 @@ export const StructuredContent = Node.create({
   },
 
   addPmPlugins() {
-    return [createStructuredContentLockPlugin(), createStructuredContentSelectPlugin()];
+    return [createStructuredContentLockPlugin(), createStructuredContentSelectPlugin(this.editor)];
   },
 
   addNodeView() {

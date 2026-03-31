@@ -83,6 +83,7 @@ import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
+import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -1612,6 +1613,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // Viewing mode: Not editable, no tracked changes, no comments
     if (cleanedMode === 'viewing') {
       this.commands.toggleTrackChangesShowOriginal?.();
+      const normalizedSelection = getViewModeSelectionWithoutStructuredContent(this.state);
+      if (normalizedSelection) {
+        this.view?.dispatch(this.state.tr.setSelection(normalizedSelection));
+      }
       this.setEditable(false, false);
       this.setOptions({ documentMode: 'viewing' });
       if (pm) pm.classList.add('view-mode');

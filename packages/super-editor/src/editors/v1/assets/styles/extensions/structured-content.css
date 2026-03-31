@@ -72,6 +72,11 @@
   border: none;
 }
 
+.super-editor .ProseMirror.view-mode .sd-structured-content:hover,
+.super-editor .ProseMirror.view-mode .sd-structured-content-block:hover {
+  background: none;
+}
+
 .super-editor .ProseMirror.view-mode .sd-structured-content-draggable {
   display: none;
 }

@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@openai/codex-sdk": "^0.118.0",
     "@superdoc-dev/sdk": "workspace:*",
     "ai": "^6.0.116",
     "openai": "^6.25.0",

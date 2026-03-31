@@ -212,10 +212,17 @@ export class SuperDoc extends EventEmitter {
   }
 
   async #init(config, container) {
+    const hasConfiguredUiDisplayFallbackFont = Object.prototype.hasOwnProperty.call(config, 'uiDisplayFallbackFont');
+
     this.config = {
       ...this.config,
       ...config,
     };
+
+    if (hasConfiguredUiDisplayFallbackFont) {
+      console.warn('[SuperDoc] config.uiDisplayFallbackFont is going to be deprecated and removed in future releases');
+    }
+
     if (!this.config.comments || typeof this.config.comments !== 'object') {
       this.config.comments = { visible: false };
     } else if (typeof this.config.comments.visible !== 'boolean') {

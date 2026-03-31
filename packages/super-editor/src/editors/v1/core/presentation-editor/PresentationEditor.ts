@@ -5955,7 +5955,7 @@ export class PresentationEditor extends EventEmitter {
         );
       }
 
-      const _exhaustive: never = target.entityType;
+      const _exhaustive: never = target;
       return false;
     } catch (error) {
       console.error('[PresentationEditor] navigateTo failed:', error);

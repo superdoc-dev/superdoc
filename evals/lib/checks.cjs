@@ -527,3 +527,34 @@ module.exports.usesRewriteOp = (output) => {
   }
   return { pass: false, score: 0, reason: 'No text.rewrite or replace found' };
 };
+
+// --- Benchmark metrics (Level 3) ---
+
+/** Extract efficiency and path metrics from benchmark provider output. */
+module.exports.benchmarkMetrics = (output, context) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: false, score: 0, reason: 'Could not parse output' };
+
+  const metrics = {
+    step_count: d.stepCount || 0,
+    cost_usd: d.cost || 0,
+    duration_ms: d.duration || 0,
+    input_tokens: d.usage?.input_tokens || 0,
+    output_tokens: d.usage?.output_tokens || 0,
+    total_tokens: (d.usage?.input_tokens || 0) + (d.usage?.output_tokens || 0),
+    path_used: d.pathUsed || 'unknown',
+    condition: d.condition || 'unknown',
+  };
+
+  return {
+    pass: true,
+    score: 1,
+    reason: `${metrics.step_count} steps, $${metrics.cost_usd.toFixed(4)}, ${Math.round(metrics.duration_ms / 1000)}s, ${metrics.total_tokens} tokens, path=${metrics.path_used}`,
+    componentResults: Object.entries(metrics).map(([k, v]) => ({
+      pass: true,
+      score: typeof v === 'number' ? v : 0,
+      reason: `${k}=${v}`,
+      namedScores: { [k]: typeof v === 'number' ? v : 0 },
+    })),
+  };
+};

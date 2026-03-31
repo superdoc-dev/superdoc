@@ -19,6 +19,7 @@ import type {
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllBookmarks,
+  findAllBookmarksInDocument,
   resolveBookmarkTarget,
   extractBookmarkInfo,
   buildBookmarkDiscoveryItem,
@@ -67,6 +68,14 @@ function allocateBookmarkId(doc: import('prosemirror-model').Node): string {
   return String(maxId + 1);
 }
 
+function bookmarkExistsAnywhere(editor: Editor, name: string, excludeBookmarkId?: string): boolean {
+  return findAllBookmarksInDocument(editor).some((bookmark) => {
+    if (bookmark.name !== name) return false;
+    if (!excludeBookmarkId) return true;
+    return bookmark.bookmarkId !== excludeBookmarkId;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
@@ -111,9 +120,7 @@ export function bookmarksInsertWrapper(
   const address: BookmarkAddress = buildBookmarkAddress(input.name, runtime.locator);
 
   try {
-    // Check for duplicate name
-    const existing = findAllBookmarks(storyEditor.state.doc);
-    if (existing.some((b) => b.name === input.name)) {
+    if (bookmarkExistsAnywhere(editor, input.name)) {
       return bookmarkFailure('NO_OP', `Bookmark with name "${input.name}" already exists.`);
     }
 
@@ -186,9 +193,7 @@ export function bookmarksRenameWrapper(
       return bookmarkFailure('NO_OP', 'New name is identical to current name.');
     }
 
-    // Check that the new name is not already taken
-    const all = findAllBookmarks(storyEditor.state.doc);
-    if (all.some((b) => b.name === input.newName)) {
+    if (bookmarkExistsAnywhere(editor, input.newName, resolved.bookmarkId)) {
       throw new DocumentApiAdapterError(
         'INVALID_INPUT',
         `bookmarks.rename: a bookmark with name "${input.newName}" already exists.`,

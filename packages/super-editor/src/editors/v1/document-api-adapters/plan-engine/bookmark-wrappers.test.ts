@@ -41,6 +41,7 @@ vi.mock('../helpers/bookmark-resolver.js', async (importOriginal) => {
   return {
     ...actual,
     findAllBookmarks: vi.fn(() => []),
+    findAllBookmarksInDocument: vi.fn(() => []),
     resolveBookmarkTarget: vi.fn(),
     extractBookmarkInfo: vi.fn(),
     buildBookmarkDiscoveryItem: vi.fn(),
@@ -59,7 +60,7 @@ vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
 import { bookmarksInsertWrapper, bookmarksRenameWrapper, bookmarksRemoveWrapper } from './bookmark-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { findAllBookmarks, resolveBookmarkTarget } from '../helpers/bookmark-resolver.js';
+import { findAllBookmarksInDocument, resolveBookmarkTarget } from '../helpers/bookmark-resolver.js';
 import { resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 
 type BookmarkNode = {
@@ -204,8 +205,23 @@ describe('bookmarksInsertWrapper', () => {
   });
 
   it('returns NO_OP when a bookmark with the same name already exists', () => {
-    vi.mocked(findAllBookmarks).mockReturnValueOnce([
-      { name: 'bm1', pos: 1, bookmarkId: '0', endPos: 2, node: {} as never },
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([{ name: 'bm1', bookmarkId: '0', storyKey: 'body' }]);
+    const { editor, tr, dispatch } = makeEditor();
+
+    const result = bookmarksInsertWrapper(editor, makeInput('bm1'));
+
+    expect(result).toEqual({
+      success: false,
+      failure: { code: 'NO_OP', message: 'Bookmark with name "bm1" already exists.' },
+    });
+    expect(resolveInlineInsertPosition).not.toHaveBeenCalled();
+    expect(tr.insert).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('returns NO_OP when the same bookmark name already exists in another story', () => {
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'bm1', bookmarkId: '55', storyKey: 'hf:part:rId7' },
     ]);
     const { editor, tr, dispatch } = makeEditor();
 
@@ -245,7 +261,7 @@ describe('bookmarksRenameWrapper', () => {
       node: { attrs: { name: 'old-name', id: '1' } } as never,
     });
 
-    vi.mocked(findAllBookmarks).mockReturnValueOnce([]);
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([]);
 
     const result = bookmarksRenameWrapper(editor, {
       target: { kind: 'entity', entityType: 'bookmark', name: 'old-name' },
@@ -282,7 +298,7 @@ describe('bookmarksRenameWrapper', () => {
       node: { attrs: { name: 'old-name', id: '1' } } as never,
     });
 
-    vi.mocked(findAllBookmarks).mockReturnValueOnce([]);
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([]);
 
     const result = bookmarksRenameWrapper(editor, {
       target: { kind: 'entity', entityType: 'bookmark', name: 'old-name', story: footnoteLocator },
@@ -300,6 +316,35 @@ describe('bookmarksRenameWrapper', () => {
     });
     expect(commit).toHaveBeenCalledWith(editor);
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+
+  it('throws INVALID_INPUT when the new name exists in another story', () => {
+    const { editor, tr } = makeEditor();
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'old-name',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'old-name', id: '1' } } as never,
+    });
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'taken-name', bookmarkId: '77', storyKey: 'hf:part:rId7' },
+    ]);
+
+    expect(() =>
+      bookmarksRenameWrapper(editor, {
+        target: { kind: 'entity', entityType: 'bookmark', name: 'old-name' },
+        newName: 'taken-name',
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: 'DocumentApiAdapterError',
+        code: 'INVALID_INPUT',
+      }),
+    );
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
   });
 });
 

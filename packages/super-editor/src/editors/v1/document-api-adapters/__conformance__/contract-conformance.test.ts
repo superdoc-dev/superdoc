@@ -328,9 +328,15 @@ vi.mock('prosemirror-model', async (importOriginal) => {
 const refResolverMocks = vi.hoisted(() => ({
   // Bookmark
   findAllBookmarks: vi.fn(() => []),
+  findAllBookmarksInDocument: vi.fn(() => []),
   resolveBookmarkTarget: vi.fn(),
   extractBookmarkInfo: vi.fn(),
   buildBookmarkDiscoveryItem: vi.fn(),
+  buildBookmarkAddress: vi.fn((name: string, story?: { storyType?: string }) => {
+    const normalizedStory = story && story.storyType !== 'body' ? story : undefined;
+    const base = { kind: 'entity', entityType: 'bookmark', name };
+    return normalizedStory ? { ...base, story: normalizedStory } : base;
+  }),
   // Link
   findAllLinks: vi.fn(() => []),
   resolveLinkTarget: vi.fn(),
@@ -392,9 +398,11 @@ const refResolverMocks = vi.hoisted(() => ({
 
 vi.mock('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
+  findAllBookmarksInDocument: refResolverMocks.findAllBookmarksInDocument,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
+  buildBookmarkAddress: refResolverMocks.buildBookmarkAddress,
 }));
 
 vi.mock('../helpers/footnote-resolver.js', () => ({
@@ -10929,6 +10937,12 @@ const resetMocks = () => {
   }
   // Restore list-returning defaults
   refResolverMocks.findAllBookmarks.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+  refResolverMocks.buildBookmarkAddress.mockImplementation((name: string, story?: { storyType?: string }) => {
+    const normalizedStory = story && story.storyType !== 'body' ? story : undefined;
+    const base = { kind: 'entity', entityType: 'bookmark', name };
+    return normalizedStory ? { ...base, story: normalizedStory } : base;
+  });
   refResolverMocks.findAllLinks.mockImplementation(() => []);
   refResolverMocks.findAllFootnotes.mockImplementation(() => []);
   refResolverMocks.findAllCrossRefs.mockImplementation(() => []);

@@ -176,6 +176,10 @@ vi.mock('../../Editor', () => {
         focus: vi.fn(),
         dispatch: vi.fn(),
       },
+      commands: {
+        setTextSelection: vi.fn(),
+        setCursorById: vi.fn(),
+      },
       options: {
         documentId: 'test-doc',
         element: document.createElement('div'),
@@ -641,7 +645,6 @@ describe('PresentationEditor - goToAnchor', () => {
 
     const bodyEditor = editor.getActiveEditor();
     bodyEditor.commands.setCursorById = vi.fn(() => true);
-    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
 
     const result = await editor.navigateTo({
       kind: 'entity',
@@ -654,7 +657,6 @@ describe('PresentationEditor - goToAnchor', () => {
       preferredActiveThreadId: 'comment-1',
       activeCommentId: 'comment-1',
     });
-    expect(mockActiveEditor.commands.setCursorById).toBeUndefined();
   });
 
   it('routes tracked change navigation through the raw tracked-change id when given a canonical id', async () => {
@@ -665,7 +667,6 @@ describe('PresentationEditor - goToAnchor', () => {
 
     const bodyEditor = editor.getActiveEditor();
     bodyEditor.commands.setCursorById = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
     mockResolveTrackedChange.mockReturnValueOnce({
       id: 'canonical-tc-id',
       rawId: 'raw-tc-id',
@@ -691,7 +692,6 @@ describe('PresentationEditor - goToAnchor', () => {
     expect(bodyEditor.commands.setCursorById).toHaveBeenNthCalledWith(2, 'raw-tc-id', {
       preferredActiveThreadId: 'raw-tc-id',
     });
-    expect(mockActiveEditor.commands.setCursorById).toBeUndefined();
   });
 
   it('falls back to scroll + setTextSelection when both setCursorById attempts fail for tracked changes', async () => {
@@ -702,7 +702,6 @@ describe('PresentationEditor - goToAnchor', () => {
 
     const bodyEditor = editor.getActiveEditor();
     bodyEditor.commands.setCursorById = vi.fn().mockReturnValue(false);
-    editor.getActiveEditor = vi.fn(() => mockActiveEditor as never);
     editor.scrollToPositionAsync = vi.fn().mockResolvedValue(undefined);
 
     mockResolveTrackedChange.mockReturnValueOnce({

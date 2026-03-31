@@ -150,7 +150,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${CSS.escape(toolbarId)}` } : {}),
           documentMode,
           role,
-          ...(contained ? { contained } : {}),
+          contained,
           ...(documentProp != null ? { document: documentProp } : {}),
           ...(user ? { user } : {}),
           ...(users ? { users } : {}),
@@ -226,7 +226,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
-  }, [documentProp, user, users, modules, role, hideToolbar, containerId, toolbarId]);
+  }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
   const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;

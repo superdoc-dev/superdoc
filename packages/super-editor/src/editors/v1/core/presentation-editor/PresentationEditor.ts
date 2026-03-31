@@ -5924,38 +5924,44 @@ export class PresentationEditor extends EventEmitter {
   async navigateTo(target: NavigableEntityAddress): Promise<boolean> {
     if (!target || target.kind !== 'entity') return false;
 
-    if (target.entityType === 'bookmark') {
-      return this.#navigateToBookmarkTarget(target);
-    }
+    try {
+      if (target.entityType === 'bookmark') {
+        return await this.#navigateToBookmarkTarget(target);
+      }
 
-    // Comments and tracked changes are only supported in the document body.
-    if ('story' in target && target.story && target.story.storyType !== 'body') {
-      console.warn(
-        `[PresentationEditor] navigateTo does not support non-body stories for ${target.entityType}. ` +
-          `Only bookmarks support cross-story navigation.`,
-      );
+      // Comments and tracked changes are only supported in the document body.
+      if ('story' in target && target.story && target.story.storyType !== 'body') {
+        console.warn(
+          `[PresentationEditor] navigateTo does not support non-body stories for ${target.entityType}. ` +
+            `Only bookmarks support cross-story navigation.`,
+        );
+        return false;
+      }
+
+      if (target.entityType === 'trackedChange') {
+        return await this.#navigateToTrackedChange(target.entityId);
+      }
+
+      if (target.entityType === 'comment') {
+        const bodyEditor = this.#resolveBodyEditorForNavigation();
+        const setCursorById = bodyEditor?.commands?.setCursorById;
+        if (typeof setCursorById !== 'function') return false;
+
+        return Boolean(
+          setCursorById(target.entityId, {
+            preferredActiveThreadId: target.entityId,
+            activeCommentId: target.entityId,
+          }),
+        );
+      }
+
+      const _exhaustive: never = target.entityType;
+      return false;
+    } catch (error) {
+      console.error('[PresentationEditor] navigateTo failed:', error);
+      this.emit('error', { error, context: 'navigateTo' });
       return false;
     }
-
-    if (target.entityType === 'trackedChange') {
-      return this.#navigateToTrackedChange(target.entityId);
-    }
-
-    if (target.entityType === 'comment') {
-      const bodyEditor = this.#resolveBodyEditorForNavigation();
-      const setCursorById = bodyEditor?.commands?.setCursorById;
-      if (typeof setCursorById !== 'function') return false;
-
-      return Boolean(
-        setCursorById(target.entityId, {
-          preferredActiveThreadId: target.entityId,
-          activeCommentId: target.entityId,
-        }),
-      );
-    }
-
-    const _exhaustive: never = target.entityType;
-    return false;
   }
 
   #resolveBodyEditorForNavigation(): Editor | null {

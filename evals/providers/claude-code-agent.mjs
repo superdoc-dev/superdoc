@@ -1,26 +1,24 @@
 /**
- * Custom Promptfoo provider: Claude Code agent benchmark.
+ * Custom Promptfoo provider: Claude Agent SDK benchmark.
  *
- * Uses @anthropic-ai/claude-agent-sdk to run Claude Code against DOCX tasks
- * under different conditions (baseline, vendor, superdoc-skill, superdoc-cli, choice).
+ * Uses @anthropic-ai/claude-agent-sdk query() — the SDK handles the full
+ * agent loop with built-in tools (Bash, Read, Write, Edit, Glob, Grep).
  *
  * Config (set per provider instance in YAML):
  *   condition:        'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
- *   allowedTools:     Array of tool names Claude Code can use
+ *   allowedTools:     Array of built-in tool names the agent can use
  *   disallowedTools:  Array of tool names to block
  *   superdocOnPath:   Whether SuperDoc CLI is available on PATH
- *   superdocSkill:    Whether the SuperDoc skill is installed
- *   vendorSkill:      Whether vendor DOCX skill is available
  *
  * Vars (set per test):
  *   fixture:   DOCX filename in fixtures/
  *   task:      The user task prompt
- *   keepFile:  Save the edited DOCX to results/output/ (default: false)
+ *   keepFile:  Save the edited DOCX (default: false)
  */
 
+import { mkdirSync } from 'node:fs';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
-  PATHS,
   cacheKey,
   cleanupTemp,
   createTempCopy,
@@ -65,18 +63,16 @@ export default class ClaudeCodeBenchmarkProvider {
       return { error: 'No fixture specified in test vars' };
     }
 
-    // Cache key includes condition + model to avoid stale results
     const key = cacheKey(`cc-${this.config.condition}`, fixture, task, 'sonnet');
     const cached = readCache(key);
     if (cached) return cached;
 
-    // Create isolated working copy
-    const { docPath, stateDir, uid } = createTempCopy(fixture);
+    const { docPath, stateDir } = createTempCopy(fixture);
+    mkdirSync(stateDir, { recursive: true });
     const beforeText = extractDocxText(docPath);
     const startTime = performance.now();
 
     try {
-      // Build PATH: include or exclude SuperDoc CLI
       const env = { ...process.env };
       if (!this.config.superdocOnPath) {
         env.PATH = env.PATH.split(':')
@@ -84,7 +80,6 @@ export default class ClaudeCodeBenchmarkProvider {
           .join(':');
       }
 
-      // Run Claude Code via SDK
       let resultMessage = null;
       const toolCalls = [];
       let agentResponseText = '';
@@ -96,26 +91,16 @@ export default class ClaudeCodeBenchmarkProvider {
           allowedTools: this.config.allowedTools,
           disallowedTools: this.config.disallowedTools,
           maxTurns: 20,
-          maxBudgetUsd: 2.00,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
-          persistSession: false,
           cwd: stateDir,
           env,
         },
       })) {
-        // Capture agent text responses (for reading task validation)
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
             if (block.type === 'text') agentResponseText += block.text + '\n';
-          }
-        }
-        // Capture tool usage (for path detection)
-        if (message.type === 'assistant' && message.message?.content) {
-          for (const block of message.message.content) {
-            if (block.type === 'tool_use') {
-              toolCalls.push({ tool: block.name, args: block.input });
-            }
+            if (block.type === 'tool_use') toolCalls.push({ tool: block.name, args: block.input });
           }
         }
         if (message.type === 'result') {
@@ -123,7 +108,6 @@ export default class ClaudeCodeBenchmarkProvider {
         }
       }
 
-      // Extract document text AFTER agent runs
       const afterText = extractDocxText(docPath);
       const duration = performance.now() - startTime;
 

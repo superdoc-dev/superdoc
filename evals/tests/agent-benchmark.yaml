@@ -15,7 +15,7 @@
 
 - description: 'Read: extract all headings'
   vars:
-    fixture: contract.docx
+    fixture: report-with-formatting.docx
     task: 'List all headings in this document.'
   assert:
     - type: javascript
@@ -23,8 +23,8 @@
       value: |
         const d = JSON.parse(output);
         const t = (d.agentResponseText || '').toLowerCase();
-        const found = ['preamble', 'article', 'signatures'].filter(h => t.includes(h));
-        if (found.length < 2) return { pass: false, score: 0, reason: `Only found: ${found.join(', ')} — expected at least 2 of preamble/article/signatures` };
+        const found = ['executive summary', 'study overview', 'enrollment', 'safety', 'efficacy'].filter(h => t.includes(h));
+        if (found.length < 2) return { pass: false, score: 0, reason: `Only found: ${found.join(', ')} — expected at least 2 headings from clinical trial report` };
         return { pass: true, score: 1, reason: `Headings found: ${found.join(', ')}` };
     - type: javascript
       metric: collateral
@@ -38,8 +38,8 @@
 
 - description: 'Read: content of a specific section'
   vars:
-    fixture: contract.docx
-    task: 'What does the Preamble section say? Give me the full text of that section.'
+    fixture: report-with-formatting.docx
+    task: 'What does the Executive Summary section say? Give me the full text of that section.'
   assert:
     - type: javascript
       metric: correctness
@@ -160,10 +160,10 @@
       value: |
         const d = JSON.parse(output);
         const t = d.agentResponseText || '';
-        const has25 = t.includes('25');
-        const has150 = t.includes('150');
-        if (!has25 && !has150) return { pass: false, score: 0, reason: 'Neither 25 (million) nor 150 (million) found in response' };
-        return { pass: true, score: 1, reason: `Financial figures found: ${[has25 && '25M', has150 && '150M'].filter(Boolean).join(', ')}` };
+        const has25 = t.includes('25') && t.includes('000');
+        const has150 = t.includes('150') || t.includes('50,000,000');
+        if (!has25 && !has150) return { pass: false, score: 0, reason: 'No acquisition threshold amounts found in response' };
+        return { pass: true, score: 1, reason: `Financial figures found: ${[has25 && '$25M', has150 && '$150M'].filter(Boolean).join(', ')}` };
     - type: javascript
       metric: collateral
       value: |
@@ -276,7 +276,7 @@
 
 - description: 'Edit: insert new section with heading + body'
   vars:
-    fixture: contract.docx
+    fixture: nda.docx
     keepFile: true
     task: 'Add a new section at the end of the document with the heading "Force Majeure" and the body text "Neither party shall be liable for delays or failures in performance resulting from causes beyond reasonable control."'
   assert:
@@ -371,7 +371,7 @@
   vars:
     fixture: employment-offer.docx
     keepFile: true
-    task: 'Fill in the placeholder "[Employee Name]" with "Jane Smith" throughout the document.'
+    task: 'Fill in the placeholder "[Candidate Name]" with "Jane Smith" throughout the document.'
   assert:
     - type: javascript
       metric: correctness
@@ -379,7 +379,7 @@
         const d = JSON.parse(output);
         const t = d.documentText || '';
         if (!t.includes('Jane Smith')) return { pass: false, score: 0, reason: '"Jane Smith" not found in document' };
-        if (t.includes('[Employee Name]')) return { pass: false, score: 0, reason: 'Placeholder [Employee Name] still present' };
+        if (t.includes('[Candidate Name]')) return { pass: false, score: 0, reason: 'Placeholder [Candidate Name] still present' };
         return { pass: true, score: 1, reason: 'Placeholder filled with Jane Smith' };
     - type: javascript
       metric: collateral
@@ -395,7 +395,7 @@
   vars:
     fixture: memorandum.docx
     keepFile: true
-    task: 'Update the acquisition limit from "$25,000,000" to "$30,000,000".'
+    task: 'Update the per-transaction acquisition limit from "$25,000,000" to "$30,000,000".'
   assert:
     - type: javascript
       metric: correctness
@@ -409,9 +409,9 @@
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('150')) return { pass: false, score: 0, reason: 'Collateral: $150M figure was removed' };
+        if (!t.includes('50,000,000') && !t.includes('50 ,000,000')) return { pass: false, score: 0, reason: 'Collateral: aggregate $150M figure was removed' };
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        return { pass: true, score: 1, reason: '$150M intact, document changed' };
+        return { pass: true, score: 1, reason: 'Aggregate threshold intact, document changed' };
     - type: javascript
       metric: efficiency
       value: file://lib/checks.cjs:benchmarkMetrics

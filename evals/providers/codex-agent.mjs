@@ -1,8 +1,8 @@
 /**
- * Custom Promptfoo provider: Codex agent benchmark.
+ * Custom Promptfoo provider: OpenAI Codex SDK benchmark.
  *
- * Uses @openai/codex-sdk to run Codex against DOCX tasks
- * under different conditions (baseline, vendor, superdoc-skill, superdoc-cli, choice).
+ * Uses @openai/codex-sdk to run Codex against DOCX tasks.
+ * API: new Codex() -> codex.startThread(opts) -> thread.run(prompt)
  *
  * Config (set per provider instance in YAML):
  *   condition:      'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
@@ -11,9 +11,10 @@
  * Vars (set per test):
  *   fixture:   DOCX filename in fixtures/
  *   task:      The user task prompt
- *   keepFile:  Save the edited DOCX to results/output/ (default: false)
+ *   keepFile:  Save the edited DOCX (default: false)
  */
 
+import { mkdirSync } from 'node:fs';
 import { Codex } from '@openai/codex-sdk';
 import {
   cacheKey,
@@ -62,34 +63,32 @@ export default class CodexBenchmarkProvider {
     if (cached) return cached;
 
     const { docPath, stateDir } = createTempCopy(fixture);
+    mkdirSync(stateDir, { recursive: true });
     const beforeText = extractDocxText(docPath);
     const startTime = performance.now();
 
     try {
-      const env = { ...process.env };
-      if (!this.config.superdocOnPath) {
-        env.PATH = env.PATH.split(':')
-          .filter(p => !p.includes('superdoc'))
-          .join(':');
-      }
-
-      // Run via Codex SDK
-      const codex = new Codex({ env });
+      // Codex SDK: new Codex() -> startThread(opts) -> thread.run(prompt)
+      const codex = new Codex();
       const thread = codex.startThread({
         workingDirectory: stateDir,
         skipGitRepoCheck: true,
+        approvalPolicy: 'never', // fully autonomous, no interactive prompts
       });
 
       const turn = await thread.run(`The DOCX file is at: ${docPath}\n\n${task}`);
       const duration = performance.now() - startTime;
 
       // Extract tool calls from turn items
+      // Items are: command_execution, mcp_tool_call, file_change, etc.
       const toolCalls = (turn.items || [])
-        .filter(item => item.type === 'tool_call' || item.type === 'function_call')
-        .map(item => ({
-          tool: item.name || item.tool,
-          args: item.arguments || item.input,
-        }));
+        .filter(item => item.type === 'command_execution' || item.type === 'mcp_tool_call')
+        .map(item => {
+          if (item.type === 'command_execution') {
+            return { tool: 'Bash', args: { command: item.command } };
+          }
+          return { tool: item.tool, args: item.arguments };
+        });
 
       const afterText = extractDocxText(docPath);
 
@@ -101,7 +100,7 @@ export default class CodexBenchmarkProvider {
           condition: this.config.condition,
           toolCalls,
           stepCount: toolCalls.length,
-          cost: 0, // Codex SDK doesn't expose cost directly
+          cost: 0, // Codex SDK doesn't expose cost
           duration,
           usage: turn.usage || {},
           pathUsed: detectPathUsed(toolCalls),

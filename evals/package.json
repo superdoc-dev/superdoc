@@ -16,10 +16,14 @@
     "analyze": "node lib/analyze-results.mjs",
     "eval:analyze": "npx promptfoo eval --env-file .env -o results/latest.json && node lib/analyze-results.mjs",
     "baseline:save": "node lib/save-baseline.mjs",
-    "baseline:compare": "node lib/compare-baselines.mjs"
+    "baseline:compare": "node lib/compare-baselines.mjs",
+    "eval:benchmark": "npx promptfoo eval --env-file .env -c promptfooconfig.benchmark.yaml -o results/benchmark/latest.json",
+    "eval:benchmark:report": "node lib/benchmark-report.mjs",
+    "eval:benchmark:claude": "npx promptfoo eval --env-file .env -c promptfooconfig.benchmark.yaml --filter-providers 'CC-*' -o results/benchmark/latest-claude.json",
+    "eval:benchmark:codex": "npx promptfoo eval --env-file .env -c promptfooconfig.benchmark.yaml --filter-providers 'Codex-*' -o results/benchmark/latest-codex.json"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.87",
     "@openai/codex-sdk": "^0.118.0",
     "@superdoc-dev/sdk": "workspace:*",
     "ai": "^6.0.116",

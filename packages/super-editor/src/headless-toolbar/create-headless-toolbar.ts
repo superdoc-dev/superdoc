@@ -8,6 +8,7 @@ import type {
 import { createToolbarSnapshot } from './create-toolbar-snapshot.js';
 import { subscribeToolbarEvents } from './subscribe-toolbar-events.js';
 import { createToolbarRegistry } from './toolbar-registry.js';
+import { resolveStateEditor } from './helpers/context.js';
 import type { BuiltInToolbarRegistryEntry } from './internal-types.js';
 
 const executeDirectCommand = (
@@ -107,7 +108,14 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     },
 
     execute(id, payload) {
+      // Restore editor focus after execution so toolbar clicks don't break
+      // the editing selection. The built-in toolbar handles this internally;
+      // the headless API must do the same so consumers don't need to.
+      const editor = resolveStateEditor(snapshot.context);
       const result = executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
+      if (result) {
+        editor?.view?.focus();
+      }
       if (result && !destroyed) {
         refreshControllerState();
       }

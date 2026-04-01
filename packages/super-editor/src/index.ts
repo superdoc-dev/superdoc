@@ -7,8 +7,11 @@ export * from './editors/v1/index.js';
 // ============================================
 
 // ProseMirror core types
+/** @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead. */
 export type { EditorView } from 'prosemirror-view';
+/** @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead. */
 export type { EditorState, Transaction } from 'prosemirror-state';
+/** @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead. */
 export type { Schema } from 'prosemirror-model';
 
 // Document API types
@@ -19,6 +22,7 @@ export type { SelectionHandle } from './editors/v1/core/selection-state.js';
 export type { SelectionCommandContext } from './editors/v1/core/presentation-editor/PresentationEditor.js';
 
 // Command types
+/** @deprecated Editor commands will be removed in a future version. Use the Document API instead. */
 export type {
   EditorCommands,
   CommandProps,

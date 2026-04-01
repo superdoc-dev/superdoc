@@ -248,13 +248,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
   extensionStorage: ExtensionStorage = {};
 
   /**
-   * ProseMirror schema for the editor
+   * ProseMirror schema for the editor.
+   * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   schema!: Schema;
 
   /**
    * ProseMirror view instance.
    * Undefined in headless mode or before the editor is mounted.
+   * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   view?: PmEditorView;
 
@@ -1310,7 +1312,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the editor state
+   * Get the editor state.
+   * @deprecated Direct ProseMirror state access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   get state(): EditorState {
     return this._state;
@@ -1377,6 +1380,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Get object of registered commands.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   get commands(): EditorCommands {
     return this.#commandService?.commands;
@@ -1562,6 +1566,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Create a chain of commands to call multiple commands at once.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   chain(): ChainableCommandObject {
     return this.#commandService.chain();
@@ -1569,6 +1574,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Check if a command or a chain of commands can be executed. Without executing it.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   can(): CanObject {
     return this.#commandService.can();
@@ -2718,6 +2724,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *
    * In headless mode, this is the primary way to apply state changes since there is
    * no ProseMirror view to dispatch through.
+   *
+   * @deprecated Direct ProseMirror dispatch will be removed in a future version. Use the Document API (`editor.doc`) instead.
    *
    * @param tr - The ProseMirror transaction to dispatch
    *

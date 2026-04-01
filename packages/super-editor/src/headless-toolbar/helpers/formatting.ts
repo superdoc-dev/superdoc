@@ -444,9 +444,9 @@ export const createTextColorExecute =
     const isNone = payload === 'none';
     const inlineValue = isNone ? 'inherit' : payload;
 
-    createDirectCommandExecute('setColor')({ context, payload: inlineValue });
+    const result = createDirectCommandExecute('setColor')({ context, payload: inlineValue });
     editor?.commands?.setFieldAnnotationsTextColor?.(isNone ? null : payload, true);
-    return true;
+    return result;
   };
 
 export const createHighlightColorExecute =
@@ -461,11 +461,11 @@ export const createHighlightColorExecute =
     const isNone = payload === 'none';
     const inlineValue = isNone ? 'transparent' : payload;
 
-    createDirectCommandExecute('setHighlight')({ context, payload: inlineValue });
+    const result = createDirectCommandExecute('setHighlight')({ context, payload: inlineValue });
     const argValue = isNone ? null : payload;
     editor?.commands?.setFieldAnnotationsTextHighlight?.(argValue, true);
     editor?.commands?.setCellBackground?.(argValue);
-    return true;
+    return result;
   };
 
 const applyLinkPostExecute = (editor: NonNullable<ReturnType<typeof resolveStateEditor>>) => {
@@ -514,9 +514,9 @@ export const createImageExecute =
     if (!editor?.view) return false;
 
     const open = getFileOpener();
-    open().then(async (result: any) => {
-      if (!result?.file) return;
-      try {
+    open()
+      .then(async (result: any) => {
+        if (!result?.file) return;
         await processAndInsertImageFile({
           file: result.file,
           editor,
@@ -524,10 +524,10 @@ export const createImageExecute =
           editorOptions: editor.options,
           getMaxContentSize: () => editor.getMaxContentSize(),
         });
-      } catch {
-        // Image processing failed — consumer can handle via their own error UI
-      }
-    });
+      })
+      .catch((err: unknown) => {
+        console.error('[headless-toolbar] Image insertion failed:', err);
+      });
 
     return true;
   };

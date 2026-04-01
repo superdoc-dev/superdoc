@@ -57,7 +57,7 @@ const ALIGN_ICONS: Record<string, React.ReactNode> = {
   justify: <FormatAlignJustify fontSize="small" />,
 };
 
-const { DEFAULT_TEXT_COLOR_OPTIONS, DEFAULT_HIGHLIGHT_COLOR_OPTIONS } = headlessToolbarConstants;
+const { DEFAULT_TEXT_COLOR_OPTIONS } = headlessToolbarConstants;
 
 // ---------------------------------------------------------------------------
 // App
@@ -65,7 +65,6 @@ const { DEFAULT_TEXT_COLOR_OPTIONS, DEFAULT_HIGHLIGHT_COLOR_OPTIONS } = headless
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const superdocRef = useRef<SuperDoc | null>(null);
   const toolbarRef = useRef<HeadlessToolbarController | null>(null);
 
   const [snapshot, setSnapshot] = useState<ToolbarSnapshot | null>(null);
@@ -86,8 +85,6 @@ export default function App() {
       document: '/test_file.docx',
       toolbar: null,
     });
-    superdocRef.current = superdoc;
-
     const toolbar = createHeadlessToolbar({
       superdoc: superdoc as any,
       commands: [...COMMANDS],
@@ -110,7 +107,9 @@ export default function App() {
   );
 
   const exec = useCallback(
-    (id: string, payload?: unknown) => toolbarRef.current!.execute(id as any, payload),
+    (id: string, payload?: unknown) => {
+      toolbarRef.current?.execute(id as any, payload);
+    },
     [],
   );
 

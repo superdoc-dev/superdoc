@@ -70,7 +70,7 @@ For backend and AI workflows, use the [Node SDK](/document-engine/sdks), [Python
 Previously, you could access the underlying ProseMirror instances directly:
 
 ```javascript
-// ❌ Deprecated — will be removed
+// Deprecated — will be removed
 superdoc.on("editorCreate", ({ editor }) => {
   const view = editor.view;
   const state = editor.state;
@@ -78,7 +78,7 @@ superdoc.on("editorCreate", ({ editor }) => {
   editor.commands.toggleBold();
 });
 
-// ✅ Use the Document API instead
+// Use the Document API instead
 superdoc.on("editorCreate", ({ editor }) => {
   const content = editor.doc.get();
   editor.doc.format.bold({ target });

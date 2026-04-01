@@ -15,13 +15,13 @@ keywords: "migrate commands, document api migration, editor commands deprecated,
 ## Quick comparison
 
 ```javascript
-// ❌ Deprecated
+// Deprecated
 editor.commands.toggleBold();
 editor.commands.insertTable({ rows: 3, cols: 3 });
 editor.commands.addComment({ content: 'Review this' });
 const text = editor.state.doc.textContent;
 
-// ✅ Document API
+// Document API
 editor.doc.format.bold({ target });
 editor.doc.create.table({ rows: 3, columns: 3 });
 editor.doc.comments.create({ target, content: 'Review this' });
@@ -33,11 +33,11 @@ const text = editor.doc.getText();
 ### Reading document content
 
 ```javascript
-// ❌ Before
+// Before
 const text = editor.state.doc.textContent;
 const json = editor.getJSON();
 
-// ✅ After
+// After
 const text = editor.doc.getText();
 const content = editor.doc.get();
 const markdown = editor.doc.getMarkdown();
@@ -47,11 +47,11 @@ const html = editor.doc.getHtml();
 ### Finding and replacing text
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.search('ACME Corp');
 // manually iterate results...
 
-// ✅ After
+// After
 const result = editor.doc.query.match({
   select: { type: 'text', pattern: 'ACME Corp' },
 });
@@ -64,14 +64,14 @@ editor.doc.replace({
 ### Formatting
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.toggleBold();
 editor.commands.toggleItalic();
 editor.commands.setColor('#ff0000');
 editor.commands.setFontSize(14);
 editor.chain().toggleBold().toggleItalic().run();
 
-// ✅ After
+// After
 editor.doc.format.bold({ target });
 editor.doc.format.italic({ target });
 editor.doc.format.color({ target, value: '#ff0000' });
@@ -83,10 +83,10 @@ editor.doc.format.apply({ target, bold: true, italic: true });
 ### Comments
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.addComment({ content: 'Please review' });
 
-// ✅ After
+// After
 editor.doc.comments.create({ target, content: 'Please review' });
 editor.doc.comments.list();
 editor.doc.comments.delete({ id: commentId });
@@ -95,11 +95,11 @@ editor.doc.comments.delete({ id: commentId });
 ### Track changes
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.acceptTrackedChange(changeId);
 editor.commands.rejectTrackedChange(changeId);
 
-// ✅ After
+// After
 editor.doc.trackChanges.list();
 editor.doc.trackChanges.decide({ id: changeId, decision: 'accept' });
 editor.doc.trackChanges.decide({ id: changeId, decision: 'reject' });
@@ -108,12 +108,12 @@ editor.doc.trackChanges.decide({ id: changeId, decision: 'reject' });
 ### Tables
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.insertTable({ rows: 3, cols: 3 });
 editor.commands.addColumnAfter();
 editor.commands.deleteRow();
 
-// ✅ After
+// After
 editor.doc.create.table({ rows: 3, columns: 3 });
 editor.doc.tables.insertColumn({ tableId, index: 2 });
 editor.doc.tables.deleteRow({ tableId, index: 1 });
@@ -122,11 +122,11 @@ editor.doc.tables.deleteRow({ tableId, index: 1 });
 ### Lists
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.toggleBulletList();
 editor.commands.toggleOrderedList();
 
-// ✅ After
+// After
 editor.doc.lists.insert({ target, type: 'bullet' });
 editor.doc.lists.insert({ target, type: 'ordered' });
 editor.doc.lists.indent({ target });
@@ -136,11 +136,11 @@ editor.doc.lists.outdent({ target });
 ### History
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.undo();
 editor.commands.redo();
 
-// ✅ After
+// After
 editor.doc.history.undo();
 editor.doc.history.redo();
 ```
@@ -148,10 +148,10 @@ editor.doc.history.redo();
 ### Images
 
 ```javascript
-// ❌ Before
+// Before
 editor.commands.setImage({ src: 'photo.png' });
 
-// ✅ After
+// After
 editor.doc.create.image({ src: 'photo.png' });
 editor.doc.images.setSize({ imageId, width: 200, height: 150 });
 editor.doc.images.setAltText({ imageId, altText: 'Team photo' });
@@ -163,11 +163,11 @@ The `onEditorCreate` callback now provides a proxied editor that warns when depr
 
 ```javascript
 superdoc.on('editorCreate', ({ editor }) => {
-  // ✅ No warnings — this is the recommended path
+  // No warnings — this is the recommended path
   const content = editor.doc.get();
   editor.doc.format.bold({ target });
 
-  // ⚠️ Console warning — deprecated, will be removed
+  // Console warning — deprecated, will be removed
   const state = editor.state;
   editor.commands.toggleBold();
 });

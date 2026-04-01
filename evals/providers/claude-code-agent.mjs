@@ -4,11 +4,22 @@
  * Uses @anthropic-ai/claude-agent-sdk query() — the SDK handles the full
  * agent loop with built-in tools (Bash, Read, Write, Edit, Glob, Grep).
  *
+ * For SuperDoc conditions, either:
+ *   - superdocMcp: true   → attaches the SuperDoc MCP server directly
+ *   - useClaudeSettings: true → inherits your local Claude Code config
+ *     (MCP servers, skills, CLAUDE.md) via settingSources
+ *
  * Config (set per provider instance in YAML):
- *   condition:        'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
- *   allowedTools:     Array of built-in tool names the agent can use
- *   disallowedTools:  Array of tool names to block
- *   superdocOnPath:   Whether SuperDoc CLI is available on PATH
+ *   condition:          'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
+ *   allowedTools:       Array of built-in tool names the agent can use
+ *   disallowedTools:    Array of tool names to block
+ *   superdocOnPath:     Whether SuperDoc CLI is available on PATH
+ *   superdocMcp:        Whether to attach the SuperDoc MCP server directly
+ *   useClaudeSettings:  Whether to load your local Claude Code settings
+ *                       (MCP servers, skills, CLAUDE.md from user + project)
+ *   model:              Model to use (default: 'sonnet')
+ *   maxTurns:           Max agent turns (default: 20)
+ *   systemPrompt:       Optional system prompt override
  *
  * Vars (set per test):
  *   fixture:   DOCX filename in fixtures/
@@ -16,7 +27,9 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
   cacheKey,
@@ -27,6 +40,23 @@ import {
   writeCache,
 } from './utils.mjs';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+const REPO_ROOT = resolve(__dirname, '../..');
+
+/**
+ * Find a .docx file the agent may have written in a directory.
+ * Returns the path to the newest .docx file, or null if none found.
+ */
+function findDocxInDir(dir) {
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir)
+    .filter(f => f.endsWith('.docx'))
+    .map(f => ({ path: resolve(dir, f), mtime: statSync(resolve(dir, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  return files[0]?.path || null;
+}
+
 /** Detect which DOCX workflow the agent used based on tool names and bash args. */
 function detectPathUsed(toolCalls) {
   const names = toolCalls.map(tc => tc.tool || '');
@@ -34,7 +64,7 @@ function detectPathUsed(toolCalls) {
     .filter(tc => tc.tool === 'Bash')
     .map(tc => JSON.stringify(tc.args || {}));
 
-  if (names.some(n => n.startsWith('superdoc_'))) return 'superdoc-skill';
+  if (names.some(n => n.startsWith('superdoc_') || n.startsWith('mcp__superdoc'))) return 'superdoc-skill';
   if (bashArgs.some(a => a.includes('superdoc '))) return 'superdoc-cli';
   if (names.some(n => n.includes('Skill'))) return 'vendor-skill';
   if (bashArgs.some(a =>
@@ -63,13 +93,17 @@ export default class ClaudeCodeBenchmarkProvider {
       return { error: 'No fixture specified in test vars' };
     }
 
-    const key = cacheKey(`cc-${this.config.condition}`, fixture, task, 'sonnet');
+    const model = this.config.model || 'sonnet';
+    const key = cacheKey(`cc-${this.config.condition}`, fixture, task, model);
     const cached = readCache(key);
     if (cached) return cached;
 
     const { docPath, stateDir } = createTempCopy(fixture);
     mkdirSync(stateDir, { recursive: true });
-    const beforeText = extractDocxText(docPath);
+    // Copy fixture into stateDir so it's within the agent's writable sandbox
+    const localDocPath = resolve(stateDir, fixture);
+    copyFileSync(docPath, localDocPath);
+    const beforeText = extractDocxText(localDocPath);
     const startTime = performance.now();
 
     try {
@@ -80,22 +114,50 @@ export default class ClaudeCodeBenchmarkProvider {
           .join(':');
       }
 
+      // Build query options
+      const queryOptions = {
+        model,
+        allowedTools: this.config.allowedTools || ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+        disallowedTools: this.config.disallowedTools,
+        maxTurns: this.config.maxTurns || 20,
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        cwd: stateDir,
+        env,
+      };
+
+      // Option A: Use your local Claude Code settings (MCP servers, skills, CLAUDE.md)
+      // This inherits whatever you have configured in ~/.claude/ and .claude/
+      if (this.config.useClaudeSettings) {
+        queryOptions.settingSources = ['user', 'project'];
+        queryOptions.cwd = REPO_ROOT; // Use repo root so project settings are found
+      }
+
+      // Option B: Attach SuperDoc MCP server directly (standalone, no local config needed)
+      if (this.config.superdocMcp) {
+        queryOptions.mcpServers = {
+          superdoc: { command: 'node', args: [MCP_SERVER_PATH] },
+        };
+        queryOptions.allowedTools = [
+          ...(queryOptions.allowedTools || []),
+          'mcp__superdoc__*',
+        ];
+      }
+
+      // Optional system prompt
+      if (this.config.systemPrompt) {
+        queryOptions.systemPrompt = this.config.systemPrompt;
+      }
+
       let resultMessage = null;
       const toolCalls = [];
       let agentResponseText = '';
 
+      const fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+
       for await (const message of query({
-        prompt: `The DOCX file is at: ${docPath}\n\n${task}`,
-        options: {
-          model: 'sonnet',
-          allowedTools: this.config.allowedTools,
-          disallowedTools: this.config.disallowedTools,
-          maxTurns: 20,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          cwd: stateDir,
-          env,
-        },
+        prompt: fullPrompt,
+        options: queryOptions,
       })) {
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
@@ -108,7 +170,11 @@ export default class ClaudeCodeBenchmarkProvider {
         }
       }
 
-      const afterText = extractDocxText(docPath);
+      let afterText = extractDocxText(localDocPath);
+      if (afterText === beforeText) {
+        const altPath = findDocxInDir(stateDir);
+        if (altPath && altPath !== localDocPath) afterText = extractDocxText(altPath);
+      }
       const duration = performance.now() - startTime;
 
       const result = {

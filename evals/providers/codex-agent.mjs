@@ -2,11 +2,15 @@
  * Custom Promptfoo provider: OpenAI Codex SDK benchmark.
  *
  * Uses @openai/codex-sdk to run Codex against DOCX tasks.
- * API: new Codex() -> codex.startThread(opts) -> thread.run(prompt)
+ * API: new Codex(opts) -> codex.startThread(opts) -> thread.run(prompt)
+ *
+ * For SuperDoc conditions, the SuperDoc MCP server is registered via
+ * Codex's config system (mcp_servers in config.toml format).
  *
  * Config (set per provider instance in YAML):
  *   condition:      'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
  *   superdocOnPath: Whether SuperDoc CLI is available on PATH
+ *   superdocMcp:    Whether to attach the SuperDoc MCP server
  *
  * Vars (set per test):
  *   fixture:   DOCX filename in fixtures/
@@ -14,7 +18,9 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Codex } from '@openai/codex-sdk';
 import {
   cacheKey,
@@ -24,6 +30,19 @@ import {
   readCache,
   writeCache,
 } from './utils.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+
+/** Find the newest .docx file in a directory (agent may write output here). */
+function findDocxInDir(dir) {
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir)
+    .filter(f => f.endsWith('.docx'))
+    .map(f => ({ path: resolve(dir, f), mtime: statSync(resolve(dir, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  return files[0]?.path || null;
+}
 
 /** Detect which DOCX workflow the agent used based on tool calls. */
 function detectPathUsed(toolCalls) {
@@ -64,23 +83,42 @@ export default class CodexBenchmarkProvider {
 
     const { docPath, stateDir } = createTempCopy(fixture);
     mkdirSync(stateDir, { recursive: true });
-    const beforeText = extractDocxText(docPath);
+    // Copy fixture into stateDir so it's within Codex's writable sandbox
+    const localDocPath = resolve(stateDir, fixture);
+    copyFileSync(docPath, localDocPath);
+    const beforeText = extractDocxText(localDocPath);
     const startTime = performance.now();
 
     try {
-      // Codex SDK: new Codex() -> startThread(opts) -> thread.run(prompt)
-      const codex = new Codex();
+      // Build Codex options
+      const codexOpts = {};
+
+      // Attach SuperDoc MCP server for superdoc conditions
+      if (this.config.superdocMcp) {
+        codexOpts.config = {
+          mcp_servers: {
+            superdoc: {
+              command: 'node',
+              args: [MCP_SERVER_PATH],
+            },
+          },
+        };
+      }
+
+      const codex = new Codex(codexOpts);
       const thread = codex.startThread({
         workingDirectory: stateDir,
         skipGitRepoCheck: true,
-        approvalPolicy: 'never', // fully autonomous, no interactive prompts
+        approvalPolicy: 'never',
       });
 
-      const turn = await thread.run(`The DOCX file is at: ${docPath}\n\n${task}`);
+      const fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+      const turn = await thread.run(fullPrompt);
       const duration = performance.now() - startTime;
 
-      // Extract tool calls from turn items
-      // Items are: command_execution, mcp_tool_call, file_change, etc.
+      // Extract tool calls from turn items:
+      //   command_execution = shell commands (Bash)
+      //   mcp_tool_call     = MCP tool invocations (SuperDoc tools)
       const toolCalls = (turn.items || [])
         .filter(item => item.type === 'command_execution' || item.type === 'mcp_tool_call')
         .map(item => {
@@ -90,7 +128,11 @@ export default class CodexBenchmarkProvider {
           return { tool: item.tool, args: item.arguments };
         });
 
-      const afterText = extractDocxText(docPath);
+      let afterText = extractDocxText(localDocPath);
+      if (afterText === beforeText) {
+        const altPath = findDocxInDir(stateDir);
+        if (altPath && altPath !== localDocPath) afterText = extractDocxText(altPath);
+      }
 
       const result = {
         output: JSON.stringify({
@@ -100,7 +142,7 @@ export default class CodexBenchmarkProvider {
           condition: this.config.condition,
           toolCalls,
           stepCount: toolCalls.length,
-          cost: 0, // Codex SDK doesn't expose cost
+          cost: 0,
           duration,
           usage: turn.usage || {},
           pathUsed: detectPathUsed(toolCalls),

@@ -1,6 +1,14 @@
 # Level 3: DOCX Agent Benchmark
 # 10 conditions (5 Claude Code + 5 Codex) x 18 tasks = 180 runs
 #
+# Conditions:
+#   baseline       — no SuperDoc, raw tools only
+#   vendor         — no SuperDoc, vendor DOCX skill (if any)
+#   superdoc-skill — SuperDoc MCP server attached (superdoc_* tools available)
+#   superdoc-cli   — SuperDoc CLI on PATH only (agent discovers it via Bash)
+#   choice         — SuperDoc MCP + CLI + vendor skill, agent picks approach
+#   local          — uses your local Claude Code settings (MCP servers, skills, CLAUDE.md)
+#
 # Run all:     pnpm run eval:benchmark
 # Claude only: pnpm run eval:benchmark:claude
 # Codex only:  pnpm run eval:benchmark:codex
@@ -19,44 +27,49 @@ providers:
     config:
       condition: baseline
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
-      disallowedTools: ['Skill']
+      superdocMcp: false
       superdocOnPath: false
-      vendorSkill: false
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-vendor
     config:
       condition: vendor
-      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill']
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      superdocMcp: false
       superdocOnPath: false
-      vendorSkill: true
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-superdoc-skill
     config:
       condition: superdoc-skill
-      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill']
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      superdocMcp: true
       superdocOnPath: true
-      superdocSkill: true
-      vendorSkill: false
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-superdoc-cli
     config:
       condition: superdoc-cli
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
-      disallowedTools: ['Skill']
+      superdocMcp: false
       superdocOnPath: true
-      vendorSkill: false
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-choice
     config:
       condition: choice
-      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill']
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      superdocMcp: true
       superdocOnPath: true
-      superdocSkill: true
-      vendorSkill: true
+
+  # Uses your local Claude Code config (MCP servers, skills, CLAUDE.md)
+  # Run with: --filter-providers 'CC-local'
+  - id: file://providers/claude-code-agent.mjs
+    label: CC-local
+    config:
+      condition: local
+      useClaudeSettings: true
+      superdocOnPath: true
 
   # ── Codex conditions ──
 
@@ -64,35 +77,36 @@ providers:
     label: Codex-baseline
     config:
       condition: baseline
+      superdocMcp: false
       superdocOnPath: false
 
   - id: file://providers/codex-agent.mjs
     label: Codex-vendor
     config:
       condition: vendor
+      superdocMcp: false
       superdocOnPath: false
-      vendorSkill: true
 
   - id: file://providers/codex-agent.mjs
     label: Codex-superdoc-skill
     config:
       condition: superdoc-skill
+      superdocMcp: true
       superdocOnPath: true
-      superdocSkill: true
 
   - id: file://providers/codex-agent.mjs
     label: Codex-superdoc-cli
     config:
       condition: superdoc-cli
+      superdocMcp: false
       superdocOnPath: true
 
   - id: file://providers/codex-agent.mjs
     label: Codex-choice
     config:
       condition: choice
+      superdocMcp: true
       superdocOnPath: true
-      superdocSkill: true
-      vendorSkill: true
 
 evaluateOptions:
   maxConcurrency: 2

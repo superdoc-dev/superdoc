@@ -113,5 +113,17 @@ evaluateOptions:
   maxConcurrency: 2
   timeoutMs: 300000  # 5 minutes per task
 
+# Derived metrics computed from per-task named scores after evaluation.
+# These appear in the Promptfoo UI alongside regular metrics.
+derivedMetrics:
+  - name: avg_latency
+    value: 'latency / __count'
+  - name: avg_steps
+    value: 'steps / __count'
+  - name: avg_tokens
+    value: 'tokens / __count'
+  - name: superdoc_usage_pct
+    value: 'path / __count * 100'
+
 tests:
   - file://tests/agent-benchmark.yaml

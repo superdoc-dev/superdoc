@@ -28,12 +28,15 @@
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
@@ -61,12 +64,15 @@
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
@@ -94,12 +100,15 @@
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
@@ -131,12 +140,15 @@
         return { pass: true, score: 1, reason: 'TechVentures intact' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
@@ -164,12 +176,15 @@
         return { pass: true, score: 1, reason: 'Document modified' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
@@ -197,12 +212,15 @@
         return { pass: true, score: 1, reason: 'Document modified' };
     - type: javascript
       metric: steps
+      weight: 0
       value: file://lib/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
+      weight: 0
       value: file://lib/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
+      weight: 0
       value: file://lib/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path

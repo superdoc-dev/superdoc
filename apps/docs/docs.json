@@ -141,7 +141,16 @@
                 ]
               },
               "modules/comments",
-              "modules/toolbar",
+              {
+                "group": "Toolbar",
+                "tag": "NEW",
+                "pages": [
+                  "modules/toolbar/overview",
+                  "modules/toolbar/built-in",
+                  "modules/toolbar/headless",
+                  "modules/toolbar/examples"
+                ]
+              },
               "modules/links",
               "modules/context-menu",
               "modules/pdf",
@@ -331,6 +340,10 @@
     "dismissible": true
   },
   "redirects": [
+    {
+      "source": "/modules/toolbar",
+      "destination": "/modules/toolbar/overview"
+    },
     {
       "source": "/getting-started/ai-agents",
       "destination": "/document-engine/ai-agents/llm-tools"

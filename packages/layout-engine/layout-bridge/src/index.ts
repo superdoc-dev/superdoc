@@ -1352,13 +1352,14 @@ const mapPmToX = (
   let paraIndentRight = 0;
   let effectiveLeft = 0;
   let isListParagraph = false;
+  let wl: ReturnType<typeof getWordLayoutConfig> | undefined;
   if (block.kind === 'paragraph') {
     const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
     const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
     paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
     paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
     effectiveLeft = paraIndentLeft;
-    const wl = getWordLayoutConfig(block);
+    wl = getWordLayoutConfig(block);
     isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
     if (isListParagraph) {
       const explicitTextStart =

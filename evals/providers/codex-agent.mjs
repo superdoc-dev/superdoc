@@ -100,8 +100,10 @@ export default class CodexBenchmarkProvider {
     const startTime = performance.now();
 
     try {
-      // Build Codex options
-      const codexOpts = {};
+      // Build Codex options — pass API key so it doesn't rely on `codex login`
+      const codexOpts = {
+        apiKey: process.env.OPENAI_API_KEY,
+      };
 
       // Attach SuperDoc MCP server for superdoc conditions
       if (this.config.superdocMcp) {

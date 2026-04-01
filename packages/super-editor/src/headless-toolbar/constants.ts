@@ -60,11 +60,38 @@ export const DEFAULT_FONT_SIZE_OPTIONS = [
 ] as const;
 
 export const DEFAULT_FONT_FAMILY_OPTIONS = [
-  { label: 'Aptos', value: 'Aptos' },
+  { label: 'Aptos', value: 'Aptos, Arial, sans-serif' },
   { label: 'Georgia', value: 'Georgia, serif' },
   { label: 'Arial', value: 'Arial, sans-serif' },
   { label: 'Courier New', value: 'Courier New, monospace' },
   { label: 'Times New Roman', value: 'Times New Roman, serif' },
+] as const;
+
+export const DEFAULT_TEXT_COLOR_OPTIONS = [
+  { label: 'Black', value: '#000000' },
+  { label: 'Dark Gray', value: '#434343' },
+  { label: 'Gray', value: '#666666' },
+  { label: 'Light Gray', value: '#999999' },
+  { label: 'Red', value: '#ff0000' },
+  { label: 'Orange', value: '#ff9900' },
+  { label: 'Yellow', value: '#ffff00' },
+  { label: 'Green', value: '#00ff00' },
+  { label: 'Cyan', value: '#00ffff' },
+  { label: 'Blue', value: '#0000ff' },
+  { label: 'Purple', value: '#9900ff' },
+  { label: 'Magenta', value: '#ff00ff' },
+  { label: 'None', value: 'none' },
+] as const;
+
+export const DEFAULT_HIGHLIGHT_COLOR_OPTIONS = [
+  { label: 'Yellow', value: '#ffff00' },
+  { label: 'Green', value: '#00ff00' },
+  { label: 'Cyan', value: '#00ffff' },
+  { label: 'Pink', value: '#ff00ff' },
+  { label: 'Blue', value: '#0000ff' },
+  { label: 'Red', value: '#ff0000' },
+  { label: 'Orange', value: '#ff9900' },
+  { label: 'None', value: 'none' },
 ] as const;
 
 export const headlessToolbarConstants = {
@@ -74,4 +101,6 @@ export const headlessToolbarConstants = {
   DEFAULT_DOCUMENT_MODE_OPTIONS,
   DEFAULT_FONT_SIZE_OPTIONS,
   DEFAULT_FONT_FAMILY_OPTIONS,
+  DEFAULT_TEXT_COLOR_OPTIONS,
+  DEFAULT_HIGHLIGHT_COLOR_OPTIONS,
 } as const;

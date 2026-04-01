@@ -106,8 +106,12 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
       };
     },
 
-    execute(id, payload) {
-      return executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
+    execute(id: PublicToolbarItemId, payload?: unknown) {
+      const result = executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
+      if (result && !destroyed) {
+        refreshControllerState();
+      }
+      return result;
     },
 
     destroy() {
@@ -117,5 +121,5 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
       unsubscribeEvents = null;
       listeners.clear();
     },
-  };
+  } as HeadlessToolbarController;
 };

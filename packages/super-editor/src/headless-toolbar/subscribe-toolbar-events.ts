@@ -8,13 +8,13 @@ const subscribeToSuperdocEvents = (
   if (!superdoc?.on || !superdoc?.off) return null;
 
   superdoc.on('editorCreate', onChange);
-  // superdoc.on('editor-update', onChange);
   superdoc.on('document-mode-change', onChange);
+  superdoc.on('zoomChange', onChange);
 
   return () => {
     superdoc.off?.('editorCreate', onChange);
-    // superdoc.off?.('editor-update', onChange);
     superdoc.off?.('document-mode-change', onChange);
+    superdoc.off?.('zoomChange', onChange);
   };
 };
 

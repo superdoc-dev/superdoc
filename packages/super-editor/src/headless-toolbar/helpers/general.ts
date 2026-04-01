@@ -4,7 +4,7 @@ import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 export const isCommandDisabled = (context: ToolbarContext | null) => {
   if (!context || !context.isEditable) return true;
   const editor = context.presentationEditor?.editor ?? context.editor;
-  const documentMode = editor?.options?.documentMode ?? editor?.options?.documentMode;
+  const documentMode = editor?.options?.documentMode;
   return documentMode === 'viewing';
 };
 

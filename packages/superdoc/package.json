@@ -47,6 +47,16 @@
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
+    "./headless-toolbar/react": {
+      "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
+      "source": "./src/headless-toolbar-react.js",
+      "import": "./dist/headless-toolbar-react.es.js"
+    },
+    "./headless-toolbar/vue": {
+      "types": "./dist/superdoc/src/headless-toolbar-vue.d.ts",
+      "source": "./src/headless-toolbar-vue.js",
+      "import": "./dist/headless-toolbar-vue.es.js"
+    },
     "./file-zipper": {
       "import": "./dist/super-editor/file-zipper.es.js"
     },
@@ -57,6 +67,12 @@
     "*": {
       "headless-toolbar": [
         "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
+      "headless-toolbar/react": [
+        "./dist/superdoc/src/headless-toolbar-react.d.ts"
+      ],
+      "headless-toolbar/vue": [
+        "./dist/superdoc/src/headless-toolbar-vue.d.ts"
       ],
       "super-editor": [
         "./dist/superdoc/src/super-editor.d.ts"

@@ -46,7 +46,7 @@ snapshot.commands['font-size']?.value // '12pt' — the current value
 
 ### Execute
 
-Run a command by ID. The editor gets focus back automatically — no need for `onMouseDown={e => e.preventDefault()}` or manual focus management.
+Run a command by ID. Returns `true` if the command executed, `false` otherwise.
 
 ```ts
 toolbar.execute('bold');
@@ -136,7 +136,7 @@ unsub();
 
 #### `execute(id, payload?)`
 
-Runs the command identified by `id`. Returns `true` if the command executed, `false` otherwise. Automatically restores focus to the editor.
+Runs the command identified by `id`. Returns `true` if the command executed, `false` otherwise.
 
 <CodeGroup>
 

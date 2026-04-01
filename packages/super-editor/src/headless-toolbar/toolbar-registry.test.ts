@@ -141,7 +141,7 @@ describe('createToolbarRegistry', () => {
     });
   });
 
-  it('normalizes font-size value to a unitless string', () => {
+  it('preserves font-size value with unit', () => {
     getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontSize', attrs: { fontSize: '12pt' } }]);
 
     const registry = createToolbarRegistry();
@@ -153,7 +153,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
-      value: '12',
+      value: '12pt',
     });
   });
 
@@ -209,11 +209,11 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
-      value: '14',
+      value: '14pt',
     });
   });
 
-  it('normalizes font-family value to the first family name', () => {
+  it('preserves full font-family value including fallbacks', () => {
     getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Arial, sans-serif' } }]);
 
     const registry = createToolbarRegistry();
@@ -225,7 +225,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
-      value: 'Arial',
+      value: 'Arial, sans-serif',
     });
   });
 
@@ -281,7 +281,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
-      value: 'Arial',
+      value: 'Arial, sans-serif',
     });
   });
 

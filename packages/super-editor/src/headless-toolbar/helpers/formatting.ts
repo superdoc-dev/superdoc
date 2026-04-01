@@ -1,6 +1,7 @@
 import { parseSizeUnit } from '../../editors/v1/core/utilities/parseSizeUnit.js';
 import { isNegatedMark } from '../../editors/v1/components/toolbar/format-negation.js';
 import { getActiveFormatting } from '../../editors/v1/core/helpers/getActiveFormatting.js';
+import { getFileOpener, processAndInsertImageFile } from '../../editors/v1/extensions/image/imageHelpers/index.js';
 import { TextSelection, Selection } from 'prosemirror-state';
 import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, resolveStateEditor } from './context.js';
 import { createDirectCommandExecute, isCommandDisabled } from './general.js';
@@ -8,13 +9,13 @@ import type { ToolbarContext } from '../types.js';
 
 export const normalizeFontSizeValue = (value: unknown) => {
   if (typeof value === 'number') {
-    return String(value);
+    return `${value}pt`;
   }
 
   if (typeof value === 'string') {
-    const [numericValue] = parseSizeUnit(value);
+    const [numericValue, unit] = parseSizeUnit(value);
     if (!Number.isNaN(numericValue)) {
-      return String(numericValue);
+      return `${numericValue}${unit || 'pt'}`;
     }
   }
 
@@ -26,7 +27,7 @@ export const normalizeFontFamilyValue = (value: unknown) => {
     return value;
   }
 
-  return value.split(',')[0]?.trim() ?? value;
+  return value;
 };
 
 export const normalizeLinkHrefValue = (value: unknown) => {
@@ -34,7 +35,10 @@ export const normalizeLinkHrefValue = (value: unknown) => {
 };
 
 export const normalizeColorValue = (value: unknown) => {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  if (typeof value === 'string' && value.length > 0) {
+    return value.toLowerCase();
+  }
+  return null;
 };
 
 export const isFormattingActivatedFromLinkedStyle = (
@@ -441,10 +445,8 @@ export const createTextColorExecute =
     const inlineValue = isNone ? 'inherit' : payload;
 
     const result = createDirectCommandExecute('setColor')({ context, payload: inlineValue });
-    if (!result) return false;
-
     editor?.commands?.setFieldAnnotationsTextColor?.(isNone ? null : payload, true);
-    return true;
+    return result;
   };
 
 export const createHighlightColorExecute =
@@ -460,12 +462,10 @@ export const createHighlightColorExecute =
     const inlineValue = isNone ? 'transparent' : payload;
 
     const result = createDirectCommandExecute('setHighlight')({ context, payload: inlineValue });
-    if (!result) return false;
-
     const argValue = isNone ? null : payload;
     editor?.commands?.setFieldAnnotationsTextHighlight?.(argValue, true);
     editor?.commands?.setCellBackground?.(argValue);
-    return true;
+    return result;
   };
 
 const applyLinkPostExecute = (editor: NonNullable<ReturnType<typeof resolveStateEditor>>) => {
@@ -504,5 +504,30 @@ export const createLinkExecute =
     const result = createDirectCommandExecute('toggleLink')({ context, payload });
     if (!result || !editor?.view) return result;
     applyLinkPostExecute(editor);
+    return true;
+  };
+
+export const createImageExecute =
+  () =>
+  ({ context }: { context: ToolbarContext | null; payload?: unknown }) => {
+    const editor = resolveStateEditor(context);
+    if (!editor?.view) return false;
+
+    const open = getFileOpener();
+    open()
+      .then(async (result: any) => {
+        if (!result?.file) return;
+        await processAndInsertImageFile({
+          file: result.file,
+          editor,
+          view: editor.view,
+          editorOptions: editor.options,
+          getMaxContentSize: () => editor.getMaxContentSize(),
+        });
+      })
+      .catch((err: unknown) => {
+        console.error('[headless-toolbar] Image insertion failed:', err);
+      });
+
     return true;
   };

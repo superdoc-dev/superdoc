@@ -5,6 +5,7 @@
  */
 
 import type {
+  BorderSpec,
   BorderStyle,
   BoxSpacing,
   CellBorders,
@@ -39,6 +40,7 @@ import {
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
+  borderSizeToPx,
 } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
@@ -146,6 +148,16 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'table_cell' ||
   node.type === 'tableHeader' ||
   node.type === 'table_header';
+
+const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const border = value as Record<string, unknown>;
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  const normalized = size != null ? { ...border, size } : border;
+
+  return convertBorderSpec(normalized);
+};
 
 type NormalizedRowHeight =
   | {
@@ -493,9 +505,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side], {
-        unit: 'eighthPoints',
-      });
+      const spec = convertResolvedCellBorder((resolvedTcProps.borders as Record<string, unknown>)[side]);
       if (spec) resolvedBorders[side] = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {

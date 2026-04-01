@@ -37,7 +37,7 @@ type BorderConversionOptions = {
  *
  * Clamps results to reasonable bounds to prevent edge cases.
  */
-const borderSizeToPx = (size?: number): number | undefined => {
+export const borderSizeToPx = (size?: number): number | undefined => {
   if (!isFiniteNumber(size)) return undefined;
   if (size <= 0) return 0;
 

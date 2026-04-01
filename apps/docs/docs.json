@@ -63,74 +63,14 @@
                   "getting-started/frameworks/vanilla-js"
                 ]
               },
-              "getting-started/import-export",
-              "getting-started/fonts",
-              "getting-started/theming"
+              "getting-started/import-export"
             ]
           },
           {
-            "group": "Core",
-            "pages": [
-              {
-                "group": "SuperDoc",
-                "pages": [
-                  "core/superdoc/overview",
-                  "core/superdoc/configuration",
-                  "core/superdoc/methods",
-                  "core/superdoc/surfaces",
-                  "core/superdoc/events"
-                ]
-              },
-              {
-                "group": "SuperEditor",
-                "pages": [
-                  "core/supereditor/overview",
-                  "core/supereditor/configuration",
-                  "core/supereditor/methods",
-                  "core/supereditor/events"
-                ]
-              },
-              {
-                "group": "React",
-                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
-              }
-            ]
-          },
-          {
-            "group": "Document Engine",
-            "tag": "NEW",
-            "pages": [
-              "document-engine/overview",
-              {
-                "group": "Document API",
-                "pages": [
-                  "document-api/overview",
-                  "document-api/reference/index",
-                  "document-api/common-workflows",
-                  "document-api/available-operations"
-                ]
-              },
-              {
-                "group": "SDKs",
-                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
-              },
-              "document-engine/cli",
-              {
-                "group": "AI Agents",
-                "pages": [
-                  "document-engine/ai-agents/llm-tools",
-                  "document-engine/ai-agents/integrations",
-                  "document-engine/ai-agents/best-practices",
-                  "document-engine/ai-agents/debugging",
-                  "document-engine/ai-agents/eval-results"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "Modules",
+            "group": "Features",
             "pages": [
               "modules/overview",
+              "modules/comments",
               {
                 "group": "Collaboration",
                 "pages": [
@@ -140,12 +80,43 @@
                   "modules/collaboration/configuration"
                 ]
               },
-              "modules/comments",
               "modules/toolbar",
+              "getting-started/theming",
+              "getting-started/fonts",
               "modules/links",
               "modules/context-menu",
               "modules/pdf",
               "modules/whiteboard"
+            ]
+          },
+          {
+            "group": "Document API",
+            "tag": "NEW",
+            "pages": [
+              "document-api/overview",
+              "document-api/common-workflows",
+              "document-api/available-operations",
+              "document-api/reference/index"
+            ]
+          },
+          {
+            "group": "SDKs & Tools",
+            "pages": [
+              "document-engine/overview",
+              "document-engine/sdks",
+              "document-engine/sdk-diffing",
+              "document-engine/cli"
+            ]
+          },
+          {
+            "group": "AI Agents",
+            "pages": [
+              "document-engine/ai-agents/llm-tools",
+              "document-engine/ai-agents/mcp-server",
+              "document-engine/ai-agents/integrations",
+              "document-engine/ai-agents/best-practices",
+              "document-engine/ai-agents/debugging",
+              "document-engine/ai-agents/eval-results"
             ]
           },
           {
@@ -203,11 +174,39 @@
             ]
           },
           {
+            "group": "API Reference",
+            "pages": [
+              {
+                "group": "SuperDoc",
+                "pages": [
+                  "core/superdoc/overview",
+                  "core/superdoc/configuration",
+                  "core/superdoc/methods",
+                  "core/superdoc/surfaces",
+                  "core/superdoc/events"
+                ]
+              },
+              {
+                "group": "SuperEditor",
+                "pages": [
+                  "core/supereditor/overview",
+                  "core/supereditor/configuration",
+                  "core/supereditor/methods",
+                  "core/supereditor/events"
+                ]
+              },
+              {
+                "group": "React",
+                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
+              }
+            ]
+          },
+          {
             "group": "Resources",
             "pages": [
               "guides/general/accessibility",
-              "resources/telemetry",
               "guides/general/security",
+              "resources/telemetry",
               "resources/license"
             ]
           }

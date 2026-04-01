@@ -148,39 +148,47 @@ test('passes action decide', () => eq(checks.usesTrackChangesDecide([call('super
 test('fails action list', () => eq(checks.usesTrackChangesDecide([call('superdoc_track_changes', { action: 'list' })]).pass, false));
 test('fails not called', () => eq(checks.usesTrackChangesDecide([call('superdoc_search')]).pass, false));
 
-// --- benchmarkMetrics ---
+// --- benchmark individual metrics ---
 console.log('benchmarkMetrics');
-test('benchmarkMetrics extracts all metric fields', () => {
-  const { benchmarkMetrics } = require('./checks.cjs');
-  const output = JSON.stringify({
-    stepCount: 5,
-    cost: 0.032,
-    duration: 12500,
-    usage: { input_tokens: 8000, output_tokens: 2000 },
-    pathUsed: 'superdoc-skill',
-    condition: 'CC-superdoc-skill',
-  });
-  const result = benchmarkMetrics(output, {});
+test('benchmarkSteps returns step count as score', () => {
+  const { benchmarkSteps } = require('./checks.cjs');
+  const output = JSON.stringify({ stepCount: 5 });
+  const result = benchmarkSteps(output);
   assert.strictEqual(result.pass, true);
-  assert.strictEqual(result.score, 1);
-  assert.ok(result.reason.includes('5 steps'));
-  assert.ok(result.reason.includes('$0.0320'));
-  assert.ok(result.reason.includes('10000 tokens'));
-  assert.ok(result.reason.includes('path=superdoc-skill'));
-  const namedScores = result.componentResults.flatMap(cr =>
-    Object.keys(cr.namedScores || {})
-  );
-  assert.ok(namedScores.includes('step_count'));
-  assert.ok(namedScores.includes('cost_usd'));
-  assert.ok(namedScores.includes('total_tokens'));
+  assert.strictEqual(result.score, 5);
+  assert.ok(result.reason.includes('5'));
 });
 
-test('benchmarkMetrics handles missing fields gracefully', () => {
+test('benchmarkLatency returns seconds as score', () => {
+  const { benchmarkLatency } = require('./checks.cjs');
+  const output = JSON.stringify({ duration: 12500 });
+  const result = benchmarkLatency(output);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 13);
+});
+
+test('benchmarkTokens returns total tokens as score', () => {
+  const { benchmarkTokens } = require('./checks.cjs');
+  const output = JSON.stringify({ usage: { input_tokens: 8000, output_tokens: 2000 } });
+  const result = benchmarkTokens(output);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 10000);
+  assert.ok(result.reason.includes('8000 in'));
+});
+
+test('benchmarkPath returns 1 for superdoc, 0 for raw', () => {
+  const { benchmarkPath } = require('./checks.cjs');
+  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).score, 1);
+  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'raw' })).score, 0);
+  assert.ok(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).reason.includes('superdoc'));
+});
+
+test('benchmarkMetrics combined still works', () => {
   const { benchmarkMetrics } = require('./checks.cjs');
-  const output = JSON.stringify({});
+  const output = JSON.stringify({ stepCount: 3, duration: 5000, usage: { input_tokens: 1000, output_tokens: 500 }, pathUsed: 'raw' });
   const result = benchmarkMetrics(output, {});
   assert.strictEqual(result.pass, true);
-  assert.ok(result.reason.includes('0 steps'));
+  assert.ok(result.reason.includes('3 steps'));
 });
 
 console.log();

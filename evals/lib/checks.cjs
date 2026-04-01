@@ -529,32 +529,54 @@ module.exports.usesRewriteOp = (output) => {
 };
 
 // --- Benchmark metrics (Level 3) ---
+// Each metric is a separate assertion so Promptfoo shows them as individual columns.
 
-/** Extract efficiency and path metrics from benchmark provider output. */
+/** Steps taken by the agent. Score = step count (lower is better). */
+module.exports.benchmarkSteps = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const steps = d.stepCount || 0;
+  return { pass: true, score: steps, reason: `${steps} steps` };
+};
+
+/** Latency in seconds. Score = seconds (lower is better). */
+module.exports.benchmarkLatency = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const secs = Math.round((d.duration || 0) / 1000);
+  return { pass: true, score: secs, reason: `${secs}s` };
+};
+
+/** Total tokens (input + output). Score = token count. */
+module.exports.benchmarkTokens = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const inTok = d.usage?.input_tokens || 0;
+  const outTok = d.usage?.output_tokens || 0;
+  const total = inTok + outTok;
+  return { pass: true, score: total, reason: `${inTok} in + ${outTok} out = ${total}` };
+};
+
+/** Which DOCX path the agent used. Score is 1 for superdoc, 0 for raw. */
+module.exports.benchmarkPath = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const path = d.pathUsed || 'unknown';
+  const score = path.includes('superdoc') ? 1 : 0;
+  return { pass: true, score, reason: path };
+};
+
+/** Combined benchmark metrics (kept for backward compat). */
 module.exports.benchmarkMetrics = (output, context) => {
   const d = parseExecOutput(output);
   if (!d) return { pass: false, score: 0, reason: 'Could not parse output' };
-
-  const metrics = {
-    step_count: d.stepCount || 0,
-    cost_usd: d.cost || 0,
-    duration_ms: d.duration || 0,
-    input_tokens: d.usage?.input_tokens || 0,
-    output_tokens: d.usage?.output_tokens || 0,
-    total_tokens: (d.usage?.input_tokens || 0) + (d.usage?.output_tokens || 0),
-    path_used: d.pathUsed || 'unknown',
-    condition: d.condition || 'unknown',
-  };
-
+  const steps = d.stepCount || 0;
+  const secs = Math.round((d.duration || 0) / 1000);
+  const tokens = (d.usage?.input_tokens || 0) + (d.usage?.output_tokens || 0);
+  const path = d.pathUsed || 'unknown';
   return {
     pass: true,
     score: 1,
-    reason: `${metrics.step_count} steps, $${metrics.cost_usd.toFixed(4)}, ${Math.round(metrics.duration_ms / 1000)}s, ${metrics.total_tokens} tokens, path=${metrics.path_used}`,
-    componentResults: Object.entries(metrics).map(([k, v]) => ({
-      pass: true,
-      score: typeof v === 'number' ? v : 0,
-      reason: `${k}=${v}`,
-      namedScores: { [k]: typeof v === 'number' ? v : 0 },
-    })),
+    reason: `${steps} steps, ${secs}s, ${tokens} tok, path=${path}`,
   };
 };

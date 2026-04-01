@@ -1,9 +1,9 @@
 # Level 3: DOCX Agent Benchmark — compact suite (v1)
 #
 # 6 tasks (3 reading + 3 editing) covering the key comparison dimensions.
-# Full 18-task suite in agent-benchmark-full.yaml.
-#
 # Each task runs against all provider conditions (baseline, superdoc-skill, etc.)
+#
+# Metrics per task: correctness, collateral, steps, latency, tokens, path
 
 # ── READING (3) — validate agentResponseText, doc must not change ──
 
@@ -27,8 +27,17 @@
         if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
 
 - description: 'Read: extract entity names'
   vars:
@@ -51,8 +60,17 @@
         if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
 
 - description: 'Read: extract financial figures'
   vars:
@@ -75,8 +93,17 @@
         if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
         return { pass: true, score: 1, reason: 'Document unchanged' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
 
 # ── EDITING (3) — validate documentText after edits, doc must change ──
 
@@ -103,8 +130,17 @@
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
         return { pass: true, score: 1, reason: 'TechVentures intact' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
 
 - description: 'Edit: insert new section'
   vars:
@@ -127,8 +163,17 @@
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
         return { pass: true, score: 1, reason: 'Document modified' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
 
 - description: 'Edit: fill placeholders'
   vars:
@@ -151,5 +196,14 @@
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
         return { pass: true, score: 1, reason: 'Document modified' };
     - type: javascript
-      metric: efficiency
-      value: file://lib/checks.cjs:benchmarkMetrics
+      metric: steps
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath

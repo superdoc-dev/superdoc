@@ -60,7 +60,7 @@ export const DEFAULT_FONT_SIZE_OPTIONS = [
 ] as const;
 
 export const DEFAULT_FONT_FAMILY_OPTIONS = [
-  { label: 'Aptos', value: 'Aptos' },
+  { label: 'Aptos', value: 'Aptos, Arial, sans-serif' },
   { label: 'Georgia', value: 'Georgia, serif' },
   { label: 'Arial', value: 'Arial, sans-serif' },
   { label: 'Courier New', value: 'Courier New, monospace' },

@@ -183,10 +183,10 @@ export default function App() {
             size="small"
             variant="standard"
             disableUnderline
-            value={(cmd('font-family')?.value as string) || FONT_FAMILIES[0].value}
+            value={(cmd('font-family')?.value as string) || ''}
             onChange={(e: SelectChangeEvent) => exec('font-family', e.target.value)}
             sx={{ minWidth: 100, fontSize: 13, ml: 0.5 }}
-            renderValue={(v) => FONT_FAMILIES.find((f) => f.value === v)?.label ?? v}
+            renderValue={(v) => FONT_FAMILIES.find((f) => f.value === v)?.label ?? v.split(',')[0]?.trim() ?? v}
           >
             {FONT_FAMILIES.map((f) => (
               <MenuItem key={f.value} value={f.value} sx={{ fontFamily: f.value, fontSize: 13 }}>

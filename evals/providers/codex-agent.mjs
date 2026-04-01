@@ -233,18 +233,25 @@ export default class CodexBenchmarkProvider {
         if (altPath && altPath !== localDocPath) afterText = extractDocxText(altPath);
       }
 
+      const pathUsed = detectPathUsed(toolCalls);
+      const stepCount = toolCalls.length;
+      const secs = Math.round(duration / 1000);
+      const inK = Math.round((usage?.input_tokens || 0) / 1000);
+      const outK = Math.round((usage?.output_tokens || 0) / 1000);
+
       const result = {
         output: JSON.stringify({
+          _summary: `${pathUsed} | ${stepCount} steps | ${secs}s | ${inK}k in + ${outK}k out`,
           agentResponseText: finalResponse,
           documentText: afterText,
           documentChanged: beforeText !== afterText,
           condition: this.config.condition,
           toolCalls,
-          stepCount: toolCalls.length,
+          stepCount,
           cost: 0,
           duration,
           usage: usage || {},
-          pathUsed: detectPathUsed(toolCalls),
+          pathUsed,
           outputFile: keepFile ? docPath : null,
         }),
       };

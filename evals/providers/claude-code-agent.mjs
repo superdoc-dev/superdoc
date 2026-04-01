@@ -234,18 +234,27 @@ export default class ClaudeCodeBenchmarkProvider {
       }
       const duration = performance.now() - startTime;
 
+      const pathUsed = detectPathUsed(toolCalls);
+      const stepCount = resultMessage?.num_turns || 0;
+      const cost = resultMessage?.total_cost_usd || 0;
+      const usage = resultMessage?.usage || {};
+      const secs = Math.round(duration / 1000);
+      const inK = Math.round((usage.input_tokens || 0) / 1000);
+      const outK = Math.round((usage.output_tokens || 0) / 1000);
+
       const result = {
         output: JSON.stringify({
+          _summary: `${pathUsed} | ${stepCount} steps | ${secs}s | ${inK}k in + ${outK}k out | $${cost.toFixed(4)}`,
           agentResponseText: agentResponseText.trim(),
           documentText: afterText,
           documentChanged: beforeText !== afterText,
           condition: this.config.condition,
           toolCalls,
-          stepCount: resultMessage?.num_turns || 0,
-          cost: resultMessage?.total_cost_usd || 0,
-          usage: resultMessage?.usage || {},
+          stepCount,
+          cost,
+          usage,
           duration,
-          pathUsed: detectPathUsed(toolCalls),
+          pathUsed,
           outputFile: keepFile ? docPath : null,
         }),
       };

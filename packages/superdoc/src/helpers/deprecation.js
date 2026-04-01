@@ -43,6 +43,9 @@ const DEPRECATED_PROPERTIES = {
 /** @type {symbol} */
 const RAW_EDITOR = Symbol.for('superdoc:rawEditor');
 
+/** @type {WeakMap<object, Map<string|symbol, Function>>} */
+const _boundFns = new WeakMap();
+
 /**
  * Wrap an Editor instance in a Proxy that emits one-time deprecation
  * warnings when consumers access ProseMirror internals or editor commands.
@@ -72,10 +75,19 @@ export function createDeprecatedEditorProxy(editor) {
       }
 
       // Bind to target (not receiver/proxy) so private-field brand checks
-      // on the Editor class work correctly.
+      // on the Editor class work correctly. Cache the bound function so
+      // repeated access returns the same reference (preserves identity).
       const value = Reflect.get(target, prop, target);
       if (typeof value === 'function') {
-        return value.bind(target);
+        let cache = _boundFns.get(target);
+        if (!cache) {
+          cache = new Map();
+          _boundFns.set(target, cache);
+        }
+        if (!cache.has(prop)) {
+          cache.set(prop, value.bind(target));
+        }
+        return cache.get(prop);
       }
       return value;
     },

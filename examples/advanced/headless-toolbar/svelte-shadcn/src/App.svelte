@@ -77,7 +77,6 @@
     const superdoc = new SuperDoc({
       selector: editorEl,
       document: '/test_file.docx',
-      toolbar: null,
     });
 
     const tb = createHeadlessToolbar({ superdoc, commands: COMMANDS });

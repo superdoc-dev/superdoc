@@ -83,7 +83,6 @@ export default function App() {
     const superdoc = new SuperDoc({
       selector: containerRef.current,
       document: '/test_file.docx',
-      toolbar: null,
     });
     const toolbar = createHeadlessToolbar({
       superdoc: superdoc as any,

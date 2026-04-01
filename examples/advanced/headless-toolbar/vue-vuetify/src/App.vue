@@ -25,7 +25,6 @@ onMounted(() => {
   superdoc = new SuperDoc({
     selector: editorRef.value,
     document: '/test_file.docx',
-    toolbar: null,
   });
 
   toolbar = createHeadlessToolbar({

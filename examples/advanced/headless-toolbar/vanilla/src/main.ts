@@ -162,7 +162,6 @@ function syncUI(container: HTMLElement, snapshot: ToolbarSnapshot) {
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: '/test_file.docx',
-  toolbar: null,
 });
 
 const toolbarEl = $('#toolbar') as HTMLElement;

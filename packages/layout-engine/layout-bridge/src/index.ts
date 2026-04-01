@@ -13,7 +13,12 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  computeLinePmRange as computeLinePmRangeUnified,
+  effectiveTableCellSpacing,
+  getFirstLineIndentOffset,
+} from '@superdoc/contracts';
 import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
@@ -1384,12 +1389,8 @@ const mapPmToX = (
   // Skip for list-marker first lines — the renderer doesn't adjust those.
   if (isFirstLine && block.kind === 'paragraph' && !isListParagraph) {
     const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-    const firstLineOffset = suppressFLI
-      ? 0
-      : (block.attrs?.indent?.firstLine ?? 0) - (block.attrs?.indent?.hanging ?? 0);
-    if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
-      availableWidth = Math.max(0, availableWidth - firstLineOffset);
-    }
+    const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
+    availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
   }
 
   // Use shared text measurement utility for pixel-perfect accuracy

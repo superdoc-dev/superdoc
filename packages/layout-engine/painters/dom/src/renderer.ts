@@ -56,6 +56,7 @@ import type {
   ResolvedDrawingItem,
 } from '@superdoc/contracts';
 import {
+  adjustAvailableWidthForTextIndent,
   calculateJustifySpacing,
   computeLinePmRange,
   getCellSpacingPx,
@@ -3206,17 +3207,14 @@ export class DomPainter {
           }
 
           // Adjust availableWidth for first-line text indent (hanging indent).
-          // Only unconditionally for negative offsets; positive offsets are already in line.maxWidth.
           const isFirstLine = index === 0 && !fragment.continuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (
-            isFirstLine &&
-            firstLineOffset &&
-            !isListFirstLine &&
-            !hasExplicitSegmentPositioning &&
-            (firstLineOffset < 0 || line.maxWidth == null)
-          ) {
-            availableWidthOverride = Math.max(0, availableWidthOverride - firstLineOffset);
+          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+            availableWidthOverride = adjustAvailableWidthForTextIndent(
+              availableWidthOverride,
+              firstLineOffset,
+              line.maxWidth,
+            );
           }
 
           const isLastLineOfFragment = index === lines.length - 1;

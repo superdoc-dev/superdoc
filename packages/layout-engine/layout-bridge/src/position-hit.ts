@@ -23,7 +23,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange } from '@superdoc/contracts';
+import { adjustAvailableWidthForTextIndent, computeLinePmRange, getFirstLineIndentOffset } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
 
@@ -787,12 +787,8 @@ export function clickToPositionGeometry(
       const isFirstLineOfParagraph = lineIndex === 0 && !fragment.continuesFromPrev;
       if (isFirstLineOfParagraph && !isListItem) {
         const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-        const firstLineOffset = suppressFLI
-          ? 0
-          : (block.attrs?.indent?.firstLine ?? 0) - (block.attrs?.indent?.hanging ?? 0);
-        if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
-          availableWidth = Math.max(0, availableWidth - firstLineOffset);
-        }
+        const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
+        availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
       }
       const paraAlignment = block.attrs?.alignment;
       const isJustified = paraAlignment === 'justify';
@@ -866,12 +862,8 @@ export function clickToPositionGeometry(
       // Skip for list-marker first lines — the renderer doesn't adjust those.
       if (lineIndex === 0 && !isListItem) {
         const suppressFLI = (cellBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-        const firstLineOffset = suppressFLI
-          ? 0
-          : (cellBlock.attrs?.indent?.firstLine ?? 0) - (cellBlock.attrs?.indent?.hanging ?? 0);
-        if (firstLineOffset !== 0 && (firstLineOffset < 0 || line.maxWidth == null)) {
-          availableWidth = Math.max(0, availableWidth - firstLineOffset);
-        }
+        const firstLineOffset = getFirstLineIndentOffset(cellBlock.attrs?.indent, suppressFLI);
+        availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
       }
       const cellAlignment = cellBlock.attrs?.alignment;
       const isJustified = cellAlignment === 'justify';

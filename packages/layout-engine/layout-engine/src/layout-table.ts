@@ -1239,6 +1239,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   applyTableFragmentPmRange(fragment, context.block, context.measure);
   state.page.fragments.push(fragment);
   state.cursorY += height;
+  state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
 }
 
 /**
@@ -1389,6 +1390,7 @@ export function layoutTableBlock({
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
     state.cursorY += height;
+    state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
     return;
   }
 
@@ -1554,6 +1556,7 @@ export function layoutTableBlock({
         applyTableFragmentPmRange(fragment, block, measure);
         state.page.fragments.push(fragment);
         state.cursorY += fragmentHeight;
+        state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       }
 
       const rowComplete = !hasRemainingLinesAfterContinuation;
@@ -1668,6 +1671,7 @@ export function layoutTableBlock({
       applyTableFragmentPmRange(fragment, block, measure);
       state.page.fragments.push(fragment);
       state.cursorY += fragmentHeight;
+      state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       pendingPartialRow = forcedPartialRow;
       samePagePartialContinuation = true;
       isTableContinuation = true;
@@ -1717,6 +1721,7 @@ export function layoutTableBlock({
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
     state.cursorY += fragmentHeight;
+    state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
 
     // Handle partial row tracking
     if (partialRow && !partialRow.isLastPart) {

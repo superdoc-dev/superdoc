@@ -86,4 +86,5 @@ export function layoutImageBlock({
 
   state.page.fragments.push(fragment);
   state.cursorY += requiredHeight;
+  state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
 }

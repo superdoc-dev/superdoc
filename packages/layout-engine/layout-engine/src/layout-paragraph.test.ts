@@ -60,6 +60,7 @@ const makePageState = (): PageState => ({
   trailingSpacing: 0,
   lastParagraphStyleId: undefined,
   lastParagraphContextualSpacing: false,
+  maxCursorY: 50,
 });
 
 /**
@@ -1271,6 +1272,7 @@ describe('layoutParagraphBlock - keepLines', () => {
       currentState = {
         ...state,
         cursorY: 50, // Reset to top of new page
+        maxCursorY: 50,
         page: { number: state.page.number + 1, fragments: [] },
         trailingSpacing: 0,
       };
@@ -1420,6 +1422,7 @@ describe('layoutParagraphBlock - keepLines', () => {
     const advanceColumn = mock((state: PageState) => ({
       ...state,
       cursorY: 50,
+      maxCursorY: 50,
       trailingSpacing: 0,
       page: { number: 2, fragments: [] },
     }));

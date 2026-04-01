@@ -3721,7 +3721,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.setOptions({ annotations: true });
     const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
-      fileSource: decryptedData ?? newFile,
+      fileSource: decryptedData ?? (newFile instanceof ArrayBuffer ? new Blob([newFile]) : newFile),
       content: docx,
       media,
       mediaFiles,

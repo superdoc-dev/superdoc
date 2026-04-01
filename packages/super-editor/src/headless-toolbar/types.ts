@@ -92,12 +92,11 @@ export type ToolbarSubscriptionEvent = {
 
 /**
  * Public controller contract.
- * Direct `context.target` access remains the base path; `execute(...)` is optional built-in behavior.
  */
 export type HeadlessToolbarController = {
   getSnapshot(): ToolbarSnapshot;
   subscribe(listener: (event: ToolbarSubscriptionEvent) => void): () => void;
-  execute?: (id: PublicToolbarItemId, payload?: unknown) => boolean;
+  execute(id: PublicToolbarItemId, payload?: unknown): boolean;
   destroy(): void;
 };
 

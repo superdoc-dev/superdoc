@@ -8,12 +8,6 @@ export type ResolvedToolbarSources = {
   context: ToolbarContext | null;
 };
 
-// `direct` uses raw command mapping only.
-// `hybrid` allows either direct command execution or an explicit registry execute adapter.
-// `execute` requires an explicit registry execute adapter.
-// `special` is reserved for items outside the current synchronous execute model.
-export type RegistryMode = 'direct' | 'hybrid' | 'execute' | 'special';
-
 export type RegistryStateDeriver = (params: {
   context: ToolbarContext | null;
   superdoc: HeadlessToolbarSuperdocHost;
@@ -27,7 +21,6 @@ export type RegistryExecutor = (params: {
 
 export type BuiltInToolbarRegistryEntry = {
   id: PublicToolbarItemId;
-  mode: RegistryMode;
   state: RegistryStateDeriver;
   directCommandName?: string;
   execute?: RegistryExecutor;

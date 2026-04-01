@@ -1,6 +1,7 @@
 import { parseSizeUnit } from '../../editors/v1/core/utilities/parseSizeUnit.js';
 import { isNegatedMark } from '../../editors/v1/components/toolbar/format-negation.js';
 import { getActiveFormatting } from '../../editors/v1/core/helpers/getActiveFormatting.js';
+import { getFileOpener, processAndInsertImageFile } from '../../editors/v1/extensions/image/imageHelpers/index.js';
 import { TextSelection, Selection } from 'prosemirror-state';
 import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, resolveStateEditor } from './context.js';
 import { createDirectCommandExecute, isCommandDisabled } from './general.js';
@@ -8,13 +9,13 @@ import type { ToolbarContext } from '../types.js';
 
 export const normalizeFontSizeValue = (value: unknown) => {
   if (typeof value === 'number') {
-    return String(value);
+    return `${value}pt`;
   }
 
   if (typeof value === 'string') {
-    const [numericValue] = parseSizeUnit(value);
+    const [numericValue, unit] = parseSizeUnit(value);
     if (!Number.isNaN(numericValue)) {
-      return String(numericValue);
+      return `${numericValue}${unit || 'pt'}`;
     }
   }
 
@@ -26,7 +27,7 @@ export const normalizeFontFamilyValue = (value: unknown) => {
     return value;
   }
 
-  return value.split(',')[0]?.trim() ?? value;
+  return value;
 };
 
 export const normalizeLinkHrefValue = (value: unknown) => {
@@ -34,7 +35,10 @@ export const normalizeLinkHrefValue = (value: unknown) => {
 };
 
 export const normalizeColorValue = (value: unknown) => {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  if (typeof value === 'string' && value.length > 0) {
+    return value.toLowerCase();
+  }
+  return null;
 };
 
 export const isFormattingActivatedFromLinkedStyle = (
@@ -440,9 +444,7 @@ export const createTextColorExecute =
     const isNone = payload === 'none';
     const inlineValue = isNone ? 'inherit' : payload;
 
-    const result = createDirectCommandExecute('setColor')({ context, payload: inlineValue });
-    if (!result) return false;
-
+    createDirectCommandExecute('setColor')({ context, payload: inlineValue });
     editor?.commands?.setFieldAnnotationsTextColor?.(isNone ? null : payload, true);
     return true;
   };
@@ -459,9 +461,7 @@ export const createHighlightColorExecute =
     const isNone = payload === 'none';
     const inlineValue = isNone ? 'transparent' : payload;
 
-    const result = createDirectCommandExecute('setHighlight')({ context, payload: inlineValue });
-    if (!result) return false;
-
+    createDirectCommandExecute('setHighlight')({ context, payload: inlineValue });
     const argValue = isNone ? null : payload;
     editor?.commands?.setFieldAnnotationsTextHighlight?.(argValue, true);
     editor?.commands?.setCellBackground?.(argValue);
@@ -504,5 +504,30 @@ export const createLinkExecute =
     const result = createDirectCommandExecute('toggleLink')({ context, payload });
     if (!result || !editor?.view) return result;
     applyLinkPostExecute(editor);
+    return true;
+  };
+
+export const createImageExecute =
+  () =>
+  ({ context }: { context: ToolbarContext | null; payload?: unknown }) => {
+    const editor = resolveStateEditor(context);
+    if (!editor?.view) return false;
+
+    const open = getFileOpener();
+    open().then(async (result: any) => {
+      if (!result?.file) return;
+      try {
+        await processAndInsertImageFile({
+          file: result.file,
+          editor,
+          view: editor.view,
+          editorOptions: editor.options,
+          getMaxContentSize: () => editor.getMaxContentSize(),
+        });
+      } catch {
+        // Image processing failed — consumer can handle via their own error UI
+      }
+    });
+
     return true;
   };

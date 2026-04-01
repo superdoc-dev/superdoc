@@ -1,10 +1,11 @@
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { isCommandDisabled } from './general.js';
+import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
 export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
-  const stateEditor = context?.presentationEditor?.editor ?? context?.editor ?? null;
+  const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
     return 0;
@@ -23,7 +24,7 @@ export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
 };
 
 export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
-  const stateEditor = context?.presentationEditor?.editor ?? context?.editor ?? null;
+  const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
     return 0;

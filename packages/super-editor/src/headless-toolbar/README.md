@@ -8,14 +8,20 @@ It provides:
 
 - toolbar state via `ToolbarSnapshot`
 - normalized active editing context
-- direct access to editor commands and document primitives
-- optional built-in `execute()` for built-in toolbar semantics
+- `execute()` for running toolbar commands with built-in semantics
 - helper utilities for linked styles and image upload flows
 
 ## Quick start
 
 ```ts
+import { SuperDoc } from 'superdoc';
 import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/my-document.docx',
+  toolbar: null, // disable the built-in toolbar
+});
 
 const toolbar = createHeadlessToolbar({
   superdoc,
@@ -26,49 +32,98 @@ const unsubscribe = toolbar.subscribe(({ snapshot }) => {
   renderToolbar(snapshot);
 });
 
-toolbar.execute?.('bold');
+toolbar.execute('bold');
 
 toolbar.destroy();
 unsubscribe();
 ```
 
+> **Important**: Pass `toolbar: null` to the SuperDoc constructor to disable the built-in toolbar UI. Without this, both the built-in and headless toolbars will be active.
+
 `snapshot` contains:
 
 - `context` for the current active editing target
-- `commands` for built-in command UI state
+- `commands` for built-in command UI state (`active`, `disabled`, `value`)
 
-## How actions are executed
+## Executing commands
 
-- Use `snapshot.commands` for UI state such as `active`, `disabled`, and `value`
-- Use `snapshot.context?.target.commands.*` for direct command execution
-- Use `toolbar.execute(id, payload?)` for built-in toolbar semantics
-
-Example:
+Use `toolbar.execute(id, payload?)` for all toolbar actions:
 
 ```ts
-toolbar.execute?.('bold');
-snapshot.context?.target.commands?.setTextAlign?.('center');
+toolbar.execute('bold');
+toolbar.execute('font-size', '14pt');
+toolbar.execute('text-color', '#ff0000');
+toolbar.execute('zoom', 125);
 ```
 
+For commands not covered by `execute()`, you can use `snapshot.context?.target.commands.*` as an escape hatch for direct access to the editor command surface.
+
+## Command reference
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `bold` | none | — |
+| `italic` | none | — |
+| `underline` | none | — |
+| `strikethrough` | none | — |
+| `font-size` | size string, e.g. `'12pt'` | size string with unit, e.g. `'12pt'` |
+| `font-family` | CSS font family, e.g. `'Arial, sans-serif'` | full CSS font family, e.g. `'Arial, sans-serif'` |
+| `text-color` | hex string, e.g. `'#ff0000'`, or `'none'` | lowercase hex string, e.g. `'#ff0000'` |
+| `highlight-color` | hex string or `'none'` | lowercase hex string, e.g. `'#ffff00'` |
+| `link` | `{ href: string \| null }` | href string or `null` |
+| `text-align` | `'left'` \| `'center'` \| `'right'` \| `'justify'` | current alignment string |
+| `line-height` | number, e.g. `1.5` | current line height number |
+| `linked-style` | style object from `getQuickFormatList()` | style ID string |
+| `bullet-list` | none | — |
+| `numbered-list` | none | — |
+| `indent-increase` | none | — |
+| `indent-decrease` | none | — |
+| `undo` | none | — |
+| `redo` | none | — |
+| `ruler` | none | — |
+| `zoom` | number, e.g. `125` | current zoom number |
+| `document-mode` | `'editing'` \| `'suggesting'` \| `'viewing'` | current mode string |
+| `clear-formatting` | none | — |
+| `copy-format` | none | — |
+| `track-changes-accept-selection` | none | — |
+| `track-changes-reject-selection` | none | — |
+| `image` | none (opens file picker) | — |
+| `table-insert` | `{ rows: number, cols: number }` | — |
+| `table-add-row-before` | none | — |
+| `table-add-row-after` | none | — |
+| `table-delete-row` | none | — |
+| `table-add-column-before` | none | — |
+| `table-add-column-after` | none | — |
+| `table-delete-column` | none | — |
+| `table-delete` | none | — |
+| `table-merge-cells` | none | — |
+| `table-split-cell` | none | — |
+| `table-remove-borders` | none | — |
+| `table-fix` | none | — |
+
+## Constants
+
+`headlessToolbarConstants` provides default option lists for common controls:
+
+- `DEFAULT_FONT_FAMILY_OPTIONS`
+- `DEFAULT_FONT_SIZE_OPTIONS`
+- `DEFAULT_TEXT_ALIGN_OPTIONS`
+- `DEFAULT_LINE_HEIGHT_OPTIONS`
+- `DEFAULT_ZOOM_OPTIONS`
+- `DEFAULT_DOCUMENT_MODE_OPTIONS`
+
+Each option has `{ label: string, value: string | number }`. Use `value` when calling `execute()`.
+
 ## Helpers
-
-`headlessToolbarConstants` provides default option lists for common controls such as:
-
-- font family
-- font size
-- text align
-- line height
-- zoom
-- document mode
 
 `headlessToolbarHelpers` provides utilities for richer consumer-owned flows:
 
 - linked styles:
-  - `getQuickFormatList(editor)`
-  - `generateLinkedStyleString(...)`
+  - `getQuickFormatList(editor)` — returns available paragraph styles
+  - `generateLinkedStyleString(...)` — returns inline CSS for style preview
 - image flow:
-  - `getFileOpener()`
-  - `processAndInsertImageFile(...)`
+  - `getFileOpener()` — returns a function that opens a file picker
+  - `processAndInsertImageFile(...)` — processes and inserts an image file
 
 ## Reference
 

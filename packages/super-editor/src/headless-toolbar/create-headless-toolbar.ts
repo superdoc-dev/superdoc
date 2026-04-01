@@ -107,7 +107,11 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     },
 
     execute(id, payload) {
-      return executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
+      const result = executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
+      if (result && !destroyed) {
+        refreshControllerState();
+      }
+      return result;
     },
 
     destroy() {

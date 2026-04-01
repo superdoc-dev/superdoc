@@ -173,7 +173,7 @@ const runTableAction = (id: TableActionId) => {
         :class="{ 'toolbar-button-active': snapshot.commands.strikethrough?.active }"
         :disabled="snapshot.commands.strikethrough?.disabled"
         type="button"
-        @click="snapshot.context?.target?.commands?.toggleStrike?.()"
+        @click="toolbarController?.execute?.('strikethrough')"
       >
         Strikethrough
       </button>
@@ -185,7 +185,7 @@ const runTableAction = (id: TableActionId) => {
           :value="String(snapshot.commands['font-family']?.value ?? '')"
           @change="(event) => toolbarController?.execute?.('font-family', (event.target as HTMLSelectElement).value)"
         >
-          <option v-for="option in fontFamilyOptions" :key="option.value" :value="option.label">
+          <option v-for="option in fontFamilyOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
@@ -198,7 +198,7 @@ const runTableAction = (id: TableActionId) => {
           :value="String(snapshot.commands['font-size']?.value ?? '')"
           @change="(event) => toolbarController?.execute?.('font-size', (event.target as HTMLSelectElement).value)"
         >
-          <option v-for="option in fontSizeOptions" :key="option.value" :value="option.label">
+          <option v-for="option in fontSizeOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
@@ -208,7 +208,7 @@ const runTableAction = (id: TableActionId) => {
         <select
           class="toolbar-select"
           :disabled="snapshot.commands['text-color']?.disabled"
-          :value="String(snapshot.commands['text-color']?.value ?? '').toLowerCase()"
+          :value="String(snapshot.commands['text-color']?.value ?? '')"
           @change="(event) => toolbarController?.execute?.('text-color', (event.target as HTMLSelectElement).value)"
         >
           <option v-for="option in textColorOptions" :key="option.value" :value="option.value">
@@ -221,7 +221,7 @@ const runTableAction = (id: TableActionId) => {
         <select
           class="toolbar-select"
           :disabled="snapshot.commands['highlight-color']?.disabled"
-          :value="String(snapshot.commands['highlight-color']?.value ?? '').toLowerCase()"
+          :value="String(snapshot.commands['highlight-color']?.value ?? '')"
           @change="(event) => toolbarController?.execute?.('highlight-color', (event.target as HTMLSelectElement).value)"
         >
           <option v-for="option in highlightColorOptions" :key="option.value" :value="option.value">
@@ -297,7 +297,7 @@ const runTableAction = (id: TableActionId) => {
           class="toolbar-select"
           :disabled="snapshot.commands['text-align']?.disabled"
           :value="String(snapshot.commands['text-align']?.value ?? '')"
-          @change="snapshot.context?.target?.commands?.setTextAlign?.((($event.target as HTMLSelectElement).value as 'left' | 'center' | 'right' | 'justify'))"
+          @change="toolbarController?.execute?.('text-align', ($event.target as HTMLSelectElement).value)"
         >
           <option v-for="option in textAlignOptions" :key="option.value" :value="option.value">
             {{ option.label }}
@@ -344,7 +344,7 @@ const runTableAction = (id: TableActionId) => {
           class="toolbar-select"
           :disabled="snapshot.commands['line-height']?.disabled"
           :value="String(snapshot.commands['line-height']?.value ?? '')"
-          @change="snapshot.context?.target?.commands?.setLineHeight?.(Number(($event.target as HTMLSelectElement).value))"
+          @change="toolbarController?.execute?.('line-height', Number(($event.target as HTMLSelectElement).value))"
         >
           <option v-for="option in lineHeightOptions" :key="option.value" :value="option.value">
             {{ option.label }}

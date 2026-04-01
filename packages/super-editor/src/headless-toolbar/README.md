@@ -20,7 +20,6 @@ import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: '/my-document.docx',
-  toolbar: null, // disable the built-in toolbar
 });
 
 const toolbar = createHeadlessToolbar({
@@ -38,7 +37,7 @@ toolbar.destroy();
 unsubscribe();
 ```
 
-> **Important**: Pass `toolbar: null` to the SuperDoc constructor to disable the built-in toolbar UI. Without this, both the built-in and headless toolbars will be active.
+> Don't pass `toolbar` to the SuperDoc constructor. The headless toolbar replaces the built-in UI entirely.
 
 `snapshot` contains:
 

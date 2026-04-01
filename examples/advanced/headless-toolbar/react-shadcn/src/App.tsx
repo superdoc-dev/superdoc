@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SuperDoc } from 'superdoc';
 import {
-  createHeadlessToolbar,
   headlessToolbarConstants,
-  type HeadlessToolbarController,
-  type ToolbarSnapshot,
   type PublicToolbarItemId,
 } from 'superdoc/headless-toolbar';
+import { useHeadlessToolbar } from 'superdoc/headless-toolbar/react';
 import 'superdoc/style.css';
 
 import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group';
@@ -688,43 +686,18 @@ function Toolbar({
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const superdocRef = useRef<SuperDoc | null>(null);
-  const toolbarRef = useRef<HeadlessToolbarController | null>(null);
+  const [superdoc, setSuperdoc] = useState<SuperDoc | null>(null);
 
-  const [snapshot, setSnapshot] = useState<ToolbarSnapshot>({
-    context: null,
-    commands: {},
-  });
-
-  // Boot SuperDoc + headless toolbar
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    const superdoc = new SuperDoc({
-      selector: el,
-      document: '/test_file.docx',
-      toolbar: null,
-    });
-    superdocRef.current = superdoc;
-
-    const toolbar = createHeadlessToolbar({ superdoc, commands: COMMANDS });
-    toolbarRef.current = toolbar;
-
-    const unsubscribe = toolbar.subscribe(({ snapshot: s }) => setSnapshot(s));
-
-    return () => {
-      unsubscribe();
-      toolbar.destroy();
-      superdoc.destroy();
-      superdocRef.current = null;
-      toolbarRef.current = null;
-    };
+    const sd = new SuperDoc({ selector: el, document: '/test_file.docx' });
+    setSuperdoc(sd);
+    return () => { sd.destroy(); setSuperdoc(null); };
   }, []);
 
-  const handleExecute = useCallback((id: PublicToolbarItemId, payload?: unknown) => {
-    toolbarRef.current?.execute(id, payload);
-  }, []);
+  const { snapshot, execute: handleExecute } = useHeadlessToolbar(superdoc, COMMANDS);
 
   return (
     <TooltipPrimitive.Provider>

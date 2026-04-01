@@ -180,6 +180,8 @@ export default defineConfig(({ mode, command }) => {
         input: {
           'superdoc': 'src/index.js',
           'headless-toolbar': 'src/headless-toolbar.js',
+          'headless-toolbar-react': 'src/headless-toolbar-react.js',
+          'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
@@ -193,6 +195,8 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
+          'react',
+          'vue',
         ],
         output: [
           {

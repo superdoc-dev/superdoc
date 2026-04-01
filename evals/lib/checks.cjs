@@ -557,12 +557,30 @@ module.exports.benchmarkTokens = (output) => {
   return { pass: true, score: total, reason: `${inTok} in + ${outTok} out = ${total}` };
 };
 
-/** Which DOCX path the agent used. Score is 1 for superdoc, 0 for raw. */
+/**
+ * Which DOCX path the agent used. Score is 1 for superdoc, 0 for raw.
+ * FAILS if the condition requires SuperDoc but the agent used raw.
+ *
+ * Conditions that require SuperDoc usage:
+ *   - superdoc-skill  → must use superdoc MCP tools
+ *   - superdoc-cli    → must use superdoc CLI via Bash
+ */
 module.exports.benchmarkPath = (output) => {
   const d = parseExecOutput(output);
   if (!d) return { pass: true, score: 0, reason: 'no data' };
+
   const path = d.pathUsed || 'unknown';
-  const score = path.includes('superdoc') ? 1 : 0;
+  const condition = d.condition || 'unknown';
+  const usedSuperdoc = path.includes('superdoc');
+  const score = usedSuperdoc ? 1 : 0;
+
+  // Conditions that require SuperDoc usage
+  const requiresSuperdoc = condition === 'superdoc-skill' || condition === 'superdoc-cli';
+
+  if (requiresSuperdoc && !usedSuperdoc) {
+    return { pass: false, score: 0, reason: `Condition "${condition}" requires SuperDoc but agent used "${path}"` };
+  }
+
   return { pass: true, score, reason: path };
 };
 

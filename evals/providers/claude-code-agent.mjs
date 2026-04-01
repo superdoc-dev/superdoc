@@ -58,12 +58,26 @@ Workflow:
 
 These tools handle OOXML format correctly and preserve document structure. Raw XML manipulation will corrupt the document.`;
 
-const SUPERDOC_AGENTS_MD = `# AGENTS.md
+const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
 
 You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
 
 **Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
 **Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
+`;
+
+const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
+
+A \`superdoc\` CLI is available on PATH for working with .docx files.
+
+**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
+**Do** use the \`superdoc\` command. Run \`superdoc --help\` to see available commands.
+
+Common commands:
+- \`superdoc get-text <file.docx>\` — extract plain text
+- \`superdoc get-markdown <file.docx>\` — extract as markdown
+- \`superdoc find <file.docx> --select.type=text --select.pattern="search term"\` — search
+- \`superdoc --help\` — list all commands
 `;
 
 /**
@@ -146,6 +160,10 @@ export default class ClaudeCodeBenchmarkProvider {
           { mode: 0o755 },
         );
         env.PATH = `${binDir}:${env.PATH}`;
+
+        if (!this.config.superdocMcp) {
+          writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_CLI_AGENTS_MD);
+        }
       }
 
       // Build query options
@@ -180,7 +198,7 @@ export default class ClaudeCodeBenchmarkProvider {
         // System prompt enforcing SuperDoc tool usage
         queryOptions.systemPrompt = SUPERDOC_SYSTEM_PROMPT;
         // Write AGENTS.md in working directory for additional reinforcement
-        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_AGENTS_MD);
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_MCP_AGENTS_MD);
       }
 
       // Optional system prompt override (takes precedence over the MCP one)

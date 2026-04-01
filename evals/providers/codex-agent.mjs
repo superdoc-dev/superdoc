@@ -37,7 +37,7 @@ const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const MCP_WRAPPER_PATH = resolve(__dirname, 'mcp-stdio-wrapper.mjs');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 
-const SUPERDOC_AGENTS_MD = `# AGENTS.md
+const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
 
 You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
 
@@ -45,6 +45,22 @@ You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
 **Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
 
 The SuperDoc tools handle OOXML format correctly and preserve document structure.
+`;
+
+const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
+
+A \`superdoc\` CLI is available on PATH for working with .docx files.
+
+**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
+**Do** use the \`superdoc\` command. Run \`superdoc --help\` to see available commands.
+
+Common commands:
+- \`superdoc get-text <file.docx>\` — extract plain text
+- \`superdoc get-markdown <file.docx>\` — extract as markdown
+- \`superdoc find <file.docx> --select.type=text --select.pattern="search term"\` — search
+- \`superdoc --help\` — list all commands
+
+The superdoc CLI handles OOXML format correctly and preserves document structure.
 `;
 
 /** Find the newest .docx file in a directory (agent may write output here). */
@@ -127,6 +143,11 @@ export default class CodexBenchmarkProvider {
           { mode: 0o755 },
         );
         env.PATH = `${binDir}:${env.PATH}`;
+
+        // Write AGENTS.md for CLI discovery (only if MCP isn't also attached)
+        if (!this.config.superdocMcp) {
+          writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_CLI_AGENTS_MD);
+        }
       }
 
       const codexOpts = {
@@ -152,7 +173,7 @@ export default class CodexBenchmarkProvider {
         };
         codexOpts.env = { ...env, LOGDIR: mcpLogDir };
 
-        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_AGENTS_MD);
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_MCP_AGENTS_MD);
       }
 
       const codex = new Codex(codexOpts);
@@ -167,6 +188,8 @@ export default class CodexBenchmarkProvider {
       let fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
       if (this.config.superdocMcp) {
         fullPrompt += '\n\nIMPORTANT: Use the superdoc MCP tools (superdoc_open, superdoc_get_content, superdoc_edit, etc.) for this task. Do NOT use unzip or manual XML parsing.';
+      } else if (this.config.superdocOnPath) {
+        fullPrompt += '\n\nIMPORTANT: A `superdoc` CLI is available on PATH for working with .docx files. Use `superdoc --help` to see commands. Use the superdoc CLI instead of unzip or manual XML parsing.';
       }
 
       // Use runStreamed to capture full event lifecycle

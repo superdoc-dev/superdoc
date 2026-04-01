@@ -860,7 +860,10 @@ export function clickToPositionGeometry(
 
       // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
       // Skip for list-marker first lines — the renderer doesn't adjust those.
-      if (lineIndex === 0 && !isListItem) {
+      // When a row is split across pages, partialRow.fromLineByCell tells us the real
+      // starting line for this cell slice — only apply when it's truly line 0.
+      const cellLineStart = tableHit.fragment.partialRow?.fromLineByCell?.[tableHit.cellColIndex] ?? 0;
+      if (lineIndex === 0 && cellLineStart === 0 && !isListItem) {
         const suppressFLI = (cellBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = getFirstLineIndentOffset(cellBlock.attrs?.indent, suppressFLI);
         availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);

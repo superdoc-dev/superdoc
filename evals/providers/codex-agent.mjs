@@ -18,10 +18,11 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Codex } from '@openai/codex-sdk';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import {
   cacheKey,
   cleanupTemp,
@@ -34,6 +35,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const MCP_WRAPPER_PATH = resolve(__dirname, 'mcp-stdio-wrapper.mjs');
+const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 
 const SUPERDOC_AGENTS_MD = `# AGENTS.md
 
@@ -114,6 +116,18 @@ export default class CodexBenchmarkProvider {
         FORCE_COLOR: '0',
         NO_COLOR: '1',
       };
+
+      // Put `superdoc` CLI on PATH as an actual executable
+      if (this.config.superdocOnPath && existsSync(CLI_PATH)) {
+        const binDir = resolve(stateDir, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        writeFileSync(
+          resolve(binDir, 'superdoc'),
+          `#!/bin/sh\nexec "${process.execPath}" "${CLI_PATH}" "$@"\n`,
+          { mode: 0o755 },
+        );
+        env.PATH = `${binDir}:${env.PATH}`;
+      }
 
       const codexOpts = {
         apiKey: process.env.OPENAI_API_KEY,

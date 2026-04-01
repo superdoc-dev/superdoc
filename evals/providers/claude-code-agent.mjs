@@ -27,10 +27,11 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import {
   cacheKey,
   cleanupTemp,
@@ -42,6 +43,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 const REPO_ROOT = resolve(__dirname, '../..');
 
 const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with tools for reading and editing Word documents (.docx).
@@ -132,6 +134,18 @@ export default class ClaudeCodeBenchmarkProvider {
         env.PATH = env.PATH.split(':')
           .filter(p => !p.includes('superdoc'))
           .join(':');
+      }
+
+      // Put `superdoc` CLI on PATH as an actual executable
+      if (this.config.superdocOnPath && existsSync(CLI_PATH)) {
+        const binDir = resolve(stateDir, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        writeFileSync(
+          resolve(binDir, 'superdoc'),
+          `#!/bin/sh\nexec "${process.execPath}" "${CLI_PATH}" "$@"\n`,
+          { mode: 0o755 },
+        );
+        env.PATH = `${binDir}:${env.PATH}`;
       }
 
       // Build query options

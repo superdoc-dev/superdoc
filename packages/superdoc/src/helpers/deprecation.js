@@ -58,7 +58,7 @@ export function createDeprecatedEditorProxy(editor) {
   if (!editor || editor[RAW_EDITOR]) return editor;
 
   return new Proxy(editor, {
-    get(target, prop, receiver) {
+    get(target, prop) {
       // Escape hatch for internal code that needs the unwrapped editor
       if (prop === RAW_EDITOR) return target;
 
@@ -71,7 +71,13 @@ export function createDeprecatedEditorProxy(editor) {
         );
       }
 
-      return Reflect.get(target, prop, receiver);
+      // Bind to target (not receiver/proxy) so private-field brand checks
+      // on the Editor class work correctly.
+      const value = Reflect.get(target, prop, target);
+      if (typeof value === 'function') {
+        return value.bind(target);
+      }
+      return value;
     },
   });
 }

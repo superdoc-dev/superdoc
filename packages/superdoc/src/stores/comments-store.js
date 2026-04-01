@@ -1047,8 +1047,6 @@ export const useCommentsStore = defineStore('comments', () => {
 
       if (!refreshExisting && skipIds.has(normalizedId)) return;
       const existingTrackedChange = existingTrackedChangeById.get(normalizedId);
-      if (!refreshExisting && skipIds.has(normalizedId)) return;
-      const existingTrackedChange = existingTrackedChangeById.get(normalizedId);
 
       const marks = {
         ...(insertedMark && { insertedMark: insertedMark.mark }),

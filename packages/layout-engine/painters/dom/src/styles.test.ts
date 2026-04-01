@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ensureSdtContainerStyles } from './styles.js';
+import { ensureSdtContainerStyles, lineStyles } from './styles.js';
+
+describe('lineStyles', () => {
+  it('sets height and lineHeight from the argument', () => {
+    const styles = lineStyles(24);
+    expect(styles.height).toBe('24px');
+    expect(styles.lineHeight).toBe('24px');
+  });
+});
 
 describe('ensureSdtContainerStyles', () => {
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {

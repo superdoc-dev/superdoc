@@ -781,11 +781,12 @@ export function clickToPositionGeometry(
 
       const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
       const isListItem = markerWidth > 0;
+      const hasRenderedMarkerText = isListItem && Boolean(fragment.markerTextWidth);
 
       // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
-      // Skip for list-marker first lines — the renderer doesn't adjust those (the marker occupies the hanging region).
+      // Skip for list-marker first lines — the renderer doesn't adjust those (only when marker has actual text).
       const isFirstLineOfParagraph = lineIndex === 0 && !fragment.continuesFromPrev;
-      if (isFirstLineOfParagraph && !isListItem) {
+      if (isFirstLineOfParagraph && !hasRenderedMarkerText) {
         const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
         availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);

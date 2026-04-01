@@ -194,6 +194,7 @@
               {
                 "group": "Migration",
                 "pages": [
+                  "guides/migration/document-api",
                   "guides/migration/prosemirror",
                   "guides/migration/breaking-changes-v1",
                   "guides/migration/typescript-migration",

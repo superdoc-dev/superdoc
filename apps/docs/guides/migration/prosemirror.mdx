@@ -38,7 +38,7 @@ const superdoc = new SuperDoc({
 
 ### Programmatic document access
 
-Use the [Document API](/document-api/overview) for reading and mutating documents programmatically. The Document API provides 300+ stable operations across namespaces like formatting, comments, tables, track changes, and more.
+The [Document API](/document-api/overview) (`editor.doc`) replaces direct ProseMirror access for all programmatic operations. 300+ operations across formatting, comments, tables, track changes, lists, images, and sections.
 
 ```javascript
 superdoc.on("editorCreate", ({ editor }) => {
@@ -59,7 +59,7 @@ superdoc.on("editorCreate", ({ editor }) => {
 });
 ```
 
-For backend and AI workflows, use the [Node SDK](/document-engine/sdks/node), [Python SDK](/document-engine/sdks/python), or [CLI](/document-engine/cli).
+For backend and AI workflows, use the [Node SDK](/document-engine/sdks), [Python SDK](/document-engine/sdks), or [CLI](/document-engine/cli).
 
 ### Deprecated: ProseMirror internals
 
@@ -95,8 +95,8 @@ superdoc.on("editorCreate", ({ editor }) => {
 
 If you need features SuperDoc doesn't provide:
 
-- Check the [Document API reference](/document-api/overview) — it covers 300+ operations
-- Use the [SDK](/document-engine/sdks/node) or [CLI](/document-engine/cli) for backend workflows
+- Check the [Document API reference](/document-api/overview) — 300+ operations
+- Use the [SDK](/document-engine/sdks) or [CLI](/document-engine/cli) for backend workflows
 - Request features via [GitHub issues](https://github.com/superdoc-dev/superdoc/issues)
 
 ## Need help?

@@ -9,7 +9,7 @@
  * boundary wraps the editor with a Proxy.
  */
 
-const MIGRATION_URL = 'https://docs.superdoc.dev/document-api/overview';
+const MIGRATION_URL = 'https://docs.superdoc.dev/guides/migration/document-api';
 
 /** @type {Set<string>} */
 const _warned = new Set();

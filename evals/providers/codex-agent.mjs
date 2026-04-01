@@ -2,10 +2,10 @@
  * Custom Promptfoo provider: OpenAI Codex SDK benchmark.
  *
  * Uses @openai/codex-sdk to run Codex against DOCX tasks.
- * API: new Codex(opts) -> codex.startThread(opts) -> thread.run(prompt)
+ * API: new Codex(opts) -> codex.startThread(opts) -> thread.runStreamed(prompt)
  *
- * For SuperDoc conditions, the SuperDoc MCP server is registered via
- * Codex's config system (mcp_servers in config.toml format).
+ * For SuperDoc conditions, the MCP server is launched through a stdio wrapper
+ * that logs raw transport bytes for debugging protocol issues.
  *
  * Config (set per provider instance in YAML):
  *   condition:      'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
@@ -33,6 +33,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+const MCP_WRAPPER_PATH = resolve(__dirname, 'mcp-stdio-wrapper.mjs');
 
 const SUPERDOC_AGENTS_MD = `# AGENTS.md
 
@@ -91,31 +92,52 @@ export default class CodexBenchmarkProvider {
     const cached = readCache(key);
     if (cached) return cached;
 
+    // Preflight: check MCP server artifact exists if needed
+    if (this.config.superdocMcp && !existsSync(MCP_SERVER_PATH)) {
+      return { error: `MCP server not built: ${MCP_SERVER_PATH}. Run: cd apps/mcp && pnpm run build` };
+    }
+
     const { docPath, stateDir } = createTempCopy(fixture);
     mkdirSync(stateDir, { recursive: true });
-    // Copy fixture into stateDir so it's within Codex's writable sandbox
     const localDocPath = resolve(stateDir, fixture);
     copyFileSync(docPath, localDocPath);
     const beforeText = extractDocxText(localDocPath);
     const startTime = performance.now();
 
     try {
-      // Build Codex options — pass API key so it doesn't rely on `codex login`
-      const codexOpts = {
-        apiKey: process.env.OPENAI_API_KEY,
+      // Minimal env to prevent stray stdout from deps
+      const env = {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        NODE_ENV: 'production',
+        FORCE_COLOR: '0',
+        NO_COLOR: '1',
       };
 
-      // Attach SuperDoc MCP server for superdoc conditions
+      const codexOpts = {
+        apiKey: process.env.OPENAI_API_KEY,
+        // Auto-approve MCP tool calls (approval_policy=never only covers shell commands)
+        config: {
+          mcp_auto_approve: ['superdoc/*'],
+        },
+      };
+
+      // Attach SuperDoc MCP server via stdio wrapper for transport debugging
       if (this.config.superdocMcp) {
+        const mcpLogDir = resolve(stateDir, 'mcp-logs');
+        mkdirSync(mcpLogDir, { recursive: true });
+
         codexOpts.config = {
           mcp_servers: {
             superdoc: {
-              command: 'node',
-              args: [MCP_SERVER_PATH],
+              command: process.execPath, // Use exact node binary, not bare 'node'
+              args: [MCP_WRAPPER_PATH, process.execPath, MCP_SERVER_PATH],
             },
           },
         };
-        // Write AGENTS.md to enforce SuperDoc tool usage
+        codexOpts.env = { ...env, LOGDIR: mcpLogDir };
+
         writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_AGENTS_MD);
       }
 
@@ -124,27 +146,49 @@ export default class CodexBenchmarkProvider {
         workingDirectory: stateDir,
         skipGitRepoCheck: true,
         approvalPolicy: 'never',
+        sandboxMode: 'danger-full-access',
       });
 
-      // Build prompt — reinforce SuperDoc usage when MCP is attached
+      // Build prompt
       let fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
       if (this.config.superdocMcp) {
         fullPrompt += '\n\nIMPORTANT: Use the superdoc MCP tools (superdoc_open, superdoc_get_content, superdoc_edit, etc.) for this task. Do NOT use unzip or manual XML parsing.';
       }
-      const turn = await thread.run(fullPrompt);
-      const duration = performance.now() - startTime;
 
-      // Extract tool calls from turn items:
-      //   command_execution = shell commands (Bash)
-      //   mcp_tool_call     = MCP tool invocations (SuperDoc tools)
-      const toolCalls = (turn.items || [])
-        .filter(item => item.type === 'command_execution' || item.type === 'mcp_tool_call')
-        .map(item => {
+      // Use runStreamed to capture full event lifecycle
+      const { events } = await thread.runStreamed(fullPrompt);
+
+      const toolCalls = [];
+      let finalResponse = '';
+      let usage = null;
+
+      for await (const event of events) {
+        if (event.type === 'item.completed') {
+          const item = event.item;
           if (item.type === 'command_execution') {
-            return { tool: 'Bash', args: { command: item.command } };
+            toolCalls.push({
+              tool: 'Bash',
+              args: { command: item.command },
+              status: item.status,
+            });
+          } else if (item.type === 'mcp_tool_call') {
+            toolCalls.push({
+              tool: item.tool,
+              server: item.server,
+              args: item.arguments,
+              status: item.status,
+              error: item.error?.message || null,
+              hasResult: !!item.result,
+            });
+          } else if (item.type === 'agent_message') {
+            finalResponse = item.text;
           }
-          return { tool: item.tool, args: item.arguments };
-        });
+        } else if (event.type === 'turn.completed') {
+          usage = event.usage;
+        }
+      }
+
+      const duration = performance.now() - startTime;
 
       let afterText = extractDocxText(localDocPath);
       if (afterText === beforeText) {
@@ -154,7 +198,7 @@ export default class CodexBenchmarkProvider {
 
       const result = {
         output: JSON.stringify({
-          agentResponseText: turn.finalResponse || '',
+          agentResponseText: finalResponse,
           documentText: afterText,
           documentChanged: beforeText !== afterText,
           condition: this.config.condition,
@@ -162,7 +206,7 @@ export default class CodexBenchmarkProvider {
           stepCount: toolCalls.length,
           cost: 0,
           duration,
-          usage: turn.usage || {},
+          usage: usage || {},
           pathUsed: detectPathUsed(toolCalls),
           outputFile: keepFile ? docPath : null,
         }),

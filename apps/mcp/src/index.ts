@@ -1,4 +1,15 @@
 #!/usr/bin/env node
+
+// Redirect ALL console output to stderr BEFORE anything else runs.
+// stdout is reserved exclusively for the MCP JSON-RPC protocol.
+// Any stray output (e.g. "[super-editor] Telemetry: enabled" from
+// console.debug in Editor.ts) will corrupt the transport and crash
+// the MCP client (rmcp serde parse error at the non-JSON line).
+console.log = (...args: unknown[]) => console.error('[mcp:log]', ...args);
+console.info = (...args: unknown[]) => console.error('[mcp:info]', ...args);
+console.debug = (...args: unknown[]) => console.error('[mcp:debug]', ...args);
+console.warn = (...args: unknown[]) => console.error('[mcp:warn]', ...args);
+
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

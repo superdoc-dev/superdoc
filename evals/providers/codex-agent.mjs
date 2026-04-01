@@ -18,7 +18,7 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Codex } from '@openai/codex-sdk';
@@ -33,6 +33,16 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+
+const SUPERDOC_AGENTS_MD = `# AGENTS.md
+
+You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
+
+**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
+**Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
+
+The SuperDoc tools handle OOXML format correctly and preserve document structure.
+`;
 
 /** Find the newest .docx file in a directory (agent may write output here). */
 function findDocxInDir(dir) {
@@ -103,6 +113,8 @@ export default class CodexBenchmarkProvider {
             },
           },
         };
+        // Write AGENTS.md to enforce SuperDoc tool usage
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_AGENTS_MD);
       }
 
       const codex = new Codex(codexOpts);
@@ -112,7 +124,11 @@ export default class CodexBenchmarkProvider {
         approvalPolicy: 'never',
       });
 
-      const fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+      // Build prompt — reinforce SuperDoc usage when MCP is attached
+      let fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+      if (this.config.superdocMcp) {
+        fullPrompt += '\n\nIMPORTANT: Use the superdoc MCP tools (superdoc_open, superdoc_get_content, superdoc_edit, etc.) for this task. Do NOT use unzip or manual XML parsing.';
+      }
       const turn = await thread.run(fullPrompt);
       const duration = performance.now() - startTime;
 

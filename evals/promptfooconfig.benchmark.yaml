@@ -42,7 +42,8 @@ providers:
     label: CC-superdoc-skill
     config:
       condition: superdoc-skill
-      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      # Only SuperDoc MCP tools + Read/Glob for discovery — no Bash to prevent raw fallback
+      allowedTools: ['Read', 'Glob', 'Grep']
       superdocMcp: true
       superdocOnPath: true
 

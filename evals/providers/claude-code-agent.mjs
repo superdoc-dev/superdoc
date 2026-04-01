@@ -27,7 +27,7 @@
  *   keepFile:  Save the edited DOCX (default: false)
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -43,6 +43,26 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const REPO_ROOT = resolve(__dirname, '../..');
+
+const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with tools for reading and editing Word documents (.docx).
+
+IMPORTANT: You MUST use the SuperDoc MCP tools for ALL .docx operations. Do NOT use Bash with unzip, python-docx, mammoth, or manual XML parsing.
+
+Workflow:
+1. superdoc_open(path) → returns session_id
+2. Use superdoc_get_content, superdoc_search, superdoc_edit, superdoc_format, superdoc_create, superdoc_comment, superdoc_track_changes, superdoc_mutations with the session_id
+3. superdoc_save(session_id) to persist changes
+4. superdoc_close(session_id) when done
+
+These tools handle OOXML format correctly and preserve document structure. Raw XML manipulation will corrupt the document.`;
+
+const SUPERDOC_AGENTS_MD = `# AGENTS.md
+
+You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
+
+**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
+**Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
+`;
 
 /**
  * Find a .docx file the agent may have written in a directory.
@@ -138,13 +158,18 @@ export default class ClaudeCodeBenchmarkProvider {
         queryOptions.mcpServers = {
           superdoc: { command: 'node', args: [MCP_SERVER_PATH] },
         };
+        // Pre-approve all SuperDoc MCP tools
         queryOptions.allowedTools = [
           ...(queryOptions.allowedTools || []),
           'mcp__superdoc__*',
         ];
+        // System prompt enforcing SuperDoc tool usage
+        queryOptions.systemPrompt = SUPERDOC_SYSTEM_PROMPT;
+        // Write AGENTS.md in working directory for additional reinforcement
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_AGENTS_MD);
       }
 
-      // Optional system prompt
+      // Optional system prompt override (takes precedence over the MCP one)
       if (this.config.systemPrompt) {
         queryOptions.systemPrompt = this.config.systemPrompt;
       }

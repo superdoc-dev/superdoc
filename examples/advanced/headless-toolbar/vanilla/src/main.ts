@@ -153,7 +153,12 @@ function syncUI(container: HTMLElement, snapshot: ToolbarSnapshot) {
     if (!sel) continue;
     const state = snapshot.commands[id];
     sel.disabled = state?.disabled ?? true;
-    if (state?.value != null) sel.value = String(state.value);
+    if (state?.value != null) {
+      const val = String(state.value);
+      // Only set if the value matches an existing option
+      const hasOption = Array.from(sel.options).some((o) => o.value === val);
+      if (hasOption) sel.value = val;
+    }
   }
 }
 

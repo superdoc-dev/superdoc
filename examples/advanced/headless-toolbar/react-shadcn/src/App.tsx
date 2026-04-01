@@ -141,6 +141,7 @@ function FormatToggles({
             <ToggleGroupPrimitive.Item
               value={id}
               disabled={state?.disabled}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => onExecute(id)}
               className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors',
@@ -438,6 +439,7 @@ function ListToggles({
             <ToggleGroupPrimitive.Item
               value={id}
               disabled={state?.disabled}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => onExecute(id)}
               className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors',
@@ -605,6 +607,7 @@ function ToolbarButton({
     <Tooltip content={label}>
       <button
         disabled={state?.disabled}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onExecute(id)}
         className={cn(
           'inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors',

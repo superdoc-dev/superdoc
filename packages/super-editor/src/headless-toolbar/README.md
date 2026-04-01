@@ -100,10 +100,6 @@ For commands not covered by `execute()`, you can use `snapshot.context?.target.c
 | `table-remove-borders` | none | — |
 | `table-fix` | none | — |
 
-## Focus handling
-
-`execute()` automatically restores focus to the editor after running a command. This means toolbar buttons won't break the editing selection — consumers don't need to manage focus manually.
-
 ## Constants
 
 `headlessToolbarConstants` provides default option lists for common controls:

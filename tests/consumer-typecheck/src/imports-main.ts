@@ -80,6 +80,26 @@ import type {
   SelectionHandle,
   SelectionCommandContext,
   ResolveRangeOutput,
+  Comment,
+  CommentElement,
+  LayoutState,
+  ImageSelectedEvent,
+  ImageDeselectedEvent,
+  TelemetryEvent,
+  RemoteCursorsRenderPayload,
+  FlowMode,
+  ProofingProvider,
+  ProofingCapabilities,
+  ProofingCheckRequest,
+  ProofingCheckResult,
+  ProofingSegment,
+  ProofingSegmentMetadata,
+  ProofingIssue,
+  ProofingIssueKind,
+  ProofingConfig,
+  ProofingStatus,
+  ProofingError,
+  PageStyles,
 } from 'superdoc';
 
 // Verify types are usable (not just importable)
@@ -103,4 +123,50 @@ const unsupported: UnsupportedContentItem = {
   tagName: 'HR',
   outerHTML: '<hr>',
   count: 1,
+};
+
+// PresentationEditor event types
+const imgSelected: ImageSelectedEvent = {
+  element: document.createElement('div'),
+  blockId: 'block-1',
+  pmStart: 0,
+};
+const imgDeselected: ImageDeselectedEvent = { blockId: 'block-1' };
+const telemetry: TelemetryEvent = {
+  type: 'error',
+  data: { phase: 'render', error: new Error('test'), timestamp: Date.now() },
+};
+
+// Proofing types
+const proofingConfig: ProofingConfig = {
+  enabled: true,
+  defaultLanguage: 'en',
+  debounceMs: 500,
+};
+const proofingIssue: ProofingIssue = {
+  segmentId: 'seg-1',
+  start: 0,
+  end: 5,
+  kind: 'spelling' satisfies ProofingIssueKind,
+};
+const proofingStatus: ProofingStatus = 'idle';
+
+// FlowMode
+const flowMode: FlowMode = 'paginated';
+
+// Comment types (replaces customer's SuperComment / SuperElement overrides)
+const element: CommentElement = {
+  type: 'paragraph',
+  text: 'Hello',
+  content: [{ type: 'text', text: 'nested' }],
+};
+const comment: Comment = {
+  commentId: 'c-1',
+  createdTime: Date.now(),
+  creatorName: 'User',
+  creatorEmail: 'user@example.com',
+  elements: [element],
+  isDone: false,
+  parentCommentId: null,
+  importedId: 'imp-1',
 };

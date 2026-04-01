@@ -213,7 +213,7 @@ export interface SaveOptions {
   commentsType?: string;
 
   /** Comments to include in export */
-  comments?: Array<{ id: string; [key: string]: unknown }>;
+  comments?: Comment[];
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
@@ -1644,11 +1644,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // This may override the setEditable calls above when read-only protection
     // is enforced or when permission ranges allow editing in protected docs.
     applyEffectiveEditability(this);
-
-    this.emit('documentModeChange', {
-      editor: this,
-      documentMode: cleanedMode as 'editing' | 'viewing' | 'suggesting',
-    });
   }
 
   /**
@@ -2235,7 +2230,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *   - [3] fonts - Object containing font files from the DOCX
    */
   static async loadXmlData(
-    fileSource: File | Blob | Buffer,
+    fileSource: File | Blob | Buffer | ArrayBuffer,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
     isNode: boolean = false,
     options?: { password?: string },
   ): Promise<
@@ -3707,7 +3717,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer | ArrayBuffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
     const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
@@ -3732,7 +3742,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const doReplaceFileSync = () => {
         // 1. Insert new PM doc into Y fragment (must happen first)
-        this.options.fragment = null;
         this.#insertNewFileData();
 
         // 2. Seed parts from new converter snapshot (prunes stale parts)

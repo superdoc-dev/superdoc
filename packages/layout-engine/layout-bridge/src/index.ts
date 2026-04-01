@@ -1386,8 +1386,9 @@ const mapPmToX = (
   }
 
   // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
-  // Skip for list-marker first lines — the renderer doesn't adjust those.
-  if (isFirstLine && block.kind === 'paragraph' && !isListParagraph) {
+  // Skip for list-marker first lines — the renderer doesn't adjust those (only when marker has actual text).
+  const hasRenderedMarkerText = isListParagraph && Boolean(wl?.marker?.markerText);
+  if (isFirstLine && block.kind === 'paragraph' && !hasRenderedMarkerText) {
     const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
     const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
     availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);

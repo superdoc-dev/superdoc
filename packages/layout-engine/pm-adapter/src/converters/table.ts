@@ -493,7 +493,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side], {
+        unit: 'eighthPoints',
+      });
       if (spec) resolvedBorders[side] = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
@@ -853,6 +855,7 @@ export function tableNodeToBlock(
   if (rows.length === 0) return null;
 
   const tableAttrs: Record<string, unknown> = {};
+  let borderUnit: 'px' | 'eighthPoints' = 'px';
   const getBorderSource = (): Record<string, unknown> | undefined => {
     if (
       node.attrs?.borders &&
@@ -860,6 +863,7 @@ export function tableNodeToBlock(
       node.attrs.borders !== null &&
       Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
     ) {
+      borderUnit = 'px';
       return node.attrs.borders as Record<string, unknown>;
     }
     if (
@@ -867,12 +871,15 @@ export function tableNodeToBlock(
       typeof hydratedTableStyle.borders === 'object' &&
       hydratedTableStyle.borders !== null
     ) {
+      borderUnit = 'eighthPoints';
       return hydratedTableStyle.borders as Record<string, unknown>;
     }
     return undefined;
   };
   const borderSource = getBorderSource();
-  const tableBorders: TableBorders | undefined = extractTableBorders(borderSource);
+  const tableBorders: TableBorders | undefined = borderSource
+    ? extractTableBorders(borderSource, { unit: borderUnit })
+    : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 
   if (node.attrs?.borderCollapse) {

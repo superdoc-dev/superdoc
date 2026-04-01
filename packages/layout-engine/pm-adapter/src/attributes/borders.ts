@@ -23,6 +23,11 @@ const EIGHTHS_PER_POINT = 8;
 const MIN_BORDER_SIZE_PX = 0.5; // Minimum visible border
 const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
 
+type BorderConversionUnit = 'px' | 'eighthPoints';
+type BorderConversionOptions = {
+  unit?: BorderConversionUnit;
+};
+
 /**
  * Convert an OOXML border size (stored in eighths of a point) to pixels.
  *
@@ -45,6 +50,13 @@ const borderSizeToPx = (size?: number): number | undefined => {
 
 const clampPixelBorderWidth = (width: number): number =>
   Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, width));
+
+const resolveBorderWidth = (size: number, unit: BorderConversionUnit): number | undefined => {
+  if (unit === 'eighthPoints') {
+    return borderSizeToPx(size);
+  }
+  return clampPixelBorderWidth(size);
+};
 
 /**
  * Normalizes a border/shading color with a default fallback.
@@ -80,7 +92,7 @@ const normalizeColorWithDefault = (color?: string): string => {
  * // undefined
  * ```
  */
-export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined {
+export function convertBorderSpec(ooxmlBorder: unknown, options?: BorderConversionOptions): BorderSpec | undefined {
   if (!ooxmlBorder || typeof ooxmlBorder !== 'object' || ooxmlBorder === null) {
     return undefined;
   }
@@ -113,7 +125,9 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
 
   // Ensure color has # prefix
   const normalizedColor = normalizeColorWithDefault(colorString);
-  const width = clampPixelBorderWidth(numericSize);
+  const unit: BorderConversionUnit = options?.unit ?? 'px';
+  const width = resolveBorderWidth(numericSize, unit);
+  if (width == null) return undefined;
 
   return {
     style: (val as BorderStyle) || 'single',
@@ -140,7 +154,10 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
  * // { none: true }
  * ```
  */
-export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue | undefined {
+export function convertTableBorderValue(
+  ooxmlBorder: unknown,
+  options?: BorderConversionOptions,
+): TableBorderValue | undefined {
   if (!ooxmlBorder || typeof ooxmlBorder !== 'object') return undefined;
 
   const border = ooxmlBorder as OoxmlBorder;
@@ -158,7 +175,9 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
   if (numericSize <= 0) return { none: true };
 
   const normalizedColor = normalizeColorWithDefault(color);
-  const width = clampPixelBorderWidth(numericSize);
+  const unit: BorderConversionUnit = options?.unit ?? 'px';
+  const width = resolveBorderWidth(numericSize, unit);
+  if (width == null) return undefined;
 
   return {
     style: (val as BorderStyle) || 'single',
@@ -214,7 +233,10 @@ function isTableBorderValue(value: unknown): value is TableBorderValue {
  * @param bordersInput - Record of border definitions for sides (top, left, right, etc.)
  * @returns TableBorders | undefined
  */
-export function extractTableBorders(bordersInput: Record<string, unknown> | undefined): TableBorders | undefined {
+export function extractTableBorders(
+  bordersInput: Record<string, unknown> | undefined,
+  options?: BorderConversionOptions,
+): TableBorders | undefined {
   if (!bordersInput || typeof bordersInput !== 'object') {
     return undefined;
   }
@@ -231,7 +253,7 @@ export function extractTableBorders(bordersInput: Record<string, unknown> | unde
       borders[side] = raw;
     } else {
       // Convert from OOXML
-      const converted = convertTableBorderValue(raw);
+      const converted = convertTableBorderValue(raw, options);
       if (converted !== undefined) {
         borders[side] = converted;
       }

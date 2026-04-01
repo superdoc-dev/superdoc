@@ -78,6 +78,12 @@ describe('convertBorderSpec', () => {
       expect(result?.width).toBe(1.5);
     });
 
+    it('converts eighth-point sizes when requested', () => {
+      const input = { val: 'single', size: 8, color: 'FF0000' }; // 1pt → 1.333px
+      const result = convertBorderSpec(input, { unit: 'eighthPoints' });
+      expect(result?.width).toBeCloseTo(1.3333, 4);
+    });
+
     it('should clamp extremely large widths to a reasonable maximum', () => {
       const input = { val: 'single', size: 2000, color: 'FF0000' };
       const result = convertBorderSpec(input);
@@ -201,6 +207,12 @@ describe('convertTableBorderValue', () => {
       const result = convertTableBorderValue(input);
       expect(result?.width).toBe(100);
     });
+
+    it('converts eighth-point sizes for table borders when requested', () => {
+      const input = { val: 'double', size: 4, color: '00FF00' }; // 0.5pt → 0.666px
+      const result = convertTableBorderValue(input, { unit: 'eighthPoints' });
+      expect(result?.width).toBeCloseTo(0.6666, 3);
+    });
   });
 
   describe('nil/none/zero borders', () => {
@@ -297,6 +309,16 @@ describe('extractTableBorders', () => {
       };
       const result = extractTableBorders(input);
       expect(Object.keys(result!)).toHaveLength(6);
+    });
+
+    it('converts eighth-point units when requested', () => {
+      const input = {
+        top: { val: 'single', size: 8 },
+        bottom: { val: 'single', size: 4 },
+      };
+      const result = extractTableBorders(input, { unit: 'eighthPoints' });
+      expect(result?.top?.width).toBeCloseTo(1.3333, 4);
+      expect(result?.bottom?.width).toBeCloseTo(0.6666, 3);
     });
 
     it('should convert nil borders to {none: true}', () => {

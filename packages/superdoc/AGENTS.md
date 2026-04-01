@@ -135,10 +135,31 @@ Docs: https://docs.superdoc.dev/document-engine/overview
 | Import DOCX | Pass URL, File, or Blob to `document` option |
 | Export DOCX | `const blob = await superdoc.export({ isFinalDoc: true })` |
 | Track changes | Set `documentMode: 'suggesting'` or use SDK with `defaultChangeMode: 'tracked'` |
-| Add comments | `superdoc.activeEditor.commands.addComment({ content: 'text' })` |
+| Add comments | Use Document API: `editor.doc.comments.create({ target, content: 'text' })` |
+| Find and replace | Use Document API: `editor.doc.query.match(...)` then `editor.doc.replace(...)` |
+| Format text | Use Document API: `editor.doc.format.bold(...)`, `.italic(...)`, etc. |
 | Real-time collab | Configure `modules.collaboration` with a Yjs provider |
 | Custom toolbar | Use `modules.toolbar.customButtons` array |
 | Listen to events | `superdoc.on('ready', ({ superdoc }) => { ... })` |
+
+### Programmatic access (Document API)
+
+For reading and mutating documents programmatically, use the Document API (`editor.doc`). It provides 300+ stable operations. Direct access to ProseMirror internals (`editor.state`, `editor.view`) and editor commands (`editor.commands`) is deprecated and will be removed.
+
+```javascript
+superdoc.on('editorCreate', ({ editor }) => {
+  // Query document content
+  const result = editor.doc.query.match({ select: { type: 'text', pattern: 'ACME' } });
+
+  // Replace matched text
+  editor.doc.replace({ target: result.items[0].target, text: 'Globex' });
+
+  // Add a comment
+  editor.doc.comments.create({ target: result.items[0].target, content: 'Updated name' });
+});
+```
+
+For backend or AI agent workflows, use the [SDK](https://docs.superdoc.dev/document-engine/sdks), [CLI](https://docs.superdoc.dev/document-engine/cli), or [MCP server](https://docs.superdoc.dev/document-engine/ai-agents/mcp-server) instead of browser editor access.
 
 ## Knowledge corrections
 

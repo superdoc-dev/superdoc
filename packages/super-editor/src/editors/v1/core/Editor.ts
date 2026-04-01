@@ -212,7 +212,7 @@ export interface SaveOptions {
   commentsType?: string;
 
   /** Comments to include in export */
-  comments?: Array<{ id: string; [key: string]: unknown }>;
+  comments?: Comment[];
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
@@ -227,6 +227,19 @@ export interface SaveOptions {
  * with format-specific options (e.g., format?: 'docx' | 'json' | 'xml').
  */
 export type ExportOptions = SaveOptions;
+
+/**
+ * Full parameter set for `Editor.exportDocx()`.
+ * Extends SaveOptions with internal export format flags.
+ */
+export interface ExportDocxParams extends SaveOptions {
+  /** Return raw XML string instead of a binary blob */
+  exportXmlOnly?: boolean;
+  /** Return JSON string instead of a binary blob */
+  exportJsonOnly?: boolean;
+  /** Return the updated file map instead of a binary blob */
+  getUpdatedDocs?: boolean;
+}
 
 /**
  * Main editor class that manages document state, extensions, and user interactions
@@ -2206,7 +2219,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *   - [3] fonts - Object containing font files from the DOCX
    */
   static async loadXmlData(
-    fileSource: File | Blob | Buffer,
+    fileSource: File | Blob | Buffer | ArrayBuffer,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
     isNode: boolean = false,
     options?: { password?: string },
   ): Promise<
@@ -3048,7 +3076,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Export the editor document to DOCX.
+   *
+   * Return type depends on flags:
+   * - `exportXmlOnly: true` → `string` (raw XML)
+   * - `exportJsonOnly: true` → `string` (JSON string)
+   * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js)
    */
+  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
+  async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',
@@ -3058,16 +3096,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: {
-    isFinalDoc?: boolean;
-    commentsType?: string;
-    exportJsonOnly?: boolean;
-    exportXmlOnly?: boolean;
-    comments?: Comment[];
-    getUpdatedDocs?: boolean;
-    fieldsHighlightColor?: string | null;
-    compression?: 'DEFLATE' | 'STORE';
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
+  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
@@ -3667,7 +3696,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer | ArrayBuffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
     const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({

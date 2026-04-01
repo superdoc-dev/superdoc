@@ -52,15 +52,19 @@ function parseResults(raw) {
       parsed = JSON.parse(result.response?.output || '{}');
     } catch {}
 
+    // Prefer parsed output (always present) over componentResults (may be empty)
+    const inputTokens = parsed.usage?.input_tokens || 0;
+    const outputTokens = parsed.usage?.output_tokens || 0;
+
     rows.push({
       provider,
-      description,
+      description: description || result.vars?.task || '',
       passed,
-      stepCount: metrics.step_count || parsed.stepCount || 0,
-      cost: metrics.cost_usd || parsed.cost || 0,
-      duration: metrics.duration_ms || parsed.duration || 0,
-      tokens: metrics.total_tokens || 0,
-      pathUsed: metrics.path_used || parsed.pathUsed || 'unknown',
+      stepCount: parsed.stepCount || metrics.step_count || 0,
+      cost: parsed.cost || metrics.cost_usd || 0,
+      duration: parsed.duration || metrics.duration_ms || 0,
+      tokens: inputTokens + outputTokens,
+      pathUsed: parsed.pathUsed || metrics.path_used || 'unknown',
       condition: parsed.condition || provider,
       collateral: (result.assertionResults || [])
         .filter(a => a.metric === 'collateral')

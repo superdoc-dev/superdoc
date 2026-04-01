@@ -197,6 +197,8 @@
 </div>
 
 <style>
+  @reference "tailwindcss";
+
   .toolbar-btn {
     @apply flex items-center justify-center w-8 h-8 rounded
            text-gray-600 hover:bg-gray-100

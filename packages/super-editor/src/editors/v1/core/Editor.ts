@@ -1644,6 +1644,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // This may override the setEditable calls above when read-only protection
     // is enforced or when permission ranges allow editing in protected docs.
     applyEffectiveEditability(this);
+
+    this.emit('documentModeChange', {
+      editor: this,
+      documentMode: cleanedMode as 'editing' | 'viewing' | 'suggesting',
+    });
   }
 
   /**
@@ -3742,6 +3747,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const doReplaceFileSync = () => {
         // 1. Insert new PM doc into Y fragment (must happen first)
+        this.options.fragment = null;
         this.#insertNewFileData();
 
         // 2. Seed parts from new converter snapshot (prunes stale parts)

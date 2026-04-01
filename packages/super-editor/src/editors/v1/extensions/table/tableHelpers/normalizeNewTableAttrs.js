@@ -8,6 +8,7 @@ import {
 } from '@superdoc/style-engine/ooxml';
 import { readDefaultTableStyle, readSettingsRoot } from '../../../document-api-adapters/document-settings.js';
 import { readTranslatedLinkedStyles } from '../../../core/parts/adapters/styles-read.js';
+import { eighthPointsToPixels } from '../../../core/super-converter/helpers.js';
 
 /**
  * @typedef {Object} NormalizedTableAttrs
@@ -53,9 +54,11 @@ export function normalizeNewTableAttrs(editor) {
   const resolved = resolvePreferredNewTableStyleIdFromEditor(editor);
 
   if (resolved.source === 'none') {
+    const fallbackPixelBorders = cloneBorders(TABLE_FALLBACK_BORDERS, convertBorderSizeToPx);
+
     return {
       tableStyleId: null,
-      borders: { ...TABLE_FALLBACK_BORDERS },
+      borders: fallbackPixelBorders,
       tableProperties: {
         borders: { ...TABLE_FALLBACK_BORDERS },
         cellMargins: {
@@ -82,3 +85,41 @@ export function normalizeNewTableAttrs(editor) {
  * Matches Word behavior where `TableGrid` is always the default.
  */
 export const STANDALONE_TABLE_STYLE_ID = TABLE_STYLE_ID_TABLE_GRID;
+
+/**
+ *
+ * @param {*} borders - The borders to clone
+ * @param {*} sizeMapper - The function to convert the size to pixels
+ * @returns {Object} - The cloned borders
+ */
+const cloneBorders = (borders, sizeMapper) => {
+  if (!borders || typeof borders !== 'object') return {};
+  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
+  const result = {};
+
+  for (const side of sides) {
+    const border = borders[side];
+    if (!border || typeof border !== 'object') continue;
+    const copy = { ...border };
+
+    if (sizeMapper) {
+      const mapped = sizeMapper(copy.size);
+      if (typeof mapped === 'number') copy.size = mapped;
+    }
+
+    result[side] = copy;
+  }
+
+  return result;
+};
+
+/**
+ *
+ * @param {*} size - The size to convert to pixels
+ * @returns
+ */
+const convertBorderSizeToPx = (size) => {
+  if (typeof size !== 'number') return undefined;
+  const px = eighthPointsToPixels(size);
+  return typeof px === 'number' ? px : undefined;
+};

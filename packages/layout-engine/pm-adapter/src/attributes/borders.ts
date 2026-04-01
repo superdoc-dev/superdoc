@@ -94,7 +94,6 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
   if (val !== undefined && typeof val !== 'string') return undefined;
 
   const sizeNumber = typeof size === 'number' ? size : undefined;
-  if (sizeNumber != null && !Number.isFinite(sizeNumber)) return undefined;
   const colorString = typeof color === 'string' ? color : undefined;
 
   // Skip nil/none borders or zero-width borders
@@ -102,7 +101,7 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
     return { style: 'none' as BorderStyle, width: 0 };
   }
 
-  const width = sizeNumber != null ? (sizeNumber <= 12 ? sizeNumber : borderSizeToPx(sizeNumber)) : undefined;
+  const width = borderSizeToPx(sizeNumber);
   if (width == null) return undefined;
 
   // Ensure color has # prefix
@@ -146,9 +145,7 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
     return { none: true };
   }
 
-  const sizeNumber = typeof size === 'number' ? size : undefined;
-  if (sizeNumber != null && !Number.isFinite(sizeNumber)) return undefined;
-  const width = sizeNumber != null ? (sizeNumber <= 12 ? sizeNumber : borderSizeToPx(sizeNumber)) : undefined;
+  const width = borderSizeToPx(size);
   if (width == null) return undefined;
 
   const normalizedColor = normalizeColorWithDefault(color);

@@ -617,7 +617,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
     }
 
     // Line height
-    proseMirror.style.lineHeight = String(DEFAULT_LINE_HEIGHT);
+    proseMirror.style.lineHeight = editor.options.isHeaderOrFooter ? String(1) : String(DEFAULT_LINE_HEIGHT);
 
     // Mobile styles
     element.style.transformOrigin = 'top left';

@@ -297,38 +297,4 @@ for (const entry of requiredEntryPoints) {
 }
 
 console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace modules`);
-
-// ---------------------------------------------------------------------------
-// Inject command type augmentation references into the super-editor barrel.
-//
-// The source index.ts has /// <reference path="..."> directives that load
-// module augmentations for CoreCommandMap and ExtensionCommandMap. These are
-// stripped by vite-plugin-dts during generation. Re-inject them so consumers
-// get typed commands (required for noPropertyAccessFromIndexSignature).
-// ---------------------------------------------------------------------------
-
-const superEditorIndexPath = path.join(distRoot, 'super-editor/src/index.d.ts');
-const superEditorContent = fs.readFileSync(superEditorIndexPath, 'utf8');
-
-const commandAugmentationRefs = [
-  '/// <reference path="./editors/v1/core/commands/core-command-map.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/comment-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/formatting-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/specialized-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/history-link-table-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/paragraph-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/block-node-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/image-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/track-changes-commands.d.ts" />',
-  '/// <reference path="./editors/v1/extensions/types/miscellaneous-commands.d.ts" />',
-].join('\n');
-
-if (!superEditorContent.includes('core-command-map.d.ts')) {
-  // Insert after the shims reference (first line) to keep it at the top
-  const lines = superEditorContent.split('\n');
-  const insertIndex = lines[0].includes('<reference') ? 1 : 0;
-  lines.splice(insertIndex, 0, commandAugmentationRefs);
-  fs.writeFileSync(superEditorIndexPath, lines.join('\n'));
-  console.log('[ensure-types] ✓ Injected command type augmentation references');
-}
 console.log('[ensure-types] ✓ Verified type entry points');

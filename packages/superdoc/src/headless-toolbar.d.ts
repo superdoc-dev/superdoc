@@ -8,7 +8,11 @@ export {
   type HeadlessToolbarSuperdocHost,
   type PublicToolbarItemId,
   type ToolbarCommandState,
+  type ToolbarCommandStates,
   type ToolbarContext,
+  type ToolbarExecuteFn,
+  type ToolbarPayloadMap,
   type ToolbarSnapshot,
   type ToolbarTarget,
+  type ToolbarValueMap,
 } from '@superdoc/super-editor';

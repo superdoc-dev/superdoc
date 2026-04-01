@@ -5,6 +5,7 @@ import type {
   HeadlessToolbarController,
   PublicToolbarItemId,
   ToolbarSnapshot,
+  ToolbarPayloadMap,
 } from './types.js';
 
 /**
@@ -43,9 +44,9 @@ export function useHeadlessToolbar(
     controller.destroy();
   });
 
-  const execute = (id: PublicToolbarItemId, payload?: unknown) => {
-    return controller.execute(id, payload);
-  };
+  const execute: HeadlessToolbarController['execute'] = ((...args: [any, any?]) => {
+    return controller.execute(...args);
+  }) as HeadlessToolbarController['execute'];
 
   return { snapshot, execute };
 }

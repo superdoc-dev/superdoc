@@ -4,7 +4,7 @@ import type {
   CreateHeadlessToolbarOptions,
   HeadlessToolbarSuperdocHost,
   PublicToolbarItemId,
-  ToolbarCommandState,
+  ToolbarCommandStates,
   ToolbarSnapshot,
 } from './types.js';
 
@@ -18,7 +18,7 @@ const buildCommandStateMap = ({
   superdoc: HeadlessToolbarSuperdocHost;
   context: ToolbarSnapshot['context'];
   toolbarRegistry: Partial<Record<PublicToolbarItemId, BuiltInToolbarRegistryEntry>>;
-}): Partial<Record<PublicToolbarItemId, ToolbarCommandState>> => {
+}): ToolbarCommandStates => {
   const entries = commands.map((command) => {
     const entry = toolbarRegistry[command];
 
@@ -35,7 +35,7 @@ const buildCommandStateMap = ({
     return [command, entry.state({ context, superdoc })] as const;
   });
 
-  return Object.fromEntries(entries);
+  return Object.fromEntries(entries) as ToolbarCommandStates;
 };
 
 export const createToolbarSnapshot = ({

@@ -107,7 +107,7 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
       };
     },
 
-    execute(id, payload) {
+    execute(id: PublicToolbarItemId, payload?: unknown) {
       // Restore editor focus after execution so toolbar clicks don't break
       // the editing selection. The built-in toolbar handles this internally;
       // the headless API must do the same so consumers don't need to.
@@ -129,5 +129,5 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
       unsubscribeEvents = null;
       listeners.clear();
     },
-  };
+  } as HeadlessToolbarController;
 };

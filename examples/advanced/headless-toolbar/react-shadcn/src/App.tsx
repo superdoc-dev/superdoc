@@ -3,6 +3,8 @@ import { SuperDoc } from 'superdoc';
 import {
   headlessToolbarConstants,
   type PublicToolbarItemId,
+  type ToolbarSnapshot,
+  type ToolbarExecuteFn,
 } from 'superdoc/headless-toolbar';
 import { useHeadlessToolbar } from 'superdoc/headless-toolbar/react';
 import 'superdoc/style.css';
@@ -114,7 +116,7 @@ function FormatToggles({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const items: { id: PublicToolbarItemId; icon: typeof Bold; label: string }[] = [
     { id: 'bold', icon: Bold, label: 'Bold' },
@@ -161,7 +163,7 @@ function FontFamilySelect({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const current = (snapshot.commands['font-family']?.value as string) ?? '';
   const currentLabel =
@@ -223,7 +225,7 @@ function FontSizeSelect({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const current = (snapshot.commands['font-size']?.value as string) ?? '';
   const currentLabel = DEFAULT_FONT_SIZE_OPTIONS.find((o) => o.value === current)?.label ?? current.replace('pt', '');
@@ -289,9 +291,9 @@ function ColorPickerPopover({
   commandId: PublicToolbarItemId;
   icon: typeof Type;
   label: string;
-  options: { label: string; value: string }[];
+  options: readonly { readonly label: string; readonly value: string }[];
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const currentColor = (snapshot.commands[commandId]?.value as string) ?? '#000000';
 
@@ -350,7 +352,7 @@ function AlignSelect({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const current = ((snapshot.commands['text-align']?.value as string) ?? 'left') as keyof typeof ALIGN_ICONS;
   const ActiveIcon = ALIGN_ICONS[current] ?? AlignLeft;
@@ -413,7 +415,7 @@ function ListToggles({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const items: { id: PublicToolbarItemId; icon: typeof List; label: string }[] = [
     { id: 'bullet-list', icon: List, label: 'Bullet list' },
@@ -458,7 +460,7 @@ function LinkPopover({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const [href, setHref] = useState('');
   const state = snapshot.commands['link'];
@@ -529,7 +531,7 @@ function ZoomSelect({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const current = (snapshot.commands['zoom']?.value as number) ?? 100;
   const currentStr = String(current);
@@ -596,7 +598,7 @@ function ToolbarButton({
   icon: typeof Bold;
   label: string;
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   const state = snapshot.commands[id];
   return (
@@ -626,7 +628,7 @@ function Toolbar({
   onExecute,
 }: {
   snapshot: ToolbarSnapshot;
-  onExecute: (id: PublicToolbarItemId, payload?: unknown) => void;
+  onExecute: ToolbarExecuteFn;
 }) {
   return (
     <div className="flex items-center gap-1 border-b border-zinc-200 bg-white px-3 py-1.5 overflow-x-auto">

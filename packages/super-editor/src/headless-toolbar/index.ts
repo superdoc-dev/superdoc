@@ -20,7 +20,11 @@ export type {
   HeadlessToolbarSuperdocHost,
   PublicToolbarItemId,
   ToolbarCommandState,
+  ToolbarCommandStates,
   ToolbarContext,
+  ToolbarExecuteFn,
+  ToolbarPayloadMap,
   ToolbarSnapshot,
   ToolbarTarget,
+  ToolbarValueMap,
 } from './types.js';

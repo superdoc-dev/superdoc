@@ -1,5 +1,12 @@
 import { DOM_CLASS_NAMES } from './constants.js';
 
+/**
+ * Fallback font-size applied to child elements inside a line container that
+ * carry no explicit fontSize. Matches the browser default so rendering is
+ * preserved after the strut-elimination fix (fontSize: '0' on lines).
+ */
+export const BROWSER_DEFAULT_FONT_SIZE = '16px';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -90,6 +97,15 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
+  // Eliminate the CSS "strut" created by the inherited font-size (typically
+  // the browser default 16px). Without this, the strut shifts normal-flow
+  // inline children down via baseline alignment, while absolutely-positioned
+  // children (used for tab-aligned segments) are unaffected — causing
+  // tab-indented first lines to appear shifted up relative to continuation
+  // lines. All text-bearing child elements set their own explicit font-size;
+  // elements that don't (empty-run, math wrapper, field annotation wrapper)
+  // are patched individually in renderer.ts.
+  fontSize: '0',
   position: 'relative',
   display: 'block',
   whiteSpace: 'pre',

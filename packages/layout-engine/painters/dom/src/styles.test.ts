@@ -7,6 +7,11 @@ describe('lineStyles', () => {
     expect(styles.height).toBe('24px');
     expect(styles.lineHeight).toBe('24px');
   });
+
+  it('sets fontSize to 0 to eliminate the CSS strut', () => {
+    const styles = lineStyles(20);
+    expect(styles.fontSize).toBe('0');
+  });
 });
 
 describe('ensureSdtContainerStyles', () => {

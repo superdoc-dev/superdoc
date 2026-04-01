@@ -1709,6 +1709,9 @@ export class SuperDoc extends EventEmitter {
     if (this.#surfaceManager) {
       this.#surfaceManager.destroy();
     }
+
+    this.toolbar?.destroy?.();
+
     // Unmount the app FIRST so editors are destroyed — this triggers each
     // extension's onDestroy() which cancels debounced Y.js writes and
     // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.

@@ -18,6 +18,7 @@ on:
       - 'packages/esign/**'
       - 'evals/**'
       - '**/*.md'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

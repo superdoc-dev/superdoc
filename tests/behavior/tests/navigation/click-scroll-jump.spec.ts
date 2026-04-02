@@ -182,100 +182,12 @@ test('@behavior SD-2356: clicking gap between paragraphs in table should not jum
   expect(gapCoords!.gapSize).toBeGreaterThan(0);
 
   const scrollBefore = await getScrollTop(page);
-  const selBeforeClick = await superdoc.getSelection();
-
-  // Instrument dispatch to trace the selection change and scroll
-  const debugLogs: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.text().includes('SD-2356')) debugLogs.push(msg.text());
-  });
-  // Check what elementsFromPoint returns at the gap — this is what clickToPositionDom uses
-  const domDebug = await page.evaluate(
-    ({ x, y }) => {
-      const elements = document.elementsFromPoint(x, y);
-      return elements.slice(0, 10).map((el) => ({
-        tag: el.tagName,
-        className: el.className?.toString()?.substring(0, 50),
-        pmStart: (el as HTMLElement).dataset?.pmStart,
-        pmEnd: (el as HTMLElement).dataset?.pmEnd,
-        blockId: (el as HTMLElement).dataset?.blockId,
-        isFragment: el.classList.contains('superdoc-fragment') || el.classList.contains('superdoc-table-fragment'),
-        isLine: !!(el as HTMLElement).dataset?.pmStart && !!(el as HTMLElement).dataset?.pmEnd,
-      }));
-    },
-    { x: gapCoords!.gapX, y: gapCoords!.gapY },
-  );
-  console.log('DOM hit chain:', JSON.stringify(domDebug, null, 2));
-
-  // Monkey-patch the position hit resolver to trace which path returns the result
-  await page.evaluate(() => {
-    // Patch clickToPositionDom by intercepting the ViewportHost's pointer events
-    // We can't easily patch the module functions, but we can instrument the dispatch
-    const editor = (window as any).editor;
-    if (!editor?.view) return;
-    const origDispatch = editor.view.dispatch.bind(editor.view);
-    editor.view.dispatch = function (tr: any) {
-      if (tr.selectionSet) {
-        const pos = tr.selection.from;
-        const resolved = tr.doc.resolve(pos);
-        const parentText = resolved.parent?.textContent?.substring(0, 80);
-        const stack = new Error().stack
-          ?.split('\n')
-          .slice(1, 10)
-          .map((l: string) => l.trim())
-          .join(' | ');
-        console.log(
-          '[SD-2356] dispatch',
-          JSON.stringify({
-            from: pos,
-            to: tr.selection.to,
-            parentText,
-            stack,
-          }),
-        );
-      }
-      return origDispatch(tr);
-    };
-  });
-
-  // Check what element/fragment is at the click point
-  const hitDebug = await page.evaluate(
-    ({ x, y }) => {
-      const el = document.elementFromPoint(x, y);
-      if (!el) return { error: 'no element' };
-      const blockEl = el.closest('[data-block-id]');
-      const pageEl = el.closest('.superdoc-page');
-      return {
-        tag: el.tagName,
-        className: el.className?.toString()?.substring(0, 40),
-        blockId: blockEl?.getAttribute('data-block-id'),
-        pageIndex: pageEl?.getAttribute('data-page-index'),
-        hasPmStart: el.hasAttribute?.('data-pm-start'),
-        closestPmStart: el.closest('[data-pm-start]')?.getAttribute('data-pm-start'),
-      };
-    },
-    { x: gapCoords!.gapX, y: gapCoords!.gapY },
-  );
-  console.log('Hit debug:', JSON.stringify(hitDebug));
 
   await page.mouse.click(gapCoords!.gapX, gapCoords!.gapY);
   await superdoc.waitForStable(1000);
 
   const scrollAfter = await getScrollTop(page);
-  const selAfterClick = await superdoc.getSelection();
   const scrollDelta = Math.abs(scrollAfter - scrollBefore);
-
-  console.log(
-    'Debug:',
-    JSON.stringify({
-      selBefore: selBeforeClick,
-      selAfter: selAfterClick,
-      scrollBefore,
-      scrollAfter,
-      scrollDelta,
-    }),
-  );
-  for (const log of debugLogs) console.log(log);
 
   expect(
     scrollDelta,

@@ -311,6 +311,47 @@ describe('DomPointerMapping', () => {
       });
     });
 
+    it('resolves through a nested table wrapper when the click lands between lines', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-table-cell" style="position: absolute;">
+              <div class="cell-content">
+                <div class="paragraph-a" style="margin-bottom: 12px;">
+                  <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                    <span data-pm-start="5" data-pm-end="15">Upper line</span>
+                  </div>
+                </div>
+                <div class="paragraph-b">
+                  <div class="superdoc-line" data-pm-start="20" data-pm-end="30">
+                    <span data-pm-start="20" data-pm-end="30">Lower line</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const cell = container.querySelector('.superdoc-table-cell') as HTMLElement;
+      const content = container.querySelector('.cell-content') as HTMLElement;
+      const lines = container.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
+      const upperRect = lines[0].getBoundingClientRect();
+      const lowerRect = lines[1].getBoundingClientRect();
+      const gapY = upperRect.bottom + Math.max(1, (lowerRect.top - upperRect.bottom) / 3);
+
+      withMockedElementsFromPoint(
+        [content, cell, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const result = clickToPositionDom(container, upperRect.left + 5, gapY);
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+
     it('returns a position when a line IS in the hit chain', () => {
       container.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

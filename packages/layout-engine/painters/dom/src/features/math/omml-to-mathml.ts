@@ -14,6 +14,7 @@ import {
   convertMathRun,
   convertFraction,
   convertBar,
+  convertDelimiter,
   convertSubscript,
   convertSuperscript,
 } from './converters/index.js';
@@ -37,6 +38,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Implemented ──────────────────────────────────────────────────────────
   'm:r': convertMathRun,
   'm:bar': convertBar, // Bar (overbar/underbar)
+  'm:d': convertDelimiter, // Delimiter (parentheses, brackets, braces)
   'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
@@ -45,7 +47,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:acc': null, // Accent (diacritical mark above base)
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
-  'm:d': null, // Delimiter (parentheses, brackets, braces)
   'm:eqArr': null, // Equation array (vertical array of equations)
   'm:func': null, // Function apply (sin, cos, log, etc.)
   'm:groupChr': null, // Group character (overbrace, underbrace)

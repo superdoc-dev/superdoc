@@ -322,6 +322,173 @@ describe('m:bar converter', () => {
   });
 });
 
+describe('m:d converter', () => {
+  it('converts m:d to delimiters around the expression', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '(' } },
+                { name: 'm:endChr', attributes: { 'm:val': ')' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x+y)');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children[0]!.textContent).toBe('(');
+    expect(outerRow!.children[1]!.textContent).toBe('x+y');
+    expect(outerRow!.children[2]!.textContent).toBe(')');
+  });
+
+  it('defaults to parentheses and pipe separators when dPr is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x|y)');
+  });
+
+  it('uses custom delimiter and separator characters for multiple expressions', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '[' } },
+                { name: 'm:endChr', attributes: { 'm:val': ']' } },
+                { name: 'm:sepChr', attributes: { 'm:val': ';' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('[a;b]');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('[');
+    expect(outerRow!.children[2]!.textContent).toBe(';');
+    expect(outerRow!.children[4]!.textContent).toBe(']');
+  });
+
+  it('does not render stray separators for empty expressions', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            { name: 'm:e', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x)');
+  });
+
+  it('preserves explicit empty delimiter characters', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '' } },
+                { name: 'm:endChr', attributes: { 'm:val': '' } },
+                { name: 'm:sepChr', attributes: { 'm:val': '' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('xy');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('');
+    expect(outerRow!.children[2]!.textContent).toBe('');
+    expect(outerRow!.children[4]!.textContent).toBe('');
+  });
+});
+
 describe('m:sSub converter', () => {
   it('converts m:sSub to <msub> with base and subscript', () => {
     const omml = {

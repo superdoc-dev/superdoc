@@ -19,7 +19,7 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +36,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const MCP_WRAPPER_PATH = resolve(__dirname, 'mcp-stdio-wrapper.mjs');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
+const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
 
 const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
 
@@ -132,6 +133,11 @@ export default class CodexBenchmarkProvider {
         FORCE_COLOR: '0',
         NO_COLOR: '1',
       };
+
+      // Install vendor DOCX skill (Anthropic's docx skill) as AGENTS.md
+      if (this.config.vendorSkill && existsSync(VENDOR_SKILL_PATH)) {
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), readFileSync(VENDOR_SKILL_PATH, 'utf8'));
+      }
 
       // Put `superdoc` CLI on PATH as an actual executable
       if (this.config.superdocOnPath && existsSync(CLI_PATH)) {

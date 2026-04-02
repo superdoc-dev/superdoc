@@ -35,6 +35,7 @@ providers:
     config:
       condition: vendor
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      vendorSkill: true
       superdocMcp: false
       superdocOnPath: false
 
@@ -85,6 +86,7 @@ providers:
     label: Codex-vendor
     config:
       condition: vendor
+      vendorSkill: true
       superdocMcp: false
       superdocOnPath: false
 

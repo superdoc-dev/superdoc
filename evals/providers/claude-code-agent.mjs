@@ -28,7 +28,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +44,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
+const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
 const REPO_ROOT = resolve(__dirname, '../..');
 
 const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with tools for reading and editing Word documents (.docx).
@@ -148,6 +149,11 @@ export default class ClaudeCodeBenchmarkProvider {
         env.PATH = env.PATH.split(':')
           .filter(p => !p.includes('superdoc'))
           .join(':');
+      }
+
+      // Install vendor DOCX skill (Anthropic's docx skill) as AGENTS.md
+      if (this.config.vendorSkill && existsSync(VENDOR_SKILL_PATH)) {
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), readFileSync(VENDOR_SKILL_PATH, 'utf8'));
       }
 
       // Put `superdoc` CLI on PATH as an actual executable

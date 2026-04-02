@@ -118,6 +118,7 @@ import { translator as w_personalCompose_translator } from './w/personalCompose/
 import { translator as w_personalReply_translator } from './w/personalReply/personalReply-translator.js';
 import { translator as w_position_translator } from './w/position/position-translator.js';
 import { translator as w_pPr_translator } from './w/pPr/pPr-translator.js';
+import { translator as w_pPrChange_translator } from './w/pPrChange/pPrChange-translator.js';
 import { translator as w_pStyle_translator } from './w/pStyle/pStyle-translator.js';
 import { translator as w_permEnd_translator } from './w/perm-end/perm-end-translator.js';
 import { translator as w_permStart_translator } from './w/perm-start/perm-start-translator.js';
@@ -324,6 +325,7 @@ const translatorList = Array.from(
     w_personalReply_translator,
     w_position_translator,
     w_pPr_translator,
+    w_pPrChange_translator,
     w_pStyle_translator,
     w_permStart_translator,
     w_permEnd_translator,

@@ -500,6 +500,8 @@ export function decodePropertiesByKey(xmlName, sdName, translator, params, attrs
  * @param {import('@translator').NodeTranslator[]} propertyTranslators An array of property translators to handle nested properties.
  * @param {object} [defaultEncodedAttrs={}] Optional default attributes to include during encoding.
  * @param {import('@translator').AttrConfig[]} [attributeHandlers=[]] Optional additional attribute handlers for the nested element.
+ * @param {object} [options={}] Optional configuration.
+ * @param {boolean} [options.emitWhenAttributesOnly=false] When true, the decode path emits the XML element if it has attributes even when there are no child elements. Useful for tracked-change wrappers (e.g. w:pPrChange) where the attributes carry independent semantic value.
  * @returns {import('@translator').NodeTranslatorConfig} The nested property handler config with xmlName, sdName, encode, and decode functions.
  */
 export function createNestedPropertiesTranslator(
@@ -508,6 +510,7 @@ export function createNestedPropertiesTranslator(
   propertyTranslators,
   defaultEncodedAttrs = {},
   attributeHandlers = [],
+  { emitWhenAttributesOnly = false } = {},
 ) {
   const propertyTranslatorsByXmlName = {};
   const propertyTranslatorsBySdName = {};
@@ -542,7 +545,9 @@ export function createNestedPropertiesTranslator(
       // Process property translators
       const elements = decodeProperties(params, propertyTranslatorsBySdName, currentValue);
 
-      if (elements.length === 0) {
+      const hasAttributes = emitWhenAttributesOnly && Object.keys(decodedAttrs).length > 0;
+
+      if (elements.length === 0 && !hasAttributes) {
         return undefined;
       }
 

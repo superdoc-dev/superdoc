@@ -197,7 +197,12 @@ async def dispatch_superdoc_tool_async(
 
 
 def get_system_prompt() -> str:
-    """Read the bundled system prompt for intent tools."""
+    """Read the bundled SDK system prompt for intent tools.
+
+    This prompt includes a persona preamble suitable for embedded LLM usage
+    (OpenAI, Anthropic APIs). For MCP server instructions, use
+    :func:`get_mcp_prompt` instead.
+    """
     resource = resources.files('superdoc').joinpath('tools', 'system-prompt.md')
     try:
         return resource.read_text(encoding='utf-8')
@@ -206,4 +211,21 @@ def get_system_prompt() -> str:
             'System prompt not found.',
             code='TOOLS_ASSET_NOT_FOUND',
             details={'file': 'system-prompt.md'},
+        ) from error
+
+
+def get_mcp_prompt() -> str:
+    """Read the bundled MCP system prompt for intent tools.
+
+    This prompt omits the persona preamble and includes session lifecycle
+    instructions (open/save/close) suitable for MCP server ``instructions``.
+    """
+    resource = resources.files('superdoc').joinpath('tools', 'system-prompt-mcp.md')
+    try:
+        return resource.read_text(encoding='utf-8')
+    except FileNotFoundError as error:
+        raise SuperDocError(
+            'MCP system prompt not found.',
+            code='TOOLS_ASSET_NOT_FOUND',
+            details={'file': 'system-prompt-mcp.md'},
         ) from error

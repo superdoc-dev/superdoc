@@ -124,7 +124,6 @@ The `evals/` directory contains a Promptfoo-based evaluation suite for validatin
 |---------|-------------|------|
 | `pnpm --filter @superdoc-testing/evals run eval` | Run deterministic evals (reading + argument tests) | ~$0.30 |
 | `pnpm --filter @superdoc-testing/evals run eval:reading` | Run reading tool tests only | ~$0.15 |
-| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark (Model+SuperDoc vs Model-Only) | ~$1-2 |
 | `pnpm --filter @superdoc-testing/evals run eval:view` | Open Promptfoo web UI with results | Free |
 | `pnpm --filter @superdoc-testing/evals run baseline:save <label>` | Save versioned results snapshot | Free |
 

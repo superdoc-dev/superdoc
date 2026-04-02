@@ -190,13 +190,11 @@ if (fs.readFileSync(superEditorFacadePath, 'utf8') !== expectedSuperEditorFacade
 //
 // Internal .d.ts files reference @superdoc/* workspace packages that consumers
 // can't install. Generate a shim so TypeScript can resolve these imports.
-// Also shim prosemirror peer deps that are bundled (not in consumer node_modules).
 // ---------------------------------------------------------------------------
 
 // Collect @superdoc/* workspace module specifiers and their named imports from
 // all .d.ts files. These are private packages consumers can't install — we
-// generate ambient `declare module` shims for them. External packages
-// (prosemirror, vue, yjs, etc.) are handled by the hand-written shims below.
+// generate ambient `declare module` shims for them.
 const workspaceImports = new Map(); // module → Set<name>
 
 for (const filePath of dtsFiles) {
@@ -244,109 +242,24 @@ for (const filePath of dtsFiles) {
 // ---------------------------------------------------------------------------
 // Write _internal-shims.d.ts
 //
-// Two sections:
-//   1. Hand-written shims for external packages (prosemirror-*, vue, yjs,
-//      eventemitter3, @hocuspocus/provider). See KNOWN LIMITATION note in the
-//      generated file about ambient shims overriding real package types.
-//   2. Auto-generated shims for @superdoc/* workspace packages.
+// Only contains auto-generated shims for @superdoc/* workspace packages.
+// External packages (prosemirror-*, vue, eventemitter3, yjs, etc.) are NOT
+// shimmed — ambient `declare module` overrides real types globally, breaking
+// consumers who depend on those packages (IT-852).
 // ---------------------------------------------------------------------------
 
 const shimLines = [
-  '// Auto-generated ambient declarations for internal/bundled packages.',
-  '// These packages are bundled into superdoc or are internal workspace packages.',
-  '// Consumers do not need to install them. This file prevents TypeScript errors',
-  '// when skipLibCheck is false.',
+  '// Auto-generated ambient declarations for internal workspace packages.',
+  '// These are private @superdoc/* packages that consumers cannot install.',
+  '// This file prevents TypeScript errors when skipLibCheck is false.',
   '//',
-  '// KNOWN LIMITATION: ambient `declare module` with `export type X = any`',
-  '// overrides real package types when both are present. This affects:',
-  '//   - vue, eventemitter3: direct deps of superdoc — ALWAYS in consumer',
-  '//     node_modules, so real types are always replaced by `any`.',
-  '//   - yjs, @hocuspocus/provider: peer deps — affected when installed.',
-  '//   - prosemirror-*: bundled (not in consumer node_modules) — no conflict.',
-  '// The proper fix is adding prosemirror-* as peerDependencies and removing',
-  '// shims for packages consumers already have installed.',
+  '// External packages (prosemirror-*, vue, eventemitter3, yjs, etc.) are NOT',
+  '// shimmed here — their real types come from node_modules. Ambient shims for',
+  '// external packages would override real types globally, breaking consumers',
+  '// who depend on those packages (e.g. Tiptap users need real prosemirror types).',
   '//',
   '// NOTE: This is a script file (no exports), so `declare module` creates',
   '// global ambient declarations and top-level declarations are global.',
-  '',
-  '// --- Well-known external packages (hand-written for correctness) ---',
-  '',
-  "declare module 'prosemirror-model' {",
-  '  export type DOMOutputSpec = any;',
-  '  export type Fragment = any;',
-  '  export type Mark = any;',
-  '  export type MarkType = any;',
-  '  export type Node = any;',
-  '  export type NodeType = any;',
-  '  export type ParseRule = any;',
-  '  export type ResolvedPos = any;',
-  '  export type Schema<N extends string = any, M extends string = any> = any;',
-  '  export type Slice = any;',
-  '}',
-  '',
-  "declare module 'prosemirror-state' {",
-  '  export type EditorState = any;',
-  '  export type Plugin<T = any> = any;',
-  '  export type PluginKey<T = any> = any;',
-  '  export type TextSelection = any;',
-  '  export type Transaction = any;',
-  '}',
-  '',
-  "declare module 'prosemirror-transform' {",
-  '  export type Mapping = any;',
-  '  export type ReplaceAroundStep = any;',
-  '  export type ReplaceStep = any;',
-  '  export type Step = any;',
-  '}',
-  '',
-  "declare module 'prosemirror-view' {",
-  '  export type Decoration = any;',
-  '  export type DecorationSet = any;',
-  '  export type DecorationSource = any;',
-  '  export type EditorProps = any;',
-  '  export type EditorView = any;',
-  '  export type NodeView = any;',
-  '}',
-  '',
-  "declare module 'eventemitter3' {",
-  '  export class EventEmitter<EventTypes extends string | symbol = string | symbol, Context = any> {',
-  '    on(event: EventTypes, fn: (...args: any[]) => void, context?: Context): this;',
-  '    off(event: EventTypes, fn: (...args: any[]) => void, context?: Context): this;',
-  '    emit(event: EventTypes, ...args: any[]): boolean;',
-  '    removeAllListeners(event?: EventTypes): this;',
-  '  }',
-  '  export default EventEmitter;',
-  '}',
-  '',
-  "declare module 'vue' {",
-  '  export type App<T = any> = any;',
-  '  export type ComponentOptionsBase<P = any, B = any, D = any, C = any, M = any, Mixin = any, Extends = any, E = any, EE = any, Defaults = any, I = any, II = any, S = any, LC = any, Directives = any, Exposed = any, Provide = any> = any;',
-  '  export type ComponentOptionsMixin = any;',
-  '  export type ComponentProvideOptions = any;',
-  '  export type ComponentPublicInstance<P = any, B = any, D = any, C = any, M = any, E = any, S = any, Options = any, Defaults = any, MakeDefaultsOptional = any, I = any, PublicMixin = any, A = any, B2 = any, C2 = any> = any;',
-  '  export type ComputedRef<T = any> = any;',
-  '  export type CreateComponentPublicInstanceWithMixins<T = any, S = any, U = any, V = any, W = any, X = any, Y = any, Z = any, A = any, B = any, C = any, D = any> = any;',
-  '  export type DefineComponent<P = any, B = any, D = any, C = any, M = any, Mixin = any, Extends = any, E = any, EE = any, PP = any, Props = any, Defaults = any, S = any> = any;',
-  '  export type ExtractPropTypes<T = any> = any;',
-  '  export type GlobalComponents = any;',
-  '  export type GlobalDirectives = any;',
-  '  export type PublicProps = any;',
-  '  export type Ref<T = any> = any;',
-  '  export type RendererElement = any;',
-  '  export type RendererNode = any;',
-  '  export type ShallowRef<T = any> = any;',
-  '  export type VNode = any;',
-  '}',
-  '',
-  "declare module 'yjs' {",
-  '  export type Doc = any;',
-  '  export type XmlFragment = any;',
-  '  export type RelativePosition = any;',
-  '}',
-  '',
-  "declare module '@hocuspocus/provider' {",
-  '  export type HocuspocusProvider = any;',
-  '}',
   '',
 ];
 
@@ -383,5 +296,5 @@ for (const entry of requiredEntryPoints) {
   }
 }
 
-console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace + 8 external modules`);
+console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace modules`);
 console.log('[ensure-types] ✓ Verified type entry points');

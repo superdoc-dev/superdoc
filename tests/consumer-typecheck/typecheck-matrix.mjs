@@ -111,6 +111,25 @@ const scenarios = [
     files: ['src/imports-main.ts', 'src/imports-sub-export.ts'],
     mustPass: true,
   },
+  // IT-852 regression: prosemirror types must NOT be overridden by ambient shims
+  {
+    name: 'bundler / prosemirror coexistence (IT-852)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/prosemirror-coexistence.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / prosemirror coexistence (IT-852)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/prosemirror-coexistence.ts'],
+    mustPass: true,
+  },
   // skipLibCheck=false — informational only (pre-existing dep errors)
   {
     name: 'bundler / skipLibCheck=false',

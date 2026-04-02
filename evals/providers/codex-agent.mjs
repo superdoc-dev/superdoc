@@ -258,7 +258,7 @@ export default class CodexBenchmarkProvider {
           duration,
           usage: usage || {},
           pathUsed,
-          outputFile: keepFile ? docPath : null,
+          outputFile: keepFile ? localDocPath : null,
         }),
       };
 

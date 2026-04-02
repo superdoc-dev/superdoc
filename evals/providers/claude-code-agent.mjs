@@ -264,7 +264,7 @@ export default class ClaudeCodeBenchmarkProvider {
           usage,
           duration,
           pathUsed,
-          outputFile: keepFile ? docPath : null,
+          outputFile: keepFile ? localDocPath : null,
         }),
       };
 

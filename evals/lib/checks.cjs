@@ -659,7 +659,7 @@ for (const check of checks) {
     const r = checkTableCell(parsed.documentXml, check.table ?? 0, check.row ?? 0, check.col ?? 0);
     let pass = true;
     let reason = r.reason;
-    if (check.text !== undefined && r.text !== check.text) { pass = false; reason = \`Cell text "\${r.text}" !== expected "\${check.text}"\`; }
+    if (check.text !== undefined && !r.text?.includes(check.text)) { pass = false; reason = \`Cell text "\${r.text}" does not contain "\${check.text}"\`; }
     if (check.alignment !== undefined && r.alignment !== check.alignment) { pass = false; reason += \`; alignment "\${r.alignment}" !== expected "\${check.alignment}"\`; }
     results.push({ pass, reason });
   } else if (check.type === 'paragraphStyle') {

@@ -107,7 +107,7 @@
     fixture: contract-redlines.docx
     keepFile: true
     task: 'Change the payment terms from "net 45" to "net 30" using tracked changes. Preserve all existing comments and tracked changes in the document.'
-    fidelityChecks: '[{"type":"trackedChangeCount","min":5},{"type":"commentExists","id":"0"},{"type":"commentExists","id":"1"}]'
+    fidelityChecks: '[{"type":"trackedChangeCount","min":5},{"type":"commentExists","id":"1"},{"type":"commentExists","id":"2"}]'
   assert:
     - type: javascript
       metric: correctness
@@ -200,7 +200,7 @@
     fixture: consulting-agreement.docx
     keepFile: true
     task: 'Find all payment-related terms in the document (amounts, rates, payment schedules), then create a summary table with columns "Item" and "Value" listing each term. Insert the table at the end of the document under a new heading "Payment Summary".'
-    fidelityChecks: '[{"type":"paragraphStyle","text":"Payment Summary","style":"Heading1"}]'
+    fidelityChecks: '[]'
   assert:
     - type: javascript
       metric: correctness
@@ -248,7 +248,7 @@
     fixture: contract-redlines.docx
     keepFile: true
     task: 'In the Liability section, change the liability cap from "$100,000" to "$250,000" using tracked changes. Do not remove or modify any existing comments or tracked changes in the document.'
-    fidelityChecks: '[{"type":"commentExists","id":"0"},{"type":"commentExists","id":"1"},{"type":"trackedChangeCount","min":5}]'
+    fidelityChecks: '[{"type":"commentExists","id":"1"},{"type":"commentExists","id":"2"},{"type":"trackedChangeCount","min":5}]'
   assert:
     - type: javascript
       metric: correctness

@@ -1,6 +1,6 @@
 # Level 3: DOCX Agent Benchmark
 #
-# 4 conditions × 2 agents × 6 tasks = 48 runs
+# 4 conditions × 2 agents × 12 tasks = 96 runs
 #
 # Conditions:
 #   baseline       — no skill, agent figures out DOCX on its own
@@ -86,6 +86,9 @@ derivedMetrics:
     value: 'tokens / __count'
   - name: superdoc_usage_pct
     value: 'path / __count * 100'
+  - name: avg_fidelity
+    value: 'fidelity / __count'
 
 tests:
   - file://tests/agent-benchmark.yaml
+  - file://tests/agent-benchmark-v2.yaml

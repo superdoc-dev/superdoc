@@ -85,6 +85,9 @@ function parseResults(raw) {
       collateral: (result.assertionResults || [])
         .filter(a => a.metric === 'collateral')
         .every(a => a.pass),
+      fidelity: (result.assertionResults || [])
+        .filter(a => a.metric === 'fidelity')
+        .map(a => a.score ?? (a.pass ? 1 : 0))[0] ?? null,
     });
   }
   return rows;
@@ -96,14 +99,18 @@ function generateSummaryTable(rows) {
   const conditions = [...new Set(rows.map(r => r.provider))];
   const lines = [
     '## Summary by Condition\n',
-    '| Condition | Pass Rate | Collateral | Med. Latency | p95 Latency | Med. Steps | Input Tok | Output Tok | Total Tok | Est. Cost |',
-    '|-----------|-----------|-----------|-------------|------------|-----------|----------|-----------|----------|----------|',
+    '| Condition | Pass Rate | Collateral | Fidelity | Med. Latency | p95 Latency | Med. Steps | Input Tok | Output Tok | Total Tok | Est. Cost |',
+    '|-----------|-----------|-----------|---------|-------------|------------|-----------|----------|-----------|----------|----------|',
   ];
 
   for (const cond of conditions) {
     const cr = rows.filter(r => r.provider === cond);
     const passRate = (cr.filter(r => r.passed).length / cr.length * 100).toFixed(0);
     const collRate = (cr.filter(r => r.collateral).length / cr.length * 100).toFixed(0);
+    const fidelityRows = cr.filter(r => r.fidelity !== null);
+    const fidRate = fidelityRows.length > 0
+      ? (fidelityRows.filter(r => r.fidelity >= 1).length / fidelityRows.length * 100).toFixed(0) + '%'
+      : '-';
     const medLat = Math.round(median(cr.map(r => r.duration)) / 1000);
     const p95Lat = Math.round(p95(cr.map(r => r.duration)) / 1000);
     const medSteps = Math.round(median(cr.map(r => r.stepCount)));
@@ -113,7 +120,7 @@ function generateSummaryTable(rows) {
     const totalCost = cr.reduce((sum, r) => sum + r.cost, 0);
 
     lines.push(
-      `| ${cond} | ${passRate}% | ${collRate}% | ${medLat}s | ${p95Lat}s | ${medSteps} | ${medIn} | ${medOut} | ${medTot} | $${totalCost.toFixed(4)} |`
+      `| ${cond} | ${passRate}% | ${collRate}% | ${fidRate} | ${medLat}s | ${p95Lat}s | ${medSteps} | ${medIn} | ${medOut} | ${medTot} | $${totalCost.toFixed(4)} |`
     );
   }
 

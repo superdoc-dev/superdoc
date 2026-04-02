@@ -6,10 +6,14 @@
  */
 
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
 const require = createRequire(import.meta.url);
 const checks = require('./checks.cjs');
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 function call(name, args = {}) {
   return { function: { name, arguments: JSON.stringify(args) } };
@@ -189,6 +193,36 @@ test('benchmarkMetrics combined still works', () => {
   const result = benchmarkMetrics(output, {});
   assert.strictEqual(result.pass, true);
   assert.ok(result.reason.includes('3 steps'));
+});
+
+// --- benchmarkFidelity ---
+console.log('benchmarkFidelity');
+test('benchmarkFidelity passes when outputFile is null (reading task)', () => {
+  const output = JSON.stringify({ stepCount: 3 }); // no outputFile
+  const result = checks.benchmarkFidelity(output, { vars: { fidelityChecks: '[{"type":"trackedChangeCount","min":1}]' } });
+  assert.strictEqual(result.pass, true);
+  assert.ok(result.reason.includes('no output file'));
+});
+
+test('benchmarkFidelity runs checks from vars.fidelityChecks', () => {
+  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const output = JSON.stringify({ outputFile: ndaPath });
+  const context = { vars: { fidelityChecks: JSON.stringify([{ type: 'trackedChangeCount', min: 0 }]) } };
+  const result = checks.benchmarkFidelity(output, context);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 1);
+});
+
+// --- benchmarkDiff ---
+console.log('benchmarkDiff');
+test('benchmarkDiff returns 0 ratio for same file', () => {
+  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const output = JSON.stringify({ outputFile: ndaPath });
+  const context = { vars: { fixture: 'nda.docx' } };
+  const result = checks.benchmarkDiff(output, context);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 0);
+  assert.ok(result.reason.includes('0/'));
 });
 
 console.log();

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
-import type { SuperDoc } from 'superdoc';
+import type { SuperDoc } from 'superdoc'; // requires superdoc >=1.24.2 for correct types
 import type * as Types from './types';
 import { FieldMenu, FieldList } from './defaults';
 import { areTemplateFieldsEqual, resolveToolbar, clampToViewport, getPresentationEditor } from './utils';

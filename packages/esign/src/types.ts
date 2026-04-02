@@ -1,4 +1,4 @@
-import type { SuperDoc } from 'superdoc'; // eslint-disable-line
+import type { SuperDoc } from 'superdoc';
 
 export type FieldValue = string | boolean | number | null | undefined;
 export type TableFieldValue = string[][];

@@ -229,6 +229,19 @@ export interface SaveOptions {
 export type ExportOptions = SaveOptions;
 
 /**
+ * Full parameter set for `Editor.exportDocx()`.
+ * Extends SaveOptions with internal export format flags.
+ */
+export interface ExportDocxParams extends SaveOptions {
+  /** Return raw XML string instead of a binary blob */
+  exportXmlOnly?: boolean;
+  /** Return JSON string instead of a binary blob */
+  exportJsonOnly?: boolean;
+  /** Return the updated file map instead of a binary blob */
+  getUpdatedDocs?: boolean;
+}
+
+/**
  * Main editor class that manages document state, extensions, and user interactions
  */
 export class Editor extends EventEmitter<EditorEventMap> {
@@ -3061,7 +3074,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Export the editor document to DOCX.
+   *
+   * Return type depends on flags:
+   * - `exportXmlOnly: true` → `string` (raw XML)
+   * - `exportJsonOnly: true` → `string` (JSON string)
+   * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js headless)
    */
+  async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
+  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',
@@ -3071,16 +3094,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: {
-    isFinalDoc?: boolean;
-    commentsType?: string;
-    exportJsonOnly?: boolean;
-    exportXmlOnly?: boolean;
-    comments?: Comment[];
-    getUpdatedDocs?: boolean;
-    fieldsHighlightColor?: string | null;
-    compression?: 'DEFLATE' | 'STORE';
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
+  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];

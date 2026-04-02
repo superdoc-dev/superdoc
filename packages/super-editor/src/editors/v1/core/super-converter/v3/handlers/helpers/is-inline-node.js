@@ -35,6 +35,7 @@ const INLINE_FALLBACK_TYPES = new Set([
   'sequenceField',
   'indexEntry',
   'tableOfContentsEntry',
+  'tableOfContentsInline',
 ]);
 
 export function isInlineNode(node, schema) {

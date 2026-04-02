@@ -45,7 +45,7 @@ import { ShapeContainer } from './shape-container/index.js';
 import { ShapeTextbox } from './shape-textbox/index.js';
 import { ContentBlock } from './content-block/index.js';
 import { BlockNode } from './block-node/index.js';
-import { TableOfContents, TocPageNumber } from './table-of-contents/index.js';
+import { TableOfContents, TableOfContentsInline, TocPageNumber } from './table-of-contents/index.js';
 import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
@@ -108,6 +108,7 @@ const getRichTextExtensions = () => {
     Link,
     Paragraph,
     TableOfContents,
+    TableOfContentsInline,
     DocumentIndex,
     Strike,
     Text,
@@ -165,6 +166,7 @@ const getStarterExtensions = () => {
     Strike,
     TabNode,
     TableOfContents,
+    TableOfContentsInline,
     TocPageNumber,
     DocumentIndex,
     Text,
@@ -274,6 +276,8 @@ export {
   TableCell,
   TableHeader,
   DocumentIndex,
+  TableOfContents,
+  TableOfContentsInline,
   IndexEntry,
   TableOfContentsEntry,
   TocPageNumber,

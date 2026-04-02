@@ -132,6 +132,52 @@ describe('LinkedStyles Extension', () => {
         });
         expect(boldTextNodes).toHaveLength(0);
       });
+
+      it('applies linked character style to a partial selection without restyling the whole paragraph', () => {
+        const firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        let innerFrom;
+        let innerTo;
+        editor.state.doc.nodesBetween(
+          firstParagraph.pos,
+          firstParagraph.pos + firstParagraph.node.nodeSize,
+          (node, pos) => {
+            if (node.isText && node.text.length >= 4) {
+              innerFrom = pos + 1;
+              innerTo = pos + node.text.length - 1;
+              return false;
+            }
+            return true;
+          },
+        );
+        expect(innerFrom).toBeDefined();
+        expect(innerTo).toBeGreaterThan(innerFrom);
+
+        const prevParaStyleId = getParagraphProps(firstParagraph.node).styleId;
+
+        const styleWithLink = {
+          ...headingStyle,
+          type: 'paragraph',
+          definition: {
+            ...headingStyle.definition,
+            attrs: { ...headingStyle.definition.attrs, link: 'Emphasis' },
+          },
+        };
+
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, innerFrom, innerTo)));
+        const result = editor.commands.setLinkedStyle(styleWithLink);
+        expect(result).toBe(true);
+
+        const paraAfter = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(paraAfter.node).styleId).toBe(prevParaStyleId);
+
+        let sawEmphasisInSelection = false;
+        editor.state.doc.nodesBetween(innerFrom, innerTo, (node) => {
+          if (!node.isText) return;
+          const ts = node.marks.find((m) => m.type.name === 'textStyle');
+          if (ts?.attrs?.styleId === 'Emphasis') sawEmphasisInSelection = true;
+        });
+        expect(sawEmphasisInSelection).toBe(true);
+      });
     });
 
     describe('toggleLinkedStyle', () => {

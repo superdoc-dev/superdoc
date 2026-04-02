@@ -2,6 +2,7 @@
 import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getLineHeightValueString } from '@core/super-converter/helpers.js';
 import { findParentNode } from '../../core/helpers/findParentNode.js';
+import { findParentNodeClosestToPos } from '../../core/helpers/findParentNodeClosestToPos.js';
 import { kebabCase } from '@superdoc/common';
 import { getUnderlineCssString } from './index.js';
 import { twipsToLines, twipsToPixels, halfPointToPixels } from '@converter/helpers.js';
@@ -309,6 +310,33 @@ export const generateLinkedStyleString = (linkedStyle, basedOnStyle, node, paren
 };
 
 /**
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} paragraphPos
+ * @param {import('prosemirror-model').Node} paragraphNode
+ * @returns {{ from: number; to: number } | null} Half-span [from, to) covering all text in the paragraph
+ */
+const getParagraphTextBounds = (doc, paragraphPos, paragraphNode) => {
+  let minPos = null;
+  let maxPos = null;
+  const innerStart = paragraphPos + 1;
+  const innerEnd = paragraphPos + paragraphNode.nodeSize - 1;
+  doc.nodesBetween(innerStart, innerEnd, (node, pos) => {
+    if (node.isText) {
+      if (minPos === null || pos < minPos) minPos = pos;
+      maxPos = pos + node.nodeSize;
+    }
+    return true;
+  });
+  if (minPos === null || maxPos === null) return null;
+  return { from: minPos, to: maxPos };
+};
+
+const applyCharacterStyleMarkToRange = (tr, textStyleType, from, to, styleId) => {
+  tr.removeMark(from, to, textStyleType);
+  tr.addMark(from, to, textStyleType.create({ styleId }));
+};
+
+/**
  * Apply a linked style to a transaction
  * @category Helper
  * @param {Object} tr - The transaction to mutate
@@ -325,6 +353,7 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
 
   let selection = tr.selection;
   const state = editor.state;
+  const textStyleType = editor.schema.marks.textStyle;
 
   // Check for preserved selection from custom selection plugin
   const focusState = CustomSelectionPluginKey.getState(state);
@@ -398,7 +427,37 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     return true;
   }
 
-  // Handle selection spanning multiple nodes
+  // Character styles: only affect the selected range (including across paragraphs)
+  if (style.type === 'character') {
+    if (!textStyleType) return false;
+    clearFormattingMarks(from, to);
+    applyCharacterStyleMarkToRange(tr, textStyleType, from, to, style.id);
+    clearStoredFormattingMarks();
+    return true;
+  }
+
+  // Paragraph style + partial selection in a single paragraph: apply linked character style to range only (Word behavior)
+  if (style.type === 'paragraph' && textStyleType) {
+    const linkedCharStyleId = style.definition?.attrs?.link;
+    if (linkedCharStyleId) {
+      const $fromPos = tr.doc.resolve(from);
+      const $toPos = tr.doc.resolve(to);
+      const startPara = findParentNodeClosestToPos($fromPos, (n) => n.type.name === 'paragraph');
+      const endPara = findParentNodeClosestToPos($toPos, (n) => n.type.name === 'paragraph');
+      if (startPara && endPara && startPara.pos === endPara.pos) {
+        const bounds = getParagraphTextBounds(tr.doc, startPara.pos, startPara.node);
+        const coversFullParagraphText = bounds && from <= bounds.from && to >= bounds.to;
+        if (!coversFullParagraphText) {
+          clearFormattingMarks(from, to);
+          applyCharacterStyleMarkToRange(tr, textStyleType, from, to, linkedCharStyleId);
+          clearStoredFormattingMarks();
+          return true;
+        }
+      }
+    }
+  }
+
+  // Handle selection spanning multiple nodes / full paragraph(s)
   const paragraphPositions = [];
 
   tr.doc.nodesBetween(from, to, (node, pos) => {

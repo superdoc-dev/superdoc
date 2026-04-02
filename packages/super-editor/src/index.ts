@@ -76,7 +76,13 @@ export type {
   ExportFormat,
   PageStyles,
 } from './editors/v1/core/types/EditorTypes.js';
-export type { OpenOptions, SaveOptions, ExportOptions, EditorLifecycleState } from './editors/v1/core/Editor.js';
+export type {
+  OpenOptions,
+  SaveOptions,
+  ExportOptions,
+  ExportDocxParams,
+  EditorLifecycleState,
+} from './editors/v1/core/Editor.js';
 
 // PresentationEditor public types
 export type {

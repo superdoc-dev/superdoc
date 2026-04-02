@@ -551,3 +551,130 @@ describe('m:sSup converter', () => {
     expect(msup!.children[0]!.textContent).toBe('x');
   });
 });
+
+describe('m:func converter', () => {
+  it('converts m:func to function name + apply operator + argument', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`sin${'\u2061'}x`);
+
+    const mrow = result!.querySelector('mrow');
+    expect(mrow).not.toBeNull();
+
+    const functionIdentifier = mrow!.querySelector('mi');
+    expect(functionIdentifier).not.toBeNull();
+    expect(functionIdentifier!.textContent).toBe('sin');
+    expect(functionIdentifier!.getAttribute('mathvariant')).toBe('normal');
+
+    const applyOperator = mrow!.querySelector('mo');
+    expect(applyOperator).not.toBeNull();
+    expect(applyOperator!.textContent).toBe('\u2061');
+  });
+
+  it('ignores m:funcPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            { name: 'm:funcPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'log' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '10' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`log${'\u2061'}10`);
+  });
+
+  it('renders single-character function names upright', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    const firstMi = result!.querySelector('mi');
+    expect(firstMi).not.toBeNull();
+    expect(firstMi!.textContent).toBe('f');
+    expect(firstMi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('wraps multi-part arguments in <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+
+    const outerRow = result!.querySelector('math > mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(3);
+    expect(outerRow!.children[0]!.textContent).toBe('sin');
+    expect(outerRow!.children[1]!.textContent).toBe('\u2061');
+    expect(outerRow!.children[2]!.textContent).toBe('x+1');
+  });
+});

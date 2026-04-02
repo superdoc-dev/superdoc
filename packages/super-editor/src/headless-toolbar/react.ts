@@ -47,7 +47,7 @@ export function useHeadlessToolbar(
   }, [superdoc]);
 
   const execute = useCallback((id: PublicToolbarItemId, payload?: unknown) => {
-    return controllerRef.current?.execute(id, payload) ?? false;
+    return controllerRef.current?.execute(id, payload as any) ?? false;
   }, []);
 
   return { snapshot, execute };

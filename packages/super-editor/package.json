@@ -154,6 +154,7 @@
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
     "@types/mdast": "catalog:",
+    "@types/react": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",

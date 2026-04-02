@@ -1,4 +1,4 @@
-import type { SuperDoc } from 'superdoc';
+import type { SuperDoc } from 'superdoc'; // requires superdoc >=1.24.2 for correct types (IT-852)
 import type { TemplateField, SuperDocTemplateBuilderProps, ToolbarConfig } from './types';
 
 export const areTemplateFieldsEqual = (a: TemplateField[], b: TemplateField[]): boolean => {

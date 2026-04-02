@@ -2787,6 +2787,12 @@ importers:
       pinia:
         specifier: 'catalog:'
         version: 2.3.1(typescript@5.9.3)(vue@3.5.25(typescript@5.9.3))
+      prosemirror-transform:
+        specifier: ^1.9.0
+        version: 1.11.0
+      prosemirror-view:
+        specifier: ^1.33.0
+        version: 1.41.7
       rollup-plugin-copy:
         specifier: 'catalog:'
         version: 3.5.0

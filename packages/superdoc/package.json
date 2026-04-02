@@ -100,9 +100,6 @@
     "yjs": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@hocuspocus/provider": {
-      "optional": true
-    },
     "pdfjs-dist": {
       "optional": true
     },
@@ -116,12 +113,6 @@
       "optional": true
     },
     "prosemirror-view": {
-      "optional": true
-    },
-    "y-prosemirror": {
-      "optional": true
-    },
-    "yjs": {
       "optional": true
     }
   },

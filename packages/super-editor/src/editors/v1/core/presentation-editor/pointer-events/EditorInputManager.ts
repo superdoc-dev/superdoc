@@ -1481,9 +1481,9 @@ export class EditorInputManager {
       }
     }
 
-    // Handle click outside text content
+    // Handle click outside text content — keep cursor and scroll position unchanged.
     if (!rawHit) {
-      this.#focusEditorAtFirstPosition();
+      this.#focusEditor();
       return;
     }
 

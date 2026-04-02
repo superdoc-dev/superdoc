@@ -229,6 +229,19 @@ export interface SaveOptions {
 export type ExportOptions = SaveOptions;
 
 /**
+ * Full parameter set for `Editor.exportDocx()`.
+ * Extends SaveOptions with internal export format flags.
+ */
+export interface ExportDocxParams extends SaveOptions {
+  /** Return raw XML string instead of a binary blob */
+  exportXmlOnly?: boolean;
+  /** Return JSON string instead of a binary blob */
+  exportJsonOnly?: boolean;
+  /** Return the updated file map instead of a binary blob */
+  getUpdatedDocs?: boolean;
+}
+
+/**
  * Main editor class that manages document state, extensions, and user interactions
  */
 export class Editor extends EventEmitter<EditorEventMap> {
@@ -248,13 +261,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
   extensionStorage: ExtensionStorage = {};
 
   /**
-   * ProseMirror schema for the editor
+   * ProseMirror schema for the editor.
+   * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   schema!: Schema;
 
   /**
    * ProseMirror view instance.
    * Undefined in headless mode or before the editor is mounted.
+   * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   view?: PmEditorView;
 
@@ -1310,7 +1325,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the editor state
+   * Get the editor state.
+   * @deprecated Direct ProseMirror state access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   get state(): EditorState {
     return this._state;
@@ -1377,6 +1393,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Get object of registered commands.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   get commands(): EditorCommands {
     return this.#commandService?.commands;
@@ -1562,6 +1579,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Create a chain of commands to call multiple commands at once.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   chain(): ChainableCommandObject {
     return this.#commandService.chain();
@@ -1569,6 +1587,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Check if a command or a chain of commands can be executed. Without executing it.
+   * @deprecated Editor commands will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
   can(): CanObject {
     return this.#commandService.can();
@@ -2719,6 +2738,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * In headless mode, this is the primary way to apply state changes since there is
    * no ProseMirror view to dispatch through.
    *
+   * @deprecated Direct ProseMirror dispatch will be removed in a future version. Use the Document API (`editor.doc`) instead.
+   *
    * @param tr - The ProseMirror transaction to dispatch
    *
    * @example
@@ -3053,7 +3074,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Export the editor document to DOCX.
+   *
+   * Return type depends on flags:
+   * - `exportXmlOnly: true` → `string` (raw XML)
+   * - `exportJsonOnly: true` → `string` (JSON string)
+   * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js headless)
    */
+  async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
+  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',
@@ -3063,16 +3094,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: {
-    isFinalDoc?: boolean;
-    commentsType?: string;
-    exportJsonOnly?: boolean;
-    exportXmlOnly?: boolean;
-    comments?: Comment[];
-    getUpdatedDocs?: boolean;
-    fieldsHighlightColor?: string | null;
-    compression?: 'DEFLATE' | 'STORE';
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
+  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];

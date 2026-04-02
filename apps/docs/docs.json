@@ -158,69 +158,6 @@
             ]
           },
           {
-            "group": "Extensions",
-            "pages": [
-              "extensions/overview",
-              {
-                "group": "All",
-                "pages": [
-                  "extensions/block-node",
-                  "extensions/bold",
-                  "extensions/bookmarks",
-                  "extensions/bullet-list",
-                  "extensions/color",
-                  "extensions/content-block",
-                  "extensions/custom-selection",
-                  "extensions/document",
-                  "extensions/document-index",
-                  "extensions/dropcursor",
-                  "extensions/font-family",
-                  "extensions/font-size",
-                  "extensions/footnote",
-                  "extensions/format-commands",
-                  "extensions/gapcursor",
-                  "extensions/heading",
-                  "extensions/highlight",
-                  "extensions/history",
-                  "extensions/image",
-                  "extensions/italic",
-                  "extensions/line-break",
-                  "extensions/line-height",
-                  "extensions/link",
-                  "extensions/linked-styles",
-                  "extensions/list-item",
-                  "extensions/mention",
-                  "extensions/noderesizer",
-                  "extensions/ordered-list",
-                  "extensions/page-number",
-                  "extensions/paragraph",
-                  "extensions/permission-ranges",
-                  "extensions/placeholder",
-                  "extensions/popover-plugin",
-                  "extensions/run-item",
-                  "extensions/search",
-                  "extensions/shape-container",
-                  "extensions/shape-textbox",
-                  "extensions/context-menu",
-                  "extensions/strike",
-                  "extensions/structured-content",
-                  "extensions/tab",
-                  "extensions/table",
-                  "extensions/table-cell",
-                  "extensions/table-header",
-                  "extensions/table-of-contents",
-                  "extensions/table-row",
-                  "extensions/text-align",
-                  "extensions/text-indent",
-                  "extensions/text-style",
-                  "extensions/text-transform",
-                  "extensions/track-changes",
-                  "extensions/underline"
-                ]
-              }
-            ]
-          },
-          {
             "group": "Solutions",
             "pages": [
               "solutions/overview",
@@ -266,6 +203,7 @@
               {
                 "group": "Migration",
                 "pages": [
+                  "guides/migration/document-api",
                   "guides/migration/prosemirror",
                   "guides/migration/breaking-changes-v1",
                   "guides/migration/typescript-migration",

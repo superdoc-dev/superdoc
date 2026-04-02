@@ -546,7 +546,7 @@
  * @typedef {Object} Config
  * @property {string} [superdocId] The ID of the SuperDoc
  * @property {string | HTMLElement} selector The selector or element to mount the SuperDoc into
- * @property {DocumentMode} documentMode The mode of the document
+ * @property {DocumentMode} [documentMode] The mode of the document (default: 'editing')
  * @property {'editor' | 'viewer' | 'suggester'} [role] The role of the user in this SuperDoc
  * @property {Object | string | File | Blob} [document] The document to load. If a string, it will be treated as a URL. If a File or Blob, it will be used directly.
  * @property {string} [password] Password for encrypted DOCX files. Forwarded during document load.

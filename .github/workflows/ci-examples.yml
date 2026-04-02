@@ -134,6 +134,26 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=features/${{ matrix.example }} npx playwright test
 
+  advanced-headless-toolbar:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [react-shadcn, react-mui, vue-vuetify, svelte-shadcn, vanilla]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=advanced/headless-toolbar/${{ matrix.example }} npx playwright test
+
   headless:
     needs: build
     runs-on: ubuntu-latest
@@ -152,7 +172,7 @@ jobs:
 
   validate:
     if: always()
-    needs: [getting-started, collaboration, features, headless]
+    needs: [getting-started, collaboration, features, advanced-headless-toolbar, headless]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

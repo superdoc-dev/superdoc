@@ -1,18 +1,15 @@
 # Level 3: DOCX Agent Benchmark
-# 10 conditions (5 Claude Code + 5 Codex) x 18 tasks = 180 runs
+#
+# 4 conditions × 2 agents × 6 tasks = 48 runs
 #
 # Conditions:
-#   baseline       — no SuperDoc, raw tools only
-#   vendor         — no SuperDoc, vendor DOCX skill (if any)
-#   superdoc-skill — SuperDoc MCP server attached (superdoc_* tools available)
-#   superdoc-cli   — SuperDoc CLI on PATH only (agent discovers it via Bash)
-#   choice         — SuperDoc MCP + CLI + vendor skill, agent picks approach
-#   local          — uses your local Claude Code settings (MCP servers, skills, CLAUDE.md)
+#   baseline       — no skill, agent figures out DOCX on its own
+#   vendor         — Anthropic's DOCX skill (unzip + XML + docx-js)
+#   superdoc-skill — SuperDoc MCP server (superdoc_* tools)
+#   superdoc-cli   — SuperDoc CLI on PATH
 #
-# Run all:     pnpm run eval:benchmark
-# Claude only: pnpm run eval:benchmark:claude
-# Codex only:  pnpm run eval:benchmark:codex
-# Report:      pnpm run eval:benchmark:report
+# Run:    pnpm run eval:benchmark
+# Report: pnpm run eval:benchmark:report
 
 description: 'Level 3: DOCX Agent Benchmark'
 
@@ -20,15 +17,13 @@ prompts:
   - '{{task}}'
 
 providers:
-  # ── Claude Code conditions ──
+  # ── Claude Code ──
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-baseline
     config:
       condition: baseline
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
-      superdocMcp: false
-      superdocOnPath: false
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-vendor
@@ -36,14 +31,11 @@ providers:
       condition: vendor
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
       vendorSkill: true
-      superdocMcp: false
-      superdocOnPath: false
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-superdoc-skill
     config:
       condition: superdoc-skill
-      # Only SuperDoc MCP tools + Read/Glob for discovery — no Bash to prevent raw fallback
       allowedTools: ['Read', 'Glob', 'Grep']
       superdocMcp: true
       superdocOnPath: true
@@ -53,42 +45,20 @@ providers:
     config:
       condition: superdoc-cli
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
-      superdocMcp: false
       superdocOnPath: true
 
-  - id: file://providers/claude-code-agent.mjs
-    label: CC-choice
-    config:
-      condition: choice
-      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
-      superdocMcp: true
-      superdocOnPath: true
-
-  # Uses your local Claude Code config (MCP servers, skills, CLAUDE.md)
-  # Run with: --filter-providers 'CC-local'
-  - id: file://providers/claude-code-agent.mjs
-    label: CC-local
-    config:
-      condition: local
-      useClaudeSettings: true
-      superdocOnPath: true
-
-  # ── Codex conditions ──
+  # ── Codex ──
 
   - id: file://providers/codex-agent.mjs
     label: Codex-baseline
     config:
       condition: baseline
-      superdocMcp: false
-      superdocOnPath: false
 
   - id: file://providers/codex-agent.mjs
     label: Codex-vendor
     config:
       condition: vendor
       vendorSkill: true
-      superdocMcp: false
-      superdocOnPath: false
 
   - id: file://providers/codex-agent.mjs
     label: Codex-superdoc-skill
@@ -101,22 +71,12 @@ providers:
     label: Codex-superdoc-cli
     config:
       condition: superdoc-cli
-      superdocMcp: false
-      superdocOnPath: true
-
-  - id: file://providers/codex-agent.mjs
-    label: Codex-choice
-    config:
-      condition: choice
-      superdocMcp: true
       superdocOnPath: true
 
 evaluateOptions:
   maxConcurrency: 2
-  timeoutMs: 300000  # 5 minutes per task
+  timeoutMs: 300000
 
-# Derived metrics computed from per-task named scores after evaluation.
-# These appear in the Promptfoo UI alongside regular metrics.
 derivedMetrics:
   - name: avg_latency
     value: 'latency / __count'

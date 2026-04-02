@@ -10,16 +10,11 @@ import 'superdoc/style.css';
 import './style.css';
 import {
   Bold, Italic, Underline, Strikethrough,
-  AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Undo2, Redo2, Image,
   createElement,
 } from 'lucide';
 
 // --- Icon helpers ---
-
-const ALIGN_ICONS: Record<string, Parameters<typeof createElement>[0]> = {
-  left: AlignLeft, center: AlignCenter, right: AlignRight, justify: AlignJustify,
-};
 
 function icon(node: Parameters<typeof createElement>[0]): SVGElement {
   return createElement(node) as unknown as SVGElement;

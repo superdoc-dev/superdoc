@@ -10,7 +10,6 @@
   --select-bg: #f8fafc;
   --select-border: #cbd5e1;
   --separator-color: #e2e8f0;
-  --color-swatch-size: 14px;
 }
 
 * {
@@ -99,29 +98,6 @@ html, body {
   cursor: default;
 }
 
-#toolbar .color-btn {
-  position: relative;
-}
-
-#toolbar .color-swatch {
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: var(--color-swatch-size);
-  height: 3px;
-  border-radius: 1px;
-  background: currentColor;
-}
-
-#toolbar .color-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
 
 #editor {
   height: calc(100% - var(--toolbar-height));

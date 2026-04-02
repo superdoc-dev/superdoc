@@ -5,14 +5,19 @@ import type {
   HeadlessToolbarController,
   PublicToolbarItemId,
   ToolbarSnapshot,
-  ToolbarPayloadMap,
 } from './types.js';
+
+const EMPTY_SNAPSHOT: ToolbarSnapshot = { context: null, commands: {} };
 
 /**
  * Vue composable for the headless toolbar.
  *
  * Returns `{ snapshot, execute }` — bind `snapshot` in your template and call
  * `execute` from your event handlers. Cleanup is automatic on unmount.
+ *
+ * `superdoc` must be available when the composable is called. If it depends on
+ * the DOM, create it in `onMounted` and use `createHeadlessToolbar` directly
+ * instead (see the vue-vuetify example).
  *
  * ```vue
  * <script setup>
@@ -25,12 +30,19 @@ import type {
  * ```
  */
 export function useHeadlessToolbar(
-  superdoc: CreateHeadlessToolbarOptions['superdoc'],
+  superdoc: CreateHeadlessToolbarOptions['superdoc'] | null | undefined,
   commands?: PublicToolbarItemId[],
 ): {
   snapshot: ShallowRef<ToolbarSnapshot>;
   execute: (id: PublicToolbarItemId, payload?: unknown) => boolean;
 } {
+  if (!superdoc) {
+    return {
+      snapshot: shallowRef<ToolbarSnapshot>(EMPTY_SNAPSHOT),
+      execute: () => false,
+    };
+  }
+
   const controller: HeadlessToolbarController = createHeadlessToolbar({ superdoc, commands });
 
   const snapshot = shallowRef<ToolbarSnapshot>(controller.getSnapshot());

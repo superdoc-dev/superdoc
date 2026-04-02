@@ -116,7 +116,11 @@ export type {
   HeadlessToolbarSuperdocHost,
   PublicToolbarItemId,
   ToolbarCommandState,
+  ToolbarCommandStates,
   ToolbarContext,
+  ToolbarExecuteFn,
+  ToolbarPayloadMap,
   ToolbarSnapshot,
   ToolbarTarget,
+  ToolbarValueMap,
 } from './headless-toolbar/types.js';

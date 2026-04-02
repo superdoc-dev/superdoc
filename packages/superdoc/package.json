@@ -42,6 +42,21 @@
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
     },
+    "./headless-toolbar": {
+      "types": "./dist/superdoc/src/headless-toolbar.d.ts",
+      "source": "./src/headless-toolbar.js",
+      "import": "./dist/headless-toolbar.es.js"
+    },
+    "./headless-toolbar/react": {
+      "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
+      "source": "./src/headless-toolbar-react.js",
+      "import": "./dist/headless-toolbar-react.es.js"
+    },
+    "./headless-toolbar/vue": {
+      "types": "./dist/superdoc/src/headless-toolbar-vue.d.ts",
+      "source": "./src/headless-toolbar-vue.js",
+      "import": "./dist/headless-toolbar-vue.es.js"
+    },
     "./file-zipper": {
       "import": "./dist/super-editor/file-zipper.es.js"
     },
@@ -50,6 +65,15 @@
   "types": "./dist/superdoc/src/index.d.ts",
   "typesVersions": {
     "*": {
+      "headless-toolbar": [
+        "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
+      "headless-toolbar/react": [
+        "./dist/superdoc/src/headless-toolbar-react.d.ts"
+      ],
+      "headless-toolbar/vue": [
+        "./dist/superdoc/src/headless-toolbar-vue.d.ts"
+      ],
       "super-editor": [
         "./dist/superdoc/src/super-editor.d.ts"
       ],
@@ -92,8 +116,29 @@
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
     "pdfjs-dist": "^5.4.296",
+    "prosemirror-model": "^1.25.0",
+    "prosemirror-state": "^1.4.0",
+    "prosemirror-transform": "^1.9.0",
+    "prosemirror-view": "^1.33.0",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pdfjs-dist": {
+      "optional": true
+    },
+    "prosemirror-model": {
+      "optional": true
+    },
+    "prosemirror-state": {
+      "optional": true
+    },
+    "prosemirror-transform": {
+      "optional": true
+    },
+    "prosemirror-view": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",

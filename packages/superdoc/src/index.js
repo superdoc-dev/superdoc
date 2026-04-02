@@ -47,15 +47,34 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 /**
  * @typedef {import('@superdoc/super-editor').EditorState} EditorState
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Transaction} Transaction
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Schema} Schema
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').EditorView} EditorView
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').EditorCommands} EditorCommands
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ChainedCommand} ChainedCommand
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ChainableCommandObject} ChainableCommandObject
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').CommandProps} CommandProps
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Command} Command
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').CanObject} CanObject
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').PresentationEditorOptions} PresentationEditorOptions
  * @typedef {import('@superdoc/super-editor').LayoutEngineOptions} LayoutEngineOptions
  * @typedef {import('@superdoc/super-editor').PageSize} PageSize
@@ -90,7 +109,10 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').ResolveRangeOutput} ResolveRangeOutput
  * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
  * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ExtensionCommandMap} ExtensionCommandMap
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').Comment} Comment
  * @typedef {import('@superdoc/super-editor').CommentsPayload} CommentsPayload
  * @typedef {import('@superdoc/super-editor').CommentLocationsPayload} CommentLocationsPayload
@@ -107,6 +129,7 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').EditorLifecycleState} EditorLifecycleState
  * @typedef {import('@superdoc/super-editor').User} User
  * @typedef {import('@superdoc/super-editor').ProseMirrorJSON} ProseMirrorJSON
+ * @deprecated ProseMirror JSON format will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').ExportFormat} ExportFormat
  * @typedef {import('@superdoc/super-editor').EditorExtension} EditorExtension
  * @typedef {import('@superdoc/super-editor').ViewLayout} ViewLayout

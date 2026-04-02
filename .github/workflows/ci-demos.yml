@@ -10,6 +10,7 @@ on:
       - 'packages/layout-engine/**'
       - 'shared/**'
       - 'package.json'
+  merge_group:
   workflow_dispatch:
 
 jobs:

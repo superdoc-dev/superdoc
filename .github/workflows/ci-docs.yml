@@ -10,6 +10,7 @@ on:
       - 'packages/document-api/scripts/**'
       - 'scripts/generate-all.mjs'
       - 'package.json'
+  merge_group:
   workflow_dispatch:
 
 jobs:

@@ -10,7 +10,7 @@ export interface CodeExample {
   file: string;
   section: string;
   code: string;
-  pattern: 'superdoc' | 'editor' | 'unknown';
+  pattern: 'superdoc' | 'editor' | 'headless' | 'unknown';
   line: number;
 }
 
@@ -60,7 +60,10 @@ function globMdx(dir: string): string[] {
   return results;
 }
 
-function detectPattern(code: string): 'superdoc' | 'editor' | 'unknown' {
+function detectPattern(code: string): 'superdoc' | 'editor' | 'headless' | 'unknown' {
+  if (code.includes("from 'superdoc/headless-toolbar'") || code.includes('createHeadlessToolbar')) {
+    return 'headless';
+  }
   if (code.includes("from 'superdoc/super-editor'") || code.includes('Editor.open')) {
     return 'editor';
   }

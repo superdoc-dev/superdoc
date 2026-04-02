@@ -51,6 +51,16 @@
       "source": "./src/editors/v1/components/toolbar/Toolbar.vue",
       "import": "./dist/toolbar.es.js"
     },
+    "./headless-toolbar/react": {
+      "source": "./src/headless-toolbar/react.ts",
+      "types": "./dist/src/headless-toolbar/react.d.ts",
+      "import": "./dist/headless-toolbar-react.es.js"
+    },
+    "./headless-toolbar/vue": {
+      "source": "./src/headless-toolbar/vue.ts",
+      "types": "./dist/src/headless-toolbar/vue.d.ts",
+      "import": "./dist/headless-toolbar-vue.es.js"
+    },
     "./super-input": {
       "source": "./src/editors/v1/components/SuperInput.vue",
       "import": "./dist/super-input.es.js"
@@ -144,6 +154,7 @@
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
     "@types/mdast": "catalog:",
+    "@types/react": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",

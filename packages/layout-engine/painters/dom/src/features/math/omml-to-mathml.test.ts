@@ -436,3 +436,118 @@ describe('m:sSub converter', () => {
     expect(msub!.children[0]!.textContent).toBe('a');
   });
 });
+
+describe('m:sSup converter', () => {
+  it('converts m:sSup to <msup> with base and superscript', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    expect(msup!.children.length).toBe(2);
+    expect(msup!.children[0]!.textContent).toBe('x');
+    expect(msup!.children[1]!.textContent).toBe('2');
+  });
+
+  it('ignores m:sSupPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSup',
+          elements: [
+            { name: 'm:sSupPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    expect(msup!.children.length).toBe(2);
+    expect(msup!.children[0]!.textContent).toBe('a');
+    expect(msup!.children[1]!.textContent).toBe('b');
+  });
+
+  it('wraps multi-part base and superscript in <mrow> for valid arity', () => {
+    // (x+1)^2 — base has 3 runs that must be grouped
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    // <msup> must have exactly 2 children (base + superscript), each wrapped in <mrow>
+    expect(msup!.children.length).toBe(2);
+    expect(msup!.children[0]!.textContent).toBe('x+1');
+    expect(msup!.children[1]!.textContent).toBe('2');
+  });
+
+  it('handles missing m:sup gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    expect(msup!.children[0]!.textContent).toBe('x');
+  });
+});

@@ -19,6 +19,7 @@ import { isAllowed } from './collaboration/permissions.js';
 import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 import { SurfaceManager } from './surface-manager.js';
+import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -1027,7 +1028,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   broadcastEditorBeforeCreate(editor) {
-    this.emit('editorBeforeCreate', { editor });
+    this.emit('editorBeforeCreate', { editor: createDeprecatedEditorProxy(editor) });
   }
 
   /**
@@ -1038,7 +1039,7 @@ export class SuperDoc extends EventEmitter {
   broadcastEditorCreate(editor) {
     this.readyEditors++;
     this.broadcastReady();
-    this.emit('editorCreate', { editor });
+    this.emit('editorCreate', { editor: createDeprecatedEditorProxy(editor) });
   }
 
   /**
@@ -1268,6 +1269,7 @@ export class SuperDoc extends EventEmitter {
 
     if (types[type]) {
       types[type]();
+      this.emit('document-mode-change', { documentMode: type });
     }
   }
 

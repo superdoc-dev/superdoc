@@ -78,11 +78,13 @@ export interface PageStyles {
 }
 
 /**
- * Toolbar configuration
+ * Toolbar instance accepted by `Editor.setToolbar()`.
+ *
+ * Any object with an optional `setActiveEditor` method satisfies this interface,
+ * including `SuperToolbar` which extends EventEmitter.
  */
 export interface Toolbar {
   setActiveEditor?: (editor: Editor) => void;
-  [key: string]: unknown;
 }
 
 /**

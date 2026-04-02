@@ -151,9 +151,9 @@ export default class ClaudeCodeBenchmarkProvider {
           .join(':');
       }
 
-      // Install vendor DOCX skill (Anthropic's docx skill) as AGENTS.md
+      // Install vendor DOCX skill as CLAUDE.md (Claude reads CLAUDE.md, not AGENTS.md)
       if (this.config.vendorSkill && existsSync(VENDOR_SKILL_PATH)) {
-        writeFileSync(resolve(stateDir, 'AGENTS.md'), readFileSync(VENDOR_SKILL_PATH, 'utf8'));
+        writeFileSync(resolve(stateDir, 'CLAUDE.md'), readFileSync(VENDOR_SKILL_PATH, 'utf8'));
       }
 
       // Put `superdoc` CLI on PATH as an actual executable
@@ -168,11 +168,12 @@ export default class ClaudeCodeBenchmarkProvider {
         env.PATH = `${binDir}:${env.PATH}`;
 
         if (!this.config.superdocMcp) {
-          writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_CLI_AGENTS_MD);
+          writeFileSync(resolve(stateDir, 'CLAUDE.md'), SUPERDOC_CLI_AGENTS_MD);
         }
       }
 
       // Build query options
+      const hasClaude = existsSync(resolve(stateDir, 'CLAUDE.md'));
       const queryOptions = {
         model,
         allowedTools: this.config.allowedTools || ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
@@ -182,6 +183,8 @@ export default class ClaudeCodeBenchmarkProvider {
         allowDangerouslySkipPermissions: true,
         cwd: stateDir,
         env,
+        // Load CLAUDE.md from stateDir if we wrote one
+        ...(hasClaude ? { settingSources: ['project'] } : {}),
       };
 
       // Option A: Use your local Claude Code settings (MCP servers, skills, CLAUDE.md)

@@ -57,11 +57,25 @@ vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   })),
 }));
 
-import { bookmarksInsertWrapper, bookmarksRenameWrapper, bookmarksRemoveWrapper } from './bookmark-wrappers.js';
-import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
+import {
+  bookmarksListWrapper,
+  bookmarksGetWrapper,
+  bookmarksInsertWrapper,
+  bookmarksRenameWrapper,
+  bookmarksRemoveWrapper,
+} from './bookmark-wrappers.js';
+import { resolveInlineInsertPosition, paginate } from '../helpers/adapter-utils.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { findAllBookmarksInDocument, resolveBookmarkTarget } from '../helpers/bookmark-resolver.js';
+import {
+  findAllBookmarks,
+  findAllBookmarksInDocument,
+  resolveBookmarkTarget,
+  extractBookmarkInfo,
+  buildBookmarkDiscoveryItem,
+} from '../helpers/bookmark-resolver.js';
 import { resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { getRevision } from './revision-tracker.js';
 
 type BookmarkNode = {
   type: { name: string };
@@ -416,5 +430,139 @@ describe('bookmarksRemoveWrapper', () => {
     });
     expect(commit).toHaveBeenCalledWith(editor);
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+});
+
+describe('bookmarksListWrapper', () => {
+  it('lists all bookmarks in the body story', () => {
+    const { editor } = makeEditor();
+    const mockBookmarks = [
+      { node: {}, pos: 5, name: 'bm1', bookmarkId: '0', endPos: 10 },
+      { node: {}, pos: 20, name: 'bm2', bookmarkId: '1', endPos: 25 },
+    ];
+    const mockDiscoveryItem = { id: 'mock', handle: {}, domain: {} };
+
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: { kind: 'story', storyType: 'body' },
+      storyKey: 'story:body',
+      editor,
+      kind: 'body',
+    });
+    vi.mocked(findAllBookmarks).mockReturnValueOnce(mockBookmarks as never);
+    vi.mocked(buildBookmarkDiscoveryItem).mockReturnValue(mockDiscoveryItem as never);
+    vi.mocked(getRevision).mockReturnValueOnce('rev-test');
+
+    const result = bookmarksListWrapper(editor);
+
+    expect(findAllBookmarks).toHaveBeenCalledWith(editor.state.doc);
+    expect(buildBookmarkDiscoveryItem).toHaveBeenCalledTimes(2);
+    expect(buildBookmarkDiscoveryItem).toHaveBeenCalledWith(editor.state.doc, mockBookmarks[0], 'rev-test', {
+      kind: 'story',
+      storyType: 'body',
+    });
+    expect(result.total).toBe(2);
+  });
+
+  it('resolves a non-body story runtime when query.in is provided', () => {
+    const { editor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor,
+      kind: 'headerFooter',
+    });
+    vi.mocked(findAllBookmarks).mockReturnValueOnce([]);
+    vi.mocked(getRevision).mockReturnValueOnce('rev-2');
+
+    bookmarksListWrapper(editor, { in: headerLocator });
+
+    expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, headerLocator);
+  });
+
+  it('applies pagination via offset and limit', () => {
+    const { editor } = makeEditor();
+    const mockBookmarks = [
+      { node: {}, pos: 5, name: 'bm1', bookmarkId: '0', endPos: 10 },
+      { node: {}, pos: 20, name: 'bm2', bookmarkId: '1', endPos: 25 },
+      { node: {}, pos: 40, name: 'bm3', bookmarkId: '2', endPos: 45 },
+    ];
+
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: { kind: 'story', storyType: 'body' },
+      storyKey: 'story:body',
+      editor,
+      kind: 'body',
+    });
+    vi.mocked(findAllBookmarks).mockReturnValueOnce(mockBookmarks as never);
+    vi.mocked(buildBookmarkDiscoveryItem).mockReturnValue({ id: 'mock', handle: {}, domain: {} } as never);
+    vi.mocked(getRevision).mockReturnValueOnce('rev-3');
+
+    const result = bookmarksListWrapper(editor, { offset: 1, limit: 1 });
+
+    expect(paginate).toHaveBeenCalledWith(expect.any(Array), 1, 1);
+    expect(result.total).toBe(3);
+  });
+});
+
+describe('bookmarksGetWrapper', () => {
+  it('resolves a bookmark by name and returns its info', () => {
+    const { editor } = makeEditor();
+    const target = { kind: 'entity' as const, entityType: 'bookmark' as const, name: 'bm1' };
+    const mockResolved = { node: {}, pos: 5, name: 'bm1', bookmarkId: '0', endPos: 10 };
+    const mockInfo = {
+      address: { kind: 'entity', entityType: 'bookmark', name: 'bm1' },
+      name: 'bm1',
+      bookmarkId: '0',
+      range: { from: { blockId: 'p1', offset: 5 }, to: { blockId: 'p1', offset: 10 } },
+    };
+
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: { kind: 'story', storyType: 'body' },
+      storyKey: 'story:body',
+      editor,
+      kind: 'body',
+    });
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce(mockResolved as never);
+    vi.mocked(extractBookmarkInfo).mockReturnValueOnce(mockInfo as never);
+
+    const result = bookmarksGetWrapper(editor, { target });
+
+    expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, undefined);
+    expect(resolveBookmarkTarget).toHaveBeenCalledWith(editor.state.doc, target);
+    expect(extractBookmarkInfo).toHaveBeenCalledWith(editor.state.doc, mockResolved, {
+      kind: 'story',
+      storyType: 'body',
+    });
+    expect(result).toEqual(mockInfo);
+  });
+
+  it('resolves a story-qualified bookmark in a header', () => {
+    const { editor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+    const target = { kind: 'entity' as const, entityType: 'bookmark' as const, name: 'hdr-bm', story: headerLocator };
+    const mockResolved = { node: {}, pos: 3, name: 'hdr-bm', bookmarkId: '5', endPos: 8 };
+    const mockInfo = {
+      address: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm', story: headerLocator },
+      name: 'hdr-bm',
+      bookmarkId: '5',
+      range: { from: { blockId: 'h1', offset: 3 }, to: { blockId: 'h1', offset: 8 } },
+    };
+
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor,
+      kind: 'headerFooter',
+    });
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce(mockResolved as never);
+    vi.mocked(extractBookmarkInfo).mockReturnValueOnce(mockInfo as never);
+
+    const result = bookmarksGetWrapper(editor, { target });
+
+    expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, headerLocator);
+    expect(extractBookmarkInfo).toHaveBeenCalledWith(editor.state.doc, mockResolved, headerLocator);
+    expect(result).toEqual(mockInfo);
   });
 });

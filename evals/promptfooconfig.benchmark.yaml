@@ -26,14 +26,14 @@ providers:
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
 
   - id: file://providers/claude-code-agent.mjs
-    label: CC-vendor
+    label: CC-with-docx-skill
     config:
       condition: vendor
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
       vendorSkill: true
 
   - id: file://providers/claude-code-agent.mjs
-    label: CC-superdoc-skill
+    label: CC-superdoc-mcp
     config:
       condition: superdoc-skill
       allowedTools: ['Read', 'Glob', 'Grep']
@@ -41,7 +41,7 @@ providers:
       superdocOnPath: true
 
   - id: file://providers/claude-code-agent.mjs
-    label: CC-superdoc-cli
+    label: CC-superdoc-cli-prompt
     config:
       condition: superdoc-cli
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
@@ -55,13 +55,13 @@ providers:
       condition: baseline
 
   - id: file://providers/codex-agent.mjs
-    label: Codex-vendor
+    label: Codex-with-docx-skill
     config:
       condition: vendor
       vendorSkill: true
 
   - id: file://providers/codex-agent.mjs
-    label: Codex-superdoc-skill
+    label: Codex-superdoc-mcp
     config:
       condition: superdoc-skill
       superdocMcp: true

@@ -81,6 +81,10 @@
   display: none;
 }
 
+.super-editor .ProseMirror.view-mode .sd-structured-content-block.ProseMirror-selectednode {
+  outline: none;
+}
+
 .presentation-editor--viewing .sd-structured-content,
 .presentation-editor--viewing .sd-structured-content-block {
   padding: 0;

@@ -76,7 +76,26 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.to).toBe(contentFrom + 1);
   });
 
-  it('clears an existing SDT node selection when switching to viewing mode', () => {
+  it('clears an existing SDT node selection when switching to viewing mode if an outside selection exists', () => {
+    const innerParagraph = schema.nodes.paragraph.create(null, schema.text('Block field'));
+    const blockSdt = schema.nodes.structuredContentBlock.create({ id: 'block-1' }, [innerParagraph]);
+    const beforeParagraph = schema.nodes.paragraph.create(null, schema.text('Before'));
+    applyDoc(schema.nodes.doc.create(null, [beforeParagraph, blockSdt]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContentBlock');
+    expect(sdt).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, sdt.pos)));
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+
+    editor.setDocumentMode('viewing');
+
+    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.options.documentMode).toBe('viewing');
+  });
+
+  it('keeps an SDT node selection when switching to viewing mode if the block SDT is the whole document', () => {
     const innerParagraph = schema.nodes.paragraph.create(null, schema.text('Block field'));
     const blockSdt = schema.nodes.structuredContentBlock.create({ id: 'block-1' }, [innerParagraph]);
     applyDoc(schema.nodes.doc.create(null, [blockSdt]));
@@ -89,8 +108,7 @@ describe('StructuredContentSelectPlugin', () => {
 
     editor.setDocumentMode('viewing');
 
-    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
-    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
     expect(editor.options.documentMode).toBe('viewing');
   });
 });

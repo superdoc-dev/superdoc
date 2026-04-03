@@ -54,6 +54,17 @@ describe('getViewModeSelectionWithoutStructuredContent', () => {
     expect(result?.eq(expected)).toBe(true);
   });
 
+  it('returns null for block structured content node selections when no outside selection exists', () => {
+    const blockSdt = schema.nodes.structuredContentBlock.create({ id: 'block-1' }, [
+      schema.nodes.paragraph.create(null, schema.text('Block field')),
+    ]);
+    const doc = schema.nodes.doc.create(null, [blockSdt]);
+    const sdt = findNode(doc, 'structuredContentBlock');
+    const state = createState(doc, NodeSelection.create(doc, sdt.pos));
+
+    expect(getViewModeSelectionWithoutStructuredContent(state)).toBeNull();
+  });
+
   it('normalizes non-empty text selections fully inside the same inline structured content', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);

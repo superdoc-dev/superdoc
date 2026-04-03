@@ -1,0 +1,70 @@
+---
+title: Toolbar
+sidebarTitle: Overview
+keywords: "toolbar, custom toolbar, headless toolbar, formatting controls, editor ui"
+---
+
+The toolbar gives your users formatting controls for document editing. You can use the built-in UI or go headless and build your own.
+
+## Choose your approach
+
+| | Built-in | Headless |
+|---|---|---|
+| Setup | `toolbar: '#toolbar'` — renders a ready-made UI | `createHeadlessToolbar()` — you build the UI |
+| Customization | Swap icons, exclude buttons, reorder groups | Full control — any component library, any layout, any framework |
+| Framework | Renders its own DOM (works everywhere) | React, Vue, Svelte, vanilla JS — your choice |
+| Best for | Standard document editing, quick prototypes | Design system integration, embedded editors, custom UX |
+
+## Quick start
+
+<Tabs>
+  <Tab title="Built-in">
+    Point `toolbar` at a container element. SuperDoc renders the UI for you.
+
+    ```javascript
+    new SuperDoc({
+      selector: '#editor',
+      document: 'contract.docx',
+      toolbar: '#toolbar',
+    });
+    ```
+  </Tab>
+
+  <Tab title="Headless">
+    Create a headless toolbar. You get state snapshots and an `execute` method — wire them to any UI you want.
+
+    ```javascript
+    import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+    const superdoc = new SuperDoc({
+      selector: '#editor',
+      document: 'contract.docx',
+    });
+
+    const toolbar = createHeadlessToolbar({
+      superdoc,
+      commands: ['bold', 'italic', 'underline', 'font-size', 'undo', 'redo'],
+    });
+
+    toolbar.subscribe(({ snapshot }) => {
+      // Update your UI with snapshot.commands
+    });
+
+    toolbar.execute('bold');
+    ```
+  </Tab>
+</Tabs>
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="Built-in toolbar" icon="panel-top" href="/modules/toolbar/built-in">
+    Configuration, custom buttons, responsive behavior
+  </Card>
+  <Card title="Headless toolbar" icon="code" href="/modules/toolbar/headless">
+    API reference, command table, helpers
+  </Card>
+  <Card title="Framework examples" icon="layout-grid" href="/modules/toolbar/examples">
+    React + shadcn, React + MUI, Vue + Vuetify, Svelte, vanilla JS
+  </Card>
+</CardGroup>

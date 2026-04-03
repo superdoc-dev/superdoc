@@ -8,6 +8,7 @@ import type { CodeExample } from './extract';
 export function transformCode(example: CodeExample): string | null {
   if (example.pattern === 'superdoc') return transformSuperdocPattern(example.code);
   if (example.pattern === 'editor') return transformEditorPattern(example.code);
+  if (example.pattern === 'headless') return transformHeadlessPattern(example.code);
   return null;
 }
 
@@ -70,6 +71,23 @@ function transformEditorPattern(code: string): string | null {
     if (trimmed.startsWith('import ')) return false;
     if (/(?:const|let)\s+editor\s*=\s*await\s+Editor\.open/.test(trimmed)) return false;
     if (/^await\s+Editor\.open/.test(trimmed)) return false;
+    return true;
+  });
+
+  const result = filtered.join('\n').trim();
+  return result || null;
+}
+
+function transformHeadlessPattern(code: string): string | null {
+  const lines = code.split('\n');
+
+  // Strip imports and SuperDoc/toolbar creation boilerplate, keep API usage
+  const filtered = lines.filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('import ')) return false;
+    if (/(?:const|let)\s+superdoc\s*=/.test(trimmed)) return false;
+    if (/(?:const|let)\s+toolbar\s*=\s*createHeadlessToolbar/.test(trimmed)) return false;
+    if (/(?:const|let)\s+unsubscribe\s*=/.test(trimmed)) return false;
     return true;
   });
 

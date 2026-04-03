@@ -116,13 +116,18 @@
               },
               "document-engine/cli",
               {
-                "group": "AI Agents",
+                "group": "MCP",
+                "pages": ["ai/mcp/overview", "ai/mcp/how-to-use", "ai/mcp/debugging"]
+              },
+              {
+                "group": "Agents",
                 "pages": [
-                  "document-engine/ai-agents/llm-tools",
-                  "document-engine/ai-agents/integrations",
-                  "document-engine/ai-agents/best-practices",
-                  "document-engine/ai-agents/debugging",
-                  "document-engine/ai-agents/eval-results"
+                  "ai/agents/llm-tools",
+                  "ai/agents/integrations",
+                  "ai/agents/best-practices",
+                  "ai/agents/debugging",
+                  "ai/agents/eval-results",
+                  "ai/agents/skills"
                 ]
               }
             ]
@@ -141,74 +146,20 @@
                 ]
               },
               "modules/comments",
-              "modules/toolbar",
+              {
+                "group": "Toolbar",
+                "tag": "NEW",
+                "pages": [
+                  "modules/toolbar/overview",
+                  "modules/toolbar/built-in",
+                  "modules/toolbar/headless",
+                  "modules/toolbar/examples"
+                ]
+              },
               "modules/links",
               "modules/context-menu",
               "modules/pdf",
               "modules/whiteboard"
-            ]
-          },
-          {
-            "group": "Extensions",
-            "pages": [
-              "extensions/overview",
-              {
-                "group": "All",
-                "pages": [
-                  "extensions/block-node",
-                  "extensions/bold",
-                  "extensions/bookmarks",
-                  "extensions/bullet-list",
-                  "extensions/color",
-                  "extensions/content-block",
-                  "extensions/custom-selection",
-                  "extensions/document",
-                  "extensions/document-index",
-                  "extensions/dropcursor",
-                  "extensions/font-family",
-                  "extensions/font-size",
-                  "extensions/footnote",
-                  "extensions/format-commands",
-                  "extensions/gapcursor",
-                  "extensions/heading",
-                  "extensions/highlight",
-                  "extensions/history",
-                  "extensions/image",
-                  "extensions/italic",
-                  "extensions/line-break",
-                  "extensions/line-height",
-                  "extensions/link",
-                  "extensions/linked-styles",
-                  "extensions/list-item",
-                  "extensions/mention",
-                  "extensions/noderesizer",
-                  "extensions/ordered-list",
-                  "extensions/page-number",
-                  "extensions/paragraph",
-                  "extensions/permission-ranges",
-                  "extensions/placeholder",
-                  "extensions/popover-plugin",
-                  "extensions/run-item",
-                  "extensions/search",
-                  "extensions/shape-container",
-                  "extensions/shape-textbox",
-                  "extensions/context-menu",
-                  "extensions/strike",
-                  "extensions/structured-content",
-                  "extensions/tab",
-                  "extensions/table",
-                  "extensions/table-cell",
-                  "extensions/table-header",
-                  "extensions/table-of-contents",
-                  "extensions/table-row",
-                  "extensions/text-align",
-                  "extensions/text-indent",
-                  "extensions/text-style",
-                  "extensions/text-transform",
-                  "extensions/track-changes",
-                  "extensions/underline"
-                ]
-              }
             ]
           },
           {
@@ -257,6 +208,7 @@
               {
                 "group": "Migration",
                 "pages": [
+                  "guides/migration/document-api",
                   "guides/migration/prosemirror",
                   "guides/migration/breaking-changes-v1",
                   "guides/migration/typescript-migration",
@@ -332,20 +284,52 @@
   },
   "redirects": [
     {
+      "source": "/modules/toolbar",
+      "destination": "/modules/toolbar/overview"
+    },
+    {
       "source": "/getting-started/ai-agents",
-      "destination": "/document-engine/ai-agents/llm-tools"
+      "destination": "/ai/agents/llm-tools"
     },
     {
       "source": "/document-api/eval-results",
-      "destination": "/document-engine/ai-agents/eval-results"
+      "destination": "/ai/agents/eval-results"
     },
     {
       "source": "/document-engine/mcp",
-      "destination": "/document-engine/ai-agents/mcp-server"
+      "destination": "/ai/mcp/overview"
+    },
+    {
+      "source": "/document-engine/ai-agents/mcp-server",
+      "destination": "/ai/mcp/overview"
+    },
+    {
+      "source": "/document-engine/ai-agents/llm-tools",
+      "destination": "/ai/agents/llm-tools"
+    },
+    {
+      "source": "/document-engine/ai-agents/integrations",
+      "destination": "/ai/agents/integrations"
     },
     {
       "source": "/document-engine/ai-agents/providers",
-      "destination": "/document-engine/ai-agents/integrations"
+      "destination": "/ai/agents/integrations"
+    },
+    {
+      "source": "/document-engine/ai-agents/best-practices",
+      "destination": "/ai/agents/best-practices"
+    },
+    {
+      "source": "/document-engine/ai-agents/debugging",
+      "destination": "/ai/agents/debugging"
+    },
+    {
+      "source": "/document-engine/ai-agents/eval-results",
+      "destination": "/ai/agents/eval-results"
+    },
+    {
+      "source": "/document-engine/ai-agents/skills",
+      "destination": "/ai/agents/skills"
     },
     {
       "source": "/core/superdoc/properties",

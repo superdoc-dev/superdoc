@@ -82,6 +82,21 @@ superdoc_format({action: "set_alignment", target: {kind: "block", nodeType: "par
 // Repeat for each paragraph...
 ```
 
+### Write content into a blank document
+
+Do not use `superdoc_search` to find empty initial paragraphs — search matches text, and blank blocks have none. Use `superdoc_get_content` for blank-block discovery.
+
+```
+// Step 1: First create — omit positional `at` targeting on a blank document
+superdoc_create({action: "paragraph", text: "First paragraph."})
+
+// Step 2: Fetch blocks to get nodeIds for subsequent relative inserts
+superdoc_get_content({action: "blocks"})
+
+// Step 3: Chain further creates using nodeIds from blocks
+superdoc_create({action: "paragraph", text: "Second paragraph.", at: {kind: "after", target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId1>"}}})
+```
+
 ### Bold or format existing text
 
 ```
@@ -178,7 +193,7 @@ When formatting newly created content, use the right source:
 
 ## Constraints
 
-- **Format calls must be sequential, one per turn.** Each format call bumps the document revision and invalidates all outstanding refs. Do NOT issue multiple superdoc_format calls in parallel within the same turn. Format one block, then re-fetch if needed for the next block.
+- **Format calls must be sequential.** Each format call bumps the document revision and invalidates all outstanding refs. Do NOT issue multiple superdoc_format calls in parallel. Format one block, then re-fetch if needed for the next block.
 - **set_alignment target must be `{kind: "block", nodeType, nodeId}`.** NEVER use `{kind: "block", start: {kind: "nodeEdge", ...}}` or any selection-like structure. Only the flat block target with nodeType and nodeId is accepted.
 - **Always format ALL created items.** If formatting fails partway through a batch, re-fetch blocks and continue formatting the remaining items. Do not stop after a partial failure.
 - **Search patterns are plain text.** Do not include `#`, `**`, or formatting markers.
@@ -188,3 +203,7 @@ When formatting newly created content, use the right source:
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`.** Use `require: "any"` with `limit` for paginated results.
 - **Do NOT hardcode formatting values.** Always read from blocks data and replicate.
 - **Do NOT copy heading/title formatting onto body paragraphs.** Read from body text blocks (alignment "justify" or "left"), not title blocks.
+- **Pass structured objects, not JSON-encoded strings.** Fields like `at`, `target`, and `inline` expect objects, not serialized JSON strings.
+- **Only pass `dryRun` when the action's schema explicitly lists it.** Do not assume every action accepts it. Prefer a real call over a preview for destructive actions unless dryRun is documented for that action.
+- **If blocks still report `underline: true` after you explicitly removed it, treat it as a style inheritance artifact.** Do not retry formatting to fix it.
+- **On "Unknown field" errors, drop the unrecognized field and retry.** Use the narrowest working call shape rather than guessing alternative field names.

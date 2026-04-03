@@ -29,6 +29,7 @@ const portMap: Record<string, number> = {
   nuxt: 3000,
   laravel: 8000,
   'collaboration/hocuspocus': 3000,
+  'advanced/headless-toolbar/svelte-shadcn': 5190,
 };
 const port = portMap[example] ?? 5173;
 

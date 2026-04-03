@@ -304,7 +304,11 @@ export async function dispatchSuperDocTool(
 }
 
 /**
- * Read the bundled system prompt for intent tools.
+ * Read the bundled SDK system prompt for intent tools.
+ *
+ * This prompt includes a persona preamble ("You are a document editing assistant…")
+ * suitable for embedded LLM usage (OpenAI, Anthropic, Vercel APIs).
+ * For MCP server instructions, use {@link getMcpPrompt} instead.
  */
 export async function getSystemPrompt(): Promise<string> {
   const promptPath = path.join(toolsDir, 'system-prompt.md');
@@ -312,6 +316,24 @@ export async function getSystemPrompt(): Promise<string> {
     return await readFile(promptPath, 'utf8');
   } catch {
     throw new SuperDocCliError('System prompt not found.', {
+      code: 'TOOLS_ASSET_NOT_FOUND',
+      details: { filePath: promptPath },
+    });
+  }
+}
+
+/**
+ * Read the bundled MCP system prompt for intent tools.
+ *
+ * This prompt omits the persona preamble and includes session lifecycle
+ * instructions (open/save/close) suitable for MCP server `instructions`.
+ */
+export async function getMcpPrompt(): Promise<string> {
+  const promptPath = path.join(toolsDir, 'system-prompt-mcp.md');
+  try {
+    return await readFile(promptPath, 'utf8');
+  } catch {
+    throw new SuperDocCliError('MCP system prompt not found.', {
       code: 'TOOLS_ASSET_NOT_FOUND',
       details: { filePath: promptPath },
     });

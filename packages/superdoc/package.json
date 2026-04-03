@@ -92,8 +92,29 @@
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
     "pdfjs-dist": "^5.4.296",
+    "prosemirror-model": "^1.25.0",
+    "prosemirror-state": "^1.4.0",
+    "prosemirror-transform": "^1.9.0",
+    "prosemirror-view": "^1.33.0",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pdfjs-dist": {
+      "optional": true
+    },
+    "prosemirror-model": {
+      "optional": true
+    },
+    "prosemirror-state": {
+      "optional": true
+    },
+    "prosemirror-transform": {
+      "optional": true
+    },
+    "prosemirror-view": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",

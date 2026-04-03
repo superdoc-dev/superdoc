@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EVALS_ROOT = resolve(__dirname, '..');
-const OUTPUT = resolve(EVALS_ROOT, 'fixtures/codex-orlov-gs-nda-codex.docx');
+const OUTPUT = resolve(EVALS_ROOT, 'fixtures/codex-orlov-gs-nda.docx');
 
 async function main() {
   const { default: Provider } = await import(resolve(EVALS_ROOT, 'providers/codex-agent.mjs'));
@@ -32,7 +32,7 @@ async function main() {
   const result = await provider.callApi('', {
     vars: {
       blankDocument: true,
-      outputName: 'orlov-gs-nda.docx',
+      outputName: 'codex-orlov-gs-nda.docx',
       keepFile: true,
       task: `Create an NDA between Andrii Orlov and Golden State Warriors Inc. Include sections: Definitions, Obligations, NBA Draft Requirements (list: age 19+, declare by deadline, Draft Combine, work visa), Salary (leave amount as $__________), Governing Law, Signatures. Make headings red and centered. Make the salary paragraph bold. IMPORTANT: After creating all content, you MUST call superdoc_save and superdoc_close before finishing.`,
     },

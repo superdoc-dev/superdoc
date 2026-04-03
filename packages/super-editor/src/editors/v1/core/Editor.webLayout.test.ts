@@ -389,6 +389,22 @@ describe('Editor Web Layout Mode', () => {
 
         expect(size).toEqual({});
       });
+
+      it('constrains width for tableHeader in web layout mode', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [
+            { type: { name: 'tableRow' }, attrs: {} },
+            { type: { name: 'tableHeader' }, attrs: { colwidth: [250], cellMargins: { left: 10, right: 10 } } },
+            { type: { name: 'paragraph' }, attrs: {} },
+          ],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size.width).toBe(230); // 250 - 10 - 10
+        expect(size.height).toBe(Infinity);
+      });
     });
   });
 });

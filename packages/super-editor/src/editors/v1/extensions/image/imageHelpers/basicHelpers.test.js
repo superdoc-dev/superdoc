@@ -71,6 +71,18 @@ describe('image helper utilities', () => {
     expect(height).toBeLessThanOrEqual(300);
   });
 
+  it('constrains width while skipping height clamp when maxHeight is Infinity', () => {
+    const { width, height } = getAllowedImageDimensions(1000, 800, () => ({ width: 200, height: Infinity }));
+    expect(width).toBe(200);
+    expect(height).toBe(160); // aspect ratio preserved: 1000/800 = 1.25, 200/1.25 = 160
+  });
+
+  it('returns original dimensions when maxHeight is Infinity and image fits', () => {
+    const { width, height } = getAllowedImageDimensions(100, 80, () => ({ width: 200, height: Infinity }));
+    expect(width).toBe(100);
+    expect(height).toBe(80);
+  });
+
   it('processing image returns resized base64 when no resize needed', async () => {
     const originalImage = globalThis.Image;
     class MockImage {

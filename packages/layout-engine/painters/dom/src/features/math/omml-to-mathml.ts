@@ -14,6 +14,7 @@ import {
   convertMathRun,
   convertFraction,
   convertBar,
+  convertFunction,
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
@@ -39,6 +40,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:r': convertMathRun,
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:f': convertFraction, // Fraction (numerator/denominator)
+  'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
@@ -49,7 +51,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:box': null, // Box (invisible grouping container)
   'm:d': null, // Delimiter (parentheses, brackets, braces)
   'm:eqArr': null, // Equation array (vertical array of equations)
-  'm:func': null, // Function apply (sin, cos, log, etc.)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)
   'm:limUpp': null, // Upper limit

@@ -4,6 +4,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
+const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -138,5 +139,84 @@ test.describe('math equation import and rendering', () => {
     await superdoc.assertTextContains('Inline E=mc2');
     await superdoc.assertTextContains('Display fraction');
     await superdoc.assertTextContains('Superscript');
+  });
+});
+
+test.describe('m:func (function apply) rendering', () => {
+  test('renders function names upright with apply operator', async ({ superdoc }) => {
+    await superdoc.loadDocument(FUNC_DOC);
+    await superdoc.waitForStable();
+
+    // All 12 test equations should produce <math> elements
+    const mathCount = await superdoc.page.evaluate(() => {
+      return document.querySelectorAll('math').length;
+    });
+    expect(mathCount).toBe(12);
+  });
+
+  test('function names have mathvariant="normal"', async ({ superdoc }) => {
+    await superdoc.loadDocument(FUNC_DOC);
+    await superdoc.waitForStable();
+
+    const funcNames = await superdoc.page.evaluate(() => {
+      const mis = document.querySelectorAll('mi[mathvariant="normal"]');
+      return Array.from(mis).map((mi) => mi.textContent);
+    });
+
+    expect(funcNames).toContain('sin');
+    expect(funcNames).toContain('cos');
+    expect(funcNames).toContain('tan');
+    expect(funcNames).toContain('log');
+    expect(funcNames).toContain('ln');
+    expect(funcNames).toContain('f');
+  });
+
+  test('invisible apply operator U+2061 is present', async ({ superdoc }) => {
+    await superdoc.loadDocument(FUNC_DOC);
+    await superdoc.waitForStable();
+
+    const applyOps = await superdoc.page.evaluate(() => {
+      const mos = document.querySelectorAll('mo');
+      return Array.from(mos).filter((mo) => mo.textContent === '\u2061').length;
+    });
+
+    expect(applyOps).toBeGreaterThanOrEqual(12);
+  });
+
+  test('nested functions render correctly (sin of cos x)', async ({ superdoc }) => {
+    await superdoc.loadDocument(FUNC_DOC);
+    await superdoc.waitForStable();
+
+    const nestedData = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const math8 = maths[7];
+      if (!math8) return null;
+      const mis = math8.querySelectorAll('mi[mathvariant="normal"]');
+      return Array.from(mis).map((mi) => mi.textContent);
+    });
+
+    expect(nestedData).toEqual(['sin', 'cos']);
+  });
+
+  test('function in fraction renders with <mfrac>', async ({ superdoc }) => {
+    await superdoc.loadDocument(FUNC_DOC);
+    await superdoc.waitForStable();
+
+    const fractionData = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const math9 = maths[8];
+      if (!math9) return null;
+      const mfrac = math9.querySelector('mfrac');
+      if (!mfrac) return null;
+      return {
+        hasFunc: mfrac.querySelector('mi[mathvariant="normal"]') !== null,
+        numeratorText: mfrac.children[0]?.textContent,
+        denominatorText: mfrac.children[1]?.textContent,
+      };
+    });
+
+    expect(fractionData).not.toBeNull();
+    expect(fractionData!.hasFunc).toBe(true);
+    expect(fractionData!.denominatorText).toBe('x');
   });
 });

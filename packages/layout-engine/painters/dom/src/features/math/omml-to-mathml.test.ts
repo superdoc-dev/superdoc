@@ -677,4 +677,120 @@ describe('m:func converter', () => {
     expect(outerRow!.children[1]!.textContent).toBe('\u2061');
     expect(outerRow!.children[2]!.textContent).toBe('x+1');
   });
+
+  it('renders only the argument when m:fName is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('x');
+
+    // No apply operator when function name is missing
+    const mo = result!.querySelector('mo');
+    expect(mo).toBeNull();
+  });
+
+  it('renders only the function name when m:e is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('sin');
+
+    // No apply operator when argument is missing
+    const mo = result!.querySelector('mo');
+    expect(mo).toBeNull();
+
+    // Function name should still be upright
+    const mi = result!.querySelector('mi');
+    expect(mi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('returns null for empty m:func', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('handles nested m:func (sin of cos x)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                {
+                  name: 'm:func',
+                  elements: [
+                    {
+                      name: 'm:fName',
+                      elements: [
+                        { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'cos' }] }] },
+                      ],
+                    },
+                    {
+                      name: 'm:e',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`sin${'\u2061'}cos${'\u2061'}x`);
+
+    // Both function names should be upright
+    const mis = result!.querySelectorAll('mi[mathvariant="normal"]');
+    expect(mis.length).toBe(2);
+    expect(mis[0]!.textContent).toBe('sin');
+    expect(mis[1]!.textContent).toBe('cos');
+  });
 });

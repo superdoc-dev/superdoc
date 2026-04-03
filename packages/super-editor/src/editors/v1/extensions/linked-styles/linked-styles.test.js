@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NodeSelection, TextSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { initTestEditor, loadTestDataForEditorTests } from '../../tests/helpers/helpers.js';
 
 const findParagraphInfo = (doc, paragraphIndex) => {
@@ -177,6 +177,93 @@ describe('LinkedStyles Extension', () => {
           if (ts?.attrs?.styleId === 'Emphasis') sawEmphasisInSelection = true;
         });
         expect(sawEmphasisInSelection).toBe(true);
+      });
+
+      it('partial linked character apply clears formatting only inside the selection', () => {
+        const minimalDoc = editor.schema.nodeFromJSON({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: 'Hello world' }],
+                },
+              ],
+            },
+          ],
+        });
+        editor.setState(EditorState.create({ schema: editor.schema, doc: minimalDoc }));
+
+        let lineFrom;
+        let lineTo;
+        editor.state.doc.descendants((node, pos) => {
+          if (node.isText && node.text === 'Hello world') {
+            lineFrom = pos;
+            lineTo = pos + node.nodeSize;
+            return false;
+          }
+          return true;
+        });
+        expect(lineFrom).toBeDefined();
+
+        const { bold } = editor.schema.marks;
+        editor.view.dispatch(editor.view.state.tr.addMark(lineFrom, lineTo, bold.create()));
+
+        const world = 'world';
+        const selFrom = lineFrom + 'Hello world'.indexOf(world);
+        const selTo = selFrom + world.length;
+
+        const styleWithLink = {
+          ...headingStyle,
+          type: 'paragraph',
+          definition: {
+            ...headingStyle.definition,
+            attrs: { ...headingStyle.definition.attrs, link: 'Emphasis' },
+          },
+        };
+        editor.view.dispatch(
+          editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, selFrom, selTo)),
+        );
+        expect(editor.commands.setLinkedStyle(styleWithLink)).toBe(true);
+
+        const insidePrefix = selFrom - 1;
+        expect(insidePrefix).toBeGreaterThanOrEqual(lineFrom);
+        expect(
+          editor.state.doc
+            .resolve(insidePrefix)
+            .marks()
+            .some((m) => m.type.name === 'bold'),
+        ).toBe(true);
+      });
+
+      it('applies paragraph style when the paragraph has no text (e.g. break-only)', () => {
+        const minimalDoc = editor.schema.nodeFromJSON({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [{ type: 'hardBreak', attrs: {} }],
+                },
+              ],
+            },
+          ],
+        });
+        editor.setState(EditorState.create({ schema: editor.schema, doc: minimalDoc }));
+
+        const info = findParagraphInfo(editor.state.doc, 0);
+        expect(info).toBeTruthy();
+        const innerFrom = info.pos + 1;
+        const innerTo = info.pos + info.node.nodeSize - 1;
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, innerFrom, innerTo)));
+
+        expect(editor.commands.setLinkedStyle(headingStyle)).toBe(true);
+        const para = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(para.node).styleId).toBe('Heading1');
       });
     });
 

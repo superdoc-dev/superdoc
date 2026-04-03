@@ -380,16 +380,24 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     };
   };
 
-  // Function to clear formatting marks from text content
-  const clearFormattingMarks = (startPos, endPos) => {
-    tr.doc.nodesBetween(startPos, endPos, (node, pos) => {
-      if (node.isText && node.marks.length > 0) {
-        node.marks.forEach((mark) => {
-          if (FORMATTING_MARK_NAMES.has(mark.type.name)) {
-            tr.removeMark(pos, pos + node.nodeSize, mark);
-          }
-        });
+  // Clear FORMATTING_MARK_NAMES only inside [rangeFrom, rangeTo), not across whole text nodes
+  // (selection can split mid-node; removeMark must use the intersection with each text slice).
+  const clearFormattingMarks = (rangeFrom, rangeTo) => {
+    tr.doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+      if (!node.isText || node.marks.length === 0) {
+        return true;
       }
+      const nodeEnd = pos + node.nodeSize;
+      const clearFrom = Math.max(pos, rangeFrom);
+      const clearTo = Math.min(nodeEnd, rangeTo);
+      if (clearFrom >= clearTo) {
+        return true;
+      }
+      node.marks.forEach((mark) => {
+        if (FORMATTING_MARK_NAMES.has(mark.type.name)) {
+          tr.removeMark(clearFrom, clearTo, mark);
+        }
+      });
       return true;
     });
   };
@@ -447,7 +455,8 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
       if (startPara && endPara && startPara.pos === endPara.pos) {
         const bounds = getParagraphTextBounds(tr.doc, startPara.pos, startPara.node);
         const coversFullParagraphText = bounds && from <= bounds.from && to >= bounds.to;
-        if (!coversFullParagraphText) {
+        // No text (empty / image-only): cannot do linked character range apply; use paragraph path below.
+        if (bounds && !coversFullParagraphText) {
           clearFormattingMarks(from, to);
           applyCharacterStyleMarkToRange(tr, textStyleType, from, to, linkedCharStyleId);
           clearStoredFormattingMarks();
@@ -466,6 +475,18 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     }
     return true;
   });
+
+  // nodesBetween often skips block parents when the range only covers inline content (e.g. image-only).
+  if (paragraphPositions.length === 0 && from !== to) {
+    const seen = new Set();
+    const pushParagraph = (info) => {
+      if (!info || seen.has(info.pos)) return;
+      seen.add(info.pos);
+      paragraphPositions.push({ node: info.node, pos: info.pos });
+    };
+    pushParagraph(findParentNodeClosestToPos(tr.doc.resolve(from), (n) => n.type.name === 'paragraph'));
+    pushParagraph(findParentNodeClosestToPos(tr.doc.resolve(to), (n) => n.type.name === 'paragraph'));
+  }
 
   // Apply style to all paragraphs in selection (with clean attributes and cleared marks)
   paragraphPositions.forEach(({ node, pos }) => {

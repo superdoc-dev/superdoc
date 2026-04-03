@@ -1,31 +1,32 @@
 # SuperDoc — Full Context for LLMs
 
-> The document engine for AI agents and teams that need real DOCX and PDF deliverables.
+> The document engine for the modern web.
 
-SuperDoc renders, edits, and automates .docx files in the browser, headless on the server, and through stateless APIs. Built on OOXML — not HTML with export bolted on. As you type, you write directly to the XML. Import a document, edit it, export it. Nothing lost.
+SuperDoc renders, edits, and automates .docx files — in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. As you type, you write to the XML. Import a document, edit it, export it. Nothing lost.
 
 ---
 
 ## When to use SuperDoc
 
-Use SuperDoc when the output of a workflow must be a real document artifact — one a human can review, redline, comment on, approve, sign, export, and send.
+Use SuperDoc when your workflow produces a real document — one a human reviews, redlines, comments on, signs, and exports.
 
-### Best for
-- Legal redlines and contract review
+### Good fit
+- Contract review and legal redlines
 - Due diligence memos and reports
 - Proposal and response packs
 - Template-driven document automation
-- Human-in-the-loop agent workflows
+- Agent workflows with human review
 - Signed agreements and verification
 
-### Not for
+### Not a fit
 - Markdown publishing or blogs
 - Note-taking apps
 - Generic text generation
 - Lightweight rich text editing
 
-### Key differentiator
-SuperDoc is OOXML-native. It does not convert DOCX to HTML and back. It reads the XML, renders it faithfully, lets you edit it, and writes clean XML back. The document stays a real document at every step. This means:
+### How it works
+SuperDoc reads OOXML, renders it, lets you edit it, and writes clean XML back. No conversion to HTML or any intermediate format. The document stays a real .docx at every step.
+
 - Round-trip fidelity: import, edit, export — nothing lost
 - Tracked changes, comments, headers, footers, tables, section breaks all preserved
 - Documents open correctly in Microsoft Word after editing
@@ -83,7 +84,7 @@ await doc.close();
 ```
 
 ### 3. MCP server (AI coding agents)
-Connect Claude Code, Cursor, Windsurf, or any MCP-compatible agent to SuperDoc. 12 MCP tools backed by 360+ underlying document operations — covering reading, editing, formatting, comments, tracked changes, and more.
+12 MCP tools backed by 340+ document operations. Works with Claude Code, Cursor, Windsurf, or any MCP-compatible agent.
 
 ```bash
 # Claude Code

@@ -1,32 +1,18 @@
 # SuperDoc
 
-> The document engine for AI agents that need real DOCX and PDF deliverables.
+> The document engine for the modern web.
 
-SuperDoc renders, edits, and automates .docx files in the browser, headless on the server, and through stateless APIs. Built on OOXML — not HTML with export bolted on.
+SuperDoc renders, edits, and automates .docx files — in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. No conversion layer. Import a document, edit it, export it. Nothing lost.
 
-## Best for
+## What it does
 
-- Legal redlines and contract review
-- Due diligence memos and reports
-- Proposal and response packs
-- Template-driven document automation
-- Human-in-the-loop agent workflows
-- Signed agreements and verification
-
-## Not for
-
-- Markdown publishing or blogs
-- Note-taking apps
-- Generic text generation
-
-## What agents get
-
-- Structured document operations (read, edit, format, comment, track changes)
-- 12 MCP tools, 9 grouped SDK tools, 360+ underlying document operations
-- Tracked changes and comments as first-class outputs
+- Reads and writes OOXML natively — documents stay real .docx files at every step
+- 12 MCP tools, 9 grouped SDK tools, 340+ underlying document operations
+- Tracked changes and comments as first-class operations
 - Same document model across browser editor, headless Node, and APIs
 - Stateless API for convert, annotate, sign, and verify
 - Real-time collaboration with Yjs CRDT
+- Runs client-side. Documents never leave your infrastructure
 
 ## Quick start (MCP)
 
@@ -45,7 +31,6 @@ npm install @superdoc-dev/sdk
 - Docs: https://docs.superdoc.dev
 - AI agents guide: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
 - MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
-- LLM tools: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
 - Document API: https://docs.superdoc.dev/document-api/overview
 - Available operations: https://docs.superdoc.dev/document-api/available-operations
 - API reference (backend): https://docs.superdoc.dev/api-reference/introduction

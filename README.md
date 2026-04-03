@@ -2,7 +2,7 @@
   <a href="https://www.superdoc.dev" target="_blank">
     <img alt="SuperDoc logo" src="https://storage.googleapis.com/public_statichosting/SuperDocHomepage/logo.webp" width="170px" height="auto" />
   </a>
-  <br />
+  <BR />
   <a href="https://www.superdoc.dev" target="_blank">
     SuperDoc
   </a>
@@ -17,9 +17,9 @@
 </div>
 
 <p align="center">
-  <strong>The document engine for AI agents and teams that need real DOCX and PDF deliverables.</strong><br>
-  Renders, edits, and automates <code>.docx</code> files in the browser, headless on the server, and through stateless APIs.<br>
-  Tracked changes, comments, collaboration, signatures, and structured document workflows — built on real OOXML.
+  <strong>The document engine for DOCX files.</strong><br>
+  Renders, edits, and automates .docx files in the browser, headless on the server, and within AI agent workflows.<br>
+  Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 
 <div align="center">
@@ -28,45 +28,7 @@
   </a>
 </div>
 
-## Why SuperDoc
-
-Use SuperDoc when your workflow needs a real document artifact — one that humans can review, redline, comment on, approve, sign, export, and send.
-
-**Best for:**
-- Legal redlines and contract review
-- Due diligence memos and reports
-- Proposal and response packs
-- Template-driven document automation
-- Human-in-the-loop agent workflows
-
-**Not for:**
-- Markdown publishing or blogs
-- Note-taking apps
-- Generic text generation
-- "HTML now, export DOCX later" hacks
-
-## Start Here
-
-| I want to... | Start here |
-|---|---|
-| Embed a DOCX editor in my app | [Quickstart](https://docs.superdoc.dev/getting-started/quickstart) |
-| Let an AI agent edit documents | [AI agents + MCP](https://docs.superdoc.dev/getting-started/ai-agents) |
-| Run document workflows on the server | [Document Engine](https://docs.superdoc.dev/document-engine/overview) |
-| Convert / annotate / sign / verify documents | [API reference](https://docs.superdoc.dev/api-reference/introduction) |
-| Add real-time collaboration | [Collaboration guides](https://docs.superdoc.dev/modules/collaboration/overview) |
-
-## Features
-
-- **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers, comments, and tracked changes. Not a contenteditable wrapper with export bolted on.
-- **Built for agents** — MCP server, SDKs, CLI, and headless workflows. Agents read, edit, comment, and save real documents using structured operations.
-- **Human review built in** — Tracked changes, comments, approvals, and collaboration in the same workflow agents use.
-- **Stateless API** — Convert, annotate, sign, and verify documents without persistence. Process and return.
-- **Real-time collaboration** — Yjs-based CRDT for multiplayer editing with shared state.
-- **Self-hosted** — Runs entirely in the browser. Your documents never leave your servers.
-- **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
-- **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
-
-## Quick Start
+## Quick start
 
 ```bash
 npm install superdoc
@@ -118,45 +80,30 @@ Or use the CDN:
 
 For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
-## For AI Agents
+### Using an AI coding agent?
 
-If your agent needs to produce a real Word or PDF artifact, start here.
-
-### MCP server
+Set up your project for AI agents and configure the MCP server:
 
 ```bash
 npx @superdoc-dev/create              # generates AGENTS.md for your framework
 claude mcp add superdoc -- npx @superdoc-dev/mcp   # connect agent to DOCX files
 ```
 
-### Why agents use SuperDoc
+## Features
 
-- Structured document operations — not brittle file mutation or string replacement
-- Same document model across editor, SDK, and automation
-- Tracked changes and comments as first-class outputs
-- Reviewable artifacts humans already understand and trust
-
-### Agent entry points
-
-- [AI agents guide](https://docs.superdoc.dev/getting-started/ai-agents)
-- [MCP server](https://docs.superdoc.dev/document-engine/ai-agents/mcp-server)
-- [LLM tools](https://docs.superdoc.dev/document-engine/ai-agents/llm-tools)
-- [AI Actions](https://docs.superdoc.dev/ai/ai-actions/overview)
-- `llms.txt` / `llms-full.txt`
-
-## Use Cases
-
-- **AI redlining** — Turn instructions into tracked changes and comments on real DOCX files
-- **Diligence memos** — Gather facts, draft a memo, and deliver a review-ready Word document
-- **Proposal automation** — Assemble response packs, compliance tables, and export-ready PDFs
-- **Contract workflows** — Draft, review, collaborate, sign, and verify end to end
+- **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers. Not a contenteditable wrapper with export bolted on.
+- **Self-hosted** — Runs entirely in the browser. Your documents never leave your servers.
+- **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
+- **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
+- **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
+- **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Examples
 
-Starter projects and workflows:
+Starter projects to get you running quickly:
 
 | Example | |
-|---|---|
+|---------|--|
 | [React](examples/getting-started/react) | [Vue](examples/getting-started/vue) |
 | [Angular](examples/getting-started/angular) | [Next.js](examples/getting-started/nextjs) |
 | [Vanilla JS](examples/getting-started/vanilla) | [CDN](examples/getting-started/cdn) |
@@ -168,11 +115,11 @@ Starter projects and workflows:
 
 ## Documentation
 
-[docs.superdoc.dev](https://docs.superdoc.dev) — installation, framework guides, collaboration, AI workflows, document engine, API reference, and more.
+[docs.superdoc.dev](https://docs.superdoc.dev) — installation, integration guides, collaboration setup, API reference, and more.
 
 ## Roadmap
 
-See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/issues/1982) for what's coming next. DOCX fidelity and production-grade document workflows remain top priorities.
+See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/issues/1982) for what's coming next. DOCX import/export fidelity is always a top priority.
 
 ## Contributing
 

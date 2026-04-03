@@ -191,6 +191,7 @@ export default class ClaudeCodeBenchmarkProvider {
         maxTurns: this.config.maxTurns || 20,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
+        settingSources: [], // SDK isolation mode: don't load user MCP servers (Linear, Excalidraw, etc.)
         cwd: stateDir,
         env,
       };

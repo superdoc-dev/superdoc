@@ -103,11 +103,13 @@ export default class CodexBenchmarkProvider {
     const task = vars.task || prompt;
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
 
-    if (!fixture) {
+    const blankDocument = vars.blankDocument === true || vars.blankDocument === 'true';
+
+    if (!fixture && !blankDocument) {
       return { error: 'No fixture specified in test vars' };
     }
 
-    const key = cacheKey(`codex-${this.config.condition}`, fixture, task, 'o3');
+    const key = cacheKey(`codex-${this.config.condition}`, fixture || 'blank', task, 'o3');
     const cached = readCache(key);
     if (cached) return cached;
 
@@ -116,11 +118,23 @@ export default class CodexBenchmarkProvider {
       return { error: `MCP server not built: ${MCP_SERVER_PATH}. Run: cd apps/mcp && pnpm run build` };
     }
 
-    const { docPath, stateDir } = createTempCopy(fixture);
-    mkdirSync(stateDir, { recursive: true });
-    const localDocPath = resolve(stateDir, fixture);
-    copyFileSync(docPath, localDocPath);
-    const beforeText = extractDocxText(localDocPath);
+    let docPath, stateDir, localDocPath, beforeText;
+
+    if (blankDocument) {
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      stateDir = resolve(__dirname, '../fixtures', `.state-${uid}`);
+      mkdirSync(stateDir, { recursive: true });
+      const outputName = vars.outputName || 'document.docx';
+      localDocPath = resolve(stateDir, outputName);
+      docPath = localDocPath;
+      beforeText = '';
+    } else {
+      ({ docPath, stateDir } = createTempCopy(fixture));
+      mkdirSync(stateDir, { recursive: true });
+      localDocPath = resolve(stateDir, fixture);
+      copyFileSync(docPath, localDocPath);
+      beforeText = extractDocxText(localDocPath);
+    }
     const startTime = performance.now();
 
     try {
@@ -191,7 +205,10 @@ export default class CodexBenchmarkProvider {
       });
 
       // Build prompt
-      let fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+      const fileInstruction = blankDocument
+        ? `Create a new DOCX file at: ${localDocPath}\nUse superdoc_open with this exact path to create a blank document, then build the content.`
+        : `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.`;
+      let fullPrompt = `${fileInstruction}\n\n${task}`;
       if (this.config.superdocMcp) {
         fullPrompt += '\n\nIMPORTANT: Use the superdoc MCP tools (superdoc_open, superdoc_get_content, superdoc_edit, etc.) for this task. Do NOT use unzip or manual XML parsing.';
       } else if (this.config.superdocOnPath) {

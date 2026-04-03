@@ -17,7 +17,10 @@ export function getViewModeSelectionWithoutStructuredContent(state) {
   const { selection, doc } = state;
 
   if (selection instanceof NodeSelection && STRUCTURED_CONTENT_NODE_TYPES.has(selection.node.type.name)) {
-    return Selection.near(doc.resolve(selection.from), -1);
+    const candidate = Selection.near(doc.resolve(selection.from), -1);
+    const candidatePos = findEnclosingStructuredContentPosition(candidate.$from);
+    if (candidatePos !== null) return null;
+    return candidate;
   }
 
   if (selection.empty) return null;

@@ -45,7 +45,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
-const REPO_ROOT = resolve(__dirname, '../..');
 
 const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with tools for reading and editing Word documents (.docx).
 
@@ -58,14 +57,6 @@ Workflow:
 4. superdoc_close(session_id) when done
 
 These tools handle OOXML format correctly and preserve document structure. Raw XML manipulation will corrupt the document.`;
-
-const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
-
-You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
-
-**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
-**Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
-`;
 
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
 
@@ -126,21 +117,35 @@ export default class ClaudeCodeBenchmarkProvider {
     const task = vars.task || prompt;
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
 
-    if (!fixture) {
+    const blankDocument = vars.blankDocument === true || vars.blankDocument === 'true';
+
+    if (!fixture && !blankDocument) {
       return { error: 'No fixture specified in test vars' };
     }
 
     const model = this.config.model || 'sonnet';
-    const key = cacheKey(`cc-${this.config.condition}`, fixture, task, model);
+    const key = cacheKey(`cc-${this.config.condition}`, fixture || 'blank', task, model);
     const cached = readCache(key);
     if (cached) return cached;
 
-    const { docPath, stateDir } = createTempCopy(fixture);
-    mkdirSync(stateDir, { recursive: true });
-    // Copy fixture into stateDir so it's within the agent's writable sandbox
-    const localDocPath = resolve(stateDir, fixture);
-    copyFileSync(docPath, localDocPath);
-    const beforeText = extractDocxText(localDocPath);
+    let docPath, stateDir, localDocPath, beforeText;
+
+    if (blankDocument) {
+      // Create from scratch: empty stateDir, agent creates the file via MCP
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      stateDir = resolve(__dirname, '../fixtures', `.state-${uid}`);
+      mkdirSync(stateDir, { recursive: true });
+      const outputName = vars.outputName || 'document.docx';
+      localDocPath = resolve(stateDir, outputName);
+      docPath = localDocPath;
+      beforeText = '';
+    } else {
+      ({ docPath, stateDir } = createTempCopy(fixture));
+      mkdirSync(stateDir, { recursive: true });
+      localDocPath = resolve(stateDir, fixture);
+      copyFileSync(docPath, localDocPath);
+      beforeText = extractDocxText(localDocPath);
+    }
     const startTime = performance.now();
 
     try {
@@ -173,7 +178,12 @@ export default class ClaudeCodeBenchmarkProvider {
       }
 
       // Build query options
-      const hasClaude = existsSync(resolve(stateDir, 'CLAUDE.md'));
+      // IMPORTANT: Do NOT set settingSources — it loads ALL user MCP servers
+      // (Linear, Excalidraw, Gmail, etc.) which adds ~4000 tokens per turn.
+      // Instead, pass CLAUDE.md content as systemPrompt directly.
+      const claudeMdPath = resolve(stateDir, 'CLAUDE.md');
+      const claudeMdContent = existsSync(claudeMdPath) ? readFileSync(claudeMdPath, 'utf8') : '';
+
       const queryOptions = {
         model,
         allowedTools: this.config.allowedTools || ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
@@ -183,48 +193,43 @@ export default class ClaudeCodeBenchmarkProvider {
         allowDangerouslySkipPermissions: true,
         cwd: stateDir,
         env,
-        // Load CLAUDE.md from stateDir if we wrote one
-        ...(hasClaude ? { settingSources: ['project'] } : {}),
       };
 
-      // Option A: Use your local Claude Code settings (MCP servers, skills, CLAUDE.md)
-      // This inherits whatever you have configured in ~/.claude/ and .claude/
-      if (this.config.useClaudeSettings) {
-        queryOptions.settingSources = ['user', 'project'];
-        queryOptions.cwd = REPO_ROOT; // Use repo root so project settings are found
-      }
-
-      // Option B: Attach SuperDoc MCP server directly (standalone, no local config needed)
+      // Attach SuperDoc MCP server directly (standalone, no user config loaded)
       if (this.config.superdocMcp) {
         queryOptions.mcpServers = {
           superdoc: { command: 'node', args: [MCP_SERVER_PATH] },
         };
-        // Pre-approve all SuperDoc MCP tools
         queryOptions.allowedTools = [
           ...(queryOptions.allowedTools || []),
           'mcp__superdoc__*',
         ];
-        // System prompt enforcing SuperDoc tool usage
-        queryOptions.systemPrompt = SUPERDOC_SYSTEM_PROMPT;
-        // Write AGENTS.md in working directory for additional reinforcement
-        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_MCP_AGENTS_MD);
       }
 
-      // Optional system prompt override (takes precedence over the MCP one)
-      if (this.config.systemPrompt) {
-        queryOptions.systemPrompt = this.config.systemPrompt;
+      // Build system prompt: combine MCP instructions + CLAUDE.md content
+      const promptParts = [];
+      if (this.config.superdocMcp) promptParts.push(SUPERDOC_SYSTEM_PROMPT);
+      if (claudeMdContent) promptParts.push(claudeMdContent);
+      if (this.config.systemPrompt) promptParts.push(this.config.systemPrompt);
+      if (promptParts.length > 0) {
+        queryOptions.systemPrompt = promptParts.join('\n\n');
       }
 
       let resultMessage = null;
       const toolCalls = [];
       let agentResponseText = '';
 
-      const fullPrompt = `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.\n\n${task}`;
+      const fileInstruction = blankDocument
+        ? `Create a new DOCX file at: ${localDocPath}\nUse superdoc_open with this exact path to create a blank document, then build the content.`
+        : `The DOCX file is at: ${localDocPath}\nIf you edit the document, save the result back to the same file path.`;
+      const fullPrompt = `${fileInstruction}\n\n${task}`;
 
       for await (const message of query({
         prompt: fullPrompt,
         options: queryOptions,
       })) {
+        console.log('message', message);
+        
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
             if (block.type === 'text') agentResponseText += block.text + '\n';

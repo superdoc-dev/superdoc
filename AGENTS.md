@@ -118,7 +118,9 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 
 ## AI Eval Suite
 
-The `evals/` directory contains a Promptfoo-based evaluation suite for validating AI tool call quality.
+The `evals/` directory contains a Promptfoo-based evaluation suite with three levels of evaluation.
+
+### Level 1: Deterministic Evals (tool selection + argument accuracy)
 
 | Command | What it does | Cost |
 |---------|-------------|------|
@@ -129,9 +131,56 @@ The `evals/` directory contains a Promptfoo-based evaluation suite for validatin
 
 Tool definitions are extracted from `packages/sdk/tools/` via `evals/tools/extract.mjs`. Run `pnpm run generate:all` first if SDK artifacts are missing.
 
-Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (Level 1: tool selection + argument accuracy, not execution).
+Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (tool selection + argument accuracy, not execution).
 
 The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt from `examples/eval-demo/lib/agent.ts`. Update both when changing the prompt.
+
+### Level 2: GDPval Benchmark (Model+SuperDoc vs Model-Only)
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark | ~$1-2 |
+
+### Level 3: DOCX Agent Benchmark (real agents, real documents)
+
+Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their performance with and without SuperDoc tools. 4 conditions x 2 agents x 6 tasks = 48 runs.
+
+**Conditions:**
+
+| Condition | What the agent gets |
+|-----------|-------------------|
+| baseline | No skill, agent figures out DOCX on its own |
+| vendor | Anthropic's DOCX skill (unzip + XML editing) |
+| superdoc-skill | SuperDoc MCP server (`superdoc_open`, `superdoc_get_content`, etc.) |
+| superdoc-cli | SuperDoc CLI on PATH |
+
+**Tasks:** 3 reading (extract headings, entity names, financial figures) + 3 editing (replace entity name, insert section, fill placeholders).
+
+**Metrics per task:** correctness (pass/fail), collateral (no unintended changes), steps (agent turn count), latency (seconds), tokens (input + output), path (which DOCX approach was used).
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval:benchmark` | Run full benchmark (48 runs) | ~15 min |
+| `pnpm --filter @superdoc-testing/evals run eval:benchmark:codex` | Run Codex conditions only | ~8 min |
+| `pnpm --filter @superdoc-testing/evals run eval:benchmark:claude` | Run Claude Code conditions only | ~8 min |
+| `pnpm --filter @superdoc-testing/evals run eval:benchmark:report` | Generate comparison report (Markdown + CSV) | Free |
+
+**Prerequisites:**
+- `OPENAI_API_KEY` in `evals/.env` (for Codex; use `codex login --with-api-key` for API key auth)
+- Claude Code installed locally (uses local auth, no API key needed in `.env`)
+- MCP server built: `cd apps/mcp && pnpm run build`
+- CLI built: check `apps/cli/dist/index.js` exists
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `evals/promptfooconfig.benchmark.yaml` | Level 3 Promptfoo config (8 providers) |
+| `evals/tests/agent-benchmark.yaml` | 6 benchmark tasks with assertions |
+| `evals/providers/claude-code-agent.mjs` | Claude Agent SDK provider |
+| `evals/providers/codex-agent.mjs` | Codex SDK provider |
+| `evals/lib/benchmark-report.mjs` | Markdown + CSV report generator |
+| `evals/fixtures/vendor-docx-skill.md` | Anthropic's DOCX skill for vendor condition |
 
 ## Generated Artifacts
 

@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { computeSdkFingerprint } from './utils.mjs';
+import { computeSdkFingerprint, extractDocxText } from './utils.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES_DIR = resolve(__dirname, '..', 'fixtures');
 
 function withTempDir(run) {
   const tempDir = mkdtempSync(resolve(tmpdir(), 'superdoc-evals-utils-'));
@@ -72,4 +76,16 @@ test('computeSdkFingerprint changes when a new SDK dist file is added', () => {
 
     assert.notEqual(before, after);
   });
+});
+
+test('extractDocxText returns non-empty text from a real DOCX fixture', () => {
+  const docxPath = resolve(FIXTURES_DIR, 'document.docx');
+  const text = extractDocxText(docxPath);
+  assert.ok(typeof text === 'string', 'result should be a string');
+  assert.ok(text.length > 0, 'result should be non-empty for a real DOCX file');
+});
+
+test('extractDocxText returns empty string for a missing file', () => {
+  const text = extractDocxText('/tmp/__nonexistent_superdoc_test_file__.docx');
+  assert.equal(text, '');
 });

@@ -14,6 +14,9 @@
  */
 
 const { resolve } = require('node:path');
+const { execSync } = require('node:child_process');
+const { writeFileSync, unlinkSync } = require('node:fs');
+const { tmpdir } = require('node:os');
 
 // --- Tool name constants ---
 
@@ -526,4 +529,222 @@ module.exports.usesRewriteOp = (output) => {
     }
   }
   return { pass: false, score: 0, reason: 'No text.rewrite or replace found' };
+};
+
+// --- Benchmark metrics (Level 3) ---
+// Each metric is a separate assertion so Promptfoo shows them as individual columns.
+
+/** Steps taken by the agent. Score = step count (lower is better). */
+module.exports.benchmarkSteps = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const steps = d.stepCount || 0;
+  return { pass: true, score: steps, reason: `${steps} steps` };
+};
+
+/** Latency in seconds. Score = seconds (lower is better). */
+module.exports.benchmarkLatency = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const secs = Math.round((d.duration || 0) / 1000);
+  return { pass: true, score: secs, reason: `${secs}s` };
+};
+
+/** Total tokens (input + output). Score = token count. */
+module.exports.benchmarkTokens = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+  const inTok = d.usage?.input_tokens || 0;
+  const outTok = d.usage?.output_tokens || 0;
+  const total = inTok + outTok;
+  return { pass: true, score: total, reason: `${inTok} in + ${outTok} out = ${total}` };
+};
+
+/**
+ * Which DOCX path the agent used. Score is 1 for superdoc, 0 for raw.
+ * FAILS if the condition requires SuperDoc but the agent used raw.
+ *
+ * Conditions that require SuperDoc usage:
+ *   - superdoc-skill  → must use superdoc MCP tools
+ *   - superdoc-cli    → must use superdoc CLI via Bash
+ */
+module.exports.benchmarkPath = (output) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+
+  const path = d.pathUsed || 'unknown';
+  const condition = d.condition || 'unknown';
+  const usedSuperdoc = path.includes('superdoc');
+  const score = usedSuperdoc ? 1 : 0;
+
+  // Conditions that require SuperDoc usage
+  const requiresSuperdoc = condition === 'superdoc-skill' || condition === 'superdoc-cli';
+
+  if (requiresSuperdoc && !usedSuperdoc) {
+    return { pass: false, score: 0, reason: `Condition "${condition}" requires SuperDoc but agent used "${path}"` };
+  }
+
+  return { pass: true, score, reason: path };
+};
+
+/** Combined benchmark metrics (kept for backward compat). */
+module.exports.benchmarkMetrics = (output, context) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: false, score: 0, reason: 'Could not parse output' };
+  const steps = d.stepCount || 0;
+  const secs = Math.round((d.duration || 0) / 1000);
+  const tokens = (d.usage?.input_tokens || 0) + (d.usage?.output_tokens || 0);
+  const path = d.pathUsed || 'unknown';
+  return {
+    pass: true,
+    score: 1,
+    reason: `${steps} steps, ${secs}s, ${tokens} tok, path=${path}`,
+  };
+};
+
+/**
+ * Run OOXML structural fidelity checks on the output DOCX.
+ *
+ * Reads `context.vars.fidelityChecks` (JSON array of check objects) and runs
+ * each check against the output file. Score = passed/total. FAIL if any check fails.
+ *
+ * Supported check types:
+ *   { type: "formatting", text, property }
+ *   { type: "trackedChangeCount", min? }
+ *   { type: "commentExists", id }
+ *   { type: "tableCell", table, row, col, text?, alignment? }
+ *   { type: "paragraphStyle", text, style }
+ */
+module.exports.benchmarkFidelity = (output, context) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 1, reason: 'no data' };
+
+  const outputFile = d.outputFile;
+  if (!outputFile) return { pass: true, score: 1, reason: 'no output file (reading task)' };
+
+  const rawChecks = context?.vars?.fidelityChecks;
+  if (!rawChecks) return { pass: true, score: 1, reason: 'no checks defined' };
+
+  let checks;
+  try {
+    checks = typeof rawChecks === 'string' ? JSON.parse(rawChecks) : rawChecks;
+  } catch {
+    return { pass: false, score: 0, reason: 'fidelityChecks is not valid JSON' };
+  }
+
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return { pass: true, score: 1, reason: 'no checks defined' };
+  }
+
+  const fidelityModulePath = resolve(__dirname, 'docx-fidelity.mjs');
+  const script = `
+import { parseDocx, checkRunFormatting, checkTrackedChangeCount, checkCommentExists, checkTableCell, checkParagraphStyle } from ${JSON.stringify(fidelityModulePath)};
+const parsed = await parseDocx(${JSON.stringify(outputFile)});
+const checks = ${JSON.stringify(checks)};
+const results = [];
+
+for (const check of checks) {
+  if (check.type === 'formatting') {
+    const r = checkRunFormatting(parsed.documentXml, check.text, check.property);
+    results.push({ pass: r.hasProperty, reason: r.reason });
+  } else if (check.type === 'trackedChangeCount') {
+    const r = checkTrackedChangeCount(parsed.documentXml);
+    const total = r.insertions + r.deletions;
+    const min = check.min ?? 0;
+    results.push({ pass: total >= min, reason: \`tracked changes: \${total} (ins=\${r.insertions}, del=\${r.deletions}), min=\${min}\` });
+  } else if (check.type === 'commentExists') {
+    const r = checkCommentExists(parsed.commentsXml, String(check.id));
+    results.push({ pass: r.exists, reason: r.reason });
+  } else if (check.type === 'tableCell') {
+    const r = checkTableCell(parsed.documentXml, check.table ?? 0, check.row ?? 0, check.col ?? 0);
+    let pass = true;
+    let reason = r.reason;
+    if (check.text !== undefined && !r.text?.includes(check.text)) { pass = false; reason = \`Cell text "\${r.text}" does not contain "\${check.text}"\`; }
+    if (check.alignment !== undefined && r.alignment !== check.alignment) { pass = false; reason += \`; alignment "\${r.alignment}" !== expected "\${check.alignment}"\`; }
+    results.push({ pass, reason });
+  } else if (check.type === 'paragraphStyle') {
+    const r = checkParagraphStyle(parsed.documentXml, check.text, check.style);
+    results.push({ pass: r.hasStyle, reason: r.reason });
+  } else {
+    results.push({ pass: false, reason: \`Unknown check type: \${check.type}\` });
+  }
+}
+
+console.log(JSON.stringify(results));
+`;
+
+  const tmpFile = resolve(tmpdir(), `superdoc-fidelity-${Date.now()}.mjs`);
+  let results;
+  try {
+    writeFileSync(tmpFile, script, 'utf8');
+    const raw = execSync(`node ${JSON.stringify(tmpFile)}`, {
+      encoding: 'utf8',
+      cwd: __dirname,
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    results = JSON.parse(raw);
+  } catch (err) {
+    const msg = err.stderr || err.message || String(err);
+    return { pass: false, score: 0, reason: `fidelity check subprocess failed: ${msg.slice(0, 300)}` };
+  } finally {
+    try { unlinkSync(tmpFile); } catch {}
+  }
+
+  const total = results.length;
+  const passedCount = results.filter((r) => r.pass).length;
+  const failed = results.filter((r) => !r.pass);
+  const score = total > 0 ? passedCount / total : 1;
+  const pass = failed.length === 0;
+  const reason = pass
+    ? `${passedCount}/${total} checks passed`
+    : `${passedCount}/${total} checks passed. Failed: ${failed.map((r) => r.reason).join('; ')}`;
+
+  return { pass, score, reason };
+};
+
+/**
+ * Compare input fixture vs output DOCX at XML element level.
+ *
+ * Score = ratio of changed elements (0 = identical, 1 = completely rewritten).
+ * Always passes — informational metric only.
+ */
+module.exports.benchmarkDiff = (output, context) => {
+  const d = parseExecOutput(output);
+  if (!d) return { pass: true, score: 0, reason: 'no data' };
+
+  const outputFile = d.outputFile;
+  if (!outputFile) return { pass: true, score: 0, reason: 'no output file (reading task)' };
+
+  const fixture = context?.vars?.fixture;
+  if (!fixture) return { pass: true, score: 0, reason: 'no fixture defined' };
+
+  const fixturePath = resolve(__dirname, '../fixtures', fixture);
+
+  const fidelityModulePath = resolve(__dirname, 'docx-fidelity.mjs');
+  const script = `
+import { diffDocxXml } from ${JSON.stringify(fidelityModulePath)};
+const diff = await diffDocxXml(${JSON.stringify(fixturePath)}, ${JSON.stringify(outputFile)});
+console.log(JSON.stringify(diff));
+`;
+
+  const tmpFile = resolve(tmpdir(), `superdoc-diff-${Date.now()}.mjs`);
+  let diff;
+  try {
+    writeFileSync(tmpFile, script, 'utf8');
+    const raw = execSync(`node ${JSON.stringify(tmpFile)}`, {
+      encoding: 'utf8',
+      cwd: __dirname,
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    diff = JSON.parse(raw);
+  } catch (err) {
+    const msg = err.stderr || err.message || String(err);
+    return { pass: true, score: 0, reason: `diff subprocess failed: ${msg.slice(0, 300)}` };
+  } finally {
+    try { unlinkSync(tmpFile); } catch {}
+  }
+
+  return { pass: true, score: diff.ratio, reason: diff.reason };
 };

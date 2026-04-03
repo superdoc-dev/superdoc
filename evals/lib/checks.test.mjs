@@ -6,10 +6,14 @@
  */
 
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
 const require = createRequire(import.meta.url);
 const checks = require('./checks.cjs');
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 function call(name, args = {}) {
   return { function: { name, arguments: JSON.stringify(args) } };
@@ -147,6 +151,79 @@ console.log('usesTrackChangesDecide');
 test('passes action decide', () => eq(checks.usesTrackChangesDecide([call('superdoc_track_changes', { action: 'decide' })]).pass, true));
 test('fails action list', () => eq(checks.usesTrackChangesDecide([call('superdoc_track_changes', { action: 'list' })]).pass, false));
 test('fails not called', () => eq(checks.usesTrackChangesDecide([call('superdoc_search')]).pass, false));
+
+// --- benchmark individual metrics ---
+console.log('benchmarkMetrics');
+test('benchmarkSteps returns step count as score', () => {
+  const { benchmarkSteps } = require('./checks.cjs');
+  const output = JSON.stringify({ stepCount: 5 });
+  const result = benchmarkSteps(output);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 5);
+  assert.ok(result.reason.includes('5'));
+});
+
+test('benchmarkLatency returns seconds as score', () => {
+  const { benchmarkLatency } = require('./checks.cjs');
+  const output = JSON.stringify({ duration: 12500 });
+  const result = benchmarkLatency(output);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 13);
+});
+
+test('benchmarkTokens returns total tokens as score', () => {
+  const { benchmarkTokens } = require('./checks.cjs');
+  const output = JSON.stringify({ usage: { input_tokens: 8000, output_tokens: 2000 } });
+  const result = benchmarkTokens(output);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 10000);
+  assert.ok(result.reason.includes('8000 in'));
+});
+
+test('benchmarkPath returns 1 for superdoc, 0 for raw', () => {
+  const { benchmarkPath } = require('./checks.cjs');
+  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).score, 1);
+  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'raw' })).score, 0);
+  assert.ok(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).reason.includes('superdoc'));
+});
+
+test('benchmarkMetrics combined still works', () => {
+  const { benchmarkMetrics } = require('./checks.cjs');
+  const output = JSON.stringify({ stepCount: 3, duration: 5000, usage: { input_tokens: 1000, output_tokens: 500 }, pathUsed: 'raw' });
+  const result = benchmarkMetrics(output, {});
+  assert.strictEqual(result.pass, true);
+  assert.ok(result.reason.includes('3 steps'));
+});
+
+// --- benchmarkFidelity ---
+console.log('benchmarkFidelity');
+test('benchmarkFidelity passes when outputFile is null (reading task)', () => {
+  const output = JSON.stringify({ stepCount: 3 }); // no outputFile
+  const result = checks.benchmarkFidelity(output, { vars: { fidelityChecks: '[{"type":"trackedChangeCount","min":1}]' } });
+  assert.strictEqual(result.pass, true);
+  assert.ok(result.reason.includes('no output file'));
+});
+
+test('benchmarkFidelity runs checks from vars.fidelityChecks', () => {
+  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const output = JSON.stringify({ outputFile: ndaPath });
+  const context = { vars: { fidelityChecks: JSON.stringify([{ type: 'trackedChangeCount', min: 0 }]) } };
+  const result = checks.benchmarkFidelity(output, context);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 1);
+});
+
+// --- benchmarkDiff ---
+console.log('benchmarkDiff');
+test('benchmarkDiff returns 0 ratio for same file', () => {
+  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const output = JSON.stringify({ outputFile: ndaPath });
+  const context = { vars: { fixture: 'nda.docx' } };
+  const result = checks.benchmarkDiff(output, context);
+  assert.strictEqual(result.pass, true);
+  assert.strictEqual(result.score, 0);
+  assert.ok(result.reason.includes('0/'));
+});
 
 console.log();
 console.log(`Results: ${passed} passed, ${failed} failed`);

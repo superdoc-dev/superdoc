@@ -1,0 +1,94 @@
+# Level 3: DOCX Agent Benchmark
+#
+# 4 conditions × 2 agents × 12 tasks = 96 runs
+#
+# Conditions:
+#   baseline       — no skill, agent figures out DOCX on its own
+#   vendor         — Anthropic's DOCX skill (unzip + XML + docx-js)
+#   superdoc-skill — SuperDoc MCP server (superdoc_* tools)
+#   superdoc-cli   — SuperDoc CLI on PATH
+#
+# Run:    pnpm run eval:benchmark
+# Report: pnpm run eval:benchmark:report
+
+description: 'Level 3: DOCX Agent Benchmark'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  # ── Claude Code ──
+
+  - id: file://providers/claude-code-agent.mjs
+    label: CC-baseline
+    config:
+      condition: baseline
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+
+  - id: file://providers/claude-code-agent.mjs
+    label: CC-with-docx-skill
+    config:
+      condition: vendor
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      vendorSkill: true
+
+  - id: file://providers/claude-code-agent.mjs
+    label: CC-superdoc-mcp
+    config:
+      condition: superdoc-skill
+      allowedTools: ['Read', 'Glob', 'Grep']
+      superdocMcp: true
+      superdocOnPath: true
+
+  - id: file://providers/claude-code-agent.mjs
+    label: CC-superdoc-cli-prompt
+    config:
+      condition: superdoc-cli
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      superdocOnPath: true
+
+  # ── Codex ──
+
+  - id: file://providers/codex-agent.mjs
+    label: Codex-baseline
+    config:
+      condition: baseline
+
+  - id: file://providers/codex-agent.mjs
+    label: Codex-with-docx-skill
+    config:
+      condition: vendor
+      vendorSkill: true
+
+  - id: file://providers/codex-agent.mjs
+    label: Codex-superdoc-mcp
+    config:
+      condition: superdoc-skill
+      superdocMcp: true
+      superdocOnPath: true
+
+  - id: file://providers/codex-agent.mjs
+    label: Codex-superdoc-cli
+    config:
+      condition: superdoc-cli
+      superdocOnPath: true
+
+evaluateOptions:
+  maxConcurrency: 2
+  timeoutMs: 300000
+
+derivedMetrics:
+  - name: avg_latency
+    value: 'latency / __count'
+  - name: avg_steps
+    value: 'steps / __count'
+  - name: avg_tokens
+    value: 'tokens / __count'
+  - name: superdoc_usage_pct
+    value: 'path / __count * 100'
+  - name: avg_fidelity
+    value: 'fidelity / __count'
+
+tests:
+  - file://tests/agent-benchmark.yaml
+  - file://tests/agent-benchmark-v2.yaml

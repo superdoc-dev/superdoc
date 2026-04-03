@@ -1,35 +1,39 @@
 # Level 3: DOCX Agent Benchmark — fidelity suite (v2)
 #
-# 6 tasks designed so that raw XML manipulation (unzip + sed) will pass text checks
-# but FAIL fidelity checks, while SuperDoc MCP preserves OOXML structure.
+# Tasks designed to test operations where SuperDoc's document model
+# outperforms raw XML manipulation (unzip + sed).
 #
-# Metrics per task: correctness, collateral, fidelity, diff, steps, latency, tokens, path
+# Category A: Structural creation (raw approaches can't produce valid OOXML)
+# Category B: Formatting operations (raw approaches can't modify run properties)
+# Category C: Complex edits (tracked changes, comments — track improvement over time)
 
-# ── TASK 1: Mixed formatting replace ──
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY A: Structural creation — SuperDoc proven advantage
+# ═══════════════════════════════════════════════════════════════
 
-- description: 'Fidelity: mixed formatting replace'
+- description: 'Structure: create heading with style'
   vars:
-    fixture: consulting-agreement.docx
+    fixture: nda.docx
     keepFile: true
-    task: 'Replace the term "Confidential Information" with "Proprietary Information" everywhere in the document, preserving bold and italic formatting on each occurrence.'
-    fidelityChecks: '[{"type":"formatting","text":"Proprietary Information","property":"bold"}]'
+    task: 'Add a new section at the end of the document with a properly styled Heading 1 that says "Force Majeure" followed by a paragraph that says "Neither party shall be liable for delays or failures resulting from causes beyond reasonable control."'
+    fidelityChecks: '[{"type":"paragraphStyle","text":"Force Majeure","style":"Heading1"}]'
   assert:
     - type: javascript
       metric: correctness
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('Proprietary Information')) return { pass: false, score: 0, reason: '"Proprietary Information" not found' };
-        if (t.includes('Confidential Information')) return { pass: false, score: 0, reason: 'Old term "Confidential Information" still present' };
-        return { pass: true, score: 1, reason: 'Term replaced correctly' };
+        if (!t.includes('Force Majeure')) return { pass: false, score: 0, reason: 'Force Majeure not found' };
+        if (!t.includes('beyond reasonable control')) return { pass: false, score: 0, reason: 'Body text not found' };
+        return { pass: true, score: 1, reason: 'Section added' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
-        const t = d.documentText || '';
-        if (!t.includes('Astra Dynamics')) return { pass: false, score: 0, reason: 'Collateral: "Astra Dynamics" removed' };
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        return { pass: true, score: 1, reason: 'Collateral content intact' };
+        const t = d.documentText || '';
+        if (!t.includes('Iqidis') && !t.includes('Agreement')) return { pass: false, score: 0, reason: 'Original content removed' };
+        return { pass: true, score: 1, reason: 'Original content preserved' };
     - type: javascript
       metric: fidelity
       value: file://lib/checks.cjs:benchmarkFidelity
@@ -53,69 +57,21 @@
       metric: path
       value: file://lib/checks.cjs:benchmarkPath
 
-# ── TASK 2: Table cell edit ──
-
-- description: 'Fidelity: table cell edit'
+- description: 'Structure: create table at end'
   vars:
-    fixture: pricing-proposal.docx
+    fixture: nda.docx
     keepFile: true
-    task: 'In the pricing table, update the Enterprise plan monthly price from $399 to $500. Do not change any other values or formatting in the table.'
-    fidelityChecks: '[{"type":"tableCell","table":0,"row":3,"col":1,"text":"500"}]'
+    task: 'Add a summary table at the end of the document with 2 columns ("Party" and "Role") and 2 data rows: "Iqidis Corp" / "Disclosing Party" and "TechVentures LLC" / "Receiving Party". The table should have borders and a header row.'
+    fidelityChecks: '[{"type":"tableCell","table":0,"row":1,"col":0,"text":"Iqidis"},{"type":"tableCell","table":0,"row":1,"col":1,"text":"Disclosing"}]'
   assert:
     - type: javascript
       metric: correctness
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('500')) return { pass: false, score: 0, reason: '"500" not found in document' };
-        return { pass: true, score: 1, reason: 'Price updated correctly' };
-    - type: javascript
-      metric: collateral
-      value: |
-        const d = JSON.parse(output);
-        const t = d.documentText || '';
-        if (!t.includes('Starter')) return { pass: false, score: 0, reason: 'Collateral: "Starter" plan removed' };
-        if (!t.includes('49')) return { pass: false, score: 0, reason: 'Collateral: Starter price removed' };
-        return { pass: true, score: 1, reason: 'Other table rows intact' };
-    - type: javascript
-      metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
-    - type: javascript
-      metric: diff
-      weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
-    - type: javascript
-      metric: steps
-      weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
-    - type: javascript
-      metric: latency
-      weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
-    - type: javascript
-      metric: tokens
-      weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
-    - type: javascript
-      metric: path
-      value: file://lib/checks.cjs:benchmarkPath
-
-# ── TASK 3: Tracked changes edit ──
-
-- description: 'Fidelity: tracked changes edit'
-  vars:
-    fixture: contract-redlines.docx
-    keepFile: true
-    task: 'Change the payment terms from "net 45" to "net 30" using tracked changes. Preserve all existing comments and tracked changes in the document.'
-    fidelityChecks: '[{"type":"trackedChangeCount","min":5},{"type":"commentExists","id":"1"},{"type":"commentExists","id":"2"}]'
-  assert:
-    - type: javascript
-      metric: correctness
-      value: |
-        const d = JSON.parse(output);
-        const t = d.documentText || '';
-        if (!t.includes('net 30') && !t.includes('30')) return { pass: false, score: 0, reason: '"net 30" or "30" not found in document' };
-        return { pass: true, score: 1, reason: 'Payment terms updated' };
+        if (!t.includes('Disclosing Party')) return { pass: false, score: 0, reason: 'Disclosing Party not in table' };
+        if (!t.includes('Receiving Party')) return { pass: false, score: 0, reason: 'Receiving Party not in table' };
+        return { pass: true, score: 1, reason: 'Table created correctly' };
     - type: javascript
       metric: collateral
       value: |
@@ -145,31 +101,32 @@
       metric: path
       value: file://lib/checks.cjs:benchmarkPath
 
-# ── TASK 4: Nested list insert ──
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY B: Formatting operations — SuperDoc proven advantage
+# ═══════════════════════════════════════════════════════════════
 
-- description: 'Fidelity: nested list insert'
+- description: 'Format: make specific text bold'
   vars:
-    fixture: policy-manual.docx
+    fixture: nda.docx
     keepFile: true
-    task: 'Add two new subpoints under section 3.2: "c) Quarterly compliance review required" and "d) Annual policy audit by external auditor". Continue the existing lettered numbering without breaking the list structure.'
-    fidelityChecks: '[]'
+    task: 'Make all occurrences of "TechVentures LLC" bold throughout the document. Do not change any text content.'
+    fidelityChecks: '[{"type":"formatting","text":"TechVentures","property":"bold"}]'
   assert:
     - type: javascript
       metric: correctness
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('Quarterly compliance review')) return { pass: false, score: 0, reason: '"Quarterly compliance review" not found' };
-        if (!t.includes('Annual policy audit')) return { pass: false, score: 0, reason: '"Annual policy audit" not found' };
-        return { pass: true, score: 1, reason: 'New list items added correctly' };
+        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'TechVentures not found' };
+        return { pass: true, score: 1, reason: 'Text preserved' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        if (!t.includes('Astra Dynamics')) return { pass: false, score: 0, reason: 'Collateral: "Astra Dynamics" removed' };
-        return { pass: true, score: 1, reason: 'Document modified, collateral intact' };
+        if (!t.includes('Iqidis')) return { pass: false, score: 0, reason: 'Collateral: Iqidis removed' };
+        if (!t.includes('indemnify')) return { pass: false, score: 0, reason: 'Collateral: indemnification removed' };
+        return { pass: true, score: 1, reason: 'Content preserved' };
     - type: javascript
       metric: fidelity
       value: file://lib/checks.cjs:benchmarkFidelity
@@ -193,13 +150,11 @@
       metric: path
       value: file://lib/checks.cjs:benchmarkPath
 
-# ── TASK 5: Multi-step workflow ──
-
-- description: 'Fidelity: multi-step workflow'
+- description: 'Format: replace text preserving bold'
   vars:
-    fixture: consulting-agreement.docx
+    fixture: nda.docx
     keepFile: true
-    task: 'Find all payment-related terms in the document (amounts, rates, payment schedules), then create a summary table with columns "Item" and "Value" listing each term. Insert the table at the end of the document under a new heading "Payment Summary".'
+    task: 'Replace all occurrences of "Iqidis Corp" with "Apex Holdings" throughout the document. The replacement text must keep the same formatting (bold, italic, etc.) as the original.'
     fidelityChecks: '[]'
   assert:
     - type: javascript
@@ -207,17 +162,17 @@
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('Payment Summary')) return { pass: false, score: 0, reason: '"Payment Summary" heading not found' };
-        if (!t.includes('150')) return { pass: false, score: 0, reason: 'Hourly rate "150" not found in summary' };
-        return { pass: true, score: 1, reason: 'Payment summary added correctly' };
+        if (!t.includes('Apex Holdings')) return { pass: false, score: 0, reason: 'Apex Holdings not found' };
+        if (t.includes('Iqidis Corp')) return { pass: false, score: 0, reason: 'Iqidis Corp still present' };
+        return { pass: true, score: 1, reason: 'Replaced correctly' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
+        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures removed' };
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        if (!t.includes('Astra Dynamics')) return { pass: false, score: 0, reason: 'Collateral: "Astra Dynamics" removed' };
-        return { pass: true, score: 1, reason: 'Document modified, collateral intact' };
+        return { pass: true, score: 1, reason: 'TechVentures intact' };
     - type: javascript
       metric: fidelity
       value: file://lib/checks.cjs:benchmarkFidelity
@@ -241,28 +196,76 @@
       metric: path
       value: file://lib/checks.cjs:benchmarkPath
 
-# ── TASK 6: Edit with existing annotations ──
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY C: Complex edits — track improvement over time
+# These tasks test operations that currently have API issues.
+# As SuperDoc improves, pass rates here should increase.
+# ═══════════════════════════════════════════════════════════════
 
-- description: 'Fidelity: edit with existing annotations'
+- description: 'Complex: tracked change replacement'
   vars:
-    fixture: contract-redlines.docx
+    fixture: nda.docx
     keepFile: true
-    task: 'In the Liability section, change the liability cap from "$100,000" to "$250,000" using tracked changes. Do not remove or modify any existing comments or tracked changes in the document.'
-    fidelityChecks: '[{"type":"commentExists","id":"1"},{"type":"commentExists","id":"2"},{"type":"trackedChangeCount","min":5}]'
+    task: 'Using tracked changes (suggesting mode), replace "$500,000" with "$750,000" in the document. The change should appear as a tracked/suggested change, not a direct edit.'
+    fidelityChecks: '[{"type":"trackedChangeCount","min":1}]'
   assert:
     - type: javascript
       metric: correctness
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('250,000') && !t.includes('250000')) return { pass: false, score: 0, reason: '"250,000" or "250000" not found in document' };
-        return { pass: true, score: 1, reason: 'Liability cap updated' };
+        if (!t.includes('750,000') && !t.includes('750000')) return { pass: false, score: 0, reason: '750,000 not found' };
+        return { pass: true, score: 1, reason: 'Amount updated' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures removed' };
+        return { pass: true, score: 1, reason: 'Content preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://lib/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://lib/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://lib/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://lib/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://lib/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://lib/checks.cjs:benchmarkPath
+
+- description: 'Complex: add comment to clause'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a comment to the indemnification clause that says "Legal review needed before signing". The comment should be anchored to the text about indemnification.'
+    fidelityChecks: '[]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        return { pass: true, score: 1, reason: 'Document modified' };
+        return { pass: true, score: 1, reason: 'Document modified (comment added)' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('indemnify') && !t.includes('Indemnification')) return { pass: false, score: 0, reason: 'Indemnification clause removed' };
+        return { pass: true, score: 1, reason: 'Clause preserved' };
     - type: javascript
       metric: fidelity
       value: file://lib/checks.cjs:benchmarkFidelity

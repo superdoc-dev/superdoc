@@ -83,6 +83,7 @@ import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
+import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -1612,6 +1613,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // Viewing mode: Not editable, no tracked changes, no comments
     if (cleanedMode === 'viewing') {
       this.commands.toggleTrackChangesShowOriginal?.();
+      const normalizedSelection = getViewModeSelectionWithoutStructuredContent(this.state);
+      if (normalizedSelection) {
+        this.view?.dispatch(this.state.tr.setSelection(normalizedSelection));
+      }
       this.setEditable(false, false);
       this.setOptions({ documentMode: 'viewing' });
       if (pm) pm.classList.add('view-mode');
@@ -2487,15 +2492,33 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * images are never wider than their containing cell.
    *
    * @returns Size object with width and height in pixels, or empty object if no page size.
-   * @note In web layout mode, returns empty object to skip content constraints.
-   *       CSS max-width: 100% handles responsive display while preserving full resolution.
+   * @note In web layout mode, returns empty object to skip content constraints unless
+   *       the cursor is inside a table cell, in which case the cell width is returned.
    */
   getMaxContentSize(): { width?: number; height?: number } {
     if (!this.converter) return {};
 
-    // In web layout mode: skip constraints, let CSS handle responsive sizing
-    // This preserves full image resolution while CSS max-width: 100% handles display
+    // When the cursor is inside a table cell, constrain width to the cell's content
+    // width so images inserted into a cell are never wider than that cell.
+    // This applies to both print and web layout modes.
+    let cellConstraintWidth = 0;
+    const { $head } = this.state.selection;
+    for (let d = $head.depth; d > 0; d--) {
+      const node = $head.node(d);
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        cellConstraintWidth = getCellContentWidthPx(node);
+        break;
+      }
+    }
+
+    // In web layout mode there are no page dimensions. Return cell width constraint
+    // if inside a table cell, otherwise skip constraints entirely (CSS handles display).
     if (this.isWebLayout()) {
+      if (cellConstraintWidth > 0) {
+        // Infinity lets getAllowedImageDimensions() skip the height check while
+        // still applying the width constraint (web layout has no page height).
+        return { width: cellConstraintWidth, height: Infinity };
+      }
       return {};
     }
 
@@ -2518,18 +2541,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
     const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
 
-    // When the cursor is inside a table cell, constrain width to the cell's content
-    // width so images inserted into a cell are never wider than that cell.
-    const { $head } = this.state.selection;
-    for (let d = $head.depth; d > 0; d--) {
-      const node = $head.node(d);
-      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
-        const cellWidth = getCellContentWidthPx(node);
-        if (cellWidth > 0) {
-          return { width: cellWidth, height: maxHeight };
-        }
-        break;
-      }
+    if (cellConstraintWidth > 0) {
+      return { width: cellConstraintWidth, height: maxHeight };
     }
 
     return {

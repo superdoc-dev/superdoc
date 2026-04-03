@@ -83,11 +83,34 @@ test.describe('math equation import and rendering', () => {
     }
   });
 
+  test('renders sub-superscript as <msubsup> with base, subscript, and superscript', async ({ superdoc }) => {
+    await superdoc.loadDocument(ALL_OBJECTS_DOC);
+    await superdoc.waitForStable();
+
+    // The test doc has x_i^2 — should render as <msubsup> with 3 children
+    const subSupData = await superdoc.page.evaluate(() => {
+      const msubsup = document.querySelector('msubsup');
+      if (!msubsup) return null;
+      return {
+        childCount: msubsup.children.length,
+        base: msubsup.children[0]?.textContent,
+        subscript: msubsup.children[1]?.textContent,
+        superscript: msubsup.children[2]?.textContent,
+      };
+    });
+
+    expect(subSupData).not.toBeNull();
+    expect(subSupData!.childCount).toBe(3);
+    expect(subSupData!.base).toBe('x');
+    expect(subSupData!.subscript).toBe('i');
+    expect(subSupData!.superscript).toBe('2');
+  });
+
   test('math text content is preserved for unimplemented objects', async ({ superdoc }) => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();
 
-    // Unimplemented math objects (e.g., superscript, radical) should still
+    // Unimplemented math objects (e.g., radical, delimiter) should still
     // have their text content accessible in the PM document
     const mathTexts = await superdoc.page.evaluate(() => {
       const view = (window as any).editor?.view;

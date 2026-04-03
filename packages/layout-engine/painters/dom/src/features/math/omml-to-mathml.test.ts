@@ -718,3 +718,136 @@ describe('m:sSup converter', () => {
     expect(msup!.children[0]!.textContent).toBe('x');
   });
 });
+
+describe('m:sSubSup converter', () => {
+  it('converts m:sSubSup to <msubsup> with base, subscript, and superscript', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSubSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msubsup = result!.querySelector('msubsup');
+    expect(msubsup).not.toBeNull();
+    expect(msubsup!.children.length).toBe(3);
+    expect(msubsup!.children[0]!.textContent).toBe('x');
+    expect(msubsup!.children[1]!.textContent).toBe('i');
+    expect(msubsup!.children[2]!.textContent).toBe('2');
+  });
+
+  it('ignores m:sSubSupPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSubSup',
+          elements: [
+            { name: 'm:sSubSupPr', elements: [{ name: 'm:alnScr' }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'k' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msubsup = result!.querySelector('msubsup');
+    expect(msubsup).not.toBeNull();
+    expect(msubsup!.children.length).toBe(3);
+    expect(msubsup!.children[0]!.textContent).toBe('a');
+    expect(msubsup!.children[1]!.textContent).toBe('n');
+    expect(msubsup!.children[2]!.textContent).toBe('k');
+  });
+
+  it('wraps multi-part operands in <mrow> for valid arity', () => {
+    // x_{n+1}^{k-1} — both sub and sup have multiple runs
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSubSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:sup',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'k' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '-' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msubsup = result!.querySelector('msubsup');
+    expect(msubsup).not.toBeNull();
+    expect(msubsup!.children.length).toBe(3);
+    expect(msubsup!.children[0]!.textContent).toBe('x');
+    expect(msubsup!.children[1]!.textContent).toBe('n+1');
+    expect(msubsup!.children[2]!.textContent).toBe('k-1');
+  });
+
+  it('handles missing m:sub and m:sup gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSubSup',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msubsup = result!.querySelector('msubsup');
+    expect(msubsup).not.toBeNull();
+    expect(msubsup!.children[0]!.textContent).toBe('x');
+  });
+});

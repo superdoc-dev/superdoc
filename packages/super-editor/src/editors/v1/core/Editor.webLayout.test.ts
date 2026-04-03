@@ -187,10 +187,12 @@ describe('Editor Web Layout Mode', () => {
      */
     function makeEditor({
       ancestors,
+      layout = 'print' as 'print' | 'web',
       pageSize = { width: 8.5, height: 11 },
       pageMargins = { top: 1, bottom: 1, left: 1, right: 1 },
     }: {
       ancestors: Array<{ type: { name: string }; attrs: Record<string, unknown> }>;
+      layout?: 'print' | 'web';
       pageSize?: { width: number; height: number };
       pageMargins?: { top: number; bottom: number; left: number; right: number };
     }) {
@@ -201,7 +203,7 @@ describe('Editor Web Layout Mode', () => {
 
       return {
         converter: { pageStyles: { pageSize, pageMargins } },
-        options: { viewOptions: { layout: 'print' } },
+        options: { viewOptions: { layout } },
         state: { selection: { $head } },
         isWebLayout() {
           return (this as any).options.viewOptions?.layout === 'web';
@@ -322,6 +324,87 @@ describe('Editor Web Layout Mode', () => {
       const size = Editor.prototype.getMaxContentSize.call(editor);
 
       expect(size.width).toBe(expectedWidth);
+    });
+
+    describe('web layout mode', () => {
+      it('constrains width to cell colwidth in web layout mode', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [
+            { type: { name: 'tableRow' }, attrs: {} },
+            { type: { name: 'tableCell' }, attrs: { colwidth: [200], cellMargins: null } },
+            { type: { name: 'paragraph' }, attrs: {} },
+          ],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size.width).toBe(200);
+        // Web layout has no page height, so Infinity is used to skip the height check
+        // while still letting getAllowedImageDimensions apply the width constraint.
+        expect(size.height).toBe(Infinity);
+      });
+
+      it('subtracts cell margins in web layout mode', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [
+            { type: { name: 'tableRow' }, attrs: {} },
+            {
+              type: { name: 'tableCell' },
+              attrs: { colwidth: [300], cellMargins: { left: 20, right: 15 } },
+            },
+            { type: { name: 'paragraph' }, attrs: {} },
+          ],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size.width).toBe(265); // 300 - 20 - 15
+        expect(size.height).toBe(Infinity);
+      });
+
+      it('returns empty object in web layout mode when not inside a table cell', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [{ type: { name: 'paragraph' }, attrs: {} }],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size).toEqual({});
+      });
+
+      it('returns empty object in web layout mode when colwidth is empty', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [
+            { type: { name: 'tableRow' }, attrs: {} },
+            { type: { name: 'tableCell' }, attrs: { colwidth: [], cellMargins: null } },
+            { type: { name: 'paragraph' }, attrs: {} },
+          ],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size).toEqual({});
+      });
+
+      it('constrains width for tableHeader in web layout mode', () => {
+        const editor = makeEditor({
+          layout: 'web',
+          ancestors: [
+            { type: { name: 'tableRow' }, attrs: {} },
+            { type: { name: 'tableHeader' }, attrs: { colwidth: [250], cellMargins: { left: 10, right: 10 } } },
+            { type: { name: 'paragraph' }, attrs: {} },
+          ],
+        });
+
+        const size = Editor.prototype.getMaxContentSize.call(editor);
+
+        expect(size.width).toBe(230); // 250 - 10 - 10
+        expect(size.height).toBe(Infinity);
+      });
     });
   });
 });

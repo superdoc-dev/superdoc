@@ -17,6 +17,7 @@ import {
   convertDelimiter,
   convertSubscript,
   convertSuperscript,
+  convertSubSuperscript,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -42,6 +43,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
+  'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:acc': null, // Accent (diacritical mark above base)
@@ -57,7 +59,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:phant': null, // Phantom (invisible spacing placeholder)
   'm:rad': null, // Radical (square root, nth root)
   'm:sPre': null, // Pre-sub-superscript (left of base)
-  'm:sSubSup': null, // Sub-superscript (both)
 };
 
 /** OMML argument/container elements that wrap children in <mrow>. */

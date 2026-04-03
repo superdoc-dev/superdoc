@@ -12,3 +12,4 @@ export { convertBar } from './bar.js';
 export { convertDelimiter } from './delimiter.js';
 export { convertSubscript } from './subscript.js';
 export { convertSuperscript } from './superscript.js';
+export { convertSubSuperscript } from './sub-superscript.js';

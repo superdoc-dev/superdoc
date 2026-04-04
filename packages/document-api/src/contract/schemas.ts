@@ -1478,11 +1478,18 @@ const commentDomainItemSchema = discoveryItemSchema(
 
 const commentsListResultSchema = discoveryResultSchema(commentDomainItemSchema);
 
+const trackChangeWordRevisionIdsSchema = objectSchema({
+  insert: { type: 'string' },
+  delete: { type: 'string' },
+  format: { type: 'string' },
+});
+
 const trackChangeInfoSchema = objectSchema(
   {
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },
@@ -1496,6 +1503,7 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },

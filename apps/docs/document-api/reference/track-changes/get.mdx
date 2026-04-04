@@ -20,7 +20,7 @@ Retrieve a single tracked change by ID.
 
 ## Expected result
 
-Returns a TrackChangeInfo object with the change type, author, date, and affected content.
+Returns a TrackChangeInfo object with the change type, author, date, affected content, and source Word revision IDs when available.
 
 ## Input fields
 
@@ -51,6 +51,10 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
 | `excerpt` | string | no |  |
 | `id` | string | yes |  |
 | `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+| `wordRevisionIds` | object | no |  |
+| `wordRevisionIds.delete` | string | no |  |
+| `wordRevisionIds.format` | string | no |  |
+| `wordRevisionIds.insert` | string | no |  |
 
 ### Example response
 
@@ -62,9 +66,12 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
     "kind": "entity"
   },
   "author": "Jane Doe",
-  "authorEmail": "jane@example.com",
   "id": "id-001",
-  "type": "insert"
+  "type": "insert",
+  "wordRevisionIds": {
+    "delete": "example",
+    "insert": "example"
+  }
 }
 ```
 
@@ -127,6 +134,21 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
         "delete",
         "format"
       ]
+    },
+    "wordRevisionIds": {
+      "additionalProperties": false,
+      "properties": {
+        "delete": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "insert": {
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [

@@ -20,7 +20,7 @@ List all tracked changes in the document.
 
 ## Expected result
 
-Returns a TrackChangesListResult with an array of tracked change entries and total count.
+Returns a TrackChangesListResult with tracked change entries, total count, and source Word revision IDs when available.
 
 ## Input fields
 
@@ -64,14 +64,17 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
         "kind": "entity"
       },
       "author": "Jane Doe",
-      "authorEmail": "jane@example.com",
       "handle": {
         "ref": "handle:abc123",
         "refStability": "stable",
         "targetKind": "text"
       },
       "id": "id-001",
-      "type": "insert"
+      "type": "insert",
+      "wordRevisionIds": {
+        "delete": "example",
+        "insert": "example"
+      }
     }
   ],
   "page": {
@@ -162,6 +165,21 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
               "delete",
               "format"
             ]
+          },
+          "wordRevisionIds": {
+            "additionalProperties": false,
+            "properties": {
+              "delete": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "insert": {
+                "type": "string"
+              }
+            },
+            "type": "object"
           }
         },
         "required": [

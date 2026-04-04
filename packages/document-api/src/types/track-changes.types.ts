@@ -3,11 +3,18 @@ import type { DiscoveryOutput } from './discovery.js';
 
 export type TrackChangeType = 'insert' | 'delete' | 'format';
 
+export interface TrackChangeWordRevisionIds {
+  insert?: string;
+  delete?: string;
+  format?: string;
+}
+
 export interface TrackChangeInfo {
   address: TrackedChangeAddress;
   /** Convenience alias for `address.entityId`. */
   id: string;
   type: TrackChangeType;
+  wordRevisionIds?: TrackChangeWordRevisionIds;
   author?: string;
   authorEmail?: string;
   authorImage?: string;
@@ -27,6 +34,7 @@ export interface TrackChangesListQuery {
 export interface TrackChangeDomain {
   address: TrackedChangeAddress;
   type: TrackChangeType;
+  wordRevisionIds?: TrackChangeWordRevisionIds;
   author?: string;
   authorEmail?: string;
   authorImage?: string;

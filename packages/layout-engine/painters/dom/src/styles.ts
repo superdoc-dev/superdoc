@@ -252,9 +252,11 @@ const TRACK_CHANGE_STYLES = `
   border-bottom: var(--sd-tracked-changes-delete-border-width, 1px) dashed var(--sd-tracked-changes-delete-border, #cb0e47);
   background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
   color: var(--sd-tracked-changes-delete-text, currentColor);
-  text-decoration-line: line-through !important;
-  text-decoration-color: var(--sd-tracked-changes-delete-text, currentColor);
-  text-decoration-thickness: var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, currentColor)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
 }
 
 .superdoc-layout .track-format-dec.highlighted {

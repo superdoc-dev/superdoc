@@ -59,7 +59,7 @@ export type InsertInput = TextInsertInput | SDInsertInput;
 // Allowlists for strict field validation
 // ---------------------------------------------------------------------------
 
-const TEXT_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'ref', 'in']);
+const TEXT_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'ref', 'in', 'placement']);
 const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy', 'in']);
 const VALID_INSERT_TYPES: ReadonlySet<string> = new Set(['text', 'markdown', 'html']);
 
@@ -121,11 +121,15 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
 
 /** Validates the text-based insert input shape. */
 function validateTextInsertInput(input: Record<string, unknown>): void {
+  const contentType = typeof input.type === 'string' ? input.type : 'text';
+  const isRichContent = contentType === 'markdown' || contentType === 'html';
+
   // Union conflict rule 4: structural-only fields with text shape
-  if ('placement' in input && input.placement !== undefined) {
+  // placement is allowed for markdown/html since they route through the structural path
+  if ('placement' in input && input.placement !== undefined && !isRichContent) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      '"placement" is only valid with structural content input, not with "value".',
+      '"placement" is only valid with structural content input or markdown/html inserts, not with plain "value".',
       { field: 'placement' },
     );
   }
@@ -139,6 +143,17 @@ function validateTextInsertInput(input: Record<string, unknown>): void {
 
   assertNoUnknownFields(input, TEXT_INSERT_ALLOWED_KEYS, 'insert');
 
+  // Validate placement value when provided for markdown/html
+  if (isRichContent && 'placement' in input && input.placement !== undefined) {
+    if (typeof input.placement !== 'string' || !PLACEMENT_VALUES.has(input.placement)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `placement must be one of: before, after, insideStart, insideEnd. Got "${String(input.placement)}".`,
+        { field: 'placement', value: input.placement },
+      );
+    }
+  }
+
   const { target, ref, value, type } = input;
 
   // Mutual exclusivity: target and ref
@@ -150,11 +165,23 @@ function validateTextInsertInput(input: Record<string, unknown>): void {
     );
   }
 
-  if (target !== undefined && !isSelectionTarget(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a SelectionTarget object.', {
-      field: 'target',
-      value: target,
-    });
+  if (target !== undefined) {
+    // Markdown/html inserts accept BlockNodeAddress targets (with optional placement)
+    // since they route through the structural insert path and produce block-level content.
+    if (isRichContent) {
+      if (!isSelectionTarget(target) && !isBlockNodeAddress(target)) {
+        throw new DocumentApiValidationError(
+          'INVALID_TARGET',
+          'target must be a SelectionTarget or BlockNodeAddress for markdown/html inserts.',
+          { field: 'target', value: target },
+        );
+      }
+    } else if (!isSelectionTarget(target)) {
+      throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a SelectionTarget object.', {
+        field: 'target',
+        value: target,
+      });
+    }
   }
 
   if (ref !== undefined && (typeof ref !== 'string' || ref === '')) {

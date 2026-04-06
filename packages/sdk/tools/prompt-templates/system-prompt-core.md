@@ -18,9 +18,9 @@ Every editing tool needs a **target** telling the API *where* to apply the chang
 
 - **From blocks data**: Each block has a `ref` (pass directly to superdoc_edit or superdoc_format) and a `nodeId` (for building `at` positions with superdoc_create).
 - **From superdoc_search**: Returns `handle.ref` covering the matched text. Use search when you need to find text patterns, not when you already know which block to target.
-- **From superdoc_create**: Returns `nodeId` for chaining creates and building block targets. Re-fetch blocks after create to get a fresh ref before formatting.
+- **From superdoc_create**: Returns `nodeId` and `ref`. The ref is valid for one immediate format call. For subsequent operations, re-fetch blocks to get fresh refs.
 
-**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation.
+**Refs expire after any mutation** between separate tool calls. Within a superdoc_mutations batch, selectors resolve automatically — no manual re-searching between steps.
 
 ## Common workflows
 
@@ -128,9 +128,33 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
+### Create a multi-section document efficiently
+
+**Step 1: Create all structure in one call using markdown insert:**
+
+```
+superdoc_edit({action: "insert", type: "markdown", placement: "end",
+  value: "# Definitions\n\n\"Confidential Information\" means any non-public information...\n\n# Obligations\n\nThe Receiving Party agrees to maintain confidentiality...\n\n# Governing Law\n\nThis Agreement shall be governed by the laws of..."})
+```
+
+This creates headings with proper Heading1 style, paragraphs, bold (**text**), italic (*text*), lists, and tables in one call. Markdown cannot express color, font-size, or alignment — those require step 2.
+
+**Step 2: Apply formatting in one batch:**
+
+```
+superdoc_mutations({action: "apply", steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Confidential Information"}, require: "all"}, args: {inline: {bold: true}}}
+]})
+```
+
+Use `require: "all"` with a node selector to format every heading at once instead of formatting one at a time.
+
+Total: 4 calls (open, insert, format batch, save) instead of 40+.
+
 ### Batch multiple text edits atomically
 
-Use superdoc_mutations when you need 2+ text changes that must succeed or fail together:
+Use superdoc_mutations for 2+ text changes, format changes, or a combination:
 
 ```
 superdoc_mutations({
@@ -143,7 +167,7 @@ superdoc_mutations({
 })
 ```
 
-Split mutations by phase: text mutations (text.rewrite, text.insert, text.delete) in one call, then formatting (format.apply) in a separate call with fresh refs from a new superdoc_search.
+Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by create steps in the same batch — the new content does not exist yet when selectors compile. Split creates and formatting into separate batches.
 
 Never create two steps targeting overlapping text in the same block. Combine them into a single text.rewrite instead.
 

@@ -43,9 +43,34 @@ const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
 You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
 
 **Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
-**Do** use the superdoc_* MCP tools: superdoc_open → superdoc_get_content/search/edit → superdoc_save → superdoc_close.
 
-The SuperDoc tools handle OOXML format correctly and preserve document structure.
+## Efficient workflows
+
+### Creating multiple headings and paragraphs
+
+Use superdoc_edit with type "markdown" to create ALL structure in one call:
+
+\`\`\`
+superdoc_edit({action: "insert", type: "markdown", placement: "end", value: "# Heading\\n\\nParagraph...\\n\\n# Heading 2\\n\\nMore text..."})
+\`\`\`
+
+This creates proper Heading styles from # markers, bold from **text**, italic from *text*. One call replaces many superdoc_create calls.
+
+### Applying formatting to multiple items at once
+
+Use superdoc_mutations with format.apply and require "all":
+
+\`\`\`
+superdoc_mutations({action: "apply", steps: [{id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}}]})
+\`\`\`
+
+### Standard workflow
+
+1. superdoc_open → session_id
+2. Create structure: superdoc_edit with type "markdown" (multiple blocks) or superdoc_create (single block)
+3. Format: superdoc_mutations format.apply (batch) or superdoc_format (single item)
+4. Text edits: superdoc_edit or superdoc_mutations
+5. superdoc_save → superdoc_close
 `;
 
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md

@@ -236,8 +236,15 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         let documentFields = getTemplateFieldsFromEditor(editor);
         const fieldStillPresent = documentFields.some((field) => field.id === id);
 
+        // If the command failed and the field is still in the document,
+        // check if it's locked — locked fields should not be force-removed.
         if (!commandResult && fieldStillPresent) {
-          documentFields = documentFields.filter((field) => field.id !== id);
+          const lockedField = documentFields.find((field) => field.id === id);
+          const isLocked = lockedField?.lockMode === 'sdtLocked' || lockedField?.lockMode === 'sdtContentLocked';
+
+          if (!isLocked) {
+            documentFields = documentFields.filter((field) => field.id !== id);
+          }
         }
 
         if (groupId) {

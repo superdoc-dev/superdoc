@@ -105,9 +105,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: {
     toolName: 'superdoc_search',
     description:
-      'Refs expire after any mutation; always re-search before the next edit. ' +
       'Find text patterns or nodes in the document and get ref handles for targeting edits and formatting. ' +
-      'Use this to locate content before calling superdoc_edit or superdoc_format. ' +
+      'Refs expire after any mutation that changes the document. Re-search before the next edit when using individual tools (superdoc_edit, superdoc_format). ' +
+      'Within a superdoc_mutations batch, selectors in "where" clauses resolve automatically at compile time; no manual re-searching needed between steps. ' +
       'Text search returns handle.ref covering only the matched substring. Node search finds blocks by type (paragraph, heading, table, listItem, etc.). ' +
       'The "require" parameter controls match cardinality: "first" returns one match, "all" returns every match, "exactlyOne" fails if not exactly one match. ' +
       'Supports scoping via "within" to search inside a single block. ' +
@@ -148,13 +148,24 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Modify document text: insert new content, replace existing text, delete a range, or undo/redo. ' +
       'Use this for single text modifications. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
       'For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
-      'Insert supports plain text (default), markdown, or html via the "type" parameter. Use "placement" (before, after, insideStart, insideEnd) to control position relative to the target. ' +
-      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes. ' +
+      'Insert supports plain text (default), markdown, or html via the "type" parameter. ' +
+      'To create a document with multiple headings and paragraphs, use action "insert" with type "markdown" and placement "end". ' +
+      'The markdown parser creates proper Heading styles from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
+      'This is the most efficient way to build document structure: one call creates all sections. Follow up with superdoc_mutations format.apply steps to apply formatting (color, font, alignment) that markdown cannot express. ' +
+      'Use "placement" (before, after, insideStart, insideEnd) to control position relative to the target. ' +
+      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). ' +
       'Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
     inputExamples: [
       { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
       { action: 'insert', value: 'Appended paragraph.', placement: 'insideEnd' },
       { action: 'insert', ref: '<block.ref>', value: 'Inserted before.', placement: 'before' },
+      {
+        action: 'insert',
+        type: 'markdown',
+        placement: 'end',
+        value:
+          '# Section Title\n\nParagraph content here.\n\n# Another Section\n\nMore content with **bold** and *italic*.',
+      },
       { action: 'delete', ref: '<handle.ref>' },
       { action: 'undo' },
     ],
@@ -162,12 +173,11 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'You MUST call superdoc_format after this tool to match document styling. ' +
-      'Create a single paragraph, heading, or table in the document. Returns a nodeId for chaining subsequent creates and for use as a block target in superdoc_format. ' +
-      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" only when the user asks for regular body text. ' +
-      'Before creating, call superdoc_get_content blocks to read formatting from regular body text paragraphs (non-empty, non-title blocks with alignment "justify" or "left"). ' +
-      'After creating, re-fetch blocks with superdoc_get_content to get a fresh ref for the new block, then apply TWO format calls: (1) superdoc_format action "inline" for character styling, AND (2) superdoc_format action "set_alignment" with the block target for paragraph alignment. Both calls are REQUIRED. ' +
-      'For body paragraphs: inline {bold:false, underline:false, fontFamily, fontSize, color from body blocks}, alignment "justify". Ignore underline:true from blocks data for body text; it is a style artifact. For headings: inline {bold:true, underline:true, fontSize scaled up, fontFamily, color}, alignment "center". ' +
+      'Create a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
+      'For creating multiple headings and paragraphs at once, prefer superdoc_edit with type "markdown" (one call for all structure) instead of calling superdoc_create repeatedly. ' +
+      'Use superdoc_create when you need to add one block at a specific position relative to another block. ' +
+      'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
+      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. ' +
       'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +
       'When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. ' +
       'Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
@@ -190,7 +200,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   format: {
     toolName: 'superdoc_format',
     description:
-      'Change text and paragraph formatting. Use this after superdoc_create to style new content, or with a search ref to restyle existing text. ' +
+      'Change text and paragraph formatting. ' +
+      'To format multiple items at once, use superdoc_mutations with format.apply steps instead of calling this tool repeatedly. Use require "all" with a node selector to format every heading or paragraph in one batch. ' +
+      'Use this tool for single-item formatting when you have a valid ref or nodeId. ' +
       'Action "inline" applies character formatting (bold, italic, underline, color, fontSize, fontFamily, highlight, strike, vertAlign) to a text range via "ref". ' +
       'Action "set_style" applies a named paragraph style by styleId (get available styles from superdoc_get_content info). ' +
       'Actions "set_alignment", "set_indentation", "set_spacing", "set_direction", and "set_flow_options" change paragraph-level properties and require a block target: {kind:"block", nodeType:"paragraph", nodeId:"<nodeId>"}, NOT a ref. ' +
@@ -198,8 +210,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Supports "dryRun" and "changeMode: tracked" for inline formatting. Paragraph-level actions do NOT support tracked changes. ' +
       'Do NOT use a search ref for paragraph-level actions; they require a block target with nodeId. ' +
       'Do NOT use {kind:"block", start:{kind:"nodeEdge",...}} or selection-like structures for paragraph actions. ONLY {kind:"block", nodeType, nodeId} is accepted. ' +
-      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls. Format one block at a time. ' +
-      'Do NOT hardcode formatting values; always read them from superdoc_get_content blocks and replicate.',
+      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls.',
     inputExamples: [
       { action: 'inline', ref: '<handle.ref>', inline: { bold: true } },
       {
@@ -299,13 +310,14 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_mutations',
     description:
       'All steps succeed or all fail; no partial application. ' +
-      'Execute multiple text edits atomically in a single batch. Use this INSTEAD OF multiple sequential superdoc_edit calls when you need 2+ text changes that should succeed or fail together. ' +
-      'Each step has an id (e.g. "s1"), an op (text.rewrite, text.insert, text.delete, format.apply, assert), a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."}), and "args" with operation-specific parameters. ' +
-      'Action "preview" dry-runs the plan without modifying the document. Action "apply" executes it. ' +
-      'CRITICAL: split mutations by phase. Text mutations (text.rewrite, text.insert, text.delete) go in one call. Formatting (format.apply) goes in a separate call with fresh refs from a new superdoc_search. ' +
-      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step. Overlapping steps fail with PLAN_CONFLICT_OVERLAP. ' +
-      'Do NOT use this for single edits; use superdoc_edit instead. ' +
-      'Do NOT mix text mutations and formatting in the same call.',
+      'Execute multiple operations atomically in one batch. Use this for any workflow needing 2+ changes. ' +
+      'Supported step types: text (text.rewrite, text.insert, text.delete), format (format.apply), create (create.heading, create.paragraph, create.table), assert. ' +
+      'Each step has an id, an op, a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"|"last"} or {by:"ref", ref:"..."}), and "args" with operation-specific parameters. ' +
+      'For create steps, "where" targets an existing anchor block and args.position ("before" or "after") controls placement. Sequential creates targeting the same anchor maintain correct order via internal position mapping. ' +
+      'For format.apply with require "all", use a node selector to format every heading or paragraph at once: {by:"select", select:{type:"node", nodeType:"heading"}, require:"all"}. ' +
+      'Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by earlier create steps in the same batch. Split creates and formatting into separate batches: first a mutations call with creates, then a mutations call with format.apply. ' +
+      'Action "preview" dry-runs the plan. Action "apply" executes it. ' +
+      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step.',
     inputExamples: [
       {
         action: 'apply',
@@ -323,6 +335,23 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
             op: 'text.delete',
             where: { by: 'select', select: { type: 'text', pattern: ' (deprecated)' }, require: 'all' },
             args: {},
+          },
+        ],
+      },
+      {
+        action: 'apply',
+        steps: [
+          {
+            id: 'f1',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'node', nodeType: 'heading' }, require: 'all' },
+            args: { inline: { color: '#FF0000' } },
+          },
+          {
+            id: 'f2',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'text', pattern: 'Confidential Information' }, require: 'all' },
+            args: { inline: { bold: true } },
           },
         ],
       },

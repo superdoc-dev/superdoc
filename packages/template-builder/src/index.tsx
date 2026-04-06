@@ -108,26 +108,25 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       [telemetry?.enabled, JSON.stringify(telemetry?.metadata)],
     );
 
-    const stableFieldColors = useMemo(() => JSON.stringify(fieldColors), [fieldColors]);
+    const fieldColorCSS = useMemo(() => {
+      if (!fieldColors) return '';
+      return generateFieldColorCSS(fieldColors, '.superdoc-template-builder');
+    }, [fieldColors]);
 
     // Inject scoped field-color CSS when fieldColors is provided
     useEffect(() => {
-      if (!stableFieldColors || stableFieldColors === 'undefined') return;
-      const colors = JSON.parse(stableFieldColors) as Record<string, string>;
-      const scope = `.superdoc-template-builder`;
-      const css = generateFieldColorCSS(colors, scope);
-      if (!css) return;
+      if (!fieldColorCSS) return;
 
       const style = window.document.createElement('style');
       style.setAttribute('data-superdoc-field-colors', '');
       if (cspNonce) style.nonce = cspNonce;
-      style.textContent = css;
+      style.textContent = fieldColorCSS;
       window.document.head.appendChild(style);
 
       return () => {
         style.remove();
       };
-    }, [stableFieldColors, cspNonce]);
+    }, [fieldColorCSS, cspNonce]);
 
     const computeFilteredFields = useCallback(
       (query: string) => {

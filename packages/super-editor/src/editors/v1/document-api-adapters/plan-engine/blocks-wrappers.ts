@@ -35,6 +35,7 @@ import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-hel
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getRevision } from './revision-tracker.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
+import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -67,9 +68,35 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
 const HEADING_PATTERN = /^Heading(\d)$/;
 
 /**
- * Extract key formatting from a block node's first text run marks.
+ * Resolve the document's default font size (in points) from the style catalog.
+ * Falls back through: Normal style rPr → docDefaults rPr → undefined.
+ * OOXML stores fontSize as half-points (w:sz val), so we divide by 2.
  */
-function extractBlockFormatting(node: ProseMirrorNode): {
+function resolveDefaultFontSizePt(editor: Editor): number | undefined {
+  const styleProps = readTranslatedLinkedStyles(editor);
+  if (!styleProps) return undefined;
+
+  // Try Normal style first
+  const normalStyle = styleProps.styles?.['Normal'];
+  const normalFontSize = normalStyle?.runProperties?.fontSize;
+  if (typeof normalFontSize === 'number') return normalFontSize / 2;
+
+  // Fall back to docDefaults
+  const defaultFontSize = styleProps.docDefaults?.runProperties?.fontSize;
+  if (typeof defaultFontSize === 'number') return defaultFontSize / 2;
+
+  return undefined;
+}
+
+/**
+ * Extract key formatting from a block node's first text run marks.
+ * When defaultFontSizePt is provided, it's used as fallback when the
+ * inline marks don't specify a fontSize (common for inherited styles).
+ */
+function extractBlockFormatting(
+  node: ProseMirrorNode,
+  defaultFontSizePt?: number,
+): {
   styleId?: string | null;
   fontFamily?: string;
   fontSize?: number;
@@ -126,7 +153,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   return {
     ...(styleId ? { styleId } : {}),
     ...(fontFamily ? { fontFamily } : {}),
-    ...(fontSize !== undefined ? { fontSize } : {}),
+    ...((fontSize ?? defaultFontSizePt) !== undefined ? { fontSize: fontSize ?? defaultFontSizePt } : {}),
     ...(bold ? { bold } : {}),
     ...(underline ? { underline } : {}),
     ...(color ? { color } : {}),
@@ -240,6 +267,9 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
 
   const rev = getRevision(editor);
 
+  // Resolve document's default fontSize once for all blocks
+  const defaultFontSizePt = resolveDefaultFontSizePt(editor);
+
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = computeTextContentLength(candidate.node);
     const ref =
@@ -261,7 +291,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       nodeType: candidate.nodeType,
       textPreview: extractTextPreview(candidate.node),
       isEmpty: textLength === 0,
-      ...extractBlockFormatting(candidate.node),
+      ...extractBlockFormatting(candidate.node, defaultFontSizePt),
       ...(ref ? { ref } : {}),
     };
   });

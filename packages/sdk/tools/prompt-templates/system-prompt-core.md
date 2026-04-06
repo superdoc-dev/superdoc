@@ -151,23 +151,13 @@ superdoc_edit({action: "insert", type: "markdown",
 
 **Step 3: Format ALL inserted blocks in ONE superdoc_mutations call.** Each format.apply step accepts `inline`, `alignment`, and `scope: "block"`.
 
-Use `scope: "block"` so the formatting covers the entire paragraph (not just the matched text). The text pattern only needs to identify which block.
+Use `scope: "block"` so formatting covers the entire paragraph (not just the matched text). The text pattern only needs to identify which block. Copy the exact property values from the existing blocks in the get_content response. Do NOT invent values.
 
-ONLY include inline properties that are explicitly present in the existing blocks. If the document blocks don't show `fontSize`, do NOT set fontSize (it will inherit the document's default, which is correct). If they don't show `bold`, don't set bold. Mirror exactly what you see, nothing more. Inventing values (like assuming fontSize: 12) causes mismatches.
-
-Example: document blocks show fontFamily and color but NO fontSize, titles are centered:
+Example: document blocks show fontFamily, fontSize: 10, color, titles centered:
 ```
 superdoc_mutations({action: "apply", atomic: true, steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", color: "#000000"}, alignment: "center", scope: "block"}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", color: "#000000"}, scope: "block"}}
-]})
-```
-
-Example: document blocks explicitly show fontSize: 12, titles are centered and underlined:
-```
-superdoc_mutations({action: "apply", atomic: true, steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify", scope: "block"}}
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, scope: "block"}}
 ]})
 ```
 

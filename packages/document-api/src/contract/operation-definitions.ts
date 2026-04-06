@@ -151,7 +151,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
       'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
       'Use scope: "block" so formatting covers the entire paragraph. ' +
-      'ONLY set inline properties that are explicitly shown in the existing get_content blocks. If blocks do not show fontSize, do NOT set fontSize (it inherits the document default). Do NOT invent values — mirror exactly what the document blocks show. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'Refs expire after any mutation; always re-search before the next edit. ' +

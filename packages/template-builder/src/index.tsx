@@ -15,6 +15,10 @@ export { FieldMenu, FieldList };
 
 type Editor = NonNullable<SuperDoc['activeEditor']>;
 
+const applyDocumentMode = (instance: SuperDoc, mode: string) => {
+  (instance as any).setDocumentMode(mode);
+};
+
 const getTemplateFieldsFromEditor = (editor: Editor): Types.TemplateField[] => {
   const structuredContentHelpers = (editor.helpers as any)?.structuredContentCommands;
 
@@ -444,8 +448,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           }
 
           // Apply any mode change that arrived during init
-          if (pendingModeRef.current) {
-            (instance as any)?.setDocumentMode(pendingModeRef.current);
+          if (pendingModeRef.current && instance) {
+            applyDocumentMode(instance, pendingModeRef.current);
             pendingModeRef.current = null;
           }
 
@@ -481,6 +485,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         }
 
         superdocRef.current = null;
+        pendingModeRef.current = null;
       };
     }, [
       document?.source,
@@ -495,18 +500,15 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
     ]);
 
     // Apply document mode changes without recreating the editor
-    const prevModeRef = useRef(document?.mode);
     const pendingModeRef = useRef<string | null>(null);
     useEffect(() => {
       const mode = document?.mode || 'editing';
-      if (prevModeRef.current !== mode) {
-        if (superdocRef.current) {
-          (superdocRef.current as any).setDocumentMode(mode);
-        } else {
-          pendingModeRef.current = mode;
-        }
+      if (superdocRef.current) {
+        applyDocumentMode(superdocRef.current, mode);
+        pendingModeRef.current = null;
+      } else {
+        pendingModeRef.current = mode;
       }
-      prevModeRef.current = mode;
     }, [document?.mode]);
 
     const handleMenuSelect = useCallback(

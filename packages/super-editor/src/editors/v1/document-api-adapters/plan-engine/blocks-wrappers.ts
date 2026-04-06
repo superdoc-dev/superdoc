@@ -67,14 +67,17 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
 
 const HEADING_PATTERN = /^Heading(\d)$/;
 
+/** OOXML implicit default font size when neither Normal style nor docDefaults specifies one. */
+const OOXML_DEFAULT_FONT_SIZE_PT = 10;
+
 /**
  * Resolve the document's default font size (in points) from the style catalog.
- * Falls back through: Normal style rPr → docDefaults rPr → undefined.
+ * Falls back through: Normal style rPr → docDefaults rPr → OOXML implicit default (10pt).
  * OOXML stores fontSize as half-points (w:sz val), so we divide by 2.
  */
-function resolveDefaultFontSizePt(editor: Editor): number | undefined {
+function resolveDefaultFontSizePt(editor: Editor): number {
   const styleProps = readTranslatedLinkedStyles(editor);
-  if (!styleProps) return undefined;
+  if (!styleProps) return OOXML_DEFAULT_FONT_SIZE_PT;
 
   // Try Normal style first
   const normalStyle = styleProps.styles?.['Normal'];
@@ -85,7 +88,7 @@ function resolveDefaultFontSizePt(editor: Editor): number | undefined {
   const defaultFontSize = styleProps.docDefaults?.runProperties?.fontSize;
   if (typeof defaultFontSize === 'number') return defaultFontSize / 2;
 
-  return undefined;
+  return OOXML_DEFAULT_FONT_SIZE_PT;
 }
 
 /**

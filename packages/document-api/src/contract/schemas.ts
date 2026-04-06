@@ -4872,8 +4872,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         args: objectSchema(
           {
             inline: buildInlineRunPatchSchema(),
+            alignment: {
+              type: 'string',
+              enum: ['left', 'center', 'right', 'justify'],
+              description:
+                'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
+            },
           },
-          ['inline'],
+          [], // Neither field is individually required — at least one must be present
         ),
       },
       ['id', 'op', 'where', 'args'],

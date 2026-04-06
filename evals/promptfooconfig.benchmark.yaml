@@ -4,8 +4,8 @@
 #
 # Conditions:
 #   baseline       — no skill, agent figures out DOCX on its own
-#   vendor         — Anthropic's DOCX skill (unzip + XML + docx-js)
-#   superdoc-skill — SuperDoc MCP server (superdoc_* tools)
+#   baseline-with-docx-skill — Anthropic's DOCX skill (unzip + XML + docx-js)
+#   superdoc-mcp             — SuperDoc MCP server (superdoc_* tools)
 #   superdoc-cli   — SuperDoc CLI on PATH
 #
 # Run:    pnpm run eval:benchmark
@@ -28,14 +28,14 @@ providers:
   - id: file://providers/claude-code-agent.mjs
     label: CC-with-docx-skill
     config:
-      condition: vendor
+      condition: baseline-with-docx-skill
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
       vendorSkill: true
 
   - id: file://providers/claude-code-agent.mjs
     label: CC-superdoc-mcp
     config:
-      condition: superdoc-skill
+      condition: superdoc-mcp
       allowedTools: ['Read', 'Glob', 'Grep']
       superdocMcp: true
       superdocOnPath: true
@@ -57,13 +57,13 @@ providers:
   - id: file://providers/codex-agent.mjs
     label: Codex-with-docx-skill
     config:
-      condition: vendor
+      condition: baseline-with-docx-skill
       vendorSkill: true
 
   - id: file://providers/codex-agent.mjs
     label: Codex-superdoc-mcp
     config:
-      condition: superdoc-skill
+      condition: superdoc-mcp
       superdocMcp: true
       superdocOnPath: true
 

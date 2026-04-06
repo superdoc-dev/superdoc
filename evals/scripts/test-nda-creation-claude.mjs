@@ -23,7 +23,7 @@ async function main() {
 
   const provider = new Provider({
     config: {
-      condition: 'superdoc-skill',
+      condition: 'superdoc-mcp',
       allowedTools: ['Read', 'Glob', 'Grep'],
       superdocMcp: true,
       superdocOnPath: true,

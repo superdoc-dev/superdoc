@@ -191,7 +191,7 @@ function generateRecommendation(rows) {
 
   for (const agent of ['CC', 'Codex']) {
     const baseline = rows.filter(r => r.provider === `${agent}-baseline`);
-    const sdSkill = rows.filter(r => r.provider === `${agent}-superdoc-skill`);
+    const sdSkill = rows.filter(r => r.provider === `${agent}-superdoc-mcp`);
     if (baseline.length === 0 || sdSkill.length === 0) continue;
 
     const bPass = baseline.filter(r => r.passed).length / baseline.length;
@@ -233,7 +233,7 @@ function generateRecommendation(rows) {
   }
 
   if (lines.length === 1) {
-    lines.push('Insufficient data. Run the full benchmark with baseline + superdoc-skill conditions.');
+    lines.push('Insufficient data. Run the full benchmark with baseline + superdoc-mcp conditions.');
   }
 
   return lines.join('\n');

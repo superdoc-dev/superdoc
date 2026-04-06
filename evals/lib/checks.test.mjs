@@ -182,9 +182,9 @@ test('benchmarkTokens returns total tokens as score', () => {
 
 test('benchmarkPath returns 1 for superdoc, 0 for raw', () => {
   const { benchmarkPath } = require('./checks.cjs');
-  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).score, 1);
+  assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-mcp' })).score, 1);
   assert.strictEqual(benchmarkPath(JSON.stringify({ pathUsed: 'raw' })).score, 0);
-  assert.ok(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-skill' })).reason.includes('superdoc'));
+  assert.ok(benchmarkPath(JSON.stringify({ pathUsed: 'superdoc-mcp' })).reason.includes('superdoc'));
 });
 
 test('benchmarkMetrics combined still works', () => {

@@ -79,7 +79,7 @@ function detectPathUsed(toolCalls) {
   const names = toolCalls.map(tc => tc.tool || '');
   const allArgs = toolCalls.map(tc => JSON.stringify(tc.args || {}));
 
-  if (names.some(n => n.startsWith('superdoc_'))) return 'superdoc-skill';
+  if (names.some(n => n.startsWith('superdoc_'))) return 'superdoc-mcp';
   if (allArgs.some(a => a.includes('superdoc '))) return 'superdoc-cli';
   if (allArgs.some(a =>
     a.includes('python-docx') || a.includes('mammoth') || a.includes('docx')
@@ -113,9 +113,12 @@ export default class CodexBenchmarkProvider {
     const cached = readCache(key);
     if (cached) return cached;
 
-    // Preflight: check MCP server artifact exists if needed
+    // Preflight: fail fast if required artifacts are not built
     if (this.config.superdocMcp && !existsSync(MCP_SERVER_PATH)) {
       return { error: `MCP server not built: ${MCP_SERVER_PATH}. Run: cd apps/mcp && pnpm run build` };
+    }
+    if (this.config.superdocOnPath && !existsSync(CLI_PATH)) {
+      return { error: `CLI not built: ${CLI_PATH}. Run: cd apps/cli && pnpm run build` };
     }
 
     let docPath, stateDir, localDocPath, beforeText;

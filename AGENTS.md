@@ -150,8 +150,8 @@ Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their perfo
 | Condition | What the agent gets |
 |-----------|-------------------|
 | baseline | No skill, agent figures out DOCX on its own |
-| vendor | Anthropic's DOCX skill (unzip + XML editing) |
-| superdoc-skill | SuperDoc MCP server (`superdoc_open`, `superdoc_get_content`, etc.) |
+| baseline-with-docx-skill | Anthropic's DOCX skill (unzip + XML editing) |
+| superdoc-mcp | SuperDoc MCP server (`superdoc_open`, `superdoc_get_content`, etc.) |
 | superdoc-cli | SuperDoc CLI on PATH |
 
 **Tasks:** 3 reading (extract headings, entity names, financial figures) + 3 editing (replace entity name, insert section, fill placeholders).
@@ -180,7 +180,7 @@ Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their perfo
 | `evals/providers/claude-code-agent.mjs` | Claude Agent SDK provider |
 | `evals/providers/codex-agent.mjs` | Codex SDK provider |
 | `evals/lib/benchmark-report.mjs` | Markdown + CSV report generator |
-| `evals/fixtures/vendor-docx-skill.md` | Anthropic's DOCX skill for vendor condition |
+| `evals/fixtures/vendor-docx-skill.md` | Anthropic's DOCX skill for baseline-with-docx-skill condition |
 
 ## Generated Artifacts
 

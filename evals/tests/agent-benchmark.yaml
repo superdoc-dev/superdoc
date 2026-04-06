@@ -1,7 +1,7 @@
 # Level 3: DOCX Agent Benchmark — compact suite (v1)
 #
 # 6 tasks (3 reading + 3 editing) covering the key comparison dimensions.
-# Each task runs against all provider conditions (baseline, superdoc-skill, etc.)
+# Each task runs against all provider conditions (baseline, superdoc-mcp, etc.)
 #
 # Metrics per task: correctness, collateral, steps, latency, tokens, path
 

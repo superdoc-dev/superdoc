@@ -10,7 +10,7 @@
  *     (MCP servers, skills, CLAUDE.md) via settingSources
  *
  * Config (set per provider instance in YAML):
- *   condition:          'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
+ *   condition:          'baseline' | 'baseline-with-docx-skill' | 'superdoc-mcp' | 'superdoc-cli' | 'choice'
  *   allowedTools:       Array of built-in tool names the agent can use
  *   disallowedTools:    Array of tool names to block
  *   superdocOnPath:     Whether SuperDoc CLI is available on PATH
@@ -61,9 +61,8 @@ These tools handle OOXML format correctly and preserve document structure. Raw X
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
 
 A \`superdoc\` CLI is available on PATH for working with .docx files.
-
+You MUST use \`superdoc\` command. Run \`superdoc --help\` to see available commands.
 **Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
-**Do** use the \`superdoc\` command. Run \`superdoc --help\` to see available commands.
 
 Common commands:
 - \`superdoc get-text <file.docx>\` — extract plain text
@@ -92,9 +91,9 @@ function detectPathUsed(toolCalls) {
     .filter(tc => tc.tool === 'Bash')
     .map(tc => JSON.stringify(tc.args || {}));
 
-  if (names.some(n => n.startsWith('superdoc_') || n.startsWith('mcp__superdoc'))) return 'superdoc-skill';
+  if (names.some(n => n.startsWith('superdoc_') || n.startsWith('mcp__superdoc'))) return 'superdoc-mcp';
   if (bashArgs.some(a => a.includes('superdoc '))) return 'superdoc-cli';
-  if (names.some(n => n.includes('Skill'))) return 'vendor-skill';
+  if (names.some(n => n.includes('Skill'))) return 'baseline-with-docx-skill';
   if (bashArgs.some(a =>
     a.includes('python-docx') || a.includes('mammoth') || a.includes('docx')
   )) return 'raw';
@@ -121,6 +120,14 @@ export default class ClaudeCodeBenchmarkProvider {
 
     if (!fixture && !blankDocument) {
       return { error: 'No fixture specified in test vars' };
+    }
+
+    // Preflight: fail fast if required artifacts are not built
+    if (this.config.superdocMcp && !existsSync(MCP_SERVER_PATH)) {
+      return { error: `MCP server not built: ${MCP_SERVER_PATH}. Run: cd apps/mcp && pnpm run build` };
+    }
+    if (this.config.superdocOnPath && !this.config.superdocMcp && !existsSync(CLI_PATH)) {
+      return { error: `CLI not built: ${CLI_PATH}. Run: cd apps/cli && pnpm run build` };
     }
 
     const model = this.config.model || 'sonnet';

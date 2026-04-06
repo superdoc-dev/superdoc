@@ -565,8 +565,8 @@ module.exports.benchmarkTokens = (output) => {
  * FAILS if the condition requires SuperDoc but the agent used raw.
  *
  * Conditions that require SuperDoc usage:
- *   - superdoc-skill  → must use superdoc MCP tools
- *   - superdoc-cli    → must use superdoc CLI via Bash
+ *   - superdoc-mcp  → must use superdoc MCP tools
+ *   - superdoc-cli  → must use superdoc CLI via Bash
  */
 module.exports.benchmarkPath = (output) => {
   const d = parseExecOutput(output);
@@ -578,7 +578,7 @@ module.exports.benchmarkPath = (output) => {
   const score = usedSuperdoc ? 1 : 0;
 
   // Conditions that require SuperDoc usage
-  const requiresSuperdoc = condition === 'superdoc-skill' || condition === 'superdoc-cli';
+  const requiresSuperdoc = condition === 'superdoc-mcp' || condition === 'superdoc-cli';
 
   if (requiresSuperdoc && !usedSuperdoc) {
     return { pass: false, score: 0, reason: `Condition "${condition}" requires SuperDoc but agent used "${path}"` };

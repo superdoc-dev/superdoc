@@ -104,9 +104,9 @@ async function testCodexProvider() {
   }
 
   // Test 3: Codex with SuperDoc MCP
-  console.log('\nTest 3: Codex superdoc-skill — reading with MCP');
+  console.log('\nTest 3: Codex superdoc-mcp — reading with MCP');
   const mcpReader = new CodexProvider({
-    config: { condition: 'superdoc-skill', superdocMcp: true, superdocOnPath: true },
+    config: { condition: 'superdoc-mcp', superdocMcp: true, superdocOnPath: true },
   });
 
   const mcpResult = await mcpReader.callApi('', {
@@ -206,10 +206,10 @@ async function testClaudeProvider() {
   }
 
   // Test 3: Claude with SuperDoc MCP
-  console.log('\nTest 3: Claude superdoc-skill — reading with MCP');
+  console.log('\nTest 3: Claude superdoc-mcp — reading with MCP');
   const mcpReader = new ClaudeProvider({
     config: {
-      condition: 'superdoc-skill',
+      condition: 'superdoc-mcp',
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
       superdocMcp: true,
       superdocOnPath: true,

@@ -3,6 +3,8 @@ import type { SelectionTarget, TargetLocator, SDMutationReceipt } from '../types
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
 import type { StoryLocator } from '../types/story.types.js';
+import type { BlockNodeAddress } from '../types/base.js';
+import type { Placement } from '../types/placement.js';
 import { PLACEMENT_VALUES } from '../types/placement.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
@@ -40,6 +42,25 @@ export type TextInsertInput = OptionalInsertLocator & {
   in?: StoryLocator;
 };
 
+/**
+ * Extended input for markdown/html inserts that also accept BlockNodeAddress
+ * targets and placement. These route through the structural insert path.
+ */
+export type RichContentInsertInput = {
+  /** Block target for positioned inserts. Accepts BlockNodeAddress or SelectionTarget. */
+  target?: SelectionTarget | BlockNodeAddress;
+  /** Optional mutation ref. Mutually exclusive with target. */
+  ref?: string;
+  /** The markdown/html content to insert. */
+  value: string;
+  /** Content format — must be 'markdown' or 'html' for this input shape. */
+  type: 'markdown' | 'html';
+  /** Where to place content relative to target. Only valid with BlockNodeAddress targets. */
+  placement?: Placement;
+  /** Target a specific document story. */
+  in?: StoryLocator;
+};
+
 /** @deprecated Use {@link TextInsertInput} instead. */
 export type LegacyInsertInput = TextInsertInput;
 
@@ -53,7 +74,7 @@ export type LegacyInsertInput = TextInsertInput;
  * Discrimination: presence of `content` (structural) vs `value` (text string).
  * These are mutually exclusive — providing both is an error.
  */
-export type InsertInput = TextInsertInput | SDInsertInput;
+export type InsertInput = TextInsertInput | RichContentInsertInput | SDInsertInput;
 
 // ---------------------------------------------------------------------------
 // Allowlists for strict field validation
@@ -276,7 +297,6 @@ export function executeInsert(
   }
 
   // Text string path
-  const { target, ref, value } = input;
   const contentType = input.type ?? 'text';
 
   // For non-text content types, delegate to the adapter's structured insert path.
@@ -284,8 +304,12 @@ export function executeInsert(
     return writeAdapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
+  // After the non-text branch, input is guaranteed to be a plain TextInsertInput.
+  const textInput = input as TextInsertInput;
+  const { target, ref, value } = textInput;
+
   // Text path with target/ref → route through SelectionMutationAdapter
-  const storyIn = input.in;
+  const storyIn = textInput.in;
   if (target || ref) {
     const request = target
       ? { kind: 'insert' as const, target, text: value, ...(storyIn ? { in: storyIn } : {}) }

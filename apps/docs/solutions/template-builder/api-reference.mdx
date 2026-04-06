@@ -79,6 +79,10 @@ None - the component works with zero configuration.
   Lock mode for all inserted fields. Per-field `lockMode` overrides this. See [lock modes](/extensions/structured-content#lock-modes).
 </ParamField>
 
+<ParamField path="fieldColors" type="Record<string, string>">
+  Colors for field types in the document and sidebar. Keys are `fieldType` values, values are CSS colors (e.g. `{ owner: '#629be7', signer: '#d97706' }`). Generates scoped CSS automatically — no stylesheet import needed.
+</ParamField>
+
 <ParamField path="cspNonce" type="string">
   Content Security Policy nonce for dynamically injected styles
 </ParamField>
@@ -393,13 +397,25 @@ Returns `SuperDoc | null`.
 
 ## Field type styling
 
-Import the optional CSS to color-code fields by type in the editor:
+Use the `fieldColors` prop to color-code fields by type:
+
+```tsx
+<SuperDocTemplateBuilder
+  fieldColors={{
+    owner: "#629be7",
+    signer: "#d97706",
+    date: "#059669",
+  }}
+/>
+```
+
+This generates scoped CSS automatically. Each color controls the field border and label in the document. Sidebar badges match.
+
+For manual control, you can still import the standalone stylesheet and use CSS variables:
 
 ```jsx
 import "@superdoc-dev/template-builder/field-types.css";
 ```
-
-Override colors with CSS variables:
 
 ```css
 :root {

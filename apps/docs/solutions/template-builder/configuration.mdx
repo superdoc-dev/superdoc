@@ -65,24 +65,30 @@ Tag fields with a `fieldType` to distinguish roles:
 />
 ```
 
-Import the optional CSS to color-code fields in the editor:
+Color-code fields in the document and sidebar with `fieldColors`:
 
-```jsx
-import "@superdoc-dev/template-builder/field-types.css";
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      { id: "1", label: "Company Name", fieldType: "owner" },
+      { id: "2", label: "Signer Name", fieldType: "signer" },
+      { id: "3", label: "Effective Date", fieldType: "date" },
+    ],
+  }}
+  fieldColors={{
+    owner: "#629be7",
+    signer: "#d97706",
+    date: "#059669",
+  }}
+/>
 ```
 
-Customize colors with CSS variables:
+Each color controls the field's border and label in the document. The sidebar badges match automatically. Custom field types beyond `owner` and `signer` work the same way — just add them to `fieldColors`.
 
-```css
-:root {
-  --superdoc-field-owner-color: #629be7;
-  --superdoc-field-signer-color: #d97706;
-}
-```
-
-<Important>
-  Without `field-types.css`, structured content fields use the default Word-like appearance: borders are transparent and only visible on selection. Importing this stylesheet makes field borders always visible and color-coded by field type, which helps template authors quickly identify fields in the document.
-</Important>
+<Tip>
+  You can also import `@superdoc-dev/template-builder/field-types.css` directly and use CSS variables instead. The `fieldColors` prop is the recommended approach — no extra imports needed.
+</Tip>
 
 The `fieldType` value flows through all callbacks (`onFieldInsert`, `onFieldsChange`, `onExport`, etc.) and is stored in the SDT tag metadata.
 

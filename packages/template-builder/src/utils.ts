@@ -67,7 +67,64 @@ const FIELD_TYPE_STYLES: Record<string, { background: string; color: string }> =
 
 const DEFAULT_FIELD_TYPE_STYLE = { background: '#f3f4f6', color: '#6b7280' };
 
-export const getFieldTypeStyle = (fieldType: string) => FIELD_TYPE_STYLES[fieldType] ?? DEFAULT_FIELD_TYPE_STYLE;
+/**
+ * Derive a light background + dark text from a single hex/css color.
+ * Falls back to the hardcoded map when no fieldColors are provided.
+ */
+export const getFieldTypeStyle = (fieldType: string, fieldColors?: Record<string, string>) => {
+  if (fieldColors?.[fieldType]) {
+    return { background: fieldColors[fieldType] + '1a', color: fieldColors[fieldType] };
+  }
+  return FIELD_TYPE_STYLES[fieldType] ?? DEFAULT_FIELD_TYPE_STYLE;
+};
+
+const SDT_INLINE = '.superdoc-structured-content-inline';
+const SDT_BLOCK = '.superdoc-structured-content-block';
+
+/** Generate scoped CSS rules for field type colors. */
+export function generateFieldColorCSS(fieldColors: Record<string, string>, scopeSelector: string): string {
+  const rules: string[] = [];
+  const entries = Object.entries(fieldColors);
+  if (entries.length === 0) return '';
+
+  // Default color (owner or first entry)
+  const defaultColor = fieldColors.owner ?? entries[0][1];
+  rules.push(`
+${scopeSelector} ${SDT_INLINE},
+${scopeSelector} ${SDT_BLOCK} {
+  border-color: ${defaultColor};
+}
+${scopeSelector} ${SDT_INLINE}:hover,
+${scopeSelector} ${SDT_BLOCK}:hover {
+  border-color: ${defaultColor};
+}
+${scopeSelector} ${SDT_INLINE} ${SDT_INLINE}__label,
+${scopeSelector} ${SDT_BLOCK} ${SDT_BLOCK}__label {
+  border-color: ${defaultColor};
+  background-color: color-mix(in srgb, ${defaultColor} 87%, transparent);
+}`);
+
+  // Per-type overrides
+  for (const [type, color] of entries) {
+    const tagSel = `[data-sdt-tag*='"fieldType":"${type}"']`;
+    rules.push(`
+${scopeSelector} ${SDT_INLINE}${tagSel},
+${scopeSelector} ${SDT_BLOCK}${tagSel} {
+  border-color: ${color};
+}
+${scopeSelector} ${SDT_INLINE}${tagSel}:hover,
+${scopeSelector} ${SDT_BLOCK}${tagSel}:hover {
+  border-color: ${color};
+}
+${scopeSelector} ${SDT_INLINE}${tagSel} ${SDT_INLINE}__label,
+${scopeSelector} ${SDT_BLOCK}${tagSel} ${SDT_BLOCK}__label {
+  border-color: ${color};
+  background-color: color-mix(in srgb, ${color} 87%, transparent);
+}`);
+  }
+
+  return rules.join('\n');
+}
 
 export const MENU_VIEWPORT_PADDING = 10;
 export const MENU_APPROX_WIDTH = 250;

@@ -146,7 +146,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const attrs: Record<string, unknown> = {
           alias: field.alias,
           tag: tagData,
-          ...(lockMode && { lockMode }),
+          ...(lockMode != null && { lockMode }),
         };
 
         const success = (
@@ -531,7 +531,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const attrs: Record<string, unknown> = {
           alias: field.alias,
           tag: tagWithGroup,
-          ...(lockMode && { lockMode }),
+          ...(lockMode != null && { lockMode }),
         };
 
         const success =

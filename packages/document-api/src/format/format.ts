@@ -62,7 +62,8 @@ export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends Impl
 export type StyleApplyInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
-  inline: InlineRunPatch;
+  inline?: InlineRunPatch;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
 };

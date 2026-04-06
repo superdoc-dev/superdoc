@@ -117,7 +117,8 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: InlineRunPatch;
+    inline?: InlineRunPatch;
+    alignment?: 'left' | 'center' | 'right' | 'justify';
   };
 };
 

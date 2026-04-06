@@ -75,6 +75,10 @@ None - the component works with zero configuration.
   - `object` — full toolbar configuration (see ToolbarConfig)
 </ParamField>
 
+<ParamField path="defaultLockMode" type="'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked'">
+  Lock mode for all inserted fields. Per-field `lockMode` overrides this. See [lock modes](/extensions/structured-content#lock-modes).
+</ParamField>
+
 <ParamField path="cspNonce" type="string">
   Content Security Policy nonce for dynamically injected styles
 </ParamField>
@@ -174,6 +178,7 @@ interface FieldDefinition {
   mode?: "inline" | "block";       // Insertion mode (default: "inline")
   group?: string;                  // Group ID for linked fields
   fieldType?: string;              // Field type, e.g. "owner" or "signer" (default: "owner")
+  lockMode?: LockMode;             // Lock mode for this field (overrides defaultLockMode)
 }
 ```
 
@@ -190,6 +195,7 @@ interface TemplateField {
   mode?: "inline" | "block"; // Rendering mode
   group?: string;            // Group ID for linked fields
   fieldType?: string;        // Field type, e.g. "owner" or "signer"
+  lockMode?: LockMode;       // Current lock mode of this field
 }
 ```
 
@@ -426,6 +432,7 @@ import type {
   SuperDocTemplateBuilderHandle,
   FieldDefinition,
   TemplateField,
+  LockMode,
   TriggerEvent,
   ExportEvent,
   ExportConfig,

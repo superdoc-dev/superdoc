@@ -171,6 +171,7 @@ export default class CodexBenchmarkProvider {
         NODE_ENV: 'production',
         FORCE_COLOR: '0',
         NO_COLOR: '1',
+        ENABLE_TOOL_SEARCH: 'auto:5',
       };
 
       // Install vendor DOCX skill (Anthropic's docx skill) as AGENTS.md

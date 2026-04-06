@@ -169,6 +169,7 @@ export default class ClaudeCodeBenchmarkProvider {
 
     try {
       const env = { ...process.env };
+      env.ENABLE_TOOL_SEARCH = 'auto:5';
       if (!this.config.superdocOnPath) {
         env.PATH = env.PATH.split(':')
           .filter(p => !p.includes('superdoc'))

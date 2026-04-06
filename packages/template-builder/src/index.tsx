@@ -443,6 +443,12 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
             discoverFields(editor);
           }
 
+          // Apply any mode change that arrived during init
+          if (pendingModeRef.current) {
+            (instance as any)?.setDocumentMode(pendingModeRef.current);
+            pendingModeRef.current = null;
+          }
+
           onReady?.();
         };
 
@@ -490,10 +496,15 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
     // Apply document mode changes without recreating the editor
     const prevModeRef = useRef(document?.mode);
+    const pendingModeRef = useRef<string | null>(null);
     useEffect(() => {
       const mode = document?.mode || 'editing';
-      if (prevModeRef.current !== mode && superdocRef.current) {
-        (superdocRef.current as any).setDocumentMode(mode);
+      if (prevModeRef.current !== mode) {
+        if (superdocRef.current) {
+          (superdocRef.current as any).setDocumentMode(mode);
+        } else {
+          pendingModeRef.current = mode;
+        }
       }
       prevModeRef.current = mode;
     }, [document?.mode]);

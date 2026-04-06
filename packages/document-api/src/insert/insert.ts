@@ -3,7 +3,8 @@ import type { SelectionTarget, TargetLocator, SDMutationReceipt } from '../types
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
 import type { StoryLocator } from '../types/story.types.js';
-import { PLACEMENT_VALUES } from '../types/placement.js';
+import { type BlockNodeAddress } from '../types/base.js';
+import { PLACEMENT_VALUES, type Placement } from '../types/placement.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
@@ -37,6 +38,20 @@ export type TextInsertInput = OptionalInsertLocator & {
   /** Content format. Defaults to `'text'` when omitted. */
   type?: InsertContentType;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
+};
+
+/**
+ * Type-safe input for markdown/html inserts with block-level positioning.
+ * Accepts BlockNodeAddress targets and placement (routed through the structural insert path).
+ * Standalone export — not part of the InsertInput union to avoid type narrowing issues in the runtime.
+ */
+export type RichContentInsertInput = {
+  target?: SelectionTarget | BlockNodeAddress;
+  ref?: string;
+  value: string;
+  type: 'markdown' | 'html';
+  placement?: Placement;
   in?: StoryLocator;
 };
 

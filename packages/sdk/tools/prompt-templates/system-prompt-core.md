@@ -135,10 +135,11 @@ Markdown insert creates block structure but uses default formatting. You MUST fo
 **Step 1: Understand the document context** from the get_content blocks response. Before inserting anything, analyze:
 - What kind of document is this? (contract, letter, certificate, report, etc.)
 - How are titles/headings styled? (centered? left? bold? underlined? what fontSize?)
+- Are titles UPPERCASE? (e.g., "EMPLOYMENT AGREEMENT", "RECITALS" → your heading must also be UPPERCASE)
 - How is body text styled? (fontFamily, fontSize, alignment, color)
 - What formatting conventions does the document follow?
 
-Your inserted content must be indistinguishable from the existing content. If titles are centered 10pt Times New Roman with no bold, your heading must be centered 10pt Times New Roman with no bold. If body text is justified 12pt with underline, your paragraphs must be justified 12pt with underline.
+Your inserted content must be indistinguishable from the existing content. If titles are ALL CAPS centered 10pt, your heading text must also be ALL CAPS centered 10pt. If body text is justified 12pt, your paragraphs must be justified 12pt.
 
 **Step 2: Insert content with markdown:**
 

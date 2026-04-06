@@ -5561,6 +5561,7 @@ export class PresentationEditor extends EventEmitter {
         top: marginTop,
         bottom: marginBottom,
         header: headerMargin,
+        footer: footerMargin,
       },
       overflowBaseHeight,
     };

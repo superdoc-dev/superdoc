@@ -39,6 +39,7 @@ function buildConstraintsForSection(section: SectionMetadata, fallback: Constrai
   const marginT = section.margins?.top ?? fallback.margins?.top;
   const marginB = section.margins?.bottom ?? fallback.margins?.bottom;
   const marginHeader = section.margins?.header ?? fallback.margins?.header;
+  const marginFooter = section.margins?.footer ?? fallback.margins?.footer;
   const contentWidth = pageW - marginL - marginR;
   // Allow tables to extend beyond right margin when grid width > content width.
   // Capped at pageWidth - marginLeft to avoid going past the page edge.
@@ -55,7 +56,14 @@ function buildConstraintsForSection(section: SectionMetadata, fallback: Constrai
     height: sectionHeight,
     pageWidth: pageW,
     pageHeight: pageH,
-    margins: { left: marginL, right: marginR, top: marginT, bottom: marginB, header: marginHeader },
+    margins: {
+      left: marginL,
+      right: marginR,
+      top: marginT,
+      bottom: marginB,
+      header: marginHeader,
+      footer: marginFooter,
+    },
     overflowBaseHeight: fallback.overflowBaseHeight,
   };
 }

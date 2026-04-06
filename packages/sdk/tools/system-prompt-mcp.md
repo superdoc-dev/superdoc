@@ -6,15 +6,46 @@ These tools handle the OOXML format correctly and preserve document structure.
 
 ## Session lifecycle
 
-Every interaction requires a session. Follow this workflow:
+1. `superdoc_open({path: "/path/to/file.docx"})` — returns `session_id`. Opening a non-existent path creates a blank document.
+2. Pass `session_id` to every subsequent tool call.
+3. Read, edit, format the document using the tools below.
+4. `superdoc_save({session_id})` — writes changes to disk.
+5. `superdoc_close({session_id})` — releases the session. Always close when done.
 
-1. `superdoc_open({file: "/path/to/file.docx"})` — returns `session_id`
-2. Pass `session_id` to every subsequent tool call
-3. Use intent tools (superdoc_search, superdoc_edit, etc.) to read and modify content
-4. `superdoc_save({session_id})` — writes changes to disk (optional `out` for save-as)
-5. `superdoc_close({session_id})` — releases the session
+## Efficient patterns (use these instead of calling tools one at a time)
 
-Opening a non-existent path creates a blank document. Always close sessions when done.
+**Creating headings and paragraphs — ALWAYS use markdown insert (one call):**
+```
+superdoc_edit({action: "insert", type: "markdown",
+  value: "# Section Title\n\nParagraph content.\n\n# Another Section\n\nMore content with **bold**."})
+```
+This creates proper Heading styles from # markers. One call replaces many superdoc_create calls.
+
+**Inserting at a specific position — use target + placement:**
+```
+superdoc_edit({action: "insert", type: "markdown",
+  target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId>"},
+  placement: "before",
+  value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
+```
+Valid placements: "before", "after", "insideStart", "insideEnd". Without target, content appends at document end.
+
+**Formatting — use `scope: "block"` to format entire paragraphs after markdown insert:**
+```
+superdoc_mutations({action: "apply", atomic: true, steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12}, alignment: "justify", scope: "block"}}
+]})
+```
+One format.apply step per block. Combine `inline`, `alignment`, and `scope: "block"` in each step. The pattern only needs to identify which paragraph — `scope: "block"` formats the entire paragraph, not just the matched text.
+
+**When to use which tool:**
+- Creating headings, paragraphs, or any block content → `superdoc_edit` with type "markdown" (preferred, even for a single heading + paragraph)
+- Creating one block only when markdown is insufficient → `superdoc_create`
+- ALL formatting after insert → `superdoc_mutations` with format.apply (inline + alignment in one step per block)
+- Single quick format (no insert before it) → `superdoc_format`
+- Multiple text edits → `superdoc_mutations`
+- Single text edit → `superdoc_edit`
 
 ## Tools overview
 
@@ -36,9 +67,9 @@ Every editing tool needs a **target** telling the API *where* to apply the chang
 
 - **From blocks data**: Each block has a `ref` (pass directly to superdoc_edit or superdoc_format) and a `nodeId` (for building `at` positions with superdoc_create).
 - **From superdoc_search**: Returns `handle.ref` covering the matched text. Use search when you need to find text patterns, not when you already know which block to target.
-- **From superdoc_create**: Returns `nodeId` for chaining creates and building block targets. Re-fetch blocks after create to get a fresh ref before formatting.
+- **From superdoc_create**: Returns `nodeId` and `ref`. The ref is valid for one immediate format call. For subsequent operations, re-fetch blocks to get fresh refs.
 
-**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation.
+**Refs expire after any mutation** between separate tool calls. Within a superdoc_mutations batch, selectors resolve automatically — no manual re-searching between steps.
 
 ## Common workflows
 
@@ -146,9 +177,43 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
+### Insert content into a document (new or existing)
+
+Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting to match the document's existing style.
+
+**Step 1: Read existing formatting** from the initial get_content blocks response. Pay special attention to:
+- **Nearby headings/titles**: look at their fontFamily, fontSize, bold, underline, alignment (especially center vs justify vs left). Your new headings must match these exactly.
+- **Body paragraphs**: note fontFamily, fontSize, color, alignment. Your new paragraphs must match.
+- Match the style of the nearest similar element, not arbitrary values.
+
+**Step 2: Insert content with markdown:**
+
+```
+superdoc_edit({action: "insert", type: "markdown",
+  target: {kind: "block", nodeType: "paragraph", nodeId: "<first-block-nodeId>"},
+  placement: "before",
+  value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
+```
+
+**Step 3: Apply ALL formatting in a SINGLE superdoc_mutations call.** Each format.apply step accepts `inline` (text styles), `alignment` (paragraph alignment), and `scope` — combine them all in one step per block.
+
+ALWAYS use `scope: "block"` after markdown inserts. This makes the formatting cover the entire paragraph, not just the matched text pattern. The pattern only needs to uniquely identify which paragraph — a short prefix is enough.
+
+Example: if the document has centered, underlined, 12pt headings and justified 12pt body text:
+```
+superdoc_mutations({action: "apply", atomic: true, steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify", scope: "block"}}
+]})
+```
+
+CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use `scope: "block"` so the formatting covers the ENTIRE paragraph, not just the matched text.
+
+Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
+
 ### Batch multiple text edits atomically
 
-Use superdoc_mutations when you need 2+ text changes that must succeed or fail together:
+Use superdoc_mutations for 2+ text changes, format changes, or a combination:
 
 ```
 superdoc_mutations({
@@ -161,7 +226,7 @@ superdoc_mutations({
 })
 ```
 
-Split mutations by phase: text mutations (text.rewrite, text.insert, text.delete) in one call, then formatting (format.apply) in a separate call with fresh refs from a new superdoc_search.
+Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by create steps in the same batch — the new content does not exist yet when selectors compile. Split creates and formatting into separate batches.
 
 Never create two steps targeting overlapping text in the same block. Combine them into a single text.rewrite instead.
 

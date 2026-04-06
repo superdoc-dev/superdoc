@@ -117,7 +117,10 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: InlineRunPatch;
+    inline?: InlineRunPatch;
+    alignment?: 'left' | 'center' | 'right' | 'justify';
+    /** When "block", inline formatting expands to cover the entire parent textblock(s), not just the matched range. Default: "match". */
+    scope?: 'match' | 'block';
   };
 };
 

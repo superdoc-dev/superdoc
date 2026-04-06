@@ -19,16 +19,71 @@ superdoc_open → superdoc_get_content / superdoc_search → intent tools → su
 4. `superdoc_save` writes changes to disk
 5. `superdoc_close` releases the session
 
+## Efficient patterns
+
+### Create multiple sections at once
+
+Use `superdoc_edit` with `type: "markdown"` to insert structured content in a single call. It parses markdown into proper document nodes — headings, paragraphs, bold, italic, and lists.
+
+```
+superdoc_edit({
+  session_id,
+  action: "insert",
+  type: "markdown",
+  placement: "end",
+  content: "# Background\n\nThis section covers the project history.\n\n# Next steps\n\n1. Review the proposal\n2. Assign owners\n3. Set a deadline"
+})
+```
+
+Markdown syntax maps to document styles:
+
+| Markdown | Document node |
+|----------|--------------|
+| `# Heading` | Heading 1 |
+| `## Heading` | Heading 2 |
+| `**text**` | Bold |
+| `*text*` | Italic |
+| `- item` | Bullet list |
+| `1. item` | Numbered list |
+
+### Format multiple items at once
+
+Use `superdoc_mutations` with `format.apply` steps to apply formatting across the document in one atomic call.
+
+```
+superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "direct", steps: [
+  {id: "f1", op: "format.apply", where: {by: "node", select: {type: "node", nodeType: "heading", level: 1}}, args: {inline: {bold: true}}, require: "all"},
+  {id: "f2", op: "format.apply", where: {by: "node", select: {type: "node", nodeType: "heading", level: 2}}, args: {inline: {italic: true}}, require: "all"}
+]})
+```
+
+<Warning>
+Format targets must exist before the batch runs. Node selectors resolve at step execution time using the current document state. If a required target is missing, the step fails and — with `atomic: true` — the entire batch rolls back.
+</Warning>
+
+### When to use which tool
+
+| Task | Best tool |
+|------|-----------|
+| Insert one paragraph or heading | `superdoc_create` |
+| Insert multiple sections with structure | `superdoc_edit` with `type: "markdown"` |
+| Replace text across the whole document | `superdoc_search` + `superdoc_edit` |
+| Rewrite a whole paragraph | `superdoc_get_content` + `superdoc_edit` with block ref |
+| Apply formatting to known text | `superdoc_search` + `superdoc_format` |
+| Apply formatting to all nodes of a type | `superdoc_mutations` with `format.apply` |
+| Multiple text changes that must succeed together | `superdoc_mutations` with `atomic: true` |
+| Review or resolve tracked changes | `superdoc_track_changes` |
+
 ## Targeting
 
 Every editing tool needs a **target** telling the API *where* to apply the change. There are three ways to get one:
 
 - **From blocks data**: Each block has a `ref` (pass to `superdoc_edit` or `superdoc_format`) and a `nodeId` (for building `at` positions with `superdoc_create`).
 - **From `superdoc_search`**: Returns `handle.ref` covering the matched text. Use search when you need to find text patterns, not when you already know which block to target.
-- **From `superdoc_create`**: Returns `nodeId` for chaining creates and building block targets. Re-fetch blocks after create to get a fresh ref before formatting.
+- **From `superdoc_create`**: Returns `nodeId` and `ref` for the new node. For creating multiple sections or blocks at once, prefer `superdoc_edit` with `type: "markdown"` instead of multiple `superdoc_create` calls. Re-fetch blocks after create to get a fresh ref before formatting.
 
 <Warning>
-**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation.
+**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation. Within a `superdoc_mutations` batch, node selectors resolve automatically at step execution time, so re-fetching between steps is not required.
 </Warning>
 
 ## Common operations
@@ -75,7 +130,7 @@ superdoc_list({session_id, action: "create", mode: "fromParagraphs", preset: "di
 
 ### Batch edits atomically
 
-Use `superdoc_mutations` when you need multiple text changes that must succeed or fail together:
+Use `superdoc_mutations` when you need multiple changes that must succeed or fail together. Supported step types include `text.rewrite`, `text.delete`, `format.apply`, `create.heading`, `create.paragraph`, and `create.table`.
 
 ```
 superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "direct", steps: [

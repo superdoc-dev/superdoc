@@ -263,7 +263,7 @@ function executeTextStep(
 }
 
 function ensureFormatStepCapabilities(ctx: ExecuteContext, step: StyleApplyStep): void {
-  const inlineKeys = Object.keys(step.args.inline) as InlineRunPatchKey[];
+  const inlineKeys = step.args.inline ? (Object.keys(step.args.inline) as InlineRunPatchKey[]) : [];
   const capabilityIssue = getInlinePropertyCapabilityIssue(ctx.editor, inlineKeys, step.op);
   if (capabilityIssue) {
     throw planError(capabilityIssue.code, capabilityIssue.message, step.id, capabilityIssue.details);

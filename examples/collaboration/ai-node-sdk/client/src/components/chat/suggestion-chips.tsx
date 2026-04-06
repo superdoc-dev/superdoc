@@ -25,6 +25,10 @@ const SUGGESTIONS = [
     label: 'Find dates',
     prompt: 'Find all mentions of dates and highlight them',
   },
+  {
+    label: 'Executive summary',
+    prompt: 'Create an executive summary at the beginning of the document',
+  },
 ];
 
 interface SuggestionChipsProps {

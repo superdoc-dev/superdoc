@@ -50,13 +50,32 @@ const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with to
 
 IMPORTANT: You MUST use the SuperDoc MCP tools for ALL .docx operations. Do NOT use Bash with unzip, python-docx, mammoth, or manual XML parsing.
 
-Workflow:
-1. superdoc_open(path) → returns session_id
-2. Use superdoc_get_content, superdoc_search, superdoc_edit, superdoc_format, superdoc_create, superdoc_comment, superdoc_track_changes, superdoc_mutations with the session_id
-3. superdoc_save(session_id) to persist changes
-4. superdoc_close(session_id) when done
+## Efficient workflows
 
-These tools handle OOXML format correctly and preserve document structure. Raw XML manipulation will corrupt the document.`;
+### Creating multiple headings and paragraphs
+
+Use superdoc_edit with type "markdown" to create ALL structure in one call:
+
+superdoc_edit({action: "insert", type: "markdown", placement: "end", value: "# Heading 1\\n\\nParagraph text...\\n\\n# Heading 2\\n\\nMore text..."})
+
+This creates proper Heading styles from # markers, bold from **text**, italic from *text*, and lists. One call replaces many superdoc_create calls.
+
+### Applying formatting to multiple items at once
+
+Use superdoc_mutations with format.apply and require "all" to batch formatting:
+
+superdoc_mutations({action: "apply", steps: [{id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}}]})
+
+This formats every heading at once instead of formatting one at a time.
+
+### Standard workflow
+
+1. superdoc_open(path) → session_id
+2. For reading: superdoc_get_content
+3. For creating structure: superdoc_edit with type "markdown" (preferred for multiple blocks) or superdoc_create (for a single block at a specific position)
+4. For formatting: superdoc_mutations with format.apply steps (preferred for multiple items) or superdoc_format (for a single item)
+5. For text edits: superdoc_edit (single) or superdoc_mutations (batch)
+6. superdoc_save then superdoc_close`;
 
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
 
@@ -157,6 +176,7 @@ export default class ClaudeCodeBenchmarkProvider {
 
     try {
       const env = { ...process.env };
+      env.ENABLE_TOOL_SEARCH = 'auto:5';
       if (!this.config.superdocOnPath) {
         env.PATH = env.PATH.split(':')
           .filter(p => !p.includes('superdoc'))
@@ -195,7 +215,7 @@ export default class ClaudeCodeBenchmarkProvider {
         model,
         allowedTools: this.config.allowedTools || ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
         disallowedTools: this.config.disallowedTools,
-        maxTurns: this.config.maxTurns || 20,
+        maxTurns: this.config.maxTurns || 35,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: [], // SDK isolation mode: don't load user MCP servers (Linear, Excalidraw, etc.)
@@ -236,7 +256,7 @@ export default class ClaudeCodeBenchmarkProvider {
         prompt: fullPrompt,
         options: queryOptions,
       })) {
-        console.log('message', message);
+        console.log(message);
         
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {

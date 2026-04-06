@@ -18,9 +18,9 @@ Every editing tool needs a **target** telling the API *where* to apply the chang
 
 - **From blocks data**: Each block has a `ref` (pass directly to superdoc_edit or superdoc_format) and a `nodeId` (for building `at` positions with superdoc_create).
 - **From superdoc_search**: Returns `handle.ref` covering the matched text. Use search when you need to find text patterns, not when you already know which block to target.
-- **From superdoc_create**: Returns `nodeId` for chaining creates and building block targets. Re-fetch blocks after create to get a fresh ref before formatting.
+- **From superdoc_create**: Returns `nodeId` and `ref`. The ref is valid for one immediate format call. For subsequent operations, re-fetch blocks to get fresh refs.
 
-**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation.
+**Refs expire after any mutation** between separate tool calls. Within a superdoc_mutations batch, selectors resolve automatically — no manual re-searching between steps.
 
 ## Common workflows
 
@@ -128,9 +128,45 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
+### Insert content into a document (new or existing)
+
+Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting so inserted content looks like it belongs in the document.
+
+**Step 1: Understand the document context** from the get_content blocks response. Before inserting anything, analyze:
+- What kind of document is this? (contract, letter, certificate, report, etc.)
+- How are titles/headings styled? (centered? left? bold? underlined? what fontSize?)
+- Are titles UPPERCASE? (e.g., "EMPLOYMENT AGREEMENT", "RECITALS" → your heading must also be UPPERCASE)
+- How is body text styled? (fontFamily, fontSize, alignment, color)
+- What formatting conventions does the document follow?
+
+Your inserted content must be indistinguishable from the existing content. If titles are ALL CAPS centered 10pt, your heading text must also be ALL CAPS centered 10pt. If body text is justified 12pt, your paragraphs must be justified 12pt.
+
+**Step 2: Insert content with markdown:**
+
+```
+superdoc_edit({action: "insert", type: "markdown",
+  target: {kind: "block", nodeType: "paragraph", nodeId: "<first-block-nodeId>"},
+  placement: "before",
+  value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
+```
+
+**Step 3: Format ALL inserted blocks in ONE superdoc_mutations call.** Each format.apply step accepts `inline`, `alignment`, and `scope: "block"`.
+
+Use `scope: "block"` so formatting covers the entire paragraph (not just the matched text). The text pattern only needs to identify which block. Copy the exact property values from the existing blocks in the get_content response. Do NOT invent values.
+
+Example: document blocks show fontFamily, fontSize: 10, color, titles centered:
+```
+superdoc_mutations({action: "apply", atomic: true, steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, scope: "block"}}
+]})
+```
+
+Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
+
 ### Batch multiple text edits atomically
 
-Use superdoc_mutations when you need 2+ text changes that must succeed or fail together:
+Use superdoc_mutations for 2+ text changes, format changes, or a combination:
 
 ```
 superdoc_mutations({
@@ -143,7 +179,7 @@ superdoc_mutations({
 })
 ```
 
-Split mutations by phase: text mutations (text.rewrite, text.insert, text.delete) in one call, then formatting (format.apply) in a separate call with fresh refs from a new superdoc_search.
+Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by create steps in the same batch — the new content does not exist yet when selectors compile. Split creates and formatting into separate batches.
 
 Never create two steps targeting overlapping text in the same block. Combine them into a single text.rewrite instead.
 

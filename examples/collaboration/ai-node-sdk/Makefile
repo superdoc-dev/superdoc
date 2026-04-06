@@ -111,13 +111,9 @@ restore-npm-sdk: ## Restore SDK from npm if currently symlinked
 
 link-local-sdk: ## Build and link local SuperDoc SDK + CLI
 	@echo "Linking local SuperDoc SDK ($(CLI_TARGET))..."
-	@# 1. Build CLI native binary if not already built
-	@if [ ! -f $(CLI_ARTIFACT) ]; then \
-		echo "  Building CLI binary..."; \
-		cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host; \
-	else \
-		echo "  CLI binary found"; \
-	fi
+	@# 1. Always rebuild CLI binary to pick up latest source changes
+	@echo "  Building CLI binary..."
+	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host
 	@# 2. Ensure server node_modules exists
 	@if [ ! -d server/node_modules ]; then \
 		echo "  Installing server deps first..."; \

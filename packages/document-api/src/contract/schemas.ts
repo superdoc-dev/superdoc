@@ -4869,12 +4869,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'format.apply', type: 'string' },
         where: stepWhereSchema,
-        args: objectSchema(
-          {
-            inline: buildInlineRunPatchSchema(),
-          },
-          ['inline'],
-        ),
+        args: {
+          ...objectSchema(
+            {
+              inline: buildInlineRunPatchSchema(),
+              alignment: {
+                type: 'string',
+                enum: ['left', 'center', 'right', 'justify'],
+                description:
+                  'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
+              },
+              scope: {
+                type: 'string',
+                enum: ['match', 'block'],
+                description:
+                  'When "block", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use "block" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: "match".',
+              },
+            },
+            [],
+          ),
+          minProperties: 1,
+        },
       },
       ['id', 'op', 'where', 'args'],
     );

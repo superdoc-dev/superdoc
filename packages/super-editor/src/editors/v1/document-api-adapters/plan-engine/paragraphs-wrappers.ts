@@ -238,7 +238,7 @@ function mutateParagraphProperties(
 // Alignment mapping — external API → OOXML justification value
 // ---------------------------------------------------------------------------
 
-export const ALIGNMENT_TO_JUSTIFICATION: Record<ParagraphAlignment, string> = {
+const ALIGNMENT_TO_JUSTIFICATION: Record<ParagraphAlignment, string> = {
   left: 'left',
   center: 'center',
   right: 'right',

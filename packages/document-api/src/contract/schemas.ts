@@ -4869,27 +4869,24 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'format.apply', type: 'string' },
         where: stepWhereSchema,
-        args: {
-          ...objectSchema(
-            {
-              inline: buildInlineRunPatchSchema(),
-              alignment: {
-                type: 'string',
-                enum: ['left', 'center', 'right', 'justify'],
-                description:
-                  'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
-              },
-              scope: {
-                type: 'string',
-                enum: ['match', 'block'],
-                description:
-                  'When "block", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use "block" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: "match".',
-              },
+        args: objectSchema(
+          {
+            inline: buildInlineRunPatchSchema(),
+            alignment: {
+              type: 'string',
+              enum: ['left', 'center', 'right', 'justify'],
+              description:
+                'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
             },
-            [], // No individual field is required
-          ),
-          minProperties: 1, // At least one of inline, alignment, or scope must be present
-        },
+            scope: {
+              type: 'string',
+              enum: ['match', 'block'],
+              description:
+                'When "block", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use "block" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: "match".',
+            },
+          },
+          [], // No individual field is required — at least one must be present
+        ),
       },
       ['id', 'op', 'where', 'args'],
     );

@@ -39,7 +39,6 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
-import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -805,13 +804,21 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+/** Alignment API value → OOXML justification value */
+const ALIGNMENT_TO_JUSTIFICATION: Record<string, string> = {
+  left: 'left',
+  center: 'center',
+  right: 'right',
+  justify: 'both',
+};
+
 /**
  * Applies alignment to the paragraph node(s) that contain the given range.
  * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
  * paragraphProperties.justification via tr.setNodeMarkup.
  */
 function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
-  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
+  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment];
   if (!justification) return false;
 
   let changed = false;

@@ -72,6 +72,18 @@ describe('areTemplateFieldsEqual', () => {
     const b: TemplateField[] = [{ id: '1', alias: 'Name', fieldType: 'signer' }];
     expect(areTemplateFieldsEqual(a, b)).toBe(false);
   });
+
+  it('returns false when lockMode differs', () => {
+    const a: TemplateField[] = [{ id: '1', alias: 'Name', lockMode: 'unlocked' }];
+    const b: TemplateField[] = [{ id: '1', alias: 'Name', lockMode: 'sdtContentLocked' }];
+    expect(areTemplateFieldsEqual(a, b)).toBe(false);
+  });
+
+  it('returns true when lockMode is the same', () => {
+    const a: TemplateField[] = [{ id: '1', alias: 'Name', lockMode: 'contentLocked' }];
+    const b: TemplateField[] = [{ id: '1', alias: 'Name', lockMode: 'contentLocked' }];
+    expect(areTemplateFieldsEqual(a, b)).toBe(true);
+  });
 });
 
 describe('resolveToolbar', () => {

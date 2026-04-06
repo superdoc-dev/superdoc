@@ -685,6 +685,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 onDelete={deleteField}
                 onUpdate={(field) => updateField(field.id, field)}
                 selectedFieldId={selectedFieldId || undefined}
+                fieldColors={fieldColors}
               />
             </div>
           )}

@@ -14,27 +14,36 @@ These tools handle the OOXML format correctly and preserve document structure.
 
 ## Efficient patterns (use these instead of calling tools one at a time)
 
-**Creating multiple headings and paragraphs — use markdown insert (one call):**
+**Creating headings and paragraphs — ALWAYS use markdown insert (one call):**
 ```
-superdoc_edit({action: "insert", type: "markdown", placement: "end",
+superdoc_edit({action: "insert", type: "markdown",
   value: "# Section Title\n\nParagraph content.\n\n# Another Section\n\nMore content with **bold**."})
 ```
 This creates proper Heading styles from # markers. One call replaces many superdoc_create calls.
 
-**Formatting multiple items at once — use mutations batch (one call):**
+**Inserting at a specific position — use target + placement:**
 ```
-superdoc_mutations({action: "apply", steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "important term"}, require: "all"}, args: {inline: {bold: true}}}
+superdoc_edit({action: "insert", type: "markdown",
+  target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId>"},
+  placement: "before",
+  value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
+```
+Valid placements: "before", "after", "insideStart", "insideEnd". Without target, content appends at document end.
+
+**Formatting — each format.apply step accepts both `inline` AND `alignment`:**
+```
+superdoc_mutations({action: "apply", atomic: true, steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "body paragraph text"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12}, alignment: "justify"}}
 ]})
 ```
-Use require "all" to format every match at once. Selectors resolve before execution, so format targets must exist in the document before the batch runs.
+One format.apply step per block. Combine `inline` (text styles) and `alignment` (paragraph alignment) in the same step. Do NOT use separate superdoc_format calls.
 
 **When to use which tool:**
-- Creating multiple blocks → `superdoc_edit` with type "markdown"
-- Creating one block at a specific position → `superdoc_create`
-- Formatting multiple items → `superdoc_mutations` with format.apply steps
-- Formatting one item → `superdoc_format`
+- Creating headings, paragraphs, or any block content → `superdoc_edit` with type "markdown" (preferred, even for a single heading + paragraph)
+- Creating one block only when markdown is insufficient → `superdoc_create`
+- ALL formatting after insert → `superdoc_mutations` with format.apply (inline + alignment in one step per block)
+- Single quick format (no insert before it) → `superdoc_format`
 - Multiple text edits → `superdoc_mutations`
 - Single text edit → `superdoc_edit`
 

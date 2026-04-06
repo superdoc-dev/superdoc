@@ -128,29 +128,37 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
-### Create a multi-section document efficiently
+### Insert content into a document (new or existing)
 
-**Step 1: Create all structure in one call using markdown insert:**
+Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting to match the document's existing style.
 
-```
-superdoc_edit({action: "insert", type: "markdown", placement: "end",
-  value: "# Definitions\n\n\"Confidential Information\" means any non-public information...\n\n# Obligations\n\nThe Receiving Party agrees to maintain confidentiality...\n\n# Governing Law\n\nThis Agreement shall be governed by the laws of..."})
-```
+**Step 1: Read existing formatting** from the initial get_content blocks response. Pay special attention to:
+- **Nearby headings/titles**: look at their fontFamily, fontSize, bold, underline, alignment (especially center vs justify vs left). Your new headings must match these exactly.
+- **Body paragraphs**: note fontFamily, fontSize, color, alignment. Your new paragraphs must match.
+- Match the style of the nearest similar element, not arbitrary values.
 
-This creates headings with proper Heading1 style, paragraphs, bold (**text**), italic (*text*), lists, and tables in one call. Markdown cannot express color, font-size, or alignment — those require step 2.
-
-**Step 2: Apply formatting in one batch:**
+**Step 2: Insert content with markdown:**
 
 ```
-superdoc_mutations({action: "apply", steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Confidential Information"}, require: "all"}, args: {inline: {bold: true}}}
+superdoc_edit({action: "insert", type: "markdown",
+  target: {kind: "block", nodeType: "paragraph", nodeId: "<first-block-nodeId>"},
+  placement: "before",
+  value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
+```
+
+**Step 3: Apply ALL formatting in a SINGLE superdoc_mutations call.** Each format.apply step accepts both `inline` (text styles) AND `alignment` (paragraph alignment) — one step per block.
+
+Example: if the document has centered, underlined, 12pt headings and justified 12pt body text:
+```
+superdoc_mutations({action: "apply", atomic: true, steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify"}}
 ]})
 ```
 
-Use `require: "all"` with a node selector to format every heading at once instead of formatting one at a time.
+CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use ONE format.apply step per block with both `inline` and `alignment` combined.
 
-Total: 4 calls (open, insert, format batch, save) instead of 40+.
+Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
 
 ### Batch multiple text edits atomically
 

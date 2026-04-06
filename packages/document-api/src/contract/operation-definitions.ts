@@ -144,28 +144,34 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   edit: {
     toolName: 'superdoc_edit',
     description:
+      'The primary tool for inserting content into documents. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
+      'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
+      'IMPORTANT: After a markdown insert, follow up with ONE superdoc_mutations call using format.apply steps to match the document style. ' +
+      'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color) AND "alignment" ("left","center","right","justify") in the same step — combine both in one step per block. ' +
+      'Look at nearby headings and paragraphs in the get_content response and copy their exact formatting. Do NOT invent values — match what is already in the document. ' +
+      'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
+      'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'Refs expire after any mutation; always re-search before the next edit. ' +
-      'Modify document text: insert new content, replace existing text, delete a range, or undo/redo. ' +
-      'Use this for single text modifications. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
-      'For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
-      'Insert supports plain text (default), markdown, or html via the "type" parameter. ' +
-      'To create a document with multiple headings and paragraphs, use action "insert" with type "markdown" and placement "end". ' +
-      'The markdown parser creates proper Heading styles from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
-      'This is the most efficient way to build document structure: one call creates all sections. Follow up with superdoc_mutations format.apply steps to apply formatting (color, font, alignment) that markdown cannot express. ' +
-      'Use "placement" (before, after, insideStart, insideEnd) to control position relative to the target. ' +
+      'For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
       'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). ' +
       'Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
     inputExamples: [
-      { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
-      { action: 'insert', value: 'Appended paragraph.', placement: 'insideEnd' },
-      { action: 'insert', ref: '<block.ref>', value: 'Inserted before.', placement: 'before' },
       {
         action: 'insert',
         type: 'markdown',
-        placement: 'end',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        placement: 'before',
+        value: '# Executive Summary\n\nThis agreement sets forth the principal terms...',
+      },
+      {
+        action: 'insert',
+        type: 'markdown',
         value:
           '# Section Title\n\nParagraph content here.\n\n# Another Section\n\nMore content with **bold** and *italic*.',
       },
+      { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
       { action: 'delete', ref: '<handle.ref>' },
       { action: 'undo' },
     ],
@@ -173,9 +179,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
-      'For creating multiple headings and paragraphs at once, prefer superdoc_edit with type "markdown" (one call for all structure) instead of calling superdoc_create repeatedly. ' +
-      'Use superdoc_create when you need to add one block at a specific position relative to another block. ' +
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'Only use superdoc_create for tables or when markdown cannot express the content. ' +
+      'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
       'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
       'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. ' +
       'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +

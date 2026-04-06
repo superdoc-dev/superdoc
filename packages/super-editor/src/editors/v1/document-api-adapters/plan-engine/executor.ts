@@ -804,6 +804,43 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+/** Alignment API value → OOXML justification value */
+const ALIGNMENT_TO_JUSTIFICATION: Record<string, string> = {
+  left: 'left',
+  center: 'center',
+  right: 'right',
+  justify: 'both',
+};
+
+/**
+ * Applies alignment to the paragraph node(s) that contain the given range.
+ * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
+ * paragraphProperties.justification via tr.setNodeMarkup.
+ */
+function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
+  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment];
+  if (!justification) return false;
+
+  let changed = false;
+  const doc = tr.doc;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    // Only set alignment on textblock nodes (paragraphs, headings)
+    if (!node.isTextblock) return;
+
+    const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const currentJustification = existing?.justification;
+
+    if (currentJustification === justification) return;
+
+    const updated = { ...(existing ?? {}), justification };
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, paragraphProperties: updated });
+    changed = true;
+  });
+
+  return changed;
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -813,7 +850,18 @@ export function executeStyleApply(
 ): { changed: boolean } {
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -957,7 +1005,17 @@ export function executeSpanStyleApply(
   const absFrom = mapping.map(firstSeg.absFrom, 1);
   const absTo = mapping.map(lastSeg.absTo, -1);
 
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------

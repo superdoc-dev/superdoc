@@ -39,6 +39,7 @@ const getTemplateFieldsFromEditor = (editor: Editor): Types.TemplateField[] => {
       mode,
       group: structuredContentHelpers.getGroup?.(attrs.tag) ?? undefined,
       fieldType: parsedTag?.fieldType ?? 'owner',
+      lockMode: attrs.lockMode ?? undefined,
     } as Types.TemplateField;
   });
 };
@@ -51,6 +52,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       menu = {},
       list = {},
       toolbar,
+      defaultLockMode,
       cspNonce,
       telemetry,
       licenseKey,
@@ -139,22 +141,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               })
             : undefined;
 
+        const lockMode = field.lockMode ?? defaultLockMode;
+
+        const attrs: Record<string, unknown> = {
+          alias: field.alias,
+          tag: tagData,
+          ...(lockMode != null && { lockMode }),
+        };
+
         const success = (
           mode === 'inline'
-            ? editor.commands.insertStructuredContentInline?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagData,
-                },
-                text: field.defaultValue || field.alias,
-              })
-            : editor.commands.insertStructuredContentBlock?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagData,
-                },
-                text: field.defaultValue || field.alias,
-              })
+            ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.defaultValue || field.alias })
+            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.defaultValue || field.alias })
         ) as boolean | undefined;
 
         if (success) {
@@ -174,7 +172,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         return success ?? false;
       },
-      [onFieldInsert, onFieldsChange, templateFields],
+      [onFieldInsert, onFieldsChange, templateFields, defaultLockMode],
     );
 
     const updateField = useCallback(
@@ -485,6 +483,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               metadata: createdField.metadata,
               defaultValue: createdField.defaultValue,
               fieldType: createdField.fieldType,
+              lockMode: createdField.lockMode,
             });
             setMenuVisible(false);
             return;
@@ -496,6 +495,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           metadata: field.metadata,
           defaultValue: field.defaultValue,
           fieldType: field.fieldType,
+          lockMode: field.lockMode,
         });
         setMenuVisible(false);
       },
@@ -526,23 +526,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         });
 
         const mode = field.mode || 'inline';
+        const lockMode = field.lockMode ?? defaultLockMode;
+
+        const attrs: Record<string, unknown> = {
+          alias: field.alias,
+          tag: tagWithGroup,
+          ...(lockMode != null && { lockMode }),
+        };
 
         const success =
           mode === 'inline'
-            ? editor.commands.insertStructuredContentInline?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagWithGroup,
-                },
-                text: field.alias,
-              })
-            : editor.commands.insertStructuredContentBlock?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagWithGroup,
-                },
-                text: field.alias,
-              });
+            ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.alias })
+            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.alias });
 
         if (success) {
           if (!field.group) {
@@ -556,7 +551,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           onFieldsChange?.(updatedFields);
         }
       },
-      [updateField, resetMenuFilter, onFieldsChange],
+      [updateField, resetMenuFilter, onFieldsChange, defaultLockMode],
     );
 
     const handleMenuClose = useCallback(() => {

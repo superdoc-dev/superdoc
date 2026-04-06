@@ -90,7 +90,7 @@ import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js'
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
-import { twipsToPixels } from '../core/super-converter/helpers.js';
+import { twipsToPixels, eighthPointsToPixels } from '../core/super-converter/helpers.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import { generateDocxHexId } from '../utils/generateDocxHexId.js';
 import {
@@ -166,7 +166,8 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   extracted.tableStyleId = tp.tableStyleId ?? null;
   extracted.justification = tp.justification ?? null;
   extracted.tableLayout = tp.tableLayout ?? null;
-  extracted.borders = tp.borders ?? null;
+  const pixelBorders = convertTableBordersToPixelUnits(tp.borders);
+  extracted.borders = pixelBorders ?? tp.borders ?? null;
 
   // tableIndent — importer converts twips→pixels (line 89)
   const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
@@ -210,6 +211,43 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   }
 
   return extracted;
+}
+
+function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
+  const clone = cloneBorderMap(value);
+  if (!clone) return undefined;
+
+  for (const border of Object.values(clone)) {
+    if (!border || typeof border !== 'object') continue;
+    const size = (border as { size?: unknown }).size;
+    const pixelSize = convertBorderSizeValueToPixels(size);
+    if (pixelSize != null) {
+      (border as Record<string, unknown>).size = pixelSize;
+    }
+  }
+
+  return Object.keys(clone).length > 0 ? clone : undefined;
+}
+
+function cloneBorderMap(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const clone: Record<string, unknown> = {};
+  let hasBorder = false;
+
+  for (const [side, borderValue] of Object.entries(value as Record<string, unknown>)) {
+    if (!borderValue || typeof borderValue !== 'object') continue;
+    clone[side] = { ...(borderValue as Record<string, unknown>) };
+    hasBorder = true;
+  }
+
+  return hasBorder ? clone : undefined;
+}
+
+function convertBorderSizeValueToPixels(size: unknown): number | undefined {
+  if (typeof size !== 'number' || Number.isNaN(size)) return undefined;
+  const pixels = eighthPointsToPixels(size);
+  if (typeof pixels !== 'number' || Number.isNaN(pixels)) return undefined;
+  return pixels;
 }
 
 function normalizeGridWidth(width: unknown): { col: number } {

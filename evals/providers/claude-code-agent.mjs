@@ -249,7 +249,6 @@ export default class ClaudeCodeBenchmarkProvider {
         prompt: fullPrompt,
         options: queryOptions,
       })) {
-        console.log('message', message);
         
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {

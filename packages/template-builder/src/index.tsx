@@ -478,7 +478,6 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       };
     }, [
       document?.source,
-      document?.mode,
       trigger,
       discoverFields,
       onReady,
@@ -488,6 +487,16 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       stableTelemetry,
       licenseKey,
     ]);
+
+    // Apply document mode changes without recreating the editor
+    const prevModeRef = useRef(document?.mode);
+    useEffect(() => {
+      const mode = document?.mode || 'editing';
+      if (prevModeRef.current !== mode && superdocRef.current) {
+        (superdocRef.current as any).setDocumentMode(mode);
+      }
+      prevModeRef.current = mode;
+    }, [document?.mode]);
 
     const handleMenuSelect = useCallback(
       async (field: Types.FieldDefinition) => {
@@ -638,6 +647,11 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       nextField,
       previousField,
       getFields: () => templateFields,
+      refresh: () => {
+        if (superdocRef.current?.activeEditor) {
+          discoverFields(superdocRef.current.activeEditor);
+        }
+      },
       exportTemplate,
       getSuperDoc: () => superdocRef.current,
     }));

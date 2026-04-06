@@ -161,6 +161,8 @@ export interface SuperDocTemplateBuilderHandle {
   nextField: () => void;
   previousField: () => void;
   getFields: () => TemplateField[];
+  /** Re-discover fields from the editor and notify via onFieldsChange */
+  refresh: () => void;
   exportTemplate: (config?: ExportConfig) => Promise<void | Blob>;
   /**
    * Returns the SuperDoc instance.

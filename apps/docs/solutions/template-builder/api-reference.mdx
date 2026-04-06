@@ -361,6 +361,14 @@ const fields = builderRef.current?.getFields();
 // Returns: TemplateField[]
 ```
 
+### refresh()
+
+Re-discover fields from the editor and trigger `onFieldsChange`. Use this when field data arrives asynchronously or after external changes to the document:
+
+```typescript
+builderRef.current?.refresh();
+```
+
 ### exportTemplate()
 
 Export the template as a .docx file:

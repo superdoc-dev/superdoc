@@ -15,6 +15,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
   onCreateField,
   existingFields = [],
   onSelectExisting,
+  fieldColors,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
@@ -389,7 +390,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                               padding: '2px 6px',
                               borderRadius: '3px',
                               textTransform: 'capitalize',
-                              ...getFieldTypeStyle(entry.fieldType),
+                              ...getFieldTypeStyle(entry.fieldType, fieldColors),
                               fontWeight: 500,
                             }}
                           >
@@ -501,7 +502,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                           padding: '2px 6px',
                           borderRadius: '3px',
                           textTransform: 'capitalize',
-                          ...getFieldTypeStyle(field.fieldType),
+                          ...getFieldTypeStyle(field.fieldType, fieldColors),
                           fontWeight: 500,
                         }}
                       >

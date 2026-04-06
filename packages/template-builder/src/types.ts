@@ -1,5 +1,7 @@
 import type { SuperDoc } from 'superdoc';
 
+export type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 /** Field definition for template builder */
 export interface FieldDefinition {
   id: string;
@@ -9,6 +11,7 @@ export interface FieldDefinition {
   mode?: 'inline' | 'block';
   group?: string;
   fieldType?: string;
+  lockMode?: LockMode;
 }
 
 /** Field instance in a template document */
@@ -20,6 +23,7 @@ export interface TemplateField {
   mode?: 'inline' | 'block';
   group?: string;
   fieldType?: string;
+  lockMode?: LockMode;
 }
 
 export interface TriggerEvent {
@@ -113,6 +117,9 @@ export interface SuperDocTemplateBuilderProps {
   menu?: MenuConfig;
   list?: ListConfig;
   toolbar?: boolean | string | ToolbarConfig;
+
+  /** Lock mode applied to all inserted fields unless overridden per-field */
+  defaultLockMode?: LockMode;
 
   /** Content Security Policy nonce for dynamically injected styles */
   cspNonce?: string;

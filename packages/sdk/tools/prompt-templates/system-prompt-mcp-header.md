@@ -37,7 +37,7 @@ superdoc_mutations({action: "apply", atomic: true, steps: [
   {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12}, alignment: "justify", scope: "block"}}
 ]})
 ```
-One format.apply step per block. Combine `inline`, `alignment`, and `scope: "block"` in each step. The pattern only needs to identify which paragraph. ALWAYS include `fontSize` on headings — markdown headings inherit a large default size that must be overridden to match the document.
+One format.apply step per block. Combine `inline`, `alignment`, and `scope: "block"` in each step. ONLY set properties that are explicitly shown in the existing document blocks. If blocks don't show fontSize, don't set it (the document default will apply correctly). Do NOT invent values.
 
 **When to use which tool:**
 - Creating headings, paragraphs, or any block content → `superdoc_edit` with type "markdown" (preferred, even for a single heading + paragraph)

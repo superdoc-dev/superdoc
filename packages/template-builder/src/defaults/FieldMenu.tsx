@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FieldDefinition, FieldMenuProps } from '../types';
+import type { FieldDefinition, FieldMenuProps, LockMode } from '../types';
 import { getFieldTypeStyle } from '../utils';
 import { InfoTooltip } from './InfoTooltip';
 
@@ -20,6 +20,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
   const [newFieldName, setNewFieldName] = useState('');
   const [fieldMode, setFieldMode] = useState<'inline' | 'block'>('inline');
   const [fieldType, setFieldType] = useState<string>('owner');
+  const [fieldLockMode, setFieldLockMode] = useState<LockMode | ''>('');
   const [existingExpanded, setExistingExpanded] = useState(true);
   const [availableExpanded, setAvailableExpanded] = useState(true);
 
@@ -29,6 +30,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setNewFieldName('');
       setFieldMode('inline');
       setFieldType('owner');
+      setFieldLockMode('');
     }
   }, [isVisible]);
 
@@ -69,6 +71,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       label: trimmedName,
       mode: fieldMode,
       fieldType: fieldType,
+      ...(fieldLockMode && { lockMode: fieldLockMode as LockMode }),
     };
 
     try {
@@ -83,6 +86,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setNewFieldName('');
       setFieldMode('inline');
       setFieldType('owner');
+      setFieldLockMode('');
     }
   };
 
@@ -131,6 +135,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 setIsCreating(false);
                 setNewFieldName('');
                 setFieldMode('inline');
+                setFieldLockMode('');
               }
             }}
             autoFocus
@@ -227,6 +232,26 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
               Signer
             </label>
           </div>
+          <div style={{ marginTop: '8px' }}>
+            <select
+              value={fieldLockMode}
+              onChange={(e) => setFieldLockMode(e.target.value as LockMode | '')}
+              style={{
+                width: '100%',
+                padding: '4px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '3px',
+                fontSize: '13px',
+                color: fieldLockMode ? '#111827' : '#9ca3af',
+              }}
+            >
+              <option value=''>No lock</option>
+              <option value='unlocked'>Unlocked</option>
+              <option value='sdtLocked'>Container locked</option>
+              <option value='contentLocked'>Content locked</option>
+              <option value='sdtContentLocked'>Fully locked</option>
+            </select>
+          </div>
           <div
             style={{
               marginTop: '8px',
@@ -254,6 +279,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 setNewFieldName('');
                 setFieldMode('inline');
                 setFieldType('owner');
+                setFieldLockMode('');
               }}
               style={{
                 padding: '4px 12px',

@@ -112,11 +112,11 @@ When enabled, the field menu shows a "Create New Field" option with inputs for n
 
 ### Field locking
 
-Make fields read-only so users can't edit or delete them:
+Make fields read-only so end users can't edit their content:
 
 ```tsx
 <SuperDocTemplateBuilder
-  defaultLockMode="sdtContentLocked"
+  defaultLockMode="contentLocked"
   fields={{
     available: [
       { id: "1", label: "Customer Name" },
@@ -126,16 +126,9 @@ Make fields read-only so users can't edit or delete them:
 />
 ```
 
-Per-field `lockMode` overrides `defaultLockMode`. Four modes:
+Per-field `lockMode` overrides `defaultLockMode`. The default field creation form includes a "Locked" checkbox that sets `contentLocked`.
 
-| Mode | Container | Content |
-| ---- | --------- | ------- |
-| `unlocked` | Deletable | Editable |
-| `sdtLocked` | Protected | Editable |
-| `contentLocked` | Deletable | Read-only |
-| `sdtContentLocked` | Protected | Read-only |
-
-Most apps want `sdtContentLocked`. See [lock modes](/extensions/structured-content#lock-modes) for details.
+Template authors can always delete and manage fields regardless of lock mode — locking only affects end users interacting with the document. For advanced use cases, see [lock modes](/extensions/structured-content#lock-modes).
 
 ### Linked fields
 

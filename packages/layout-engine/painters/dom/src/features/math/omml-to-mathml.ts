@@ -14,8 +14,10 @@ import {
   convertMathRun,
   convertFraction,
   convertBar,
+  convertFunction,
   convertSubscript,
   convertSuperscript,
+  convertSubSuperscript,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -38,8 +40,10 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:r': convertMathRun,
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:f': convertFraction, // Fraction (numerator/denominator)
+  'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
+  'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:acc': null, // Accent (diacritical mark above base)
@@ -47,7 +51,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:box': null, // Box (invisible grouping container)
   'm:d': null, // Delimiter (parentheses, brackets, braces)
   'm:eqArr': null, // Equation array (vertical array of equations)
-  'm:func': null, // Function apply (sin, cos, log, etc.)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)
   'm:limUpp': null, // Upper limit
@@ -56,7 +59,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:phant': null, // Phantom (invisible spacing placeholder)
   'm:rad': null, // Radical (square root, nth root)
   'm:sPre': null, // Pre-sub-superscript (left of base)
-  'm:sSubSup': null, // Sub-superscript (both)
 };
 
 /** OMML argument/container elements that wrap children in <mrow>. */

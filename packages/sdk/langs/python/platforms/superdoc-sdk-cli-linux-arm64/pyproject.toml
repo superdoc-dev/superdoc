@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superdoc-sdk-cli-linux-arm64"
-version = "1.2.0"
+version = "1.3.0"
 description = "SuperDoc CLI binary for Linux ARM64"
 readme = "README.md"
 requires-python = ">=3.9"

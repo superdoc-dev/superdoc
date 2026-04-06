@@ -129,7 +129,7 @@
   },
   "pnpm": {
     "overrides": {
-      "canvas": "3.2.2",
+      "canvas": "3.2.3",
       "happy-dom": "20.4.0",
       "jsdom": "27.3.0",
       "vue": "3.5.25",

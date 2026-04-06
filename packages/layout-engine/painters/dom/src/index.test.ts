@@ -441,6 +441,76 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
+  it('skips justify for lines with manual tab runs but no explicit segment positions', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'tab-justify-block',
+      runs: [
+        { text: '1.', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 48 },
+        { text: 'a b c d', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 7,
+          width: 60,
+          maxWidth: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          // No segments with x — this is the "manual tab without segments" case
+        },
+        {
+          fromRun: 2,
+          fromChar: 7,
+          toRun: 2,
+          toChar: 7,
+          width: 0,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    // Manual tab without explicit segment positions should skip justify
+    expect(lines[0].style.wordSpacing).toBe('');
+  });
+
   it('justifies last visible line when paragraph ends with lineBreak', () => {
     // When a paragraph ends with <w:br/> (lineBreak), the visible text before the break
     // should still be justified because the "last line" is the empty line after the break.
@@ -3881,6 +3951,60 @@ describe('DomPainter', () => {
     expect(trackedSpan).toBeTruthy();
     expect(trackedSpan.classList.contains('track-delete-dec')).toBe(true);
     expect(trackedSpan.classList.contains('highlighted')).toBe(true);
+  });
+
+  it('injects a delete-decoration reset that overrides inherited underline metadata', () => {
+    document.body.appendChild(mount);
+    mount.style.setProperty('--sd-tracked-changes-delete-text', '#2e64a8');
+    mount.style.setProperty('--sd-tracked-changes-delete-decoration-thickness', '1.5px');
+
+    try {
+      const trackedDeleteBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tracked-delete-underline-reset',
+        runs: [
+          {
+            text: 'Deleted underlined text',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            underline: {
+              style: 'wavy',
+              color: '#1f9d55',
+            },
+            trackedChange: {
+              kind: 'delete',
+              id: 'tracked-delete-1',
+            },
+          },
+        ],
+        attrs: {
+          trackedChangesMode: 'review',
+          trackedChangesEnabled: true,
+        },
+      };
+
+      const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+        trackedDeleteBlock.id,
+        trackedDeleteBlock.runs[0].text.length,
+      );
+
+      const painter = createTestPainter({ blocks: [trackedDeleteBlock], measures: [paragraphMeasure] });
+      painter.paint(paragraphLayout, mount);
+
+      const trackedSpan = mount.querySelector('[data-track-change-id="tracked-delete-1"]') as HTMLElement;
+      expect(trackedSpan).toBeTruthy();
+      expect(trackedSpan.style.textDecorationLine).toBe('underline');
+      expect(trackedSpan.style.textDecorationStyle).toBe('wavy');
+      expectCssColor(trackedSpan.style.textDecorationColor, '#1f9d55');
+
+      const styleEl = document.head.querySelector('[data-superdoc-track-change-styles="true"]') as HTMLStyleElement;
+      expect(styleEl).toBeTruthy();
+      expect(styleEl.textContent).toMatch(
+        /\.track-delete-dec\.highlighted\s*\{[\s\S]*text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*currentColor\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+      );
+    } finally {
+      mount.remove();
+    }
   });
 
   describe('token resolution tests', () => {

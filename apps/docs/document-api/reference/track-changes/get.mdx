@@ -20,7 +20,7 @@ Retrieve a single tracked change by ID.
 
 ## Expected result
 
-Returns a TrackChangeInfo object with the change type, author, date, and affected content.
+Returns a TrackChangeInfo object with the change type, author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.
 
 ## Input fields
 
@@ -51,6 +51,10 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
 | `excerpt` | string | no |  |
 | `id` | string | yes |  |
 | `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+| `wordRevisionIds` | object | no |  |
+| `wordRevisionIds.delete` | string | no |  |
+| `wordRevisionIds.format` | string | no |  |
+| `wordRevisionIds.insert` | string | no |  |
 
 ### Example response
 
@@ -62,9 +66,12 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
     "kind": "entity"
   },
   "author": "Jane Doe",
-  "authorEmail": "jane@example.com",
   "id": "id-001",
-  "type": "insert"
+  "type": "insert",
+  "wordRevisionIds": {
+    "delete": "example",
+    "insert": "example"
+  }
 }
 ```
 
@@ -127,6 +134,25 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
         "delete",
         "format"
       ]
+    },
+    "wordRevisionIds": {
+      "additionalProperties": false,
+      "description": "Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. This is provenance metadata, not the canonical SuperDoc tracked-change ID. Replacements may include both `insert` and `delete` IDs.",
+      "properties": {
+        "delete": {
+          "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:del>` element when this logical change includes a deletion.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:rPrChange>` element when this logical change includes a formatting revision.",
+          "type": "string"
+        },
+        "insert": {
+          "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:ins>` element when this logical change includes an insertion.",
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [

@@ -18,7 +18,8 @@ export const areTemplateFieldsEqual = (a: TemplateField[], b: TemplateField[]): 
       left.position !== right.position ||
       left.mode !== right.mode ||
       left.group !== right.group ||
-      left.fieldType !== right.fieldType
+      left.fieldType !== right.fieldType ||
+      left.lockMode !== right.lockMode
     ) {
       return false;
     }

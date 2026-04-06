@@ -1,0 +1,105 @@
+:root {
+  --toolbar-bg: #ffffff;
+  --toolbar-border: #e2e8f0;
+  --toolbar-height: 44px;
+  --btn-size: 32px;
+  --btn-radius: 6px;
+  --btn-hover: #f1f5f9;
+  --btn-active: #e2e8f0;
+  --btn-disabled: #94a3b8;
+  --select-bg: #f8fafc;
+  --select-border: #cbd5e1;
+  --separator-color: #e2e8f0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f1f5f9;
+}
+
+#toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--toolbar-height);
+  padding: 0 8px;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+}
+
+#toolbar .separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--separator-color);
+}
+
+#toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--btn-size);
+  height: var(--btn-size);
+  border: none;
+  border-radius: var(--btn-radius);
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#toolbar button:hover:not(:disabled) {
+  background: var(--btn-hover);
+}
+
+#toolbar button.active {
+  background: var(--btn-active);
+  color: #0f172a;
+}
+
+#toolbar button:disabled {
+  color: var(--btn-disabled);
+  cursor: default;
+}
+
+#toolbar button svg {
+  width: 16px;
+  height: 16px;
+}
+
+#toolbar select {
+  height: var(--btn-size);
+  padding: 0 8px;
+  border: 1px solid var(--select-border);
+  border-radius: var(--btn-radius);
+  background: var(--select-bg);
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+#toolbar select:focus {
+  border-color: #3b82f6;
+}
+
+#toolbar select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
+#editor {
+  height: calc(100% - var(--toolbar-height));
+  overflow: auto;
+}

@@ -110,6 +110,26 @@ Allow users to create new fields while building templates:
 
 When enabled, the field menu shows a "Create New Field" option with inputs for name, mode (inline/block), and field type (owner/signer).
 
+### Field locking
+
+Make fields read-only so end users can't edit their content:
+
+```tsx
+<SuperDocTemplateBuilder
+  defaultLockMode="contentLocked"
+  fields={{
+    available: [
+      { id: "1", label: "Customer Name" },
+      { id: "2", label: "Notes", lockMode: "unlocked" }, // this one stays editable
+    ],
+  }}
+/>
+```
+
+Per-field `lockMode` overrides `defaultLockMode`. The default field creation form includes a "Locked" checkbox that sets `contentLocked`.
+
+Template authors can always delete and manage fields regardless of lock mode — locking only affects end users interacting with the document. For advanced use cases, see [lock modes](/extensions/structured-content#lock-modes).
+
 ### Linked fields
 
 When a user selects an existing field from the "Existing Fields" section in the menu, a linked copy is inserted. Both instances share a group ID and stay in sync.

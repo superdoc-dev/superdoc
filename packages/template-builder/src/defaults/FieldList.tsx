@@ -124,6 +124,21 @@ const FieldItem: FC<{
               {field.fieldType}
             </span>
           )}
+          {field.lockMode && field.lockMode !== 'unlocked' && (
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '2px 5px',
+                borderRadius: '3px',
+                background: '#fef2f2',
+                color: '#991b1b',
+                fontWeight: '500',
+              }}
+              title={field.lockMode}
+            >
+              🔒
+            </span>
+          )}
         </div>
       </div>
     </div>

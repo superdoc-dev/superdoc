@@ -932,6 +932,16 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
               "args": {
                 "additionalProperties": false,
                 "properties": {
+                  "alignment": {
+                    "description": "Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.",
+                    "enum": [
+                      "left",
+                      "center",
+                      "right",
+                      "justify"
+                    ],
+                    "type": "string"
+                  },
                   "inline": {
                     "additionalProperties": false,
                     "minProperties": 1,
@@ -1740,11 +1750,16 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                       }
                     },
                     "type": "object"
+                  },
+                  "scope": {
+                    "description": "When \"block\", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use \"block\" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: \"match\".",
+                    "enum": [
+                      "match",
+                      "block"
+                    ],
+                    "type": "string"
                   }
                 },
-                "required": [
-                  "inline"
-                ],
                 "type": "object"
               },
               "id": {

@@ -841,6 +841,29 @@ function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, 
   return changed;
 }
 
+/**
+ * Expands a position range to cover the full content of all textblock nodes
+ * that overlap with it. Used when scope: "block" is set on a format.apply step.
+ */
+function expandToBlockBoundaries(
+  doc: import('prosemirror-model').Node,
+  from: number,
+  to: number,
+): { from: number; to: number } {
+  let expandedFrom = from;
+  let expandedTo = to;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return;
+    const blockContentStart = pos + 1;
+    const blockContentEnd = pos + node.nodeSize - 1;
+    expandedFrom = Math.min(expandedFrom, blockContentStart);
+    expandedTo = Math.max(expandedTo, blockContentEnd);
+  });
+
+  return { from: expandedFrom, to: expandedTo };
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -848,8 +871,15 @@ export function executeStyleApply(
   step: StyleApplyStep,
   mapping: Mapping,
 ): { changed: boolean } {
-  const absFrom = mapping.map(target.absFrom);
-  const absTo = mapping.map(target.absTo);
+  let absFrom = mapping.map(target.absFrom);
+  let absTo = mapping.map(target.absTo);
+
+  // Expand to full block boundaries when scope is "block"
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
 
   let changed = false;
 
@@ -1002,8 +1032,14 @@ export function executeSpanStyleApply(
   // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
-  const absFrom = mapping.map(firstSeg.absFrom, 1);
-  const absTo = mapping.map(lastSeg.absTo, -1);
+  let absFrom = mapping.map(firstSeg.absFrom, 1);
+  let absTo = mapping.map(lastSeg.absTo, -1);
+
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
 
   let changed = false;
 

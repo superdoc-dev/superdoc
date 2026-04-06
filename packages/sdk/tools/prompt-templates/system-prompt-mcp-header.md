@@ -30,14 +30,14 @@ superdoc_edit({action: "insert", type: "markdown",
 ```
 Valid placements: "before", "after", "insideStart", "insideEnd". Without target, content appends at document end.
 
-**Formatting — each format.apply step accepts both `inline` AND `alignment`:**
+**Formatting — use `scope: "block"` to format entire paragraphs after markdown insert:**
 ```
 superdoc_mutations({action: "apply", atomic: true, steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center"}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "body paragraph text"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12}, alignment: "justify"}}
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12}, alignment: "justify", scope: "block"}}
 ]})
 ```
-One format.apply step per block. Combine `inline` (text styles) and `alignment` (paragraph alignment) in the same step. Do NOT use separate superdoc_format calls.
+One format.apply step per block. Combine `inline`, `alignment`, and `scope: "block"` in each step. The pattern only needs to identify which paragraph — `scope: "block"` formats the entire paragraph, not just the matched text.
 
 **When to use which tool:**
 - Creating headings, paragraphs, or any block content → `superdoc_edit` with type "markdown" (preferred, even for a single heading + paragraph)

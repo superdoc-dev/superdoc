@@ -4878,8 +4878,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               description:
                 'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
             },
+            scope: {
+              type: 'string',
+              enum: ['match', 'block'],
+              description:
+                'When "block", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use "block" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: "match".',
+            },
           },
-          [], // Neither field is individually required — at least one must be present
+          [], // No individual field is required — at least one must be present
         ),
       },
       ['id', 'op', 'where', 'args'],

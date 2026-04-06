@@ -146,17 +146,19 @@ superdoc_edit({action: "insert", type: "markdown",
   value: "# Executive Summary\n\nThis agreement sets forth the principal terms..."})
 ```
 
-**Step 3: Apply ALL formatting in a SINGLE superdoc_mutations call.** Each format.apply step accepts both `inline` (text styles) AND `alignment` (paragraph alignment) — one step per block.
+**Step 3: Apply ALL formatting in a SINGLE superdoc_mutations call.** Each format.apply step accepts `inline` (text styles), `alignment` (paragraph alignment), and `scope` — combine them all in one step per block.
+
+ALWAYS use `scope: "block"` after markdown inserts. This makes the formatting cover the entire paragraph, not just the matched text pattern. The pattern only needs to uniquely identify which paragraph — a short prefix is enough.
 
 Example: if the document has centered, underlined, 12pt headings and justified 12pt body text:
 ```
 superdoc_mutations({action: "apply", atomic: true, steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center"}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify"}}
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify", scope: "block"}}
 ]})
 ```
 
-CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use ONE format.apply step per block with both `inline` and `alignment` combined.
+CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use `scope: "block"` so the formatting covers the ENTIRE paragraph, not just the matched text.
 
 Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
 

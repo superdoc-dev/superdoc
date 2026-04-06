@@ -2968,10 +2968,14 @@ importers:
         version: 1.11.0
       prosemirror-view:
         specifier: ^1.33.0
+<<<<<<< HEAD
         version: 1.41.5
       react:
         specifier: '>=16.8.0'
         version: 19.2.4
+=======
+        version: 1.41.7
+>>>>>>> origin/stable
       rollup-plugin-copy:
         specifier: 'catalog:'
         version: 3.5.0

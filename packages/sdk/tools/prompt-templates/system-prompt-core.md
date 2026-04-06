@@ -158,7 +158,11 @@ superdoc_mutations({action: "apply", atomic: true, steps: [
 ]})
 ```
 
-CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use `scope: "block"` so the formatting covers the ENTIRE paragraph, not just the matched text.
+CRITICAL rules for formatting after insert:
+- Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1.
+- Use `scope: "block"` so the formatting covers the ENTIRE paragraph, not just the matched text.
+- ALWAYS include `fontSize` on headings. Markdown headings inherit a large default font size from the Heading1 style. You MUST override it with the fontSize used by existing titles/headings in the document (typically the same as body text, e.g., 10pt or 12pt).
+- If the document blocks don't show a fontSize, use the fontSize from the nearest block that does have one.
 
 Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
 

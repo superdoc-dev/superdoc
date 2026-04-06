@@ -72,7 +72,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       label: trimmedName,
       mode: fieldMode,
       fieldType: fieldType,
-      ...(fieldLocked && { lockMode: 'contentLocked' as const }),
+      lockMode: fieldLocked ? ('contentLocked' as const) : ('unlocked' as const),
     };
 
     try {

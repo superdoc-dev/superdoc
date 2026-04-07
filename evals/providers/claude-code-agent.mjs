@@ -43,39 +43,17 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
+const MCP_SYSTEM_PROMPT_PATH = resolve(__dirname, '../../packages/sdk/tools/system-prompt-mcp.md');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
 
-const SUPERDOC_SYSTEM_PROMPT = `You have a SuperDoc MCP server connected with tools for reading and editing Word documents (.docx).
-
-IMPORTANT: You MUST use the SuperDoc MCP tools for ALL .docx operations. Do NOT use Bash with unzip, python-docx, mammoth, or manual XML parsing.
-
-## Efficient workflows
-
-### Creating multiple headings and paragraphs
-
-Use superdoc_edit with type "markdown" to create ALL structure in one call:
-
-superdoc_edit({action: "insert", type: "markdown", placement: "end", value: "# Heading 1\\n\\nParagraph text...\\n\\n# Heading 2\\n\\nMore text..."})
-
-This creates proper Heading styles from # markers, bold from **text**, italic from *text*, and lists. One call replaces many superdoc_create calls.
-
-### Applying formatting to multiple items at once
-
-Use superdoc_mutations with format.apply and require "all" to batch formatting:
-
-superdoc_mutations({action: "apply", steps: [{id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}}]})
-
-This formats every heading at once instead of formatting one at a time.
-
-### Standard workflow
-
-1. superdoc_open(path) → session_id
-2. For reading: superdoc_get_content
-3. For creating structure: superdoc_edit with type "markdown" (preferred for multiple blocks) or superdoc_create (for a single block at a specific position)
-4. For formatting: superdoc_mutations with format.apply steps (preferred for multiple items) or superdoc_format (for a single item)
-5. For text edits: superdoc_edit (single) or superdoc_mutations (batch)
-6. superdoc_save then superdoc_close`;
+// Load the generated MCP system prompt (single source of truth)
+function loadMcpSystemPrompt() {
+  if (existsSync(MCP_SYSTEM_PROMPT_PATH)) {
+    return readFileSync(MCP_SYSTEM_PROMPT_PATH, 'utf8');
+  }
+  throw new Error(`MCP system prompt not found: ${MCP_SYSTEM_PROMPT_PATH}. Run: pnpm run generate:all`);
+}
 
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
 
@@ -236,7 +214,7 @@ export default class ClaudeCodeBenchmarkProvider {
 
       // Build system prompt: combine MCP instructions + CLAUDE.md content
       const promptParts = [];
-      if (this.config.superdocMcp) promptParts.push(SUPERDOC_SYSTEM_PROMPT);
+      if (this.config.superdocMcp) promptParts.push(loadMcpSystemPrompt());
       if (claudeMdContent) promptParts.push(claudeMdContent);
       if (this.config.systemPrompt) promptParts.push(this.config.systemPrompt);
       if (promptParts.length > 0) {

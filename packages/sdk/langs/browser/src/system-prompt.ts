@@ -136,12 +136,16 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 ### Insert content into a document (new or existing)
 
-Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting to match the document's existing style.
+Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting so inserted content looks like it belongs in the document.
 
-**Step 1: Read existing formatting** from the initial get_content blocks response. Pay special attention to:
-- **Nearby headings/titles**: look at their fontFamily, fontSize, bold, underline, alignment (especially center vs justify vs left). Your new headings must match these exactly.
-- **Body paragraphs**: note fontFamily, fontSize, color, alignment. Your new paragraphs must match.
-- Match the style of the nearest similar element, not arbitrary values.
+**Step 1: Understand the document context** from the get_content blocks response. Before inserting anything, analyze:
+- What kind of document is this? (contract, letter, certificate, report, etc.)
+- How are titles/headings styled? (centered? left? bold? underlined? what fontSize?)
+- Are titles UPPERCASE? (e.g., "EMPLOYMENT AGREEMENT", "RECITALS" → your heading must also be UPPERCASE)
+- How is body text styled? (fontFamily, fontSize, alignment, color)
+- What formatting conventions does the document follow?
+
+Your inserted content must be indistinguishable from the existing content. If titles are ALL CAPS centered 10pt, your heading text must also be ALL CAPS centered 10pt. If body text is justified 12pt, your paragraphs must be justified 12pt.
 
 **Step 2: Insert content with markdown:**
 
@@ -152,19 +156,17 @@ superdoc_edit({action: "insert", type: "markdown",
   value: "# Executive Summary\\n\\nThis agreement sets forth the principal terms..."})
 \`\`\`
 
-**Step 3: Apply ALL formatting in a SINGLE superdoc_mutations call.** Each format.apply step accepts \`inline\` (text styles), \`alignment\` (paragraph alignment), and \`scope\` — combine them all in one step per block.
+**Step 3: Format ALL inserted blocks in ONE superdoc_mutations call.** Each format.apply step accepts \`inline\`, \`alignment\`, and \`scope: "block"\`.
 
-ALWAYS use \`scope: "block"\` after markdown inserts. This makes the formatting cover the entire paragraph, not just the matched text pattern. The pattern only needs to uniquely identify which paragraph — a short prefix is enough.
+Use \`scope: "block"\` so formatting covers the entire paragraph (not just the matched text). The text pattern only needs to identify which block. Copy the exact property values from the existing blocks in the get_content response. Do NOT invent values.
 
-Example: if the document has centered, underlined, 12pt headings and justified 12pt body text:
+Example: document blocks show fontFamily, fontSize: 10, color, titles centered:
 \`\`\`
 superdoc_mutations({action: "apply", atomic: true, steps: [
-  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, underline: true}, alignment: "center", scope: "block"}},
-  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 12, color: "#000000"}, alignment: "justify", scope: "block"}}
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "Executive Summary"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, alignment: "center", scope: "block"}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "text", pattern: "This agreement sets forth"}, require: "first"}, args: {inline: {fontFamily: "Times New Roman, serif", fontSize: 10, color: "#000000"}, scope: "block"}}
 ]})
 \`\`\`
-
-CRITICAL: Do NOT guess formatting values. Copy them from the existing document blocks you read in step 1. Use \`scope: "block"\` so the formatting covers the ENTIRE paragraph, not just the matched text.
 
 Total: 3 calls (read + insert + format-all-in-one-batch). Never more.
 

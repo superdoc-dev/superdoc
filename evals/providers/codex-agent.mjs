@@ -8,7 +8,7 @@
  * that logs raw transport bytes for debugging protocol issues.
  *
  * Config (set per provider instance in YAML):
- *   condition:      'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
+ *   condition:      'baseline' | 'baseline-with-docx-skill' | 'superdoc-mcp' | 'superdoc-cli' | 'choice'
  *   superdocOnPath: Whether SuperDoc CLI is available on PATH
  *   superdocMcp:    Whether to attach the SuperDoc MCP server
  *
@@ -37,41 +37,15 @@ const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const MCP_WRAPPER_PATH = resolve(__dirname, 'mcp-stdio-wrapper.mjs');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
 const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
+const MCP_SYSTEM_PROMPT_PATH = resolve(__dirname, '../../packages/sdk/tools/system-prompt-mcp.md');
 
-const SUPERDOC_MCP_AGENTS_MD = `# AGENTS.md
-
-You have a SuperDoc MCP server available. Use it for ALL .docx file operations.
-
-**Do NOT** use unzip, python-docx, mammoth, sed, or manual XML editing on .docx files.
-
-## Efficient workflows
-
-### Creating multiple headings and paragraphs
-
-Use superdoc_edit with type "markdown" to create ALL structure in one call:
-
-\`\`\`
-superdoc_edit({action: "insert", type: "markdown", placement: "end", value: "# Heading\\n\\nParagraph...\\n\\n# Heading 2\\n\\nMore text..."})
-\`\`\`
-
-This creates proper Heading styles from # markers, bold from **text**, italic from *text*. One call replaces many superdoc_create calls.
-
-### Applying formatting to multiple items at once
-
-Use superdoc_mutations with format.apply and require "all":
-
-\`\`\`
-superdoc_mutations({action: "apply", steps: [{id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading"}, require: "all"}, args: {inline: {color: "#FF0000"}}}]})
-\`\`\`
-
-### Standard workflow
-
-1. superdoc_open → session_id
-2. Create structure: superdoc_edit with type "markdown" (multiple blocks) or superdoc_create (single block)
-3. Format: superdoc_mutations format.apply (batch) or superdoc_format (single item)
-4. Text edits: superdoc_edit or superdoc_mutations
-5. superdoc_save → superdoc_close
-`;
+// Load the generated MCP system prompt (single source of truth)
+function loadMcpSystemPrompt() {
+  if (existsSync(MCP_SYSTEM_PROMPT_PATH)) {
+    return readFileSync(MCP_SYSTEM_PROMPT_PATH, 'utf8');
+  }
+  throw new Error(`MCP system prompt not found: ${MCP_SYSTEM_PROMPT_PATH}. Run: pnpm run generate:all`);
+}
 
 const SUPERDOC_CLI_AGENTS_MD = `# AGENTS.md
 
@@ -222,7 +196,7 @@ export default class CodexBenchmarkProvider {
         };
         codexOpts.env = { ...env, LOGDIR: mcpLogDir };
 
-        writeFileSync(resolve(stateDir, 'AGENTS.md'), SUPERDOC_MCP_AGENTS_MD);
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), loadMcpSystemPrompt());
       }
 
       const codex = new Codex(codexOpts);

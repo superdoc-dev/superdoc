@@ -744,9 +744,16 @@ export function executeTextRewrite(
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
 
-  // Multi-block replacement: create separate paragraph nodes (same approach as span handler)
+  // Multi-block replacement: create separate paragraph nodes (same approach as span handler).
+  // Detects both explicit blocks array AND text with \n\n paragraph separators.
   const { replacement } = step.args;
-  if (replacement.blocks !== undefined && replacement.blocks.length > 1) {
+  const textBlocks =
+    replacement.blocks !== undefined && replacement.blocks.length > 1
+      ? replacement.blocks.map((b) => b.text)
+      : typeof replacement.text === 'string' && replacement.text.includes('\n\n')
+        ? replacement.text.split('\n\n')
+        : null;
+  if (textBlocks !== null && textBlocks.length > 1) {
     const { schema } = editor.state;
     const paragraphType = schema.nodes.paragraph;
     if (!paragraphType) {
@@ -769,8 +776,8 @@ export function executeTextRewrite(
     }
 
     const nodes: ProseMirrorNode[] = [];
-    for (const block of replacement.blocks) {
-      const textNode = block.text.length > 0 ? schema.text(block.text, pmMarks) : null;
+    for (const blockText of textBlocks) {
+      const textNode = blockText.length > 0 ? schema.text(blockText, pmMarks) : null;
       const para =
         paragraphType.createAndFill(inheritedAttrs, textNode ?? undefined) ??
         paragraphType.create(inheritedAttrs, textNode ? [textNode] : undefined);

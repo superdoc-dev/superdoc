@@ -141,6 +141,14 @@ const hashRuns = (block: FlowBlock): string => {
         const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
 
         for (const cellBlock of cellBlocks) {
+          if (cellBlock?.kind === 'table') {
+            // Nested tables inside table cells must contribute to the parent
+            // table cache key, otherwise edits can be missed until a later
+            // broader invalidation.
+            cellHashes.push(`nt:${hashRuns(cellBlock as FlowBlock)}`);
+            continue;
+          }
+
           const paragraphBlock = cellBlock as ParagraphBlock;
 
           // Safety: Check that runs array exists before iterating

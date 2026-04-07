@@ -7412,6 +7412,10 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
+          } else if (cellBlock?.kind) {
+            // Include nested non-paragraph blocks (notably nested tables inside
+            // table cells) so edits there invalidate this parent table version.
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }

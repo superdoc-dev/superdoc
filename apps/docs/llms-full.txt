@@ -65,22 +65,30 @@ npm install @superdoc-dev/sdk
 ```
 
 ```typescript
-import { SuperDocClient } from '@superdoc-dev/sdk';
+import { createSuperDocClient } from '@superdoc-dev/sdk';
 
-const client = new SuperDocClient({ defaultChangeMode: 'tracked' });
+const client = createSuperDocClient();
+await client.connect();
+
 const doc = await client.open({ doc: './contract.docx' });
 
 // Read
-const blocks = await doc.blocks.list();
+const info = await doc.info();
 const comments = await doc.comments.list();
 
-// Edit
-await doc.blocks.update(blockId, { content: 'New text' });
-await doc.comments.create({ blockId, content: 'Please review' });
+// Search and replace
+const match = await doc.query.match({
+  select: { type: 'text', pattern: 'termination' },
+  require: 'first',
+});
+if (match.items?.[0]) {
+  await doc.replace({ target: match.items[0].target, text: 'expiration' });
+}
 
 // Save and close
-await doc.save();
+await doc.save({ inPlace: true });
 await doc.close();
+await client.dispose();
 ```
 
 ### 3. MCP server (AI coding agents)

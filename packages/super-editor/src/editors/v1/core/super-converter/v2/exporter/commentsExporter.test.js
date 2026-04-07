@@ -381,6 +381,58 @@ describe('prepareCommentsXmlFilesForExport', () => {
       expect(result.removedTargets).toHaveLength(0);
     });
   });
+
+  describe('threading profile overrides', () => {
+    it('forces Word-style threading when export strategy is Word but profile is range-based', () => {
+      const threadingProfile = {
+        defaultStyle: 'range-based',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: false,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs,
+        commentsWithParaIds,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      expect(result.documentXml['word/commentsExtended.xml']).toBeDefined();
+      const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
+      expect(rel).toBeDefined();
+    });
+
+    it('still honors Google Docs export strategy when all comments originate from Google Docs', () => {
+      const threadingProfile = {
+        defaultStyle: 'range-based',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: false,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      const googleComments = [makeComment({ origin: 'google-docs' })];
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs,
+        commentsWithParaIds: googleComments,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      expect(result.documentXml['word/commentsExtended.xml']).toBeUndefined();
+      const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
+      expect(rel).toBeUndefined();
+    });
+  });
 });
 
 describe('getCommentDefinition', () => {

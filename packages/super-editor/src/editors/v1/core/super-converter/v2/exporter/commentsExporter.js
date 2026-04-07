@@ -400,10 +400,14 @@ export const prepareCommentsXmlFilesForExport = ({
   relationships.push(generateRelationship('comments.xml'));
   emittedTargets.add('comments.xml');
 
+  const forceWordThreadingProfile =
+    threadingProfile?.defaultStyle === 'range-based' && exportStrategy !== 'google-docs';
+  const effectiveThreadingProfile = forceWordThreadingProfile ? 'word' : threadingProfile || exportStrategy;
+
   const commentsExtendedXml = updateCommentsExtendedXml(
     commentsWithParaIds,
     updatedXml['word/commentsExtended.xml'],
-    threadingProfile || exportStrategy,
+    effectiveThreadingProfile,
   );
 
   // Only add the file and relationship if we're actually generating commentsExtended.xml

@@ -746,6 +746,20 @@ export function executeTextRewrite(
 
   const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
+  const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
+
+  if (structuralRewrite) {
+    const nodes = buildReplacementParagraphNodes(
+      editor,
+      structuralRewrite.replacementBlocks,
+      marks,
+      structuralRewrite.paragraphAttrs,
+      step.id,
+    );
+    const slice = new Slice(Fragment.from(nodes), 1, 1);
+    tr.replace(absFrom, absTo, slice);
+    return { changed: replacementText !== target.text };
+  }
 
   const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
   tr.replaceWith(absFrom, absTo, textNode);
@@ -989,6 +1003,131 @@ function resolveReplacementBlocks(replacement: ReplacementPayload, stepId: strin
     throw planError('INVALID_INPUT', 'replacement must specify either text or blocks', stepId);
   }
   return normalizeReplacementText(replacement.text, stepId);
+}
+
+function replacementMayContainStructuralBlocks(replacement: ReplacementPayload): boolean {
+  if (replacement.blocks !== undefined) {
+    return replacement.blocks.length > 1;
+  }
+
+  return replacement.text?.includes('\n') || replacement.text?.includes('\r') || false;
+}
+
+function findSharedTextblockDepth(
+  $from: ReturnType<ProseMirrorNode['resolve']>,
+  $to: ReturnType<ProseMirrorNode['resolve']>,
+): number | null {
+  const maxDepth = Math.min($from.depth, $to.depth);
+  for (let depth = maxDepth; depth >= 0; depth -= 1) {
+    if ($from.node(depth) !== $to.node(depth)) {
+      continue;
+    }
+
+    if ($from.node(depth)?.isTextblock) {
+      return depth;
+    }
+  }
+
+  return null;
+}
+
+function findTextRangeWithin(doc: ProseMirrorNode, from: number, to: number): { from: number; to: number } | null {
+  let textFrom: number | null = null;
+  let textTo: number | null = null;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText || !node.text) {
+      return;
+    }
+
+    const nodeFrom = Math.max(from, pos);
+    const nodeTo = Math.min(to, pos + node.text.length);
+    if (nodeFrom >= nodeTo) {
+      return;
+    }
+
+    if (textFrom === null) {
+      textFrom = nodeFrom;
+    }
+    textTo = nodeTo;
+  });
+
+  return textFrom === null || textTo === null ? null : { from: textFrom, to: textTo };
+}
+
+function sanitizeReplacementParagraphAttrs(
+  attrs: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!attrs || typeof attrs !== 'object') {
+    return null;
+  }
+
+  const cloned = { ...attrs };
+  delete cloned.paraId;
+  delete cloned.sdBlockId;
+  delete cloned.nodeId;
+  delete cloned.id;
+  delete cloned.blockId;
+  delete cloned.uuid;
+
+  return Object.keys(cloned).length > 0 ? cloned : null;
+}
+
+function resolveStructuralRangeRewrite(
+  doc: ProseMirrorNode,
+  absFrom: number,
+  absTo: number,
+  step: TextRewriteStep,
+): { replacementBlocks: string[]; paragraphAttrs: Record<string, unknown> | null } | null {
+  if (absFrom === absTo || !replacementMayContainStructuralBlocks(step.args.replacement)) {
+    return null;
+  }
+
+  const $from = doc.resolve(absFrom);
+  const $to = doc.resolve(absTo);
+  const textblockDepth = findSharedTextblockDepth($from, $to);
+  if (textblockDepth === null) {
+    return null;
+  }
+
+  const textblockTextRange = findTextRangeWithin(doc, $from.start(textblockDepth), $to.end(textblockDepth));
+  const replacesEntireTextblock =
+    textblockTextRange !== null && absFrom <= textblockTextRange.from && absTo >= textblockTextRange.to;
+  if (!replacesEntireTextblock) {
+    return null;
+  }
+
+  const replacementBlocks = resolveReplacementBlocks(step.args.replacement, step.id);
+  if (replacementBlocks.length <= 1) {
+    return null;
+  }
+
+  return {
+    replacementBlocks,
+    paragraphAttrs: sanitizeReplacementParagraphAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+  };
+}
+
+function buildReplacementParagraphNodes(
+  editor: Editor,
+  replacementBlocks: string[],
+  marks: readonly unknown[],
+  paragraphAttrs: Record<string, unknown> | null,
+  stepId: string,
+): ProseMirrorNode[] {
+  const { schema } = editor.state;
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) {
+    throw planError('INVALID_INPUT', 'paragraph node type not in schema', stepId);
+  }
+
+  return replacementBlocks.map((text) => {
+    const textNode = text.length > 0 ? schema.text(text, asProseMirrorMarks(marks)) : null;
+    return (
+      paragraphType.createAndFill(paragraphAttrs, textNode ?? undefined) ??
+      paragraphType.create(paragraphAttrs, textNode ? [textNode] : undefined)
+    );
+  });
 }
 
 function resolveInheritedParagraphAttrsForReplacement(

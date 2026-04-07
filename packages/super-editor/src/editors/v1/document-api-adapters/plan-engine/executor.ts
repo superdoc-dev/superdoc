@@ -744,46 +744,7 @@ export function executeTextRewrite(
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
 
-  // Multi-block replacement: create separate paragraph nodes (same approach as span handler)
-  const { replacement } = step.args;
-  if (replacement.blocks !== undefined && replacement.blocks.length > 1) {
-    const { schema } = editor.state;
-    const paragraphType = schema.nodes.paragraph;
-    if (!paragraphType) {
-      throw planError('INVALID_INPUT', 'paragraph node type not in schema', step.id);
-    }
-
-    const marks = resolveMarksForRange(editor, target, step);
-    const pmMarks = asProseMirrorMarks(marks);
-
-    // Inherit paragraph attrs from the target block
-    const $from = tr.doc.resolve(absFrom);
-    const parentNode = $from.node($from.depth);
-    const inheritedAttrs =
-      parentNode.type.name === 'paragraph' || parentNode.type.name === 'heading'
-        ? { ...(parentNode.attrs as Record<string, unknown>) }
-        : null;
-    if (inheritedAttrs) {
-      delete inheritedAttrs.paraId;
-      delete inheritedAttrs.sdBlockId;
-    }
-
-    const nodes: ProseMirrorNode[] = [];
-    for (const block of replacement.blocks) {
-      const textNode = block.text.length > 0 ? schema.text(block.text, pmMarks) : null;
-      const para =
-        paragraphType.createAndFill(inheritedAttrs, textNode ?? undefined) ??
-        paragraphType.create(inheritedAttrs, textNode ? [textNode] : undefined);
-      nodes.push(para);
-    }
-
-    const slice = new Slice(Fragment.from(nodes), 1, 1);
-    tr.replace(absFrom, absTo, slice);
-    return { changed: true };
-  }
-
-  // Single-block replacement: flat text (existing behavior)
-  const replacementText = getReplacementText(replacement);
+  const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
 
   const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));

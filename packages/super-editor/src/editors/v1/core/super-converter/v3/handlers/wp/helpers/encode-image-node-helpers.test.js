@@ -166,6 +166,16 @@ describe('handleImageNode', () => {
     };
   };
 
+  const renameDrawingMlPrefix = (node, prefix) => {
+    if (!node || typeof node !== 'object') return;
+    if (typeof node.name === 'string' && node.name.startsWith('a:')) {
+      node.name = `${prefix}:${node.name.slice(2)}`;
+    }
+    if (Array.isArray(node.elements)) {
+      node.elements.forEach((child) => renameDrawingMlPrefix(child, prefix));
+    }
+  };
+
   it('returns null if picture is missing', () => {
     const node = makeNode();
     node.elements[1].elements[0].elements = [];
@@ -528,6 +538,15 @@ describe('handleImageNode', () => {
     expect(extractFillColor).toHaveBeenCalled();
     expect(extractStrokeColor).toHaveBeenCalled();
     expect(extractStrokeWidth).toHaveBeenCalled();
+  });
+
+  it('handles DrawingML nodes with non-a prefixes', () => {
+    const node = makeShapeNode({ prst: 'rect' });
+    renameDrawingMlPrefix(node, 'ns6');
+
+    const result = handleImageNode(node, makeParams(), false);
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('rect');
   });
 
   it('renders textbox shapes as vectorShapes with text content', () => {

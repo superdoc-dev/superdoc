@@ -287,6 +287,9 @@ export type ImageLuminanceAdjustment = {
   contrast?: number;
 };
 
+/** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
+export type ImageHyperlink = { url: string; tooltip?: string };
+
 /**
  * Inline image run for images that flow with text on the same line.
  * Unlike ImageBlock (anchored/floating images), ImageRun is part of the paragraph's run array
@@ -362,7 +365,7 @@ export type ImageRun = {
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
-  hyperlink?: { url: string; tooltip?: string };
+  hyperlink?: ImageHyperlink;
 };
 
 export type BreakRun = {
@@ -638,7 +641,7 @@ export type ImageBlock = {
   flipH?: boolean; // Horizontal flip
   flipV?: boolean; // Vertical flip
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
-  hyperlink?: { url: string; tooltip?: string };
+  hyperlink?: ImageHyperlink;
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';

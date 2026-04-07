@@ -10,6 +10,7 @@ import type {
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
+  ImageHyperlink,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -231,7 +232,7 @@ export const normalizeString = (value: unknown): string | undefined => {
  * `{ url, tooltip? }` shape used by ImageBlock and ImageRun. Empty or invalid
  * URLs are dropped, and tooltip text is trimmed before inclusion.
  */
-export const readImageHyperlink = (value: unknown): { url: string; tooltip?: string } | undefined => {
+export const readImageHyperlink = (value: unknown): ImageHyperlink | undefined => {
   const hyperlink = isPlainObject(value) ? value : undefined;
   const url = normalizeString(hyperlink?.url);
   if (!url) {

@@ -14,6 +14,7 @@ import type {
   ImageBlock,
   ImageDrawing,
   ImageFragment,
+  ImageHyperlink,
   ImageRun,
   Layout,
   Line,
@@ -3698,7 +3699,7 @@ export class DomPainter {
    */
   private buildImageHyperlinkAnchor(
     imageEl: HTMLElement,
-    hyperlink: { url: string; tooltip?: string } | undefined,
+    hyperlink: ImageHyperlink | undefined,
     display: 'block' | 'inline-block',
   ): HTMLElement {
     if (!hyperlink?.url || !this.doc) return imageEl;

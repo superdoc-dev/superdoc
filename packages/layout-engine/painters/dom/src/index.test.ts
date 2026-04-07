@@ -5,6 +5,7 @@ import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
+  ImageHyperlink,
   Measure,
   Layout,
   Line,
@@ -7693,7 +7694,7 @@ describe('ImageFragment (block-level images)', () => {
   });
 
   describe('hyperlink (DrawingML a:hlinkClick)', () => {
-    const makePainter = (hyperlink?: { url: string; tooltip?: string }) => {
+    const makePainter = (hyperlink?: ImageHyperlink) => {
       const block: FlowBlock = {
         kind: 'image',
         id: 'linked-img',

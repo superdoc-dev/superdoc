@@ -1008,6 +1008,12 @@ export interface TableOfContentsAttrs extends BlockNodeAttributes {
   sdBlockId?: string | null;
 }
 
+/** Inline table of contents node attributes */
+export interface TableOfContentsInlineAttrs extends InlineNodeAttributes {
+  /** Field instruction */
+  instruction?: string | null;
+}
+
 // ============================================
 // DOCUMENT INDEX
 // ============================================
@@ -1217,6 +1223,7 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Content blocks
     contentBlock: ContentBlockAttrs;
     tableOfContents: TableOfContentsAttrs;
+    tableOfContentsInline: TableOfContentsInlineAttrs;
     index: DocumentIndexAttrs;
     indexEntry: IndexEntryAttrs;
 

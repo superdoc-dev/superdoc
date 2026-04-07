@@ -170,6 +170,7 @@ export type {
   ContentBlockSize,
   ContentBlockMarginOffset,
   TableOfContentsAttrs,
+  TableOfContentsInlineAttrs,
   StructuredContentBlockAttrs,
   DocumentPartObjectAttrs,
 } from './extensions/types/node-attributes.js';

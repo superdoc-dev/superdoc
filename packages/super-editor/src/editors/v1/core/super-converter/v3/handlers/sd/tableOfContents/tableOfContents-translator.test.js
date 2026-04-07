@@ -90,6 +90,53 @@ describe('sd:tableOfContents translator', () => {
       const result = config.encode(params);
       expect(result.attrs.rightAlignPageNumbers).toBe(false);
     });
+
+    it('encodes inline tableOfContents when block parents are not allowed', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [{ type: 'text', text: 'Inline content' }]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\h' },
+            elements: [{ name: 'w:r', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+        extraParams: { parentAcceptsBlocks: false },
+      };
+
+      const result = config.encode(params);
+      expect(result).toEqual({
+        type: 'tableOfContentsInline',
+        attrs: { instruction: 'TOC \\h' },
+        content: [{ type: 'text', text: 'Inline content' }],
+      });
+    });
+
+    it('wraps inline children into a paragraph when parent accepts blocks', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [{ type: 'text', text: 'Inline content' }]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\h' },
+            elements: [{ name: 'w:r', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result).toEqual({
+        type: 'tableOfContents',
+        attrs: { instruction: 'TOC \\h', rightAlignPageNumbers: true },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inline content' }] }],
+      });
+    });
   });
 
   describe('decode', () => {
@@ -171,6 +218,43 @@ describe('sd:tableOfContents translator', () => {
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('w:p');
       expect(result[0].elements).toEqual([...expectedBeginElements, ...expectedEndElements]);
+    });
+
+    it('should decode inline TOC nodes into run content', () => {
+      const inlineParams = {
+        node: {
+          type: 'tableOfContentsInline',
+          attrs: { instruction: 'TOC \\h' },
+          content: [{ type: 'text', text: 'Inline result' }],
+        },
+      };
+      vi.mocked(exportSchemaToJson).mockReturnValue({
+        name: 'w:r',
+        elements: [{ name: 'w:t', elements: [{ text: 'Inline result' }] }],
+      });
+
+      const result = config.decode(inlineParams);
+
+      const inlineBegin = [
+        { ...expectedBeginElements[0] },
+        {
+          name: 'w:r',
+          elements: [
+            {
+              name: 'w:instrText',
+              attributes: { 'xml:space': 'preserve' },
+              elements: [{ text: 'TOC \\h', type: 'text', name: '#text', elements: [] }],
+            },
+          ],
+        },
+        { ...expectedBeginElements[2] },
+      ];
+
+      expect(result).toEqual([
+        ...inlineBegin,
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: 'Inline result' }] }] },
+        ...expectedEndElements,
+      ]);
     });
   });
 });

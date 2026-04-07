@@ -439,6 +439,7 @@ describe('getCommentDefinition', () => {
   it('preserves tracked change display metadata for exported tracked-change comments', () => {
     const definition = getCommentDefinition(
       makeComment({
+        creatorEmail: 'author@example.com',
         trackedChange: true,
         trackedChangeType: 'trackFormat',
         trackedChangeText: 'https://example.com',
@@ -452,6 +453,8 @@ describe('getCommentDefinition', () => {
     expect(definition.attributes['custom:trackedChangeType']).toBe('trackFormat');
     expect(definition.attributes['custom:trackedChangeText']).toBe('https://example.com');
     expect(definition.attributes['custom:trackedChangeDisplayType']).toBe('hyperlinkAdded');
+    expect(definition.attributes['custom:email']).toBe('author@example.com');
+    expect(definition.attributes['w:email']).toBeUndefined();
   });
 });
 
@@ -661,5 +664,31 @@ describe('updateCommentsXml', () => {
     const lastParagraph = updatedComment.elements[updatedComment.elements.length - 1];
 
     expect(lastParagraph.attributes['w14:paraId']).toBe('ABC12345');
+    expect(updatedComment.attributes['w:email']).toBeUndefined();
+    expect(updatedComment.attributes['custom:email']).toBeUndefined();
+  });
+
+  it('preserves custom author email attribute and omits w:email', () => {
+    const commentDef = {
+      type: 'element',
+      name: 'w:comment',
+      attributes: {
+        'w:id': '1',
+        'w:author': 'Author',
+        'w:initials': 'A',
+        'w15:paraId': 'EMAIL123',
+        'custom:email': 'author@example.com',
+      },
+      elements: [{ type: 'element', name: 'w:p', attributes: {}, elements: [] }],
+    };
+    const commentsXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const result = updateCommentsXml([commentDef], commentsXml);
+    const updatedComment = result.elements[0].elements[0];
+
+    expect(updatedComment.attributes['w:email']).toBeUndefined();
+    expect(updatedComment.attributes['custom:email']).toBe('author@example.com');
   });
 });

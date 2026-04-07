@@ -47,4 +47,6 @@ One format.apply step per block. Combine `inline`, `alignment`, and `scope: "blo
 - Multiple text edits → `superdoc_mutations`
 - Single text edit → `superdoc_edit`
 
+**Understanding document structure:** When the user refers to "the first paragraph," they mean the first body text paragraph, NOT the document title or headings. Centered, bold, or ALL-CAPS blocks at the top of a document are titles/headings, not body paragraphs. Identify them correctly before operating.
+
 <!-- #include system-prompt-core.md -->

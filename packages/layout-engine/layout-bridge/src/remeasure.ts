@@ -5,6 +5,7 @@ import type {
   LineSegment,
   Run,
   TextRun,
+  TabRun,
   TabStop,
   ParagraphIndent,
   LeaderDecoration,
@@ -779,6 +780,29 @@ const applyTabLayoutToLines = (
   indentLeft: number,
   rawFirstLineOffset: number,
 ): void => {
+  const totalTabRuns = runs.reduce((count, run) => (run.kind === 'tab' ? count + 1 : count), 0);
+  const alignmentTabStopsPx = tabStops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+    if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
+    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
+    const remainingTabs = totalTabRuns - ordinal - 1;
+    const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
+    if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
+    return alignmentTabStopsPx[targetIndex];
+  };
+  let sequentialTabIndex = 0;
+  const consumeTabOrdinal = (explicitIndex?: number): number => {
+    if (typeof explicitIndex === 'number' && Number.isFinite(explicitIndex)) {
+      sequentialTabIndex = Math.max(sequentialTabIndex, explicitIndex + 1);
+      return explicitIndex;
+    }
+    const ordinal = sequentialTabIndex;
+    sequentialTabIndex += 1;
+    return ordinal;
+  };
+
   lines.forEach((line, lineIndex) => {
     let cursorX = 0;
     let lineWidth = 0;
@@ -795,11 +819,23 @@ const applyTabLayoutToLines = (
     /**
      * Processes a tab character, calculating position and handling alignment.
      */
-    const applyTab = (startRunIndex: number, startChar: number, run?: Run): void => {
+    const applyTab = (startRunIndex: number, startChar: number, run?: Run, tabOrdinal?: number): void => {
       const originX = cursorX;
       const absCurrentX = cursorX + effectiveIndent;
-      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-      tabStopCursor = nextIndex;
+      let stop: TabStopPx | undefined;
+      let target: number;
+      const forcedAlignment =
+        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal) ? getAlignmentStopForOrdinal(tabOrdinal) : null;
+      if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
+        stop = forcedAlignment.stop;
+        target = forcedAlignment.stop.pos;
+        tabStopCursor = forcedAlignment.index + 1;
+      } else {
+        const next = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        stop = next.stop;
+        target = next.target;
+        tabStopCursor = next.nextIndex;
+      }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
@@ -851,7 +887,9 @@ const applyTabLayoutToLines = (
       const run = runs[runIndex];
       if (!run) continue;
       if (run.kind === 'tab') {
-        applyTab(runIndex + 1, 0, run);
+        const tabRun = run as TabRun;
+        const ordinal = consumeTabOrdinal(tabRun.tabIndex);
+        applyTab(runIndex + 1, 0, run, ordinal);
         continue;
       }
 
@@ -887,7 +925,8 @@ const applyTabLayoutToLines = (
           lineWidth = Math.max(lineWidth, cursorX);
           segments.push(segment);
         }
-        applyTab(runIndex, i + 1);
+        const ordinal = consumeTabOrdinal();
+        applyTab(runIndex, i + 1, undefined, ordinal);
         segmentStart = i + 1;
       }
 

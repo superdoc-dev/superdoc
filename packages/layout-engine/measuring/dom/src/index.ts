@@ -981,6 +981,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     block.attrs?.tabs as TabStop[],
     block.attrs?.tabIntervalTwips as number | undefined,
   );
+  const alignmentTabStopsPx = tabStops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
   const decimalSeparator = sanitizeDecimalSeparator(block.attrs?.decimalSeparator);
 
   // Extract bar tab stops for paragraph-level rendering (OOXML: bars on all lines)
@@ -1229,7 +1232,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 
   // Expand runs to handle inline newlines as explicit break runs
-  const runsToProcess: Run[] = [];
+  let runsToProcess: Run[] = [];
   for (const run of normalizedRuns as Run[]) {
     if ((run as TextRun).text && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\n')) {
       const textRun = run as TextRun;
@@ -1258,6 +1261,58 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       runsToProcess.push(run as Run);
     }
   }
+  if (runsToProcess.some((run) => isTextRun(run) && typeof run.text === 'string' && run.text.includes('\t'))) {
+    const expandedRuns: Run[] = [];
+    for (const run of runsToProcess) {
+      if (!isTextRun(run) || typeof run.text !== 'string' || !run.text.includes('\t')) {
+        expandedRuns.push(run);
+        continue;
+      }
+      const textRun = run as TextRun;
+      let buffer = '';
+      let cursor = textRun.pmStart ?? 0;
+      const text = textRun.text;
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        if (char === '\t') {
+          if (buffer.length > 0) {
+            expandedRuns.push({
+              ...textRun,
+              text: buffer,
+              pmStart: cursor - buffer.length,
+              pmEnd: cursor,
+            });
+            buffer = '';
+          }
+          const tabRun: TabRun = {
+            kind: 'tab',
+            text: '\t',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            tabStops: block.attrs?.tabs as TabStop[] | undefined,
+            indent,
+            leader: (textRun as unknown as TabRun)?.leader ?? null,
+            sdt: textRun.sdt,
+          };
+          expandedRuns.push(tabRun);
+          cursor += 1;
+          continue;
+        }
+        buffer += char;
+        cursor += 1;
+      }
+      if (buffer.length > 0) {
+        expandedRuns.push({
+          ...textRun,
+          text: buffer,
+          pmStart: cursor - buffer.length,
+          pmEnd: cursor,
+        });
+      }
+    }
+    runsToProcess = expandedRuns;
+  }
+  const totalTabRuns = runsToProcess.reduce((count, run) => (isTabRun(run) ? count + 1 : count), 0);
 
   /**
    * Trims trailing regular spaces from a line when it is finalized.
@@ -1306,6 +1361,18 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 
   // Process each run
+  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+    if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
+      return null;
+    }
+    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
+    const remainingTabs = totalTabRuns - ordinal - 1;
+    const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
+    if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
+    return alignmentTabStopsPx[targetIndex];
+  };
+
+  let sequentialTabIndex = 0;
   for (let runIndex = 0; runIndex < runsToProcess.length; runIndex++) {
     const run = runsToProcess[runIndex];
 
@@ -1417,13 +1484,29 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         };
       }
 
-      // Advance to next tab stop using the same logic as inline "\t" handling
+      // Advance to the appropriate tab stop (explicit alignment stops take precedence for trailing tabs)
       const originX = currentLine.width;
       // Use first-line effective indent (accounts for hanging) on first line, body indent otherwise
       const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
       const absCurrentX = currentLine.width + effectiveIndent;
-      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-      tabStopCursor = nextIndex;
+      let stop: TabStopPx | undefined;
+      let target: number;
+      const resolvedTabIndex =
+        typeof (run as TabRun).tabIndex === 'number' && Number.isFinite((run as TabRun).tabIndex)
+          ? (run as TabRun).tabIndex!
+          : sequentialTabIndex;
+      sequentialTabIndex += 1;
+      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
+      if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
+        stop = forcedAlignment.stop;
+        target = forcedAlignment.stop.pos;
+        tabStopCursor = forcedAlignment.index + 1;
+      } else {
+        const nextStop = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        target = nextStop.target;
+        tabStopCursor = nextStop.nextIndex;
+        stop = nextStop.stop;
+      }
       const maxAbsWidth = currentLine.maxWidth + effectiveIndent;
       const clampedTarget = Math.min(target, maxAbsWidth);
       const tabAdvance = Math.max(0, clampedTarget - absCurrentX);

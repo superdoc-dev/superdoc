@@ -1619,6 +1619,35 @@ describe('measureBlock', () => {
       }
     });
 
+    it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'toc-paragraph',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'Generalities', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 15, pmEnd: 16 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          indent: { left: 30, right: 0, firstLine: 0, hanging: 30 },
+          tabs: [{ val: 'end', leader: 'dot', pos: 10593 }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines).toHaveLength(1);
+      const line = measure.lines[0];
+      expect(line.leaders).toBeDefined();
+      expect(line.leaders?.[0]?.style).toBe('dot');
+      const trailingTab = block.runs[3];
+      if (trailingTab.kind === 'tab') {
+        expect(trailingTab.width).toBeGreaterThan(0);
+        expect(trailingTab.width).toBeGreaterThan(50);
+      }
+    });
+
     it('handles multiple tabs in a row', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

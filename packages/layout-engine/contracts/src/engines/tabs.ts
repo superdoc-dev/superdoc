@@ -129,18 +129,18 @@ export function computeTabStops(context: TabContext): TabStop[] {
 
   // Find the rightmost explicit stop (use original stops for this calculation)
   const maxExplicit = filteredExplicitStops.reduce((max, stop) => Math.max(max, stop.pos), 0);
-  const hasExplicit = filteredExplicitStops.length > 0;
-
   // Collect all stops: start with filtered explicit stops
   const stops = [...filteredExplicitStops];
+  const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
 
   // Generate default stops at regular intervals.
-  // When explicit stops exist, start after the rightmost explicit or leftIndent.
-  // When no explicit stops, generate from 0 to ensure we hit multiples that land at/near leftIndent.
-  // Then filter defaults by leftIndent (body text alignment).
-  const defaultStart = hasExplicit ? Math.max(maxExplicit, leftIndent) : 0;
+  // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),
+  //   seed defaults from the origin so numbering/content still lands on the default grid.
+  // - Otherwise, preserve legacy behavior: defaults start after the rightmost explicit or left indent.
+  const seedDefaultsFromZero = !hasStartAlignedExplicit;
+  const defaultStart = seedDefaultsFromZero ? 0 : Math.max(maxExplicit, leftIndent);
   let pos = defaultStart;
-  const targetLimit = Math.max(defaultStart, leftIndent) + 14400; // 14400 twips = 10 inches
+  const targetLimit = Math.max(defaultStart, leftIndent, maxExplicit) + 14400; // 14400 twips = 10 inches
 
   while (pos < targetLimit) {
     pos += defaultTabInterval;

@@ -927,3 +927,53 @@ describe('m:func converter', () => {
     expect(mis[1]!.textContent).toBe('cos');
   });
 });
+
+describe('m:limUpp converter', () => {
+  it('converts upper limit to <mover>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:limUpp',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'A' }] }] }],
+            },
+            {
+              name: 'm:lim',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.children[0]!.textContent).toBe('A');
+    expect(mover!.children[1]!.textContent).toBe('n');
+  });
+
+  it('handles missing m:lim gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:limUpp',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'B' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.children[0]!.textContent).toBe('B');
+  });
+});

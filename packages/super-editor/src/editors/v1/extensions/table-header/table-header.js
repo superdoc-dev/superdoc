@@ -2,7 +2,11 @@
 
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
-import { renderCellBorderStyle } from '../table-cell/helpers/renderCellBorderStyle.js';
+import { cssColorToHex } from '@core/utilities/cssColorToHex.js';
+import { parseCellBorders } from '@extensions/shared/parseCellBorders.js';
+import { parseCellMargins } from '@extensions/shared/parseCellMargins.js';
+import { parseCellVerticalAlignFromStyle } from '@extensions/shared/parseCellVerticalAlign.js';
+import { renderCellBorderStyle } from '@extensions/shared/renderCellBorderStyle.js';
 
 /**
  * Configuration options for TableHeader
@@ -87,6 +91,11 @@ export const TableHeader = Node.create({
       },
 
       background: {
+        parseDOM: (element) => {
+          const color = cssColorToHex(element.style?.backgroundColor);
+          if (!color) return null;
+          return { color: color.replace(/^#/, '') };
+        },
         renderDOM({ background }) {
           if (!background) return {};
           // @ts-expect-error - background is known to be an object at runtime
@@ -97,6 +106,7 @@ export const TableHeader = Node.create({
       },
 
       verticalAlign: {
+        parseDOM: parseCellVerticalAlignFromStyle,
         renderDOM({ verticalAlign }) {
           if (!verticalAlign) return {};
           const style = `vertical-align: ${verticalAlign}`;
@@ -105,6 +115,7 @@ export const TableHeader = Node.create({
       },
 
       cellMargins: {
+        parseDOM: (element) => parseCellMargins(element),
         renderDOM({ cellMargins, borders }) {
           if (!cellMargins) return {};
           const sides = ['top', 'right', 'bottom', 'left'];
@@ -112,6 +123,7 @@ export const TableHeader = Node.create({
             .map((side) => {
               const margin = cellMargins?.[side] ?? 0;
               const border = borders?.[side];
+              // TODO: this should include table-level borders as well for the first/last cell in the row
               const borderSize = border && border.val !== 'none' ? Math.ceil(border.size) : 0;
 
               if (margin) return `padding-${side}: ${Math.max(0, margin - borderSize)}px;`;
@@ -124,6 +136,7 @@ export const TableHeader = Node.create({
 
       borders: {
         default: null,
+        parseDOM: (element) => parseCellBorders(element),
         renderDOM: ({ borders }) => {
           if (!borders) return {};
           return renderCellBorderStyle(borders);

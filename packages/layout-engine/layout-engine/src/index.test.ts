@@ -79,6 +79,21 @@ const makeTableMeasure = (columnWidths: number[], rowHeights: number[]): TableMe
   totalHeight: rowHeights.reduce((sum, height) => sum + height, 0),
 });
 
+const makeParagraphlessFloatingTable = (id: string): TableBlock =>
+  makeTableBlock(id, 1, {
+    anchor: {
+      isAnchored: true,
+      hRelativeFrom: 'page',
+      vRelativeFrom: 'paragraph',
+      offsetH: 120,
+      offsetV: 15,
+    },
+    wrap: {
+      type: 'Square',
+      wrapText: 'bothSides',
+    },
+  });
+
 const block: FlowBlock = {
   kind: 'paragraph',
   id: 'block-1',
@@ -716,6 +731,48 @@ describe('layoutDocument', () => {
     expect(anchoredTableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + paragraphMeasure.totalHeight);
   });
 
+  it('renders a floating table when the document has no body paragraphs', () => {
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-only');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument([floatingOnlyTable], [floatingOnlyMeasure], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-only',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
+  it('renders a floating table after pruning a leading empty page', () => {
+    const leadingPageBreak: PageBreakBlock = {
+      kind: 'pageBreak',
+      id: 'page-break-before-floating-table',
+    };
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-after-page-break');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument(
+      [leadingPageBreak, floatingOnlyTable],
+      [{ kind: 'pageBreak' }, floatingOnlyMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-after-page-break',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
   it('propagates pm ranges onto fragments', () => {
     const blockWithRuns: FlowBlock = {
       kind: 'paragraph',
@@ -897,6 +954,125 @@ describe('layoutDocument', () => {
     // p3 appears on a new page with header/footer distances, body at base margins
     const pageWithP3 = layout.pages.find((p) => p.fragments.some((f) => f.blockId === 'p3'));
     expect(pageWithP3?.margins).toMatchObject({ top: 40, bottom: 40, header: 150, footer: 100 });
+  });
+
+  it('synthesizes page 1 for section-break-only body layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-only',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 500, h: 700 },
+      orientation: 'landscape',
+      margins: { top: 40, right: 30, bottom: 35, left: 25, header: 120, footer: 90 },
+    };
+
+    const layout = layoutDocument([sectionBreakBlock], [{ kind: 'sectionBreak' }], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].fragments).toHaveLength(0);
+    expect(layout.pages[0].orientation).toBe('landscape');
+    expect(layout.pages[0].margins).toMatchObject({
+      top: 40,
+      right: 30,
+      bottom: 35,
+      left: 25,
+      header: 120,
+      footer: 90,
+    });
+  });
+
+  it('resets page numbering when synthesizing a next-page section-break-only layout', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const nextPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-next',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, nextPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('1');
+    expect(layout.pages[0].sectionIndex).toBe(1);
+    expect(layout.pages[0].margins).toMatchObject({
+      top: 45,
+      right: 35,
+      bottom: 40,
+      left: 30,
+    });
+  });
+
+  it('resets parity bookkeeping when synthesizing an even-page section-break-only layout', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const evenPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-even',
+      type: 'evenPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, evenPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('1');
+    expect(layout.pages[0].sectionIndex).toBe(1);
+  });
+
+  it('preserves explicit numbering starts for section-break-only fallback pages', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const nextPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-next',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+      numbering: { start: 5 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, nextPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('5');
+    expect(layout.pages[0].sectionIndex).toBe(1);
   });
 
   it('section break with only header margin stores header distance', () => {
@@ -2546,6 +2722,21 @@ describe('layoutHeaderFooter', () => {
     const layout = layoutHeaderFooter([], [], { width: 200, height: 40 });
     expect(layout.height).toBe(0);
     expect(layout.pages).toEqual([]);
+  });
+
+  it('does not synthesize blank pages for section-break-only header/footer layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'header-sb',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 200, h: 80 },
+      margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    };
+
+    const layout = layoutHeaderFooter([sectionBreakBlock], [{ kind: 'sectionBreak' }], { width: 200, height: 80 });
+
+    expect(layout.pages).toEqual([]);
+    expect(layout.height).toBe(0);
   });
 
   it('uses image measure height when fragment height missing', () => {

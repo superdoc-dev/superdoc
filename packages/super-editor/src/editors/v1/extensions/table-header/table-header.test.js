@@ -1,24 +1,28 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { TableCell } from './table-cell.js';
+import { TableHeader } from './table-header.js';
 
-describe('TableCell', () => {
+/**
+ * `tableHeader` uses the same DOM attribute specs as `tableCell` for presentation;
+ * parse rules run on `<th>` (e.g. Google Docs header rows).
+ */
+describe('TableHeader', () => {
   let attributes;
 
   beforeAll(() => {
-    attributes = TableCell.config.addAttributes.call(TableCell);
+    attributes = TableHeader.config.addAttributes.call(TableHeader);
   });
 
   describe('background', () => {
     describe('parseDOM', () => {
       it('parses rgb() background to hex', () => {
-        const td = document.createElement('td');
-        td.style.backgroundColor = 'rgb(255, 255, 0)';
-        expect(attributes.background.parseDOM(td)).toEqual({ color: 'ffff00' });
+        const th = document.createElement('th');
+        th.style.backgroundColor = 'rgb(255, 255, 0)';
+        expect(attributes.background.parseDOM(th)).toEqual({ color: 'ffff00' });
       });
 
       it('returns null when background is unset', () => {
-        expect(attributes.background.parseDOM(document.createElement('td'))).toBeNull();
+        expect(attributes.background.parseDOM(document.createElement('th'))).toBeNull();
       });
     });
 
@@ -28,7 +32,6 @@ describe('TableCell', () => {
         expect(attributes.background.renderDOM({ background: null })).toEqual({});
       });
 
-      // renderDOM prefixes `#`; store channel hex without leading `#` to avoid `##` in CSS.
       it('renders background-color for hex digits without leading #', () => {
         expect(attributes.background.renderDOM({ background: { color: 'ffff00' } })).toEqual({
           style: 'background-color: #ffff00',
@@ -43,9 +46,9 @@ describe('TableCell', () => {
     });
 
     it('parseDOM → renderDOM round-trips to valid CSS', () => {
-      const td = document.createElement('td');
-      td.style.backgroundColor = 'rgb(255, 255, 0)';
-      const parsed = attributes.background.parseDOM(td);
+      const th = document.createElement('th');
+      th.style.backgroundColor = 'rgb(255, 255, 0)';
+      const parsed = attributes.background.parseDOM(th);
       const { style } = attributes.background.renderDOM({ background: parsed });
       expect(style).toBe('background-color: #ffff00');
     });
@@ -54,23 +57,23 @@ describe('TableCell', () => {
   describe('verticalAlign', () => {
     describe('parseDOM', () => {
       it('maps middle to center', () => {
-        const td = document.createElement('td');
-        td.style.verticalAlign = 'middle';
-        expect(attributes.verticalAlign.parseDOM(td)).toBe('center');
+        const th = document.createElement('th');
+        th.style.verticalAlign = 'middle';
+        expect(attributes.verticalAlign.parseDOM(th)).toBe('center');
       });
 
       it('normalizes top and bottom', () => {
-        const topTd = document.createElement('td');
-        topTd.style.verticalAlign = 'TOP';
-        expect(attributes.verticalAlign.parseDOM(topTd)).toBe('top');
+        const topTh = document.createElement('th');
+        topTh.style.verticalAlign = 'TOP';
+        expect(attributes.verticalAlign.parseDOM(topTh)).toBe('top');
 
-        const bottomTd = document.createElement('td');
-        bottomTd.style.verticalAlign = 'bottom';
-        expect(attributes.verticalAlign.parseDOM(bottomTd)).toBe('bottom');
+        const bottomTh = document.createElement('th');
+        bottomTh.style.verticalAlign = 'bottom';
+        expect(attributes.verticalAlign.parseDOM(bottomTh)).toBe('bottom');
       });
 
       it('returns null when vertical-align is missing', () => {
-        expect(attributes.verticalAlign.parseDOM(document.createElement('td'))).toBeNull();
+        expect(attributes.verticalAlign.parseDOM(document.createElement('th'))).toBeNull();
       });
     });
 
@@ -91,9 +94,9 @@ describe('TableCell', () => {
   describe('cellMargins', () => {
     describe('parseDOM', () => {
       it('parses uniform padding in pt', () => {
-        const td = document.createElement('td');
-        td.style.padding = '5pt';
-        expect(attributes.cellMargins.parseDOM(td)).toEqual({
+        const th = document.createElement('th');
+        th.style.padding = '5pt';
+        expect(attributes.cellMargins.parseDOM(th)).toEqual({
           top: 7,
           right: 7,
           bottom: 7,
@@ -102,11 +105,11 @@ describe('TableCell', () => {
       });
 
       it('parses per-side padding', () => {
-        const td = document.createElement('td');
-        td.style.paddingTop = '5pt';
-        td.style.paddingRight = '10pt';
-        td.style.paddingBottom = '15pt';
-        expect(attributes.cellMargins.parseDOM(td)).toEqual({
+        const th = document.createElement('th');
+        th.style.paddingTop = '5pt';
+        th.style.paddingRight = '10pt';
+        th.style.paddingBottom = '15pt';
+        expect(attributes.cellMargins.parseDOM(th)).toEqual({
           top: 7,
           right: 13,
           bottom: 20,
@@ -114,7 +117,7 @@ describe('TableCell', () => {
       });
 
       it('returns null when no padding is set', () => {
-        expect(attributes.cellMargins.parseDOM(document.createElement('td'))).toBeNull();
+        expect(attributes.cellMargins.parseDOM(document.createElement('th'))).toBeNull();
       });
     });
 
@@ -140,9 +143,9 @@ describe('TableCell', () => {
   describe('borders', () => {
     describe('parseDOM', () => {
       it('applies shorthand border to all sides', () => {
-        const td = document.createElement('td');
-        td.style.border = '1px solid rgb(0, 0, 0)';
-        expect(attributes.borders.parseDOM(td)).toEqual({
+        const th = document.createElement('th');
+        th.style.border = '1px solid rgb(0, 0, 0)';
+        expect(attributes.borders.parseDOM(th)).toEqual({
           top: { val: 'single', size: 1, color: '#000000', style: 'solid' },
           right: { val: 'single', size: 1, color: '#000000', style: 'solid' },
           bottom: { val: 'single', size: 1, color: '#000000', style: 'solid' },
@@ -151,12 +154,12 @@ describe('TableCell', () => {
       });
 
       it('uses per-side rules when they override shorthand', () => {
-        const td = document.createElement('td');
-        td.style.border = '1px solid rgb(0, 0, 0)';
-        td.style.borderTop = '2px dashed rgb(255, 0, 0)';
-        td.style.borderRight = '3px dotted rgb(0, 0, 255)';
-        td.style.borderBottom = '4px double rgb(0, 128, 0)';
-        expect(attributes.borders.parseDOM(td)).toEqual({
+        const th = document.createElement('th');
+        th.style.border = '1px solid rgb(0, 0, 0)';
+        th.style.borderTop = '2px dashed rgb(255, 0, 0)';
+        th.style.borderRight = '3px dotted rgb(0, 0, 255)';
+        th.style.borderBottom = '4px double rgb(0, 128, 0)';
+        expect(attributes.borders.parseDOM(th)).toEqual({
           top: { val: 'dashed', size: 2, color: '#ff0000', style: 'dashed' },
           right: { val: 'dotted', size: 3, color: '#0000ff', style: 'dotted' },
           bottom: { val: 'single', size: 4, color: '#008000', style: 'double' },
@@ -165,7 +168,7 @@ describe('TableCell', () => {
       });
 
       it('returns null when no border is set', () => {
-        expect(attributes.borders.parseDOM(document.createElement('td'))).toBeNull();
+        expect(attributes.borders.parseDOM(document.createElement('th'))).toBeNull();
       });
     });
 

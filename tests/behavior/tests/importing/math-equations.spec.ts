@@ -107,11 +107,28 @@ test.describe('math equation import and rendering', () => {
     expect(subSupData!.superscript).toBe('2');
   });
 
+  test('renders radical as <msqrt> with radicand', async ({ superdoc }) => {
+    await superdoc.loadDocument(ALL_OBJECTS_DOC);
+    await superdoc.waitForStable();
+
+    // The test doc has √(b²-4ac) and √x — both with degHide, so both should be <msqrt>
+    const sqrtData = await superdoc.page.evaluate(() => {
+      const msqrts = document.querySelectorAll('msqrt');
+      return Array.from(msqrts).map((el) => ({
+        childCount: el.children.length,
+        textContent: el.textContent,
+      }));
+    });
+
+    expect(sqrtData.length).toBeGreaterThanOrEqual(2);
+    expect(sqrtData[0]!.childCount).toBeGreaterThan(0);
+  });
+
   test('math text content is preserved for unimplemented objects', async ({ superdoc }) => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();
 
-    // Unimplemented math objects (e.g., radical, delimiter) should still
+    // Unimplemented math objects (e.g., delimiter) should still
     // have their text content accessible in the PM document
     const mathTexts = await superdoc.page.evaluate(() => {
       const view = (window as any).editor?.view;

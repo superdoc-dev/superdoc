@@ -29,18 +29,18 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Read: extract entity names'
   vars:
@@ -65,18 +65,18 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Read: extract financial figures'
   vars:
@@ -101,18 +101,18 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 # ── EDITING (3) — validate documentText after edits, doc must change ──
 
@@ -141,18 +141,18 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Edit: insert new section'
   vars:
@@ -177,18 +177,18 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Edit: fill placeholders'
   vars:
@@ -213,15 +213,15 @@
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath

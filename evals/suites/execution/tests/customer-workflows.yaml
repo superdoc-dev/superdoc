@@ -28,9 +28,9 @@
           return { pass: false, score: 0, reason: 'Still says mutually indemnify' };
         return { pass: true, score: 1, reason: 'Clause modified correctly' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'NDA: global entity name replacement (Iqidis → Irys)'
   vars:
@@ -50,9 +50,9 @@
           return { pass: false, score: 0, reason: 'Collateral: other party name removed' };
         return { pass: true, score: 1, reason: 'Entity names replaced correctly' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'NDA: fill signature placeholders'
   vars:
@@ -70,7 +70,7 @@
           return { pass: false, score: 0, reason: 'Date not filled in' };
         return { pass: true, score: 1, reason: 'Placeholders filled' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'NDA: change governing law'
   vars:
@@ -88,7 +88,7 @@
           return { pass: false, score: 0, reason: 'Delaware still present' };
         return { pass: true, score: 1, reason: 'Governing law changed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'NDA: add bullet to obligations list'
   vars:
@@ -103,9 +103,9 @@
           return { pass: false, score: 0, reason: 'New bullet not added' };
         return { pass: true, score: 1, reason: 'Bullet added to obligations' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'NDA: increase liability cap'
   vars:
@@ -123,7 +123,7 @@
           return { pass: false, score: 0, reason: '$500K still present' };
         return { pass: true, score: 1, reason: 'Liability cap updated' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
 # B. DOCUMENT Q&A / COMPREHENSION (AcuityMD, Orbital)
@@ -143,7 +143,7 @@
           return { pass: false, score: 0, reason: 'Document missing assignment section' };
         return { pass: true, score: 1, reason: 'Document intact, Q&A completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -166,7 +166,7 @@
         if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
         return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -189,7 +189,7 @@
         if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
         return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -212,7 +212,7 @@
         if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
         return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -244,7 +244,7 @@
           return { pass: false, score: 0, reason: 'No term definitions added' };
         return { pass: true, score: 1, reason: 'Glossary created with definitions' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Lease: add disclaimer notice at end'
   vars:
@@ -262,9 +262,9 @@
           return { pass: false, score: 0, reason: 'Disclaimer text missing' };
         return { pass: true, score: 1, reason: 'Disclaimer added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Offer: add signing bonus section'
   vars:
@@ -279,9 +279,9 @@
           return { pass: false, score: 0, reason: 'Signing bonus not added' };
         return { pass: true, score: 1, reason: 'Signing bonus section added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Report: add follow-up paragraph after conclusions'
   vars:
@@ -296,9 +296,9 @@
           return { pass: false, score: 0, reason: 'Summary not added' };
         return { pass: true, score: 1, reason: 'Follow-up paragraph added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
 # D. COMMENTS & ANNOTATIONS (Torke)
@@ -318,9 +318,9 @@
           return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Comment operation completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -344,9 +344,9 @@
           return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Comment added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -372,7 +372,7 @@
           return { pass: false, score: 0.5, reason: 'Comment list action not called' };
         return { pass: true, score: 1, reason: 'Comments listed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -401,9 +401,9 @@
           return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Tracked change applied' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Offer: tracked change on salary'
   vars:
@@ -418,9 +418,9 @@
           return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Tracked change applied' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Lease: tracked change on rent, table untouched'
   vars:
@@ -438,9 +438,9 @@
           return { pass: false, score: 0, reason: 'Collateral: table data changed' };
         return { pass: true, score: 1, reason: 'Tracked change applied, table intact' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
 # F. TABLE OPERATIONS (AcuityMD, Reavant, Tryal)
@@ -461,7 +461,7 @@
           return { pass: false, score: 0, reason: 'Table site data missing' };
         return { pass: true, score: 1, reason: 'Enrollment table read' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Report: update enrollment count in table'
   vars:
@@ -481,9 +481,9 @@
           return { pass: false, score: 0, reason: 'Table data damaged' };
         return { pass: true, score: 1, reason: 'Table cell updated' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Lease: update rent escalation table'
   vars:
@@ -501,7 +501,7 @@
           return { pass: false, score: 0, reason: 'Collateral: Year 2 data damaged' };
         return { pass: true, score: 1, reason: 'Table cells updated, Year 2 intact' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
 # G. MULTI-STEP COMPOUND OPERATIONS (Lighthouse, Athena, Irys)
@@ -530,9 +530,9 @@
         }
         return { pass: true, score: 1, reason: 'All placeholders filled' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -562,9 +562,9 @@
           return { pass: false, score: 0, reason: 'Notice text missing' };
         return { pass: true, score: 1, reason: 'Both operations completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Lease: search + comment + modify clause'
   vars:
@@ -580,9 +580,9 @@
           return { pass: false, score: 0, reason: 'Text not modified' };
         return { pass: true, score: 1, reason: 'Search + comment + edit completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -610,9 +610,9 @@
           return { pass: false, score: 0, reason: 'Follow-up note missing' };
         return { pass: true, score: 1, reason: 'Both operations completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
 # H. FORMATTING (Tryal)
@@ -635,7 +635,7 @@
           return { pass: false, score: 0, reason: 'Old term still present' };
         return { pass: true, score: 1, reason: 'Terminology updated' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'Report: bold formatting on search result'
   vars:
@@ -650,9 +650,9 @@
           return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Formatting operation completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -688,9 +688,9 @@
           return { pass: false, score: 0, reason: 'Collateral: Exhibit A removed' };
         return { pass: true, score: 1, reason: 'Exhibit X page created' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -727,9 +727,9 @@
           return { pass: false, score: 0, reason: 'Deadline not set' };
         return { pass: true, score: 1, reason: 'All three counter-offer changes applied' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'NDA: full contract preparation (rename + fill + add notice)'
   vars:
@@ -753,6 +753,6 @@
           return { pass: false, score: 0, reason: 'Exhibit heading missing' };
         return { pass: true, score: 1, reason: 'Full contract preparation completed' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog

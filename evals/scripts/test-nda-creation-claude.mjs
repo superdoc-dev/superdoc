@@ -7,7 +7,7 @@
  * Raw XML manipulation (unzip + sed) cannot do this.
  *
  * Usage: node evals/scripts/test-nda-creation.mjs
- * Output: evals/fixtures/claude-orlov-gs-nda.docx
+ * Output: evals/fixtures/docs/claude-orlov-gs-nda.docx
  */
 
 import { copyFileSync, existsSync, statSync } from 'node:fs';
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EVALS_ROOT = resolve(__dirname, '..');
-const OUTPUT = resolve(EVALS_ROOT, 'fixtures/claude-orlov-gs-nda.docx');
+const OUTPUT = resolve(EVALS_ROOT, 'fixtures/docs/claude-orlov-gs-nda.docx');
 
 async function main() {
   const { default: Provider } = await import(resolve(EVALS_ROOT, 'providers/claude-code-agent.mjs'));
@@ -71,7 +71,7 @@ async function main() {
   console.log('');
 
   // Verify
-  const { parseDocx } = await import(resolve(EVALS_ROOT, 'lib/docx-fidelity.mjs'));
+  const { parseDocx } = await import(resolve(EVALS_ROOT, 'shared/docx-fidelity.mjs'));
   const parsed = await parseDocx(OUTPUT);
   const xml = parsed.documentXml;
 

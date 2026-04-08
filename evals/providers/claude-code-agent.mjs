@@ -39,13 +39,13 @@ import {
   extractDocxText,
   readCache,
   writeCache,
-} from './utils.mjs';
+} from '../shared/provider-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MCP_SERVER_PATH = resolve(__dirname, '../../apps/mcp/dist/index.js');
 const MCP_SYSTEM_PROMPT_PATH = resolve(__dirname, '../../packages/sdk/tools/system-prompt-mcp.md');
 const CLI_PATH = resolve(__dirname, '../../apps/cli/dist/index.js');
-const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor-docx-skill.md');
+const VENDOR_SKILL_PATH = resolve(__dirname, '../fixtures/vendor/vendor-docx-skill.md');
 
 // Load the generated MCP system prompt (single source of truth)
 function loadMcpSystemPrompt() {

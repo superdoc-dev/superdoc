@@ -2,8 +2,8 @@
 
 /**
  * Save current eval results as a versioned baseline.
- * Usage: node lib/save-baseline.mjs [label]
- * Creates: results/baselines/<date>-<label>.json
+ * Usage: node shared/save-baseline.mjs [label]
+ * Creates: artifacts/baselines/<date>-<label>.json
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -24,13 +24,13 @@ async function main() {
   try {
     data = await readFile(latestPath, 'utf8');
   } catch {
-    console.error('No results/latest.json found. Run "pnpm run eval" first.');
+    console.error('No artifacts/latest/tool-quality.json found. Run "pnpm run eval" first.');
     process.exit(1);
   }
 
   await mkdir(BASELINES_DIR, { recursive: true });
   await writeFile(resolve(BASELINES_DIR, filename), data);
-  console.log(`Baseline saved: results/baselines/${filename}`);
+  console.log(`Baseline saved: artifacts/baselines/${filename}`);
 }
 
 main().catch((err) => {

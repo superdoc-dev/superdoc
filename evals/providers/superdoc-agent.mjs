@@ -22,7 +22,7 @@ import {
   cleanArgs,
   writeCache,
   dispatchWithRetry,
-} from './utils.mjs';
+} from '../shared/provider-utils.mjs';
 
 const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
 const MAX_TURNS = 10;

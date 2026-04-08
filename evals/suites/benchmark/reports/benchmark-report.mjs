@@ -2,13 +2,13 @@
 /**
  * Level 3 Benchmark Report Generator
  *
- * Reads results/benchmark/latest.json (Promptfoo output) and produces:
+ * Reads artifacts/benchmark-runs/latest.json (Promptfoo output) and produces:
  * 1. Summary table: pass rate, latency (median + p95), tokens in/out, steps, cost, collateral
  * 2. Per-task detail: every metric per condition, side by side
  * 3. Path usage table (agent-choice conditions)
  * 4. Written recommendation
  *
- * Output: results/benchmark/summary.md + results/benchmark/raw.csv
+ * Output: artifacts/benchmark-runs/summary.md + artifacts/benchmark-runs/raw.csv
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EVALS_ROOT = resolve(__dirname, '..');
-const RESULTS_DIR = resolve(EVALS_ROOT, 'results/benchmark');
+const RESULTS_DIR = resolve(EVALS_ROOT, 'artifacts/benchmark-runs');
 const INPUT_FILE = resolve(RESULTS_DIR, 'latest.json');
 
 // --- Cost estimation (per 1M tokens, approximate) ---
@@ -286,5 +286,5 @@ mkdirSync(RESULTS_DIR, { recursive: true });
 writeFileSync(resolve(RESULTS_DIR, 'summary.md'), report);
 writeFileSync(resolve(RESULTS_DIR, 'raw.csv'), generateCsv(rows));
 
-console.log(`Report written to: results/benchmark/summary.md`);
-console.log(`CSV written to: results/benchmark/raw.csv`);
+console.log(`Report written to: artifacts/benchmark-runs/summary.md`);
+console.log(`CSV written to: artifacts/benchmark-runs/raw.csv`);

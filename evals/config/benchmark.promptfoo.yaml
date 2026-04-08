@@ -19,20 +19,20 @@ prompts:
 providers:
   # ── Claude Code ──
 
-  - id: file://providers/claude-code-agent.mjs
+  - id: file://../providers/claude-code-agent.mjs
     label: CC-baseline
     config:
       condition: baseline
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
 
-  - id: file://providers/claude-code-agent.mjs
+  - id: file://../providers/claude-code-agent.mjs
     label: CC-with-docx-skill
     config:
       condition: baseline-with-docx-skill
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
       vendorSkill: true
 
-  - id: file://providers/claude-code-agent.mjs
+  - id: file://../providers/claude-code-agent.mjs
     label: CC-superdoc-mcp
     config:
       condition: superdoc-mcp
@@ -40,7 +40,7 @@ providers:
       superdocMcp: true
       superdocOnPath: true
 
-  - id: file://providers/claude-code-agent.mjs
+  - id: file://../providers/claude-code-agent.mjs
     label: CC-superdoc-cli-prompt
     config:
       condition: superdoc-cli
@@ -49,25 +49,25 @@ providers:
 
   # ── Codex ──
 
-  - id: file://providers/codex-agent.mjs
+  - id: file://../providers/codex-agent.mjs
     label: Codex-baseline
     config:
       condition: baseline
 
-  - id: file://providers/codex-agent.mjs
+  - id: file://../providers/codex-agent.mjs
     label: Codex-with-docx-skill
     config:
       condition: baseline-with-docx-skill
       vendorSkill: true
 
-  - id: file://providers/codex-agent.mjs
+  - id: file://../providers/codex-agent.mjs
     label: Codex-superdoc-mcp
     config:
       condition: superdoc-mcp
       superdocMcp: true
       superdocOnPath: true
 
-  - id: file://providers/codex-agent.mjs
+  - id: file://../providers/codex-agent.mjs
     label: Codex-superdoc-cli
     config:
       condition: superdoc-cli
@@ -90,5 +90,5 @@ derivedMetrics:
     value: 'fidelity / __count'
 
 tests:
-  - file://tests/agent-benchmark.yaml
-  - file://tests/agent-benchmark-v2.yaml
+  - file://../suites/benchmark/tests/agent-benchmark.yaml
+  - file://../suites/benchmark/tests/agent-benchmark-v2.yaml

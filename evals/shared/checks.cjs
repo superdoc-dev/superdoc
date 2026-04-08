@@ -719,7 +719,7 @@ module.exports.benchmarkDiff = (output, context) => {
   const fixture = context?.vars?.fixture;
   if (!fixture) return { pass: true, score: 0, reason: 'no fixture defined' };
 
-  const fixturePath = resolve(__dirname, '../fixtures', fixture);
+  const fixturePath = resolve(__dirname, '../fixtures/docs', fixture);
 
   const fidelityModulePath = resolve(__dirname, 'docx-fidelity.mjs');
   const script = `

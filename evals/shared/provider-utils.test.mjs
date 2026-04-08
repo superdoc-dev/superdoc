@@ -5,10 +5,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { computeSdkFingerprint, extractDocxText } from './utils.mjs';
+import { computeSdkFingerprint, extractDocxText } from './provider-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURES_DIR = resolve(__dirname, '..', 'fixtures');
+const FIXTURES_DIR = resolve(__dirname, '..', 'fixtures/docs');
 
 function withTempDir(run) {
   const tempDir = mkdtempSync(resolve(tmpdir(), 'superdoc-evals-utils-'));

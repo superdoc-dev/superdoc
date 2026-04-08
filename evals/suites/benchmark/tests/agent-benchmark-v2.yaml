@@ -36,26 +36,26 @@
         return { pass: true, score: 1, reason: 'Original content preserved' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Structure: create table at end'
   vars:
@@ -80,26 +80,26 @@
         return { pass: true, score: 1, reason: 'Document modified' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 # ═══════════════════════════════════════════════════════════════
 # CATEGORY B: Formatting operations — SuperDoc proven advantage
@@ -129,26 +129,26 @@
         return { pass: true, score: 1, reason: 'Content preserved' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Format: replace text preserving bold'
   vars:
@@ -175,26 +175,26 @@
         return { pass: true, score: 1, reason: 'TechVentures intact' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 # ═══════════════════════════════════════════════════════════════
 # CATEGORY C: Complex edits — track improvement over time
@@ -225,26 +225,26 @@
         return { pass: true, score: 1, reason: 'Content preserved' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath
 
 - description: 'Complex: add comment to clause'
   vars:
@@ -268,23 +268,23 @@
         return { pass: true, score: 1, reason: 'Clause preserved' };
     - type: javascript
       metric: fidelity
-      value: file://lib/checks.cjs:benchmarkFidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
     - type: javascript
       metric: diff
       weight: 0
-      value: file://lib/checks.cjs:benchmarkDiff
+      value: file://../shared/checks.cjs:benchmarkDiff
     - type: javascript
       metric: steps
       weight: 0
-      value: file://lib/checks.cjs:benchmarkSteps
+      value: file://../shared/checks.cjs:benchmarkSteps
     - type: javascript
       metric: latency
       weight: 0
-      value: file://lib/checks.cjs:benchmarkLatency
+      value: file://../shared/checks.cjs:benchmarkLatency
     - type: javascript
       metric: tokens
       weight: 0
-      value: file://lib/checks.cjs:benchmarkTokens
+      value: file://../shared/checks.cjs:benchmarkTokens
     - type: javascript
       metric: path
-      value: file://lib/checks.cjs:benchmarkPath
+      value: file://../shared/checks.cjs:benchmarkPath

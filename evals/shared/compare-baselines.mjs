@@ -2,8 +2,8 @@
 
 /**
  * Compare two baseline result files and report differences.
- * Usage: node lib/compare-baselines.mjs <file-a> <file-b>
- * Example: node lib/compare-baselines.mjs results/baselines/2026-03-01-v1.json results/baselines/2026-03-09-v2.json
+ * Usage: node shared/compare-baselines.mjs <file-a> <file-b>
+ * Example: node shared/compare-baselines.mjs artifacts/baselines/2026-03-01-v1.json artifacts/baselines/2026-03-09-v2.json
  *
  * Matches tests by identity (description + provider + prompt), not array index.
  * Exits with code 1 if regressions are found.
@@ -25,7 +25,7 @@ function testKey(r) {
 async function main() {
   const [fileA, fileB] = process.argv.slice(2);
   if (!fileA || !fileB) {
-    console.error('Usage: node lib/compare-baselines.mjs <file-a> <file-b>');
+    console.error('Usage: node shared/compare-baselines.mjs <file-a> <file-b>');
     process.exit(1);
   }
 

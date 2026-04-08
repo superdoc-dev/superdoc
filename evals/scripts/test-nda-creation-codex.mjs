@@ -3,7 +3,7 @@
  * Test: Create an NDA from scratch using Codex + SuperDoc MCP.
  *
  * Usage: node evals/scripts/test-nda-creation-codex.mjs
- * Output: evals/fixtures/codex-orlov-gs-nda-codex.docx
+ * Output: evals/fixtures/docs/codex-orlov-gs-nda-codex.docx
  */
 
 import { copyFileSync, existsSync, statSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EVALS_ROOT = resolve(__dirname, '..');
-const OUTPUT = resolve(EVALS_ROOT, 'fixtures/codex-orlov-gs-nda.docx');
+const OUTPUT = resolve(EVALS_ROOT, 'fixtures/docs/codex-orlov-gs-nda.docx');
 
 async function main() {
   const { default: Provider } = await import(resolve(EVALS_ROOT, 'providers/codex-agent.mjs'));
@@ -62,7 +62,7 @@ async function main() {
   console.log('Size:', statSync(OUTPUT).size, 'bytes');
   console.log('');
 
-  const { parseDocx } = await import(resolve(EVALS_ROOT, 'lib/docx-fidelity.mjs'));
+  const { parseDocx } = await import(resolve(EVALS_ROOT, 'shared/docx-fidelity.mjs'));
   const parsed = await parseDocx(OUTPUT);
   const xml = parsed.documentXml;
 

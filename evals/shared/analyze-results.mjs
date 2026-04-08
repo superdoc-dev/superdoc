@@ -6,7 +6,7 @@
  * Opens the result in the browser automatically.
  *
  * Usage:
- *   node lib/analyze-results.mjs [results-file]
+ *   node shared/analyze-results.mjs [results-file]
  *   pnpm run analyze                # analyze latest results
  *   pnpm run eval:analyze           # run eval then analyze
  *
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EVALS_ROOT = resolve(__dirname, '..');
-const OUTPUT_HTML = resolve(EVALS_ROOT, 'results/analysis.html');
+const OUTPUT_HTML = resolve(EVALS_ROOT, 'artifacts/latest/analysis.html');
 
 // ---------------------------------------------------------------------------
 // Extract structured data from eval results
@@ -92,7 +92,7 @@ function extractEvalSummary(resultsPath) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const resultsPath = process.argv[2] || resolve(EVALS_ROOT, 'results/latest.json');
+  const resultsPath = process.argv[2] || resolve(EVALS_ROOT, 'artifacts/latest/tool-quality.json');
   if (!existsSync(resultsPath)) {
     console.error(`Results file not found: ${resultsPath}`);
     process.exit(1);

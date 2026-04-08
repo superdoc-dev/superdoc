@@ -23,9 +23,9 @@
         if (!d.documentText?.includes('A list of list features')) return { pass: false, score: 0, reason: 'Content missing' };
         return { pass: true, score: 1, reason: 'Content extracted' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'Replace: bullets → bullet points'
   vars:
@@ -41,9 +41,9 @@
           return { pass: false, score: 0, reason: 'Replace failed' };
         return { pass: true, score: 1, reason: 'Content correct' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -65,9 +65,9 @@
         if (!d.documentText?.includes('EVAL TEST PASSED')) return { pass: false, score: 0, reason: 'Missing' };
         return { pass: true, score: 1, reason: 'Paragraph added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Insert: heading at end'
   vars:
@@ -81,7 +81,7 @@
         if (!d.documentText?.includes('Summary')) return { pass: false, score: 0, reason: 'Missing' };
         return { pass: true, score: 1, reason: 'Heading added' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
 # MEMORANDUM.DOCX — legal memo
@@ -101,9 +101,9 @@
           return { pass: false, score: 0, reason: 'Key content missing' };
         return { pass: true, score: 1, reason: 'All sections present' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'Replace: party name globally'
   vars:
@@ -119,9 +119,9 @@
           return { pass: false, score: 0, reason: 'Replace incomplete' };
         return { pass: true, score: 1, reason: 'All replaced' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Replace: date precision ($25M/$150M untouched)'
   vars:
@@ -138,9 +138,9 @@
         if (!t.includes('$150,000,000')) return { pass: false, score: 0, reason: 'Collateral: $150M gone' };
         return { pass: true, score: 1, reason: 'Precise replace' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -170,7 +170,7 @@
           return { pass: false, score: 0, reason: 'Replace failed' };
         return { pass: true, score: 1, reason: 'Replaced' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'Insert: heading + paragraph at end'
   vars:
@@ -186,9 +186,9 @@
           return { pass: false, score: 0, reason: 'Missing content' };
         return { pass: true, score: 1, reason: 'Added at end' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Replace: Acquiror → Buyer globally'
   vars:
@@ -204,7 +204,7 @@
           return { pass: false, score: 0, reason: 'Replace incomplete' };
         return { pass: true, score: 1, reason: 'All replaced' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 - description: 'Replace: go-shop date, Dec date intact'
   vars:
@@ -236,7 +236,7 @@
           return { pass: false, score: 0, reason: 'Replace failed' };
         return { pass: true, score: 1, reason: 'Terms replaced' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
 # TABLE DOC
@@ -256,7 +256,7 @@
           return { pass: false, score: 0, reason: 'Table content missing' };
         return { pass: true, score: 1, reason: 'Table read' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Table: replace cell content'
   vars:
@@ -271,9 +271,9 @@
           return { pass: false, score: 0, reason: 'Missing "Production"' };
         return { pass: true, score: 1, reason: 'Cells replaced' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
 # MULTI-STEP — compound operations, trace sequence matters most
@@ -292,9 +292,9 @@
           return { pass: false, score: 0, reason: 'Note not added' };
         return { pass: true, score: 1, reason: 'Note inserted' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -318,9 +318,9 @@
           return { pass: false, score: 0, reason: 'Incomplete' };
         return { pass: true, score: 1, reason: 'Both operations done' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -348,7 +348,7 @@
           return { pass: false, score: 0, reason: 'Edit incomplete' };
         return { pass: true, score: 1, reason: 'Saved correctly' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
 # LISTS — creation, conversion, multi-item
@@ -368,9 +368,9 @@
         if (!hasAll) return { pass: false, score: 0, reason: 'Missing list items' };
         return { pass: true, score: 1, reason: 'All items present' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'List: convert bullet to numbered'
   vars:
@@ -388,7 +388,7 @@
         if (!hasSetType && !hasCreate) return { pass: false, score: 0, reason: 'No list conversion call found' };
         return { pass: true, score: 1, reason: hasSetType ? 'Used set_type' : 'Used create' };
     - type: javascript
-      value: file://lib/checks.cjs:traceAllOk
+      value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
       value: |
         const d = JSON.parse(output);
@@ -414,7 +414,7 @@
         if (!d.documentText?.includes('GLOSSARY')) return { pass: false, score: 0, reason: 'Missing' };
         return { pass: true, score: 1, reason: 'Glossary created' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Aspirational: bullet list to table'
   vars:
@@ -429,7 +429,7 @@
         if (t.includes('Feature') && t.includes('Notes')) return { pass: true, score: 1, reason: 'Table created' };
         return { pass: false, score: 0, reason: 'Table headers missing' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog
 
 - description: 'Aspirational: tracked change redline'
   vars:
@@ -443,4 +443,4 @@
         if (!d.documentText?.includes('MEMORANDUM')) return { pass: false, score: 0, reason: 'Document damaged' };
         return { pass: true, score: 1, reason: 'Document intact' };
     - type: javascript
-      value: file://lib/checks.cjs:traceLog
+      value: file://../shared/checks.cjs:traceLog

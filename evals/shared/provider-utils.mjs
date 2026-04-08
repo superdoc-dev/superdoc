@@ -24,7 +24,7 @@ const EVALS_ROOT = resolve(__dirname, '..');
 
 export const PATHS = {
   root: EVALS_ROOT,
-  fixtures: resolve(EVALS_ROOT, 'fixtures'),
+  fixtures: resolve(EVALS_ROOT, 'fixtures/docs'),
   output: resolve(EVALS_ROOT, 'results/output'),
   cache: resolve(EVALS_ROOT, 'results/.cache'),
   prompt: resolve(EVALS_ROOT, '..', 'packages/sdk/tools/system-prompt.md'),

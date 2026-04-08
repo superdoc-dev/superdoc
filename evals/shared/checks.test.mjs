@@ -205,7 +205,7 @@ test('benchmarkFidelity passes when outputFile is null (reading task)', () => {
 });
 
 test('benchmarkFidelity runs checks from vars.fidelityChecks', () => {
-  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const ndaPath = resolve(__dirname, '../fixtures/docs/nda.docx');
   const output = JSON.stringify({ outputFile: ndaPath });
   const context = { vars: { fidelityChecks: JSON.stringify([{ type: 'trackedChangeCount', min: 0 }]) } };
   const result = checks.benchmarkFidelity(output, context);
@@ -216,7 +216,7 @@ test('benchmarkFidelity runs checks from vars.fidelityChecks', () => {
 // --- benchmarkDiff ---
 console.log('benchmarkDiff');
 test('benchmarkDiff returns 0 ratio for same file', () => {
-  const ndaPath = resolve(__dirname, '../fixtures/nda.docx');
+  const ndaPath = resolve(__dirname, '../fixtures/docs/nda.docx');
   const output = JSON.stringify({ outputFile: ndaPath });
   const context = { vars: { fixture: 'nda.docx' } };
   const result = checks.benchmarkDiff(output, context);

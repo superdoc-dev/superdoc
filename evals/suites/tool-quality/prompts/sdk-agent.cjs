@@ -6,7 +6,7 @@ const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
 const base = readFileSync(
-  resolve(__dirname, '../../packages/sdk/tools/system-prompt.md'),
+  resolve(__dirname, '../../../../packages/sdk/tools/system-prompt.md'),
   'utf8',
 );
 

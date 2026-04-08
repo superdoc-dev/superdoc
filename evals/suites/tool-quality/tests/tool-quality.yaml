@@ -23,7 +23,7 @@
       threshold: 1.0
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:usesGetContentText
+      value: file://../shared/checks.cjs:usesGetContentText
       metric: argument_accuracy
 
 - description: 'Get document as markdown'
@@ -47,10 +47,10 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:usesCreateAction
+      value: file://../shared/checks.cjs:usesCreateAction
       metric: argument_accuracy
     - type: javascript
-      value: file://lib/checks.cjs:noTextInsertForStructure
+      value: file://../shared/checks.cjs:noTextInsertForStructure
       metric: correctness
 
 - description: 'Add paragraph at end'
@@ -64,7 +64,7 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:usesCreateAction
+      value: file://../shared/checks.cjs:usesCreateAction
       metric: argument_accuracy
 
 - description: 'Undo last change'
@@ -77,7 +77,7 @@
       threshold: 1.0
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:usesEditUndo
+      value: file://../shared/checks.cjs:usesEditUndo
       metric: argument_accuracy
 
 - description: 'Text search with pattern'
@@ -90,7 +90,7 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:textSearchArgs
+      value: file://../shared/checks.cjs:textSearchArgs
       metric: argument_accuracy
 
 - description: 'Node search for headings'
@@ -104,7 +104,7 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:nodeSearchArgs
+      value: file://../shared/checks.cjs:nodeSearchArgs
       metric: argument_accuracy
 
 - description: 'Count text occurrences'
@@ -117,7 +117,7 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:textSearchArgs
+      value: file://../shared/checks.cjs:textSearchArgs
       metric: argument_accuracy
 
 # =============================================================================
@@ -134,7 +134,7 @@
     task: 'Replace the text "old title" with "new title" in the document.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctEdit
+      value: file://../shared/checks.cjs:instinctEdit
       metric: tool_instinct
 
 - description: 'Delete sentence (instinct)'
@@ -143,7 +143,7 @@
     task: 'Remove the sentence "This is a draft document." from the introduction.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctEdit
+      value: file://../shared/checks.cjs:instinctEdit
       metric: tool_instinct
 
 - description: 'Atomic multi-step replace (instinct)'
@@ -152,7 +152,7 @@
     task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" atomically.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctEdit
+      value: file://../shared/checks.cjs:instinctEdit
       metric: tool_instinct
 
 - description: 'First-occurrence replace (instinct)'
@@ -161,7 +161,7 @@
     task: 'Replace the first occurrence of "draft" with "final" in the document.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctEdit
+      value: file://../shared/checks.cjs:instinctEdit
       metric: tool_instinct
 
 # --- Format tasks ---
@@ -172,7 +172,7 @@
     task: 'Make the word "Important" bold in the document.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctFormat
+      value: file://../shared/checks.cjs:instinctFormat
       metric: tool_instinct
 
 - description: 'Highlight text (instinct)'
@@ -181,7 +181,7 @@
     task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctFormat
+      value: file://../shared/checks.cjs:instinctFormat
       metric: tool_instinct
 
 - description: 'Underline text (instinct)'
@@ -190,7 +190,7 @@
     task: 'Underline the sentence containing "payment terms" in the document.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctFormat
+      value: file://../shared/checks.cjs:instinctFormat
       metric: tool_instinct
 
 # --- Comment tasks ---
@@ -201,7 +201,7 @@
     task: 'Add a comment on the first paragraph saying "Needs legal review".'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctComment
+      value: file://../shared/checks.cjs:instinctComment
       metric: tool_instinct
 
 - description: 'Comment on liability clauses (instinct)'
@@ -210,7 +210,7 @@
     task: 'Add a review comment to each paragraph containing "limitation of liability".'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctComment
+      value: file://../shared/checks.cjs:instinctComment
       metric: tool_instinct
 
 # --- List tasks ---
@@ -221,7 +221,7 @@
     task: 'Convert the bullet points in section 2 into a numbered list.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctList
+      value: file://../shared/checks.cjs:instinctList
       metric: tool_instinct
 
 - description: 'Change list numbering style (instinct)'
@@ -230,7 +230,7 @@
     task: 'Change the third level of this list to lowercase Roman numerals.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctList
+      value: file://../shared/checks.cjs:instinctList
       metric: tool_instinct
 
 # --- Tracked changes tasks ---
@@ -241,7 +241,7 @@
     task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctTrackChanges
+      value: file://../shared/checks.cjs:instinctTrackChanges
       metric: tool_instinct
 
 - description: 'Direct edit (instinct)'
@@ -250,7 +250,7 @@
     task: 'Replace "draft" with "final version" in the title. Apply directly.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:instinctEdit
+      value: file://../shared/checks.cjs:instinctEdit
       metric: tool_instinct
 
 # =============================================================================
@@ -263,7 +263,7 @@
     task: 'Extract all the plain text so I can paste it elsewhere.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:noHallucinatedParams
+      value: file://../shared/checks.cjs:noHallucinatedParams
       metric: argument_accuracy
 
 - description: 'Rewrite + format must not be mixed in one batch'
@@ -272,7 +272,7 @@
     task: 'Replace "old text" with "new text" and make it bold.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:noMixedBatch
+      value: file://../shared/checks.cjs:noMixedBatch
       metric: correctness
 
 - description: 'Simple replace uses 5 or fewer tool calls'

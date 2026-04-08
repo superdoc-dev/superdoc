@@ -48,8 +48,13 @@ export const convertBorderBox: MathObjectConverter = (node, doc, convertChildren
   const props = elements.find((e) => e.name === 'm:borderBoxPr');
   const base = elements.find((e) => e.name === 'm:e');
 
+  /** OOXML ST_OnOff true values: "1", "on", "true", or boolean-flag presence. */
   const isOn = (el?: { attributes?: Record<string, string> }) =>
-    el && (el.attributes?.['m:val'] === '1' || el.attributes?.['m:val'] === 'on' || !el.attributes);
+    el &&
+    (el.attributes?.['m:val'] === '1' ||
+      el.attributes?.['m:val'] === 'on' ||
+      el.attributes?.['m:val'] === 'true' ||
+      !el.attributes);
 
   const hideTop = props?.elements?.find((e) => e.name === 'm:hideTop');
   const hideBot = props?.elements?.find((e) => e.name === 'm:hideBot');

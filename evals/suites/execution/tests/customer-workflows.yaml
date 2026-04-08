@@ -32,21 +32,21 @@
     - type: javascript
       value: file://../shared/checks.cjs:traceLog
 
-- description: 'NDA: global entity name replacement (Iqidis → Irys)'
+- description: 'NDA: global entity name replacement (Amazing → Irys)'
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace "Iqidis Corp" with "Irys Inc." and "legal@iqidis.com" with "legal@irys.com" everywhere in the document.'
+    task: 'Replace "Amazing Corp" with "Irys Inc." and "legal@iqidis.com" with "legal@irys.com" everywhere in the document.'
   assert:
     - type: javascript
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (t.includes('Iqidis') || t.includes('iqidis'))
+        if (t.includes('Amazing') || t.includes('iqidis'))
           return { pass: false, score: 0, reason: 'Old entity name still present' };
         if (!t.includes('Irys Inc.') || !t.includes('legal@irys.com'))
           return { pass: false, score: 0, reason: 'New names not found' };
-        if (!t.includes('TechVentures'))
+        if (!t.includes('TechCraft'))
           return { pass: false, score: 0, reason: 'Collateral: other party name removed' };
         return { pass: true, score: 1, reason: 'Entity names replaced correctly' };
     - type: javascript
@@ -546,13 +546,13 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace "Iqidis Corp" with "Irys Inc." everywhere in the document, then add a heading "CONFIDENTIALITY NOTICE" at the end followed by a paragraph "This document contains proprietary information."'
+    task: 'Replace "Amazing Corp" with "Irys Inc." everywhere in the document, then add a heading "CONFIDENTIALITY NOTICE" at the end followed by a paragraph "This document contains proprietary information."'
   assert:
     - type: javascript
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (t.includes('Iqidis'))
+        if (t.includes('Amazing'))
           return { pass: false, score: 0, reason: 'Old name still present' };
         if (!t.includes('Irys Inc.'))
           return { pass: false, score: 0, reason: 'New name missing' };
@@ -735,13 +735,13 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Prepare this NDA for execution: (1) Replace "Iqidis Corp" with "Irys Inc." everywhere, (2) Replace "[Party A Signature]" with "Jane Smith, CEO", (3) Replace "[Date]" with "March 20, 2025", (4) Add a heading "EXHIBIT A" at the end followed by "List of authorized recipients to be provided separately."'
+    task: 'Prepare this NDA for execution: (1) Replace "Amazing Corp" with "Irys Inc." everywhere, (2) Replace "[Party A Signature]" with "Jane Smith, CEO", (3) Replace "[Date]" with "March 20, 2025", (4) Add a heading "EXHIBIT A" at the end followed by "List of authorized recipients to be provided separately."'
   assert:
     - type: javascript
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (t.includes('Iqidis'))
+        if (t.includes('Amazing'))
           return { pass: false, score: 0, reason: 'Entity name not replaced' };
         if (!t.includes('Irys Inc.'))
           return { pass: false, score: 0, reason: 'New entity name missing' };

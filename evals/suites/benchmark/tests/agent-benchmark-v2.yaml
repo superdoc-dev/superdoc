@@ -32,7 +32,7 @@
         const d = JSON.parse(output);
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
         const t = d.documentText || '';
-        if (!t.includes('Iqidis') && !t.includes('Agreement')) return { pass: false, score: 0, reason: 'Original content removed' };
+        if (!t.includes('Amazing') && !t.includes('Agreement')) return { pass: false, score: 0, reason: 'Original content removed' };
         return { pass: true, score: 1, reason: 'Original content preserved' };
     - type: javascript
       metric: fidelity
@@ -61,8 +61,8 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Add a summary table at the end of the document with 2 columns ("Party" and "Role") and 2 data rows: "Iqidis Corp" / "Disclosing Party" and "TechVentures LLC" / "Receiving Party". The table should have borders and a header row.'
-    fidelityChecks: '[{"type":"tableCell","table":0,"row":1,"col":0,"text":"Iqidis"},{"type":"tableCell","table":0,"row":1,"col":1,"text":"Disclosing"}]'
+    task: 'Add a summary table at the end of the document with 2 columns ("Party" and "Role") and 2 data rows: "Amazing Corp" / "Disclosing Party" and "TechCraft LLC" / "Receiving Party". The table should have borders and a header row.'
+    fidelityChecks: '[{"type":"tableCell","table":0,"row":1,"col":0,"text":"Amazing"},{"type":"tableCell","table":0,"row":1,"col":1,"text":"Disclosing"}]'
   assert:
     - type: javascript
       metric: correctness
@@ -109,22 +109,22 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Make all occurrences of "TechVentures LLC" bold throughout the document. Do not change any text content.'
-    fidelityChecks: '[{"type":"formatting","text":"TechVentures","property":"bold"}]'
+    task: 'Make all occurrences of "TechCraft LLC" bold throughout the document. Do not change any text content.'
+    fidelityChecks: '[{"type":"formatting","text":"TechCraft","property":"bold"}]'
   assert:
     - type: javascript
       metric: correctness
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'TechVentures not found' };
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'TechCraft not found' };
         return { pass: true, score: 1, reason: 'Text preserved' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('Iqidis')) return { pass: false, score: 0, reason: 'Collateral: Iqidis removed' };
+        if (!t.includes('Amazing')) return { pass: false, score: 0, reason: 'Collateral: Amazing removed' };
         if (!t.includes('indemnify')) return { pass: false, score: 0, reason: 'Collateral: indemnification removed' };
         return { pass: true, score: 1, reason: 'Content preserved' };
     - type: javascript
@@ -154,7 +154,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace all occurrences of "Iqidis Corp" with "Apex Holdings" throughout the document. The replacement text must keep the same formatting (bold, italic, etc.) as the original.'
+    task: 'Replace all occurrences of "Amazing Corp" with "Apex Holdings" throughout the document. The replacement text must keep the same formatting (bold, italic, etc.) as the original.'
     fidelityChecks: '[]'
   assert:
     - type: javascript
@@ -163,16 +163,16 @@
         const d = JSON.parse(output);
         const t = d.documentText || '';
         if (!t.includes('Apex Holdings')) return { pass: false, score: 0, reason: 'Apex Holdings not found' };
-        if (t.includes('Iqidis Corp')) return { pass: false, score: 0, reason: 'Iqidis Corp still present' };
+        if (t.includes('Amazing Corp')) return { pass: false, score: 0, reason: 'Amazing Corp still present' };
         return { pass: true, score: 1, reason: 'Replaced correctly' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures removed' };
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        return { pass: true, score: 1, reason: 'TechVentures intact' };
+        return { pass: true, score: 1, reason: 'TechCraft intact' };
     - type: javascript
       metric: fidelity
       value: file://../shared/checks.cjs:benchmarkFidelity
@@ -221,7 +221,7 @@
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures removed' };
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
         return { pass: true, score: 1, reason: 'Content preserved' };
     - type: javascript
       metric: fidelity

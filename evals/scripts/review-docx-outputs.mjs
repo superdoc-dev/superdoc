@@ -53,8 +53,8 @@ for (const f of files) {
 const reviewGuide = {
   'Replace': [
     'Is "SuperDoc Inc" (or "Apex Holdings") present throughout?',
-    'Is the old name ("Iqidis") completely gone?',
-    'Is "TechVentures" still intact (collateral)?',
+    'Is the old name ("Amazing") completely gone?',
+    'Is "TechCraft" still intact (collateral)?',
     'Is the formatting preserved? (bold, font, size unchanged)',
     'Are headings, numbering, and styles intact?',
   ],
@@ -76,7 +76,7 @@ const reviewGuide = {
     'Is the rest of the document unchanged?',
   ],
   'bold': [
-    'Is "TechVentures LLC" displayed in bold?',
+    'Is "TechCraft LLC" displayed in bold?',
     'Are ALL occurrences bold (not just the first)?',
     'Is the text content unchanged (no extra/missing words)?',
   ],

@@ -166,7 +166,7 @@ The Claude Agent SDK loaded ALL user MCP servers (43 Linear tools, 5 Excalidraw 
 12. **Document template tool** — accept markdown/structured spec, create full document in one call.
 13. **Reduce tool count** — merge superdoc_create + superdoc_format to eliminate extra turns.
 14. **Add document fidelity scoring** — compare OOXML structure before/after to measure preservation quality.
-15. **Synthetic names migration** — replace Iqidis/TechVentures in v1 fixtures.
+15. **Synthetic names migration** — replace Amazing/TechCraft in v1 fixtures.
 
 ---
 

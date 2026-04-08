@@ -52,10 +52,10 @@
       value: |
         const d = JSON.parse(output);
         const t = d.agentResponseText || '';
-        const hasIqidis = t.includes('Iqidis');
-        const hasTechVentures = t.includes('TechVentures');
-        if (!hasIqidis && !hasTechVentures) return { pass: false, score: 0, reason: 'Neither Iqidis nor TechVentures found' };
-        return { pass: true, score: 1, reason: `Found: ${[hasIqidis && 'Iqidis', hasTechVentures && 'TechVentures'].filter(Boolean).join(', ')}` };
+        const hasAmazing = t.includes('Amazing');
+        const hasTechCraft = t.includes('TechCraft');
+        if (!hasAmazing && !hasTechCraft) return { pass: false, score: 0, reason: 'Neither Amazing nor TechCraft found' };
+        return { pass: true, score: 1, reason: `Found: ${[hasAmazing && 'Amazing', hasTechCraft && 'TechCraft'].filter(Boolean).join(', ')}` };
     - type: javascript
       metric: collateral
       value: |
@@ -120,7 +120,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace every instance of "Iqidis" with "SuperDoc Inc" throughout the document.'
+    task: 'Replace every instance of "Amazing" with "SuperDoc Inc" throughout the document.'
   assert:
     - type: javascript
       metric: correctness
@@ -128,16 +128,16 @@
         const d = JSON.parse(output);
         const t = d.documentText || '';
         if (!t.includes('SuperDoc Inc')) return { pass: false, score: 0, reason: 'SuperDoc Inc not found' };
-        if (t.includes('Iqidis')) return { pass: false, score: 0, reason: 'Old name Iqidis still present' };
+        if (t.includes('Amazing')) return { pass: false, score: 0, reason: 'Old name Amazing still present' };
         return { pass: true, score: 1, reason: 'Entity replaced correctly' };
     - type: javascript
       metric: collateral
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (!t.includes('TechVentures')) return { pass: false, score: 0, reason: 'Collateral: TechVentures removed' };
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
         if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
-        return { pass: true, score: 1, reason: 'TechVentures intact' };
+        return { pass: true, score: 1, reason: 'TechCraft intact' };
     - type: javascript
       metric: steps
       weight: 0

@@ -86,7 +86,7 @@ async function testCodexProvider() {
   const editResult = await baselineEditor.callApi('', {
     vars: {
       fixture: 'nda.docx',
-      task: 'Replace every instance of "Iqidis" with "SuperDoc Inc" throughout the document.',
+      task: 'Replace every instance of "Amazing" with "SuperDoc Inc" throughout the document.',
       keepFile: true,
     },
   });
@@ -98,8 +98,8 @@ async function testCodexProvider() {
     const editOutput = JSON.parse(editResult.output);
     assert(editOutput.documentChanged === true, 'Document was modified');
     assert(editOutput.documentText.includes('SuperDoc Inc'), 'New name "SuperDoc Inc" present');
-    assert(!editOutput.documentText.includes('Iqidis'), 'Old name "Iqidis" removed');
-    assert(editOutput.documentText.includes('TechVentures'), 'Collateral: TechVentures intact');
+    assert(!editOutput.documentText.includes('Amazing'), 'Old name "Amazing" removed');
+    assert(editOutput.documentText.includes('TechCraft'), 'Collateral: TechCraft intact');
     assert(editOutput.pathUsed === 'raw', 'Path used is "raw" (no SuperDoc)');
   }
 
@@ -123,7 +123,7 @@ async function testCodexProvider() {
     const mcpOutput = JSON.parse(mcpResult.output);
     assert(mcpOutput.agentResponseText.length > 10, 'Agent returned text response');
     assert(
-      mcpOutput.agentResponseText.includes('Iqidis') || mcpOutput.agentResponseText.includes('TechVentures'),
+      mcpOutput.agentResponseText.includes('Amazing') || mcpOutput.agentResponseText.includes('TechCraft'),
       'Response contains party names'
     );
     assert(mcpOutput.documentChanged === false, 'Document was not modified (reading task)');
@@ -189,7 +189,7 @@ async function testClaudeProvider() {
   const editResult = await baselineEditor.callApi('', {
     vars: {
       fixture: 'nda.docx',
-      task: 'Replace every instance of "Iqidis" with "SuperDoc Inc" throughout the document.',
+      task: 'Replace every instance of "Amazing" with "SuperDoc Inc" throughout the document.',
       keepFile: true,
     },
   });
@@ -201,8 +201,8 @@ async function testClaudeProvider() {
     const editOutput = JSON.parse(editResult.output);
     assert(editOutput.documentChanged === true, 'Document was modified');
     assert(editOutput.documentText.includes('SuperDoc Inc'), 'New name "SuperDoc Inc" present');
-    assert(!editOutput.documentText.includes('Iqidis'), 'Old name "Iqidis" removed');
-    assert(editOutput.documentText.includes('TechVentures'), 'Collateral: TechVentures intact');
+    assert(!editOutput.documentText.includes('Amazing'), 'Old name "Amazing" removed');
+    assert(editOutput.documentText.includes('TechCraft'), 'Collateral: TechCraft intact');
   }
 
   // Test 3: Claude with SuperDoc MCP
@@ -230,7 +230,7 @@ async function testClaudeProvider() {
     const mcpOutput = JSON.parse(mcpResult.output);
     assert(mcpOutput.agentResponseText.length > 10, 'Agent returned text response');
     assert(
-      mcpOutput.agentResponseText.includes('Iqidis') || mcpOutput.agentResponseText.includes('TechVentures'),
+      mcpOutput.agentResponseText.includes('Amazing') || mcpOutput.agentResponseText.includes('TechCraft'),
       'Response contains party names'
     );
     assert(mcpOutput.documentChanged === false, 'Document was not modified (reading task)');
@@ -266,7 +266,7 @@ async function testClaudeProvider() {
     const localOutput = JSON.parse(localResult.output);
     assert(localOutput.agentResponseText.length > 10, 'Agent returned text response');
     assert(
-      localOutput.agentResponseText.includes('Iqidis') || localOutput.agentResponseText.includes('TechVentures'),
+      localOutput.agentResponseText.includes('Amazing') || localOutput.agentResponseText.includes('TechCraft'),
       'Response contains party names'
     );
     console.log(`  INFO: pathUsed=${localOutput.pathUsed}`);

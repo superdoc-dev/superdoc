@@ -51,9 +51,9 @@ Below that is the agent's response text and the full document text after any edi
 | # | Type | Task | What we check |
 |---|------|------|--------------|
 | 1 | Read | Extract headings | Agent lists headings from a clinical trial report |
-| 2 | Read | Extract entity names | Agent finds "Iqidis Corp" and "TechVentures LLC" in an NDA |
+| 2 | Read | Extract entity names | Agent finds "Amazing Corp" and "TechCraft LLC" in an NDA |
 | 3 | Read | Extract financial figures | Agent finds $25M and $150M thresholds in a memorandum |
-| 4 | Edit | Replace entity name | Replace "Iqidis" with "SuperDoc Inc" without touching "TechVentures" |
+| 4 | Edit | Replace entity name | Replace "Amazing" with "SuperDoc Inc" without touching "TechCraft" |
 | 5 | Edit | Insert new section | Add a "Force Majeure" section at the end of the NDA |
 | 6 | Edit | Fill placeholders | Replace "[Candidate Name]" with "Jane Smith" in an offer letter |
 

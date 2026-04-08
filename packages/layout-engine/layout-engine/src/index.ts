@@ -2260,9 +2260,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Prune trailing empty page(s) that can be created by page-boundary rules
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
-  while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
-    pages.pop();
-  }
+  paginator.pruneTrailingEmptyPages();
 
   if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
     const state = paginator.ensurePage();

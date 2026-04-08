@@ -927,3 +927,52 @@ describe('m:func converter', () => {
     expect(mis[1]!.textContent).toBe('cos');
   });
 });
+
+describe('m:eqArr converter', () => {
+  it('converts equation array to left-aligned <mtable>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:eqArr',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '=' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '=' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mtable = result!.querySelector('mtable');
+    expect(mtable).not.toBeNull();
+    expect(mtable!.getAttribute('columnalign')).toBe('left');
+    const rows = mtable!.querySelectorAll('mtr');
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.textContent).toBe('x=1');
+    expect(rows[1]!.textContent).toBe('y=2');
+  });
+
+  it('returns null for empty equation array', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:eqArr', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+});

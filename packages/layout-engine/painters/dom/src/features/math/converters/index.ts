@@ -13,3 +13,4 @@ export { convertFunction } from './function.js';
 export { convertSubscript } from './subscript.js';
 export { convertSuperscript } from './superscript.js';
 export { convertSubSuperscript } from './sub-superscript.js';
+export { convertEquationArray } from './equation-array.js';

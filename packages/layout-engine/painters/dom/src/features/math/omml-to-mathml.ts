@@ -18,6 +18,7 @@ import {
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
+  convertEquationArray,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -50,7 +51,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
   'm:d': null, // Delimiter (parentheses, brackets, braces)
-  'm:eqArr': null, // Equation array (vertical array of equations)
+  'm:eqArr': convertEquationArray, // Equation array (vertical array of equations)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)
   'm:limUpp': null, // Upper limit

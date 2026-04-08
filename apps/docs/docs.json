@@ -65,7 +65,8 @@
               },
               "getting-started/import-export",
               "getting-started/fonts",
-              "getting-started/theming"
+              "getting-started/theming",
+              "getting-started/ai"
             ]
           },
           {
@@ -114,7 +115,14 @@
                 "group": "SDKs",
                 "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
               },
-              "document-engine/cli",
+              "document-engine/cli"
+            ]
+          },
+          {
+            "group": "AI",
+            "tag": "NEW",
+            "pages": [
+              "ai/overview",
               {
                 "group": "MCP",
                 "pages": ["ai/mcp/overview", "ai/mcp/how-to-use", "ai/mcp/debugging"]
@@ -126,10 +134,10 @@
                   "ai/agents/integrations",
                   "ai/agents/best-practices",
                   "ai/agents/debugging",
-                  "ai/agents/eval-results",
-                  "ai/agents/skills"
+                  "ai/agents/eval-results"
                 ]
-              }
+              },
+              "ai/agents/skills"
             ]
           },
           {

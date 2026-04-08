@@ -3453,3 +3453,60 @@ describe('m:phant converter', () => {
     expect(mpadded!.querySelector('mphantom')).not.toBeNull();
   });
 });
+
+describe('m:groupChr converter', () => {
+  it('converts bottom underbrace to <munder> with default character', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:groupChr',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+    expect(munder!.children[0]!.textContent).toBe('x');
+    const groupMo = munder!.children[1] as Element;
+    expect(groupMo.localName).toBe('mo');
+    expect(groupMo.textContent).toBe('\u23DF');
+  });
+
+  it('converts top overbrace to <mover>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:groupChr',
+          elements: [
+            {
+              name: 'm:groupChrPr',
+              elements: [
+                { name: 'm:chr', attributes: { 'm:val': '\u23DE' } },
+                { name: 'm:pos', attributes: { 'm:val': 'top' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.children[0]!.textContent).toBe('y');
+    const mo = mover!.querySelector('mo');
+    expect(mo!.textContent).toBe('\u23DE');
+  });
+});

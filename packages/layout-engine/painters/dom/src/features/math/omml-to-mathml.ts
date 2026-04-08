@@ -27,6 +27,7 @@ import {
   convertUpperLimit,
   convertNary,
   convertPhantom,
+  convertGroupCharacter,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -66,7 +67,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
-  'm:groupChr': null, // Group character (overbrace, underbrace)
+  'm:groupChr': convertGroupCharacter, // Group character (overbrace, underbrace)
   'm:m': null, // Matrix (grid of elements)
 };
 

@@ -3929,3 +3929,121 @@ describe('m:m converter', () => {
     expect(mtable!.textContent).toBe('ab');
   });
 });
+describe('m:box converter', () => {
+  it('converts m:box to <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:box',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('returns null for empty m:box', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:box', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+});
+
+describe('m:borderBox converter', () => {
+  it('converts m:borderBox to <menclose notation="box"> by default', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'E' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('box');
+    expect(menclose!.textContent).toBe('E');
+  });
+
+  it('hides individual sides when hide flags are set', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    const notation = menclose!.getAttribute('notation')!;
+    expect(notation).toContain('left');
+    expect(notation).toContain('right');
+    expect(notation).not.toContain('top');
+    expect(notation).not.toContain('bottom');
+  });
+
+  it('adds strike notations', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('horizontalstrike');
+  });
+});

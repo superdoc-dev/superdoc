@@ -205,6 +205,13 @@ const totalHeight = computed(() => {
   return max + 50;
 });
 
+// The inner sidebar is translated by sidebarOffsetY. When shifted down, the
+// rendered bottom edge can exceed totalHeight and get clipped by parent scroll
+// containers. Expand wrapper height to include positive translate offset.
+const wrapperMinHeight = computed(() => {
+  return totalHeight.value + Math.max(0, sidebarOffsetY.value);
+});
+
 // Set up IntersectionObserver to track which placeholders are near the viewport
 const setupObserver = () => {
   if (observer) observer.disconnect();
@@ -287,6 +294,19 @@ const handleResize = (comment) => {
     const dialog = el.querySelector('.comments-dialog');
     if (!dialog) return;
     storeHeight(key, dialog.getBoundingClientRect().height);
+
+    const isActiveThread = key === activeCommentKey.value;
+    const isPending = key === 'pending';
+    const isEditingThread = !!editingCommentId.value && editingCommentId.value === comment?.commentId;
+    if (!isActiveThread && !isPending && !isEditingThread) return;
+
+    // Reflow nearby cards after size changes of the active/pending/editing thread.
+    // Avoid force-snapping to anchor here because it can over-shift the whole lane
+    // near viewport boundaries and make bottom clipping more frequent.
+    remeasureCommentKeys(allPositions.value.map((pos) => pos.id));
+    clearDeferredRemeasureTimers();
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 50));
+    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 350));
   });
 };
 
@@ -567,7 +587,7 @@ onBeforeUnmount(() => {
     class="section-wrapper"
     ref="floatingCommentsContainer"
     :style="{
-      minHeight: totalHeight + 'px',
+      minHeight: wrapperMinHeight + 'px',
       transition: disableInstantLayoutTransitions ? 'none' : undefined,
     }"
   >

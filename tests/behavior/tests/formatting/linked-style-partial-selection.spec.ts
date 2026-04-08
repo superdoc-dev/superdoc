@@ -38,13 +38,29 @@ async function getTextStyleId(page: Page, text: string): Promise<string | null> 
   }, text);
 }
 
-async function applyLinkedStyleToSelection(page: Page, styleId: string): Promise<boolean> {
-  return page.evaluate((id) => {
-    const editor = (window as any).editor;
-    const style = editor.helpers.linkedStyles.getStyleById(id);
-    if (!style) return false;
-    return editor.commands.setLinkedStyle(style);
-  }, styleId);
+async function applyLinkedStyleToSelection(page: Page, styleId: string, linkedCharStyleId: string): Promise<boolean> {
+  return page.evaluate(
+    ({ id, linkId }) => {
+      const editor = (window as any).editor;
+      const baseStyle = editor.helpers.linkedStyles.getStyleById(id);
+      if (!baseStyle) return false;
+
+      const linkedStyle = {
+        ...baseStyle,
+        type: 'paragraph',
+        definition: {
+          ...baseStyle.definition,
+          attrs: {
+            ...(baseStyle.definition?.attrs ?? {}),
+            link: linkId,
+          },
+        },
+      };
+
+      return editor.commands.setLinkedStyle(linkedStyle);
+    },
+    { id: styleId, linkId: linkedCharStyleId },
+  );
 }
 
 test.describe('SD-2425 linked style partial selection', () => {
@@ -58,7 +74,7 @@ test.describe('SD-2425 linked style partial selection', () => {
     await superdoc.waitForStable();
 
     // Apply Heading 1 via command
-    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
+    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1', 'Heading1Char');
     await superdoc.waitForStable();
     expect(result).toBe(true);
 
@@ -83,7 +99,7 @@ test.describe('SD-2425 linked style partial selection', () => {
     await superdoc.selectAll();
     await superdoc.waitForStable();
 
-    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
+    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1', 'Heading1Char');
     await superdoc.waitForStable();
     expect(result).toBe(true);
 
@@ -105,7 +121,7 @@ test.describe('SD-2425 linked style partial selection', () => {
     await superdoc.setTextSelection(pos, pos + 'world'.length);
     await superdoc.waitForStable();
 
-    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
+    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1', 'Heading1Char');
     await superdoc.waitForStable();
     expect(result).toBe(true);
 
@@ -126,7 +142,7 @@ test.describe('SD-2425 linked style partial selection', () => {
     await superdoc.setTextSelection(pos, pos + 'world'.length);
     await superdoc.waitForStable();
 
-    await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
+    await applyLinkedStyleToSelection(superdoc.page, 'Heading1', 'Heading1Char');
     await superdoc.waitForStable();
 
     // Move cursor to end and press Enter
@@ -153,7 +169,7 @@ test.describe('SD-2425 linked style partial selection', () => {
     await superdoc.setTextSelection(fromPos, toText + 'Second'.length);
     await superdoc.waitForStable();
 
-    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
+    const result = await applyLinkedStyleToSelection(superdoc.page, 'Heading1', 'Heading1Char');
     await superdoc.waitForStable();
     expect(result).toBe(true);
 

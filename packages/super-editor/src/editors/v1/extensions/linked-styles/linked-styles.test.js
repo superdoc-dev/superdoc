@@ -238,6 +238,35 @@ describe('LinkedStyles Extension', () => {
         ).toBe(true);
       });
 
+      it('applies character style as stored marks on collapsed cursor without modifying paragraph', () => {
+        const prevStyleId = getParagraphProps(findParagraphInfo(editor.state.doc, 0).node).styleId;
+
+        setParagraphCursor(editor.view, 0);
+
+        const characterStyle = {
+          ...headingStyle,
+          id: 'EmphasisChar',
+          type: 'character',
+          definition: {
+            ...headingStyle.definition,
+            attrs: { ...headingStyle.definition.attrs, name: 'Emphasis Char' },
+          },
+        };
+
+        const result = editor.commands.setLinkedStyle(characterStyle);
+        expect(result).toBe(true);
+
+        // Paragraph style must NOT change
+        const paraAfter = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(paraAfter.node).styleId).toBe(prevStyleId);
+
+        // Stored marks should include textStyle with the character styleId
+        const stored = editor.state.storedMarks || [];
+        const ts = stored.find((m) => m.type.name === 'textStyle');
+        expect(ts).toBeDefined();
+        expect(ts?.attrs?.styleId).toBe('EmphasisChar');
+      });
+
       it('applies character style to a text selection without modifying the paragraph style', () => {
         const firstParagraph = findParagraphInfo(editor.state.doc, 0);
         const prevStyleId = getParagraphProps(firstParagraph.node).styleId;

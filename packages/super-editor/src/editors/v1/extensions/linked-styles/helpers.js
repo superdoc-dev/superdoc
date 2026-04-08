@@ -414,7 +414,23 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     }
   };
 
-  // Handle cursor position (no selection)
+  // Character styles: only affect the selected range (or stored marks for collapsed cursor)
+  if (style.type === 'character') {
+    if (!textStyleType) return false;
+    if (from === to) {
+      // Collapsed cursor: set stored marks for subsequent typing
+      const sourceMarks = tr.storedMarks ?? state.storedMarks ?? selection.$from.marks();
+      const filtered = sourceMarks.filter((mark) => mark.type !== textStyleType);
+      tr.setStoredMarks([...filtered, textStyleType.create({ styleId: style.id })]);
+      return true;
+    }
+    clearFormattingMarks(from, to);
+    applyCharacterStyleMarkToRange(tr, textStyleType, from, to, style.id);
+    clearStoredFormattingMarks();
+    return true;
+  }
+
+  // Handle cursor position (no selection) — paragraph styles only
   if (from === to) {
     let pos = from;
     let paragraphNode = tr.doc.nodeAt(from);
@@ -432,15 +448,6 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
 
     // Update paragraph attributes
     tr.setNodeMarkup(pos, undefined, getUpdatedParagraphAttrs(paragraphNode));
-    return true;
-  }
-
-  // Character styles: only affect the selected range (including across paragraphs)
-  if (style.type === 'character') {
-    if (!textStyleType) return false;
-    clearFormattingMarks(from, to);
-    applyCharacterStyleMarkToRange(tr, textStyleType, from, to, style.id);
-    clearStoredFormattingMarks();
     return true;
   }
 

@@ -716,6 +716,35 @@ describe('layoutDocument', () => {
     expect(anchoredTableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + paragraphMeasure.totalHeight);
   });
 
+  it('renders a floating table when the document has no body paragraphs', () => {
+    const floatingOnlyTable = makeTableBlock('table-floating-only', 1, {
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'paragraph',
+        offsetH: 120,
+        offsetV: 15,
+      },
+      wrap: {
+        type: 'Square',
+        wrapText: 'bothSides',
+      },
+    });
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument([floatingOnlyTable], [floatingOnlyMeasure], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-only',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
   it('propagates pm ranges onto fragments', () => {
     const blockWithRuns: FlowBlock = {
       kind: 'paragraph',

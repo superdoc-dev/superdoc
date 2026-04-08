@@ -238,6 +238,90 @@ describe('LinkedStyles Extension', () => {
         ).toBe(true);
       });
 
+      it('applies character style to a text selection without modifying the paragraph style', () => {
+        const firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        const prevStyleId = getParagraphProps(firstParagraph.node).styleId;
+
+        const { from, to } = selectParagraphText(editor.view, 0);
+
+        const characterStyle = {
+          ...headingStyle,
+          id: 'EmphasisChar',
+          type: 'character',
+          definition: {
+            ...headingStyle.definition,
+            attrs: { ...headingStyle.definition.attrs, name: 'Emphasis Char' },
+          },
+        };
+
+        const result = editor.commands.setLinkedStyle(characterStyle);
+        expect(result).toBe(true);
+
+        // Paragraph style unchanged
+        const paraAfter = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(paraAfter.node).styleId).toBe(prevStyleId);
+
+        // Character style mark applied to the selected range
+        let sawCharStyle = false;
+        editor.state.doc.nodesBetween(from, to, (node) => {
+          if (!node.isText) return;
+          const ts = node.marks.find((m) => m.type.name === 'textStyle');
+          if (ts?.attrs?.styleId === 'EmphasisChar') sawCharStyle = true;
+        });
+        expect(sawCharStyle).toBe(true);
+      });
+
+      it('applies paragraph style to both paragraphs when selection spans two paragraphs with a linked style', () => {
+        const twoParagraphDoc = editor.schema.nodeFromJSON({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'run', content: [{ type: 'text', text: 'First paragraph' }] }],
+            },
+            {
+              type: 'paragraph',
+              content: [{ type: 'run', content: [{ type: 'text', text: 'Second paragraph' }] }],
+            },
+          ],
+        });
+        editor.setState(EditorState.create({ schema: editor.schema, doc: twoParagraphDoc }));
+
+        // Find text positions in both paragraphs
+        let firstTextPos = null;
+        let secondTextEnd = null;
+        editor.state.doc.descendants((node, pos) => {
+          if (node.isText && node.text === 'First paragraph' && firstTextPos === null) {
+            firstTextPos = pos + 3; // mid-word "st paragraph"
+          }
+          if (node.isText && node.text === 'Second paragraph') {
+            secondTextEnd = pos + node.text.length - 3; // mid-word "Second paragra"
+          }
+        });
+        expect(firstTextPos).not.toBeNull();
+        expect(secondTextEnd).not.toBeNull();
+
+        const styleWithLink = {
+          ...headingStyle,
+          type: 'paragraph',
+          definition: {
+            ...headingStyle.definition,
+            attrs: { ...headingStyle.definition.attrs, link: 'Heading1Char' },
+          },
+        };
+
+        editor.view.dispatch(
+          editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, firstTextPos, secondTextEnd)),
+        );
+        expect(editor.commands.setLinkedStyle(styleWithLink)).toBe(true);
+
+        // Both paragraphs should have the paragraph style (not character mark)
+        const para0 = findParagraphInfo(editor.state.doc, 0);
+        const para1 = findParagraphInfo(editor.state.doc, 1);
+        expect(getParagraphProps(para0.node).styleId).toBe('Heading1');
+        expect(getParagraphProps(para1.node).styleId).toBe('Heading1');
+      });
+
       it('applies paragraph style when the paragraph has no text (e.g. break-only)', () => {
         const minimalDoc = editor.schema.nodeFromJSON({
           type: 'doc',

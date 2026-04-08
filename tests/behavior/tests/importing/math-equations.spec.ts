@@ -111,7 +111,7 @@ test.describe('math equation import and rendering', () => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();
 
-    // Unimplemented math objects (e.g., radical, delimiter) should still
+    // Unimplemented math objects (e.g., delimiter) should still
     // have their text content accessible in the PM document
     const mathTexts = await superdoc.page.evaluate(() => {
       const view = (window as any).editor?.view;

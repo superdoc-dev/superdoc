@@ -927,3 +927,85 @@ describe('m:func converter', () => {
     expect(mis[1]!.textContent).toBe('cos');
   });
 });
+
+describe('m:limLow converter', () => {
+  it('converts lim_{x→0} to <munder>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:limLow',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'lim' }] }] }],
+            },
+            {
+              name: 'm:lim',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '→' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+    expect(munder!.children[0]!.textContent).toBe('lim');
+    expect(munder!.children[1]!.textContent).toBe('x→0');
+  });
+
+  it('handles missing m:lim gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:limLow',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'min' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+    expect(munder!.children[0]!.textContent).toBe('min');
+  });
+
+  it('ignores m:limLowPr', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:limLow',
+          elements: [
+            { name: 'm:limLowPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sup' }] }] }],
+            },
+            {
+              name: 'm:lim',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'S' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+    expect(munder!.children[0]!.textContent).toBe('sup');
+    expect(munder!.children[1]!.textContent).toBe('S');
+  });
+});

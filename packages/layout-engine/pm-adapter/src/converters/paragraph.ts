@@ -665,6 +665,26 @@ export function paragraphToFlowBlocks({
     blockWithAttrs.attrs.anchorParagraphId = anchorParagraphId;
     return blockWithAttrs;
   };
+  const attachInlineShapeGroupAlignment = <T extends FlowBlock>(block: T): T => {
+    if (block.kind !== 'drawing') {
+      return block;
+    }
+    const drawingBlock = block as T & {
+      drawingKind?: string;
+      attrs?: Record<string, unknown>;
+    };
+    const rawWrap = drawingBlock.attrs?.wrap as { type?: unknown } | undefined;
+    if (drawingBlock.drawingKind !== 'shapeGroup' || rawWrap?.type !== 'Inline') {
+      return block;
+    }
+    if (!drawingBlock.attrs) {
+      drawingBlock.attrs = {};
+    }
+    if (paragraphAttrs.alignment === 'center' || paragraphAttrs.alignment === 'right') {
+      drawingBlock.attrs.inlineParagraphAlignment = paragraphAttrs.alignment;
+    }
+    return block;
+  };
 
   const flushParagraph = () => {
     if (currentRuns.length === 0) {
@@ -757,11 +777,13 @@ export function paragraphToFlowBlocks({
             const block = blockConverter(node, { ...blockOptions, blocks: newBlocks });
             if (block) {
               attachAnchorParagraphId(block, anchorParagraphId);
+              attachInlineShapeGroupAlignment(block);
               blocks.push(block);
             } else if (newBlocks.length > 0) {
               // Some block converters may push multiple blocks to the provided array
               newBlocks.forEach((b) => {
                 attachAnchorParagraphId(b, anchorParagraphId);
+                attachInlineShapeGroupAlignment(b);
                 blocks.push(b);
               });
             }
@@ -779,6 +801,7 @@ export function paragraphToFlowBlocks({
       const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
       const drawingBlock = converter(node, stableNextBlockId, positions);
       if (drawingBlock) {
+        attachInlineShapeGroupAlignment(drawingBlock);
         blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;

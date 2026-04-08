@@ -85,6 +85,12 @@ export function layoutDrawingBlock({
   const indentRight = typeof attrs?.hrIndentRight === 'number' ? attrs.hrIndentRight : 0;
   const maxWidthForBlock =
     attrs?.isFullWidth === true && maxWidth > 0 ? Math.max(1, maxWidth - indentLeft - indentRight) : maxWidth;
+  const rawWrap = attrs?.wrap as { type?: unknown } | undefined;
+  const isInlineShapeGroup = block.drawingKind === 'shapeGroup' && rawWrap?.type === 'Inline';
+  const inlineParagraphAlignment =
+    attrs?.inlineParagraphAlignment === 'center' || attrs?.inlineParagraphAlignment === 'right'
+      ? attrs.inlineParagraphAlignment
+      : undefined;
 
   if (width > maxWidthForBlock && maxWidthForBlock > 0) {
     const scale = maxWidthForBlock / width;
@@ -107,12 +113,18 @@ export function layoutDrawingBlock({
   }
 
   const pmRange = extractBlockPmRange(block);
+  let x = columnX(state.columnIndex) + marginLeft + indentLeft;
+  if (isInlineShapeGroup && inlineParagraphAlignment === 'center') {
+    x += Math.max(0, maxWidthForBlock - width) / 2;
+  } else if (isInlineShapeGroup && inlineParagraphAlignment === 'right') {
+    x += Math.max(0, maxWidthForBlock - width);
+  }
 
   const fragment: DrawingFragment = {
     kind: 'drawing',
     blockId: block.id,
     drawingKind: block.drawingKind,
-    x: columnX(state.columnIndex) + marginLeft + indentLeft,
+    x,
     y: state.cursorY + marginTop,
     width,
     height,

@@ -510,6 +510,14 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Allow body layout to synthesize page 1 for anchored tables when a document has
+   * no anchor paragraphs and would otherwise render zero pages.
+   *
+   * Header/footer layout keeps this disabled to avoid changing long-standing
+   * overlay behavior in paragraph-free header/footer regions.
+   */
+  allowParagraphlessAnchoredTableFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -804,6 +812,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Track active and pending columns
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
+  const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -1432,8 +1441,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Collect anchored drawings mapped to their anchor paragraphs
   const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
-  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs
-  const anchoredTablesByParagraph = collectAnchoredTables(blocks, measures);
+  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
+  // Tables without any anchor paragraph need explicit fallback placement so
+  // floating-only documents still produce a page and render their content.
+  const anchoredTables = collectAnchoredTables(blocks, measures);
+  const anchoredTablesByParagraph = anchoredTables.byParagraph;
+  const paragraphlessAnchoredTables = anchoredTables.withoutParagraph;
   const placedAnchoredIds = new Set<string>();
   const placedAnchoredTableIds = new Set<string>();
 
@@ -1445,6 +1458,44 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
   const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+
+  const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
+    const contentTop = state.topMargin;
+    const contentBottom = state.contentBottom;
+    const contentHeight = Math.max(0, contentBottom - contentTop);
+    const tableHeight = measure.totalHeight ?? 0;
+    const anchor = block.anchor;
+    const offsetV = anchor?.offsetV ?? 0;
+    const vRelativeFrom = anchor?.vRelativeFrom;
+    const alignV = anchor?.alignV;
+
+    if (vRelativeFrom === 'margin') {
+      if (alignV === 'bottom') {
+        return contentBottom - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        return contentTop + (contentHeight - tableHeight) / 2 + offsetV;
+      }
+      return contentTop + offsetV;
+    }
+
+    if (vRelativeFrom === 'page') {
+      if (alignV === 'bottom') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return pageHeight - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return (pageHeight - tableHeight) / 2 + offsetV;
+      }
+      return offsetV;
+    }
+
+    // Paragraph-relative floating tables normally anchor to a body paragraph.
+    // When a document has no body paragraphs at all, fall back to the top of the
+    // content area so the table can still render on page 1.
+    return contentTop + offsetV;
+  };
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -2209,8 +2260,28 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Prune trailing empty page(s) that can be created by page-boundary rules
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
-  while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
-    pages.pop();
+  paginator.pruneTrailingEmptyPages();
+
+  if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
+    const state = paginator.ensurePage();
+
+    for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
+      const columnWidthForTable = getCurrentColumnWidth();
+      const totalWidth = tableMeasure.totalWidth ?? 0;
+      const shouldFlowInline =
+        columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+
+      if (shouldFlowInline) {
+        continue;
+      }
+
+      const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
+      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+
+      floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      placedAnchoredTableIds.add(tableBlock.id);
+    }
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -2533,6 +2604,7 @@ export function layoutHeaderFooter(
   const layout = layoutDocument(blocks, measures, {
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    allowParagraphlessAnchoredTableFallback: false,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.

@@ -8,7 +8,6 @@ import type {
   ExportEvent,
 } from '@superdoc-dev/template-builder';
 import 'superdoc/style.css';
-import '@superdoc-dev/template-builder/field-types.css';
 import './App.css';
 
 const availableFields: FieldDefinition[] = [
@@ -253,6 +252,10 @@ export function App() {
           fields={fieldsConfig}
           list={listConfig}
           toolbar={true}
+          fieldColors={{
+            owner: '#629be7',
+            signer: '#d97706',
+          }}
           telemetry={{
             enabled: true,
             metadata: {

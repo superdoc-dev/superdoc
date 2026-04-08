@@ -67,8 +67,8 @@ describe('groupTrackedChanges', () => {
 
   it('groups marks by raw id', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
-      { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
-      { ...makeTrackMark(TrackDeleteMarkName, 'tc-1'), from: 5, to: 10 },
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '11' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackDeleteMarkName, 'tc-1', { sourceId: '10' }), from: 5, to: 10 },
     ] as never);
 
     const editor = makeEditor();
@@ -80,6 +80,7 @@ describe('groupTrackedChanges', () => {
     expect(grouped[0]?.to).toBe(10);
     expect(grouped[0]?.hasInsert).toBe(true);
     expect(grouped[0]?.hasDelete).toBe(true);
+    expect(grouped[0]?.wordRevisionIds).toEqual({ insert: '11', delete: '10' });
   });
 
   it('keeps separate entries for different raw ids', () => {
@@ -137,13 +138,14 @@ describe('groupTrackedChanges', () => {
 
   it('detects format marks', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
-      { ...makeTrackMark(TrackFormatMarkName, 'tc-1'), from: 1, to: 5 },
+      { ...makeTrackMark(TrackFormatMarkName, 'tc-1', { sourceId: '22' }), from: 1, to: 5 },
     ] as never);
 
     const grouped = groupTrackedChanges(makeEditor());
     expect(grouped[0]?.hasFormat).toBe(true);
     expect(grouped[0]?.hasInsert).toBe(false);
     expect(grouped[0]?.hasDelete).toBe(false);
+    expect(grouped[0]?.wordRevisionIds).toEqual({ format: '22' });
   });
 
   it('sorts results by from position', () => {

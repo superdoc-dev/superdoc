@@ -147,9 +147,15 @@
   },
   "peerDependencies": {
     "@floating-ui/dom": "^1.7.0",
+    "react": ">=16.8.0",
     "tippy.js": "^6.3.7",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
@@ -162,6 +168,7 @@
     "postcss-nested": "catalog:",
     "postcss-nested-import": "catalog:",
     "prosemirror-test-builder": "catalog:",
+    "react": "catalog:",
     "tippy.js": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

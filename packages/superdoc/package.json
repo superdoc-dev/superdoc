@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -120,6 +120,7 @@
     "prosemirror-state": "^1.4.0",
     "prosemirror-transform": "^1.9.0",
     "prosemirror-view": "^1.33.0",
+    "react": ">=16.8.0",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },
@@ -137,6 +138,9 @@
       "optional": true
     },
     "prosemirror-view": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     }
   },

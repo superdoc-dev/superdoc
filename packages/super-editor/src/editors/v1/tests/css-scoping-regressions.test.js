@@ -9,6 +9,7 @@ const __dirname = dirname(__filename);
 
 const NODE_RESIZER_CSS_PATH = resolve(__dirname, '../assets/styles/extensions/noderesizer.css');
 const PROSEMIRROR_CSS_PATH = resolve(__dirname, '../assets/styles/elements/prosemirror.css');
+const STRUCTURED_CONTENT_CSS_PATH = resolve(__dirname, '../assets/styles/extensions/structured-content.css');
 
 function extractTopLevelSelectors(cssText) {
   const selectors = [];
@@ -215,5 +216,13 @@ describe('CSS Scoping Regressions', () => {
     expect(proseMirrorRootSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
     expect(proseMirrorListSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
     expect(proseMirrorSelectedNodeSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+  });
+
+  it('structured content stylesheet should disable hover affordances in ProseMirror view mode', () => {
+    const cssText = readFileSync(STRUCTURED_CONTENT_CSS_PATH, 'utf8');
+    const selectors = extractTopLevelSelectors(cssText);
+
+    expect(selectors).toContain('.super-editor .ProseMirror.view-mode .sd-structured-content:hover');
+    expect(selectors).toContain('.super-editor .ProseMirror.view-mode .sd-structured-content-block:hover');
   });
 });

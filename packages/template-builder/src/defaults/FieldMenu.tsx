@@ -15,11 +15,13 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
   onCreateField,
   existingFields = [],
   onSelectExisting,
+  fieldColors,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [fieldMode, setFieldMode] = useState<'inline' | 'block'>('inline');
   const [fieldType, setFieldType] = useState<string>('owner');
+  const [fieldLocked, setFieldLocked] = useState(false);
   const [existingExpanded, setExistingExpanded] = useState(true);
   const [availableExpanded, setAvailableExpanded] = useState(true);
 
@@ -29,6 +31,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setNewFieldName('');
       setFieldMode('inline');
       setFieldType('owner');
+      setFieldLocked(false);
     }
   }, [isVisible]);
 
@@ -69,6 +72,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       label: trimmedName,
       mode: fieldMode,
       fieldType: fieldType,
+      ...(fieldLocked && { lockMode: 'contentLocked' as const }),
     };
 
     try {
@@ -83,6 +87,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setNewFieldName('');
       setFieldMode('inline');
       setFieldType('owner');
+      setFieldLocked(false);
     }
   };
 
@@ -131,6 +136,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 setIsCreating(false);
                 setNewFieldName('');
                 setFieldMode('inline');
+                setFieldLocked(false);
               }
             }}
             autoFocus
@@ -231,6 +237,19 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             style={{
               marginTop: '8px',
               display: 'flex',
+              gap: '12px',
+              fontSize: '13px',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input type='checkbox' checked={fieldLocked} onChange={(e) => setFieldLocked(e.target.checked)} />
+              Locked
+            </label>
+          </div>
+          <div
+            style={{
+              marginTop: '8px',
+              display: 'flex',
               gap: '8px',
             }}
           >
@@ -254,6 +273,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 setNewFieldName('');
                 setFieldMode('inline');
                 setFieldType('owner');
+                setFieldLocked(false);
               }}
               style={{
                 padding: '4px 12px',
@@ -370,7 +390,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                               padding: '2px 6px',
                               borderRadius: '3px',
                               textTransform: 'capitalize',
-                              ...getFieldTypeStyle(entry.fieldType),
+                              ...getFieldTypeStyle(entry.fieldType, fieldColors),
                               fontWeight: 500,
                             }}
                           >
@@ -482,7 +502,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                           padding: '2px 6px',
                           borderRadius: '3px',
                           textTransform: 'capitalize',
-                          ...getFieldTypeStyle(field.fieldType),
+                          ...getFieldTypeStyle(field.fieldType, fieldColors),
                           fontWeight: 500,
                         }}
                       >

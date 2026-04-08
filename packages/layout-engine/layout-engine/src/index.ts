@@ -1095,6 +1095,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
     'decimal';
   let activePageCounter = 1;
+  let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;
   // Section header/footer ref tracking state
   type SectionRefs = {
@@ -1122,6 +1123,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
   if (typeof initialSectionMetadata?.numbering?.start === 'number') {
     activePageCounter = initialSectionMetadata.numbering.start;
+    activeSectionPageCounterStart = activePageCounter;
   }
   let activeSectionRefs: SectionRefs | null = null;
   let pendingSectionRefs: SectionRefs | null = null;
@@ -1165,6 +1167,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
+        const isApplyingPendingSection =
+          pendingTopMargin !== null ||
+          pendingBottomMargin !== null ||
+          pendingLeftMargin !== null ||
+          pendingRightMargin !== null ||
+          pendingHeaderDistance !== null ||
+          pendingFooterDistance !== null ||
+          pendingPageSize !== null ||
+          pendingColumns !== null ||
+          pendingOrientation !== null ||
+          pendingNumbering !== null ||
+          pendingSectionRefs !== null ||
+          pendingSectionIndex !== null ||
+          pendingVAlign !== undefined ||
+          pendingSectionBaseTopMargin !== null ||
+          pendingSectionBaseBottomMargin !== null;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1245,6 +1263,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pendingSectionBaseBottomMargin !== null) {
           activeSectionBaseBottomMargin = pendingSectionBaseBottomMargin;
           pendingSectionBaseBottomMargin = null;
+        }
+        if (isApplyingPendingSection) {
+          activeSectionPageCounterStart = activePageCounter;
         }
         pageCount += 1;
 
@@ -1763,6 +1784,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (sectionMetadata.numbering.format) activeNumberFormat = sectionMetadata.numbering.format;
           if (typeof sectionMetadata.numbering.start === 'number') {
             activePageCounter = sectionMetadata.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           // Non-first section: schedule for next page
@@ -1773,6 +1795,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (effectiveBlock.numbering.format) activeNumberFormat = effectiveBlock.numbering.format;
           if (typeof effectiveBlock.numbering.start === 'number') {
             activePageCounter = effectiveBlock.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           pendingNumbering = { ...effectiveBlock.numbering };
@@ -2274,6 +2297,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
   paginator.pruneTrailingEmptyPages();
+
+  const resetPaginationStateForBlankPageFallback = (): void => {
+    pageCount = 0;
+    activePageCounter = activeSectionPageCounterStart;
+    sectionFirstPageNumbers.clear();
+  };
+
+  if (
+    pages.length === 0 &&
+    ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
+  ) {
+    resetPaginationStateForBlankPageFallback();
+  }
 
   if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
     const state = paginator.ensurePage();

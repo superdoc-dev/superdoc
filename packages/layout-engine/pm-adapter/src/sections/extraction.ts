@@ -211,7 +211,7 @@ function extractPageNumbering(elements: SectionElement[]):
  */
 function extractColumns(
   elements: SectionElement[],
-): { count: number; gap: number; widths?: number[]; equalWidth?: boolean } | undefined {
+): { count: number; gap: number; widths?: number[]; equalWidth?: boolean; lineBetween?: boolean } | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
@@ -233,11 +233,17 @@ function extractColumns(
     .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
     .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
 
+  const sepAttr = cols.attributes['w:sep'];
+  const hasSepChild = Array.isArray(cols.elements) && cols.elements.some((child) => child?.name === 'w:sep');
+  const lineBetween =
+    sepAttr === '1' || sepAttr === 1 || sepAttr === true || sepAttr === 'true' || hasSepChild ? true : undefined;
+
   const result = {
     count,
     gap: gapInches * PX_PER_INCH,
     ...(widths.length > 0 ? { widths } : {}),
     ...(equalWidth !== undefined ? { equalWidth } : {}),
+    ...(lineBetween !== undefined ? { lineBetween } : {}),
   };
 
   return result;

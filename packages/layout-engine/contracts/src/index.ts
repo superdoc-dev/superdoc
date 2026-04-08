@@ -990,6 +990,7 @@ export type SectionBreakBlock = {
     gap: number;
     widths?: number[];
     equalWidth?: boolean;
+    lineBetween?: boolean;
   };
   /**
    * Vertical alignment of content within the section's pages.
@@ -1478,6 +1479,7 @@ export type ColumnLayout = {
   gap: number;
   widths?: number[];
   equalWidth?: boolean;
+  lineBetween?: boolean;
 };
 
 /** A measured line within a block, output by the measurer. */
@@ -1698,6 +1700,11 @@ export type Page = {
    * where headers/footers don't affect vertical alignment.
    */
   baseMargins?: { top: number; bottom: number };
+  /**
+   * Column layout for this page, if multi-column.
+   * Carried from the active section so the painter can render column separator lines.
+   */
+  columns?: ColumnLayout;
   /**
    * Index of the section this page belongs to.
    * Used for section-aware page numbering and header/footer selection.

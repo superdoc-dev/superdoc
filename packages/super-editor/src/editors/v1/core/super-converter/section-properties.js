@@ -87,6 +87,17 @@ export function getSectPrColumns(sectPr) {
     result.gap = twipsToInches(a['w:space']);
   }
 
+  // w:sep = line between columns (attribute on w:cols)
+  if (a['w:sep'] === '1' || a['w:sep'] === 'true') {
+    result.lineBetween = true;
+  }
+
+  // Also check for w:sep child element (alternative OOXML form)
+  const sepChild = cols.elements?.find((el) => el?.name === 'w:sep');
+  if (sepChild) {
+    result.lineBetween = true;
+  }
+
   return Object.keys(result).length > 0 ? result : undefined;
 }
 

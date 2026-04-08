@@ -2227,6 +2227,45 @@ export class DomPainter {
       );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
+
+    // Render vertical separator lines between columns when lineBetween is enabled
+    if (page.columns?.lineBetween && page.columns.count > 1 && page.margins && this.doc) {
+      const cols = page.columns;
+      const margins = page.margins;
+      const pageHeight = page.size?.h ?? height;
+      const contentTop = margins.top;
+      const contentBottom = pageHeight - margins.bottom;
+      const lineHeight = contentBottom - contentTop;
+
+      if (lineHeight > 0) {
+        const colWidths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
+        for (let c = 0; c < cols.count - 1; c++) {
+          let lineX: number;
+          if (colWidths) {
+            let x = margins.left;
+            for (let j = 0; j <= c; j++) {
+              x += colWidths[j] ?? 0;
+              if (j < c) x += cols.gap;
+            }
+            lineX = x + cols.gap / 2;
+          } else {
+            const colWidth = (width - margins.left - margins.right - (cols.count - 1) * cols.gap) / cols.count;
+            lineX = margins.left + (c + 1) * colWidth + (c + 0.5) * cols.gap;
+          }
+
+          const line = this.doc.createElement('div');
+          line.style.position = 'absolute';
+          line.style.left = `${lineX}px`;
+          line.style.top = `${contentTop}px`;
+          line.style.width = '0px';
+          line.style.height = `${lineHeight}px`;
+          line.style.borderLeft = '1px solid #000';
+          line.style.pointerEvents = 'none';
+          el.appendChild(line);
+        }
+      }
+    }
+
     return el;
   }
 

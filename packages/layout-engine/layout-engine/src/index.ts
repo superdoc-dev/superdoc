@@ -1071,6 +1071,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         bottom: activeSectionBaseBottomMargin,
       };
     }
+    // Carry column layout to the page for the painter (e.g. inter-column separator lines)
+    if (activeColumns && activeColumns.count > 1) {
+      page.columns = activeColumns;
+    }
     return page;
   };
 

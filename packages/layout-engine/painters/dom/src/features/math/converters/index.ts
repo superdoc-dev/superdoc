@@ -21,3 +21,4 @@ export { convertRadical } from './radical.js';
 export { convertLowerLimit } from './lower-limit.js';
 export { convertUpperLimit } from './upper-limit.js';
 export { convertNary } from './nary.js';
+export { convertPhantom } from './phantom.js';

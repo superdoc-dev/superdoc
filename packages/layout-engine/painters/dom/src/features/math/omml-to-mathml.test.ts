@@ -1017,4 +1017,50 @@ describe('m:rad converter', () => {
     expect(result!.querySelector('mroot')).not.toBeNull();
     expect(result!.querySelector('msqrt')).toBeNull();
   });
+
+  it('produces <msqrt> when m:deg is missing entirely', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msqrt')).not.toBeNull();
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('handles missing m:e gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide' }],
+            },
+            { name: 'm:deg', elements: [] },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('');
+  });
 });

@@ -26,7 +26,7 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
   const degHideVal = degHideEl?.attributes?.['m:val'];
   const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false';
 
-  if (degreeHidden) {
+  if (degreeHidden || !deg) {
     const msqrt = doc.createElementNS(MATHML_NS, 'msqrt');
     const radicandRow = doc.createElementNS(MATHML_NS, 'mrow');
     radicandRow.appendChild(convertChildren(radicand?.elements ?? []));

@@ -160,6 +160,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/Muhammad-Nur-Alamsyah-Anwar"><img src="https://github.com/Muhammad-Nur-Alamsyah-Anwar.png" width="50" height="50" alt="Muhammad-Nur-Alamsyah-Anwar" title="Alam" /></a>
 <a href="https://github.com/andrewsrigom"><img src="https://github.com/andrewsrigom.png" width="50" height="50" alt="andrewsrigom" title="Andrews Rigom" /></a>
 <a href="https://github.com/iguit0"><img src="https://github.com/iguit0.png" width="50" height="50" alt="iguit0" title="Igor Alves" /></a>
+<a href="https://github.com/PeterHollens"><img src="https://github.com/PeterHollens.png" width="50" height="50" alt="PeterHollens" title="Peter Hollens" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

@@ -124,19 +124,15 @@ Both levels target the same **9 grouped public tools** from the SDK:
 
 | Fixture | Content | Used by |
 |---------|---------|---------|
-| `nda.docx` | Mutual NDA (parties, indemnification, $500K cap) | benchmark, customer-workflows |
+| `blank.docx` | Blank document template | benchmark-v2 |
+| `nda.docx` | Mutual NDA (parties, indemnification, $500K cap) | benchmark, benchmark-v2, customer-workflows |
 | `employment-offer.docx` | Offer letter with salary, equity, placeholders | benchmark, customer-workflows |
-| `report-with-formatting.docx` | Clinical trial report with tables, citations | benchmark |
+| `report-with-formatting.docx` | Clinical trial report with tables, citations | benchmark, customer-workflows |
 | `lease-agreement.docx` | Commercial lease with rent escalation table | customer-workflows |
 | `document.docx` | Bullet list document | execution |
-| `memorandum.docx` | Legal memo with financial figures | execution |
+| `memorandum.docx` | Legal memo with financial figures | execution, benchmark |
 | `table-doc.docx` | Tables with component data | execution |
-| `contract.docx` | Longer legal contract | (available) |
 | `comments-doc.docx` | Document with existing comments | customer-workflows |
-| `consulting-agreement.docx` | Agreement with nested lists | benchmark-v2 |
-| `contract-redlines.docx` | Contract with tracked changes | benchmark-v2 |
-| `policy-manual.docx` | Manual with formatting | benchmark-v2 |
-| `pricing-proposal.docx` | Proposal with tables | benchmark-v2 |
 
 Fixtures are in `fixtures/docs/`.
 

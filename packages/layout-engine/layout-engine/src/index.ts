@@ -518,6 +518,14 @@ export type LayoutOptions = {
    * overlay behavior in paragraph-free header/footer regions.
    */
   allowParagraphlessAnchoredTableFallback?: boolean;
+  /**
+   * Allow body layout to synthesize page 1 when section metadata exists but no
+   * renderable body blocks survive conversion.
+   *
+   * Header/footer layout keeps this disabled to preserve existing empty-region
+   * behavior for paragraph-free overlays.
+   */
+  allowSectionBreakOnlyPageFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -589,6 +597,10 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
+  return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
 // List constants sourced from shared/common
@@ -813,6 +825,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
   const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -2284,6 +2297,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
+  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+    paginator.ensurePage();
+  }
+
   // Post-process pages with vertical alignment (center, bottom, both)
   // For each page, calculate content bounds and apply Y offset to all fragments
   for (const page of pages) {
@@ -2605,6 +2622,7 @@ export function layoutHeaderFooter(
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
     allowParagraphlessAnchoredTableFallback: false,
+    allowSectionBreakOnlyPageFallback: false,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.

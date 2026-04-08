@@ -956,6 +956,31 @@ describe('layoutDocument', () => {
     expect(pageWithP3?.margins).toMatchObject({ top: 40, bottom: 40, header: 150, footer: 100 });
   });
 
+  it('synthesizes page 1 for section-break-only body layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-only',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 500, h: 700 },
+      orientation: 'landscape',
+      margins: { top: 40, right: 30, bottom: 35, left: 25, header: 120, footer: 90 },
+    };
+
+    const layout = layoutDocument([sectionBreakBlock], [{ kind: 'sectionBreak' }], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].fragments).toHaveLength(0);
+    expect(layout.pages[0].orientation).toBe('landscape');
+    expect(layout.pages[0].margins).toMatchObject({
+      top: 40,
+      right: 30,
+      bottom: 35,
+      left: 25,
+      header: 120,
+      footer: 90,
+    });
+  });
+
   it('section break with only header margin stores header distance', () => {
     const sectionBreakBlock: FlowBlock = {
       kind: 'sectionBreak',
@@ -2603,6 +2628,21 @@ describe('layoutHeaderFooter', () => {
     const layout = layoutHeaderFooter([], [], { width: 200, height: 40 });
     expect(layout.height).toBe(0);
     expect(layout.pages).toEqual([]);
+  });
+
+  it('does not synthesize blank pages for section-break-only header/footer layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'header-sb',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 200, h: 80 },
+      margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    };
+
+    const layout = layoutHeaderFooter([sectionBreakBlock], [{ kind: 'sectionBreak' }], { width: 200, height: 80 });
+
+    expect(layout.pages).toEqual([]);
+    expect(layout.height).toBe(0);
   });
 
   it('uses image measure height when fragment height missing', () => {

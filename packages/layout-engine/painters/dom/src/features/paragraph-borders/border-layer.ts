@@ -214,6 +214,11 @@ export const applyParagraphBorderStyles = (
   if (showBetweenBorder && borders.between) {
     setBorderSideStyle(element, 'bottom', borders.between);
   }
+
+  // Bar border: decorative vertical line on the left edge of the paragraph (OOXML §17.3.1.4)
+  if (borders.bar && borders.bar.style !== 'none') {
+    setBorderSideStyle(element, 'left', borders.bar);
+  }
 };
 
 const setBorderSideStyle = (element: HTMLElement, side: CssBorderSide, border: ParagraphBorder): void => {

@@ -30,6 +30,7 @@ export const hashParagraphBorders = (borders: ParagraphBorders): string => {
   if (borders.bottom) parts.push(`b:[${hashParagraphBorder(borders.bottom)}]`);
   if (borders.left) parts.push(`l:[${hashParagraphBorder(borders.left)}]`);
   if (borders.between) parts.push(`bw:[${hashParagraphBorder(borders.between)}]`);
+  if (borders.bar) parts.push(`bar:[${hashParagraphBorder(borders.bar)}]`);
   return parts.join(';');
 };
 

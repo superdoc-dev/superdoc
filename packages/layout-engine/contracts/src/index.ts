@@ -1168,6 +1168,7 @@ export type ParagraphBorders = {
   bottom?: ParagraphBorder;
   left?: ParagraphBorder;
   between?: ParagraphBorder;
+  bar?: ParagraphBorder;
 };
 
 export type ParagraphShading = {

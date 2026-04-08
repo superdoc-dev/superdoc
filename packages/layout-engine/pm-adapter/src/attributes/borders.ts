@@ -324,7 +324,14 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
 export const normalizeParagraphBorders = (value: unknown): ParagraphAttrs['borders'] | undefined => {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as Record<string, unknown>;
-  const sides: Array<'top' | 'right' | 'bottom' | 'left' | 'between'> = ['top', 'right', 'bottom', 'left', 'between'];
+  const sides: Array<'top' | 'right' | 'bottom' | 'left' | 'between' | 'bar'> = [
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'between',
+    'bar',
+  ];
   const borders: ParagraphAttrs['borders'] = {};
 
   sides.forEach((side) => {

@@ -927,3 +927,61 @@ describe('m:func converter', () => {
     expect(mis[1]!.textContent).toBe('cos');
   });
 });
+
+describe('m:sPre converter', () => {
+  it('converts pre-sub-superscript to <mmultiscripts> with <mprescripts/>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'X' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    expect(mmulti!.children.length).toBe(4);
+    expect(mmulti!.children[0]!.textContent).toBe('X');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+    expect(mmulti!.children[2]!.textContent).toBe('a');
+    expect(mmulti!.children[3]!.textContent).toBe('b');
+  });
+
+  it('handles missing sub/sup gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'Y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    expect(mmulti!.children[0]!.textContent).toBe('Y');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+  });
+});

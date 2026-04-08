@@ -18,6 +18,7 @@ import {
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
+  convertPreSubSuperscript,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -58,7 +59,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:nary': null, // N-ary operator (integral, summation, product)
   'm:phant': null, // Phantom (invisible spacing placeholder)
   'm:rad': null, // Radical (square root, nth root)
-  'm:sPre': null, // Pre-sub-superscript (left of base)
+  'm:sPre': convertPreSubSuperscript, // Pre-sub-superscript (left of base)
 };
 
 /** OMML argument/container elements that wrap children in <mrow>. */

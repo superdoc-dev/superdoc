@@ -66,6 +66,27 @@ const DEFAULT_INLINE_POLICY: import('@superdoc/document-api').InlineStylePolicy 
   onNonUniform: 'majority',
 };
 const CORE_SET_MARK_KEYS = ['bold', 'italic', 'underline', 'strike'] as const;
+const DEBUG_TEXT_REWRITE =
+  typeof process !== 'undefined' && typeof process.env?.SUPERDOC_DEBUG_TEXT_REWRITE === 'string'
+    ? process.env.SUPERDOC_DEBUG_TEXT_REWRITE === '1'
+    : false;
+
+function debugTextRewrite(message: string, details?: Record<string, unknown>): void {
+  if (!DEBUG_TEXT_REWRITE) return;
+  console.error('[text-rewrite]', message, details ?? {});
+}
+
+type StructuredTextPayload = {
+  blocks: string[];
+  splitBefore: boolean;
+  splitAfter: boolean;
+};
+
+type InlineWrapperSpec = {
+  type: NodeType;
+  attrs: Record<string, unknown>;
+  marks: readonly ProseMirrorMark[];
+};
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
@@ -749,20 +770,37 @@ export function executeTextRewrite(
   const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
 
   if (structuralRewrite) {
-    const nodes = buildReplacementParagraphNodes(
+    const slice = buildReplacementParagraphSlice(
       editor,
       structuralRewrite.replacementBlocks,
       marks,
       structuralRewrite.paragraphAttrs,
       step.id,
+      structuralRewrite.leadingWrappers,
+      structuralRewrite.trailingWrappers,
+      structuralRewrite.openStart,
+      structuralRewrite.openEnd,
     );
-    // openStart/openEnd = 1: the fragment's first and last paragraph edges are
-    // "open" so ProseMirror merges them into the surrounding content. This is
-    // correct regardless of nesting depth (list items, table cells) because the
-    // open depth is relative to the fragment's own structure, not the document's.
-    const slice = new Slice(Fragment.from(nodes), 1, 1);
-    tr.replace(absFrom, absTo, slice);
-    return { changed: replacementText !== target.text };
+    try {
+      // Validate the structural replace against the current document before
+      // mutating the transaction. This lets us fall back to inline rewrite in
+      // containers that cannot host sibling paragraph nodes.
+      tr.doc.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
+      tr.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
+      return { changed: replacementText !== target.text };
+    } catch (error) {
+      debugTextRewrite('structural rewrite fell back to inline replacement', {
+        replaceFrom: structuralRewrite.replaceFrom,
+        replaceTo: structuralRewrite.replaceTo,
+        openStart: structuralRewrite.openStart,
+        openEnd: structuralRewrite.openEnd,
+        replacementBlockCount: structuralRewrite.replacementBlocks.length,
+        stepId: step.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fall back to inline replacement when the surrounding content model
+      // cannot accept multiple paragraph siblings for this textblock.
+    }
   }
 
   const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
@@ -798,6 +836,36 @@ export function executeTextInsert(
   } else {
     const resolvedPos = tr.doc.resolve(absPos);
     marks = resolvedPos.marks();
+  }
+
+  const structuralInsert = resolveStructuralTextInsert(tr.doc, absPos, step);
+  if (structuralInsert) {
+    const slice = buildReplacementParagraphSlice(
+      editor,
+      structuralInsert.replacementBlocks,
+      marks,
+      structuralInsert.paragraphAttrs,
+      step.id,
+      structuralInsert.leadingWrappers,
+      structuralInsert.trailingWrappers,
+      structuralInsert.openStart,
+      structuralInsert.openEnd,
+    );
+
+    try {
+      tr.doc.replace(structuralInsert.insertAt, structuralInsert.insertAt, slice);
+      tr.replace(structuralInsert.insertAt, structuralInsert.insertAt, slice);
+      return { changed: true };
+    } catch (error) {
+      debugTextRewrite('structural insert fell back to inline insertion', {
+        insertAt: structuralInsert.insertAt,
+        openStart: structuralInsert.openStart,
+        openEnd: structuralInsert.openEnd,
+        replacementBlockCount: structuralInsert.replacementBlocks.length,
+        stepId: step.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   const textNode = editor.state.schema.text(text, marks);
@@ -1009,12 +1077,42 @@ function resolveReplacementBlocks(replacement: ReplacementPayload, stepId: strin
   return normalizeReplacementText(replacement.text, stepId);
 }
 
-function replacementMayContainStructuralBlocks(replacement: ReplacementPayload): boolean {
+function resolveStructuredTextPayload(text: string, stepId: string): StructuredTextPayload {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const splitBefore = normalized.startsWith('\n');
+  const splitAfter = normalized.endsWith('\n');
+  const coreText = splitBefore || splitAfter ? normalized.replace(/^\n+/, '').replace(/\n+$/, '') : normalized;
+  const blocks = coreText.length === 0 ? [''] : normalizeReplacementText(coreText, stepId);
+
+  return {
+    blocks,
+    splitBefore,
+    splitAfter,
+  };
+}
+
+function resolveStructuredReplacementPayload(replacement: ReplacementPayload, stepId: string): StructuredTextPayload {
   if (replacement.blocks !== undefined) {
-    return replacement.blocks.length > 1;
+    if (replacement.blocks.length === 0) {
+      throw planError('INVALID_INPUT', 'replacement.blocks must contain at least one entry', stepId);
+    }
+
+    return {
+      blocks: replacement.blocks.map((block) => block.text),
+      splitBefore: false,
+      splitAfter: false,
+    };
   }
 
-  return replacement.text?.includes('\n') || replacement.text?.includes('\r') || false;
+  if (replacement.text == null) {
+    throw planError('INVALID_INPUT', 'replacement must specify either text or blocks', stepId);
+  }
+
+  return resolveStructuredTextPayload(replacement.text, stepId);
+}
+
+function payloadNeedsStructuralHandling(payload: StructuredTextPayload): boolean {
+  return payload.blocks.length > 1 || payload.splitBefore || payload.splitAfter;
 }
 
 function findSharedTextblockDepth(
@@ -1033,6 +1131,72 @@ function findSharedTextblockDepth(
   }
 
   return null;
+}
+
+function findAddressableInlineRangeWithinTextblock(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): { from: number; to: number } | null {
+  let inlineFrom: number | null = null;
+  let inlineTo: number | null = null;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isInline) {
+      return;
+    }
+
+    if (node.isText && node.text) {
+      const nodeFrom = Math.max(from, pos);
+      const nodeTo = Math.min(to, pos + node.text.length);
+      if (nodeFrom >= nodeTo) {
+        return;
+      }
+
+      if (inlineFrom === null) {
+        inlineFrom = nodeFrom;
+      }
+      inlineTo = nodeTo;
+      return;
+    }
+
+    if (!node.isLeaf && !node.isAtom) {
+      return;
+    }
+
+    const nodeFrom = Math.max(from, pos);
+    const nodeTo = Math.min(to, pos + node.nodeSize);
+    if (nodeFrom >= nodeTo) {
+      return;
+    }
+
+    if (inlineFrom === null) {
+      inlineFrom = nodeFrom;
+    }
+    inlineTo = nodeTo;
+  });
+
+  return inlineFrom === null || inlineTo === null ? null : { from: inlineFrom, to: inlineTo };
+}
+
+function resolveInlineWrapperChainAt(doc: ProseMirrorNode, pos: number, textblockDepth: number): InlineWrapperSpec[] {
+  const $pos = doc.resolve(pos);
+  const chain: InlineWrapperSpec[] = [];
+
+  for (let depth = textblockDepth + 1; depth <= $pos.depth; depth += 1) {
+    const node = $pos.node(depth);
+    if (!node?.isInline || node.isText) {
+      continue;
+    }
+
+    chain.push({
+      type: node.type,
+      attrs: { ...(node.attrs ?? {}) },
+      marks: node.marks,
+    });
+  }
+
+  return chain;
 }
 
 /**
@@ -1055,8 +1219,22 @@ function resolveStructuralRangeRewrite(
   absFrom: number,
   absTo: number,
   step: TextRewriteStep,
-): { replacementBlocks: string[]; paragraphAttrs: Record<string, unknown> | null } | null {
-  if (absFrom === absTo || !replacementMayContainStructuralBlocks(step.args.replacement)) {
+): {
+  replacementBlocks: string[];
+  paragraphAttrs: Record<string, unknown> | null;
+  replaceFrom: number;
+  replaceTo: number;
+  openStart: number;
+  openEnd: number;
+  leadingWrappers: InlineWrapperSpec[];
+  trailingWrappers: InlineWrapperSpec[];
+} | null {
+  if (absFrom === absTo) {
+    return null;
+  }
+
+  const payload = resolveStructuredReplacementPayload(step.args.replacement, step.id);
+  if (!payloadNeedsStructuralHandling(payload)) {
     return null;
   }
 
@@ -1064,27 +1242,171 @@ function resolveStructuralRangeRewrite(
   const $to = doc.resolve(absTo);
   const textblockDepth = findSharedTextblockDepth($from, $to);
   if (textblockDepth === null) {
+    debugTextRewrite('structural rewrite skipped: no shared textblock', { absFrom, absTo, stepId: step.id });
     return null;
   }
 
-  // Use ProseMirror content boundaries to check if the range covers the entire
-  // textblock content. $pos.start(depth) / $pos.end(depth) return positions at the
-  // content edges — this correctly accounts for ALL inline content including atoms
-  // (mentions, footnotes, images, etc.), not just text nodes.
-  const contentStart = $from.start(textblockDepth);
-  const contentEnd = $from.end(textblockDepth);
-  if (absFrom > contentStart || absTo < contentEnd) {
+  // A "whole paragraph" text rewrite needs to cover the full addressable inline
+  // content inside the textblock. We cannot use raw content boundaries here
+  // because real documents often wrap text in inline containers like `run`,
+  // which shifts text positions inward from the paragraph's content edges.
+  const textblockStart = $from.start(textblockDepth);
+  const textblockEnd = $from.end(textblockDepth);
+  const inlineRange = findAddressableInlineRangeWithinTextblock(doc, textblockStart, textblockEnd);
+  const replacesEntireTextblock = inlineRange !== null && absFrom <= inlineRange.from && absTo >= inlineRange.to;
+  const selectionStaysWithinTextblock = inlineRange !== null && absFrom >= inlineRange.from && absTo <= inlineRange.to;
+
+  if (!replacesEntireTextblock && !selectionStaysWithinTextblock) {
+    debugTextRewrite('structural rewrite skipped: selection does not cover full inline range', {
+      absFrom,
+      absTo,
+      textblockDepth,
+      textblockType: $from.node(textblockDepth).type.name,
+      textblockStart,
+      textblockEnd,
+      inlineRange,
+      stepId: step.id,
+    });
     return null;
   }
 
-  const replacementBlocks = resolveReplacementBlocks(step.args.replacement, step.id);
-  if (replacementBlocks.length <= 1) {
-    return null;
+  const replacementBlocks = payload.blocks;
+
+  if (replacesEntireTextblock) {
+    if (replacementBlocks.length <= 1) {
+      debugTextRewrite('structural rewrite skipped: whole-textblock rewrite resolved to one block', {
+        replacementBlocks,
+        stepId: step.id,
+      });
+      return null;
+    }
+
+    const replaceFrom = $from.before(textblockDepth);
+    const replaceTo = $from.after(textblockDepth);
+    debugTextRewrite('structural rewrite enabled', {
+      absFrom,
+      absTo,
+      textblockDepth,
+      textblockType: $from.node(textblockDepth).type.name,
+      inlineRange,
+      replaceFrom,
+      replaceTo,
+      replacementBlockCount: replacementBlocks.length,
+      openStart: 0,
+      openEnd: 0,
+      stepId: step.id,
+    });
+
+    return {
+      replacementBlocks,
+      paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+      replaceFrom,
+      replaceTo,
+      openStart: 0,
+      openEnd: 0,
+      leadingWrappers: [],
+      trailingWrappers: [],
+    };
   }
+
+  const leadingWrappers = resolveInlineWrapperChainAt(doc, absFrom, textblockDepth);
+  const trailingWrappers = resolveInlineWrapperChainAt(doc, absTo, textblockDepth);
+  const effectiveBlocks = [...replacementBlocks];
+  if (payload.splitBefore) {
+    effectiveBlocks.unshift('');
+  }
+  if (payload.splitAfter) {
+    effectiveBlocks.push('');
+  }
+  const openStart = 1 + leadingWrappers.length;
+  const openEnd = 1 + trailingWrappers.length;
+  debugTextRewrite('structural rewrite enabled', {
+    absFrom,
+    absTo,
+    textblockDepth,
+    textblockType: $from.node(textblockDepth).type.name,
+    inlineRange,
+    replaceFrom: absFrom,
+    replaceTo: absTo,
+    replacementBlockCount: effectiveBlocks.length,
+    openStart,
+    openEnd,
+    leadingWrapperDepth: leadingWrappers.length,
+    trailingWrapperDepth: trailingWrappers.length,
+    stepId: step.id,
+  });
 
   return {
-    replacementBlocks,
+    replacementBlocks: effectiveBlocks,
     paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+    replaceFrom: absFrom,
+    replaceTo: absTo,
+    openStart,
+    openEnd,
+    leadingWrappers,
+    trailingWrappers,
+  };
+}
+
+function resolveStructuralTextInsert(
+  doc: ProseMirrorNode,
+  absPos: number,
+  step: TextInsertStep,
+): {
+  replacementBlocks: string[];
+  paragraphAttrs: Record<string, unknown> | null;
+  insertAt: number;
+  openStart: number;
+  openEnd: number;
+  leadingWrappers: InlineWrapperSpec[];
+  trailingWrappers: InlineWrapperSpec[];
+} | null {
+  const text = step.args.content.text;
+  if (!text) {
+    return null;
+  }
+
+  const payload = resolveStructuredTextPayload(text, step.id);
+  if (!payloadNeedsStructuralHandling(payload)) {
+    return null;
+  }
+
+  const $pos = doc.resolve(absPos);
+  const textblockDepth = findSharedTextblockDepth($pos, $pos);
+  if (textblockDepth === null) {
+    debugTextRewrite('structural insert skipped: no shared textblock', { absPos, stepId: step.id });
+    return null;
+  }
+
+  const wrappers = resolveInlineWrapperChainAt(doc, absPos, textblockDepth);
+  const effectiveBlocks = [...payload.blocks];
+  if (payload.splitBefore) {
+    effectiveBlocks.unshift('');
+  }
+  if (payload.splitAfter) {
+    effectiveBlocks.push('');
+  }
+  const openStart = 1 + wrappers.length;
+  const openEnd = 1 + wrappers.length;
+  debugTextRewrite('structural insert enabled', {
+    absPos,
+    textblockDepth,
+    textblockType: $pos.node(textblockDepth).type.name,
+    replacementBlockCount: effectiveBlocks.length,
+    openStart,
+    openEnd,
+    wrapperDepth: wrappers.length,
+    stepId: step.id,
+  });
+
+  return {
+    replacementBlocks: effectiveBlocks,
+    paragraphAttrs: stripIdentityAttrs($pos.node(textblockDepth).attrs as Record<string, unknown>),
+    insertAt: absPos,
+    openStart,
+    openEnd,
+    leadingWrappers: wrappers,
+    trailingWrappers: wrappers,
   };
 }
 
@@ -1094,6 +1416,8 @@ function buildReplacementParagraphNodes(
   marks: readonly unknown[],
   paragraphAttrs: Record<string, unknown> | null,
   stepId: string,
+  leadingWrappers: InlineWrapperSpec[],
+  trailingWrappers: InlineWrapperSpec[],
 ): ProseMirrorNode[] {
   const { schema } = editor.state;
   const paragraphType = schema.nodes.paragraph;
@@ -1101,13 +1425,68 @@ function buildReplacementParagraphNodes(
     throw planError('INVALID_INPUT', 'paragraph node type not in schema', stepId);
   }
 
-  return replacementBlocks.map((text) => {
+  const wrapInlineContent = (contentNode: ProseMirrorNode | null, wrappers: InlineWrapperSpec[]): ProseMirrorNode => {
+    let content = contentNode;
+
+    for (let index = wrappers.length - 1; index >= 0; index -= 1) {
+      const wrapper = wrappers[index];
+      content =
+        wrapper.type.createAndFill(wrapper.attrs, content ?? undefined, wrapper.marks) ??
+        wrapper.type.create(wrapper.attrs, content ?? undefined, wrapper.marks);
+    }
+
+    if (!content) {
+      throw planError('INVALID_INPUT', 'could not build inline wrapper content', stepId);
+    }
+
+    return content;
+  };
+
+  const defaultWrappers = leadingWrappers.length > 0 ? leadingWrappers : trailingWrappers;
+
+  return replacementBlocks.map((text, index) => {
     const textNode = text.length > 0 ? schema.text(text, asProseMirrorMarks(marks)) : null;
-    return (
-      paragraphType.createAndFill(paragraphAttrs, textNode ?? undefined) ??
-      paragraphType.create(paragraphAttrs, textNode ? [textNode] : undefined)
-    );
+    const wrappers =
+      index === 0
+        ? leadingWrappers.length > 0
+          ? leadingWrappers
+          : defaultWrappers
+        : index === replacementBlocks.length - 1
+          ? trailingWrappers.length > 0
+            ? trailingWrappers
+            : defaultWrappers
+          : defaultWrappers;
+    const content =
+      textNode == null
+        ? wrappers.length > 0
+          ? wrapInlineContent(null, wrappers)
+          : undefined
+        : wrapInlineContent(textNode, wrappers);
+    return paragraphType.createAndFill(paragraphAttrs, content) ?? paragraphType.create(paragraphAttrs, content);
   });
+}
+
+function buildReplacementParagraphSlice(
+  editor: Editor,
+  replacementBlocks: string[],
+  marks: readonly unknown[],
+  paragraphAttrs: Record<string, unknown> | null,
+  stepId: string,
+  leadingWrappers: InlineWrapperSpec[],
+  trailingWrappers: InlineWrapperSpec[],
+  openStart: number,
+  openEnd: number,
+): Slice {
+  const nodes = buildReplacementParagraphNodes(
+    editor,
+    replacementBlocks,
+    marks,
+    paragraphAttrs,
+    stepId,
+    leadingWrappers,
+    trailingWrappers,
+  );
+  return new Slice(Fragment.from(nodes), openStart, openEnd);
 }
 
 function resolveInheritedParagraphAttrsForReplacement(

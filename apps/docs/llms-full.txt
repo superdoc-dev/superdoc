@@ -92,7 +92,7 @@ await client.dispose();
 ```
 
 ### 3. MCP server (AI coding agents)
-12 MCP tools backed by 340+ document operations. Works with Claude Code, Cursor, Windsurf, or any MCP-compatible agent.
+180+ MCP tools covering reading, editing, formatting, comments, tracked changes, tables, and more. Works with Claude Code, Cursor, Windsurf, or any MCP-compatible agent.
 
 ```bash
 # Claude Code

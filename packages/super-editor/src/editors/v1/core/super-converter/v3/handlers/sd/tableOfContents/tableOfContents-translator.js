@@ -72,11 +72,6 @@ const decode = (params) => {
   const { node } = params;
   const isInlineNode = node.type === 'tableOfContentsInline';
   const tocContent = Array.isArray(node.content) ? node.content : [];
-  const inlineContentNodes = tocContent.flatMap((n) => {
-    const exported = exportSchemaToJson({ ...params, node: n });
-    if (!exported) return [];
-    return Array.isArray(exported) ? exported : [exported];
-  });
   const inlineContentNodes = isInlineNode
     ? tocContent.flatMap((n) => {
         const exported = exportSchemaToJson({ ...params, node: n });

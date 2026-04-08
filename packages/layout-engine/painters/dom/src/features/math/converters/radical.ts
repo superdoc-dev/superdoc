@@ -12,7 +12,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *   - degree hidden → <msqrt><mrow>radicand</mrow></msqrt>
  *   - degree shown  → <mroot><mrow>radicand</mrow><mrow>degree</mrow></mroot>
  *
- * @spec ECMA-376 §22.1.2.86
+ * @spec ECMA-376 §22.1.2.88
  */
 export const convertRadical: MathObjectConverter = (node, doc, convertChildren) => {
   const elements = node.elements ?? [];

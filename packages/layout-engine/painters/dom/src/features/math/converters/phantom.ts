@@ -30,7 +30,7 @@ export const convertPhantom: MathObjectConverter = (node, doc, convertChildren) 
   /** OOXML ST_OnOff true values. */
   const isOnOffTrue = (val?: string) => val === '1' || val === 'on' || val === 'true';
 
-  const isVisible = isOnOffTrue(show?.attributes?.['m:val']);
+  const isVisible = isOnOffTrue(show?.attributes?.['m:val']) || (show != null && !show.attributes);
   const hasZeroDimension = zeroWid || zeroAsc || zeroDesc;
 
   const content = convertChildren(base?.elements ?? []);

@@ -77,6 +77,13 @@ const decode = (params) => {
     if (!exported) return [];
     return Array.isArray(exported) ? exported : [exported];
   });
+  const inlineContentNodes = isInlineNode
+    ? tocContent.flatMap((n) => {
+        const exported = exportSchemaToJson({ ...params, node: n });
+        if (!exported) return [];
+        return Array.isArray(exported) ? exported : [exported];
+      })
+    : [];
   const blockContentNodes = isInlineNode ? [] : tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
 
   // Inject the fldChar begin, instrText and fldChar separate into the first child (after any existing pPr)

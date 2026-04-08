@@ -1,8 +1,7 @@
 <script setup>
 import { storeToRefs } from 'pinia';
-import { computed, onBeforeUnmount, onMounted, reactive, getCurrentInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted, nextTick, ref, watch } from 'vue';
 import { useCommentsStore } from '@stores/comments-store';
-import { useSuperdocStore } from '@stores/superdoc-store';
 import CommentDialog from '../CommentDialog.vue';
 
 const props = defineProps({
@@ -16,15 +15,43 @@ const props = defineProps({
   },
 });
 
-const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
-const { COMMENT_EVENTS } = commentsStore;
-const { commentsList, getGroupedComments, isCommentsListVisible } = storeToRefs(commentsStore);
-const { proxy } = getCurrentInstance();
+const { getGroupedComments, isCommentsListVisible, activeComment, pendingComment, editingCommentId } =
+  storeToRefs(commentsStore);
+
+const itemRefs = ref({});
 
 const shouldShowResolvedComments = computed(() => {
   return props.showResolvedComments && getGroupedComments.value?.resolvedComments?.length > 0;
 });
+
+const setItemRef = (commentId) => (el) => {
+  if (el) {
+    itemRefs.value[commentId] = el;
+  } else {
+    delete itemRefs.value[commentId];
+  }
+};
+
+const ensureThreadVisible = (commentId) => {
+  if (!commentId) return;
+  nextTick(() => {
+    const element = itemRefs.value[commentId];
+    element?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  });
+};
+
+const handleDialogResize = (commentId) => {
+  if (!commentId) return;
+  if (
+    activeComment.value !== commentId &&
+    pendingComment.value?.commentId !== commentId &&
+    editingCommentId.value !== commentId
+  ) {
+    return;
+  }
+  ensureThreadVisible(commentId);
+};
 
 onMounted(() => {
   isCommentsListVisible.value = true;
@@ -33,20 +60,43 @@ onMounted(() => {
 onBeforeUnmount(() => {
   isCommentsListVisible.value = false;
 });
+
+watch(activeComment, (commentId) => {
+  ensureThreadVisible(commentId);
+});
+
+watch(
+  () => pendingComment.value?.commentId ?? null,
+  (commentId) => {
+    ensureThreadVisible(commentId);
+  },
+);
+
+watch(editingCommentId, (commentId) => {
+  ensureThreadVisible(commentId);
+});
 </script>
 
 <template>
   <div class="comments-list">
     <div v-if="showMainComments">
-      <div v-for="comment in getGroupedComments.parentComments" class="comment-item">
-        <CommentDialog :comment="comment" />
+      <div
+        v-for="comment in getGroupedComments.parentComments"
+        :ref="setItemRef(comment.commentId)"
+        class="comment-item"
+      >
+        <CommentDialog :comment="comment" @resize="handleDialogResize(comment.commentId)" />
       </div>
     </div>
 
     <div v-if="shouldShowResolvedComments">
       <div class="comment-title">Resolved</div>
-      <div v-for="comment in getGroupedComments.resolvedComments" class="comment-item">
-        <CommentDialog :comment="comment" />
+      <div
+        v-for="comment in getGroupedComments.resolvedComments"
+        :ref="setItemRef(comment.commentId)"
+        class="comment-item"
+      >
+        <CommentDialog :comment="comment" @resize="handleDialogResize(comment.commentId)" />
       </div>
     </div>
   </div>

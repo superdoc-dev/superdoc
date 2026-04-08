@@ -56,12 +56,7 @@ async function main() {
   let agentTool = 'claude-code';
 
   if (!nonInteractive) {
-    const agentIdx = await select('Which agent tool do you use?', [
-      'Claude Code',
-      'Cursor',
-      'Windsurf',
-      'None / Skip',
-    ]);
+    const agentIdx = await select('Which agent tool do you use?', ['Claude Code', 'Cursor', 'Windsurf', 'None / Skip']);
     agentTool = ['claude-code', 'cursor', 'windsurf', 'none'][agentIdx];
     setupMcp = agentTool !== 'none';
   }

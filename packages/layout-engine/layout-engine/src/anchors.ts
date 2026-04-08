@@ -25,6 +25,53 @@ export type AnchoredTable = {
 
 export type AnchoredObject = AnchoredDrawing | AnchoredTable;
 
+export type AnchoredTableCollection = {
+  byParagraph: Map<number, AnchoredTable[]>;
+  withoutParagraph: AnchoredTable[];
+};
+
+function buildParagraphIndexById(blocks: FlowBlock[], len: number): Map<string, number> {
+  const paragraphIndexById = new Map<string, number>();
+
+  for (let i = 0; i < len; i += 1) {
+    const block = blocks[i];
+    if (block.kind === 'paragraph') {
+      paragraphIndexById.set(block.id, i);
+    }
+  }
+
+  return paragraphIndexById;
+}
+
+function findNearestParagraphIndex(blocks: FlowBlock[], len: number, fromIndex: number): number | null {
+  for (let i = fromIndex - 1; i >= 0; i -= 1) {
+    if (blocks[i].kind === 'paragraph') return i;
+  }
+
+  for (let i = fromIndex + 1; i < len; i += 1) {
+    if (blocks[i].kind === 'paragraph') return i;
+  }
+
+  return null;
+}
+
+function resolveAnchorParagraphIndex(
+  blocks: FlowBlock[],
+  len: number,
+  paragraphIndexById: Map<string, number>,
+  fromIndex: number,
+  anchorParagraphId: unknown,
+): number | null {
+  if (typeof anchorParagraphId === 'string') {
+    const explicitIndex = paragraphIndexById.get(anchorParagraphId);
+    if (typeof explicitIndex === 'number') {
+      return explicitIndex;
+    }
+  }
+
+  return findNearestParagraphIndex(blocks, len, fromIndex);
+}
+
 /**
  * Check if an anchored image should be pre-registered (before any paragraphs are laid out).
  * Images with vRelativeFrom='margin' or 'page' position themselves relative to the page,
@@ -78,28 +125,7 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
 export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredDrawing[]> {
   const map = new Map<number, AnchoredDrawing[]>();
   const len = Math.min(blocks.length, measures.length);
-  const paragraphIndexById = new Map<string, number>();
-
-  for (let i = 0; i < len; i += 1) {
-    const block = blocks[i];
-    if (block.kind === 'paragraph') {
-      paragraphIndexById.set(block.id, i);
-    }
-  }
-
-  const nearestPrevParagraph = (fromIndex: number): number | null => {
-    for (let i = fromIndex - 1; i >= 0; i -= 1) {
-      if (blocks[i].kind === 'paragraph') return i;
-    }
-    return null;
-  };
-
-  const nearestNextParagraph = (fromIndex: number): number | null => {
-    for (let i = fromIndex + 1; i < len; i += 1) {
-      if (blocks[i].kind === 'paragraph') return i;
-    }
-    return null;
-  };
+  const paragraphIndexById = buildParagraphIndexById(blocks, len);
 
   for (let i = 0; i < len; i += 1) {
     const block = blocks[i];
@@ -125,12 +151,7 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
       typeof drawingBlock.attrs === 'object' && drawingBlock.attrs
         ? (drawingBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
         : undefined;
-    let anchorParaIndex =
-      typeof anchorParagraphId === 'string' ? (paragraphIndexById.get(anchorParagraphId) ?? null) : null;
-    if (anchorParaIndex == null) {
-      anchorParaIndex = nearestPrevParagraph(i);
-    }
-    if (anchorParaIndex == null) anchorParaIndex = nearestNextParagraph(i);
+    const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
     if (anchorParaIndex == null) continue; // no paragraphs at all
 
     const list = map.get(anchorParaIndex) ?? [];
@@ -143,34 +164,15 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
 
 /**
  * Collect anchored/floating tables mapped to their anchor paragraph index.
- * Map of paragraph block index -> anchored tables associated with that paragraph.
+ * Also returns anchored tables that have no paragraph to attach to.
  */
-export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredTable[]> {
-  const map = new Map<number, AnchoredTable[]>();
-  const paragraphIndexById = new Map<string, number>();
+export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]): AnchoredTableCollection {
+  const len = Math.min(blocks.length, measures.length);
+  const byParagraph = new Map<number, AnchoredTable[]>();
+  const withoutParagraph: AnchoredTable[] = [];
+  const paragraphIndexById = buildParagraphIndexById(blocks, len);
 
-  for (let i = 0; i < blocks.length; i += 1) {
-    const block = blocks[i];
-    if (block.kind === 'paragraph') {
-      paragraphIndexById.set(block.id, i);
-    }
-  }
-
-  const nearestPrevParagraph = (fromIndex: number): number | null => {
-    for (let i = fromIndex - 1; i >= 0; i -= 1) {
-      if (blocks[i].kind === 'paragraph') return i;
-    }
-    return null;
-  };
-
-  const nearestNextParagraph = (fromIndex: number): number | null => {
-    for (let i = fromIndex + 1; i < blocks.length; i += 1) {
-      if (blocks[i].kind === 'paragraph') return i;
-    }
-    return null;
-  };
-
-  for (let i = 0; i < blocks.length; i += 1) {
+  for (let i = 0; i < len; i += 1) {
     const block = blocks[i];
     const measure = measures[i];
 
@@ -187,18 +189,19 @@ export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]):
       typeof tableBlock.attrs === 'object' && tableBlock.attrs
         ? (tableBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
         : undefined;
-    let anchorParaIndex =
-      typeof anchorParagraphId === 'string' ? (paragraphIndexById.get(anchorParagraphId) ?? null) : null;
+    const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
     if (anchorParaIndex == null) {
-      anchorParaIndex = nearestPrevParagraph(i);
+      withoutParagraph.push({ block: tableBlock, measure: tableMeasure });
+      continue;
     }
-    if (anchorParaIndex == null) anchorParaIndex = nearestNextParagraph(i);
-    if (anchorParaIndex == null) continue; // no paragraphs at all
 
-    const list = map.get(anchorParaIndex) ?? [];
+    const list = byParagraph.get(anchorParaIndex) ?? [];
     list.push({ block: tableBlock, measure: tableMeasure });
-    map.set(anchorParaIndex, list);
+    byParagraph.set(anchorParaIndex, list);
   }
 
-  return map;
+  return {
+    byParagraph,
+    withoutParagraph,
+  };
 }

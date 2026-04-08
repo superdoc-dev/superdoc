@@ -79,6 +79,21 @@ const makeTableMeasure = (columnWidths: number[], rowHeights: number[]): TableMe
   totalHeight: rowHeights.reduce((sum, height) => sum + height, 0),
 });
 
+const makeParagraphlessFloatingTable = (id: string): TableBlock =>
+  makeTableBlock(id, 1, {
+    anchor: {
+      isAnchored: true,
+      hRelativeFrom: 'page',
+      vRelativeFrom: 'paragraph',
+      offsetH: 120,
+      offsetV: 15,
+    },
+    wrap: {
+      type: 'Square',
+      wrapText: 'bothSides',
+    },
+  });
+
 const block: FlowBlock = {
   kind: 'paragraph',
   id: 'block-1',
@@ -714,6 +729,48 @@ describe('layoutDocument', () => {
 
     expect(anchoredTableFragment).toBeTruthy();
     expect(anchoredTableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + paragraphMeasure.totalHeight);
+  });
+
+  it('renders a floating table when the document has no body paragraphs', () => {
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-only');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument([floatingOnlyTable], [floatingOnlyMeasure], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-only',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
+  it('renders a floating table after pruning a leading empty page', () => {
+    const leadingPageBreak: PageBreakBlock = {
+      kind: 'pageBreak',
+      id: 'page-break-before-floating-table',
+    };
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-after-page-break');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument(
+      [leadingPageBreak, floatingOnlyTable],
+      [{ kind: 'pageBreak' }, floatingOnlyMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-after-page-break',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
   });
 
   it('propagates pm ranges onto fragments', () => {

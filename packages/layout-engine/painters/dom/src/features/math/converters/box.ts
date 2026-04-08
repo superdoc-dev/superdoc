@@ -85,12 +85,17 @@ export const convertBorderBox: MathObjectConverter = (node, doc, convertChildren
   if (isOn(strikeTLBR)) notations.push('downdiagonalstrike');
   if (isOn(strikeV)) notations.push('verticalstrike');
 
-  const menclose = doc.createElementNS(MATHML_NS, 'menclose');
-  if (notations.length > 0) {
-    menclose.setAttribute('notation', notations.join(' '));
+  const content = convertChildren(base?.elements ?? []);
+
+  if (notations.length === 0) {
+    const mrow = doc.createElementNS(MATHML_NS, 'mrow');
+    mrow.appendChild(content);
+    return mrow;
   }
 
-  menclose.appendChild(convertChildren(base?.elements ?? []));
+  const menclose = doc.createElementNS(MATHML_NS, 'menclose');
+  menclose.setAttribute('notation', notations.join(' '));
+  menclose.appendChild(content);
 
   return menclose;
 };

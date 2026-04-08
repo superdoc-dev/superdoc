@@ -4046,4 +4046,34 @@ describe('m:borderBox converter', () => {
     expect(menclose).not.toBeNull();
     expect(menclose!.getAttribute('notation')).toBe('horizontalstrike');
   });
+
+  it('falls back to <mrow> when all borders hidden and no strikes', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'q' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).toBeNull();
+    expect(result!.textContent).toBe('q');
+  });
 });

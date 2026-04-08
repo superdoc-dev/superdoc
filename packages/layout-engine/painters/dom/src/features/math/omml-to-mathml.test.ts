@@ -685,6 +685,140 @@ describe('m:sSubSup converter', () => {
   });
 });
 
+describe('m:rad converter', () => {
+  it('converts m:rad with degHide to <msqrt>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:radPr', elements: [{ name: 'm:degHide', attributes: { 'm:val': '1' } }] },
+            { name: 'm:deg', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('x');
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('converts m:rad without degHide to <mroot> with degree', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:radPr', elements: [] },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mroot = result!.querySelector('mroot');
+    expect(mroot).not.toBeNull();
+    expect(mroot!.children.length).toBe(2);
+    expect(mroot!.children[0]!.textContent).toBe('x');
+    expect(mroot!.children[1]!.textContent).toBe('3');
+  });
+
+  it('defaults to <msqrt> when m:radPr is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('y');
+  });
+
+  it('wraps multi-part radicand in <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:radPr', elements: [{ name: 'm:degHide', attributes: { 'm:val': '1' } }] },
+            { name: 'm:deg', elements: [] },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('a+b');
+  });
+
+  it('ignores m:radPr properties element in output', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:radPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '4' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '16' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mroot = result!.querySelector('mroot');
+    expect(mroot).not.toBeNull();
+    expect(mroot!.children[0]!.textContent).toBe('16');
+    expect(mroot!.children[1]!.textContent).toBe('4');
+  });
+});
+
 describe('m:func converter', () => {
   it('converts m:func to function name + apply operator + argument', () => {
     const omml = {

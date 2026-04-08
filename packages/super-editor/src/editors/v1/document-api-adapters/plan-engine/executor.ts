@@ -756,6 +756,10 @@ export function executeTextRewrite(
       structuralRewrite.paragraphAttrs,
       step.id,
     );
+    // openStart/openEnd = 1: the fragment's first and last paragraph edges are
+    // "open" so ProseMirror merges them into the surrounding content. This is
+    // correct regardless of nesting depth (list items, table cells) because the
+    // open depth is relative to the fragment's own structure, not the document's.
     const slice = new Slice(Fragment.from(nodes), 1, 1);
     tr.replace(absFrom, absTo, slice);
     return { changed: replacementText !== target.text };
@@ -1031,37 +1035,11 @@ function findSharedTextblockDepth(
   return null;
 }
 
-function findTextRangeWithin(doc: ProseMirrorNode, from: number, to: number): { from: number; to: number } | null {
-  let textFrom: number | null = null;
-  let textTo: number | null = null;
-
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText || !node.text) {
-      return;
-    }
-
-    const nodeFrom = Math.max(from, pos);
-    const nodeTo = Math.min(to, pos + node.text.length);
-    if (nodeFrom >= nodeTo) {
-      return;
-    }
-
-    if (textFrom === null) {
-      textFrom = nodeFrom;
-    }
-    textTo = nodeTo;
-  });
-
-  return textFrom === null || textTo === null ? null : { from: textFrom, to: textTo };
-}
-
-function sanitizeReplacementParagraphAttrs(
-  attrs: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  if (!attrs || typeof attrs !== 'object') {
-    return null;
-  }
-
+/**
+ * Strips identity attributes that must not be copied to replacement paragraphs.
+ * Shared by both range and span replacement paths to avoid drift.
+ */
+function stripIdentityAttrs(attrs: Record<string, unknown>): Record<string, unknown> | null {
   const cloned = { ...attrs };
   delete cloned.paraId;
   delete cloned.sdBlockId;
@@ -1069,7 +1047,6 @@ function sanitizeReplacementParagraphAttrs(
   delete cloned.id;
   delete cloned.blockId;
   delete cloned.uuid;
-
   return Object.keys(cloned).length > 0 ? cloned : null;
 }
 
@@ -1090,10 +1067,13 @@ function resolveStructuralRangeRewrite(
     return null;
   }
 
-  const textblockTextRange = findTextRangeWithin(doc, $from.start(textblockDepth), $to.end(textblockDepth));
-  const replacesEntireTextblock =
-    textblockTextRange !== null && absFrom <= textblockTextRange.from && absTo >= textblockTextRange.to;
-  if (!replacesEntireTextblock) {
+  // Use ProseMirror content boundaries to check if the range covers the entire
+  // textblock content. $pos.start(depth) / $pos.end(depth) return positions at the
+  // content edges — this correctly accounts for ALL inline content including atoms
+  // (mentions, footnotes, images, etc.), not just text nodes.
+  const contentStart = $from.start(textblockDepth);
+  const contentEnd = $from.end(textblockDepth);
+  if (absFrom > contentStart || absTo < contentEnd) {
     return null;
   }
 
@@ -1104,7 +1084,7 @@ function resolveStructuralRangeRewrite(
 
   return {
     replacementBlocks,
-    paragraphAttrs: sanitizeReplacementParagraphAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+    paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
   };
 }
 
@@ -1144,15 +1124,7 @@ function resolveInheritedParagraphAttrsForReplacement(
     return null;
   }
 
-  const attrs = { ...(sourceAttrs as Record<string, unknown>) };
-  delete attrs.paraId;
-  delete attrs.sdBlockId;
-  delete attrs.nodeId;
-  delete attrs.id;
-  delete attrs.blockId;
-  delete attrs.uuid;
-
-  return Object.keys(attrs).length > 0 ? attrs : null;
+  return stripIdentityAttrs(sourceAttrs as Record<string, unknown>);
 }
 
 // ---------------------------------------------------------------------------

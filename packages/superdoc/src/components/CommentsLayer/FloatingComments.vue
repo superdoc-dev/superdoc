@@ -304,9 +304,7 @@ const handleResize = (comment) => {
     // Avoid force-snapping to anchor here because it can over-shift the whole lane
     // near viewport boundaries and make bottom clipping more frequent.
     remeasureCommentKeys(allPositions.value.map((pos) => pos.id));
-    clearDeferredRemeasureTimers();
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 50));
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 350));
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
   });
 };
 
@@ -375,6 +373,25 @@ const remeasureCommentKeys = (keys) => {
   }
 };
 
+// 50ms: after Vue nextTick + browser rAF settle the initial DOM change.
+// 350ms: after .comment-placeholder transition (300ms ease) completes.
+const REMEASURE_AFTER_DOM_SETTLE_MS = 50;
+const REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS = 350;
+
+/**
+ * Cancels any pending delayed remeasure passes, then schedules two remeasure runs.
+ * Pass an array of keys, or a getter so keys are resolved when each timeout fires
+ * (e.g. when `allPositions` may have changed).
+ */
+const scheduleDeferredRemeasure = (keysOrGetter) => {
+  clearDeferredRemeasureTimers();
+  const resolveKeys = typeof keysOrGetter === 'function' ? keysOrGetter : () => keysOrGetter;
+  remeasureTimers.push(setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_DOM_SETTLE_MS));
+  remeasureTimers.push(
+    setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS),
+  );
+};
+
 const finishInstantSidebarAlignment = () => {
   clearInstantSidebarAlignment();
   requestAnimationFrame(() => {
@@ -402,16 +419,13 @@ watch(activeCommentKey, (newKey, oldKey) => {
   const hasPendingInstantAlignment =
     newKey && newKey === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
 
-  // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
-  // 350ms: after .comment-placeholder transition (300ms ease) completes
   nextTick(() => {
     if (hasPendingInstantAlignment) {
       remeasureCommentKeys(keysToRemeasure);
       return;
     }
 
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 50));
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 350));
+    scheduleDeferredRemeasure(keysToRemeasure);
   });
 });
 
@@ -428,8 +442,7 @@ watch(editingCommentId, () => {
   clearDeferredRemeasureTimers();
 
   nextTick(() => {
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 50));
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 350));
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
   });
 });
 

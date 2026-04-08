@@ -3,7 +3,11 @@ import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
 import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
-import { clearInheritedLinkedStyleId, isLinkedParagraphStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
+import {
+  clearInheritedLinkedStyleId,
+  isLinkedParagraphStyleId,
+  isLinkedCharacterStyleId,
+} from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
 
@@ -109,17 +113,8 @@ export function splitBlockPatch(state, dispatch, editor) {
             paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, getSplitRunProperties(state, $from));
           }
           const pp = paragraphAttrs?.paragraphProperties;
-          const styles = editor?.converter?.translatedLinkedStyles?.styles;
-          const rp = pp?.runProperties;
-          const runStyleIsLinkedCharacter =
-            rp?.styleId &&
-            styles &&
-            Object.values(styles).some((def) => def?.type === 'paragraph' && def?.link === rp.styleId);
-          if (
-            pp &&
-            (isLinkedParagraphStyleId(editor, sourceParagraphStyleId) ||
-              (runStyleIsLinkedCharacter && !isLinkedParagraphStyleId(editor, sourceParagraphStyleId)))
-          ) {
+          const runStyleIsLinkedCharacter = isLinkedCharacterStyleId(editor, pp?.runProperties?.styleId);
+          if (pp && (isLinkedParagraphStyleId(editor, sourceParagraphStyleId) || runStyleIsLinkedCharacter)) {
             const nextPp = { ...pp };
             delete nextPp.runProperties;
             paragraphAttrs = { ...paragraphAttrs, paragraphProperties: nextPp };

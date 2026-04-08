@@ -927,3 +927,74 @@ describe('m:func converter', () => {
     expect(mis[1]!.textContent).toBe('cos');
   });
 });
+
+describe('m:acc converter', () => {
+  it('converts accent with tilde to <mover accent="true">', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:acc',
+          elements: [
+            { name: 'm:accPr', elements: [{ name: 'm:chr', attributes: { 'm:val': '\u0303' } }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.getAttribute('accent')).toBe('true');
+    expect(mover!.children[0]!.textContent).toBe('x');
+    const mo = mover!.querySelector('mo');
+    expect(mo!.textContent).toBe('\u0303');
+  });
+
+  it('defaults to circumflex (U+0302) when m:chr is absent', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:acc',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    const mo = mover!.querySelector('mo');
+    expect(mo!.textContent).toBe('\u0302');
+  });
+
+  it('renders dot accent', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:acc',
+          elements: [
+            { name: 'm:accPr', elements: [{ name: 'm:chr', attributes: { 'm:val': '\u0307' } }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mo = result!.querySelector('mover mo');
+    expect(mo!.textContent).toBe('\u0307');
+  });
+});

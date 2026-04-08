@@ -27,7 +27,10 @@ export const convertPhantom: MathObjectConverter = (node, doc, convertChildren) 
   const zeroAsc = phantPr?.elements?.find((e) => e.name === 'm:zeroAsc');
   const zeroDesc = phantPr?.elements?.find((e) => e.name === 'm:zeroDesc');
 
-  const isVisible = show?.attributes?.['m:val'] === '1' || show?.attributes?.['m:val'] === 'on';
+  /** OOXML ST_OnOff true values. */
+  const isOnOffTrue = (val?: string) => val === '1' || val === 'on' || val === 'true';
+
+  const isVisible = isOnOffTrue(show?.attributes?.['m:val']);
   const hasZeroDimension = zeroWid || zeroAsc || zeroDesc;
 
   const content = convertChildren(base?.elements ?? []);
@@ -40,8 +43,7 @@ export const convertPhantom: MathObjectConverter = (node, doc, convertChildren) 
 
   const mpadded = doc.createElementNS(MATHML_NS, 'mpadded');
 
-  const isZeroVal = (el?: typeof zeroWid) =>
-    el && (el.attributes?.['m:val'] === '1' || el.attributes?.['m:val'] === 'on' || !el.attributes);
+  const isZeroVal = (el?: typeof zeroWid) => el && (isOnOffTrue(el.attributes?.['m:val']) || !el.attributes);
 
   if (isZeroVal(zeroWid)) mpadded.setAttribute('width', '0');
   if (isZeroVal(zeroAsc)) mpadded.setAttribute('height', '0');

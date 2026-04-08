@@ -735,8 +735,11 @@ describe('m:rad converter', () => {
     expect(result).not.toBeNull();
     const mroot = result!.querySelector('mroot');
     expect(mroot).not.toBeNull();
+    // <mroot> wraps each operand in <mrow> for valid two-child arity
     expect(mroot!.children.length).toBe(2);
+    expect(mroot!.children[0]!.localName).toBe('mrow');
     expect(mroot!.children[0]!.textContent).toBe('x');
+    expect(mroot!.children[1]!.localName).toBe('mrow');
     expect(mroot!.children[1]!.textContent).toBe('3');
   });
 
@@ -814,8 +817,40 @@ describe('m:rad converter', () => {
     expect(result).not.toBeNull();
     const mroot = result!.querySelector('mroot');
     expect(mroot).not.toBeNull();
+    // <mroot> wraps each operand in <mrow> for valid two-child arity
+    expect(mroot!.children.length).toBe(2);
+    expect(mroot!.children[0]!.localName).toBe('mrow');
     expect(mroot!.children[0]!.textContent).toBe('16');
+    expect(mroot!.children[1]!.localName).toBe('mrow');
     expect(mroot!.children[1]!.textContent).toBe('4');
+  });
+
+  it('treats m:degHide m:val="true" as hidden (ST_OnOff)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:radPr', elements: [{ name: 'm:degHide', attributes: { 'm:val': 'true' } }] },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('z');
+    expect(result!.querySelector('mroot')).toBeNull();
   });
 });
 

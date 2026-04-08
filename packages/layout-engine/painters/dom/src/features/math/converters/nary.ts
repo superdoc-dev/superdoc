@@ -45,8 +45,13 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
   const opChar = chr?.attributes?.['m:val'] ?? DEFAULT_NARY_CHAR;
   const isUndOvr = limLoc?.attributes?.['m:val'] === 'undOvr';
 
+  /** OOXML ST_OnOff true values: "1", "on", "true", or boolean-flag presence. */
   const isHidden = (el?: typeof subHide) =>
-    el && (el.attributes?.['m:val'] === '1' || el.attributes?.['m:val'] === 'on' || !el.attributes);
+    el &&
+    (el.attributes?.['m:val'] === '1' ||
+      el.attributes?.['m:val'] === 'on' ||
+      el.attributes?.['m:val'] === 'true' ||
+      !el.attributes);
 
   const hasSub = !isHidden(subHide);
   const hasSup = !isHidden(supHide);

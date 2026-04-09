@@ -14,10 +14,12 @@ import {
   convertMathRun,
   convertFraction,
   convertBar,
+  convertFunction,
   convertDelimiter,
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
+  convertRadical,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -41,6 +43,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:d': convertDelimiter, // Delimiter (parentheses, brackets, braces)
   'm:f': convertFraction, // Fraction (numerator/denominator)
+  'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
@@ -50,14 +53,13 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
   'm:eqArr': null, // Equation array (vertical array of equations)
-  'm:func': null, // Function apply (sin, cos, log, etc.)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)
   'm:limUpp': null, // Upper limit
   'm:m': null, // Matrix (grid of elements)
   'm:nary': null, // N-ary operator (integral, summation, product)
   'm:phant': null, // Phantom (invisible spacing placeholder)
-  'm:rad': null, // Radical (square root, nth root)
+  'm:rad': convertRadical, // Radical (square root, nth root)
   'm:sPre': null, // Pre-sub-superscript (left of base)
 };
 

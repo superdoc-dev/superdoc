@@ -24,6 +24,7 @@ import {
   extractBookmarkInfo,
   buildBookmarkDiscoveryItem,
   buildBookmarkAddress,
+  type DocumentBookmarkEntry,
 } from '../helpers/bookmark-resolver.js';
 import { paginate, resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
@@ -57,17 +58,24 @@ function parseBookmarkId(raw: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function allocateBookmarkId(editor: Editor): string {
+function allocateBookmarkId(editor: Editor, preCollected?: DocumentBookmarkEntry[]): string {
+  const entries = preCollected ?? findAllBookmarksInDocument(editor);
   let maxId = -1;
-  for (const entry of findAllBookmarksInDocument(editor)) {
+  for (const entry of entries) {
     const id = parseBookmarkId(entry.bookmarkId);
     if (id !== null && id > maxId) maxId = id;
   }
   return String(maxId + 1);
 }
 
-function bookmarkExistsAnywhere(editor: Editor, name: string, excludeBookmarkId?: string): boolean {
-  return findAllBookmarksInDocument(editor).some((bookmark) => {
+function bookmarkExistsAnywhere(
+  editor: Editor,
+  name: string,
+  excludeBookmarkId?: string,
+  preCollected?: DocumentBookmarkEntry[],
+): boolean {
+  const entries = preCollected ?? findAllBookmarksInDocument(editor);
+  return entries.some((bookmark) => {
     if (bookmark.name !== name) return false;
     if (!excludeBookmarkId) return true;
     return bookmark.bookmarkId !== excludeBookmarkId;
@@ -118,7 +126,9 @@ export function bookmarksInsertWrapper(
   const address: BookmarkAddress = buildBookmarkAddress(input.name, runtime.locator);
 
   try {
-    if (bookmarkExistsAnywhere(editor, input.name)) {
+    const allBookmarks = findAllBookmarksInDocument(editor);
+
+    if (bookmarkExistsAnywhere(editor, input.name, undefined, allBookmarks)) {
       return bookmarkFailure('NO_OP', `Bookmark with name "${input.name}" already exists.`);
     }
 
@@ -140,7 +150,7 @@ export function bookmarksInsertWrapper(
     const receipt = executeDomainCommand(
       storyEditor,
       () => {
-        const bookmarkId = allocateBookmarkId(editor);
+        const bookmarkId = allocateBookmarkId(editor, allBookmarks);
         const startAttrs: Record<string, unknown> = {
           name: input.name,
           id: bookmarkId,

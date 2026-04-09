@@ -6055,7 +6055,6 @@ export class PresentationEditor extends EventEmitter {
       runtime.editor.view?.focus?.();
       return true;
     } catch (error) {
-      this.#exitHeaderFooterMode();
       console.error('[PresentationEditor] navigateTo bookmark failed:', error);
       this.emit('error', {
         error,

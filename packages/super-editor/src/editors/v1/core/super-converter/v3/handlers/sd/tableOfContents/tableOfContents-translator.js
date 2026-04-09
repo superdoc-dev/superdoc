@@ -67,7 +67,7 @@ const encode = (params) => {
 const decode = (params) => {
   const { node } = params;
   const tocContent = Array.isArray(node.content) ? node.content : [];
-  const blockContentNodes = tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
 
   // Inject the fldChar begin, instrText and fldChar separate into the first child (after any existing pPr)
   const tocBeginElements = [
@@ -87,12 +87,9 @@ const decode = (params) => {
     },
     { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' }, elements: [] }] },
   ];
-  const tocEndElements = [
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
-  ];
 
-  if (blockContentNodes.length > 0) {
-    const firstParagraph = blockContentNodes[0];
+  if (contentNodes.length > 0) {
+    const firstParagraph = contentNodes[0];
     let insertIndex = 0;
     if (firstParagraph.elements) {
       const pPrIndex = firstParagraph.elements.findIndex((el) => el.name === 'w:pPr');
@@ -104,20 +101,23 @@ const decode = (params) => {
     firstParagraph.elements.splice(insertIndex, 0, ...tocBeginElements);
   } else {
     // If there are no paragraphs, create one with the TOC begin elements
-    blockContentNodes.push({
+    contentNodes.push({
       name: 'w:p',
       elements: tocBeginElements,
     });
   }
 
-  const lastParagraph = blockContentNodes[blockContentNodes.length - 1];
+  const tocEndElements = [
+    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
+  ];
+  const lastParagraph = contentNodes[contentNodes.length - 1];
   if (lastParagraph.elements) {
     lastParagraph.elements.push(...tocEndElements);
   } else {
     lastParagraph.elements = [...tocEndElements];
   }
 
-  return blockContentNodes;
+  return contentNodes;
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

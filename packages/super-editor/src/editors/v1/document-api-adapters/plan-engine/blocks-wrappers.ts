@@ -65,6 +65,11 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
   return text.slice(0, TEXT_PREVIEW_MAX_LENGTH);
 }
 
+function extractBlockText(node: ProseMirrorNode): string | null {
+  if (!node.isTextblock) return null;
+  return node.textContent;
+}
+
 const HEADING_PATTERN = /^Heading(\d)$/;
 
 /** OOXML implicit default font size when neither styles nor docDefaults specifies one. */
@@ -309,6 +314,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
 
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = computeTextContentLength(candidate.node);
+    const fullText = input?.includeText ? extractBlockText(candidate.node) : undefined;
     const ref =
       textLength > 0
         ? encodeV4Ref({
@@ -327,6 +333,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       nodeId: candidate.nodeId,
       nodeType: candidate.nodeType,
       textPreview: extractTextPreview(candidate.node),
+      ...(fullText !== undefined ? { text: fullText } : {}),
       isEmpty: textLength === 0,
       ...extractBlockFormatting(candidate.node, styleCtx),
       ...(ref ? { ref } : {}),

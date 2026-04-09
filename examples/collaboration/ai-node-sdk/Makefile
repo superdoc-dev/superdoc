@@ -111,19 +111,25 @@ restore-npm-sdk: ## Restore SDK from npm if currently symlinked
 
 link-local-sdk: ## Build and link local SuperDoc SDK + CLI
 	@echo "Linking local SuperDoc SDK ($(CLI_TARGET))..."
-	@# 1. Always rebuild CLI binary to pick up latest source changes
+	@# 1. Refresh generated artifacts so SDK + CLI reflect latest contract/tool changes
+	@echo "  Generating derived SDK/tool artifacts..."
+	@cd $(ROOT) && $(PNPM) run generate:all
+	@# 2. Rebuild the Node SDK dist that the symlinked package actually exports
+	@echo "  Building Node SDK..."
+	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/sdk run build
+	@# 3. Always rebuild CLI binary to pick up latest source changes
 	@echo "  Building CLI binary..."
 	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host
-	@# 2. Ensure server node_modules exists
+	@# 4. Ensure server node_modules exists
 	@if [ ! -d server/node_modules ]; then \
 		echo "  Installing server deps first..."; \
 		cd server && npm install; \
 	fi
-	@# 3. Replace npm SDK with symlink to workspace source
+	@# 5. Replace npm SDK with symlink to workspace source
 	@rm -rf server/node_modules/@superdoc-dev/sdk
 	@ln -sf $(SDK_SRC) server/node_modules/@superdoc-dev/sdk
 	@echo "  ✓ Linked SDK → $(SDK_SRC)"
-	@# 4. Place CLI binary where the workspace SDK can find it via require.resolve
+	@# 6. Place CLI binary where the workspace SDK can find it via require.resolve
 	@#    Node follows the symlink real path, so the binary must be in the
 	@#    workspace SDK's own node_modules, not the server's.
 	@mkdir -p $(SDK_SRC)/node_modules/$(CLI_PKG)/bin
@@ -133,12 +139,16 @@ link-local-sdk: ## Build and link local SuperDoc SDK + CLI
 	@echo "✓ Local SDK ready"
 
 rebuild-local-sdk: ## Rebuild CLI binary and re-link
+	@echo "Refreshing generated artifacts..."
+	@cd $(ROOT) && $(PNPM) run generate:all
+	@echo "Rebuilding Node SDK..."
+	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/sdk run build
 	@echo "Rebuilding CLI binary..."
 	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host
 	@mkdir -p $(SDK_SRC)/node_modules/$(CLI_PKG)/bin
 	@cp $(CLI_ARTIFACT) $(SDK_SRC)/node_modules/$(CLI_PKG)/bin/$(CLI_BINARY)
 	@chmod +x $(SDK_SRC)/node_modules/$(CLI_PKG)/bin/$(CLI_BINARY)
-	@echo "✓ CLI binary updated"
+	@echo "✓ Local SDK + CLI updated"
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
 

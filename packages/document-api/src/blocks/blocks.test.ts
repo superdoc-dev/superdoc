@@ -216,5 +216,20 @@ describe('executeBlocksList', () => {
       executeBlocksList(adapter, input);
       expect(adapter.list).toHaveBeenCalledWith(input);
     });
+
+    it('passes through includeText unchanged', () => {
+      const adapter = makeListAdapter();
+      const input: BlocksListInput = { includeText: true, offset: 1 };
+      executeBlocksList(adapter, input);
+      expect(adapter.list).toHaveBeenCalledWith(input);
+    });
+  });
+
+  describe('input validation', () => {
+    it('rejects non-boolean includeText', () => {
+      expect(() => executeBlocksList(makeListAdapter(), { includeText: 'yes' as any })).toThrow(
+        DocumentApiValidationError,
+      );
+    });
   });
 });

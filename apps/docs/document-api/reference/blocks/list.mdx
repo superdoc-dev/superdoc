@@ -1,14 +1,14 @@
 ---
 title: blocks.list
 sidebarTitle: blocks.list
-description: List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.
+description: "List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.
+List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.
 
 - Operation ID: `blocks.list`
 - API member path: `editor.doc.blocks.list(...)`
@@ -20,12 +20,13 @@ List top-level blocks in document order with IDs, types, and text previews. Supp
 
 ## Expected result
 
-Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.
+Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, optional text, isEmpty), and the current document revision.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `includeText` | boolean | no |  |
 | `limit` | number | no |  |
 | `nodeTypes` | enum[] | no |  |
 | `offset` | number | no |  |
@@ -53,10 +54,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 {
   "blocks": [
     {
-      "isEmpty": true,
       "nodeId": "node-def456",
       "nodeType": "paragraph",
       "ordinal": 1,
+      "text": "Hello, world.",
       "textPreview": "example"
     }
   ],
@@ -80,6 +81,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 {
   "additionalProperties": false,
   "properties": {
+    "includeText": {
+      "description": "When true, includes the full flattened block text in each block entry.",
+      "type": "boolean"
+    },
     "limit": {
       "description": "Maximum blocks to return. Omit for all blocks.",
       "minimum": 1,
@@ -175,6 +180,17 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
           },
           "styleId": {
             "description": "Named paragraph style.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "description": "Full flattened block text when requested with includeText.",
             "oneOf": [
               {
                 "type": "string"

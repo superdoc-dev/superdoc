@@ -37,6 +37,7 @@ export type {
 // Editor event types (used by consumers to type event handlers)
 export type {
   Comment,
+  CommentElement,
   CommentsPayload,
   CommentLocationsPayload,
   FontsResolvedPayload,
@@ -53,6 +54,7 @@ export type { PartChangedEvent, PartId, PartSectionId } from './editors/v1/core/
 export type {
   EditorOptions,
   User,
+  FontConfig,
   FieldValue,
   DocxFileEntry,
   ViewLayout,
@@ -97,13 +99,51 @@ export type {
   PresentationEditorOptions,
   LayoutMetrics,
   LayoutError,
+  LayoutState,
   RangeRect,
   BoundingRect,
   LayoutUpdatePayload,
+  ImageSelectedEvent,
+  ImageDeselectedEvent,
+  TelemetryEvent,
+  RemoteCursorsRenderPayload,
+  FlowMode,
 } from './editors/v1/core/presentation-editor/types.js';
+
+// Proofing types (public contract for spellcheck/grammar providers)
+export type {
+  ProofingProvider,
+  ProofingCapabilities,
+  ProofingCheckRequest,
+  ProofingCheckResult,
+  ProofingSegment,
+  ProofingSegmentMetadata,
+  ProofingIssue,
+  ProofingIssueKind,
+  ProofingConfig,
+  ProofingStatus,
+  ProofingError,
+} from './editors/v1/core/presentation-editor/proofing/types.js';
 
 // Layout engine types
 export type { PositionHit } from '@superdoc/layout-bridge';
 export type { PaintSnapshot, LayoutMode } from '@superdoc/painter-dom';
 export type { FlowBlock, Layout, Measure, SectionMetadata, TrackedChangesMode } from '@superdoc/contracts';
 export type { Page as LayoutPage, Fragment as LayoutFragment } from '@superdoc/contracts';
+
+// Headless toolbar public types
+export type {
+  CreateHeadlessToolbarOptions,
+  HeadlessToolbarController,
+  HeadlessToolbarSurface,
+  HeadlessToolbarSuperdocHost,
+  PublicToolbarItemId,
+  ToolbarCommandState,
+  ToolbarCommandStates,
+  ToolbarContext,
+  ToolbarExecuteFn,
+  ToolbarPayloadMap,
+  ToolbarSnapshot,
+  ToolbarTarget,
+  ToolbarValueMap,
+} from './headless-toolbar/types.js';

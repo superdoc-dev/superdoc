@@ -99,6 +99,8 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
     .find((el) => el.elements.some((inner) => inner.name === 'w:basedOn'))
     ?.elements.find((inner) => inner.name === 'w:basedOn')?.attributes['w:val'];
 
+  const linkToCharacterStyle = firstMatch.elements.find((el) => el.name === 'w:link')?.attributes?.['w:val'] ?? null;
+
   const parsedAttrs = {
     name,
     qFormat: qFormat ? true : false,
@@ -108,6 +110,8 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
     pageBreakBefore: pageBreakBeforeVal ? true : false,
     pageBreakAfter: pageBreakAfterVal ? true : false,
     basedOn: basedOn ?? null,
+    /** Linked character style id (w:link); used when applying paragraph style to a partial selection */
+    link: linkToCharacterStyle,
   };
 
   // rPr

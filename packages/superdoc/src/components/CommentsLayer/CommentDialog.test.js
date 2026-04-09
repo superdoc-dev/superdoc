@@ -892,6 +892,73 @@ describe('CommentDialog.vue', () => {
     expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
   });
 
+  it('does not deselect when e.target is wrong but elementFromPoint finds a comment highlight', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+
+    // Simulate pointer capture redirecting e.target to the viewport host
+    const viewportHost = document.createElement('div');
+    const commentHighlight = document.createElement('span');
+    commentHighlight.className = 'superdoc-comment-highlight';
+    document.body.appendChild(commentHighlight);
+
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => commentHighlight);
+
+    const handler = wrapper.element.__clickOutside;
+    handler({ target: viewportHost, clientX: 50, clientY: 50 });
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
+
+    document.elementFromPoint = originalElementFromPoint;
+    document.body.removeChild(commentHighlight);
+  });
+
+  it('does not deselect when elementFromPoint finds a tracked-change element', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+
+    const viewportHost = document.createElement('div');
+    const trackedInsert = document.createElement('span');
+    trackedInsert.className = 'track-insert';
+    document.body.appendChild(trackedInsert);
+
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => trackedInsert);
+
+    const handler = wrapper.element.__clickOutside;
+    handler({ target: viewportHost, clientX: 50, clientY: 50 });
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
+
+    document.elementFromPoint = originalElementFromPoint;
+    document.body.removeChild(trackedInsert);
+  });
+
+  it('deselects when elementFromPoint returns a non-ignored element', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+
+    const viewportHost = document.createElement('div');
+    const plainDiv = document.createElement('div');
+    plainDiv.className = 'some-normal-content';
+    document.body.appendChild(plainDiv);
+
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => plainDiv);
+
+    const handler = wrapper.element.__clickOutside;
+    handler({ target: viewportHost, clientX: 50, clientY: 50 });
+
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(expect.any(Object), null);
+    expect(wrapper.emitted('dialog-exit')).toHaveLength(1);
+
+    document.elementFromPoint = originalElementFromPoint;
+    document.body.removeChild(plainDiv);
+  });
+
   it('sorts tracked change parent first, then child comments by creation time', async () => {
     // Simulate a tracked change with two comments on it
     // The comments were created after the tracked change but should appear below it

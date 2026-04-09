@@ -82,6 +82,8 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/super-input', replacement: path.resolve(__dirname, '../super-editor/src/editors/v1/components/SuperInput.vue') },
     { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/editors/v1/components/toolbar/AIWriter.vue') },
     { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
+    { find: '@superdoc/super-editor/headless-toolbar/react', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/react.ts') },
+    { find: '@superdoc/super-editor/headless-toolbar/vue', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/vue.ts') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
@@ -179,6 +181,9 @@ export default defineConfig(({ mode, command }) => {
       rollupOptions: {
         input: {
           'superdoc': 'src/index.js',
+          'headless-toolbar': 'src/headless-toolbar.js',
+          'headless-toolbar-react': 'src/headless-toolbar-react.js',
+          'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
@@ -192,6 +197,8 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
+          'react',
+          'vue',
         ],
         output: [
           {

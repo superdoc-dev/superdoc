@@ -38,6 +38,9 @@ import { NodeSelection } from 'prosemirror-state';
  * @property {string} [role='editor'] - Role of the toolbar ('editor' or 'viewer')
  * @property {Object} [icons] - Custom icons for toolbar items
  * @property {Object} [texts] - Custom texts for toolbar items
+ * @property {import('../../core/types/EditorConfig.js').FontConfig[]} [fonts] - Font options for the font picker dropdown
+ * @property {boolean} [hideButtons=true] - Whether to hide buttons when the editor is not focused
+ * @property {boolean} [pagination=false] - Whether to show pagination controls
  * @property {string} [mode='docx'] - Editor mode
  * @property {string[]} [excludeItems=[]] - Items to exclude from the toolbar
  * @property {Object} [groups=null] - Custom groups configuration

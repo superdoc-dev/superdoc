@@ -1,5 +1,7 @@
 import type { SuperDoc } from 'superdoc';
 
+export type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 /** Field definition for template builder */
 export interface FieldDefinition {
   id: string;
@@ -9,6 +11,7 @@ export interface FieldDefinition {
   mode?: 'inline' | 'block';
   group?: string;
   fieldType?: string;
+  lockMode?: LockMode;
 }
 
 /** Field instance in a template document */
@@ -20,6 +23,7 @@ export interface TemplateField {
   mode?: 'inline' | 'block';
   group?: string;
   fieldType?: string;
+  lockMode?: LockMode;
 }
 
 export interface TriggerEvent {
@@ -46,6 +50,7 @@ export interface FieldMenuProps {
   onCreateField?: (field: FieldDefinition) => void | Promise<FieldDefinition | void>;
   existingFields?: TemplateField[];
   onSelectExisting?: (field: TemplateField) => void;
+  fieldColors?: Record<string, string>;
 }
 
 export interface FieldListProps {
@@ -54,6 +59,7 @@ export interface FieldListProps {
   onDelete: (fieldId: string | number) => void;
   onUpdate?: (field: TemplateField) => void;
   selectedFieldId?: string | number;
+  fieldColors?: Record<string, string>;
 }
 
 export interface DocumentConfig {
@@ -114,6 +120,12 @@ export interface SuperDocTemplateBuilderProps {
   list?: ListConfig;
   toolbar?: boolean | string | ToolbarConfig;
 
+  /** Lock mode applied to all inserted fields unless overridden per-field */
+  defaultLockMode?: LockMode;
+
+  /** Colors for field types in the document and sidebar. Keys are fieldType values, values are CSS colors. */
+  fieldColors?: Record<string, string>;
+
   /** Content Security Policy nonce for dynamically injected styles */
   cspNonce?: string;
 
@@ -149,6 +161,8 @@ export interface SuperDocTemplateBuilderHandle {
   nextField: () => void;
   previousField: () => void;
   getFields: () => TemplateField[];
+  /** Re-discover fields from the editor and notify via onFieldsChange */
+  refresh: () => void;
   exportTemplate: (config?: ExportConfig) => Promise<void | Blob>;
   /**
    * Returns the SuperDoc instance.

@@ -510,6 +510,22 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Allow body layout to synthesize page 1 for anchored tables when a document has
+   * no anchor paragraphs and would otherwise render zero pages.
+   *
+   * Header/footer layout keeps this disabled to avoid changing long-standing
+   * overlay behavior in paragraph-free header/footer regions.
+   */
+  allowParagraphlessAnchoredTableFallback?: boolean;
+  /**
+   * Allow body layout to synthesize page 1 when section metadata exists but no
+   * renderable body blocks survive conversion.
+   *
+   * Header/footer layout keeps this disabled to preserve existing empty-region
+   * behavior for paragraph-free overlays.
+   */
+  allowSectionBreakOnlyPageFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -581,6 +597,10 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
+  return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
 // List constants sourced from shared/common
@@ -804,6 +824,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Track active and pending columns
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
+  const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -1073,6 +1095,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
     'decimal';
   let activePageCounter = 1;
+  let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;
   // Section header/footer ref tracking state
   type SectionRefs = {
@@ -1100,6 +1123,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
   if (typeof initialSectionMetadata?.numbering?.start === 'number') {
     activePageCounter = initialSectionMetadata.numbering.start;
+    activeSectionPageCounterStart = activePageCounter;
   }
   let activeSectionRefs: SectionRefs | null = null;
   let pendingSectionRefs: SectionRefs | null = null;
@@ -1143,6 +1167,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
+        const isApplyingPendingSection =
+          pendingTopMargin !== null ||
+          pendingBottomMargin !== null ||
+          pendingLeftMargin !== null ||
+          pendingRightMargin !== null ||
+          pendingHeaderDistance !== null ||
+          pendingFooterDistance !== null ||
+          pendingPageSize !== null ||
+          pendingColumns !== null ||
+          pendingOrientation !== null ||
+          pendingNumbering !== null ||
+          pendingSectionRefs !== null ||
+          pendingSectionIndex !== null ||
+          pendingVAlign !== undefined ||
+          pendingSectionBaseTopMargin !== null ||
+          pendingSectionBaseBottomMargin !== null;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1223,6 +1263,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pendingSectionBaseBottomMargin !== null) {
           activeSectionBaseBottomMargin = pendingSectionBaseBottomMargin;
           pendingSectionBaseBottomMargin = null;
+        }
+        if (isApplyingPendingSection) {
+          activeSectionPageCounterStart = activePageCounter;
         }
         pageCount += 1;
 
@@ -1432,8 +1475,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Collect anchored drawings mapped to their anchor paragraphs
   const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
-  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs
-  const anchoredTablesByParagraph = collectAnchoredTables(blocks, measures);
+  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
+  // Tables without any anchor paragraph need explicit fallback placement so
+  // floating-only documents still produce a page and render their content.
+  const anchoredTables = collectAnchoredTables(blocks, measures);
+  const anchoredTablesByParagraph = anchoredTables.byParagraph;
+  const paragraphlessAnchoredTables = anchoredTables.withoutParagraph;
   const placedAnchoredIds = new Set<string>();
   const placedAnchoredTableIds = new Set<string>();
 
@@ -1445,6 +1492,44 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
   const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+
+  const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
+    const contentTop = state.topMargin;
+    const contentBottom = state.contentBottom;
+    const contentHeight = Math.max(0, contentBottom - contentTop);
+    const tableHeight = measure.totalHeight ?? 0;
+    const anchor = block.anchor;
+    const offsetV = anchor?.offsetV ?? 0;
+    const vRelativeFrom = anchor?.vRelativeFrom;
+    const alignV = anchor?.alignV;
+
+    if (vRelativeFrom === 'margin') {
+      if (alignV === 'bottom') {
+        return contentBottom - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        return contentTop + (contentHeight - tableHeight) / 2 + offsetV;
+      }
+      return contentTop + offsetV;
+    }
+
+    if (vRelativeFrom === 'page') {
+      if (alignV === 'bottom') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return pageHeight - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return (pageHeight - tableHeight) / 2 + offsetV;
+      }
+      return offsetV;
+    }
+
+    // Paragraph-relative floating tables normally anchor to a body paragraph.
+    // When a document has no body paragraphs at all, fall back to the top of the
+    // content area so the table can still render on page 1.
+    return contentTop + offsetV;
+  };
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -1699,6 +1784,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (sectionMetadata.numbering.format) activeNumberFormat = sectionMetadata.numbering.format;
           if (typeof sectionMetadata.numbering.start === 'number') {
             activePageCounter = sectionMetadata.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           // Non-first section: schedule for next page
@@ -1709,6 +1795,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (effectiveBlock.numbering.format) activeNumberFormat = effectiveBlock.numbering.format;
           if (typeof effectiveBlock.numbering.start === 'number') {
             activePageCounter = effectiveBlock.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           pendingNumbering = { ...effectiveBlock.numbering };
@@ -2209,8 +2296,46 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Prune trailing empty page(s) that can be created by page-boundary rules
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
-  while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
-    pages.pop();
+  paginator.pruneTrailingEmptyPages();
+
+  const resetPaginationStateForBlankPageFallback = (): void => {
+    pageCount = 0;
+    activePageCounter = activeSectionPageCounterStart;
+    sectionFirstPageNumbers.clear();
+  };
+
+  if (
+    pages.length === 0 &&
+    ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
+  ) {
+    resetPaginationStateForBlankPageFallback();
+  }
+
+  if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
+    const state = paginator.ensurePage();
+
+    for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
+      const columnWidthForTable = getCurrentColumnWidth();
+      const totalWidth = tableMeasure.totalWidth ?? 0;
+      const shouldFlowInline =
+        columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+
+      if (shouldFlowInline) {
+        continue;
+      }
+
+      const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
+      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+
+      floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      placedAnchoredTableIds.add(tableBlock.id);
+    }
+  }
+
+  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+    paginator.ensurePage();
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -2533,6 +2658,8 @@ export function layoutHeaderFooter(
   const layout = layoutDocument(blocks, measures, {
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    allowParagraphlessAnchoredTableFallback: false,
+    allowSectionBreakOnlyPageFallback: false,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.

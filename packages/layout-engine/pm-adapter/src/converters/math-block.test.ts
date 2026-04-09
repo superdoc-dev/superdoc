@@ -78,16 +78,20 @@ describe('handleMathBlockNode', () => {
     const { context, blocks } = makeContext();
     const fractionXml = {
       name: 'm:oMathPara',
-      elements: [{
-        name: 'm:oMath',
-        elements: [{
-          name: 'm:f',
+      elements: [
+        {
+          name: 'm:oMath',
           elements: [
-            { name: 'm:num', elements: [{ name: 'm:r' }] },
-            { name: 'm:den', elements: [{ name: 'm:r' }] },
+            {
+              name: 'm:f',
+              elements: [
+                { name: 'm:num', elements: [{ name: 'm:r' }] },
+                { name: 'm:den', elements: [{ name: 'm:r' }] },
+              ],
+            },
           ],
-        }],
-      }],
+        },
+      ],
     };
     handleMathBlockNode(makeNode({ textContent: 'ab', originalXml: fractionXml }) as any, context);
     const run = (blocks[0] as ParagraphBlock).runs[0] as MathRun;

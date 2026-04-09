@@ -5,6 +5,7 @@ import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
+  ImageHyperlink,
   Measure,
   Layout,
   Line,
@@ -439,6 +440,76 @@ describe('DomPainter', () => {
     expect(lines[0].style.wordSpacing).toBe('40px');
     // Last line should NOT be justified (Word behavior: last line of paragraph is left-aligned)
     expect(lines[1].style.wordSpacing).toBe('');
+  });
+
+  it('skips justify for lines with manual tab runs but no explicit segment positions', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'tab-justify-block',
+      runs: [
+        { text: '1.', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 48 },
+        { text: 'a b c d', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 7,
+          width: 60,
+          maxWidth: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          // No segments with x — this is the "manual tab without segments" case
+        },
+        {
+          fromRun: 2,
+          fromChar: 7,
+          toRun: 2,
+          toChar: 7,
+          width: 0,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    // Manual tab without explicit segment positions should skip justify
+    expect(lines[0].style.wordSpacing).toBe('');
   });
 
   it('justifies last visible line when paragraph ends with lineBreak', () => {
@@ -3883,6 +3954,60 @@ describe('DomPainter', () => {
     expect(trackedSpan.classList.contains('highlighted')).toBe(true);
   });
 
+  it('injects a delete-decoration reset that overrides inherited underline metadata', () => {
+    document.body.appendChild(mount);
+    mount.style.setProperty('--sd-tracked-changes-delete-text', '#2e64a8');
+    mount.style.setProperty('--sd-tracked-changes-delete-decoration-thickness', '1.5px');
+
+    try {
+      const trackedDeleteBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tracked-delete-underline-reset',
+        runs: [
+          {
+            text: 'Deleted underlined text',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            underline: {
+              style: 'wavy',
+              color: '#1f9d55',
+            },
+            trackedChange: {
+              kind: 'delete',
+              id: 'tracked-delete-1',
+            },
+          },
+        ],
+        attrs: {
+          trackedChangesMode: 'review',
+          trackedChangesEnabled: true,
+        },
+      };
+
+      const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+        trackedDeleteBlock.id,
+        trackedDeleteBlock.runs[0].text.length,
+      );
+
+      const painter = createTestPainter({ blocks: [trackedDeleteBlock], measures: [paragraphMeasure] });
+      painter.paint(paragraphLayout, mount);
+
+      const trackedSpan = mount.querySelector('[data-track-change-id="tracked-delete-1"]') as HTMLElement;
+      expect(trackedSpan).toBeTruthy();
+      expect(trackedSpan.style.textDecorationLine).toBe('underline');
+      expect(trackedSpan.style.textDecorationStyle).toBe('wavy');
+      expectCssColor(trackedSpan.style.textDecorationColor, '#1f9d55');
+
+      const styleEl = document.head.querySelector('[data-superdoc-track-change-styles="true"]') as HTMLStyleElement;
+      expect(styleEl).toBeTruthy();
+      expect(styleEl.textContent).toMatch(
+        /\.track-delete-dec\.highlighted\s*\{[\s\S]*text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*currentColor\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+      );
+    } finally {
+      mount.remove();
+    }
+  });
+
   describe('token resolution tests', () => {
     it('renders footer with page numbers resolved', () => {
       const footerBlock: FlowBlock = {
@@ -5926,6 +6051,58 @@ describe('DomPainter', () => {
   });
 
   describe('renderImageRun (inline image runs)', () => {
+    const renderInlineImageRun = (
+      run: Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number],
+      lineWidth = 100,
+      lineHeight = 100,
+    ) => {
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [run],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: lineWidth,
+            ascent: lineHeight,
+            descent: 0,
+            lineHeight,
+          },
+        ],
+        totalHeight: lineHeight,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: lineWidth,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+    };
+
     it('renders img element with valid data URL', () => {
       const imageBlock: FlowBlock = {
         kind: 'paragraph',
@@ -6392,6 +6569,84 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('wraps linked inline image in anchor without clipPath', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 100,
+        title: 'Image',
+        hyperlink: { url: 'https://example.com/inline', tooltip: ' Inline tooltip ' },
+      });
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const img = anchor?.querySelector('img') as HTMLImageElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.href).toBe('https://example.com/inline');
+      expect(anchor?.title).toBe('Inline tooltip');
+      expect(img?.getAttribute('title')).toBeNull();
+      expect(anchor?.firstElementChild?.tagName).toBe('IMG');
+    });
+
+    it('falls back to hyperlink URL for linked inline image title', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 100,
+        title: 'Image',
+        hyperlink: { url: 'https://superdoc.dev' },
+      });
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const img = anchor?.querySelector('img') as HTMLImageElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.title).toBe('https://superdoc.dev');
+      expect(img?.getAttribute('title')).toBeNull();
+    });
+
+    it('wraps linked inline image clip wrapper in anchor when clipPath uses positive dimensions', () => {
+      renderInlineImageRun(
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          width: 80,
+          height: 60,
+          clipPath: 'inset(10% 20% 30% 40%)',
+          hyperlink: { url: 'https://example.com/clip-wrapper' },
+        },
+        80,
+        60,
+      );
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.querySelector('.superdoc-inline-image-clip-wrapper')).toBeTruthy();
+      expect(anchor?.querySelector('.superdoc-inline-image-clip-wrapper img')).toBeTruthy();
+    });
+
+    it('wraps linked inline image clip wrapper in anchor when clipPath falls back to wrapper return path', () => {
+      renderInlineImageRun(
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          width: 0,
+          height: 60,
+          clipPath: 'inset(10% 20% 30% 40%)',
+          hyperlink: { url: 'https://example.com/fallback-wrapper' },
+        },
+        1,
+        60,
+      );
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const wrapper = anchor?.querySelector('.superdoc-inline-image-clip-wrapper') as HTMLElement | null;
+      expect(anchor).toBeTruthy();
+      expect(wrapper).toBeTruthy();
+      expect(wrapper?.style.width).toBe('0px');
+      expect(wrapper?.querySelector('img')).toBeTruthy();
     });
 
     it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
@@ -7435,6 +7690,123 @@ describe('ImageFragment (block-level images)', () => {
       // vmlWatermark: false should still have metadata (interactive)
       const metadataAttr = imageEl?.getAttribute('data-image-metadata');
       expect(metadataAttr).toBeTruthy();
+    });
+  });
+
+  describe('hyperlink (DrawingML a:hlinkClick)', () => {
+    const makePainter = (hyperlink?: ImageHyperlink) => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'linked-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        ...(hyperlink ? { hyperlink } : {}),
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      return createDomPainter({ blocks: [block], measures: [measure] });
+    };
+
+    it('wraps linked image in <a class="superdoc-link"> with correct href', () => {
+      const painter = makePainter({ url: 'https://example.com' });
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'image' as const,
+                blockId: 'linked-img',
+                x: 20,
+                y: 20,
+                width: 100,
+                height: 50,
+              },
+            ],
+          },
+        ],
+      };
+      painter.paint(layout, mount);
+
+      const fragmentEl = mount.querySelector('.superdoc-image-fragment');
+      expect(fragmentEl).toBeTruthy();
+
+      const anchor = fragmentEl?.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.href).toBe('https://example.com/');
+      expect(anchor?.target).toBe('_blank');
+      expect(anchor?.rel).toContain('noopener');
+      expect(anchor?.getAttribute('role')).toBe('link');
+    });
+
+    it('encodes tooltip before setting title attribute', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'tip-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        hyperlink: { url: 'https://example.com', tooltip: `  ${'x'.repeat(600)}  ` },
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'tip-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor?.title).toBe('x'.repeat(500));
+    });
+
+    it('does NOT wrap unlinked image in anchor', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'plain-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'plain-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link');
+      expect(anchor).toBeNull();
+
+      // Image element should still be present
+      const img = mount.querySelector('.superdoc-image-fragment img');
+      expect(img).toBeTruthy();
+    });
+
+    it('does NOT wrap image when hyperlink URL fails sanitization', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'unsafe-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        hyperlink: { url: 'javascript:alert(1)' },
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'unsafe-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link');
+      expect(anchor).toBeNull();
     });
   });
 });

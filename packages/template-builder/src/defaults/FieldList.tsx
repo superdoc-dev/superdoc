@@ -13,7 +13,8 @@ const FieldItem: FC<{
   onDelete: (id: string | number) => void;
   isSelected: boolean;
   isGrouped?: boolean;
-}> = ({ field, onSelect, onDelete, isSelected, isGrouped = false }) => {
+  fieldColors?: Record<string, string>;
+}> = ({ field, onSelect, onDelete, isSelected, isGrouped = false, fieldColors }) => {
   return (
     <div
       onClick={() => onSelect(field)}
@@ -117,11 +118,26 @@ const FieldItem: FC<{
                 fontSize: '9px',
                 padding: '2px 5px',
                 borderRadius: '3px',
-                ...getFieldTypeStyle(field.fieldType),
+                ...getFieldTypeStyle(field.fieldType, fieldColors),
                 fontWeight: '500',
               }}
             >
               {field.fieldType}
+            </span>
+          )}
+          {field.lockMode && field.lockMode !== 'unlocked' && (
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '2px 5px',
+                borderRadius: '3px',
+                background: '#fef2f2',
+                color: '#991b1b',
+                fontWeight: '500',
+              }}
+              title={field.lockMode}
+            >
+              🔒
             </span>
           )}
         </div>
@@ -130,7 +146,7 @@ const FieldItem: FC<{
   );
 };
 
-export const FieldList: FC<FieldListProps> = ({ fields, onSelect, onDelete, selectedFieldId }) => {
+export const FieldList: FC<FieldListProps> = ({ fields, onSelect, onDelete, selectedFieldId, fieldColors }) => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const { groupedFields, ungroupedFields } = useMemo(() => {
@@ -196,6 +212,7 @@ export const FieldList: FC<FieldListProps> = ({ fields, onSelect, onDelete, sele
               onSelect={onSelect}
               onDelete={onDelete}
               isSelected={selectedFieldId === field.id}
+              fieldColors={fieldColors}
             />
           ))}
 
@@ -258,6 +275,7 @@ export const FieldList: FC<FieldListProps> = ({ fields, onSelect, onDelete, sele
                         onDelete={onDelete}
                         isSelected={selectedFieldId === field.id}
                         isGrouped
+                        fieldColors={fieldColors}
                       />
                     ))}
                   </div>

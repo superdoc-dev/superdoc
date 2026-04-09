@@ -11,9 +11,11 @@ import { Plugin, TextSelection } from 'prosemirror-state';
  * Uses appendTransaction so it works in both editing mode (PM DOM clicks) and
  * presentation mode (PresentationEditor dispatched selections).
  */
-export function createStructuredContentSelectPlugin() {
+export function createStructuredContentSelectPlugin(editor) {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
+      if (editor?.options?.documentMode === 'viewing') return null;
+
       const { selection } = newState;
 
       // Only for collapsed selections (cursor placement, not range selections)

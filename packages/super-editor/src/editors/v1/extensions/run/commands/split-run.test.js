@@ -220,6 +220,22 @@ describe('splitRunToParagraph with style marks', () => {
     ],
   };
 
+  /** Paragraph without a linked paragraph style — simulates applying only the linked character part to a selection. */
+  const NORMAL_BODY_PARAGRAPH_DOC = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'run',
+            content: [{ type: 'text', text: 'Hello world' }],
+          },
+        ],
+      },
+    ],
+  };
+
   const STYLED_TABLE_DOC = {
     type: 'doc',
     content: [
@@ -510,6 +526,38 @@ describe('splitRunToParagraph with style marks', () => {
     expect(insertedTextNode).toBeTruthy();
     const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
     expect(markTypes).not.toContain('bold');
+    expect(markTypes).not.toContain('textStyle');
+  });
+
+  it('does not carry linked character style to a new line when only a selection had the linked char style', () => {
+    const linkedStyleConverter = createHeadingLinkedStyleConverter();
+    editor.converter = linkedStyleConverter;
+    loadDoc(NORMAL_BODY_PARAGRAPH_DOC);
+
+    const start = findTextPos('Hello world');
+    expect(start).not.toBeNull();
+    const textStyle = editor.schema.marks.textStyle;
+    const textStart = start ?? 0;
+    editor.view.dispatch(
+      editor.view.state.tr.addMark(textStart + 6, textStart + 11, textStyle.create({ styleId: 'Heading1Char' })),
+    );
+
+    updateSelection(textStart + 'Hello world'.length);
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    editor.commands.insertContent('X');
+
+    let insertedTextNode = null;
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'text' && node.text === 'X') {
+        insertedTextNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    expect(insertedTextNode).toBeTruthy();
+    const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
     expect(markTypes).not.toContain('textStyle');
   });
 

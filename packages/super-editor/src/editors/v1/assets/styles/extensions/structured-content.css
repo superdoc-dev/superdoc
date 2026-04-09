@@ -72,8 +72,17 @@
   border: none;
 }
 
+.super-editor .ProseMirror.view-mode .sd-structured-content:hover,
+.super-editor .ProseMirror.view-mode .sd-structured-content-block:hover {
+  background: none;
+}
+
 .super-editor .ProseMirror.view-mode .sd-structured-content-draggable {
   display: none;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content-block.ProseMirror-selectednode {
+  outline: none;
 }
 
 .presentation-editor--viewing .sd-structured-content,

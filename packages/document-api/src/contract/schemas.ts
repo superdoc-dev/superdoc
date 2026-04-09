@@ -1478,11 +1478,34 @@ const commentDomainItemSchema = discoveryItemSchema(
 
 const commentsListResultSchema = discoveryResultSchema(commentDomainItemSchema);
 
+const trackChangeWordRevisionIdsSchema: JsonSchema = {
+  ...objectSchema({
+    insert: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:ins>` element when this logical change includes an insertion.',
+    },
+    delete: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:del>` element when this logical change includes a deletion.',
+    },
+    format: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:rPrChange>` element when this logical change includes a formatting revision.',
+    },
+  }),
+  description:
+    'Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. This is provenance metadata, not the canonical SuperDoc tracked-change ID. Replacements may include both `insert` and `delete` IDs.',
+};
+
 const trackChangeInfoSchema = objectSchema(
   {
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },
@@ -1496,6 +1519,7 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },

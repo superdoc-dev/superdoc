@@ -39,7 +39,7 @@ export const createRunPropertiesChangeElement = (trackFormatMark) => {
     type: 'element',
     name: 'w:rPrChange',
     attributes: {
-      'w:id': trackFormatMark.attrs?.id,
+      'w:id': trackFormatMark.attrs?.sourceId || trackFormatMark.attrs?.id,
       'w:author': trackFormatMark.attrs?.author,
       'w:authorEmail': trackFormatMark.attrs?.authorEmail,
       'w:date': trackFormatMark.attrs?.date,

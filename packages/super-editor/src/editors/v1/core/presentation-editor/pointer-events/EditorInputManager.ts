@@ -97,6 +97,10 @@ function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
     .filter(Boolean);
 }
 
+function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean {
+  return getCommentHighlightThreadIds(target).length === 1;
+}
+
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) {
     return null;
@@ -213,6 +217,14 @@ function shouldIgnoreRepeatClickOnActiveComment(
   activeThreadId: string | null,
 ): boolean {
   if (!activeThreadId) {
+    return false;
+  }
+
+  // Direct clicks on commented text should place a caret at the clicked
+  // position and let the comments plugin infer the active thread from the
+  // resulting selection. Only preserve the pointerdown short-circuit for
+  // nearby non-text surfaces, such as split-run gaps.
+  if (isDirectSingleCommentHighlightHit(target)) {
     return false;
   }
 
@@ -2230,6 +2242,10 @@ export class EditorInputManager {
   }
 
   #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+    if (isDirectSingleCommentHighlightHit(target)) {
+      return false;
+    }
+
     const clickedThreadId = resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY);
     if (!clickedThreadId) {
       return false;

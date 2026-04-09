@@ -133,6 +133,33 @@ for (const changeType of CHANGE_TYPES) {
   });
 }
 
+test('partial undo updates tracked-change bubble text to match the document (SD-2277)', async ({ superdoc }) => {
+  const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
+  const bubbleText = sidebar.locator('.tracked-change-text.is-inserted');
+
+  await assertDocumentApiReady(superdoc.page);
+  await superdoc.setDocumentMode('suggesting');
+  await superdoc.waitForStable();
+
+  await superdoc.type('hello');
+  await superdoc.waitForStable();
+  await superdoc.page.waitForTimeout(500);
+  await superdoc.type(' world');
+  await superdoc.waitForStable();
+
+  await expectTrackedState(superdoc.page, { changes: 1, bubbles: 1 });
+  await expect(bubbleText).toContainText('hello world');
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+  await expect(bubbleText).toContainText('hello');
+  await expect(bubbleText).not.toContainText('world');
+
+  await superdoc.redo();
+  await superdoc.waitForStable();
+  await expect(bubbleText).toContainText('hello world');
+});
+
 test('accepting from the tracked-change bubble can be undone immediately with the keyboard shortcut', async ({
   superdoc,
 }) => {

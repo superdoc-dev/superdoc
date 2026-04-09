@@ -190,36 +190,6 @@ function collectReferencedRIdsBySection(effectiveRefsBySection: Map<number, Head
 }
 
 /**
- * Resolve the default header/footer rId for each section.
- *
- * Multi-section layout has historically measured only the default variant with
- * section-specific constraints. Preserve that behavior to avoid changing
- * established rendering for documents that use first/even/odd variants.
- */
-function resolveDefaultRIdPerSection(
-  sectionMetadata: SectionMetadata[],
-  kind: 'header' | 'footer',
-): Map<number, string> {
-  const result = new Map<number, string>();
-  let inheritedDefaultRId: string | undefined;
-
-  for (const section of sectionMetadata) {
-    const refs = getRefsForKind(section, kind);
-    const explicitDefaultRId = refs?.default;
-
-    if (explicitDefaultRId) {
-      inheritedDefaultRId = explicitDefaultRId;
-    }
-
-    if (inheritedDefaultRId) {
-      result.set(section.sectionIndex, inheritedDefaultRId);
-    }
-  }
-
-  return result;
-}
-
-/**
  * Layout header/footer blocks per rId, respecting per-section margins.
  *
  * For documents with multiple sections that have different margins, this function

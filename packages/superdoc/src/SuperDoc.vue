@@ -31,6 +31,7 @@ import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
 import { SuperEditor, AIWriter, PresentationEditor } from '@superdoc/super-editor';
+import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
 import AiLayer from './components/AiLayer/AiLayer.vue';
@@ -1086,10 +1087,13 @@ const onEditorCommentsUpdate = (params = {}) => {
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
   const inputType = transaction?.getMeta?.('inputType');
+  const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
+  const isCollabUndoRedo = Boolean(ySyncMeta?.isUndoRedoOperation);
 
-  // Call sync on editor transaction but only if it's undo or redo
+  // Call sync on editor transaction for undo/redo in both local history
+  // and collaboration (Yjs UndoManager) modes.
   // This could be extended to other listeners in the future
-  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+  if (inputType === 'historyUndo' || inputType === 'historyRedo' || isCollabUndoRedo) {
     const documentId = editor?.options?.documentId;
     syncTrackedChangePositionsWithDocument({ documentId, editor });
     syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor });

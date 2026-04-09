@@ -112,11 +112,14 @@ export default defineConfig(({ mode }) => {
       },
       rollupOptions: {
         external: [
+          'react',
           'vue',
           'yjs',
           'y-protocols',
         ],
         input: {
+          'headless-toolbar-react': 'src/headless-toolbar/react.ts',
+          'headless-toolbar-vue': 'src/headless-toolbar/vue.ts',
           'super-editor': 'src/index.ts',
           'types': 'src/types.ts',
           'editor': '@core/Editor',

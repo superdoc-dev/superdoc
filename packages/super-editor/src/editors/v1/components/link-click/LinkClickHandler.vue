@@ -322,6 +322,9 @@ const openLinkInViewingMode = (detail) => {
   window.open(href, target, features || undefined);
 };
 
+const isImageLinkClick = (detail) =>
+  detail.element instanceof HTMLElement && detail.element.querySelector('img') !== null;
+
 // ─── Link click handler ─────────────────────────────────────────────────────
 
 /**
@@ -355,6 +358,11 @@ const handleLinkClick = (event) => {
   }
 
   if (props.editor.options?.documentMode === 'viewing') {
+    openLinkInViewingMode(detail);
+    return;
+  }
+
+  if (isImageLinkClick(detail)) {
     openLinkInViewingMode(detail);
     return;
   }

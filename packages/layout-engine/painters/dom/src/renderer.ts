@@ -14,6 +14,7 @@ import type {
   ImageBlock,
   ImageDrawing,
   ImageFragment,
+  ImageHyperlink,
   ImageRun,
   Layout,
   Line,
@@ -3668,13 +3669,80 @@ export class DomPainter {
       if (filters.length > 0) {
         img.style.filter = filters.join(' ');
       }
-      fragmentEl.appendChild(img);
+
+      // Wrap in anchor when block has a DrawingML hyperlink (a:hlinkClick)
+      const imageChild = this.buildImageHyperlinkAnchor(img, block.hyperlink, 'block');
+      fragmentEl.appendChild(imageChild);
 
       return fragmentEl;
     } catch (error) {
       console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
       return this.createErrorPlaceholder(fragment.blockId, error);
     }
+  }
+
+  /**
+   * Optionally wrap an image element in an anchor for DrawingML hyperlinks (a:hlinkClick).
+   *
+   * When `hyperlink` is present and its URL passes sanitization, returns an
+   * `<a class="superdoc-link">` wrapping `imageEl`. The existing EditorInputManager
+   * click-delegation on `a.superdoc-link` handles both viewing-mode navigation and
+   * editing-mode event dispatch automatically, with no extra wiring needed here.
+   *
+   * When `hyperlink` is absent or the URL fails sanitization the original element
+   * is returned unchanged.
+   *
+   * @param imageEl   - The image element (img or span wrapper) to potentially wrap.
+   * @param hyperlink - Hyperlink metadata from the ImageBlock/ImageRun, or undefined.
+   * @param display   - CSS display value for the anchor: 'block' for fragment images,
+   *                    'inline-block' for inline runs.
+   */
+  private buildImageHyperlinkAnchor(
+    imageEl: HTMLElement,
+    hyperlink: ImageHyperlink | undefined,
+    display: 'block' | 'inline-block',
+  ): HTMLElement {
+    if (!hyperlink?.url || !this.doc) return imageEl;
+
+    const sanitized = sanitizeHref(hyperlink.url);
+    if (!sanitized?.href) return imageEl;
+
+    const anchor = this.doc.createElement('a');
+    anchor.href = sanitized.href;
+    anchor.classList.add('superdoc-link');
+
+    if (sanitized.protocol === 'http' || sanitized.protocol === 'https') {
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+    }
+
+    const tooltipSource =
+      typeof hyperlink.tooltip === 'string' && hyperlink.tooltip.trim().length > 0 ? hyperlink.tooltip : hyperlink.url;
+    const tooltipResult = encodeTooltip(tooltipSource);
+    if (tooltipResult?.text) {
+      anchor.title = tooltipResult.text;
+    }
+
+    for (const titledElement of [imageEl, ...Array.from(imageEl.querySelectorAll('[title]'))]) {
+      titledElement.removeAttribute('title');
+    }
+
+    // Accessibility: explicit role and keyboard focus (mirrors applyLinkAttributes for text links)
+    anchor.setAttribute('role', 'link');
+    anchor.setAttribute('tabindex', '0');
+
+    if (display === 'block') {
+      anchor.style.cssText = 'display: block; width: 100%; height: 100%; cursor: pointer;';
+    } else {
+      // inline-block preserves the image's layout box inside a paragraph line
+      anchor.style.display = 'inline-block';
+      anchor.style.lineHeight = '0';
+      anchor.style.cursor = 'pointer';
+      anchor.style.verticalAlign = imageEl.style.verticalAlign || 'bottom';
+    }
+
+    anchor.appendChild(imageEl);
+    return anchor;
   }
 
   private renderDrawingFragment(
@@ -5246,7 +5314,7 @@ export class DomPainter {
       this.applySdtDataset(wrapper, run.sdt);
       if (run.dataAttrs) applyRunDataAttributes(wrapper, run.dataAttrs);
       wrapper.appendChild(img);
-      return wrapper;
+      return this.buildImageHyperlinkAnchor(wrapper, run.hyperlink, 'inline-block');
     }
 
     // Apply PM position tracking for cursor placement (only on img when not wrapped)
@@ -5301,10 +5369,10 @@ export class DomPainter {
       this.applySdtDataset(wrapper, run.sdt);
 
       wrapper.appendChild(img);
-      return wrapper;
+      return this.buildImageHyperlinkAnchor(wrapper, run.hyperlink, 'inline-block');
     }
 
-    return img;
+    return this.buildImageHyperlinkAnchor(img, run.hyperlink, 'inline-block');
   }
 
   /**
@@ -5663,6 +5731,8 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
+    const lineContainsTabRun = runsForLine.some((run) => run.kind === 'tab');
+    const manualTabWithoutSegments = lineContainsTabRun && !hasExplicitPositioning;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
@@ -5671,7 +5741,7 @@ export class DomPainter {
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify,
+      skipJustifyOverride: skipJustify || manualTabWithoutSegments,
     });
 
     const countSpaces = (text: string): number => {

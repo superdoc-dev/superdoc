@@ -753,5 +753,75 @@ describe('image converter', () => {
       expect(result.flipH).toBeUndefined();
       expect(result.flipV).toBeUndefined();
     });
+
+    describe('hyperlink (DrawingML a:hlinkClick)', () => {
+      it('passes hyperlink url and tooltip from node attrs to ImageBlock', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.png',
+            hyperlink: { url: 'https://example.com', tooltip: 'Visit us' },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.hyperlink).toEqual({ url: 'https://example.com', tooltip: 'Visit us' });
+      });
+
+      it('passes hyperlink url without tooltip', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.png',
+            hyperlink: { url: 'https://example.com' },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.hyperlink).toEqual({ url: 'https://example.com' });
+        expect(result.hyperlink?.tooltip).toBeUndefined();
+      });
+
+      it('omits hyperlink when node attrs has no hyperlink', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: { src: 'image.png' },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.hyperlink).toBeUndefined();
+      });
+
+      it('omits hyperlink when url is empty string', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.png',
+            hyperlink: { url: '' },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.hyperlink).toBeUndefined();
+      });
+
+      it('omits hyperlink when hyperlink attr is null', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.png',
+            hyperlink: null,
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.hyperlink).toBeUndefined();
+      });
+    });
   });
 });

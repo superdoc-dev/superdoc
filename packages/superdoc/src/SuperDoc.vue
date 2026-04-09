@@ -1642,8 +1642,7 @@ const getPDFViewer = () => {
   min-width: 300px;
   width: 300px;
   height: 100%;
-  overflow-y: hidden;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .superdoc__layers {

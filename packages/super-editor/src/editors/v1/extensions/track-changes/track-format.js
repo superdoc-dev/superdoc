@@ -111,6 +111,11 @@ export const TrackFormat = Mark.create({
         },
       },
 
+      sourceId: {
+        default: '',
+        rendered: false,
+      },
+
       importedAuthor: {
         default: '',
         rendered: false,

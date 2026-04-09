@@ -189,7 +189,7 @@ import {
 } from '../table-cell/helpers/legacyBorderMigration.js';
 import { isInTable } from '@helpers/isInTable.js';
 import { findParentNode } from '@helpers/findParentNode.js';
-import { TextSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { TextSelection, NodeSelection, Plugin, PluginKey } from 'prosemirror-state';
 import { isCellSelection } from './tableHelpers/isCellSelection.js';
 import {
   addColumnBefore as originalAddColumnBefore,
@@ -316,6 +316,113 @@ function insertTopLevelTableWithSeparators(tr, doc, pos, tableNode, replaceRange
 function getFirstTableCellTextPos(tablePos, tableNode) {
   const map = TableMap.get(tableNode);
   return tablePos + 1 + map.map[0] + 2;
+}
+
+/**
+ * Resolves the table targeted by a command.
+ *
+ * When a block SDT that wraps a single table is selected, table commands should
+ * still operate on that inner table rather than an ancestor wrapper table.
+ *
+ * @param {import('prosemirror-state').Selection} selection
+ * @returns {{ node: import('prosemirror-model').Node, pos: number } | null}
+ */
+function resolveCommandTargetTable(selection) {
+  if (selection?.node?.type?.name === 'structuredContentBlock') {
+    let found = null;
+    let count = 0;
+    selection.node.descendants((node, pos) => {
+      if (node.type?.name !== 'table') return true;
+      count += 1;
+      found = {
+        node,
+        pos: selection.from + 1 + pos,
+      };
+      return false;
+    });
+
+    if (count === 1 && found) {
+      return found;
+    }
+  }
+
+  return findParentNode((node) => node.type.name === 'table')(selection);
+}
+
+/**
+ * Resolves insertion coordinates when a table is inserted inside a block SDT.
+ *
+ * Block structured content allows block children (`content: 'block*'`), so
+ * table insertion should operate on its inner block list rather than using the
+ * top-level document insertion path.
+ *
+ * @param {import('prosemirror-state').Selection} selection
+ * @returns {{ from: number, to: number, tablePos: number } | null}
+ */
+function resolveStructuredContentBlockTableInsertion(selection) {
+  if (selection instanceof NodeSelection && selection.node?.type?.name === 'structuredContentBlock') {
+    const contentStart = selection.from + 1;
+    const firstChild = selection.node.firstChild;
+    const shouldReplaceOnlyEmptyParagraph =
+      selection.node.childCount === 1 && firstChild?.type?.name === 'paragraph' && firstChild.textContent === '';
+
+    if (shouldReplaceOnlyEmptyParagraph) {
+      return {
+        from: contentStart,
+        to: contentStart + firstChild.nodeSize,
+        tablePos: contentStart,
+      };
+    }
+
+    const contentEnd = contentStart + selection.node.content.size;
+    return {
+      from: contentEnd,
+      to: contentEnd,
+      tablePos: contentEnd,
+    };
+  }
+
+  const $from = selection.$from;
+  let structuredContentDepth = -1;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    if ($from.node(depth).type?.name === 'structuredContentBlock') {
+      structuredContentDepth = depth;
+      break;
+    }
+  }
+
+  if (structuredContentDepth === -1) {
+    return null;
+  }
+
+  const paragraphDepth = $from.parent?.type?.name === 'run' ? $from.depth - 1 : $from.depth;
+  if (paragraphDepth <= structuredContentDepth) {
+    const contentEnd = $from.end(structuredContentDepth);
+    return {
+      from: contentEnd,
+      to: contentEnd,
+      tablePos: contentEnd,
+    };
+  }
+
+  const paragraph = $from.node(paragraphDepth);
+  const isEmptyParagraph = paragraph.type.name === 'paragraph' && paragraph.textContent === '';
+
+  if (isEmptyParagraph) {
+    const from = $from.before(paragraphDepth);
+    return {
+      from,
+      to: $from.after(paragraphDepth),
+      tablePos: from,
+    };
+  }
+
+  const from = $from.after(paragraphDepth);
+  return {
+    from,
+    to: from,
+    tablePos: from,
+  };
 }
 
 const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
@@ -732,6 +839,15 @@ export const Table = Node.create({
           const node = createTable(editor.schema, rows, cols, withHeaderRow, null, widths, tableAttrs);
 
           if (dispatch) {
+            const structuredContentInsertion = resolveStructuredContentBlockTableInsertion(tr.selection);
+            if (structuredContentInsertion) {
+              const { from, to, tablePos } = structuredContentInsertion;
+              tr.replaceWith(from, to, node);
+              const selectionPos = getFirstTableCellTextPos(tablePos, node);
+              tr.scrollIntoView().setSelection(TextSelection.near(tr.doc.resolve(selectionPos)));
+              return true;
+            }
+
             let offset;
             let replaceRange = undefined;
 
@@ -1348,18 +1464,15 @@ export const Table = Node.create({
             return false;
           }
 
-          const table = findParentNode((node) => node.type.name === this.name)(state.selection);
+          const table = resolveCommandTargetTable(state.selection);
 
           if (!table) {
             return false;
           }
 
-          const from = table.pos;
-          const to = table.pos + table.node.nodeSize;
-
           // remove from cells — write nil borders to tableCellProperties.borders (canonical source)
           const nilBorder = { val: 'nil', size: 0, space: 0, color: 'auto' };
-          state.doc.nodesBetween(from, to, (node, pos) => {
+          table.node.descendants((node, pos) => {
             if (['tableCell', 'tableHeader'].includes(node.type.name)) {
               const nextTableCellProperties = {
                 ...(node.attrs.tableCellProperties ?? {}),
@@ -1371,13 +1484,14 @@ export const Table = Node.create({
                 },
               };
               const nextInlineKeys = [...new Set([...(node.attrs.tableCellPropertiesInlineKeys || []), 'borders'])];
-              tr.setNodeMarkup(pos, undefined, {
+              tr.setNodeMarkup(table.pos + 1 + pos, undefined, {
                 ...node.attrs,
                 borders: null,
                 tableCellProperties: nextTableCellProperties,
                 tableCellPropertiesInlineKeys: nextInlineKeys,
               });
             }
+            return true;
           });
 
           // remove from table

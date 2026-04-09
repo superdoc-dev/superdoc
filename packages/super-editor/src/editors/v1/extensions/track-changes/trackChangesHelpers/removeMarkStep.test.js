@@ -172,6 +172,40 @@ describe('removeMarkStep cancel logic', () => {
     expect(ids[0]).toBe(ids[1]);
   });
 
+  it('preserves sourceId when addMarkStep rewrites an imported trackFormat change', () => {
+    const bold = schema.marks.bold.create();
+    const importedTrackFormat = schema.marks[TrackFormatMarkName].create({
+      id: 'format-1',
+      sourceId: 'word-format-22',
+      author: 'Imported Author',
+      authorEmail: 'imported@example.com',
+      date: '2024-01-01T00:00:00.000Z',
+      before: [],
+      after: [{ type: 'bold', attrs: { value: true } }],
+    });
+    const doc = createDocWithRuns([{ text: 'Hello', marks: [bold, importedTrackFormat] }]);
+    const state = createState(doc);
+
+    const step = new AddMarkStep(2, 7, schema.marks.italic.create());
+    const tr = state.tr;
+    addMarkStep({ state, step, newTr: tr, doc: state.doc, user, date });
+    const result = state.apply(tr);
+
+    const rewrittenTrackFormats = [];
+    result.doc.descendants((node) => {
+      node.marks
+        ?.filter((m) => m.type.name === TrackFormatMarkName)
+        .forEach((mark) => rewrittenTrackFormats.push(mark.attrs));
+    });
+
+    expect(rewrittenTrackFormats).toHaveLength(1);
+    expect(rewrittenTrackFormats[0].author).toBe(user.name);
+    expect(rewrittenTrackFormats[0].sourceId).toBe('word-format-22');
+    expect(rewrittenTrackFormats[0].after).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'bold' }), expect.objectContaining({ type: 'italic' })]),
+    );
+  });
+
   it('clamps TrackFormat mark to node boundaries, not step range', () => {
     // doc > paragraph > run_1("Hello " at pos 2-7) + run_2("world" at pos 10-14)
     // Run open/close tags add +1 offset each, so run_2 content starts at pos 10.
@@ -225,5 +259,40 @@ describe('removeMarkStep cancel logic', () => {
 
     // Neither node should have a TrackFormat mark
     expect(hasTrackFormatMark(stateAfterRemove.doc)).toBe(false);
+  });
+
+  it('preserves sourceId when removeMarkStep rewrites an imported trackFormat change', () => {
+    const bold = schema.marks.bold.create();
+    const italic = schema.marks.italic.create();
+    const importedTrackFormat = schema.marks[TrackFormatMarkName].create({
+      id: 'format-1',
+      sourceId: 'word-format-22',
+      author: 'Imported Author',
+      authorEmail: 'imported@example.com',
+      date: '2024-01-01T00:00:00.000Z',
+      before: [],
+      after: [
+        { type: 'bold', attrs: { value: true } },
+        { type: 'italic', attrs: { value: true } },
+      ],
+    });
+    const doc = createDocWithRuns([{ text: 'Hello', marks: [bold, italic, importedTrackFormat] }]);
+    const state = createState(doc);
+
+    const step = new RemoveMarkStep(2, 7, italic);
+    const tr = state.tr;
+    removeMarkStep({ state, step, newTr: tr, doc: state.doc, user, date });
+    const result = state.apply(tr);
+
+    const rewrittenTrackFormats = [];
+    result.doc.descendants((node) => {
+      node.marks
+        ?.filter((m) => m.type.name === TrackFormatMarkName)
+        .forEach((mark) => rewrittenTrackFormats.push(mark.attrs));
+    });
+
+    expect(rewrittenTrackFormats).toHaveLength(1);
+    expect(rewrittenTrackFormats[0].author).toBe(user.name);
+    expect(rewrittenTrackFormats[0].sourceId).toBe('word-format-22');
   });
 });

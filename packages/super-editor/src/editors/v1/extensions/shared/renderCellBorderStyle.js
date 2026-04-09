@@ -6,7 +6,7 @@
  * Shared by both `tableCell` and `tableHeader` node `renderDOM` methods
  * so the border-rendering logic stays in one place.
  *
- * @param {import('./createCellBorders.js').CellBorders | null | undefined} borders
+ * @param {import('../table-cell/helpers/createCellBorders.js').CellBorders | null | undefined} borders
  * @returns {{ style: string } | {}}
  */
 export const renderCellBorderStyle = (borders) => {

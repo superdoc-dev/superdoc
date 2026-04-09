@@ -12,19 +12,6 @@ function getDelimiterValue(properties: OmmlJsonNode | undefined, name: string, f
   return property.attributes?.['m:val'] ?? '';
 }
 
-function createExpressionGroup(
-  expression: OmmlJsonNode | undefined,
-  doc: Document,
-  convertChildren: (children: OmmlJsonNode[]) => DocumentFragment,
-): Element | null {
-  const fragment = convertChildren(expression?.elements ?? []);
-  if (fragment.childNodes.length === 0) return null;
-
-  const group = doc.createElementNS(MATHML_NS, 'mrow');
-  group.appendChild(fragment);
-  return group;
-}
-
 /**
  * Convert m:d (delimiter) to MathML.
  *
@@ -51,19 +38,22 @@ export const convertDelimiter: MathObjectConverter = (node, doc, convertChildren
   begin.textContent = beginDelimiter;
   wrapper.appendChild(begin);
 
-  const expressionGroups = expressions
-    .map((expression) => createExpressionGroup(expression, doc, convertChildren))
-    .filter((expressionGroup): expressionGroup is Element => expressionGroup !== null);
+  let renderedCount = 0;
+  for (const expression of expressions) {
+    const fragment = convertChildren(expression?.elements ?? []);
+    if (fragment.childNodes.length === 0) continue;
 
-  expressionGroups.forEach((expressionGroup, index) => {
-    if (index > 0) {
+    if (renderedCount > 0) {
       const separator = doc.createElementNS(MATHML_NS, 'mo');
       separator.textContent = separatorDelimiter;
       wrapper.appendChild(separator);
     }
 
-    wrapper.appendChild(expressionGroup);
-  });
+    const group = doc.createElementNS(MATHML_NS, 'mrow');
+    group.appendChild(fragment);
+    wrapper.appendChild(group);
+    renderedCount++;
+  }
 
   const end = doc.createElementNS(MATHML_NS, 'mo');
   end.textContent = endDelimiter;

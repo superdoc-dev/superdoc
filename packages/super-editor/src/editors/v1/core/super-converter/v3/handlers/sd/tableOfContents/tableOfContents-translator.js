@@ -107,6 +107,7 @@ const decode = (params) => {
     });
   }
 
+  // Inject the fldChar end into the last child
   const tocEndElements = [
     { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
   ];

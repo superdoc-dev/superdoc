@@ -1144,7 +1144,10 @@ const createOrUpdateTrackedChangeComment = ({
     trackedChangeType: isDeletionInsertion ? 'both' : trackedChangeType,
     trackedChangeText,
     trackedChangeDisplayType,
-    deletedText: marks.deletionMark ? deletionText : null,
+    // Replacement updates can arrive with insert-only transaction meta while the
+    // document still contains both insert+delete marks for the same change id.
+    // In that case isDeletionInsertion is true and we must keep deleted text.
+    deletedText: isDeletionInsertion || marks.deletionMark ? deletionText : null,
     author,
     authorEmail,
     ...(authorImage && { authorImage }),

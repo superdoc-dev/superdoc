@@ -1124,6 +1124,47 @@ describe('internal helper functions', () => {
     expect(payload?.deletedText).toBe('original');
   });
 
+  it('preserves deletedText on replacement update when transaction meta only carries insertion mark', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'replace-update-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'replace-update-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const docInsertNode = schema.text('replacement', [insertMark]);
+    const docDeleteNode = schema.text('original', [deleteMark]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [docInsertNode, docDeleteNode])]);
+    const state = EditorState.create({ schema, doc });
+
+    // Simulate an update transaction where meta has only insertedMark, but the
+    // document still has both insert+delete marks under the same tracked-change id.
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'update',
+      marks: { insertedMark: insertMark, deletionMark: null, formatMark: null },
+      deletionNodes: [],
+      nodes: [schema.text('replacement', [insertMark])],
+      newEditorState: state,
+      documentId: 'doc-1',
+      trackedChangesForId: [
+        { mark: insertMark, from: 1, to: doc.content.size },
+        { mark: deleteMark, from: 1, to: doc.content.size },
+      ],
+    });
+
+    expect(payload?.event).toBe(comments_module_events.UPDATE);
+    expect(payload?.trackedChangeType).toBe('both');
+    expect(payload?.trackedChangeText).toBe('replacement');
+    expect(payload?.deletedText).toBe('original');
+  });
+
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {
     const schema = createCommentSchema();
     const insertMark = schema.marks[TrackInsertMarkName].create({

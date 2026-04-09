@@ -3655,6 +3655,43 @@ describe('paragraph converters', () => {
       expect(result?.pmEnd).toBe(43);
     });
 
+    it('includes hyperlink metadata when present', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.png',
+          inline: true,
+          hyperlink: {
+            url: ' https://example.com/image-link ',
+            tooltip: '  Image tooltip  ',
+          },
+        },
+      };
+
+      const result = imageNodeToRun(buildImageParams(node, positions));
+      expect(result?.hyperlink).toEqual({
+        url: 'https://example.com/image-link',
+        tooltip: 'Image tooltip',
+      });
+    });
+
+    it('omits hyperlink metadata when URL is empty', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.png',
+          inline: true,
+          hyperlink: {
+            url: '   ',
+            tooltip: 'Image tooltip',
+          },
+        },
+      };
+
+      const result = imageNodeToRun(buildImageParams(node, positions));
+      expect(result?.hyperlink).toBeUndefined();
+    });
+
     it('omits PM positions when not in map', () => {
       const node: PMNode = {
         type: 'image',

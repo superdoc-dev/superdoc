@@ -711,7 +711,7 @@ List tracked changes in the document. Supports filtering by `type` and paginatio
 Retrieve full information for a single tracked change by its canonical ID. Throws `TARGET_NOT_FOUND` when the ID is invalid.
 
 - **Input**: `TrackChangesGetInput` (`{ id }`)
-- **Output**: `TrackChangeInfo`
+- **Output**: `TrackChangeInfo` (includes `wordRevisionIds` with raw imported Word OOXML `w:id` values when available)
 - **Mutates**: No
 - **Idempotency**: idempotent
 

@@ -39,7 +39,11 @@
 
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
-import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
+import { cssColorToHex } from '@core/utilities/cssColorToHex.js';
+import { parseCellBorders } from '@extensions/shared/parseCellBorders.js';
+import { parseCellMargins } from '@extensions/shared/parseCellMargins.js';
+import { parseCellVerticalAlignFromStyle } from '@extensions/shared/parseCellVerticalAlign.js';
+import { renderCellBorderStyle } from '@extensions/shared/renderCellBorderStyle.js';
 
 /**
  * Cell margins configuration
@@ -154,6 +158,11 @@ export const TableCell = Node.create({
       },
 
       background: {
+        parseDOM: (element) => {
+          const color = cssColorToHex(element.style?.backgroundColor);
+          if (!color) return null;
+          return { color: color.replace(/^#/, '') };
+        },
         renderDOM({ background }) {
           if (!background) return {};
           // @ts-expect-error - background is known to be an object at runtime
@@ -164,6 +173,7 @@ export const TableCell = Node.create({
       },
 
       verticalAlign: {
+        parseDOM: parseCellVerticalAlignFromStyle,
         renderDOM({ verticalAlign }) {
           if (!verticalAlign) return {};
           const style = `vertical-align: ${verticalAlign}`;
@@ -172,6 +182,7 @@ export const TableCell = Node.create({
       },
 
       cellMargins: {
+        parseDOM: (element) => parseCellMargins(element),
         renderDOM({ cellMargins, borders }) {
           if (!cellMargins) return {};
           const sides = ['top', 'right', 'bottom', 'left'];
@@ -192,6 +203,7 @@ export const TableCell = Node.create({
 
       borders: {
         default: null,
+        parseDOM: (element) => parseCellBorders(element),
         renderDOM: ({ borders }) => {
           if (!borders) return {};
           return renderCellBorderStyle(borders);

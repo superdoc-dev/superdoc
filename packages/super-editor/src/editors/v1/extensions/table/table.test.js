@@ -963,6 +963,67 @@ describe('Table commands', async () => {
 
       sharedTests();
     });
+
+    it('targets the inner table when a structuredContentBlock wrapper around it is selected', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const nilBorders = Object.assign(
+        {},
+        ...['top', 'left', 'bottom', 'right'].map((side) => ({
+          [side]: { color: 'auto', size: 0, space: 0, val: 'nil' },
+        })),
+      );
+
+      const outerBorders = {
+        top: { val: 'single', size: 8, space: 0, color: '000000' },
+        bottom: { val: 'single', size: 8, space: 0, color: '000000' },
+        left: { val: 'single', size: 8, space: 0, color: '000000' },
+        right: { val: 'single', size: 8, space: 0, color: '000000' },
+      };
+
+      const innerTable = createTable(schema, 2, 2, false);
+      const sdt = schema.nodes.structuredContentBlock.create({ id: '2001', tag: 'block_table_sdt' }, [innerTable]);
+      const outerCell = schema.nodes.tableCell.create(
+        {
+          tableCellProperties: { borders: outerBorders },
+          tableCellPropertiesInlineKeys: ['borders'],
+        },
+        [sdt],
+      );
+      const outerRow = schema.nodes.tableRow.create({ paraId: 'A1B2C3D4' }, [outerCell]);
+      const outerTable = schema.nodes.table.create({}, [outerRow]);
+      const doc = schema.nodes.doc.create(null, [outerTable]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      let sdtPos = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'structuredContentBlock') {
+          sdtPos = pos;
+          return false;
+        }
+        return true;
+      });
+      expect(sdtPos).not.toBeNull();
+
+      editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, sdtPos)));
+
+      const success = editor.commands.deleteCellAndTableBorders(editor);
+      expect(success).toBe(true);
+
+      const updatedOuterTable = editor.state.doc.child(0);
+      const updatedOuterCell = updatedOuterTable.firstChild.firstChild;
+      expect(updatedOuterCell.attrs.tableCellProperties?.borders).toEqual(outerBorders);
+
+      const updatedInnerTable = updatedOuterCell.firstChild.firstChild;
+      expect(updatedInnerTable.type.name).toBe('table');
+      updatedInnerTable.forEach((row) => {
+        row.forEach((cell) => {
+          expect(cell.attrs.tableCellProperties?.borders).toEqual(nilBorders);
+        });
+      });
+    });
   });
 
   describe('table style normalization', async () => {
@@ -1303,6 +1364,51 @@ describe('Table commands', async () => {
       expect(editor.state.selection.from).toBe(firstCellTextPos);
       expect($from.parent.type.name).toBe('paragraph');
       expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('inserts the table inside a selected structuredContentBlock instead of creating a sibling block', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const { schema } = editor.state;
+      const emptyParagraph = schema.nodes.paragraph.create();
+      const sdt = schema.nodes.structuredContentBlock.create({ id: '1001', tag: 'block_table_sdt' }, [emptyParagraph]);
+      const doc = schema.nodes.doc.create(null, [sdt]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 0)));
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      expect(editor.state.doc.childCount).toBe(1);
+      expect(editor.state.doc.child(0).type.name).toBe('structuredContentBlock');
+
+      const insertedSdt = editor.state.doc.child(0);
+      expect(insertedSdt.childCount).toBe(1);
+      expect(insertedSdt.child(0).type.name).toBe('table');
+    });
+
+    it('inserts the table inside structuredContentBlock content for text selections', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const { schema } = editor.state;
+      const paragraph = schema.nodes.paragraph.create(null, schema.text('Hello'));
+      const sdt = schema.nodes.structuredContentBlock.create({ id: '1002', tag: 'block_table_sdt' }, [paragraph]);
+      const doc = schema.nodes.doc.create(null, [sdt]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      const textSelection = TextSelection.create(editor.state.doc, 2, 7);
+      editor.view.dispatch(editor.state.tr.setSelection(textSelection));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      expect(editor.state.doc.childCount).toBe(1);
+      expect(editor.state.doc.child(0).type.name).toBe('structuredContentBlock');
+
+      const insertedSdt = editor.state.doc.child(0);
+      expect(insertedSdt.childCount).toBe(2);
+      expect(insertedSdt.child(0).type.name).toBe('paragraph');
+      expect(insertedSdt.child(1).type.name).toBe('table');
     });
 
     it('places cursor in first cell and adds trailing paragraph when inserting table with AllSelection', async () => {

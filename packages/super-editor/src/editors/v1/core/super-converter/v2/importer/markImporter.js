@@ -114,6 +114,7 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
   const attributes = rPrChange.attributes || {};
   const mappedAttributes = {
     id: attributes['w:id'],
+    sourceId: attributes['w:id'],
     date: attributes['w:date'],
     author: attributes['w:author'],
     authorEmail: attributes['w:authorEmail'],
@@ -143,6 +144,7 @@ export function handleStyleChangeMarks(rPr, currentMarks) {
   const { attributes } = styleChangeMark;
   const mappedAttributes = {
     id: attributes['w:id'],
+    sourceId: attributes['w:id'],
     date: attributes['w:date'],
     author: attributes['w:author'],
     authorEmail: attributes['w:authorEmail'],

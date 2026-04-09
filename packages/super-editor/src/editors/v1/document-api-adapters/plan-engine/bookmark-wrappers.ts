@@ -33,6 +33,7 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { parseStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -87,7 +88,43 @@ function bookmarkExistsAnywhere(
 // ---------------------------------------------------------------------------
 
 export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput): BookmarksListResult {
-  const runtime = resolveStoryRuntime(editor, query?.in);
+  // When a story filter is provided, list from that story only.
+  if (query?.in) {
+    return listBookmarksFromStory(editor, query.in, query);
+  }
+
+  // When no story filter, list from ALL stories so consumers don't miss
+  // bookmarks in headers, footers, footnotes, or endnotes.
+  const bodyRevision = getRevision(editor);
+  const entries = findAllBookmarksInDocument(editor);
+  const storyKeys = [...new Set(entries.map((e) => e.storyKey))];
+
+  const allItems = storyKeys.flatMap((storyKey) => {
+    const locator = storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(storyKey);
+    const runtime = resolveStoryRuntime(editor, locator);
+    const doc = runtime.editor.state.doc;
+    const revision = getRevision(runtime.editor);
+    const bookmarks = findAllBookmarks(doc);
+    return bookmarks.map((b) => buildBookmarkDiscoveryItem(doc, b, revision, runtime.locator));
+  });
+
+  const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);
+  const effectiveLimit = query?.limit ?? total;
+
+  return buildDiscoveryResult({
+    evaluatedRevision: bodyRevision,
+    total,
+    items: paged,
+    page: { limit: effectiveLimit, offset: query?.offset ?? 0, returned: paged.length },
+  });
+}
+
+function listBookmarksFromStory(
+  editor: Editor,
+  storyLocator: BookmarkListInput['in'],
+  query?: BookmarkListInput,
+): BookmarksListResult {
+  const runtime = resolveStoryRuntime(editor, storyLocator);
   const storyEditor = runtime.editor;
   const doc = storyEditor.state.doc;
   const revision = getRevision(storyEditor);
@@ -106,7 +143,22 @@ export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput):
 }
 
 export function bookmarksGetWrapper(editor: Editor, input: BookmarkGetInput): BookmarkInfo {
-  const runtime = resolveStoryRuntime(editor, input.target.story);
+  // When story is specified, search that story directly.
+  if (input.target.story) {
+    const runtime = resolveStoryRuntime(editor, input.target.story);
+    const resolved = resolveBookmarkTarget(runtime.editor.state.doc, input.target);
+    return extractBookmarkInfo(runtime.editor.state.doc, resolved, runtime.locator);
+  }
+
+  // When story is omitted, search all stories. Bookmark names are
+  // document-global unique (ECMA-376 §17.13.6.2), so there is no ambiguity.
+  const entry = findAllBookmarksInDocument(editor).find((b) => b.name === input.target.name);
+  if (!entry) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bookmark with name "${input.target.name}" not found.`);
+  }
+
+  const locator = entry.storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(entry.storyKey);
+  const runtime = resolveStoryRuntime(editor, locator);
   const resolved = resolveBookmarkTarget(runtime.editor.state.doc, input.target);
   return extractBookmarkInfo(runtime.editor.state.doc, resolved, runtime.locator);
 }

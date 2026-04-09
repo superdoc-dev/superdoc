@@ -1,4 +1,4 @@
-.PHONY: install dev dev-local dev-server dev-client link-local-sdk rebuild-local-sdk restore-npm-sdk kill clean help
+.PHONY: install dev dev-local dev-server dev-client build-local-artifacts link-local-sdk rebuild-local-sdk restore-npm-sdk kill clean help
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ dev: check-env kill restore-npm-sdk ## Start with npm SDK (default)
 		"cd server && npm run dev" \
 		"cd client && $(PNPM) run dev"
 
-dev-local: check-env kill link-local-sdk ## Start with local SDK (built from monorepo)
+dev-local: check-env kill link-local-sdk ## Start with local SDK (always rebuilds local artifacts)
 	@echo ""
 	@echo "  Server → http://localhost:8090 + ws://localhost:8081 (local SDK)"
 	@echo "  Client → http://localhost:5173"
@@ -109,27 +109,34 @@ restore-npm-sdk: ## Restore SDK from npm if currently symlinked
 
 # ─── Local SDK ────────────────────────────────────────────────────────────────
 
-link-local-sdk: ## Build and link local SuperDoc SDK + CLI
-	@echo "Linking local SuperDoc SDK ($(CLI_TARGET))..."
-	@# 1. Refresh generated artifacts so SDK + CLI reflect latest contract/tool changes
+build-local-artifacts: ## Rebuild local editor, SDK, and CLI artifacts used by dev-local
+	@echo "Rebuilding local SuperDoc artifacts..."
 	@echo "  Generating derived SDK/tool artifacts..."
 	@cd $(ROOT) && $(PNPM) run generate:all
-	@# 2. Rebuild the Node SDK dist that the symlinked package actually exports
-	@echo "  Building Node SDK..."
+	@echo "  Building @superdoc/super-editor..."
+	@cd $(ROOT) && $(PNPM) --filter @superdoc/super-editor run build
+	@echo "  Building superdoc..."
+	@cd $(ROOT) && $(PNPM) --filter superdoc run build:es
+	@echo "  Building @superdoc-dev/react..."
+	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/react run build
+	@echo "  Building @superdoc-dev/sdk..."
 	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/sdk run build
-	@# 3. Always rebuild CLI binary to pick up latest source changes
 	@echo "  Building CLI binary..."
 	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host
-	@# 4. Ensure server node_modules exists
+	@echo "✓ Local artifacts rebuilt"
+
+link-local-sdk: build-local-artifacts ## Build and link local SuperDoc SDK + CLI
+	@echo "Linking local SuperDoc SDK ($(CLI_TARGET))..."
+	@# 1. Ensure server node_modules exists
 	@if [ ! -d server/node_modules ]; then \
 		echo "  Installing server deps first..."; \
 		cd server && npm install; \
 	fi
-	@# 5. Replace npm SDK with symlink to workspace source
+	@# 2. Replace npm SDK with symlink to workspace source
 	@rm -rf server/node_modules/@superdoc-dev/sdk
 	@ln -sf $(SDK_SRC) server/node_modules/@superdoc-dev/sdk
 	@echo "  ✓ Linked SDK → $(SDK_SRC)"
-	@# 6. Place CLI binary where the workspace SDK can find it via require.resolve
+	@# 3. Place CLI binary where the workspace SDK can find it via require.resolve
 	@#    Node follows the symlink real path, so the binary must be in the
 	@#    workspace SDK's own node_modules, not the server's.
 	@mkdir -p $(SDK_SRC)/node_modules/$(CLI_PKG)/bin
@@ -138,17 +145,7 @@ link-local-sdk: ## Build and link local SuperDoc SDK + CLI
 	@echo "  ✓ Linked CLI binary"
 	@echo "✓ Local SDK ready"
 
-rebuild-local-sdk: ## Rebuild CLI binary and re-link
-	@echo "Refreshing generated artifacts..."
-	@cd $(ROOT) && $(PNPM) run generate:all
-	@echo "Rebuilding Node SDK..."
-	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/sdk run build
-	@echo "Rebuilding CLI binary..."
-	@cd $(ROOT) && $(PNPM) --filter @superdoc-dev/cli run build:native:host
-	@mkdir -p $(SDK_SRC)/node_modules/$(CLI_PKG)/bin
-	@cp $(CLI_ARTIFACT) $(SDK_SRC)/node_modules/$(CLI_PKG)/bin/$(CLI_BINARY)
-	@chmod +x $(SDK_SRC)/node_modules/$(CLI_PKG)/bin/$(CLI_BINARY)
-	@echo "✓ Local SDK + CLI updated"
+rebuild-local-sdk: link-local-sdk ## Rebuild local artifacts and refresh links
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
 

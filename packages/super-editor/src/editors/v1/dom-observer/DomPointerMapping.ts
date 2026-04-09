@@ -97,6 +97,21 @@ function readPmRange(el: HTMLElement): { start: number; end: number } {
   };
 }
 
+function getInlineSdtWrapperBoundaryPos(
+  spanEl: HTMLElement | null | undefined,
+  side: 'before' | 'after',
+): number | null {
+  if (!(spanEl instanceof HTMLElement)) return null;
+
+  const wrapper = spanEl.closest(`.${CLASS.inlineSdtWrapper}`) as HTMLElement | null;
+  if (!wrapper) return null;
+
+  const { start, end } = readPmRange(wrapper);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+
+  return side === 'before' ? start - 1 : end + 1;
+}
+
 /**
  * Collects clickable span/anchor elements inside a line.
  *
@@ -331,8 +346,16 @@ function resolvePositionInLine(
   const visualRight = Math.max(...boundsRects.map((r) => r.right));
 
   // Boundary snapping: click outside all spans → return line start/end (RTL-aware)
-  if (viewX <= visualLeft) return rtl ? lineEnd : lineStart;
-  if (viewX >= visualRight) return rtl ? lineStart : lineEnd;
+  if (viewX <= visualLeft) {
+    const edgeSpan = rtl ? spanEls[spanEls.length - 1] : spanEls[0];
+    const inlineBoundary = getInlineSdtWrapperBoundaryPos(edgeSpan, rtl ? 'after' : 'before');
+    return inlineBoundary ?? (rtl ? lineEnd : lineStart);
+  }
+  if (viewX >= visualRight) {
+    const edgeSpan = rtl ? spanEls[0] : spanEls[spanEls.length - 1];
+    const inlineBoundary = getInlineSdtWrapperBoundaryPos(edgeSpan, rtl ? 'before' : 'after');
+    return inlineBoundary ?? (rtl ? lineStart : lineEnd);
+  }
 
   const targetEl = findSpanAtX(spanEls, viewX);
   if (!targetEl) return lineStart;

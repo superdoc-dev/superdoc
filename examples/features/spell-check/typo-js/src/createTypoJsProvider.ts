@@ -17,7 +17,7 @@ function createAbortError(): DOMException | Error {
 }
 
 export async function createTypoJsProvider() {
-  // SD-2505: Run Typo.js work inside a dedicated worker to avoid UI stalls.
+  // Run Typo.js work inside a dedicated worker to avoid UI stalls.
   const worker = new Worker(new URL('./typoWorker.ts', import.meta.url), { type: 'module' });
   const pending = new Map<number, PendingRequest>();
   let nextRequestId = 0;

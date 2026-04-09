@@ -2,29 +2,29 @@ import type { Transaction, EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import type { Editor } from '../Editor.js';
 
+// Command interfaces — imported directly for reliable cross-package typing.
+// Module augmentation doesn't survive the npm package boundary, so we
+// compose EditorCommands as an explicit intersection of all command interfaces.
+import type { CoreCommandSignatures } from '../commands/core-command-map.js';
+import type { CommentCommands } from '../../extensions/types/comment-commands.js';
+import type { FormattingCommandAugmentations } from '../../extensions/types/formatting-commands.js';
+import type { HistoryLinkTableCommandAugmentations } from '../../extensions/types/history-link-table-commands.js';
+import type { SpecializedCommandAugmentations } from '../../extensions/types/specialized-commands.js';
+import type { ParagraphCommands } from '../../extensions/types/paragraph-commands.js';
+import type { BlockNodeCommands } from '../../extensions/types/block-node-commands.js';
+import type { ImageCommands } from '../../extensions/types/image-commands.js';
+import type { MiscellaneousCommands } from '../../extensions/types/miscellaneous-commands.js';
+import type { TrackChangesCommands } from '../../extensions/types/track-changes-commands.js';
+
 /**
  * Map of built-in command names to their parameter signatures.
- * Extensions can augment this interface to add more precise types.
- * Currently empty because built-in focus/blur are exposed directly on Editor,
- * not via `editor.commands`. Populate here when core commands are added.
+ * Populated via core-command-map.d.ts module augmentation.
  */
 export interface CoreCommandMap {}
 
 /**
  * Map of extension command names to their parameter signatures.
- * Each extension should augment this interface when adding typed commands.
- */
-/**
- * Map of extension command names to their parameter signatures.
- * Extensions should augment this interface via module augmentation, e.g.:
- *
- * ```ts
- * declare module '@core/types/ChainedCommands.js' {
- *   interface ExtensionCommandMap {
- *     setFontSize: (fontSize: string | number) => boolean;
- *   }
- * }
- * ```
+ * Kept for backward compat with any external module augmentations.
  */
 export interface ExtensionCommandMap {}
 
@@ -98,9 +98,25 @@ export type CoreCommands = Pick<KnownCommandRecord, keyof CoreCommandMap>;
 export type ExtensionCommands = Pick<KnownCommandRecord, keyof ExtensionCommandMap>;
 
 /**
- * All available editor commands
+ * All available editor commands.
+ *
+ * Composed from explicit imports of each command interface for reliable
+ * cross-package typing (module augmentation doesn't survive the npm boundary).
+ * The Record<string, AnyCommand> fallback allows dynamic/plugin commands.
  */
-export type EditorCommands = CoreCommands & ExtensionCommands & Record<string, AnyCommand>;
+export type EditorCommands = CoreCommands &
+  ExtensionCommands &
+  CoreCommandSignatures &
+  CommentCommands &
+  FormattingCommandAugmentations &
+  HistoryLinkTableCommandAugmentations &
+  SpecializedCommandAugmentations &
+  ParagraphCommands &
+  BlockNodeCommands &
+  ImageCommands &
+  MiscellaneousCommands &
+  TrackChangesCommands &
+  Record<string, AnyCommand>;
 
 /**
  * Command props made available to every command handler.

@@ -36,9 +36,9 @@ export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
 
   const insertionMark = tr.doc.type.schema.marks[TrackInsertMarkName].create({
     id,
-    author: user.name,
-    authorEmail: user.email,
-    authorImage: user.image,
+    author: user.name || '',
+    authorEmail: user.email || '',
+    authorImage: user.image || '',
     date,
   });
 

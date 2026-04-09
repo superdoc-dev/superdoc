@@ -79,6 +79,7 @@ class SuperDocAsyncRuntime:
         request_timeout_ms: Optional[int] = None,
         watchdog_timeout_ms: int = 30_000,
         max_queue_depth: int = 100,
+        stdout_buffer_limit_bytes: int = 64 * 1024 * 1024,
         default_change_mode: Optional[str] = None,
         user: Optional[Dict[str, str]] = None,
     ) -> None:
@@ -93,6 +94,7 @@ class SuperDocAsyncRuntime:
             request_timeout_ms=request_timeout_ms,
             watchdog_timeout_ms=watchdog_timeout_ms,
             max_queue_depth=max_queue_depth,
+            stdout_buffer_limit_bytes=stdout_buffer_limit_bytes,
             default_change_mode=self._default_change_mode,
             user=user,
         )

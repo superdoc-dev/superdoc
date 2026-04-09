@@ -399,6 +399,7 @@ class AsyncHostTransport:
         request_timeout_ms: Optional[int] = None,
         watchdog_timeout_ms: int = 30_000,
         max_queue_depth: int = 100,
+        stdout_buffer_limit_bytes: int = 64 * 1024 * 1024,
         default_change_mode: Optional[ChangeMode] = None,
         user: Optional[Dict[str, str]] = None,
     ) -> None:
@@ -409,6 +410,7 @@ class AsyncHostTransport:
         self._request_timeout_ms = request_timeout_ms
         self._watchdog_timeout_ms = watchdog_timeout_ms
         self._max_queue_depth = max_queue_depth
+        self._stdout_buffer_limit_bytes = stdout_buffer_limit_bytes
         self._default_change_mode = default_change_mode
         self._user = user
 
@@ -531,12 +533,15 @@ class AsyncHostTransport:
         args = [*prefix_args, 'host', '--stdio']
 
         try:
+            # ``limit`` raises asyncio's StreamReader buffer above its 64 KiB
+            # default; host responses are single JSON lines and can exceed it.
             self._process = await asyncio.create_subprocess_exec(
                 command, *args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
                 env={**os.environ, **self._env},
+                limit=self._stdout_buffer_limit_bytes,
             )
             logger.debug('Host spawned (pid=%s, bin=%s).', self._process.pid, self._cli_bin)
         except Exception as exc:

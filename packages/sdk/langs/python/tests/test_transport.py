@@ -493,3 +493,46 @@ class TestAsyncDispose:
             await transport.dispose()
         finally:
             _cleanup_wrapper(cli2)
+
+
+class TestAsyncLargeResponse:
+    """Responses larger than the StreamReader buffer must not crash the reader."""
+
+    @pytest.mark.asyncio
+    async def test_response_above_default_64kb_buffer(self):
+        big_payload = 'x' * (200 * 1024)
+        cli = _mock_cli_bin({
+            'handshake': 'ok',
+            'responses': [{'data': {'content': big_payload}}],
+        })
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+            result = await transport.invoke(_TEST_OP, {'query': 'big'})
+            assert result == {'content': big_payload}
+            assert transport.state == 'CONNECTED'
+            await transport.dispose()
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
+    async def test_response_above_custom_buffer_limit_disconnects(self):
+        # Pins that stdout_buffer_limit_bytes is wired through to the spawn:
+        # setting it below the response size reproduces the original failure.
+        big_payload = 'x' * (200 * 1024)
+        cli = _mock_cli_bin({
+            'handshake': 'ok',
+            'responses': [{'data': {'content': big_payload}}],
+        })
+        try:
+            transport = AsyncHostTransport(
+                cli,
+                startup_timeout_ms=5_000,
+                stdout_buffer_limit_bytes=64 * 1024,
+            )
+            await transport.connect()
+            with pytest.raises(SuperDocError) as exc_info:
+                await transport.invoke(_TEST_OP, {'query': 'big'})
+            assert exc_info.value.code == HOST_DISCONNECTED
+        finally:
+            _cleanup_wrapper(cli)

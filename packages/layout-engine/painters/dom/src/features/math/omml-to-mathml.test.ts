@@ -361,7 +361,7 @@ describe('m:d converter', () => {
     expect(outerRow!.children[2]!.textContent).toBe(')');
   });
 
-  it('defaults to parentheses and pipe separators when dPr is missing', () => {
+  it('defaults to parentheses and U+2502 separators when dPr is missing', () => {
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -383,7 +383,7 @@ describe('m:d converter', () => {
 
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
-    expect(result!.textContent).toBe('(x|y)');
+    expect(result!.textContent).toBe('(x\u2502y)');
   });
 
   it('uses custom delimiter and separator characters for multiple expressions', () => {
@@ -462,6 +462,42 @@ describe('m:d converter', () => {
                 { name: 'm:endChr', attributes: { 'm:val': '' } },
                 { name: 'm:sepChr', attributes: { 'm:val': '' } },
               ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('xy');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('');
+    expect(outerRow!.children[2]!.textContent).toBe('');
+    expect(outerRow!.children[4]!.textContent).toBe('');
+  });
+
+  it('suppresses delimiter characters when chr elements are present without m:val', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [{ name: 'm:begChr' }, { name: 'm:endChr' }, { name: 'm:sepChr' }],
             },
             {
               name: 'm:e',

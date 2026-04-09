@@ -4,7 +4,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 
 const DEFAULT_BEGIN_DELIMITER = '(';
 const DEFAULT_END_DELIMITER = ')';
-const DEFAULT_SEPARATOR_DELIMITER = '\u2502';
+const DEFAULT_SEPARATOR_DELIMITER = '\u2502'; // ECMA-376 22.1.2.95: BOX DRAWINGS LIGHT VERTICAL
 
 function getDelimiterValue(properties: OmmlJsonNode | undefined, name: string, fallback: string): string {
   const property = properties?.elements?.find((element) => element.name === name);

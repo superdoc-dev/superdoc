@@ -322,6 +322,584 @@ describe('m:bar converter', () => {
   });
 });
 
+describe('m:d converter', () => {
+  it('converts m:d to delimiters around the expression', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '(' } },
+                { name: 'm:endChr', attributes: { 'm:val': ')' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x+y)');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children[0]!.textContent).toBe('(');
+    expect(outerRow!.children[1]!.textContent).toBe('x+y');
+    expect(outerRow!.children[2]!.textContent).toBe(')');
+  });
+
+  it('defaults to parentheses and U+2502 separators when dPr is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x\u2502y)');
+  });
+
+  it('uses custom delimiter and separator characters for multiple expressions', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '[' } },
+                { name: 'm:endChr', attributes: { 'm:val': ']' } },
+                { name: 'm:sepChr', attributes: { 'm:val': ';' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('[a;b]');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('[');
+    expect(outerRow!.children[2]!.textContent).toBe(';');
+    expect(outerRow!.children[4]!.textContent).toBe(']');
+  });
+
+  it('does not render stray separators for empty expressions', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            { name: 'm:e', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('(x)');
+  });
+
+  it('preserves explicit empty delimiter characters', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [
+                { name: 'm:begChr', attributes: { 'm:val': '' } },
+                { name: 'm:endChr', attributes: { 'm:val': '' } },
+                { name: 'm:sepChr', attributes: { 'm:val': '' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('xy');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('');
+    expect(outerRow!.children[2]!.textContent).toBe('');
+    expect(outerRow!.children[4]!.textContent).toBe('');
+  });
+
+  it('suppresses delimiter characters when chr elements are present without m:val', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:d',
+          elements: [
+            {
+              name: 'm:dPr',
+              elements: [{ name: 'm:begChr' }, { name: 'm:endChr' }, { name: 'm:sepChr' }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('xy');
+
+    const outerRow = result!.querySelector('mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(5);
+    expect(outerRow!.children[0]!.textContent).toBe('');
+    expect(outerRow!.children[2]!.textContent).toBe('');
+    expect(outerRow!.children[4]!.textContent).toBe('');
+  });
+});
+
+describe('m:func converter', () => {
+  it('converts m:func to function name + apply operator + argument', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`sin${'\u2061'}x`);
+
+    const mrow = result!.querySelector('mrow');
+    expect(mrow).not.toBeNull();
+
+    const functionIdentifier = mrow!.querySelector('mi');
+    expect(functionIdentifier).not.toBeNull();
+    expect(functionIdentifier!.textContent).toBe('sin');
+    expect(functionIdentifier!.getAttribute('mathvariant')).toBe('normal');
+
+    const applyOperator = mrow!.querySelector('mo');
+    expect(applyOperator).not.toBeNull();
+    expect(applyOperator!.textContent).toBe('\u2061');
+  });
+
+  it('ignores m:funcPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            { name: 'm:funcPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'log' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '10' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`log${'\u2061'}10`);
+  });
+
+  it('renders single-character function names upright', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    const firstMi = result!.querySelector('mi');
+    expect(firstMi).not.toBeNull();
+    expect(firstMi!.textContent).toBe('f');
+    expect(firstMi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('wraps multi-part arguments in <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+
+    const outerRow = result!.querySelector('math > mrow');
+    expect(outerRow).not.toBeNull();
+    expect(outerRow!.children.length).toBe(3);
+    expect(outerRow!.children[0]!.textContent).toBe('sin');
+    expect(outerRow!.children[1]!.textContent).toBe('\u2061');
+    expect(outerRow!.children[2]!.textContent).toBe('x+1');
+  });
+
+  it('renders only the argument when m:fName is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('x');
+
+    const mo = result!.querySelector('mo');
+    expect(mo).toBeNull();
+  });
+
+  it('renders only the function name when m:e is missing', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe('sin');
+
+    const mo = result!.querySelector('mo');
+    expect(mo).toBeNull();
+
+    const mi = result!.querySelector('mi');
+    expect(mi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('returns null for empty m:func', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('handles nested m:func (sin of cos x)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                {
+                  name: 'm:func',
+                  elements: [
+                    {
+                      name: 'm:fName',
+                      elements: [
+                        { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'cos' }] }] },
+                      ],
+                    },
+                    {
+                      name: 'm:e',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.textContent).toBe(`sin${'\u2061'}cos${'\u2061'}x`);
+
+    const mis = result!.querySelectorAll('mi[mathvariant="normal"]');
+    expect(mis.length).toBe(2);
+    expect(mis[0]!.textContent).toBe('sin');
+    expect(mis[1]!.textContent).toBe('cos');
+  });
+});
+
+describe('m:rad converter', () => {
+  it('converts m:rad with degHide to <msqrt>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide' }],
+            },
+            { name: 'm:deg', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('x');
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('converts m:rad without degHide to <mroot> with radicand first, degree second', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mroot = result!.querySelector('mroot');
+    expect(mroot).not.toBeNull();
+    expect(mroot!.children[0]!.textContent).toBe('x');
+    expect(mroot!.children[1]!.textContent).toBe('3');
+    expect(result!.querySelector('msqrt')).toBeNull();
+  });
+
+  it('converts m:rad with degHide m:val="0" to <mroot> (degree explicitly visible)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide', attributes: { 'm:val': '0' } }],
+            },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mroot')).not.toBeNull();
+    expect(result!.querySelector('msqrt')).toBeNull();
+  });
+
+  it('produces <msqrt> when m:deg is missing entirely', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msqrt')).not.toBeNull();
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('handles missing m:e gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide' }],
+            },
+            { name: 'm:deg', elements: [] },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('');
+  });
+});
+
 describe('m:sSub converter', () => {
   it('converts m:sSub to <msub> with base and subscript', () => {
     const omml = {

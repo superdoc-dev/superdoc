@@ -10,6 +10,7 @@ export { convertMathRun } from './math-run.js';
 export { convertFraction } from './fraction.js';
 export { convertBar } from './bar.js';
 export { convertFunction } from './function.js';
+export { convertDelimiter } from './delimiter.js';
 export { convertSubscript } from './subscript.js';
 export { convertSuperscript } from './superscript.js';
 export { convertSubSuperscript } from './sub-superscript.js';

@@ -213,7 +213,7 @@ export interface SaveOptions {
   commentsType?: string;
 
   /** Comments to include in export */
-  comments?: Array<{ id: string; [key: string]: unknown }>;
+  comments?: Comment[];
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
@@ -2235,7 +2235,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *   - [3] fonts - Object containing font files from the DOCX
    */
   static async loadXmlData(
-    fileSource: File | Blob | Buffer,
+    fileSource: File | Blob | Buffer | ArrayBuffer,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
     isNode: boolean = false,
     options?: { password?: string },
   ): Promise<
@@ -3707,11 +3722,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer | ArrayBuffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
     const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
-      fileSource: decryptedData ?? newFile,
+      fileSource: decryptedData ?? (newFile instanceof ArrayBuffer ? new Blob([newFile]) : newFile),
       content: docx,
       media,
       mediaFiles,

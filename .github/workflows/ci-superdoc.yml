@@ -72,6 +72,13 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
+      - name: Consumer typecheck
+        run: |
+          cd packages/superdoc && pnpm pack --pack-destination .
+          cd ../../tests/consumer-typecheck
+          npm install ../../packages/superdoc/superdoc-*.tgz --no-save
+          npx tsc --noEmit
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

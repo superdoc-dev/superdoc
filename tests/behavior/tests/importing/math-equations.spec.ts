@@ -5,6 +5,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
+const DELIMITER_DOC = path.resolve(__dirname, 'fixtures/math-delimiter-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -128,8 +129,8 @@ test.describe('math equation import and rendering', () => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();
 
-    // Unimplemented math objects (e.g., delimiter) should still
-    // have their text content accessible in the PM document
+    // Unimplemented math objects should still have their text
+    // content accessible in the PM document
     const mathTexts = await superdoc.page.evaluate(() => {
       const view = (window as any).editor?.view;
       if (!view) return [];
@@ -235,5 +236,127 @@ test.describe('m:func (function apply) rendering', () => {
     expect(fractionData).not.toBeNull();
     expect(fractionData!.hasFunc).toBe(true);
     expect(fractionData!.denominatorText).toBe('x');
+  });
+});
+
+test.describe('m:d (delimiter) rendering', () => {
+  test('renders all 21 delimiter test cases as <math> elements', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    const mathCount = await superdoc.page.evaluate(() => {
+      return document.querySelectorAll('math').length;
+    });
+    expect(mathCount).toBe(21);
+  });
+
+  test('default parentheses wrap expression in <mo> delimiters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 1: default (x+y)
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[0];
+      if (!math) return null;
+      const mrow = math.querySelector('mrow');
+      if (!mrow) return null;
+      const mos = mrow.querySelectorAll(':scope > mo');
+      return {
+        text: math.textContent,
+        openDelim: mos[0]?.textContent,
+        closeDelim: mos[mos.length - 1]?.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.text).toBe('(x+y)');
+    expect(data!.openDelim).toBe('(');
+    expect(data!.closeDelim).toBe(')');
+  });
+
+  test('uses U+2502 as default separator between expressions', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 2: two expressions with default separator
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[1];
+      if (!math) return null;
+      return { text: math.textContent };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.text).toBe('(x\u2502y)');
+  });
+
+  test('suppresses delimiter when chr element present without m:val', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 5: begChr present, no val → suppress opening delimiter
+    const case5 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[4];
+      return math?.textContent ?? null;
+    });
+    expect(case5).toBe('x+y)');
+
+    // Case 8: endChr present, no val → suppress closing delimiter
+    const case8 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[7];
+      return math?.textContent ?? null;
+    });
+    expect(case8).toBe('(x+y');
+
+    // Case 9: both present, no val → suppress both
+    const case9 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[8];
+      return math?.textContent ?? null;
+    });
+    expect(case9).toBe('x+y');
+  });
+
+  test('renders custom delimiter characters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 13: absolute value |x|
+    const absVal = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[12];
+      return math?.textContent ?? null;
+    });
+    expect(absVal).toBe('|x|');
+
+    // Case 15: floor ⌊x⌋
+    const floor = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[14];
+      return math?.textContent ?? null;
+    });
+    expect(floor).toBe('⌊x⌋');
+
+    // Case 16: ceiling ⌈x⌉
+    const ceiling = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[15];
+      return math?.textContent ?? null;
+    });
+    expect(ceiling).toBe('⌈x⌉');
+  });
+
+  test('renders nested delimiters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 17: ((x+y)+z)
+    const nested = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[16];
+      if (!math) return null;
+      const innerMrows = math.querySelectorAll('mrow mrow mo');
+      return {
+        text: math.textContent,
+        nestedMoCount: innerMrows.length,
+      };
+    });
+
+    expect(nested).not.toBeNull();
+    expect(nested!.text).toBe('((x+y)+z)');
   });
 });

@@ -129,10 +129,15 @@ test.describe('SD-2425 linked style partial selection', () => {
     await applyLinkedStyleToSelection(superdoc.page, 'Heading1');
     await superdoc.waitForStable();
 
-    // Move cursor to end and press Enter
-    await superdoc.press('End');
+    // Place a collapsed cursor at paragraph end via document positions.
+    // Using key events (End) can be flaky in CI depending on focus timing.
+    const worldPos = await superdoc.findTextPos('world');
+    const paragraphEnd = worldPos + 'world'.length;
+    await superdoc.setTextSelection(paragraphEnd, paragraphEnd);
     await superdoc.waitForStable();
+
     await superdoc.newLine();
+    await superdoc.waitForStable();
     await superdoc.type('new text');
     await superdoc.waitForStable();
 

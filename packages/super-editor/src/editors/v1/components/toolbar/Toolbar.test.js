@@ -17,9 +17,11 @@ function createMockToolbar() {
     config: {
       toolbarGroups: ['left', 'center', 'right'],
       toolbarButtonsExclude: [],
+      responsiveToContainer: false,
     },
     getToolbarItemByGroup: () => [],
     getToolbarItemByName: () => null,
+    getAvailableWidth: () => 1200,
     onToolbarResize: vi.fn(),
     emitCommand: vi.fn(),
     overflowItems: [],
@@ -110,5 +112,34 @@ describe('Toolbar', () => {
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
+  });
+
+  it('does not attach ResizeObserver when responsiveToContainer is disabled', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const mockToolbar = {
+      ...createMockToolbar(),
+      toolbarContainer: document.createElement('div'),
+    };
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: true },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    expect(ResizeObserverMock).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+    vi.unstubAllGlobals();
   });
 });

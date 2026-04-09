@@ -387,6 +387,16 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Get the width used for responsive toolbar decisions.
+   * @returns {number} Available width in pixels
+   */
+  getAvailableWidth() {
+    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
+    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
+    return this.config.responsiveToContainer ? containerWidth : documentWidth;
+  }
+
+  /**
    * Create toolbar items based on configuration
    * @private
    * @param {SuperToolbar} options.superToolbar - The toolbar instance
@@ -397,9 +407,7 @@ export class SuperToolbar extends EventEmitter {
    * @returns {void}
    */
   #makeToolbarItems({ superToolbar, icons, texts, fonts, hideButtons, isDev = false } = {}) {
-    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
-    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
-    const availableWidth = this.config.responsiveToContainer ? containerWidth : documentWidth;
+    const availableWidth = this.getAvailableWidth();
 
     const { defaultItems, overflowItems } = makeDefaultItems({
       superToolbar,

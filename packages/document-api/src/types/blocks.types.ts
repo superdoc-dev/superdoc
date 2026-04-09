@@ -9,6 +9,8 @@ export interface BlockListEntry {
   nodeId: string;
   nodeType: BlockNodeType;
   textPreview: string | null;
+  /** Full flattened block text when requested via BlocksListInput.includeText. */
+  text?: string | null;
   isEmpty: boolean;
   /** Named paragraph style ID (e.g. 'Normal', 'Heading1'). */
   styleId?: string | null;
@@ -34,6 +36,8 @@ export interface BlocksListInput {
   offset?: number;
   limit?: number;
   nodeTypes?: BlockNodeType[];
+  /** Include full flattened text for each block. Omit to return textPreview only. */
+  includeText?: boolean;
 }
 
 export interface BlocksListResult {

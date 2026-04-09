@@ -3054,6 +3054,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         items: { enum: [...blockNodeTypeValues] },
         description: "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
       },
+      includeText: {
+        type: 'boolean',
+        description: 'When true, includes the full flattened block text in each block entry.',
+      },
     }),
     output: objectSchema(
       {
@@ -3066,6 +3070,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               nodeId: { type: 'string', description: 'Block ID for targeting with other tools.' },
               nodeType: { enum: [...blockNodeTypeValues] },
               textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              text: {
+                oneOf: [{ type: 'string' }, { type: 'null' }],
+                description: 'Full flattened block text when requested with includeText.',
+              },
               isEmpty: { type: 'boolean' },
               styleId: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Named paragraph style.' },
               fontFamily: { type: 'string', description: 'Font family from first text run.' },
@@ -4769,18 +4777,36 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['by', 'target'],
     );
 
-    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema] };
+    const blockWhereSchema = objectSchema(
+      {
+        by: { const: 'block', type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        nodeId: { type: 'string' },
+      },
+      ['by', 'nodeType', 'nodeId'],
+    );
+
+    const stepWhereSchema: JsonSchema = {
+      oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema, blockWhereSchema],
+    };
 
     // Insert-only where (no 'all' require, no ref)
-    const insertWhereSchema = objectSchema(
-      {
-        by: { const: 'select', type: 'string' },
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: blockNodeAddressSchema,
-        require: { enum: ['first', 'exactlyOne'] },
-      },
-      ['by', 'select', 'require'],
-    );
+    const insertWhereSchema: JsonSchema = {
+      oneOf: [
+        objectSchema(
+          {
+            by: { const: 'select', type: 'string' },
+            select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+            within: blockNodeAddressSchema,
+            require: { enum: ['first', 'exactlyOne'] },
+          },
+          ['by', 'select', 'require'],
+        ),
+        refWhereSchema,
+        targetWhereSchema,
+        blockWhereSchema,
+      ],
+    };
 
     // Assert where (select only, no require)
     const assertWhereSchema = objectSchema(

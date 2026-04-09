@@ -573,6 +573,47 @@ describe('blocksListWrapper', () => {
     expect(result.blocks[0]!.textPreview).toBe('Short text');
   });
 
+  it('returns full block text when includeText is true', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Longer full text value' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { includeText: true });
+    expect(result.blocks[0]!.text).toBe('Longer full text value');
+    expect(result.blocks[0]!.textPreview).toBe('Longer full text value');
+  });
+
+  it('omits full block text when includeText is false or omitted', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Body text' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    expect(blocksListWrapper(editor).blocks[0]!.text).toBeUndefined();
+    expect(blocksListWrapper(editor, { includeText: false }).blocks[0]!.text).toBeUndefined();
+  });
+
+  it('returns null full text for non-text blocks when includeText is true', () => {
+    const table = createNode('table', [], {
+      attrs: { blockId: 't1', sdBlockId: 't1' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const doc = createNode('doc', [table], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { includeText: true });
+    expect(result.blocks[0]!.text).toBeNull();
+    expect(result.blocks[0]!.textPreview).toBeNull();
+  });
+
   it('reads alignment from paragraphProperties.justification', () => {
     const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Centered' })], {
       attrs: {

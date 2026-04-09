@@ -128,7 +128,8 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_get_content',
     description:
       'Read document content in various formats. Call this first in any workflow to understand document structure before making edits. ' +
-      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, optional full text when includeText:true, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'When you need to evaluate or rewrite existing paragraphs or clauses, prefer action "blocks" with includeText:true so you can identify the correct block and then target it by nodeId. ' +
       'Action "text" and "markdown" return the full document as plain text or Markdown. Action "html" returns HTML. ' +
       'Action "info" returns document metadata: word count, paragraph count, page count, outline, available styles, and capability flags. ' +
       'The "blocks" action supports pagination via "offset" and "limit", and filtering via "nodeTypes". Other actions ignore these parameters. ' +
@@ -136,6 +137,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Do NOT call superdoc_edit or superdoc_format without first reading blocks to get valid refs and formatting reference values.',
     inputExamples: [
       { action: 'blocks' },
+      { action: 'blocks', includeText: true, offset: 0, limit: 20 },
       { action: 'blocks', offset: 0, limit: 20, nodeTypes: ['heading', 'paragraph'] },
       { action: 'text' },
       { action: 'info' },
@@ -154,6 +156,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
+      'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
       'Refs expire after any mutation; always re-search before the next edit. ' +
       'For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
       'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). ' +
@@ -319,11 +322,15 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'All steps succeed or all fail; no partial application. ' +
       'Execute multiple operations atomically in one batch. Use this for any workflow needing 2+ changes. ' +
       'Supported step types: text (text.rewrite, text.insert, text.delete), format (format.apply), create (create.heading, create.paragraph, create.table), assert. ' +
-      'Each step has an id, an op, a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"|"last"} or {by:"ref", ref:"..."}), and "args" with operation-specific parameters. ' +
+      'Each step has an id, an op, a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."} or {by:"block", nodeType:"paragraph", nodeId:"..."}), and "args" with operation-specific parameters. ' +
+      'Use {by:"block", nodeType, nodeId} when you want to rewrite, delete, format, or anchor against a whole known block from superdoc_get_content action "blocks" without relying on text matching. ' +
+      'For full-paragraph or full-clause rewrites, first call superdoc_get_content with action:"blocks" and includeText:true, then rewrite the matching block by nodeId. ' +
+      'Use {by:"select"} only for substring edits, discovery, or insertion relative to a sentence fragment; do NOT use a shortened text selector to replace an entire known block. ' +
       'For create steps, "where" targets an existing anchor block and args.position ("before" or "after") controls placement. Sequential creates targeting the same anchor maintain correct order via internal position mapping. ' +
       'For format.apply with require "all", use a node selector to format every heading or paragraph at once: {by:"select", select:{type:"node", nodeType:"heading"}, require:"all"}. ' +
       'Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by earlier create steps in the same batch. Split creates and formatting into separate batches: first a mutations call with creates, then a mutations call with format.apply. ' +
       'Action "preview" dry-runs the plan. Action "apply" executes it. ' +
+      'If a selector matches nothing, the failure reports the step id plus selector details so you can retry with a shorter or more distinctive anchor. ' +
       'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step.',
     inputExamples: [
       {
@@ -348,6 +355,12 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       {
         action: 'apply',
         steps: [
+          {
+            id: 'r1',
+            op: 'text.rewrite',
+            where: { by: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+            args: { replacement: { text: 'Updated clause text.' } },
+          },
           {
             id: 'f1',
             op: 'format.apply',
@@ -817,9 +830,9 @@ export const OPERATION_DEFINITIONS = {
   'blocks.list': {
     memberPath: 'blocks.list',
     description:
-      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.',
     expectedResult:
-      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, optional text, isEmpty), and the current document revision.',
     requiresDocumentContext: true,
     metadata: readOperation({
       throws: ['INVALID_INPUT'],

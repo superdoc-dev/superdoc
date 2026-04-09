@@ -39,8 +39,30 @@ type ToolCatalogEntry = {
   operations: OperationEntry[];
 };
 
+const STRIP_EMPTY_OPTIONAL_ARGS = new Set(['parentId', 'parentCommentId', 'id', 'status']);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
+}
+
+function isObviouslyCorruptedToolArgKey(key: string): boolean {
+  const trimmed = key.trim();
+  return trimmed.length === 0 || !/[\p{L}\p{N}]/u.test(trimmed);
+}
+
+function stripCorruptedToolArgKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripCorruptedToolArgKeys(item));
+  }
+
+  if (!isRecord(value)) return value;
+
+  const clean: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (isObviouslyCorruptedToolArgKey(key)) continue;
+    clean[key] = stripCorruptedToolArgKeys(entryValue);
+  }
+  return clean;
 }
 
 async function readJson<T>(fileName: string): Promise<T> {
@@ -277,6 +299,14 @@ export async function dispatchSuperDocTool(
     });
   }
 
+  const sanitizedArgs = stripCorruptedToolArgKeys(args);
+  if (!isRecord(sanitizedArgs)) {
+    throw new SuperDocCliError(`Tool arguments for ${toolName} must be an object.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { toolName },
+    });
+  }
+
   // Validate against the tool schema before dispatch.
   const catalog = await getCachedCatalog();
   const tool = catalog.tools.find((t) => t.toolName === toolName);
@@ -286,14 +316,13 @@ export async function dispatchSuperDocTool(
       details: { toolName },
     });
   }
-  validateToolArgs(toolName, args, tool);
+  validateToolArgs(toolName, sanitizedArgs, tool);
 
   // Strip empty strings for known optional ID/enum params that LLMs fill with ""
   // instead of omitting. Only target params where "" is never a valid value.
-  const STRIP_EMPTY = new Set(['parentId', 'parentCommentId', 'id', 'status']);
   const cleanArgs: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (value === '' && STRIP_EMPTY.has(key)) continue;
+  for (const [key, value] of Object.entries(sanitizedArgs)) {
+    if (value === '' && STRIP_EMPTY_OPTIONAL_ARGS.has(key)) continue;
     cleanArgs[key] = value;
   }
 

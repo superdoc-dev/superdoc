@@ -1,3 +1,5 @@
+import type { Editor } from '../Editor.js';
+
 /**
  * A map of plugin names to their helper API objects.
  * Each plugin defines its own helper methods.

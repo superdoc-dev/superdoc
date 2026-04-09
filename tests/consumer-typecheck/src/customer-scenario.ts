@@ -11,7 +11,43 @@
  * - Event handlers receive typed payloads
  */
 
-import { Editor, PresentationEditor, SuperToolbar, getStarterExtensions, getRichTextExtensions } from 'superdoc';
+import {
+  Editor,
+  PresentationEditor,
+  SuperToolbar,
+  SuperDoc,
+  SuperConverter,
+  getStarterExtensions,
+  getRichTextExtensions,
+  Extensions,
+  DOCX,
+  PDF,
+  HTML,
+  createZip,
+  DocxZipper,
+  getMarksFromSelection,
+  getActiveFormatting,
+  getAllowedImageDimensions,
+  isNodeType,
+  assertNodeType,
+  isMarkType,
+  defineNode,
+  defineMark,
+  fieldAnnotationHelpers,
+  trackChangesHelpers,
+  AnnotatorHelpers,
+  SectionHelpers,
+  registeredHandlers,
+  TrackChangesBasePluginKey,
+  CommentsPluginKey,
+  SuperEditor,
+  SuperInput,
+  BasicUpload,
+  Toolbar,
+  AIWriter,
+  ContextMenu,
+  SlashMenu,
+} from 'superdoc';
 
 import type {
   // ProseMirror core
@@ -515,6 +551,102 @@ function testProofingProvider() {
   };
 }
 
+// ============================================
+// SECTION 12: Editor static and content methods
+// ============================================
+
+async function testEditorStaticMethods() {
+  const file = new File([''], 'test.docx');
+  const xmlData = await Editor.loadXmlData(file);
+  const editor = await Editor.open(file);
+}
+
+function testEditorContentMethods(editor: Editor) {
+  const html = editor.getHTML();
+  const json = editor.getJSON();
+  editor.destroy();
+}
+
+// ============================================
+// SECTION 13: Extensions, SuperDoc, and utilities
+// ============================================
+
+function testExtensions() {
+  const starterExtensions = getStarterExtensions();
+  const richTextExtensions = getRichTextExtensions();
+  const { Node, Mark, Extension, Plugin, PluginKey } = Extensions;
+}
+
+function testSuperDoc() {
+  const superdoc: typeof SuperDoc = SuperDoc;
+}
+
+function testUtilities() {
+  // Verify these are exported
+  const zipFn = createZip;
+  const docxMime: typeof DOCX = DOCX;
+  const pdfMime: typeof PDF = PDF;
+  const htmlMime: typeof HTML = HTML;
+}
+
+// ============================================
+// SECTION 14: Type guards
+// ============================================
+
+function testTypeGuards() {
+  // Verify type guard functions are exported and callable
+  const nodeGuard = isNodeType;
+  const nodeAssert = assertNodeType;
+  const markGuard = isMarkType;
+}
+
+// ============================================
+// SECTION 15: Helper modules, plugin keys, additional functions
+// ============================================
+
+function testHelperModules() {
+  const fa = fieldAnnotationHelpers;
+  const tc = trackChangesHelpers;
+  const ah = AnnotatorHelpers;
+  const sh = SectionHelpers;
+  const rh = registeredHandlers;
+  const trackChangesKey = TrackChangesBasePluginKey;
+  const commentsKey = CommentsPluginKey;
+}
+
+function testAdditionalFunctions() {
+  // Verify these functions are exported and callable
+  const marksFromSel = getMarksFromSelection;
+  const activeFmt = getActiveFormatting;
+  const imgDims = getAllowedImageDimensions;
+  const nodeDef = defineNode;
+  const markDef = defineMark;
+}
+
+// ============================================
+// SECTION 16: Additional classes
+// ============================================
+
+function testAdditionalClasses() {
+  // Verify these classes are exported
+  const ZipperClass = DocxZipper;
+  const ToolbarClass = SuperToolbar;
+}
+
+// ============================================
+// SECTION 17: Vue components
+// ============================================
+
+function testVueComponents() {
+  const superEditor = SuperEditor;
+  const superInput = SuperInput;
+  const basicUpload = BasicUpload;
+  const toolbarComponent = Toolbar;
+  const aiWriter = AIWriter;
+  const contextMenu = ContextMenu;
+  const slashMenu = SlashMenu;
+}
+
 export {
   testTypeShapes,
   testEditorOptions,
@@ -529,4 +661,14 @@ export {
   testPresentationEditorEvents,
   testToolbar,
   testProofingProvider,
+  testEditorStaticMethods,
+  testEditorContentMethods,
+  testExtensions,
+  testSuperDoc,
+  testUtilities,
+  testTypeGuards,
+  testHelperModules,
+  testAdditionalFunctions,
+  testAdditionalClasses,
+  testVueComponents,
 };

@@ -44,9 +44,9 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
 
   const deletionMark = tr.doc.type.schema.marks[TrackDeleteMarkName].create({
     id,
-    author: user.name,
-    authorEmail: user.email,
-    authorImage: user.image,
+    author: user.name || '',
+    authorEmail: user.email || '',
+    authorImage: user.image || '',
     date,
   });
 

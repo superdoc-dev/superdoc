@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ steps.pr.outputs.ref || '' }}
+          ref: ${{ steps.pr.outputs.sha || '' }}
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Refresh stable branch head

@@ -209,7 +209,6 @@ export function exportSchemaToJson(params) {
     sequenceField: sdSequenceFieldTranslator,
     documentStatField: sdDocumentStatFieldTranslator,
     tableOfContents: sdTableOfContentsTranslator,
-    tableOfContentsInline: sdTableOfContentsTranslator,
     index: sdIndexTranslator,
     indexEntry: sdIndexEntryTranslator,
     mathBlock: translatePassthroughNode,

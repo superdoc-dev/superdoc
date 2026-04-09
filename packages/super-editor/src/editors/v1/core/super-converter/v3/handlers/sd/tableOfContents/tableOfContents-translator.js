@@ -37,9 +37,8 @@ const encode = (params) => {
     ...params,
     nodes: node.elements || [],
   });
-  const parentAcceptsBlocks = params?.extraParams?.parentAcceptsBlocks !== false;
   const hasParagraphBlocks = (processedContent || []).some((child) => child?.type === 'paragraph');
-  if (parentAcceptsBlocks && !hasParagraphBlocks) {
+  if (!hasParagraphBlocks) {
     processedContent = [
       {
         type: 'paragraph',
@@ -47,15 +46,12 @@ const encode = (params) => {
       },
     ];
   }
-  const inlineField = !parentAcceptsBlocks;
   const attrs = {
     instruction: node.attributes?.instruction || '',
   };
-  if (!inlineField) {
-    attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
-  }
+  attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
   const processedNode = {
-    type: inlineField ? 'tableOfContentsInline' : 'tableOfContents',
+    type: 'tableOfContents',
     attrs,
     content: processedContent,
   };
@@ -70,14 +66,8 @@ const encode = (params) => {
  */
 const decode = (params) => {
   const { node } = params;
-  const isInlineNode = node.type === 'tableOfContentsInline';
   const tocContent = Array.isArray(node.content) ? node.content : [];
-  const inlineContentNodes = tocContent.flatMap((n) => {
-    const exported = exportSchemaToJson({ ...params, node: n });
-    if (!exported) return [];
-    return Array.isArray(exported) ? exported : [exported];
-  });
-  const blockContentNodes = isInlineNode ? [] : tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
 
   // Inject the fldChar begin, instrText and fldChar separate into the first child (after any existing pPr)
   const tocBeginElements = [
@@ -97,16 +87,9 @@ const decode = (params) => {
     },
     { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' }, elements: [] }] },
   ];
-  const tocEndElements = [
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
-  ];
 
-  if (isInlineNode) {
-    return [...tocBeginElements, ...inlineContentNodes, ...tocEndElements];
-  }
-
-  if (blockContentNodes.length > 0) {
-    const firstParagraph = blockContentNodes[0];
+  if (contentNodes.length > 0) {
+    const firstParagraph = contentNodes[0];
     let insertIndex = 0;
     if (firstParagraph.elements) {
       const pPrIndex = firstParagraph.elements.findIndex((el) => el.name === 'w:pPr');
@@ -118,20 +101,24 @@ const decode = (params) => {
     firstParagraph.elements.splice(insertIndex, 0, ...tocBeginElements);
   } else {
     // If there are no paragraphs, create one with the TOC begin elements
-    blockContentNodes.push({
+    contentNodes.push({
       name: 'w:p',
       elements: tocBeginElements,
     });
   }
 
-  const lastParagraph = blockContentNodes[blockContentNodes.length - 1];
+  // Inject the fldChar end into the last child
+  const tocEndElements = [
+    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
+  ];
+  const lastParagraph = contentNodes[contentNodes.length - 1];
   if (lastParagraph.elements) {
     lastParagraph.elements.push(...tocEndElements);
   } else {
     lastParagraph.elements = [...tocEndElements];
   }
 
-  return blockContentNodes;
+  return contentNodes;
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

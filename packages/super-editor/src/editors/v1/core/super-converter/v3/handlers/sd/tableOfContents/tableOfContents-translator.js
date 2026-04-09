@@ -37,9 +37,8 @@ const encode = (params) => {
     ...params,
     nodes: node.elements || [],
   });
-  const parentAcceptsBlocks = params?.extraParams?.parentAcceptsBlocks !== false;
   const hasParagraphBlocks = (processedContent || []).some((child) => child?.type === 'paragraph');
-  if (parentAcceptsBlocks && !hasParagraphBlocks) {
+  if (!hasParagraphBlocks) {
     processedContent = [
       {
         type: 'paragraph',
@@ -47,15 +46,12 @@ const encode = (params) => {
       },
     ];
   }
-  const inlineField = !parentAcceptsBlocks;
   const attrs = {
     instruction: node.attributes?.instruction || '',
   };
-  if (!inlineField) {
-    attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
-  }
+  attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
   const processedNode = {
-    type: inlineField ? 'tableOfContentsInline' : 'tableOfContents',
+    type: 'tableOfContents',
     attrs,
     content: processedContent,
   };
@@ -70,16 +66,8 @@ const encode = (params) => {
  */
 const decode = (params) => {
   const { node } = params;
-  const isInlineNode = node.type === 'tableOfContentsInline';
   const tocContent = Array.isArray(node.content) ? node.content : [];
-  const inlineContentNodes = isInlineNode
-    ? tocContent.flatMap((n) => {
-        const exported = exportSchemaToJson({ ...params, node: n });
-        if (!exported) return [];
-        return Array.isArray(exported) ? exported : [exported];
-      })
-    : [];
-  const blockContentNodes = isInlineNode ? [] : tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
+  const blockContentNodes = tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
 
   // Inject the fldChar begin, instrText and fldChar separate into the first child (after any existing pPr)
   const tocBeginElements = [
@@ -102,10 +90,6 @@ const decode = (params) => {
   const tocEndElements = [
     { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
   ];
-
-  if (isInlineNode) {
-    return [...tocBeginElements, ...inlineContentNodes, ...tocEndElements];
-  }
 
   if (blockContentNodes.length > 0) {
     const firstParagraph = blockContentNodes[0];

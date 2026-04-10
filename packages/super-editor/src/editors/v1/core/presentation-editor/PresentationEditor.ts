@@ -5847,6 +5847,59 @@ export class PresentationEditor extends EventEmitter {
   private static readonly ANCHOR_NAV_TIMEOUT_MS = 2000;
 
   /**
+   * Scroll to any document element by its ID.
+   *
+   * Accepts any element ID — paragraph nodeId, comment entityId, or tracked
+   * change entityId. Resolves the element type automatically:
+   * 1. Tries block index lookup (paragraphs, headings, tables)
+   * 2. Falls back to comment/tracked-change mark lookup
+   *
+   * @param elementId - The element's stable ID (nodeId, commentId, or trackedChangeId).
+   * @returns Promise resolving to true if the element was found and scrolled to.
+   */
+  async scrollToElement(elementId: string): Promise<boolean> {
+    if (!elementId || !this.#editor) return false;
+
+    try {
+      // Try block navigation first (O(1) index lookup).
+      const index = getBlockIndex(this.#editor);
+      try {
+        const candidate = findBlockByNodeIdOnly(index, elementId);
+        if (candidate) {
+          return await this.#scrollToBlockCandidate(this.#editor, candidate);
+        }
+      } catch {
+        // Not a block — fall through to mark lookup.
+      }
+
+      // Try comment/tracked-change marks (walks the document).
+      const setCursorById = this.#editor.commands?.setCursorById;
+      if (typeof setCursorById === 'function' && setCursorById(elementId, { preferredActiveThreadId: elementId })) {
+        return true;
+      }
+
+      // Try tracked change resolution (canonical ID → raw ID fallback).
+      const resolved = resolveTrackedChange(this.#editor, elementId);
+      if (resolved) {
+        if (typeof setCursorById === 'function' && resolved.rawId !== elementId) {
+          if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
+            return true;
+          }
+        }
+        await this.scrollToPositionAsync(resolved.from, { behavior: 'auto', block: 'center' });
+        this.#editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
+        this.#editor.view?.focus?.();
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[PresentationEditor] scrollToElement failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Navigate to any addressable element in the document.
    *
    * Accepts blocks (by nodeId), comments (by entityId), and tracked changes
@@ -5898,19 +5951,25 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (!candidate) return false;
+    return this.#scrollToBlockCandidate(editor, candidate);
+  }
 
-    // Resolve the first text-content position inside the block. The layout
-    // engine maps fragments to text content ranges — block wrappers and
-    // zero-width annotation nodes (bookmarkStart, commentRangeStart) don't
-    // generate layout fragments. We walk the block's children to find the
-    // first inline node with text content (typically a `run` node).
+  /**
+   * Scroll to a resolved block candidate and place the cursor inside it.
+   *
+   * Resolves the first text-content position inside the block — the layout
+   * engine maps fragments to text content ranges, so block wrappers and
+   * zero-width annotation nodes (bookmarkStart, commentRangeStart) don't
+   * generate layout fragments. We walk the block's children to find the
+   * first inline node with text content (typically a `run` node).
+   */
+  async #scrollToBlockCandidate(editor: Editor, candidate: { pos: number }): Promise<boolean> {
     const blockNode = editor.state.doc.nodeAt(candidate.pos);
     let contentPos = candidate.pos + 1;
     if (blockNode) {
       blockNode.forEach((child, offset) => {
         if (contentPos !== candidate.pos + 1) return;
         if (child.textContent.length > 0) {
-          // Position inside the child: block pos + 1 (block open) + offset + 1 (child open, if not text)
           contentPos = candidate.pos + 1 + offset + (child.isText ? 0 : 1);
         }
       });

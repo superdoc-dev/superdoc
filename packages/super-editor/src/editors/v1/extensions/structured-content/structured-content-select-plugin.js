@@ -1,43 +1,6 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 
-function ensureEditableSlotAtPosition(tr, pos, direction = 'after') {
-  const clampedPos = Math.max(0, Math.min(pos, tr.doc.content.size));
-  if (direction === 'before') {
-    const $pos = tr.doc.resolve(clampedPos);
-    const nodeBefore = $pos.nodeBefore;
-    const shouldInsertBefore =
-      !nodeBefore ||
-      nodeBefore.type?.name === 'hardBreak' ||
-      nodeBefore.type?.name === 'lineBreak' ||
-      nodeBefore.type?.name === 'structuredContent' ||
-      (nodeBefore.type?.name === 'run' && !nodeBefore.lastChild?.isText);
-
-    if (!shouldInsertBefore) {
-      tr.setSelection(TextSelection.create(tr.doc, clampedPos, clampedPos));
-      return tr;
-    }
-
-    tr.insertText('\u200B', clampedPos);
-    tr.setSelection(TextSelection.create(tr.doc, clampedPos + 1));
-    return tr;
-  }
-  const nodeAfter = tr.doc.nodeAt(clampedPos);
-  const shouldInsert =
-    !nodeAfter ||
-    nodeAfter.type?.name === 'hardBreak' ||
-    nodeAfter.type?.name === 'lineBreak' ||
-    nodeAfter.type?.name === 'structuredContent' ||
-    (nodeAfter.type?.name === 'run' && !nodeAfter.firstChild?.isText);
-
-  if (!shouldInsert) {
-    tr.setSelection(TextSelection.create(tr.doc, clampedPos, clampedPos));
-    return tr;
-  }
-
-  tr.insertText('\u200B', clampedPos);
-  tr.setSelection(TextSelection.create(tr.doc, clampedPos + 1));
-  return tr;
-}
+import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 
 /**
  * Select-all-on-click plugin for inline StructuredContent nodes.
@@ -60,7 +23,7 @@ export function createStructuredContentSelectPlugin(editor) {
         if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
 
         const { state } = view;
-        const { selection, doc } = state;
+        const { selection } = state;
 
         const resolveBoundaryExit = ($pos) => {
           for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -97,7 +60,7 @@ export function createStructuredContentSelectPlugin(editor) {
 
         try {
           const direction = event.key === 'ArrowLeft' ? 'before' : 'after';
-          const tr = ensureEditableSlotAtPosition(state.tr, nextPos, direction);
+          const tr = applyEditableSlotAtInlineBoundary(state.tr, nextPos, direction);
           view.dispatch(tr);
           event.preventDefault();
           return true;
@@ -143,10 +106,10 @@ export function createStructuredContentSelectPlugin(editor) {
           const oldAtLeadingBoundary = oldState.selection.empty && oldState.selection.from <= selectedSdt.pos;
 
           if (oldAtTrailingBoundary) {
-            return ensureEditableSlotAtPosition(newState.tr, selectedSdt.pos + selectedSdt.node.nodeSize, 'after');
+            return applyEditableSlotAtInlineBoundary(newState.tr, selectedSdt.pos + selectedSdt.node.nodeSize, 'after');
           }
           if (oldAtLeadingBoundary) {
-            return ensureEditableSlotAtPosition(newState.tr, selectedSdt.pos, 'before');
+            return applyEditableSlotAtInlineBoundary(newState.tr, selectedSdt.pos, 'before');
           }
         }
         return null;

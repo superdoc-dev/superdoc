@@ -39,6 +39,7 @@ import {
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
+import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
@@ -62,11 +63,6 @@ const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]
   [0, -COMMENT_THREAD_HIT_TOLERANCE_PX],
   [0, COMMENT_THREAD_HIT_TOLERANCE_PX],
 ];
-// Boundary clicks are intentionally forgiving so near-edge clicks can place the
-// caret before/after an inline SDT instead of selecting it.
-const INLINE_SDT_BOUNDARY_OUTSIDE_SLOP_PX = 12;
-const INLINE_SDT_BOUNDARY_INSIDE_SLOP_PX = 4;
-
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
 type CommentThreadHit = {
@@ -1221,18 +1217,10 @@ export class EditorInputManager {
 
     // Track click depth for multi-click
     const clickDepth = this.#registerPointerClick(event);
-    const hitPos = this.#normalizeInlineSdtBoundaryHitPosition(
-      target,
-      event.clientX,
-      event.clientY,
-      doc,
-      hit.pos,
-      clickDepth,
-    );
 
     // Set up drag selection state
     if (clickDepth === 1) {
-      this.#dragAnchor = hitPos;
+      this.#dragAnchor = hit.pos;
       this.#dragAnchorPageIndex = hit.pageIndex;
       this.#pendingMarginClick = this.#callbacks.computePendingMarginClick?.(event.pointerId, x, y) ?? null;
 
@@ -1302,33 +1290,33 @@ export class EditorInputManager {
     if (!handledByDepth) {
       try {
         // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
-        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hitPos) : null;
+        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
         let inlineSdtBoundaryPos: number | null = null;
         let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
         if (sdtBlock) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
-          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hitPos) : null;
-          if (inlineSdt && hitPos >= inlineSdt.end) {
+          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hit.pos) : null;
+          if (inlineSdt && hit.pos >= inlineSdt.end) {
             const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
             inlineSdtBoundaryPos = afterInlineSdt;
             inlineSdtBoundaryDirection = 'after';
             nextSelection = TextSelection.create(doc, afterInlineSdt);
-          } else if (inlineSdt && hitPos <= inlineSdt.start) {
+          } else if (inlineSdt && hit.pos <= inlineSdt.start) {
             inlineSdtBoundaryPos = inlineSdt.pos;
             inlineSdtBoundaryDirection = 'before';
             nextSelection = TextSelection.create(doc, inlineSdt.pos);
           } else {
-            nextSelection = TextSelection.create(doc, hitPos);
+            nextSelection = TextSelection.create(doc, hit.pos);
           }
           if (!nextSelection.$from.parent.inlineContent) {
-            nextSelection = Selection.near(doc.resolve(hitPos), 1);
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
           }
         }
         let tr = editor.state.tr.setSelection(nextSelection);
         if (inlineSdtBoundaryPos != null && inlineSdtBoundaryDirection) {
-          tr = this.#ensureEditableSlotAtInlineSdtBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
+          tr = applyEditableSlotAtInlineBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
           nextSelection = tr.selection;
         }
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
@@ -1342,98 +1330,6 @@ export class EditorInputManager {
     }
 
     this.#callbacks.scheduleSelectionUpdate?.();
-  }
-
-  #normalizeInlineSdtBoundaryHitPosition(
-    target: HTMLElement,
-    clientX: number,
-    clientY: number,
-    doc: ProseMirrorNode,
-    fallbackPos: number,
-    clickDepth: number,
-  ): number {
-    if (clickDepth !== 1) return fallbackPos;
-
-    const line =
-      target.closest(`.${DOM_CLASS_NAMES.LINE}`) ??
-      (typeof document.elementsFromPoint === 'function'
-        ? (document
-            .elementsFromPoint(clientX, clientY)
-            .find((element) => element instanceof HTMLElement && element.closest(`.${DOM_CLASS_NAMES.LINE}`))
-            ?.closest(`.${DOM_CLASS_NAMES.LINE}`) as HTMLElement | null)
-        : null);
-    if (!line) return fallbackPos;
-
-    const wrappers = Array.from(line.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}`));
-    const wrapper = wrappers.find((candidate) => {
-      const rect = candidate.getBoundingClientRect();
-      const verticallyAligned = clientY >= rect.top - 2 && clientY <= rect.bottom + 2;
-      if (!verticallyAligned) return false;
-
-      const nearLeftEdge =
-        clientX >= rect.left - INLINE_SDT_BOUNDARY_OUTSIDE_SLOP_PX &&
-        clientX <= rect.left + INLINE_SDT_BOUNDARY_INSIDE_SLOP_PX;
-      const nearRightEdge =
-        clientX >= rect.right - INLINE_SDT_BOUNDARY_INSIDE_SLOP_PX &&
-        clientX <= rect.right + INLINE_SDT_BOUNDARY_OUTSIDE_SLOP_PX;
-      return nearLeftEdge || nearRightEdge;
-    });
-    if (!wrapper) return fallbackPos;
-
-    const rect = wrapper.getBoundingClientRect();
-    // Treat clicks near left edge as "before SDT", and right half as "after SDT" intent.
-    const leftSideThreshold = rect.left + rect.width * 0.2;
-    const rightSideThreshold = rect.left + rect.width * 0.5;
-    if (clientX <= leftSideThreshold) {
-      const pmStartRaw = wrapper.dataset.pmStart;
-      const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
-      if (!Number.isFinite(pmStart)) return fallbackPos;
-      return Math.max(0, Math.min(pmStart, doc.content.size));
-    }
-    if (clientX < rightSideThreshold) return fallbackPos;
-
-    const pmEndRaw = wrapper.dataset.pmEnd;
-    const pmEnd = pmEndRaw != null ? Number(pmEndRaw) : NaN;
-    if (!Number.isFinite(pmEnd)) return fallbackPos;
-    return Math.max(0, Math.min(pmEnd + 1, doc.content.size));
-  }
-
-  #ensureEditableSlotAtInlineSdtBoundary<
-    T extends {
-      doc: ProseMirrorNode;
-      insertText: (text: string, from?: number, to?: number) => unknown;
-      setSelection: (selection: Selection) => unknown;
-      selection: Selection;
-    },
-  >(tr: T, pos: number, direction: 'before' | 'after'): T {
-    const clampedPos = Math.max(0, Math.min(pos, tr.doc.content.size));
-    const needsEditableSlot = (node: ProseMirrorNode | null | undefined, side: 'before' | 'after') =>
-      !node ||
-      node.type?.name === 'hardBreak' ||
-      node.type?.name === 'lineBreak' ||
-      node.type?.name === 'structuredContent' ||
-      (node.type?.name === 'run' && !(side === 'before' ? node.lastChild?.isText : node.firstChild?.isText));
-
-    if (direction === 'before') {
-      const $pos = tr.doc.resolve(clampedPos);
-      const nodeBefore = $pos.nodeBefore;
-      const shouldInsertBefore = needsEditableSlot(nodeBefore, 'before');
-
-      if (!shouldInsertBefore) return tr;
-
-      tr.insertText('\u200B', clampedPos);
-      tr.setSelection(TextSelection.create(tr.doc, clampedPos + 1));
-      return tr;
-    }
-
-    const nodeAfter = tr.doc.nodeAt(clampedPos);
-    const shouldInsertAfter = needsEditableSlot(nodeAfter, 'after');
-
-    if (!shouldInsertAfter) return tr;
-
-    tr.insertText('\u200B', clampedPos);
-    tr.setSelection(TextSelection.create(tr.doc, clampedPos + 1));
-    return tr;
   }
 
   #handlePointerMove(event: PointerEvent): void {

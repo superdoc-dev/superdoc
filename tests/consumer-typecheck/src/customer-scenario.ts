@@ -270,6 +270,15 @@ function testEditorCommands(editor: Editor) {
 
   // Chain API
   editor.chain().toggleBold().toggleItalic().run();
+
+  // SD-2334: Chain intermediate methods must return ChainableCommandObject, not boolean.
+  // Reproduces IT-344 (Ontra): chain().setTextSelection(...).setMark(...).run()
+  const chainResult: ChainableCommandObject = editor.chain().setTextSelection({ from: 0, to: 5 });
+  const runResult: boolean = editor.chain().setTextSelection({ from: 0, to: 5 }).setMark('bold').run();
+
+  // SD-2334: can().chain() must return ChainableCommandObject, not boolean
+  const canChain: ChainableCommandObject = editor.can().chain();
+  const canChainRun: boolean = editor.can().chain().toggleBold().run();
 }
 
 function testPresentationEditorCommands(pe: PresentationEditor) {

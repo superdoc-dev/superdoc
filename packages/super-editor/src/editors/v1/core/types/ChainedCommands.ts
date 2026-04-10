@@ -48,31 +48,63 @@ type KnownCommandRecord = {
 };
 
 /**
+ * Transforms a command interface so every method returns ChainableCommandObject
+ * instead of boolean, preserving parameter types.
+ */
+type Chainified<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => unknown ? (...args: A) => ChainableCommandObject : T[K];
+};
+
+/**
+ * All chain-typed commands composed from explicit imports.
+ * Mirrors EditorCommands but with each method returning ChainableCommandObject.
+ *
+ * Module augmentation (CoreCommandMap/ExtensionCommandMap) doesn't survive
+ * the npm boundary, so we use direct imports — same pattern as EditorCommands.
+ */
+type AllChainedCommands = Chainified<CoreCommandSignatures> &
+  Chainified<CommentCommands> &
+  Chainified<FormattingCommandAugmentations> &
+  Chainified<HistoryLinkTableCommandAugmentations> &
+  Chainified<SpecializedCommandAugmentations> &
+  Chainified<ParagraphCommands> &
+  Chainified<BlockNodeCommands> &
+  Chainified<ImageCommands> &
+  Chainified<MiscellaneousCommands> &
+  Chainified<TrackChangesCommands>;
+
+/**
+ * All can-check commands composed from explicit imports.
+ * Mirrors EditorCommands with original return types for availability checks.
+ */
+type AllCanCommands = CoreCommandSignatures &
+  CommentCommands &
+  FormattingCommandAugmentations &
+  HistoryLinkTableCommandAugmentations &
+  SpecializedCommandAugmentations &
+  ParagraphCommands &
+  BlockNodeCommands &
+  ImageCommands &
+  MiscellaneousCommands &
+  TrackChangesCommands;
+
+/**
  * A chainable version of an editor command keyed by command name.
  */
 export type ChainedCommand<K extends string = string> = (...args: CommandArgs<K>) => ChainableCommandObject;
 
-type KnownChainedCommands = {
-  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => ChainableCommandObject;
-};
-
 /**
  * Chainable command object returned by `createChain`.
- * Has dynamic keys (one per command) and a `run()` method.
+ * Only `run()` returns boolean — all other methods return ChainableCommandObject.
  */
 export type ChainableCommandObject = {
   run: () => boolean;
-} & KnownChainedCommands &
-  Record<string, (...args: unknown[]) => ChainableCommandObject>;
+} & AllChainedCommands;
 
 /**
  * A command that can be checked for availability.
  */
 export type CanCommand<K extends string = string> = (...args: CommandArgs<K>) => CommandResult<K>;
-
-type KnownCanCommands = {
-  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => CommandResult<K>;
-};
 
 /**
  * Map of commands that can be checked.
@@ -80,12 +112,11 @@ type KnownCanCommands = {
 export type CanCommands = Record<string, CanCommand>;
 
 /**
- * Object returned by `createCan`: dynamic boolean commands + a `chain()` helper.
+ * Object returned by `createCan`: typed boolean commands + a `chain()` helper.
  */
-export type CanObject = KnownCanCommands &
-  Record<string, CanCommand> & {
-    chain: () => ChainableCommandObject;
-  };
+export type CanObject = AllCanCommands & {
+  chain: () => ChainableCommandObject;
+};
 
 /**
  * Core editor commands available on all instances.

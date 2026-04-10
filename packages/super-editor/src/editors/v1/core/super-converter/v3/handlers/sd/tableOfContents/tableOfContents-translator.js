@@ -33,16 +33,26 @@ const encode = (params) => {
   const { nodes = [], nodeListHandler } = params || {};
   const node = nodes[0];
 
-  const processedContent = nodeListHandler.handler({
+  let processedContent = nodeListHandler.handler({
     ...params,
     nodes: node.elements || [],
   });
+  const hasParagraphBlocks = (processedContent || []).some((child) => child?.type === 'paragraph');
+  if (!hasParagraphBlocks) {
+    processedContent = [
+      {
+        type: 'paragraph',
+        content: processedContent.filter((child) => Boolean(child && child.type)),
+      },
+    ];
+  }
+  const attrs = {
+    instruction: node.attributes?.instruction || '',
+  };
+  attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
   const processedNode = {
     type: 'tableOfContents',
-    attrs: {
-      instruction: node.attributes?.instruction || '',
-      rightAlignPageNumbers: deriveRightAlignPageNumbers(processedContent),
-    },
+    attrs,
     content: processedContent,
   };
 

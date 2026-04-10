@@ -279,6 +279,27 @@ for (const { address } of saved) {
 editor2.destroy();
 ```
 
+### Navigate to saved addresses in the browser
+
+When the saved addresses are used in a browser-based viewer (RAG citations, search results, cross-references), pass the `nodeId` directly to `scrollToElement`:
+
+```ts
+// In the browser — user clicks a citation
+const savedNodeId = citation.nodeId; // from your database / vector store
+const found = await superdoc.scrollToElement(savedNodeId);
+
+if (!found) {
+  console.warn('Element no longer exists in the document');
+}
+```
+
+`scrollToElement` also works with comment and tracked change IDs:
+
+```ts
+await superdoc.scrollToElement(commentEntityId);
+await superdoc.scrollToElement(trackedChangeEntityId);
+```
+
 <Info>
 `nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from `paraId` when available and is best-effort stable across loads. Runtime-created content is still not guaranteed stable across loads; many nodes use session-scoped editor identity, while some structures such as tables or table cells may expose deterministic fallback IDs instead of raw `sdBlockId`.
 </Info>

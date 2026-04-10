@@ -99,46 +99,98 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           preservedDerivedKeys,
           preferExistingKeys,
         );
-        const runProperties = firstInlineProps ?? null;
+        let runProperties = firstInlineProps ?? null;
 
         const existingInlineKeys = runNode.attrs?.runPropertiesInlineKeys || [];
+        // [] means "importer explicitly found nothing inline"; null means "no metadata" (legacy).
+        // The exporter treats null as "export all keys" for backward compat, so [] must be preserved.
+        const hadInlineKeysMetadata = Array.isArray(runNode.attrs?.runPropertiesInlineKeys);
         const styleKeys = runNode.attrs?.runPropertiesStyleKeys || [];
         const keysFromMarks = (segment) => {
           const textNode = segment.content?.find((n) => n.isText);
           return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
         };
         const overrideKeysFromInlineProps = (inlineProps) => styleKeys.filter((k) => inlineProps && k in inlineProps);
+
+        // When the importer set an empty inline keys list ([]), it means the original run
+        // had no inline w:rPr — all properties are style-inherited. Preserve that decision
+        // unless the user has genuinely added new formatting (detected by new keys appearing
+        // in computed inline props that weren't in the previous run properties).
+        //
+        // Without this guard, mark-derived keys (e.g. fontFamily from paragraph style) get
+        // added to the allow-list. Marks lose per-script fidelity through the round-trip
+        // (eastAsia/cs get flattened to the ascii font), causing the exporter to emit inline
+        // w:rPr that breaks style inheritance in Word. (SD-2517 / IT-907)
+        const existingRunPropsKeys = new Set(
+          runNode.attrs?.runProperties ? Object.keys(runNode.attrs.runProperties) : [],
+        );
+
+        /**
+         * Compute inline keys for a segment, respecting the [] vs null distinction.
+         * @param {Record<string, any>|null} segmentInlineProps - Computed inline props for this segment
+         * @param {{ content: import('prosemirror-model').Node[] }} segment - The segment to extract mark keys from
+         * @returns {{ inlineKeys: string[]|null, overrideKeys: string[]|null }}
+         */
+        const computeSegmentKeys = (segmentInlineProps, segment) => {
+          // Detect genuinely new inline properties (user-applied formatting, not just
+          // recomputation artifacts from mark round-trip fidelity loss).
+          const hasNewInlineProps =
+            segmentInlineProps != null && Object.keys(segmentInlineProps).some((k) => !existingRunPropsKeys.has(k));
+          const shouldAddMarkKeys = !hadInlineKeysMetadata || existingInlineKeys.length > 0 || hasNewInlineProps;
+          const markKeysToAdd = shouldAddMarkKeys ? keysFromMarks(segment) : [];
+          const keys = [...new Set([...existingInlineKeys, ...markKeysToAdd])];
+          const ok = overrideKeysFromInlineProps(segmentInlineProps);
+          return {
+            inlineKeys: keys.length ? keys : hadInlineKeysMetadata ? [] : null,
+            overrideKeys: ok?.length ? ok : null,
+          };
+        };
+
         if (segments.length === 1) {
           const hadInlineKeys =
             Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties) && hadInlineKeys) return;
-          // Allow-list = prior inline keys ∪ mark keys only. Do not union Object.keys(runProperties): runs often
-          // carry resolved paragraph-style noise in runProperties; listing every key would re-export it on w:rPr
-          // and bloat document.xml. Importer / plan-engine must seed runPropertiesInlineKeys for true OOXML keys.
-          const newInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segments[0])])];
-          const newOverrideKeys = overrideKeysFromInlineProps(runProperties);
+          // When the importer set non-empty inline keys and the computed inline props
+          // dropped some of those keys (e.g. fontFamily "matches" the style due to
+          // mark round-trip comparison), preserve the original keys. The importer saw
+          // explicit w:rPr in the XML and that decision is authoritative. (SD-2517)
+          if (hadInlineKeys) {
+            const computedKeys = new Set(runProperties ? Object.keys(runProperties) : []);
+            const lostKeys = existingInlineKeys.filter((k) => !computedKeys.has(k));
+            if (lostKeys.length > 0) {
+              if (!runProperties) runProperties = {};
+              lostKeys.forEach((k) => {
+                if (runNode.attrs?.runProperties?.[k] !== undefined) {
+                  runProperties[k] = runNode.attrs.runProperties[k];
+                }
+              });
+            }
+          }
+          const { inlineKeys: newInlineKeys, overrideKeys: newOverrideKeys } = computeSegmentKeys(
+            runProperties,
+            segments[0],
+          );
           tr.setNodeMarkup(
             mappedPos,
             runNode.type,
             {
               ...runNode.attrs,
               runProperties,
-              runPropertiesInlineKeys: newInlineKeys.length ? newInlineKeys : null,
-              runPropertiesOverrideKeys: newOverrideKeys.length ? newOverrideKeys : null,
+              runPropertiesInlineKeys: newInlineKeys,
+              runPropertiesOverrideKeys: newOverrideKeys,
             },
             runNode.marks,
           );
         } else {
           const newRuns = segments.map((segment) => {
             const props = segment.inlineProps ?? null;
-            const segmentInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segment)])];
-            const segmentOverrideKeys = overrideKeysFromInlineProps(props);
+            const { inlineKeys: segInlineKeys, overrideKeys: segOverrideKeys } = computeSegmentKeys(props, segment);
             return runType.create(
               {
                 ...(runNode.attrs ?? {}),
                 runProperties: props,
-                runPropertiesInlineKeys: segmentInlineKeys.length ? segmentInlineKeys : null,
-                runPropertiesOverrideKeys: segmentOverrideKeys.length ? segmentOverrideKeys : null,
+                runPropertiesInlineKeys: segInlineKeys,
+                runPropertiesOverrideKeys: segOverrideKeys,
               },
               Fragment.fromArray(segment.content),
               runNode.marks,

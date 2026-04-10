@@ -1270,12 +1270,18 @@ function resolveStructuralRangeRewrite(
     return null;
   }
 
-  const replacementBlocks = payload.blocks;
+  const effectiveBlocks = [...payload.blocks];
+  if (payload.splitBefore) {
+    effectiveBlocks.unshift('');
+  }
+  if (payload.splitAfter) {
+    effectiveBlocks.push('');
+  }
 
   if (replacesEntireTextblock) {
-    if (replacementBlocks.length <= 1) {
+    if (effectiveBlocks.length <= 1) {
       debugTextRewrite('structural rewrite skipped: whole-textblock rewrite resolved to one block', {
-        replacementBlocks,
+        replacementBlocks: effectiveBlocks,
         stepId: step.id,
       });
       return null;
@@ -1291,14 +1297,14 @@ function resolveStructuralRangeRewrite(
       inlineRange,
       replaceFrom,
       replaceTo,
-      replacementBlockCount: replacementBlocks.length,
+      replacementBlockCount: effectiveBlocks.length,
       openStart: 0,
       openEnd: 0,
       stepId: step.id,
     });
 
     return {
-      replacementBlocks,
+      replacementBlocks: effectiveBlocks,
       paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
       replaceFrom,
       replaceTo,
@@ -1311,13 +1317,6 @@ function resolveStructuralRangeRewrite(
 
   const leadingWrappers = resolveInlineWrapperChainAt(doc, absFrom, textblockDepth);
   const trailingWrappers = resolveInlineWrapperChainAt(doc, absTo, textblockDepth);
-  const effectiveBlocks = [...replacementBlocks];
-  if (payload.splitBefore) {
-    effectiveBlocks.unshift('');
-  }
-  if (payload.splitAfter) {
-    effectiveBlocks.push('');
-  }
   const openStart = 1 + leadingWrappers.length;
   const openEnd = 1 + trailingWrappers.length;
   debugTextRewrite('structural rewrite enabled', {

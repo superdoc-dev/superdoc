@@ -78,14 +78,10 @@ type Chainified<T> = {
  * but consumers who augment ExtensionCommandMap get their custom commands
  * on chain() for free.
  */
-type AugmentedChainedCommands = {
-  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => ChainableCommandObject;
-};
+type AugmentedChainedCommands = Chainified<KnownCommandRecord>;
 
-/** Same as AugmentedChainedCommands but with original return types for can(). */
-type AugmentedCanCommands = {
-  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => CommandResult<K>;
-};
+/** Same but with original return types for can(). */
+type AugmentedCanCommands = KnownCommandRecord;
 
 /**
  * A chainable version of an editor command keyed by command name.

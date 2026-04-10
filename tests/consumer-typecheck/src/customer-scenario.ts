@@ -133,6 +133,7 @@ import type {
   ProofingError,
 
   // Context menu
+  ContextMenuContext,
   ContextMenuItem,
   ContextMenuSection,
   ContextMenuConfig,
@@ -593,14 +594,16 @@ function testEditorContentMethods(editor: Editor) {
 // ============================================
 
 function testContextMenuTypes() {
+  // action receives (editor, context) — both args
   const item: ContextMenuItem = {
     id: 'copy-text',
     label: 'Copy',
     icon: 'copy',
-    action: (editor) => {
+    action: (editor, context) => {
       editor.commands.selectAll();
+      const text: string = context.selectedText;
     },
-    showWhen: (ctx) => ctx.selectedText.length > 0,
+    showWhen: (ctx) => ctx.hasSelection && !ctx.isInTable,
   };
 
   const section: ContextMenuSection = {
@@ -613,6 +616,12 @@ function testContextMenuTypes() {
     includeDefaultItems: true,
     menuProvider: (ctx, sections) => sections.filter((s) => s.id !== 'clipboard'),
   };
+
+  // ContextMenuContext has the full runtime shape
+  const ctx: ContextMenuContext = {} as ContextMenuContext;
+  const _trigger: 'click' | 'slash' = ctx.trigger;
+  const _mode: string = ctx.documentMode;
+  const _marks: string[] = ctx.activeMarks;
 }
 
 // ============================================

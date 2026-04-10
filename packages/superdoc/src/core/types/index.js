@@ -139,7 +139,7 @@
  * Configuration for the context menu module.
  * @typedef {Object} ContextMenuConfig
  * @property {ContextMenuSection[]} [customItems] Custom menu sections appended (or merged by id) to the default menu
- * @property {(context: ContextMenuContext, sections: ContextMenuSection[]) => ContextMenuSection[]} [menuProvider] Advanced: transform the final section list before render
+ * @property {(context: ContextMenuContext, sections: ContextMenuSection[]) => ContextMenuSection[] | null | undefined} [menuProvider] Advanced: transform the final section list before render. Return null/undefined to keep the original sections.
  * @property {boolean} [includeDefaultItems] Whether to include default menu items (default: true)
  */
 

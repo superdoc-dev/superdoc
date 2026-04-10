@@ -308,6 +308,62 @@ await superdoc.scrollToElement(trackedChangeEntityId);
 No ID is guaranteed to survive all Microsoft Word round-trips. Re-extract addresses after major external edits or transformations, since Word (or other tools) may rewrite paragraph IDs and SuperDoc may rewrite duplicate IDs on import.
 </Warning>
 
+## Content extraction for RAG
+
+`doc.extract()` returns all document content in one call — blocks with full text, comments, and tracked changes. Each item has a stable ID that works directly with [`scrollToElement`](/core/superdoc/methods#scrolltoelement).
+
+```ts
+const content = editor.doc.extract();
+
+// Every block in document order, with full text
+for (const block of content.blocks) {
+  console.log(block.nodeId, block.type, block.text);
+  // → '5AF80E61', 'heading', 'Chapter 1: Introduction'
+  // → '17FBFA43', 'paragraph', 'This is the opening paragraph...'
+}
+
+// Comments anchored to blocks
+for (const comment of content.comments) {
+  console.log(comment.entityId, comment.blockId, comment.text);
+}
+
+// Tracked changes
+for (const tc of content.trackedChanges) {
+  console.log(tc.entityId, tc.type, tc.excerpt);
+}
+```
+
+### RAG pipeline pattern
+
+Extract content, chunk it, store the IDs, and navigate back on click:
+
+```ts
+// 1. Extract all content
+const { blocks } = editor.doc.extract();
+
+// 2. Chunk and embed (your pipeline)
+const chunks = blocks
+  .filter((b) => b.text.length > 0)
+  .map((b) => ({
+    id: b.nodeId,
+    text: b.text,
+    type: b.type,
+    headingLevel: b.headingLevel,
+  }));
+const embeddings = await embedChunks(chunks);
+
+// 3. Store embeddings with nodeIds
+await vectorStore.upsert(embeddings);
+
+// 4. Later — user clicks a citation
+const citation = await vectorStore.query(userQuestion);
+await superdoc.scrollToElement(citation.id);
+```
+
+<Info>
+All IDs from `doc.extract()` work directly with `scrollToElement()` — no conversion needed. For DOCX-imported content, block `nodeId` values are stable across sessions.
+</Info>
+
 ## Read document counts
 
 `doc.info()` returns a snapshot of current document statistics including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts.

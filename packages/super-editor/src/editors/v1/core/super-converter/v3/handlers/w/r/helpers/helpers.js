@@ -9,6 +9,8 @@ export const resolveFontFamily = (textStyleAttrs, text) => {
   if (!eastAsiaFont) return textStyleAttrs;
   const normalized = { ...textStyleAttrs };
   delete normalized.eastAsiaFontFamily;
+  // Note: csFontFamily is deliberately preserved — it's round-trip metadata
+  // consumed by decodeRPrFromMarks to restore per-script fonts. (SD-2517)
   const shouldUseEastAsia = typeof text === 'string' && containsEastAsianCharacters(text);
   if (!shouldUseEastAsia) return normalized;
   return { ...normalized, fontFamily: eastAsiaFont };

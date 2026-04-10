@@ -5890,7 +5890,7 @@ export class PresentationEditor extends EventEmitter {
 
       if (target.kind === 'entity') {
         if (target.entityType === 'comment') {
-          return this.#navigateToComment(target.entityId);
+          return await this.#navigateToComment(target.entityId);
         }
         if (target.entityType === 'trackedChange') {
           return await this.#navigateToTrackedChange(target.entityId);
@@ -5958,28 +5958,32 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  #navigateToComment(entityId: string): boolean {
+  async #navigateToComment(entityId: string): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
     const setCursorById = editor.commands?.setCursorById;
-    if (typeof setCursorById === 'function') {
-      return setCursorById(entityId, {
-        preferredActiveThreadId: entityId,
-        activeCommentId: entityId,
-      });
+    if (typeof setCursorById !== 'function') return false;
+
+    if (!setCursorById(entityId, { preferredActiveThreadId: entityId, activeCommentId: entityId })) {
+      return false;
     }
 
-    return false;
+    // Scroll the viewport — setCursorById places the cursor but doesn't
+    // scroll in presentation mode where DomPainter renders the output.
+    await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
+    return true;
   }
 
   async #navigateToTrackedChange(entityId: string): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
-    // Try direct cursor placement first.
     const setCursorById = editor.commands?.setCursorById;
+
+    // Try direct cursor placement, then scroll to the new selection.
     if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
+      await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
       return true;
     }
 
@@ -5990,6 +5994,7 @@ export class PresentationEditor extends EventEmitter {
     // Try with the raw ID (tracked changes may use a different internal ID).
     if (typeof setCursorById === 'function' && resolved.rawId !== entityId) {
       if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
+        await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
         return true;
       }
     }

@@ -99,7 +99,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           preservedDerivedKeys,
           preferExistingKeys,
         );
-        const runProperties = firstInlineProps ?? null;
+        let runProperties = firstInlineProps ?? null;
 
         const existingInlineKeys = runNode.attrs?.runPropertiesInlineKeys || [];
         // [] means "importer explicitly found nothing inline"; null means "no metadata" (legacy).
@@ -150,6 +150,22 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           const hadInlineKeys =
             Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties) && hadInlineKeys) return;
+          // When the importer set non-empty inline keys and the computed inline props
+          // dropped some of those keys (e.g. fontFamily "matches" the style due to
+          // mark round-trip comparison), preserve the original keys. The importer saw
+          // explicit w:rPr in the XML and that decision is authoritative. (SD-2517)
+          if (hadInlineKeys) {
+            const computedKeys = new Set(runProperties ? Object.keys(runProperties) : []);
+            const lostKeys = existingInlineKeys.filter((k) => !computedKeys.has(k));
+            if (lostKeys.length > 0) {
+              if (!runProperties) runProperties = {};
+              lostKeys.forEach((k) => {
+                if (runNode.attrs?.runProperties?.[k] !== undefined) {
+                  runProperties[k] = runNode.attrs.runProperties[k];
+                }
+              });
+            }
+          }
           const { inlineKeys: newInlineKeys, overrideKeys: newOverrideKeys } = computeSegmentKeys(
             runProperties,
             segments[0],

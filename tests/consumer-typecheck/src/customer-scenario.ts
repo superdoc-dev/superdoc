@@ -132,6 +132,11 @@ import type {
   ProofingStatus,
   ProofingError,
 
+  // Context menu
+  ContextMenuItem,
+  ContextMenuSection,
+  ContextMenuConfig,
+
   // Other
   UnsupportedContentItem,
   PageStyles,
@@ -584,6 +589,33 @@ function testEditorContentMethods(editor: Editor) {
 }
 
 // ============================================
+// SECTION 12b: Context menu types (SD-2514)
+// ============================================
+
+function testContextMenuTypes() {
+  const item: ContextMenuItem = {
+    id: 'copy-text',
+    label: 'Copy',
+    icon: 'copy',
+    action: (editor) => {
+      editor.commands.selectAll();
+    },
+    showWhen: (ctx) => ctx.selectedText.length > 0,
+  };
+
+  const section: ContextMenuSection = {
+    id: 'custom-actions',
+    items: [item],
+  };
+
+  const config: ContextMenuConfig = {
+    customItems: [section],
+    includeDefaultItems: true,
+    menuProvider: (ctx, sections) => sections.filter((s) => s.id !== 'clipboard'),
+  };
+}
+
+// ============================================
 // SECTION 13: Extensions, SuperDoc, and utilities
 // ============================================
 
@@ -679,6 +711,7 @@ export {
   testProofingProvider,
   testEditorStaticMethods,
   testEditorContentMethods,
+  testContextMenuTypes,
   testExtensions,
   testSuperDoc,
   testUtilities,

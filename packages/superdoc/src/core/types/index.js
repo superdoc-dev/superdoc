@@ -87,6 +87,38 @@
  */
 
 // ---------------------------------------------------------------------------
+// Context menu types
+// ---------------------------------------------------------------------------
+
+/**
+ * A single item inside a context menu section.
+ * @typedef {Object} ContextMenuItem
+ * @property {string} id Unique identifier for the menu item
+ * @property {string} label Display text
+ * @property {string} [icon] Icon identifier
+ * @property {unknown} [component] Custom Vue component to render this item
+ * @property {(editor: Editor) => void} [action] Callback invoked when the item is clicked
+ * @property {(context: { editor: Editor, selectedText: string, trigger: string }) => boolean} [showWhen] Predicate controlling visibility
+ * @property {(context: { editor: Editor, selectedText: string, trigger: string }) => HTMLElement} [render] Custom renderer returning an HTML element
+ * @property {string} [shortcut] Keyboard shortcut label displayed beside the item
+ */
+
+/**
+ * A section (group) of items in the context menu.
+ * @typedef {Object} ContextMenuSection
+ * @property {string} id Unique identifier for the section
+ * @property {ContextMenuItem[]} items Menu items in this section
+ */
+
+/**
+ * Configuration for the context menu module.
+ * @typedef {Object} ContextMenuConfig
+ * @property {ContextMenuSection[]} [customItems] Custom menu sections appended (or merged by id) to the default menu
+ * @property {(context: { editor: Editor, selectedText: string, trigger: string }, sections: ContextMenuSection[]) => ContextMenuSection[]} [menuProvider] Advanced: transform the final section list before render
+ * @property {boolean} [includeDefaultItems] Whether to include default menu items (default: true)
+ */
+
+// ---------------------------------------------------------------------------
 // Surface system types
 // ---------------------------------------------------------------------------
 
@@ -469,10 +501,7 @@
  * @property {Object} [toolbar] Toolbar module configuration
  * @property {Object} [links] Link click popover configuration
  * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
- * @property {Object} [contextMenu] Context menu module configuration
- * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
- * @property {Function} [contextMenu.menuProvider] Function to customize menu items
- * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {ContextMenuConfig} [contextMenu] Context menu module configuration
  * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  */

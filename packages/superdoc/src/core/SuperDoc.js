@@ -1239,23 +1239,6 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
-   * Navigate to any addressable element in the document by its ID.
-   *
-   * Accepts blocks (by nodeId), comments (by entityId), and tracked changes
-   * (by entityId). Returns true if navigation succeeded, false otherwise.
-   *
-   * @param {NavigableAddress} address - The element address to navigate to.
-   * @returns {Promise<boolean>} Whether navigation succeeded.
-   */
-  async navigateTo(address) {
-    const storeDocs = this.superdocStore?.documents;
-    if (!storeDocs?.length) return false;
-    const presentationEditor = storeDocs[0].getPresentationEditor?.();
-    if (!presentationEditor?.navigateTo) return false;
-    return presentationEditor.navigateTo(address);
-  }
-
-  /**
    * Toggle the custom context menu globally.
    * Updates both flow editors and PresentationEditor instances so downstream listeners can short-circuit early.
    * @param {boolean} disabled

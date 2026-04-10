@@ -5852,60 +5852,32 @@ export class PresentationEditor extends EventEmitter {
    * Accepts any element ID — paragraph nodeId, comment entityId, or tracked
    * change entityId. Resolves the element type automatically:
    * 1. Tries block index lookup (paragraphs, headings, tables)
-   * 2. Falls back to comment/tracked-change mark lookup
+   * 2. Tries comment navigation (activates comment thread)
+   * 3. Tries tracked change navigation (with raw ID fallback)
    *
    * @param elementId - The element's stable ID (nodeId, commentId, or trackedChangeId).
    * @returns Promise resolving to true if the element was found and scrolled to.
    */
   async scrollToElement(elementId: string): Promise<boolean> {
-    if (!elementId || !this.#editor) return false;
+    if (!elementId) return false;
 
-    try {
-      // Try block navigation first (O(1) index lookup).
-      const index = getBlockIndex(this.#editor);
-      try {
-        const candidate = findBlockByNodeIdOnly(index, elementId);
-        if (candidate) {
-          return await this.#scrollToBlockCandidate(this.#editor, candidate);
-        }
-      } catch {
-        // Not a block — fall through to mark lookup.
-      }
+    // Try block first — O(1) index lookup, most common for RAG citations.
+    if (await this.navigateTo({ kind: 'block', nodeId: elementId })) return true;
 
-      // Try comment/tracked-change marks (walks the document).
-      const setCursorById = this.#editor.commands?.setCursorById;
-      if (typeof setCursorById === 'function' && setCursorById(elementId, { preferredActiveThreadId: elementId })) {
-        return true;
-      }
+    // Try comment — setCursorById handles both comment and TC marks,
+    // but we try comment first to get full thread activation.
+    if (await this.navigateTo({ kind: 'entity', entityType: 'comment', entityId: elementId })) return true;
 
-      // Try tracked change resolution (canonical ID → raw ID fallback).
-      const resolved = resolveTrackedChange(this.#editor, elementId);
-      if (resolved) {
-        if (typeof setCursorById === 'function' && resolved.rawId !== elementId) {
-          if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
-            return true;
-          }
-        }
-        await this.scrollToPositionAsync(resolved.from, { behavior: 'auto', block: 'center' });
-        this.#editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
-        this.#editor.view?.focus?.();
-        return true;
-      }
+    // Try tracked change — has its own fallback chain (canonical → raw ID → scroll).
+    if (await this.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: elementId })) return true;
 
-      return false;
-    } catch (error) {
-      console.error('[PresentationEditor] scrollToElement failed:', error);
-      return false;
-    }
+    return false;
   }
 
   /**
-   * Navigate to any addressable element in the document.
+   * Navigate to a typed document element address.
    *
-   * Accepts blocks (by nodeId), comments (by entityId), and tracked changes
-   * (by entityId). Returns true if navigation succeeded, false otherwise.
-   *
-   * @param target - The element address to navigate to.
+   * @param target - Typed address: block (nodeId), comment (entityId), or tracked change (entityId).
    * @returns Promise resolving to true if navigation succeeded.
    */
   async navigateTo(target: NavigableAddress): Promise<boolean> {
@@ -6023,10 +5995,12 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Last resort: scroll to position directly.
-    await this.scrollToPositionAsync(resolved.from, {
+    const scrolled = await this.scrollToPositionAsync(resolved.from, {
       behavior: 'auto',
       block: 'center',
     });
+    if (!scrolled) return false;
+
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;

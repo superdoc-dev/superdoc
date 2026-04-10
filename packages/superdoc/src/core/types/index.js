@@ -43,35 +43,6 @@
 /** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
 
 /**
- * Address for navigating to a block-level element by its node ID.
- * @typedef {Object} BlockNavigationAddress
- * @property {'block'} kind
- * @property {string} nodeId
- * @property {'paragraph' | 'heading' | 'table' | 'tableOfContents' | 'sdt' | 'image'} [nodeType]
- */
-
-/**
- * Address for navigating to a comment by its entity ID.
- * @typedef {Object} CommentNavigationAddress
- * @property {'entity'} kind
- * @property {'comment'} entityType
- * @property {string} entityId
- */
-
-/**
- * Address for navigating to a tracked change by its entity ID.
- * @typedef {Object} TrackedChangeNavigationAddress
- * @property {'entity'} kind
- * @property {'trackedChange'} entityType
- * @property {string} entityId
- */
-
-/**
- * Union of all address types accepted by `navigateTo()`.
- * @typedef {BlockNavigationAddress | CommentNavigationAddress | TrackedChangeNavigationAddress} NavigableAddress
- */
-
-/**
  * @typedef {Object} UpgradeToCollaborationOptions Options for `upgradeToCollaboration()`
  * @property {import('yjs').Doc} ydoc The target Yjs document to seed and connect to
  * @property {CollaborationProvider} provider The collaboration provider to use

@@ -565,4 +565,127 @@ describe('bookmarksGetWrapper', () => {
     expect(extractBookmarkInfo).toHaveBeenCalledWith(editor.state.doc, mockResolved, headerLocator);
     expect(result).toEqual(mockInfo);
   });
+
+  it('searches all stories when story is omitted and finds a header bookmark', () => {
+    const { editor } = makeEditor();
+    const target = { kind: 'entity' as const, entityType: 'bookmark' as const, name: 'hdr-bm' };
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+    const mockResolved = { node: {}, pos: 3, name: 'hdr-bm', bookmarkId: '5', endPos: 8 };
+    const mockInfo = {
+      address: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm', story: headerLocator },
+      name: 'hdr-bm',
+      bookmarkId: '5',
+      range: { from: { blockId: 'h1', offset: 3 }, to: { blockId: 'h1', offset: 8 } },
+    };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'body-bm', bookmarkId: '0', storyKey: 'body' },
+      { name: 'hdr-bm', bookmarkId: '5', storyKey: 'hf:part:rId7' },
+    ]);
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor,
+      kind: 'headerFooter',
+    });
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce(mockResolved as never);
+    vi.mocked(extractBookmarkInfo).mockReturnValueOnce(mockInfo as never);
+
+    const result = bookmarksGetWrapper(editor, { target });
+
+    expect(findAllBookmarksInDocument).toHaveBeenCalledWith(editor);
+    expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, headerLocator);
+    expect(result).toEqual(mockInfo);
+  });
+
+  it('searches all stories when story is omitted and finds a body bookmark', () => {
+    const { editor } = makeEditor();
+    const target = { kind: 'entity' as const, entityType: 'bookmark' as const, name: 'bm1' };
+    const mockResolved = { node: {}, pos: 5, name: 'bm1', bookmarkId: '0', endPos: 10 };
+    const mockInfo = {
+      address: { kind: 'entity', entityType: 'bookmark', name: 'bm1' },
+      name: 'bm1',
+      bookmarkId: '0',
+      range: { from: { blockId: 'p1', offset: 5 }, to: { blockId: 'p1', offset: 10 } },
+    };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([{ name: 'bm1', bookmarkId: '0', storyKey: 'body' }]);
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: { kind: 'story', storyType: 'body' },
+      storyKey: 'story:body',
+      editor,
+      kind: 'body',
+    });
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce(mockResolved as never);
+    vi.mocked(extractBookmarkInfo).mockReturnValueOnce(mockInfo as never);
+
+    const result = bookmarksGetWrapper(editor, { target });
+
+    expect(findAllBookmarksInDocument).toHaveBeenCalledWith(editor);
+    expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, undefined);
+    expect(result).toEqual(mockInfo);
+  });
+
+  it('throws TARGET_NOT_FOUND when story is omitted and bookmark does not exist', () => {
+    const { editor } = makeEditor();
+    const target = { kind: 'entity' as const, entityType: 'bookmark' as const, name: 'nonexistent' };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([{ name: 'bm1', bookmarkId: '0', storyKey: 'body' }]);
+
+    expect(() => bookmarksGetWrapper(editor, { target })).toThrow('not found');
+  });
+});
+
+describe('bookmarksListWrapper (cross-story)', () => {
+  it('lists bookmarks from all stories when no filter is provided', () => {
+    const { editor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+    const bodyBookmarks = [{ node: {}, pos: 5, name: 'body-bm', bookmarkId: '0', endPos: 10 }];
+    const headerBookmarks = [{ node: {}, pos: 3, name: 'hdr-bm', bookmarkId: '1', endPos: 8 }];
+    const mockDiscoveryItem = { id: 'mock', handle: {}, domain: {} };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'body-bm', bookmarkId: '0', storyKey: 'body' },
+      { name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' },
+    ]);
+
+    vi.mocked(resolveStoryRuntime)
+      .mockReturnValueOnce({
+        locator: { kind: 'story', storyType: 'body' },
+        storyKey: 'story:body',
+        editor,
+        kind: 'body',
+      })
+      .mockReturnValueOnce({
+        locator: headerLocator,
+        storyKey: 'hf:part:rId7',
+        editor,
+        kind: 'headerFooter',
+      });
+
+    vi.mocked(findAllBookmarks)
+      .mockReturnValueOnce(bodyBookmarks as never)
+      .mockReturnValueOnce(headerBookmarks as never);
+    vi.mocked(buildBookmarkDiscoveryItem).mockReturnValue(mockDiscoveryItem as never);
+    vi.mocked(getRevision).mockReturnValue('rev-cross');
+
+    const result = bookmarksListWrapper(editor);
+
+    expect(findAllBookmarksInDocument).toHaveBeenCalledWith(editor);
+    expect(resolveStoryRuntime).toHaveBeenCalledTimes(2);
+    expect(findAllBookmarks).toHaveBeenCalledTimes(2);
+    expect(result.total).toBe(2);
+  });
+
+  it('returns empty result when no bookmarks exist in any story', () => {
+    const { editor } = makeEditor();
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([]);
+    vi.mocked(getRevision).mockReturnValueOnce('rev-empty');
+
+    const result = bookmarksListWrapper(editor);
+
+    expect(result.total).toBe(0);
+    expect(resolveStoryRuntime).not.toHaveBeenCalled();
+  });
 });

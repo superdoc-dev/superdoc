@@ -732,7 +732,7 @@ describe('PresentationEditor - goToAnchor', () => {
     expect(mockResolveTrackedChange).toHaveBeenCalledWith(bodyEditor, 'canonical-tc-id');
   });
 
-  it('returns false for bookmark navigation in note stories', async () => {
+  it('returns false for bookmark navigation in footnote stories', async () => {
     editor = new PresentationEditor({
       element: container,
       documentId: 'test-doc',
@@ -752,5 +752,65 @@ describe('PresentationEditor - goToAnchor', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       '[PresentationEditor] navigateTo does not yet support bookmark navigation in footnote stories.',
     );
+  });
+
+  it('returns false for bookmark navigation in endnote stories', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-in-endnote',
+      story: { kind: 'story', storyType: 'endnote', noteId: 'en-1' },
+    });
+
+    expect(result).toBe(false);
+    expect(mockResolveBookmarkTarget).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PresentationEditor] navigateTo does not yet support bookmark navigation in endnote stories.',
+    );
+  });
+
+  it('returns false for comment navigation with non-body story', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'comment',
+      entityId: 'comment-1',
+      story: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+    } as any);
+
+    expect(result).toBe(false);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('returns false for tracked change navigation with non-body story', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      documentId: 'test-doc',
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await editor.navigateTo({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'tc-1',
+      story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' },
+    } as any);
+
+    expect(result).toBe(false);
+    expect(warnSpy).toHaveBeenCalled();
   });
 });

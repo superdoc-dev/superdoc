@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed, markRaw } from 'vue';
+import { Selection } from 'prosemirror-state';
+import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
 import { ContextMenuPluginKey } from '../../extensions/context-menu/context-menu.js';
 import { getPropsByItemId } from './utils.js';
 import { shouldBypassContextMenu } from '../../utils/contextmenu-helpers.js';
@@ -33,6 +35,39 @@ const menuRef = ref(null);
 const sections = ref([]);
 const selectedId = ref(null);
 const currentContext = ref(null); // Store context for action execution
+
+const TABLE_SURFACE_SELECTOR = '.superdoc-table-fragment, .superdoc-table-cell';
+
+const hasExpandedSelection = (selection) => {
+  return (
+    Number.isFinite(selection?.from) &&
+    Number.isFinite(selection?.to) &&
+    Number(selection.from) !== Number(selection.to)
+  );
+};
+
+const setSelectionNearPos = (editor, pos, options = {}) => {
+  if (!editor?.state?.doc || !Number.isFinite(pos)) return false;
+  const doc = editor.state.doc;
+  const maxPos = doc.content.size;
+  const clampedPos = Math.max(0, Math.min(pos, maxPos));
+
+  try {
+    const resolved = doc.resolve(clampedPos);
+    const nextSelection = Selection.near(resolved, 1);
+    const tr = editor.state.tr.setSelection(nextSelection);
+    if (options.addToHistory === false) {
+      tr.setMeta('addToHistory', false);
+    }
+    editor.dispatch?.(tr);
+    if (options.focus) {
+      editor.focus?.();
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 // Helper to close menu if editor becomes read-only
 const handleEditorUpdate = () => {
@@ -299,7 +334,7 @@ const handleRightClick = async (event) => {
   // Update cursor position to the right-click location before opening context menu,
   // unless the click lands inside an active selection (keep selection intact).
   const editorState = props.editor?.state;
-  const hasRangeSelection = editorState?.selection?.from !== editorState?.selection?.to;
+  const hasRangeSelection = hasExpandedSelection(editorState?.selection);
   let isClickInsideSelection = false;
 
   if (hasRangeSelection && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
@@ -310,12 +345,31 @@ const handleRightClick = async (event) => {
     }
   }
 
-  if (!isClickInsideSelection) {
+  const target = event?.target;
+  const tableSurface = target instanceof Element ? target.closest(TABLE_SURFACE_SELECTOR) : null;
+  const tableCandidatePm = target instanceof Element ? target.closest('[data-pm-start]') : null;
+  const tableAnchorPos = Number.isFinite(Number(tableCandidatePm?.dataset?.pmStart))
+    ? Number(tableCandidatePm.dataset.pmStart)
+    : null;
+  const selectionIsCell = isCellSelection(editorState?.selection);
+
+  if (tableSurface && Number.isFinite(tableAnchorPos) && !selectionIsCell && !hasRangeSelection) {
+    setSelectionNearPos(props.editor, tableAnchorPos, { focus: true });
+  } else if (!isClickInsideSelection) {
     moveCursorToMouseEvent(event, props.editor);
   }
 
   try {
     const context = await getEditorContext(props.editor, event);
+    const reseatForTable =
+      Boolean(tableSurface) &&
+      context?.isInTable &&
+      Number.isFinite(context?.pos) &&
+      !isCellSelection(props.editor?.state?.selection) &&
+      !hasExpandedSelection(props.editor?.state?.selection);
+    if (reseatForTable) {
+      setSelectionNearPos(props.editor, context.pos, { focus: true });
+    }
     currentContext.value = context;
     sections.value = getItems({ ...context, trigger: 'click' });
     selectedId.value = flattenedItems.value[0]?.id || null;
@@ -339,6 +393,18 @@ const handleRightClick = async (event) => {
 
 const executeCommand = async (item) => {
   if (props.editor) {
+    const currentPos = currentContext.value?.pos;
+    const shouldReseatTableSelection =
+      currentContext.value?.event?.type === 'contextmenu' &&
+      currentContext.value?.isInTable &&
+      Number.isFinite(currentPos) &&
+      !isCellSelection(props.editor?.state?.selection) &&
+      !hasExpandedSelection(props.editor?.state?.selection);
+
+    if (shouldReseatTableSelection) {
+      setSelectionNearPos(props.editor, currentPos, { focus: true, addToHistory: false });
+    }
+
     // First call the action if needed on the item
     item.action ? await item.action(props.editor, currentContext.value) : null;
 

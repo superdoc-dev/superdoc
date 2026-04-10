@@ -2,7 +2,6 @@ import { test, expect } from '../../fixtures/superdoc.js';
 import { addCommentByText, replaceText, findFirstTextRange } from '../../helpers/document-api.js';
 
 test('@behavior SD-2525: doc.extract returns blocks with nodeIds and full text', async ({ superdoc }) => {
-  await superdoc.click();
   await superdoc.type('Hello world');
   await superdoc.press('Enter');
   await superdoc.type('Second paragraph');
@@ -29,7 +28,6 @@ test('@behavior SD-2525: doc.extract returns blocks with nodeIds and full text',
 test('@behavior SD-2525: doc.extract returns empty arrays when no comments or tracked changes', async ({
   superdoc,
 }) => {
-  await superdoc.click();
   await superdoc.type('Plain document');
 
   const result = await superdoc.page.evaluate(() => (window as any).editor.doc.extract({}));
@@ -52,7 +50,6 @@ test('@behavior SD-2525: doc.extract returns full text not truncated', async ({ 
 });
 
 test('@behavior SD-2525: doc.extract returns headingLevel for heading blocks', async ({ superdoc }) => {
-  await superdoc.click();
   await superdoc.type('My Heading');
 
   await superdoc.page.evaluate(() => {
@@ -75,7 +72,6 @@ test('@behavior SD-2525: doc.extract returns headingLevel for heading blocks', a
 });
 
 test('@behavior SD-2525: doc.extract returns comments with entityId and blockId', async ({ superdoc }) => {
-  await superdoc.click();
   await superdoc.type('This text has a comment on it');
 
   const commentId = await addCommentByText(superdoc.page, {
@@ -95,7 +91,6 @@ test('@behavior SD-2525: doc.extract returns comments with entityId and blockId'
 });
 
 test('@behavior SD-2525: doc.extract returns tracked changes', async ({ superdoc }) => {
-  await superdoc.click();
   await superdoc.type('Original text here');
 
   const target = await findFirstTextRange(superdoc.page, 'Original');
@@ -111,7 +106,6 @@ test('@behavior SD-2525: doc.extract returns tracked changes', async ({ superdoc
 });
 
 test('@behavior SD-2525: extract nodeIds work with scrollToElement', async ({ superdoc }) => {
-  await superdoc.click();
   await superdoc.type('First paragraph');
   await superdoc.press('Enter');
   await superdoc.type('Second paragraph');

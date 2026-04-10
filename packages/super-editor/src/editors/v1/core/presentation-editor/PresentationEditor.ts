@@ -130,7 +130,10 @@ import {
   ensureEditorFieldAnnotationInteractionStyles,
 } from './dom/EditorStyleInjector.js';
 
-import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+import type { ResolveRangeOutput, DocumentApi, NavigableAddress, BlockNavigationAddress } from '@superdoc/document-api';
+import { getBlockIndex } from '../../document-api-adapters/helpers/index-cache.js';
+import { findBlockByNodeIdOnly, findBlockById } from '../../document-api-adapters/helpers/node-address-resolver.js';
+import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
@@ -5842,6 +5845,133 @@ export class PresentationEditor extends EventEmitter {
    * This allows sufficient time for virtualized pages to render before giving up.
    */
   private static readonly ANCHOR_NAV_TIMEOUT_MS = 2000;
+
+  /**
+   * Navigate to any addressable element in the document.
+   *
+   * Accepts blocks (by nodeId), comments (by entityId), and tracked changes
+   * (by entityId). Returns true if navigation succeeded, false otherwise.
+   *
+   * @param target - The element address to navigate to.
+   * @returns Promise resolving to true if navigation succeeded.
+   */
+  async navigateTo(target: NavigableAddress): Promise<boolean> {
+    if (!target) return false;
+
+    try {
+      if (target.kind === 'block') {
+        return await this.#navigateToBlock(target);
+      }
+
+      if (target.kind === 'entity') {
+        if (target.entityType === 'comment') {
+          return this.#navigateToComment(target.entityId);
+        }
+        if (target.entityType === 'trackedChange') {
+          return await this.#navigateToTrackedChange(target.entityId);
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[PresentationEditor] navigateTo failed:', error);
+      this.emit('error', { error, context: 'navigateTo' });
+      return false;
+    }
+  }
+
+  async #navigateToBlock(target: BlockNavigationAddress): Promise<boolean> {
+    const editor = this.#editor;
+    if (!editor) return false;
+
+    const index = getBlockIndex(editor);
+
+    let candidate;
+    try {
+      if (target.nodeType) {
+        candidate = findBlockById(index, { kind: 'block', nodeType: target.nodeType, nodeId: target.nodeId });
+      } else {
+        candidate = findBlockByNodeIdOnly(index, target.nodeId);
+      }
+    } catch {
+      return false;
+    }
+
+    if (!candidate) return false;
+
+    // Resolve the first text-content position inside the block. The layout
+    // engine maps fragments to text content ranges — block wrappers and
+    // zero-width annotation nodes (bookmarkStart, commentRangeStart) don't
+    // generate layout fragments. We walk the block's children to find the
+    // first inline node with text content (typically a `run` node).
+    const blockNode = editor.state.doc.nodeAt(candidate.pos);
+    let contentPos = candidate.pos + 1;
+    if (blockNode) {
+      blockNode.forEach((child, offset) => {
+        if (contentPos !== candidate.pos + 1) return;
+        if (child.textContent.length > 0) {
+          // Position inside the child: block pos + 1 (block open) + offset + 1 (child open, if not text)
+          contentPos = candidate.pos + 1 + offset + (child.isText ? 0 : 1);
+        }
+      });
+    }
+
+    const scrolled = await this.scrollToPositionAsync(contentPos, {
+      behavior: 'auto',
+      block: 'center',
+    });
+    if (!scrolled) return false;
+
+    editor.commands?.setTextSelection?.({ from: contentPos, to: contentPos });
+    editor.view?.focus?.();
+    return true;
+  }
+
+  #navigateToComment(entityId: string): boolean {
+    const editor = this.#editor;
+    if (!editor) return false;
+
+    const setCursorById = editor.commands?.setCursorById;
+    if (typeof setCursorById === 'function') {
+      return setCursorById(entityId, {
+        preferredActiveThreadId: entityId,
+        activeCommentId: entityId,
+      });
+    }
+
+    return false;
+  }
+
+  async #navigateToTrackedChange(entityId: string): Promise<boolean> {
+    const editor = this.#editor;
+    if (!editor) return false;
+
+    // Try direct cursor placement first.
+    const setCursorById = editor.commands?.setCursorById;
+    if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
+      return true;
+    }
+
+    // Fall back to resolving the tracked change position and scrolling.
+    const resolved = resolveTrackedChange(editor, entityId);
+    if (!resolved) return false;
+
+    // Try with the raw ID (tracked changes may use a different internal ID).
+    if (typeof setCursorById === 'function' && resolved.rawId !== entityId) {
+      if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
+        return true;
+      }
+    }
+
+    // Last resort: scroll to position directly.
+    await this.scrollToPositionAsync(resolved.from, {
+      behavior: 'auto',
+      block: 'center',
+    });
+    editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
+    editor.view?.focus?.();
+    return true;
+  }
 
   /**
    * Navigate to a bookmark/anchor in the current document (e.g., TOC links).

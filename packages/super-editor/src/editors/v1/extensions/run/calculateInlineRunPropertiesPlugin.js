@@ -139,12 +139,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           const shouldAddMarkKeys = !hadInlineKeysMetadata || existingInlineKeys.length > 0 || hasNewInlineProps;
           const markKeysToAdd = shouldAddMarkKeys ? keysFromMarks(segment) : [];
           const keys = [...new Set([...existingInlineKeys, ...markKeysToAdd])];
+          const ok = overrideKeysFromInlineProps(segmentInlineProps);
           return {
             inlineKeys: keys.length ? keys : hadInlineKeysMetadata ? [] : null,
-            overrideKeys: (() => {
-              const ok = overrideKeysFromInlineProps(segmentInlineProps);
-              return ok?.length ? ok : null;
-            })(),
+            overrideKeys: ok?.length ? ok : null,
           };
         };
 

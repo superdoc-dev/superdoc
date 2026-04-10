@@ -28,7 +28,7 @@ describe('executeExtract', () => {
     expect(adapter.extract).toHaveBeenCalledWith({});
   });
 
-  it('returns blocks with full text (not truncated)', () => {
+  it('passes through full text without truncation', () => {
     const longText = 'A'.repeat(200);
     const extractResult: ExtractResult = {
       ...DEFAULT_EXTRACT,
@@ -42,16 +42,5 @@ describe('executeExtract', () => {
 
     expect(result.blocks[0].text).toBe(longText);
     expect(result.blocks[0].text.length).toBe(200);
-  });
-
-  it('includes headingLevel only for headings', () => {
-    const result = DEFAULT_EXTRACT;
-
-    expect(result.blocks[0].headingLevel).toBe(1);
-    expect(result.blocks[1].headingLevel).toBeUndefined();
-  });
-
-  it('comments include blockId from anchored segment', () => {
-    expect(DEFAULT_EXTRACT.comments[0].blockId).toBe('p1');
   });
 });

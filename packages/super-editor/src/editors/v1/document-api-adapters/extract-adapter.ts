@@ -14,46 +14,29 @@ import type {
   ExtractTrackedChange,
   CommentsListQuery,
 } from '@superdoc/document-api';
-import { mapBlockNodeType, resolveBlockNodeId } from './helpers/node-address-resolver.js';
+import { getHeadingLevel } from './helpers/node-address-resolver.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
+import { collectTopLevelBlocks } from './plan-engine/blocks-wrappers.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { trackChangesListWrapper } from './plan-engine/track-changes-wrappers.js';
 
-const HEADING_PATTERN = /^Heading(\d)$/;
-
 function collectBlocks(editor: Editor): ExtractBlock[] {
-  const doc = editor.state.doc;
-  const blocks: ExtractBlock[] = [];
+  const candidates = collectTopLevelBlocks(editor);
 
-  let offset = 0;
-  for (let i = 0; i < doc.childCount; i++) {
-    const child = doc.child(i);
-    const nodeType = mapBlockNodeType(child);
-    const pos = offset;
+  return candidates.map((candidate) => {
+    const pProps = (candidate.node.attrs as Record<string, unknown>).paragraphProperties as
+      | { styleId?: string }
+      | undefined;
+    const headingLevel = getHeadingLevel(pProps?.styleId);
 
-    if (nodeType) {
-      const nodeId = resolveBlockNodeId(child, pos, nodeType, [i]);
-
-      if (nodeId) {
-        const text = child.textContent;
-
-        let headingLevel: number | undefined;
-        const pProps = (child.attrs as Record<string, unknown>).paragraphProperties as { styleId?: string } | undefined;
-        const styleId = pProps?.styleId;
-        if (typeof styleId === 'string') {
-          const m = HEADING_PATTERN.exec(styleId);
-          if (m) headingLevel = parseInt(m[1], 10);
-        }
-
-        const block: ExtractBlock = { nodeId, type: nodeType, text };
-        if (headingLevel !== undefined) block.headingLevel = headingLevel;
-        blocks.push(block);
-      }
-    }
-    offset += child.nodeSize;
-  }
-
-  return blocks;
+    const block: ExtractBlock = {
+      nodeId: candidate.nodeId,
+      type: candidate.nodeType,
+      text: candidate.node.textContent,
+    };
+    if (headingLevel !== undefined) block.headingLevel = headingLevel;
+    return block;
+  });
 }
 
 function collectComments(editor: Editor): ExtractComment[] {

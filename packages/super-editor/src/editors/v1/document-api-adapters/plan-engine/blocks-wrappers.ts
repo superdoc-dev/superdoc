@@ -202,7 +202,7 @@ function validateCommandLayerUniqueness(editor: Editor, sdBlockId: string): void
 // blocks.list — ordered block inspection
 // ---------------------------------------------------------------------------
 
-function collectTopLevelBlocks(editor: Editor): BlockCandidate[] {
+export function collectTopLevelBlocks(editor: Editor): BlockCandidate[] {
   const doc = editor.state.doc;
   const results: BlockCandidate[] = [];
 

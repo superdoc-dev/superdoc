@@ -48,36 +48,12 @@ type KnownCommandRecord = {
 };
 
 /**
- * Transforms a command interface so every method returns ChainableCommandObject
- * instead of boolean, preserving parameter types.
+ * Union of all command interfaces via explicit imports.
+ * Module augmentation doesn't survive the npm boundary, so this is the
+ * single source of truth for the built-in command surface. Used by
+ * EditorCommands, ChainableCommandObject, and CanObject.
  */
-type Chainified<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => unknown ? (...args: A) => ChainableCommandObject : T[K];
-};
-
-/**
- * All chain-typed commands composed from explicit imports.
- * Mirrors EditorCommands but with each method returning ChainableCommandObject.
- *
- * Module augmentation (CoreCommandMap/ExtensionCommandMap) doesn't survive
- * the npm boundary, so we use direct imports — same pattern as EditorCommands.
- */
-type AllChainedCommands = Chainified<CoreCommandSignatures> &
-  Chainified<CommentCommands> &
-  Chainified<FormattingCommandAugmentations> &
-  Chainified<HistoryLinkTableCommandAugmentations> &
-  Chainified<SpecializedCommandAugmentations> &
-  Chainified<ParagraphCommands> &
-  Chainified<BlockNodeCommands> &
-  Chainified<ImageCommands> &
-  Chainified<MiscellaneousCommands> &
-  Chainified<TrackChangesCommands>;
-
-/**
- * All can-check commands composed from explicit imports.
- * Mirrors EditorCommands with original return types for availability checks.
- */
-type AllCanCommands = CoreCommandSignatures &
+type AllCommandSignatures = CoreCommandSignatures &
   CommentCommands &
   FormattingCommandAugmentations &
   HistoryLinkTableCommandAugmentations &
@@ -89,6 +65,29 @@ type AllCanCommands = CoreCommandSignatures &
   TrackChangesCommands;
 
 /**
+ * Transforms a command interface so every method returns ChainableCommandObject
+ * instead of boolean, preserving parameter types.
+ */
+type Chainified<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => unknown ? (...args: A) => ChainableCommandObject : T[K];
+};
+
+/**
+ * Commands from module augmentation, transformed for chaining.
+ * Empty for npm consumers (augmentation doesn't survive the boundary),
+ * but consumers who augment ExtensionCommandMap get their custom commands
+ * on chain() for free.
+ */
+type AugmentedChainedCommands = {
+  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => ChainableCommandObject;
+};
+
+/** Same as AugmentedChainedCommands but with original return types for can(). */
+type AugmentedCanCommands = {
+  [K in keyof RegisteredCommands]: (...args: CommandArgs<K>) => CommandResult<K>;
+};
+
+/**
  * A chainable version of an editor command keyed by command name.
  */
 export type ChainedCommand<K extends string = string> = (...args: CommandArgs<K>) => ChainableCommandObject;
@@ -96,10 +95,14 @@ export type ChainedCommand<K extends string = string> = (...args: CommandArgs<K>
 /**
  * Chainable command object returned by `createChain`.
  * Only `run()` returns boolean — all other methods return ChainableCommandObject.
+ *
+ * Includes AugmentedChainedCommands so consumers who extend ExtensionCommandMap
+ * via module augmentation get their custom commands on chain() automatically.
  */
 export type ChainableCommandObject = {
   run: () => boolean;
-} & AllChainedCommands;
+} & Chainified<AllCommandSignatures> &
+  AugmentedChainedCommands;
 
 /**
  * A command that can be checked for availability.
@@ -113,10 +116,14 @@ export type CanCommands = Record<string, CanCommand>;
 
 /**
  * Object returned by `createCan`: typed boolean commands + a `chain()` helper.
+ *
+ * Includes AugmentedCanCommands so consumers who extend ExtensionCommandMap
+ * via module augmentation get their custom commands on can() automatically.
  */
-export type CanObject = AllCanCommands & {
-  chain: () => ChainableCommandObject;
-};
+export type CanObject = AllCommandSignatures &
+  AugmentedCanCommands & {
+    chain: () => ChainableCommandObject;
+  };
 
 /**
  * Core editor commands available on all instances.
@@ -131,23 +138,11 @@ export type ExtensionCommands = Pick<KnownCommandRecord, keyof ExtensionCommandM
 /**
  * All available editor commands.
  *
- * Composed from explicit imports of each command interface for reliable
- * cross-package typing (module augmentation doesn't survive the npm boundary).
- * The Record<string, AnyCommand> fallback allows dynamic/plugin commands.
+ * Composed from AllCommandSignatures (explicit imports) for reliable
+ * cross-package typing, plus CoreCommands/ExtensionCommands (module
+ * augmentation) and a Record fallback for dynamic/plugin commands.
  */
-export type EditorCommands = CoreCommands &
-  ExtensionCommands &
-  CoreCommandSignatures &
-  CommentCommands &
-  FormattingCommandAugmentations &
-  HistoryLinkTableCommandAugmentations &
-  SpecializedCommandAugmentations &
-  ParagraphCommands &
-  BlockNodeCommands &
-  ImageCommands &
-  MiscellaneousCommands &
-  TrackChangesCommands &
-  Record<string, AnyCommand>;
+export type EditorCommands = CoreCommands & ExtensionCommands & AllCommandSignatures & Record<string, AnyCommand>;
 
 /**
  * Command props made available to every command handler.

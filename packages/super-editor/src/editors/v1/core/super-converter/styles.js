@@ -599,6 +599,15 @@ export function decodeRPrFromMarks(marks) {
                 runProperties.fontFamily = result;
               }
               break;
+            case 'eastAsiaFontFamily':
+              // Restore per-script East Asian font from the mark attribute preserved
+              // during encode (styles.js line 117). Without this, decodeRPrFromMarks
+              // flattens all scripts to the ascii font, causing getInlineRunProperties
+              // to falsely classify fontFamily as inline. (SD-2517)
+              if (value != null && runProperties.fontFamily) {
+                runProperties.fontFamily.eastAsia = value.split(',')[0].trim();
+              }
+              break;
             case 'vertAlign':
               if (value != null) {
                 runProperties.vertAlign = value;

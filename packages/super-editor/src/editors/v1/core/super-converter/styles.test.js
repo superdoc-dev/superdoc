@@ -538,4 +538,35 @@ describe('marks encoding/decoding round-trip', () => {
     // encodeMarksFromRPr doesn't handle 'caps', so it produces no textTransform mark.
     expect(marksFromCaps.some((m) => m.type === 'textStyle' && m.attrs.textTransform)).toBe(false);
   });
+
+  // SD-2517: eastAsiaFontFamily must survive the mark round-trip
+  it('preserves eastAsia font through encode → decode round-trip', () => {
+    const rPr = {
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Times New Roman', cs: 'Times New Roman' },
+    };
+    const marks = encodeMarksFromRPr(rPr, {});
+    const textStyleMark = marks.find((m) => m.type === 'textStyle');
+    // Encode should set eastAsiaFontFamily when it differs from ascii
+    expect(textStyleMark.attrs.eastAsiaFontFamily).toMatch(/^Times New Roman/);
+
+    const decoded = decodeRPrFromMarks(marks);
+    // Decode should restore the eastAsia font, not flatten it to the ascii font
+    expect(decoded.fontFamily.eastAsia).toMatch(/^Times New Roman/);
+    expect(decoded.fontFamily.ascii).toMatch(/^Arial/);
+    expect(decoded.fontFamily.hAnsi).toBe('Arial');
+  });
+
+  it('flattens all scripts to ascii when eastAsia matches ascii', () => {
+    const rPr = {
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+    };
+    const marks = encodeMarksFromRPr(rPr, {});
+    const textStyleMark = marks.find((m) => m.type === 'textStyle');
+    // No eastAsiaFontFamily when it matches the ascii font
+    expect(textStyleMark.attrs.eastAsiaFontFamily).toBeUndefined();
+
+    const decoded = decodeRPrFromMarks(marks);
+    // All scripts should be Arial (default flatten behavior)
+    expect(decoded.fontFamily).toEqual({ ascii: 'Arial', eastAsia: 'Arial', hAnsi: 'Arial', cs: 'Arial' });
+  });
 });

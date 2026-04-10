@@ -409,6 +409,13 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToPosition(100);
   pe.scrollThreadAnchorToClientY('thread-1', 300);
 
+  // Element navigation
+  pe.scrollToElement('paraId-ABC123');
+  pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
+  pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
+  pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
+
   // Dispatch
   pe.dispatch(pe.state.tr);
   pe.dispatchInActiveEditor((ed) => {

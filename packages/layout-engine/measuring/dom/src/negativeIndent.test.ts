@@ -674,5 +674,63 @@ describe('negative indent measurement', () => {
       expect(measure.lines[0].maxWidth).toBe(contentWidth);
       expect(measure.lines[1].maxWidth).toBe(contentWidth);
     });
+
+    // SD-2415: the guard was relaxed from `hasNegativeIndent` (left<0 || right<0)
+    // to `hasNegativeLeftIndent` (left<0). The cases below pin the changed
+    // behavior so a future revert is caught by the test suite.
+    it('widens first line with hanging indent when only the RIGHT indent is negative', async () => {
+      const maxWidth = 468;
+      const negativeRight = -48;
+      const hanging = 24;
+
+      const longText =
+        'The first line of this paragraph extends into the hanging region while the right indent pushes every line further into the right margin area, so the text should wrap across multiple lines when the available width is exhausted by the natural measurement of the run contents.';
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sd2415-neg-right-only-with-hanging',
+        runs: [{ text: longText, fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          indent: { left: 0, right: negativeRight, hanging },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines.length).toBeGreaterThan(1);
+
+      // contentWidth = maxWidth - left(0) - right(-48) = maxWidth + 48.
+      // First-line offset from hanging = -24, so first-line maxWidth = contentWidth + 24.
+      const contentWidth = maxWidth + Math.abs(negativeRight);
+      expect(measure.lines[0].maxWidth).toBe(contentWidth + hanging);
+      // Body lines use the plain content width.
+      expect(measure.lines[1].maxWidth).toBe(contentWidth);
+    });
+
+    it('does NOT widen first line when the LEFT indent is negative, even with hanging', async () => {
+      // Regression guard for SD-1401: a negative LEFT indent already widens
+      // contentWidth leftward, so adding hanging on top would double-count.
+      const maxWidth = 468;
+      const negativeLeft = -48;
+      const hanging = 24;
+
+      const longText =
+        'This paragraph has a negative left indent which already widens every line leftward into the page margin, so the first line must not be widened by the hanging amount on top of that expansion or the first line will overflow the fragment area and produce misaligned justified spacing across wrapped body text.';
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sd1401-neg-left-with-hanging',
+        runs: [{ text: longText, fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          indent: { left: negativeLeft, right: 0, hanging },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines.length).toBeGreaterThan(1);
+
+      const contentWidth = maxWidth + Math.abs(negativeLeft);
+      expect(measure.lines[0].maxWidth).toBe(contentWidth);
+      expect(measure.lines[1].maxWidth).toBe(contentWidth);
+    });
   });
 });

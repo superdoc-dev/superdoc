@@ -1514,6 +1514,148 @@ describe('m:sSubSup converter', () => {
   });
 });
 
+describe('m:sPre converter', () => {
+  // Per ECMA-376 §22.1.2.99, m:sPre children appear in the order
+  // (m:sPrePr?, m:sub, m:sup, m:e) — base is last, not first.
+  it('converts pre-sub-superscript to <mmultiscripts> with <mprescripts/>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'X' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    // mmultiscripts children order: base, <mprescripts/>, sub, sup
+    expect(mmulti!.children.length).toBe(4);
+    expect(mmulti!.children[0]!.textContent).toBe('X');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+    expect(mmulti!.children[2]!.textContent).toBe('a');
+    expect(mmulti!.children[3]!.textContent).toBe('b');
+  });
+
+  it('ignores m:sPrePr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            { name: 'm:sPrePr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'X' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    expect(mmulti!.children.length).toBe(4);
+    expect(mmulti!.children[0]!.textContent).toBe('X');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+    expect(mmulti!.children[2]!.textContent).toBe('a');
+    expect(mmulti!.children[3]!.textContent).toBe('b');
+  });
+
+  it('wraps multi-run sub and sup in <mrow> for valid arity', () => {
+    // {}_{n+1}^{k-1}X — both pre-scripts have multiple runs
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            {
+              name: 'm:sub',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:sup',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'k' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '-' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'X' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    // <mmultiscripts> must keep exactly 4 children — the mrow wrapping preserves arity
+    expect(mmulti!.children.length).toBe(4);
+    expect(mmulti!.children[0]!.textContent).toBe('X');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+    expect(mmulti!.children[2]!.textContent).toBe('n+1');
+    expect(mmulti!.children[3]!.textContent).toBe('k-1');
+  });
+
+  it('handles missing m:sub and m:sup gracefully', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sPre',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'Y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mmulti = result!.querySelector('mmultiscripts');
+    expect(mmulti).not.toBeNull();
+    // Empty sub/sup mrows preserved to keep valid <mmultiscripts> arity of 4.
+    expect(mmulti!.children.length).toBe(4);
+    expect(mmulti!.children[0]!.textContent).toBe('Y');
+    expect(mmulti!.children[1]!.localName).toBe('mprescripts');
+  });
+});
+
 describe('m:func converter', () => {
   it('converts m:func to function name + apply operator + argument', () => {
     const omml = {

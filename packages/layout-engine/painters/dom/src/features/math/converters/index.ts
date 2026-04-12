@@ -15,6 +15,7 @@ export { convertSubscript } from './subscript.js';
 export { convertSuperscript } from './superscript.js';
 export { convertSubSuperscript } from './sub-superscript.js';
 export { convertAccent } from './accent.js';
+export { convertPreSubSuperscript } from './pre-sub-superscript.js';
 export { convertRadical } from './radical.js';
 export { convertLowerLimit } from './lower-limit.js';
 export { convertUpperLimit } from './upper-limit.js';

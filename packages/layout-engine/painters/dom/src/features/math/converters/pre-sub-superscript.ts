@@ -6,7 +6,11 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  * Convert m:sPre (pre-sub-superscript) to MathML <mmultiscripts>.
  *
  * OMML structure:
- *   m:sPre → m:sPrePr (optional), m:e (base), m:sub (subscript), m:sup (superscript)
+ *   m:sPre → m:sPrePr (optional), m:sub (subscript), m:sup (superscript), m:e (base)
+ *
+ * Note: element order differs from m:sSubSup — in m:sPre the base (m:e) is the
+ * LAST child, not the first. The converter uses tag-based lookup (not position)
+ * so any order is accepted.
  *
  * MathML output:
  *   <mmultiscripts>

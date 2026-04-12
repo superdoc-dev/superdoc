@@ -5,6 +5,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
+const SPRE_DOC = path.resolve(__dirname, 'fixtures/math-spre-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -218,5 +219,132 @@ test.describe('m:func (function apply) rendering', () => {
     expect(fractionData).not.toBeNull();
     expect(fractionData!.hasFunc).toBe(true);
     expect(fractionData!.denominatorText).toBe('x');
+  });
+});
+
+test.describe('m:sPre (pre-sub-superscript) rendering', () => {
+  // Fixture covers 9 m:sPre shapes: basic, isotope, multi-run, only-sub, only-sup,
+  // no sPrePr, fraction-in-sub, nested sPre, display-mode m:oMathPara.
+  test('imports all m:sPre equations from docx', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    const mathCount = await superdoc.page.evaluate(() => document.querySelectorAll('math').length);
+    expect(mathCount).toBe(9);
+  });
+
+  test('renders each m:sPre as <mmultiscripts> with <mprescripts/>', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    const structure = await superdoc.page.evaluate(() => {
+      const multis = Array.from(document.querySelectorAll('mmultiscripts'));
+      return {
+        count: multis.length,
+        allHaveFourChildren: multis.every((m) => m.children.length === 4),
+        allHavePrescripts: multis.every((m) => m.children[1]?.localName === 'mprescripts'),
+        allHaveBaseFirst: multis.every((m) => m.children[0]?.localName === 'mrow'),
+      };
+    });
+
+    // 8 outer sPre + 1 inner nested + 1 inside m:oMathPara = 10
+    expect(structure.count).toBe(10);
+    expect(structure.allHaveFourChildren).toBe(true);
+    expect(structure.allHavePrescripts).toBe(true);
+    expect(structure.allHaveBaseFirst).toBe(true);
+  });
+
+  test('preserves multi-run operands inside <mrow>', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    // Test 3 in the fixture: sub=n+1, sup=k-1, base=X
+    const multiRun = await superdoc.page.evaluate(() => {
+      const multis = Array.from(document.querySelectorAll('mmultiscripts'));
+      const target = multis.find((m) => m.children[0]?.textContent === 'X');
+      if (!target) return null;
+      return {
+        subText: target.children[2]?.textContent,
+        supText: target.children[3]?.textContent,
+        subChildCount: target.children[2]?.children.length ?? 0,
+      };
+    });
+
+    expect(multiRun).not.toBeNull();
+    expect(multiRun!.subText).toBe('n+1');
+    expect(multiRun!.supText).toBe('k-1');
+    // sub mrow should contain 3 tokens (mi/mo/mn), preserving arity of outer mmultiscripts
+    expect(multiRun!.subChildCount).toBe(3);
+  });
+
+  test('missing m:sub/m:sup renders empty <mrow> to preserve arity', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    // Test 4 (base=P, only sub=5) and Test 5 (base=Q, only sup=3)
+    const emptySlots = await superdoc.page.evaluate(() => {
+      const multis = Array.from(document.querySelectorAll('mmultiscripts'));
+      const onlySub = multis.find((m) => m.children[0]?.textContent === 'P');
+      const onlySup = multis.find((m) => m.children[0]?.textContent === 'Q');
+      return {
+        onlySubEmptySup: onlySub?.children[3]?.textContent === '',
+        onlySupEmptySub: onlySup?.children[2]?.textContent === '',
+        // Both still have exactly 4 children
+        arityPreserved: onlySub?.children.length === 4 && onlySup?.children.length === 4,
+      };
+    });
+
+    expect(emptySlots.onlySubEmptySup).toBe(true);
+    expect(emptySlots.onlySupEmptySub).toBe(true);
+    expect(emptySlots.arityPreserved).toBe(true);
+  });
+
+  test('nested m:sPre renders nested <mmultiscripts> inside outer base', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    // Test 8: outer sPre(a, b, <inner sPre(c, d, Y)>)
+    const nested = await superdoc.page.evaluate(() => {
+      const multis = Array.from(document.querySelectorAll('mmultiscripts'));
+      // The outer one has a nested mmultiscripts inside its first child (base mrow)
+      const outer = multis.find((m) => m.children[0]?.querySelector('mmultiscripts'));
+      if (!outer) return null;
+      const inner = outer.children[0]!.querySelector('mmultiscripts')!;
+      return {
+        outerSubText: outer.children[2]?.textContent,
+        outerSupText: outer.children[3]?.textContent,
+        innerBaseText: inner.children[0]?.textContent,
+        innerSubText: inner.children[2]?.textContent,
+        innerSupText: inner.children[3]?.textContent,
+      };
+    });
+
+    expect(nested).not.toBeNull();
+    expect(nested!.outerSubText).toBe('a');
+    expect(nested!.outerSupText).toBe('b');
+    expect(nested!.innerBaseText).toBe('Y');
+    expect(nested!.innerSubText).toBe('c');
+    expect(nested!.innerSupText).toBe('d');
+  });
+
+  test('m:oMathPara wrapping m:sPre renders in display mode', async ({ superdoc }) => {
+    await superdoc.loadDocument(SPRE_DOC);
+    await superdoc.waitForStable();
+
+    // Test 9: <m:oMathPara><m:oMath><m:sPre>...base=Z</m:sPre></m:oMath></m:oMathPara>
+    const displayMode = await superdoc.page.evaluate(() => {
+      const multis = Array.from(document.querySelectorAll('mmultiscripts'));
+      const target = multis.find((m) => m.children[0]?.textContent === 'Z');
+      if (!target) return null;
+      const math = target.closest('math');
+      return {
+        display: math?.getAttribute('display'),
+        displaystyle: math?.getAttribute('displaystyle'),
+      };
+    });
+
+    expect(displayMode).not.toBeNull();
+    expect(displayMode!.display).toBe('block');
+    expect(displayMode!.displaystyle).toBe('true');
   });
 });

@@ -12,7 +12,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *   - degree hidden → <msqrt><mrow>radicand</mrow></msqrt>
  *   - degree shown  → <mroot><mrow>radicand</mrow><mrow>degree</mrow></mroot>
  *
- * @spec ECMA-376 §22.1.2.88
+ * @spec ECMA-376 §22.1.2.86
  */
 export const convertRadical: MathObjectConverter = (node, doc, convertChildren) => {
   const elements = node.elements ?? [];
@@ -26,7 +26,8 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
   const degHideVal = degHideEl?.attributes?.['m:val'];
   const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false';
 
-  if (degreeHidden || !deg) {
+  // Use msqrt if degree is explicitly hidden OR if m:deg is missing/empty
+  if (degreeHidden || !deg || (deg.elements ?? []).length === 0) {
     const msqrt = doc.createElementNS(MATHML_NS, 'msqrt');
     const radicandRow = doc.createElementNS(MATHML_NS, 'mrow');
     radicandRow.appendChild(convertChildren(radicand?.elements ?? []));
@@ -36,6 +37,7 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
 
   const mroot = doc.createElementNS(MATHML_NS, 'mroot');
 
+  // MathML <mroot>: first child is base (radicand), second is index (degree)
   const radicandRow = doc.createElementNS(MATHML_NS, 'mrow');
   radicandRow.appendChild(convertChildren(radicand?.elements ?? []));
   mroot.appendChild(radicandRow);
@@ -46,3 +48,4 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
 
   return mroot;
 };
+

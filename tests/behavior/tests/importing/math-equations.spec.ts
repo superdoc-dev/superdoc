@@ -7,6 +7,7 @@ const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx'
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
 const DELIMITER_DOC = path.resolve(__dirname, 'fixtures/math-delimiter-tests.docx');
 const RADICAL_DOC = path.resolve(__dirname, 'fixtures/math-radical-tests.docx');
+const LIMIT_DOC = path.resolve(__dirname, 'fixtures/math-limit-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -470,5 +471,179 @@ test.describe('m:rad (radical) edge cases', () => {
     expect(data.thirdHasMroot).toBe(false);
     expect(data.thirdText).toBe('x');
     expect(data.brokenMrootCount).toBe(0);
+  });
+});
+
+test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
+  // Fixture (math-limit-tests.docx) contains 8 Word-native equations:
+  //   1. lim_(n→∞)       — m:limLow inside m:func > m:fName
+  //   2. =^def           — bare m:limUpp (at root of m:oMath)
+  //   3. lim_(x/y)       — m:limLow with m:f (fraction) inside m:lim
+  //   4. a_b             — bare m:limLow (non-function base)
+  //   5. lim^x           — m:limUpp inside m:func > m:fName
+  //   6. max_(x∈S)       — m:limLow with multi-char non-"lim" function base
+  //   7. sup_(n≥1)       — m:limLow with another non-"lim" function base
+  //   8. lim_(x_i→0)     — m:limLow with m:sSub (subscript) inside m:lim
+
+  test('renders all 8 limit equations as <math> elements', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    const mathCount = await superdoc.page.evaluate(() => {
+      return document.querySelectorAll('math').length;
+    });
+    expect(mathCount).toBe(8);
+  });
+
+  test('renders m:limLow cases as <munder> with arity 2', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Cases 1, 3, 4, 6, 7, 8 are m:limLow — all produce <munder> with exactly 2 children.
+    const data = await superdoc.page.evaluate(() => {
+      const munders = Array.from(document.querySelectorAll('munder'));
+      return munders.map((el) => ({
+        childCount: el.children.length,
+        baseText: el.children[0]?.textContent ?? null,
+        limitText: el.children[1]?.textContent ?? null,
+      }));
+    });
+
+    expect(data.length).toBe(6);
+    for (const m of data) {
+      expect(m.childCount).toBe(2);
+    }
+    // Case 1 base is "lim" (upright function operator)
+    expect(data.some((m) => m.baseText === 'lim' && m.limitText === 'n→∞')).toBe(true);
+    // Case 4 bare: "a" over "b"
+    expect(data.some((m) => m.baseText === 'a' && m.limitText === 'b')).toBe(true);
+    // Case 6: "max" over "x∈S"
+    expect(data.some((m) => m.baseText === 'max' && m.limitText === 'x∈S')).toBe(true);
+    // Case 7: "sup" over "n≥1"
+    expect(data.some((m) => m.baseText === 'sup' && m.limitText === 'n≥1')).toBe(true);
+  });
+
+  test('renders m:limUpp cases as <mover> with arity 2', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const movers = Array.from(document.querySelectorAll('mover'));
+      return movers.map((el) => ({
+        childCount: el.children.length,
+        baseText: el.children[0]?.textContent ?? null,
+        limitText: el.children[1]?.textContent ?? null,
+      }));
+    });
+
+    expect(data.length).toBe(2);
+    for (const m of data) {
+      expect(m.childCount).toBe(2);
+    }
+    // Case 2 bare limUpp: "=" above "def"
+    expect(data.some((m) => m.baseText === '=' && m.limitText === 'def')).toBe(true);
+    // Case 5 limUpp in func: "lim" above "x"
+    expect(data.some((m) => m.baseText === 'lim' && m.limitText === 'x')).toBe(true);
+  });
+
+  test('preserves nested <mfrac> inside <munder> (case 3: lim of x/y)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // The limLow whose limit contains x/y must have a <mfrac> inside its second child.
+    const hasFracInMunder = await superdoc.page.evaluate(() => {
+      const munders = Array.from(document.querySelectorAll('munder'));
+      for (const mu of munders) {
+        const frac = mu.children[1]?.querySelector('mfrac');
+        if (
+          frac &&
+          frac.children.length === 2 &&
+          frac.children[0]?.textContent === 'x' &&
+          frac.children[1]?.textContent === 'y'
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    expect(hasFracInMunder).toBe(true);
+  });
+
+  test('applies mathvariant=normal via m:sty val=p (ECMA-376 §22.1.2)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Every function-keyword base the fixture produces (lim/max/sup) originates
+    // from m:r with m:rPr > m:sty m:val="p", so convertMathRun must set
+    // mathvariant="normal" on those <mi> elements.
+    const counts = await superdoc.page.evaluate(() => {
+      const count = (text: string) =>
+        Array.from(document.querySelectorAll('mi[mathvariant="normal"]')).filter((mi) => mi.textContent === text)
+          .length;
+      return { lim: count('lim'), max: count('max'), sup: count('sup') };
+    });
+    // "lim" appears in cases 1, 3, 5, 8 (4 total).
+    expect(counts.lim).toBe(4);
+    // "max" appears in case 6 (1).
+    expect(counts.max).toBe(1);
+    // "sup" appears in case 7 (1).
+    expect(counts.sup).toBe(1);
+  });
+
+  test('preserves nested <msub> inside <munder> (case 8: lim of x_i → 0)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // The limLow whose limit contains x_i must have an <msub> inside its second child.
+    const hasSubInMunder = await superdoc.page.evaluate(() => {
+      const munders = Array.from(document.querySelectorAll('munder'));
+      return munders.some((mu) => {
+        const sub = mu.children[1]?.querySelector('msub');
+        return sub !== null && sub !== undefined && sub.children.length === 2;
+      });
+    });
+    expect(hasSubInMunder).toBe(true);
+  });
+
+  test('bare m:limLow (case 4) leaves identifiers italic (no m:rPr styling)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Case 4 "a_b" is bare m:limLow with no m:rPr — identifiers keep the MathML default
+    // (single-char <mi> is italic) and therefore must NOT carry mathvariant="normal".
+    // The other bare case (case 2 "=^def") has no <mi>a</mi>, so finding an <mi>a</mi>
+    // without mathvariant is a sufficient signal for case 4.
+    const data = await superdoc.page.evaluate(() => {
+      const a = Array.from(document.querySelectorAll('mi')).find((el) => el.textContent === 'a');
+      const b = Array.from(document.querySelectorAll('mi')).find((el) => el.textContent === 'b');
+      return {
+        aHasVariant: a?.hasAttribute('mathvariant') ?? null,
+        bHasVariant: b?.hasAttribute('mathvariant') ?? null,
+      };
+    });
+
+    expect(data.aHasVariant).toBe(false);
+    expect(data.bHasVariant).toBe(false);
+  });
+
+  test('m:limLowPr and m:limUppPr property elements are filtered out', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Word emits m:limLowPr / m:limUppPr wrapping m:ctrlPr on every limit object.
+    // These must be stripped by the converter — they should never appear as DOM
+    // elements named "limlowpr" / "limupppr" / "ctrlpr".
+    const leaked = await superdoc.page.evaluate(() => {
+      const leaks: string[] = [];
+      for (const el of document.querySelectorAll('math *')) {
+        const name = el.localName.toLowerCase();
+        if (name === 'limlowpr' || name === 'limupppr' || name === 'ctrlpr') {
+          leaks.push(name);
+        }
+      }
+      return leaks;
+    });
+    expect(leaked).toEqual([]);
   });
 });

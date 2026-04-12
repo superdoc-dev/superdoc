@@ -51,6 +51,24 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
 
+      // Track-change accept/reject rewrites marks to a canonical state. Inline-key metadata
+      // and run.runProperties from the prior (suggested) state are stale and must not be
+      // re-applied by the SD-2517 lost-keys preservation below.
+      const isAcceptReject = transactions.some((t) => t.getMeta('inputType') === 'acceptReject');
+
+      // Collect mark types the user explicitly removed in this batch — for these, the
+      // lost-keys preservation must NOT re-apply values from stale run.runProperties.
+      // Map textStyle attr-keys to 'textStyle' for comparison.
+      const removedMarkTypes = new Set();
+      transactions.forEach((t) => {
+        t.steps.forEach((step) => {
+          const jsonStep = step.toJSON?.();
+          if (jsonStep?.stepType === 'removeMark' && jsonStep.mark?.type) {
+            removedMarkTypes.add(jsonStep.mark.type);
+          }
+        });
+      });
+
       const preservedDerivedKeys = new Set();
       const preferExistingKeys = new Set();
       transactions.forEach((transaction) => {
@@ -154,16 +172,25 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           // dropped some of those keys (e.g. fontFamily "matches" the style due to
           // mark round-trip comparison), preserve the original keys. The importer saw
           // explicit w:rPr in the XML and that decision is authoritative. (SD-2517)
-          if (hadInlineKeys) {
+          //
+          // Skip entirely during accept/reject: the restored marks are canonical, and
+          // existing run.runProperties still reflect the pre-resolution (suggested) state.
+          if (hadInlineKeys && !isAcceptReject) {
             const computedKeys = new Set(runProperties ? Object.keys(runProperties) : []);
             const lostKeys = existingInlineKeys.filter((k) => !computedKeys.has(k));
             if (lostKeys.length > 0) {
               if (!runProperties) runProperties = {};
               lostKeys.forEach((k) => {
+                // If the user just removed the standalone mark for this key, don't
+                // preserve the stale value from the run node's runProperties.
+                // (For textStyle-derived keys, preserve — the import w:rPr is authoritative
+                // and in-batch textStyle rewrites replace the mark rather than strip a single attr.)
+                if (removedMarkTypes.has(k)) return;
                 if (runNode.attrs?.runProperties?.[k] !== undefined) {
                   runProperties[k] = runNode.attrs.runProperties[k];
                 }
               });
+              if (runProperties && Object.keys(runProperties).length === 0) runProperties = null;
             }
           }
           const { inlineKeys: newInlineKeys, overrideKeys: newOverrideKeys } = computeSegmentKeys(

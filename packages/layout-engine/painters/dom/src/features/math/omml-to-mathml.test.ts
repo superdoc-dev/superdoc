@@ -899,6 +899,63 @@ describe('m:rad converter', () => {
     expect(msqrt!.textContent).toBe('');
   });
 
+  it('treats m:degHide m:val="1" as hidden (canonical Word output)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide', attributes: { 'm:val': '1' } }],
+            },
+            { name: 'm:deg', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msqrt')).not.toBeNull();
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('treats m:degHide m:val="true" as hidden (ST_OnOff true alias)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide', attributes: { 'm:val': 'true' } }],
+            },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msqrt')).not.toBeNull();
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
   // Word's round-trip canonical form for "no explicit degree": Word adds an empty
   // <m:deg/> on save even when there is no <m:degHide>. Without the empty-deg
   // check this falls into the <mroot> branch and produces an invalid

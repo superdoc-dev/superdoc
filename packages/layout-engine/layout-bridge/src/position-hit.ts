@@ -75,6 +75,14 @@ export type TableHitResult = {
   localX: number;
   /** Y coordinate relative to the cell content area */
   localY: number;
+  /**
+   * Cumulative line count of preceding paragraph blocks in this cell.
+   * Used by callers to compute the hit paragraph's local first-line flag
+   * when the row continues from a prior page: `isFirstLineOfParagraph` is
+   * `lineIndex === 0 && max(0, cellLineStart - blockStartGlobal) === 0`,
+   * matching `renderTableCell.ts`'s `localStartLine` computation.
+   */
+  blockStartGlobal: number;
 };
 
 type AtomicFragment = DrawingFragment | ImageFragment;
@@ -556,6 +564,12 @@ export const hitTestTableFragment = (
     );
 
     let blockStartY = 0;
+    // Cumulative line count of preceding paragraph blocks in this cell.
+    // Tracked in parallel with blockStartY so we can report it on hit return —
+    // callers use it to compute the hit paragraph's local first-line flag
+    // when a row spans multiple pages (matches renderTableCell's per-block
+    // `localStartLine = max(0, globalFromLine - blockStartGlobal)`).
+    let blockStartGlobalLines = 0;
     const getBlockHeight = (m: Measure | undefined): number => {
       if (!m) return 0;
       if ('totalHeight' in m && typeof (m as { totalHeight?: number }).totalHeight === 'number') {
@@ -600,10 +614,12 @@ export const hitTestTableFragment = (
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
           localY: Math.max(0, localYWithinBlock),
+          blockStartGlobal: blockStartGlobalLines,
         };
       }
 
       blockStartY = blockEndY;
+      blockStartGlobalLines += paragraphMeasure.lines.length;
     }
   }
 
@@ -862,9 +878,13 @@ export function clickToPositionGeometry(
       // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
       // Skip for list-marker first lines — the renderer doesn't adjust those.
       // When a row is split across pages, partialRow.fromLineByCell tells us the real
-      // starting line for this cell slice — only apply when it's truly line 0.
+      // starting line for the cell slice, but the painter decides per-paragraph (see
+      // renderTableCell's `localStartLine = max(0, globalFromLine - blockStartGlobal)`).
+      // Subtract the hit paragraph's cumulative block offset so multi-block cells
+      // spanning pages stay aligned with the painter (SD-2415).
       const cellLineStart = tableHit.fragment.partialRow?.fromLineByCell?.[tableHit.cellColIndex] ?? 0;
-      if (lineIndex === 0 && cellLineStart === 0 && !isListItem) {
+      const localStartLine = Math.max(0, cellLineStart - tableHit.blockStartGlobal);
+      if (lineIndex === 0 && localStartLine === 0 && !isListItem) {
         const suppressFLI = (cellBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = getFirstLineIndentOffset(cellBlock.attrs?.indent, suppressFLI);
         availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);

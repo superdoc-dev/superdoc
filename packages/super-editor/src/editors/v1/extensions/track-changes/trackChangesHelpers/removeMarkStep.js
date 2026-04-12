@@ -95,9 +95,9 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
         const newFormatMark = state.schema.marks[TrackFormatMarkName].create({
           id: formatChangeMark ? formatChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4())),
           sourceId: formatChangeMark?.attrs?.sourceId || '',
-          author: user.name,
-          authorEmail: user.email,
-          authorImage: user.image,
+          author: user.name || '',
+          authorEmail: user.email || '',
+          authorImage: user.image || '',
           date,
           before,
           after,

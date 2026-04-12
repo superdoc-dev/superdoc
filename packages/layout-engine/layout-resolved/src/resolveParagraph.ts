@@ -9,6 +9,7 @@ import type {
   ResolvedDropCapItem,
   ResolvedListMarkerItem,
 } from '@superdoc/contracts';
+import { adjustAvailableWidthForTextIndent } from '@superdoc/contracts';
 import {
   isMinimalWordLayout,
   resolveListMarkerGeometry,
@@ -285,6 +286,9 @@ export function resolveParagraphContent(
         textIndentPx = firstLineOffset;
       }
     }
+
+    // Adjust availableWidth for first-line text indent.
+    availableWidth = adjustAvailableWidthForTextIndent(availableWidth, textIndentPx, line.maxWidth);
 
     // --- indentOffset for segment positioning path (mirrors renderer lines 5635-5653) ---
     const indentLeft = paraIndent?.left ?? 0;

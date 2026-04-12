@@ -648,6 +648,19 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'get_content',
     intentAction: 'info',
   },
+  extract: {
+    memberPath: 'extract',
+    description:
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+    expectedResult:
+      'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'extract.mdx',
+    referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'extract',
+  },
 
   clearContent: {
     memberPath: 'clearContent',

@@ -7,6 +7,7 @@ import {
   executeCompiledPlan,
   executeCreateStep,
   executeTextInsert,
+  executeTextRewrite,
   executeSpanTextDelete,
   executeSpanTextRewrite,
   executeStyleApply,
@@ -15,7 +16,8 @@ import {
 } from './executor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { PlanError } from './errors.js';
-import { Schema } from 'prosemirror-model';
+import { Schema, Slice } from 'prosemirror-model';
+import { EditorState } from 'prosemirror-state';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -96,6 +98,7 @@ function mockMark(name: string) {
 function makeEditor(text = 'Hello'): {
   editor: Editor;
   tr: {
+    replace: ReturnType<typeof vi.fn>;
     replaceWith: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     insert: ReturnType<typeof vi.fn>;
@@ -106,6 +109,7 @@ function makeEditor(text = 'Hello'): {
   dispatch: ReturnType<typeof vi.fn>;
 } {
   const tr = {
+    replace: vi.fn(),
     replaceWith: vi.fn(),
     delete: vi.fn(),
     insert: vi.fn(),
@@ -119,6 +123,7 @@ function makeEditor(text = 'Hello'): {
       textContent: text,
     },
   };
+  tr.replace.mockReturnValue(tr);
   tr.replaceWith.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.insert.mockReturnValue(tr);
@@ -621,6 +626,784 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
 
     // Effect should be noop since text didn't change
     expect(receipt.steps[0].effect).toBe('noop');
+  });
+
+  it('replaces a whole textblock with sibling paragraphs when replacement normalizes to multiple blocks', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+          attrs: {
+            paragraphProperties: { default: null },
+            paraId: { default: null },
+            sdBlockId: { default: null },
+          },
+        },
+        text: { group: 'inline' },
+      },
+    });
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create(
+        {
+          paragraphProperties: { styleId: 'Normal' },
+          paraId: 'para-1',
+          sdBlockId: 'sd-para-1',
+        },
+        schema.text('hello world'),
+      ),
+    ]);
+
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc,
+    };
+    tr.replace.mockReturnValue(tr);
+    tr.replaceWith.mockReturnValue(tr);
+
+    const editor = {
+      state: {
+        doc,
+        schema,
+      },
+    } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom: 1,
+      absTo: 12,
+      from: 0,
+      to: 11,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-structural',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.replaceWith).not.toHaveBeenCalled();
+    expect(tr.replace).toHaveBeenCalledTimes(1);
+    expect(tr.replace).toHaveBeenCalledWith(0, doc.content.size, expect.any(Slice));
+
+    const slice = tr.replace.mock.calls[0][2];
+    expect(slice.content.childCount).toBe(2);
+    expect(slice.openStart).toBe(0);
+    expect(slice.openEnd).toBe(0);
+
+    const first = slice.content.child(0);
+    const second = slice.content.child(1);
+    expect(first.textContent).toBe('Alpha');
+    expect(second.textContent).toBe('Beta');
+    expect(first.attrs.paragraphProperties).toEqual({ styleId: 'Normal' });
+    expect(first.attrs.paraId).toBeNull();
+    expect(first.attrs.sdBlockId).toBeNull();
+  });
+
+  it('applies structural range rewrites as sibling paragraphs in a real transaction', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-structural-real',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(4);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('Alpha');
+    expect(tr.doc.child(2).textContent).toBe('Beta');
+    expect(tr.doc.child(3).textContent).toBe('after');
+  });
+
+  it('applies structural range rewrites for run-wrapped paragraphs in a real transaction', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'inline*' },
+        run: { group: 'inline', inline: true, content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('before')])]),
+      schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('hello world')])]),
+      schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('after')])]),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-structural-run-real',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(4);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('Alpha');
+    expect(tr.doc.child(2).textContent).toBe('Beta');
+    expect(tr.doc.child(3).textContent).toBe('after');
+  });
+
+  it('splices sibling paragraphs through a partial text rewrite in a real transaction', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const originalText = 'hey guys, hello world and this stuff is great';
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text(originalText))]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === originalText) {
+        absFrom = pos + originalText.indexOf('hello world');
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: originalText.indexOf('hello world'),
+      to: originalText.indexOf('hello world') + 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-partial-structural-real',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(2);
+    expect(tr.doc.child(0).textContent).toBe('hey guys, Alpha');
+    expect(tr.doc.child(1).textContent).toBe('Beta and this stuff is great');
+  });
+
+  it('splices structural text inserts inside a textblock in a real transaction', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const originalText = 'hey guys, and this stuff is great';
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text(originalText))]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === originalText) {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const prefix = 'hey guys,';
+    const target = makeTarget({
+      op: 'text.insert' as any,
+      absFrom,
+      absTo: absFrom + prefix.length,
+      from: 0,
+      to: prefix.length,
+      text: prefix,
+    }) as any;
+    const step: TextInsertStep = {
+      id: 'step-structural-insert-real',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: prefix }, require: 'exactlyOne' },
+      args: { position: 'after', content: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    const outcome = executeTextInsert(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(2);
+    expect(tr.doc.child(0).textContent).toBe('hey guys,Alpha');
+    expect(tr.doc.child(1).textContent).toBe('Beta and this stuff is great');
+  });
+
+  it('treats a leading newline on structural text insert as a hard left paragraph boundary', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const originalText = 'hey guys, and this stuff is great';
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text(originalText))]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === originalText) {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const prefix = 'hey guys,';
+    const target = makeTarget({
+      op: 'text.insert' as any,
+      absFrom,
+      absTo: absFrom + prefix.length,
+      from: 0,
+      to: prefix.length,
+      text: prefix,
+    }) as any;
+    const step: TextInsertStep = {
+      id: 'step-structural-insert-leading-boundary',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: prefix }, require: 'exactlyOne' },
+      args: { position: 'after', content: { text: '\nAlpha\n\nBeta' } },
+    };
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    const outcome = executeTextInsert(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(3);
+    expect(tr.doc.child(0).textContent).toBe('hey guys,');
+    expect(tr.doc.child(1).textContent).toBe('Alpha');
+    expect(tr.doc.child(2).textContent).toBe('Beta and this stuff is great');
+  });
+
+  it('falls back to inline replacement when the container cannot host sibling paragraphs', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text('hello world'))]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-structural-fallback',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(1);
+    expect(tr.doc.child(0).textContent).toBe('Alpha\n\nBeta');
+  });
+
+  it('handles splitBefore with single core block on whole-textblock rewrite', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-split-before',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: '\nAlpha' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(4);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('');
+    expect(tr.doc.child(2).textContent).toBe('Alpha');
+    expect(tr.doc.child(3).textContent).toBe('after');
+  });
+
+  it('handles splitAfter with single core block on whole-textblock rewrite', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-split-after',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(4);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('Alpha');
+    expect(tr.doc.child(2).textContent).toBe('');
+    expect(tr.doc.child(3).textContent).toBe('after');
+  });
+
+  it('handles both splitBefore and splitAfter with single core block on whole-textblock rewrite', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-split-both',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: '\nAlpha\n' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(5);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('');
+    expect(tr.doc.child(2).textContent).toBe('Alpha');
+    expect(tr.doc.child(3).textContent).toBe('');
+    expect(tr.doc.child(4).textContent).toBe('after');
+  });
+
+  it('handles splitBefore with multi-block replacement on whole-textblock rewrite', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-split-before-multi',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: '\nAlpha\n\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(5);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('');
+    expect(tr.doc.child(2).textContent).toBe('Alpha');
+    expect(tr.doc.child(3).textContent).toBe('Beta');
+    expect(tr.doc.child(4).textContent).toBe('after');
+  });
+
+  it('handles splitAfter with multi-block replacement on whole-textblock rewrite', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.text('before')),
+      schema.nodes.paragraph.create({}, schema.text('hello world')),
+      schema.nodes.paragraph.create({}, schema.text('after')),
+    ]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello world'.length,
+      from: 0,
+      to: 'hello world'.length,
+      text: 'hello world',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-split-after-multi',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello world' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\n\nBeta\n' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(5);
+    expect(tr.doc.child(0).textContent).toBe('before');
+    expect(tr.doc.child(1).textContent).toBe('Alpha');
+    expect(tr.doc.child(2).textContent).toBe('Beta');
+    expect(tr.doc.child(3).textContent).toBe('');
+    expect(tr.doc.child(4).textContent).toBe('after');
+  });
+
+  it('keeps partial-range rewrites inline in a real transaction when replacement text stays within one block', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: { group: 'block', content: 'text*' },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text('hello world'))]);
+
+    let absFrom = -1;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'hello world') {
+        absFrom = pos;
+        return false;
+      }
+      return undefined;
+    });
+    expect(absFrom).toBeGreaterThan(0);
+
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const editor = { state } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom,
+      absTo: absFrom + 'hello'.length,
+      from: 0,
+      to: 'hello'.length,
+      text: 'hello',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-inline-real',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.childCount).toBe(1);
+    expect(tr.doc.child(0).textContent).toBe('Alpha\nBeta world');
+  });
+
+  it('keeps partial-range rewrites inline when the replacement text stays within one block', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+        },
+        text: { group: 'inline' },
+      },
+    });
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, schema.text('hello world'))]);
+
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc,
+    };
+    tr.replace.mockReturnValue(tr);
+    tr.replaceWith.mockReturnValue(tr);
+
+    const editor = {
+      state: {
+        doc,
+        schema,
+      },
+    } as unknown as Editor;
+
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    const target = makeTarget({
+      absFrom: 1,
+      absTo: 6,
+      from: 0,
+      to: 5,
+      text: 'hello',
+      capturedStyle: { runs: [], isUniform: true },
+    }) as any;
+    const step: TextRewriteStep = {
+      id: 'step-inline',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Alpha\nBeta' } },
+    };
+
+    const outcome = executeTextRewrite(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.replace).not.toHaveBeenCalled();
+    expect(tr.replaceWith).toHaveBeenCalledTimes(1);
+
+    const replacementNode = tr.replaceWith.mock.calls[0][2];
+    expect(replacementNode.text).toBe('Alpha\nBeta');
   });
 });
 

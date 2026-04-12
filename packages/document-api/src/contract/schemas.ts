@@ -2952,6 +2952,60 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
   },
+  extract: {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
+              type: { type: 'string', description: 'Block type: paragraph, heading, listItem, table, image, etc.' },
+              text: { type: 'string', description: 'Full plain text content of the block.' },
+              headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+            },
+            ['nodeId', 'type', 'text'],
+          ),
+        },
+        comments: {
+          type: 'array',
+          items: objectSchema(
+            {
+              entityId: {
+                type: 'string',
+                description: 'Comment entity ID — pass to scrollToElement() for navigation.',
+              },
+              text: { type: 'string', description: 'Comment body text.' },
+              anchoredText: { type: 'string', description: 'The document text the comment is anchored to.' },
+              blockId: { type: 'string', description: 'Block ID the comment is anchored to.' },
+              status: { type: 'string', enum: ['open', 'resolved'] },
+              author: { type: 'string', description: 'Comment author name.' },
+            },
+            ['entityId', 'status'],
+          ),
+        },
+        trackedChanges: {
+          type: 'array',
+          items: objectSchema(
+            {
+              entityId: {
+                type: 'string',
+                description: 'Tracked change entity ID — pass to scrollToElement() for navigation.',
+              },
+              type: { type: 'string', enum: ['insert', 'delete', 'format'] },
+              excerpt: { type: 'string', description: 'Short text excerpt of the changed content.' },
+              author: { type: 'string', description: 'Change author name.' },
+              date: { type: 'string', description: 'Change date (ISO string).' },
+            },
+            ['entityId', 'type'],
+          ),
+        },
+        revision: { type: 'string', description: 'Document revision at the time of extraction.' },
+      },
+      ['blocks', 'comments', 'trackedChanges', 'revision'],
+    ),
+  },
   clearContent: {
     input: strictEmptyObjectSchema,
     output: receiptResultSchemaFor('clearContent'),

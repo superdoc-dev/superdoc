@@ -29,6 +29,8 @@ type ParagraphBlockAttrs = {
   decimalSeparator?: string;
   wordLayout?: WordParagraphLayoutOutput;
   numberingProperties?: unknown;
+  /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */
+  suppressFirstLineIndent?: boolean;
 };
 
 let canvas: HTMLCanvasElement | null = null;
@@ -1081,7 +1083,12 @@ export function remeasureParagraph(
   const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
-  const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
+  // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where
+  // justified paragraphs ignore their first-line indent. Without honoring it here, the
+  // initial measure and remeasure (triggered by live editing, resize, etc.) produce
+  // different first-line offsets and the first line jumps on redraw.
+  const suppressFirstLine = attrs?.suppressFirstLineIndent === true;
+  const baseFirstLineOffset = suppressFirstLine ? 0 : firstLineIndent || indentFirstLine - indentHanging;
   // When wordLayout is present, the hanging region is occupied by the list marker/tab,
   // so keep the same available width as body lines. For normal paragraphs we must honor
   // negative offsets (hanging indent) so the first line can extend into the hanging region.

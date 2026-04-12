@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { clearInheritedLinkedStyleId, isLinkedParagraphStyleId } from './linkedStyleSplitHelpers.js';
+import {
+  clearInheritedLinkedStyleId,
+  isLinkedCharacterStyleId,
+  isLinkedParagraphStyleId,
+} from './linkedStyleSplitHelpers.js';
 
 describe('linkedStyleSplitHelpers', () => {
   describe('isLinkedParagraphStyleId', () => {
@@ -62,6 +66,40 @@ describe('linkedStyleSplitHelpers', () => {
           null,
         ),
       ).toBe(false);
+    });
+  });
+
+  describe('isLinkedCharacterStyleId', () => {
+    it('returns true when the styleId is the linked character counterpart of a paragraph style', () => {
+      const editor = {
+        converter: {
+          translatedLinkedStyles: {
+            styles: {
+              Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
+            },
+          },
+        },
+      };
+
+      expect(isLinkedCharacterStyleId(editor, 'Heading1Char')).toBe(true);
+    });
+
+    it('returns false for paragraph style ids, unknown ids, and missing data', () => {
+      const editor = {
+        converter: {
+          translatedLinkedStyles: {
+            styles: {
+              Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
+              BodyText: { styleId: 'BodyText', type: 'paragraph' },
+            },
+          },
+        },
+      };
+
+      expect(isLinkedCharacterStyleId(editor, 'Heading1')).toBe(false);
+      expect(isLinkedCharacterStyleId(editor, 'Unknown')).toBe(false);
+      expect(isLinkedCharacterStyleId(editor, null)).toBe(false);
+      expect(isLinkedCharacterStyleId({}, 'Heading1Char')).toBe(false);
     });
   });
 

@@ -438,20 +438,24 @@ const setFocus = () => {
 
 const handleClickOutside = (e) => {
   const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
-  const clickedIgnoredTarget = targetElement?.closest?.(
-    [
-      '.comments-dropdown__option-label',
-      '.superdoc-comment-highlight',
-      '.sd-editor-comment-highlight',
-      '.sd-editor-tracked-change-highlight',
-      '.track-insert',
-      '.track-insert-dec',
-      '.track-delete',
-      '.track-delete-dec',
-      '.track-format',
-      '.track-format-dec',
-    ].join(','),
-  );
+  // Also check what's under the actual click coordinates. Pointer capture
+  // (used by the presentation editor) can redirect e.target away from the
+  // originally clicked element, causing the selector check to miss it.
+  const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+  const ignoredSelectors = [
+    '.comments-dropdown__option-label',
+    '.superdoc-comment-highlight',
+    '.sd-editor-comment-highlight',
+    '.sd-editor-tracked-change-highlight',
+    '.track-insert',
+    '.track-insert-dec',
+    '.track-delete',
+    '.track-delete-dec',
+    '.track-format',
+    '.track-format-dec',
+  ].join(',');
+  const clickedIgnoredTarget =
+    targetElement?.closest?.(ignoredSelectors) || elementAtPoint?.closest?.(ignoredSelectors);
 
   if (clickedIgnoredTarget || isCommentHighlighted.value) return;
 

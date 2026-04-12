@@ -21,6 +21,14 @@ Control which document is loaded and how users interact with it:
 **Editing mode** - Users can edit document content and insert fields.
 **Viewing mode** - Read-only document display, fields can still be inserted.
 
+Changing `mode` at runtime switches between editing and viewing without recreating the editor — no scroll jump or content flash:
+
+```tsx
+<SuperDocTemplateBuilder
+  document={{ source: file, mode: isEditing ? "editing" : "viewing" }}
+/>
+```
+
 ## Field system
 
 ### Available fields

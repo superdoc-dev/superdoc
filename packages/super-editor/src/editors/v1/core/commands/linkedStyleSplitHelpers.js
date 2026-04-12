@@ -8,6 +8,14 @@ export const isLinkedParagraphStyleId = (editor, styleId) => {
   return Boolean(styleDefinition?.type === 'paragraph' && styleDefinition?.link);
 };
 
+export const isLinkedCharacterStyleId = (editor, styleId) => {
+  if (!styleId) return false;
+
+  const translatedStyles = readTranslatedLinkedStyles(editor)?.styles;
+  if (!translatedStyles) return false;
+  return Object.values(translatedStyles).some((def) => def?.type === 'paragraph' && def?.link === styleId);
+};
+
 export const clearInheritedLinkedStyleId = (attrs, editor, { emptyParagraph = false } = {}) => {
   if (!emptyParagraph) return attrs;
   if (!attrs || typeof attrs !== 'object') return attrs;

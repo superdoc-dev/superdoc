@@ -6,6 +6,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
 const SPRE_DOC = path.resolve(__dirname, 'fixtures/math-spre-tests.docx');
+const DELIMITER_DOC = path.resolve(__dirname, 'fixtures/math-delimiter-tests.docx');
+const RADICAL_DOC = path.resolve(__dirname, 'fixtures/math-radical-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -108,12 +110,29 @@ test.describe('math equation import and rendering', () => {
     expect(subSupData!.superscript).toBe('2');
   });
 
+  test('renders radical as <msqrt> with radicand', async ({ superdoc }) => {
+    await superdoc.loadDocument(ALL_OBJECTS_DOC);
+    await superdoc.waitForStable();
+
+    // The test doc has √(b²-4ac) and √x — both with degHide, so both should be <msqrt>
+    const sqrtData = await superdoc.page.evaluate(() => {
+      const msqrts = document.querySelectorAll('msqrt');
+      return Array.from(msqrts).map((el) => ({
+        childCount: el.children.length,
+        textContent: el.textContent,
+      }));
+    });
+
+    expect(sqrtData.length).toBeGreaterThanOrEqual(2);
+    expect(sqrtData[0]!.childCount).toBeGreaterThan(0);
+  });
+
   test('math text content is preserved for unimplemented objects', async ({ superdoc }) => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();
 
-    // Unimplemented math objects (e.g., radical, delimiter) should still
-    // have their text content accessible in the PM document
+    // Unimplemented math objects should still have their text
+    // content accessible in the PM document
     const mathTexts = await superdoc.page.evaluate(() => {
       const view = (window as any).editor?.view;
       if (!view) return [];
@@ -346,5 +365,207 @@ test.describe('m:sPre (pre-sub-superscript) rendering', () => {
     expect(displayMode).not.toBeNull();
     expect(displayMode!.display).toBe('block');
     expect(displayMode!.displaystyle).toBe('true');
+  });
+});
+
+test.describe('m:d (delimiter) rendering', () => {
+  test('renders all 21 delimiter test cases as <math> elements', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    const mathCount = await superdoc.page.evaluate(() => {
+      return document.querySelectorAll('math').length;
+    });
+    expect(mathCount).toBe(21);
+  });
+
+  test('default parentheses wrap expression in <mo> delimiters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 1: default (x+y)
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[0];
+      if (!math) return null;
+      const mrow = math.querySelector('mrow');
+      if (!mrow) return null;
+      const mos = mrow.querySelectorAll(':scope > mo');
+      return {
+        text: math.textContent,
+        openDelim: mos[0]?.textContent,
+        closeDelim: mos[mos.length - 1]?.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.text).toBe('(x+y)');
+    expect(data!.openDelim).toBe('(');
+    expect(data!.closeDelim).toBe(')');
+  });
+
+  test('uses U+2502 as default separator between expressions', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 2: two expressions with default separator
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[1];
+      if (!math) return null;
+      return { text: math.textContent };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.text).toBe('(x\u2502y)');
+  });
+
+  test('suppresses delimiter when chr element present without m:val', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 5: begChr present, no val → suppress opening delimiter
+    const case5 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[4];
+      return math?.textContent ?? null;
+    });
+    expect(case5).toBe('x+y)');
+
+    // Case 8: endChr present, no val → suppress closing delimiter
+    const case8 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[7];
+      return math?.textContent ?? null;
+    });
+    expect(case8).toBe('(x+y');
+
+    // Case 9: both present, no val → suppress both
+    const case9 = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[8];
+      return math?.textContent ?? null;
+    });
+    expect(case9).toBe('x+y');
+  });
+
+  test('renders custom delimiter characters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 13: absolute value |x|
+    const absVal = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[12];
+      return math?.textContent ?? null;
+    });
+    expect(absVal).toBe('|x|');
+
+    // Case 15: floor ⌊x⌋
+    const floor = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[14];
+      return math?.textContent ?? null;
+    });
+    expect(floor).toBe('⌊x⌋');
+
+    // Case 16: ceiling ⌈x⌉
+    const ceiling = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[15];
+      return math?.textContent ?? null;
+    });
+    expect(ceiling).toBe('⌈x⌉');
+  });
+
+  test('renders nested delimiters', async ({ superdoc }) => {
+    await superdoc.loadDocument(DELIMITER_DOC);
+    await superdoc.waitForStable();
+
+    // Case 17: ((x+y)+z)
+    const nested = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[16];
+      if (!math) return null;
+      const innerMrows = math.querySelectorAll('mrow mrow mo');
+      return {
+        text: math.textContent,
+        nestedMoCount: innerMrows.length,
+      };
+    });
+
+    expect(nested).not.toBeNull();
+    expect(nested!.text).toBe('((x+y)+z)');
+  });
+});
+
+test.describe('m:rad (radical) edge cases', () => {
+  // Fixture has 3 cases the converter must handle distinctly:
+  //   sqrt_degHide          — canonical Word sqrt: degHide=1 + empty <m:deg/>
+  //   cube_root             — explicit degree, no degHide
+  //   empty_deg_no_degHide  — Word's round-trip canonical for "no explicit degree":
+  //                           Word adds an empty <m:deg/> on save, no <m:degHide>
+  test('canonical sqrt (degHide) renders as <msqrt>', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const first = maths[0];
+      if (!first) return null;
+      return {
+        hasMsqrt: first.querySelector('msqrt') !== null,
+        hasMroot: first.querySelector('mroot') !== null,
+        text: first.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.hasMsqrt).toBe(true);
+    expect(data!.hasMroot).toBe(false);
+    expect(data!.text).toBe('x');
+  });
+
+  test('cube root (visible degree) renders as <mroot> with radicand and index', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const second = maths[1];
+      if (!second) return null;
+      const mroot = second.querySelector('mroot');
+      if (!mroot) return null;
+      return {
+        childCount: mroot.children.length,
+        radicand: mroot.children[0]?.textContent,
+        degree: mroot.children[1]?.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.childCount).toBe(2);
+    expect(data!.radicand).toBe('x');
+    expect(data!.degree).toBe('3');
+  });
+
+  test('empty <m:deg/> with no degHide renders as <msqrt>, never <mroot> with empty index', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    // Without the empty-deg check, this case produces <mroot><mrow>x</mrow><mrow></mrow></mroot>.
+    // Assert the broken shape never appears anywhere on the page.
+    const data = await superdoc.page.evaluate(() => {
+      const maths = Array.from(document.querySelectorAll('math'));
+      const third = maths[2];
+      const brokenMroots = maths.filter((m) => {
+        const root = m.querySelector('mroot');
+        if (!root) return false;
+        const index = root.children[1];
+        return !index || index.textContent === '';
+      });
+      return {
+        thirdHasMsqrt: third?.querySelector('msqrt') !== null,
+        thirdHasMroot: third?.querySelector('mroot') !== null,
+        thirdText: third?.textContent,
+        brokenMrootCount: brokenMroots.length,
+      };
+    });
+
+    expect(data.thirdHasMsqrt).toBe(true);
+    expect(data.thirdHasMroot).toBe(false);
+    expect(data.thirdText).toBe('x');
+    expect(data.brokenMrootCount).toBe(0);
   });
 });

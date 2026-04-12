@@ -20,6 +20,7 @@ import {
   convertSuperscript,
   convertSubSuperscript,
   convertRadical,
+  convertUpperLimit,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -55,7 +56,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:eqArr': null, // Equation array (vertical array of equations)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:limLow': null, // Lower limit (e.g., lim)
-  'm:limUpp': null, // Upper limit
+  'm:limUpp': convertUpperLimit, // Upper limit
   'm:m': null, // Matrix (grid of elements)
   'm:nary': null, // N-ary operator (integral, summation, product)
   'm:phant': null, // Phantom (invisible spacing placeholder)

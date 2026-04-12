@@ -898,6 +898,101 @@ describe('m:rad converter', () => {
     expect(msqrt).not.toBeNull();
     expect(msqrt!.textContent).toBe('');
   });
+
+  // Word's round-trip canonical form for "no explicit degree": Word adds an empty
+  // <m:deg/> on save even when there is no <m:degHide>. Without the empty-deg
+  // check this falls into the <mroot> branch and produces an invalid
+  // <mroot><mrow>x</mrow><mrow></mrow></mroot> with an empty index.
+  it('produces <msqrt> when m:deg is present but empty and no m:degHide', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            { name: 'm:deg', elements: [] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msqrt = result!.querySelector('msqrt');
+    expect(msqrt).not.toBeNull();
+    expect(msqrt!.textContent).toBe('x');
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  // ST_OnOff (ECMA-376 §22.9.2.7) accepts "1"/"true"/"on" as true and
+  // "0"/"false"/"off" as false. Word normalizes "on"/"off" away on save but
+  // other DOCX producers (Google Docs, LibreOffice, Pages) may emit them.
+  it('treats m:degHide m:val="on" as hidden (ST_OnOff true alias)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide', attributes: { 'm:val': 'on' } }],
+            },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msqrt')).not.toBeNull();
+    expect(result!.querySelector('mroot')).toBeNull();
+  });
+
+  it('treats m:degHide m:val="off" as not hidden (ST_OnOff false alias)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:rad',
+          elements: [
+            {
+              name: 'm:radPr',
+              elements: [{ name: 'm:degHide', attributes: { 'm:val': 'off' } }],
+            },
+            {
+              name: 'm:deg',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mroot = result!.querySelector('mroot');
+    expect(mroot).not.toBeNull();
+    expect(mroot!.children[0]!.textContent).toBe('x');
+    expect(mroot!.children[1]!.textContent).toBe('3');
+    expect(result!.querySelector('msqrt')).toBeNull();
+  });
 });
 
 describe('m:sSub converter', () => {
@@ -1503,142 +1598,5 @@ describe('m:func converter', () => {
     expect(mis.length).toBe(2);
     expect(mis[0]!.textContent).toBe('sin');
     expect(mis[1]!.textContent).toBe('cos');
-  });
-});
-
-describe('m:rad converter', () => {
-  it('converts m:rad with degHide to <msqrt>', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:rad',
-          elements: [
-            {
-              name: 'm:radPr',
-              elements: [{ name: 'm:degHide' }],
-            },
-            { name: 'm:deg', elements: [] },
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-
-    const result = convertOmmlToMathml(omml, doc);
-    expect(result).not.toBeNull();
-    const msqrt = result!.querySelector('msqrt');
-    expect(msqrt).not.toBeNull();
-    expect(msqrt!.textContent).toBe('x');
-    expect(result!.querySelector('mroot')).toBeNull();
-  });
-
-  it('converts m:rad without degHide to <mroot> with radicand first, degree second', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:rad',
-          elements: [
-            {
-              name: 'm:deg',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
-            },
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-
-    const result = convertOmmlToMathml(omml, doc);
-    expect(result).not.toBeNull();
-    const mroot = result!.querySelector('mroot');
-    expect(mroot).not.toBeNull();
-    // MathML <mroot> order: first child = radicand, second child = degree
-    expect(mroot!.children[0]!.textContent).toBe('x');
-    expect(mroot!.children[1]!.textContent).toBe('3');
-    expect(result!.querySelector('msqrt')).toBeNull();
-  });
-
-  it('converts m:rad with degHide m:val="0" to <mroot> (degree explicitly visible)', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:rad',
-          elements: [
-            {
-              name: 'm:radPr',
-              elements: [{ name: 'm:degHide', attributes: { 'm:val': '0' } }],
-            },
-            {
-              name: 'm:deg',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
-            },
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-
-    const result = convertOmmlToMathml(omml, doc);
-    expect(result).not.toBeNull();
-    expect(result!.querySelector('mroot')).not.toBeNull();
-    expect(result!.querySelector('msqrt')).toBeNull();
-  });
-
-  it('produces <msqrt> when m:deg is missing entirely', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:rad',
-          elements: [
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-
-    const result = convertOmmlToMathml(omml, doc);
-    expect(result).not.toBeNull();
-    expect(result!.querySelector('msqrt')).not.toBeNull();
-    expect(result!.querySelector('mroot')).toBeNull();
-  });
-
-  it('handles missing m:e gracefully', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:rad',
-          elements: [
-            {
-              name: 'm:radPr',
-              elements: [{ name: 'm:degHide' }],
-            },
-            { name: 'm:deg', elements: [] },
-          ],
-        },
-      ],
-    };
-
-    const result = convertOmmlToMathml(omml, doc);
-    expect(result).not.toBeNull();
-    const msqrt = result!.querySelector('msqrt');
-    expect(msqrt).not.toBeNull();
-    expect(msqrt!.textContent).toBe('');
   });
 });

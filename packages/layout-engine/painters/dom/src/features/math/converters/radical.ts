@@ -12,7 +12,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *   - degree hidden → <msqrt><mrow>radicand</mrow></msqrt>
  *   - degree shown  → <mroot><mrow>radicand</mrow><mrow>degree</mrow></mroot>
  *
- * @spec ECMA-376 §22.1.2.86
+ * @spec ECMA-376 §22.1.2.88
  */
 export const convertRadical: MathObjectConverter = (node, doc, convertChildren) => {
   const elements = node.elements ?? [];
@@ -21,10 +21,11 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
   const deg = elements.find((e) => e.name === 'm:deg');
   const radicand = elements.find((e) => e.name === 'm:e');
 
-  // m:degHide val defaults to false; presence with val="1" or "true" means hidden
+  // m:degHide is an ST_OnOff property: presence with no val (or val="1"/"true"/"on") means
+  // the degree is hidden; val="0"/"false"/"off" means it is shown. ECMA-376 §22.9.2.7.
   const degHideEl = radPr?.elements?.find((e) => e.name === 'm:degHide');
   const degHideVal = degHideEl?.attributes?.['m:val'];
-  const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false';
+  const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false' && degHideVal !== 'off';
 
   // Use msqrt if degree is explicitly hidden OR if m:deg is missing/empty
   if (degreeHidden || !deg || (deg.elements ?? []).length === 0) {
@@ -48,4 +49,3 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
 
   return mroot;
 };
-

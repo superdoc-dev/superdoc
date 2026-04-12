@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
 const DELIMITER_DOC = path.resolve(__dirname, 'fixtures/math-delimiter-tests.docx');
+const RADICAL_DOC = path.resolve(__dirname, 'fixtures/math-radical-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -358,5 +359,85 @@ test.describe('m:d (delimiter) rendering', () => {
 
     expect(nested).not.toBeNull();
     expect(nested!.text).toBe('((x+y)+z)');
+  });
+});
+
+test.describe('m:rad (radical) edge cases', () => {
+  // Fixture has 3 cases the converter must handle distinctly:
+  //   sqrt_degHide          — canonical Word sqrt: degHide=1 + empty <m:deg/>
+  //   cube_root             — explicit degree, no degHide
+  //   empty_deg_no_degHide  — Word's round-trip canonical for "no explicit degree":
+  //                           Word adds an empty <m:deg/> on save, no <m:degHide>
+  test('canonical sqrt (degHide) renders as <msqrt>', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const first = maths[0];
+      if (!first) return null;
+      return {
+        hasMsqrt: first.querySelector('msqrt') !== null,
+        hasMroot: first.querySelector('mroot') !== null,
+        text: first.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.hasMsqrt).toBe(true);
+    expect(data!.hasMroot).toBe(false);
+    expect(data!.text).toBe('x');
+  });
+
+  test('cube root (visible degree) renders as <mroot> with radicand and index', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const second = maths[1];
+      if (!second) return null;
+      const mroot = second.querySelector('mroot');
+      if (!mroot) return null;
+      return {
+        childCount: mroot.children.length,
+        radicand: mroot.children[0]?.textContent,
+        degree: mroot.children[1]?.textContent,
+      };
+    });
+
+    expect(data).not.toBeNull();
+    expect(data!.childCount).toBe(2);
+    expect(data!.radicand).toBe('x');
+    expect(data!.degree).toBe('3');
+  });
+
+  test('empty <m:deg/> with no degHide renders as <msqrt>, never <mroot> with empty index', async ({ superdoc }) => {
+    await superdoc.loadDocument(RADICAL_DOC);
+    await superdoc.waitForStable();
+
+    // Without the empty-deg check, this case produces <mroot><mrow>x</mrow><mrow></mrow></mroot>.
+    // Assert the broken shape never appears anywhere on the page.
+    const data = await superdoc.page.evaluate(() => {
+      const maths = Array.from(document.querySelectorAll('math'));
+      const third = maths[2];
+      const brokenMroots = maths.filter((m) => {
+        const root = m.querySelector('mroot');
+        if (!root) return false;
+        const index = root.children[1];
+        return !index || index.textContent === '';
+      });
+      return {
+        thirdHasMsqrt: third?.querySelector('msqrt') !== null,
+        thirdHasMroot: third?.querySelector('mroot') !== null,
+        thirdText: third?.textContent,
+        brokenMrootCount: brokenMroots.length,
+      };
+    });
+
+    expect(data.thirdHasMsqrt).toBe(true);
+    expect(data.thirdHasMroot).toBe(false);
+    expect(data.thirdText).toBe('x');
+    expect(data.brokenMrootCount).toBe(0);
   });
 });

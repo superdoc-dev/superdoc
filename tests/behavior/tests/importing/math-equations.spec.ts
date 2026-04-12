@@ -84,6 +84,37 @@ test.describe('math equation import and rendering', () => {
     }
   });
 
+  test('renders m:acc as <mover accent="true"> with spacing-form accent char', async ({ superdoc }) => {
+    await superdoc.loadDocument(ALL_OBJECTS_DOC);
+    await superdoc.waitForStable();
+
+    // The fixture has m:acc with m:chr m:val="U+0302" (combining circumflex).
+    // convertAccent should:
+    //   1. Produce a <mover accent="true"> wrapper
+    //   2. Emit ASCII circumflex U+005E (not the combining U+0302) since that's
+    //      what MathML Core's operator dictionary marks as a stretchy accent.
+    const accentData = await superdoc.page.evaluate(() => {
+      const mover = document.querySelector('mover[accent="true"]');
+      if (!mover) return null;
+      const mo = mover.querySelector('mo');
+      return {
+        childCount: mover.children.length,
+        baseText: mover.children[0]?.textContent,
+        accentChar: mo?.textContent,
+        accentCodepoint: mo?.textContent
+          ? 'U+' + (mo.textContent.codePointAt(0) ?? 0).toString(16).padStart(4, '0').toUpperCase()
+          : null,
+      };
+    });
+
+    expect(accentData).not.toBeNull();
+    expect(accentData!.childCount).toBe(2);
+    expect(accentData!.baseText).toBe('x');
+    // Combining circumflex (U+0302) in OMML must be rendered as ASCII circumflex (U+005E).
+    expect(accentData!.accentChar).toBe('\u005E');
+    expect(accentData!.accentCodepoint).toBe('U+005E');
+  });
+
   test('renders sub-superscript as <msubsup> with base, subscript, and superscript', async ({ superdoc }) => {
     await superdoc.loadDocument(ALL_OBJECTS_DOC);
     await superdoc.waitForStable();

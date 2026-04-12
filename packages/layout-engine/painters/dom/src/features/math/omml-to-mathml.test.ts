@@ -929,72 +929,125 @@ describe('m:func converter', () => {
 });
 
 describe('m:acc converter', () => {
+  // Helper: build an m:acc node with an optional accPr and a base string.
+  const buildAcc = (accPrElements: unknown[] | null, baseText: string | null, extraBaseRuns: string[] = []) => {
+    const elements: unknown[] = [];
+    if (accPrElements !== null) {
+      elements.push({ name: 'm:accPr', elements: accPrElements });
+    }
+    if (baseText !== null) {
+      const runs = [baseText, ...extraBaseRuns].map((t) => ({
+        name: 'm:r',
+        elements: [{ name: 'm:t', elements: [{ type: 'text', text: t }] }],
+      }));
+      elements.push({ name: 'm:e', elements: runs });
+    }
+    return { name: 'm:oMath', elements: [{ name: 'm:acc', elements }] };
+  };
+
   it('converts accent with tilde to <mover accent="true">', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:acc',
-          elements: [
-            { name: 'm:accPr', elements: [{ name: 'm:chr', attributes: { 'm:val': '\u0303' } }] },
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-    const result = convertOmmlToMathml(omml, doc);
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr', attributes: { 'm:val': '\u0303' } }], 'x'), doc);
     expect(result).not.toBeNull();
     const mover = result!.querySelector('mover');
     expect(mover).not.toBeNull();
     expect(mover!.getAttribute('accent')).toBe('true');
     expect(mover!.children[0]!.textContent).toBe('x');
+    // Combining tilde (U+0303) is mapped to ASCII tilde (U+007E, "~") which
+    // MathML Core's operator dictionary marks as a stretchy accent.
     const mo = mover!.querySelector('mo');
-    expect(mo!.textContent).toBe('\u0303');
+    expect(mo!.textContent).toBe('\u007E');
   });
 
-  it('defaults to circumflex (U+0302) when m:chr is absent', () => {
-    const omml = {
-      name: 'm:oMath',
-      elements: [
-        {
-          name: 'm:acc',
-          elements: [
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
-            },
-          ],
-        },
-      ],
-    };
-    const result = convertOmmlToMathml(omml, doc);
+  it('defaults to circumflex when m:accPr is absent (spec §22.1.2.1)', () => {
+    const result = convertOmmlToMathml(buildAcc(null, 'a'), doc);
     const mover = result!.querySelector('mover');
     expect(mover).not.toBeNull();
-    const mo = mover!.querySelector('mo');
-    expect(mo!.textContent).toBe('\u0302');
+    expect(mover!.getAttribute('accent')).toBe('true');
+    // Combining circumflex (U+0302) maps to ASCII circumflex (U+005E, "^").
+    expect(mover!.querySelector('mo')!.textContent).toBe('\u005E');
+  });
+
+  it('defaults to circumflex when m:accPr is present but m:chr is absent (spec §22.1.2.20)', () => {
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:ctrlPr' }], 'a'), doc);
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.getAttribute('accent')).toBe('true');
+    expect(mover!.querySelector('mo')!.textContent).toBe('\u005E');
   });
 
   it('renders dot accent', () => {
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr', attributes: { 'm:val': '\u0307' } }], 'y'), doc);
+    const mover = result!.querySelector('mover');
+    expect(mover!.getAttribute('accent')).toBe('true');
+    // U+0307 → U+02D9 (spacing dot above) — no ASCII-range equivalent.
+    expect(mover!.querySelector('mo')!.textContent).toBe('\u02D9');
+  });
+
+  it('maps combining right-arrow (U+20D7) to stretchy right arrow (U+2192)', () => {
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr', attributes: { 'm:val': '\u20D7' } }], 'v'), doc);
+    expect(result!.querySelector('mover mo')!.textContent).toBe('\u2192');
+  });
+
+  it('passes unmapped accent characters through unchanged', () => {
+    // A character outside the combining→spacing table should pass through as-is.
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr', attributes: { 'm:val': '*' } }], 'x'), doc);
+    expect(result!.querySelector('mover mo')!.textContent).toBe('*');
+  });
+
+  // ── Spec §22.1.2.20: m:chr present with missing/empty m:val means the
+  //    character is absent (not "use the default"). Render the base alone.
+  it('renders the base alone when m:chr is present with no m:val attribute', () => {
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr' }], 'x'), doc);
+    expect(result).not.toBeNull();
+    // No <mover> wrapper — just the base inside an <mrow>.
+    expect(result!.querySelector('mover')).toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('renders the base alone when m:chr has an explicitly empty m:val', () => {
+    const result = convertOmmlToMathml(buildAcc([{ name: 'm:chr', attributes: { 'm:val': '' } }], 'x'), doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mover')).toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('wraps multi-run base in <mrow> so a wide base like x+1 renders as a group', () => {
+    const result = convertOmmlToMathml(
+      buildAcc([{ name: 'm:chr', attributes: { 'm:val': '\u0303' } }], 'x', ['+', '1']),
+      doc,
+    );
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    const baseRow = mover!.children[0]!;
+    expect(baseRow.tagName.toLowerCase()).toBe('mrow');
+    expect(baseRow.children.length).toBe(3);
+    expect(baseRow.textContent).toBe('x+1');
+  });
+
+  it('ignores non-chr siblings in m:accPr (e.g. m:ctrlPr)', () => {
+    const result = convertOmmlToMathml(
+      buildAcc([{ name: 'm:ctrlPr' }, { name: 'm:chr', attributes: { 'm:val': '\u0303' } }], 'x'),
+      doc,
+    );
+    const mover = result!.querySelector('mover');
+    expect(mover).not.toBeNull();
+    expect(mover!.children.length).toBe(2);
+    expect(mover!.querySelector('mo')!.textContent).toBe('\u007E');
+  });
+
+  it('returns null when m:e is absent (invalid per CT_Acc)', () => {
     const omml = {
       name: 'm:oMath',
       elements: [
         {
           name: 'm:acc',
-          elements: [
-            { name: 'm:accPr', elements: [{ name: 'm:chr', attributes: { 'm:val': '\u0307' } }] },
-            {
-              name: 'm:e',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
-            },
-          ],
+          elements: [{ name: 'm:accPr', elements: [{ name: 'm:chr', attributes: { 'm:val': '\u0303' } }] }],
         },
       ],
     };
     const result = convertOmmlToMathml(omml, doc);
-    const mo = result!.querySelector('mover mo');
-    expect(mo!.textContent).toBe('\u0307');
+    // The outer <math> is produced only if it has children. With m:acc dropped,
+    // there are no math children, so convertOmmlToMathml returns null.
+    expect(result).toBeNull();
   });
 });

@@ -39,6 +39,7 @@ export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Implemented ──────────────────────────────────────────────────────────
   'm:r': convertMathRun,
+  'm:acc': convertAccent, // Accent (diacritical mark above base)
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
@@ -47,7 +48,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
-  'm:acc': convertAccent, // Accent (diacritical mark above base)
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
   'm:d': null, // Delimiter (parentheses, brackets, braces)

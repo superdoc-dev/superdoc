@@ -287,6 +287,51 @@ Use the explicit `collaboration` object when your server speaks the Hocuspocus p
   </Tab>
 </Tabs>
 
+### Forward custom WebSocket query parameters
+
+Attach arbitrary key-value pairs to the WebSocket connection URL with the `params` field. Use this when your collaboration server expects per-connection metadata (activity tracking, tenant identifiers, feature flags, etc.) that shouldn't live in the document ID.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'y-websocket',
+        url: 'wss://collab.example.com/ws',
+        documentId: 'asset_abc',
+        tokenEnv: 'SUPERDOC_COLLAB_TOKEN',
+        params: {
+          customAttributions: 'agent_id:abc,session_id:def,user_id:ghi',
+          region: 'us-east-1',
+        },
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "y-websocket",
+            "url": "wss://collab.example.com/ws",
+            "documentId": "asset_abc",
+            "tokenEnv": "SUPERDOC_COLLAB_TOKEN",
+            "params": {
+                "customAttributions": "agent_id:abc,session_id:def,user_id:ghi",
+                "region": "us-east-1",
+            },
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+Keys and values must both be strings — query parameters serialize as strings on the URL. The field is supported for `y-websocket` and `hocuspocus`; Liveblocks manages its transport differently and does not accept this field.
+
+<Note>
+  `token` is reserved — the CLI sets it automatically from `tokenEnv`. Passing `token` inside `params` is a validation error; use `tokenEnv` for authentication.
+</Note>
+
 ### Connect to Liveblocks
 
 Liveblocks is configured through an explicit `collaboration` object. Two auth modes are supported:

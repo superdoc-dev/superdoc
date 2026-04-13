@@ -77,6 +77,44 @@ function classifyMathText(text: string): 'mn' | 'mo' | 'mi' {
   return 'mi';
 }
 
+/** ECMA-376 m:sty → MathML mathvariant (§22.1.2 math run properties). */
+const STY_TO_VARIANT: Record<string, string> = {
+  p: 'normal',
+  b: 'bold',
+  i: 'italic',
+  bi: 'bold-italic',
+};
+
+/** ECMA-376 m:scr → MathML mathvariant (§22.1.2 math run properties). */
+const SCR_TO_VARIANT: Record<string, string> = {
+  roman: 'normal',
+  script: 'script',
+  fraktur: 'fraktur',
+  'double-struck': 'double-struck',
+  'sans-serif': 'sans-serif',
+  monospace: 'monospace',
+};
+
+/**
+ * Resolve the effective MathML mathvariant from OMML m:rPr.
+ *
+ * Precedence (highest first): m:sty > m:scr > m:nor.
+ * m:nor is the legacy "normal text" flag (ECMA-376 §22.1.2); it is treated as
+ * equivalent to m:sty="p" when neither m:sty nor m:scr is present.
+ */
+function resolveMathVariant(rPr: OmmlJsonNode | undefined): string | null {
+  const elements = rPr?.elements ?? [];
+  const sty = elements.find((el) => el.name === 'm:sty')?.attributes?.['m:val'];
+  if (sty && STY_TO_VARIANT[sty]) return STY_TO_VARIANT[sty]!;
+
+  const scr = elements.find((el) => el.name === 'm:scr')?.attributes?.['m:val'];
+  if (scr && SCR_TO_VARIANT[scr]) return SCR_TO_VARIANT[scr]!;
+
+  if (elements.some((el) => el.name === 'm:nor')) return 'normal';
+
+  return null;
+}
+
 /**
  * Convert an m:r (math run) element to MathML.
  *
@@ -105,18 +143,18 @@ export const convertMathRun: MathObjectConverter = (node, doc) => {
 
   if (!text) return null;
 
-  // Check m:rPr for normal text flag (m:nor) which disables math italics
   const rPr = elements.find((el) => el.name === 'm:rPr');
-  const isNormalText = rPr?.elements?.some((el) => el.name === 'm:nor') ?? false;
-
+  const variant = resolveMathVariant(rPr);
   const tag = classifyMathText(text);
+
   const el = doc.createElementNS(MATHML_NS, tag);
   el.textContent = text;
 
-  // MathML <mi> with single-char content is italic by default (spec).
-  // Multi-char <mi> is normal by default. The m:nor flag forces normal.
-  if (tag === 'mi' && isNormalText) {
-    el.setAttribute('mathvariant', 'normal');
+  // Apply mathvariant when the spec properties resolve to one. The default
+  // for single-char <mi> is italic and for multi-char <mi>/<mo>/<mn> is
+  // normal — we only set an attribute when m:rPr explicitly specifies it.
+  if (variant) {
+    el.setAttribute('mathvariant', variant);
   }
 
   return el;

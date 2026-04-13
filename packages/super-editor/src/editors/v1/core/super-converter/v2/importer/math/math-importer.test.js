@@ -53,6 +53,42 @@ describe('mathNodeHandler', () => {
       expect(original).not.toBe(oMathNode);
       expect(original.elements[0].name).toBe('m:sSup');
     });
+
+    it('preserves m:sPre subtree verbatim in originalXml', () => {
+      // Spec-correct child order per ECMA-376 §22.1.2.99: (m:sPrePr?, m:sub, m:sup, m:e)
+      const oMathNode = {
+        name: 'm:oMath',
+        elements: [
+          {
+            name: 'm:sPre',
+            elements: [
+              { name: 'm:sPrePr', elements: [{ name: 'm:ctrlPr' }] },
+              {
+                name: 'm:sub',
+                elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+              },
+              {
+                name: 'm:sup',
+                elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+              },
+              {
+                name: 'm:e',
+                elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'A' }] }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handler({ nodes: [oMathNode] });
+      const original = result.nodes[0].attrs.originalXml;
+
+      expect(original).not.toBe(oMathNode);
+      expect(original.elements[0].name).toBe('m:sPre');
+      // Child order is preserved — the layout-engine converter relies on tag-based
+      // lookup, but the importer must not rearrange the tree.
+      expect(original.elements[0].elements.map((e) => e.name)).toEqual(['m:sPrePr', 'm:sub', 'm:sup', 'm:e']);
+    });
   });
 
   describe('m:oMathPara (display math)', () => {

@@ -17,10 +17,10 @@ export function cloneBorders(borders, sides) {
   for (const side of keys) {
     const borderValue = source[side];
     if (!borderValue || typeof borderValue !== 'object') continue;
-    clone[side] = { .../** @type {Record<string, unknown>} */ (borderValue) };
+    /** @type {Record<string, unknown>} */ (clone)[side] = { .../** @type {Record<string, unknown>} */ (borderValue) };
   }
 
-  return clone;
+  return /** @type {Record<string, unknown>} */ (clone);
 }
 
 /**

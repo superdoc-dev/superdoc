@@ -17,9 +17,8 @@ import type {
 } from '@superdoc/contracts';
 import type { OoxmlBorder } from '../types.js';
 import { normalizeColor, pickNumber, isFiniteNumber, normalizeCellPaddingTopBottom } from '../utilities.js';
-import { PX_PER_PT } from '../constants.js';
+import { eighthPointsToPixels } from '@superdoc/super-editor/converter/internal/helpers.js';
 
-const EIGHTHS_PER_POINT = 8;
 const MIN_BORDER_SIZE_PX = 0.5; // Minimum visible border
 const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
 
@@ -37,16 +36,7 @@ type BorderConversionOptions = {
  *
  * Clamps results to reasonable bounds to prevent edge cases.
  */
-export const borderSizeToPx = (size?: number): number | undefined => {
-  if (!isFiniteNumber(size)) return undefined;
-  if (size <= 0) return 0;
-
-  const points = size / EIGHTHS_PER_POINT;
-  const pixelValue = points * PX_PER_PT;
-
-  // Clamp to reasonable bounds
-  return Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, pixelValue));
-};
+export const borderSizeToPx = (size?: number): number | undefined => eighthPointsToPixels(size, { clamp: true });
 
 const clampPixelBorderWidth = (width: number): number =>
   Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, width));

@@ -217,15 +217,8 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
 function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
   const clone = cloneBorders(value);
   if (!clone || Object.keys(clone).length === 0) return undefined;
-  mapBorderSizes(clone, convertBorderSizeValueToPixels);
+  mapBorderSizes(clone, eighthPointsToPixels);
   return Object.keys(clone).length > 0 ? clone : undefined;
-}
-
-function convertBorderSizeValueToPixels(size: unknown): number | undefined {
-  if (typeof size !== 'number' || Number.isNaN(size)) return undefined;
-  const pixels = eighthPointsToPixels(size);
-  if (typeof pixels !== 'number' || Number.isNaN(pixels)) return undefined;
-  return pixels;
 }
 
 function normalizeGridWidth(width: unknown): { col: number } {

@@ -63,6 +63,10 @@ function dataUriToArrayBuffer(data) {
 // CSS pixels per inch; used to convert between Word's inch-based measurements and DOM pixels.
 const PIXELS_PER_INCH = 96;
 
+const EIGHTHS_PER_POINT = 8;
+const MIN_BORDER_SIZE_PX = 0.5;
+const MAX_BORDER_SIZE_PX = 100;
+
 function inchesToTwips(inches) {
   if (inches == null) return;
   if (typeof inches === 'string') inches = parseFloat(inches);
@@ -137,11 +141,26 @@ function pixelsToHalfPoints(pixels) {
   return Math.round((pixels * 72) / PIXELS_PER_INCH);
 }
 
-function eighthPointsToPixels(eighthPoints) {
-  if (eighthPoints == null) return;
-  const points = parseFloat(eighthPoints) / 8;
-  const pixels = points * 1.3333;
-  return pixels;
+/**
+ * Convert an OOXML border size (eighths of a point, ST_EighthPointMeasure) to CSS pixels.
+ *
+ * Accepts numbers or numeric strings (OOXML values are sometimes parsed as strings).
+ *
+ * @param {*} eighthPoints - Size in eighths of a point.
+ * @param {{ clamp?: boolean }} [options]
+ * @param {boolean} [options.clamp=false] - When true, clamps the result to a visible range
+ *   [MIN_BORDER_SIZE_PX, MAX_BORDER_SIZE_PX] and returns 0 for non-positive input,
+ *   preventing invisible or oversized borders.
+ * @returns {number | undefined}
+ */
+function eighthPointsToPixels(eighthPoints, { clamp = false } = {}) {
+  if (eighthPoints == null) return undefined;
+  const numeric = parseFloat(eighthPoints);
+  if (!Number.isFinite(numeric)) return undefined;
+  if (clamp && numeric <= 0) return 0;
+  const pixels = (numeric / EIGHTHS_PER_POINT) * (PIXELS_PER_INCH / 72);
+  if (!clamp) return pixels;
+  return Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, pixels));
 }
 
 function pointsToTwips(points) {

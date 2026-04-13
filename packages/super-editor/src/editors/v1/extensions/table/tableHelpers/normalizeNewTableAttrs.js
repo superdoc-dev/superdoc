@@ -56,7 +56,7 @@ export function normalizeNewTableAttrs(editor) {
 
   if (resolved.source === 'none') {
     const fallbackPixelBorders = cloneBorders(TABLE_FALLBACK_BORDERS, TABLE_BORDER_SIDES);
-    mapBorderSizes(fallbackPixelBorders, convertBorderSizeToPx);
+    mapBorderSizes(fallbackPixelBorders, eighthPointsToPixels);
 
     return {
       tableStyleId: null,
@@ -89,14 +89,3 @@ export function normalizeNewTableAttrs(editor) {
 export const STANDALONE_TABLE_STYLE_ID = TABLE_STYLE_ID_TABLE_GRID;
 
 const TABLE_BORDER_SIDES = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
-
-/**
- *
- * @param {*} size - The size to convert to pixels
- * @returns
- */
-const convertBorderSizeToPx = (size) => {
-  if (typeof size !== 'number') return undefined;
-  const px = eighthPointsToPixels(size);
-  return typeof px === 'number' ? px : undefined;
-};

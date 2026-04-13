@@ -12,7 +12,7 @@ export function emuToPixels(emu: any): number;
 export function pixelsToEmu(px: any): number;
 export function pixelsToHalfPoints(pixels: any): number;
 export function halfPointToPoints(halfPoints: any): number;
-export function eighthPointsToPixels(eighthPoints: any): number;
+export function eighthPointsToPixels(eighthPoints: any, options?: { clamp?: boolean }): number | undefined;
 export function pixelsToEightPoints(pixels: any): number;
 export function rotToDegrees(rot: any): number;
 export function degreesToRot(degrees: any): number;

@@ -1,6 +1,25 @@
-import type { MathObjectConverter } from '../types.js';
+import type { MathObjectConverter, OmmlJsonNode } from '../types.js';
 
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
+
+/**
+ * Deep-clone row children with `&` stripped from m:t text nodes.
+ *
+ * ECMA-376 §22.1.2.34: `&` characters inside m:t are alignment markers
+ * (odd = align, even = spacer), not literal text. This implementation
+ * doesn't yet map them to MathML <maligngroup>/<malignmark>, so strip them
+ * to avoid rendering literal ampersands in the output.
+ */
+const stripAlignmentMarkers = (nodes: OmmlJsonNode[]): OmmlJsonNode[] =>
+  nodes.map((node) => {
+    if (node?.type === 'text' && typeof node.text === 'string' && node.text.includes('&')) {
+      return { ...node, text: node.text.replace(/&/g, '') };
+    }
+    if (node?.elements) {
+      return { ...node, elements: stripAlignmentMarkers(node.elements) };
+    }
+    return node;
+  });
 
 /**
  * Convert m:eqArr (equation array) to MathML <mtable>.
@@ -10,7 +29,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  *
  * MathML output:
  *   <mtable columnalign="left">
- *     <mtr> <mtd> <mrow>row-content</mrow> </mtd> </mtr>
+ *     <mtr> <mtd> row-content </mtd> </mtr>
  *     ...
  *   </mtable>
  *
@@ -29,7 +48,8 @@ export const convertEquationArray: MathObjectConverter = (node, doc, convertChil
   for (const row of rows) {
     const mtr = doc.createElementNS(MATHML_NS, 'mtr');
     const mtd = doc.createElementNS(MATHML_NS, 'mtd');
-    mtd.appendChild(convertChildren(row.elements ?? []));
+    const cleanedChildren = stripAlignmentMarkers(row.elements ?? []);
+    mtd.appendChild(convertChildren(cleanedChildren));
     mtr.appendChild(mtd);
     mtable.appendChild(mtr);
   }

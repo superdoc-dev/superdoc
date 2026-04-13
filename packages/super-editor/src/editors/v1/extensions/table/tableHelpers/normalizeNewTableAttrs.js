@@ -9,6 +9,7 @@ import {
 import { readDefaultTableStyle, readSettingsRoot } from '../../../document-api-adapters/document-settings.js';
 import { readTranslatedLinkedStyles } from '../../../core/parts/adapters/styles-read.js';
 import { eighthPointsToPixels } from '../../../core/super-converter/helpers.js';
+import { cloneBorders, mapBorderSizes } from './border-utils.js';
 
 /**
  * @typedef {Object} NormalizedTableAttrs
@@ -54,7 +55,8 @@ export function normalizeNewTableAttrs(editor) {
   const resolved = resolvePreferredNewTableStyleIdFromEditor(editor);
 
   if (resolved.source === 'none') {
-    const fallbackPixelBorders = cloneBorders(TABLE_FALLBACK_BORDERS, convertBorderSizeToPx);
+    const fallbackPixelBorders = cloneBorders(TABLE_FALLBACK_BORDERS, TABLE_BORDER_SIDES);
+    mapBorderSizes(fallbackPixelBorders, convertBorderSizeToPx);
 
     return {
       tableStyleId: null,
@@ -86,32 +88,7 @@ export function normalizeNewTableAttrs(editor) {
  */
 export const STANDALONE_TABLE_STYLE_ID = TABLE_STYLE_ID_TABLE_GRID;
 
-/**
- *
- * @param {*} borders - The borders to clone
- * @param {*} sizeMapper - The function to convert the size to pixels
- * @returns {Object} - The cloned borders
- */
-const cloneBorders = (borders, sizeMapper) => {
-  if (!borders || typeof borders !== 'object') return {};
-  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
-  const result = {};
-
-  for (const side of sides) {
-    const border = borders[side];
-    if (!border || typeof border !== 'object') continue;
-    const copy = { ...border };
-
-    if (sizeMapper) {
-      const mapped = sizeMapper(copy.size);
-      if (typeof mapped === 'number') copy.size = mapped;
-    }
-
-    result[side] = copy;
-  }
-
-  return result;
-};
+const TABLE_BORDER_SIDES = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
 
 /**
  *

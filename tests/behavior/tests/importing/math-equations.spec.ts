@@ -11,6 +11,7 @@ const RADICAL_DOC = path.resolve(__dirname, 'fixtures/math-radical-tests.docx');
 const LIMIT_DOC = path.resolve(__dirname, 'fixtures/math-limit-tests.docx');
 const EQARR_DOC = path.resolve(__dirname, 'fixtures/math-eqarr-tests.docx');
 const NARY_DOC = path.resolve(__dirname, 'fixtures/math-nary-tests.docx');
+const PHANTOM_DOC = path.resolve(__dirname, 'fixtures/math-phantom-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -1080,6 +1081,186 @@ test.describe('m:nary (n-ary operator) rendering', () => {
       return Array.from(document.querySelectorAll('math *'))
         .map((el) => el.localName.toLowerCase())
         .filter((n) => ['narypr', 'subhide', 'suphide', 'limloc', 'chr', 'grow', 'ctrlpr'].includes(n));
+    });
+    expect(leaked).toEqual([]);
+  });
+});
+
+test.describe('m:phant (phantom) rendering', () => {
+  // Fixture contains 12 phantom cases of `a + [phant(xyz)] + b`:
+  //   0: no phantPr                        → visible mpadded
+  //   1: empty phantPr                     → visible mpadded
+  //   2: bare <m:show/>                    → visible mpadded
+  //   3: m:show val=1                      → visible mpadded
+  //   4: m:show val=0                      → mphantom (hidden)
+  //   5: m:show val=true                   → visible mpadded
+  //   6: m:show val=false                  → mphantom (hidden)
+  //   7: m:zeroAsc=1 alone                 → mpadded height=0, visible
+  //   8: m:zeroDesc=1 alone                → mpadded depth=0, visible
+  //   9: m:show=0 + m:zeroDesc=1           → mpadded depth=0 wrapping mphantom
+  //  10: m:show=0 + all three zero flags   → mpadded all=0 wrapping mphantom
+  //  11: m:transp=1 (unsupported)          → visible mpadded passthrough
+
+  test('imports all 12 phantom equations from docx', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+    const mathCount = await superdoc.page.evaluate(() => document.querySelectorAll('math').length);
+    expect(mathCount).toBe(12);
+  });
+
+  test('renders visible phantom as <mpadded> without inner <mphantom> (default per ECMA-376 §22.1.2.96)', async ({
+    superdoc,
+  }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    // Cases 0, 1, 2, 3, 5: visibility-default variants (no m:show, empty, bare, val=1, val=true).
+    const visibleIndices = [0, 1, 2, 3, 5];
+    const results = await superdoc.page.evaluate((indices) => {
+      const maths = document.querySelectorAll('math');
+      return indices.map((i) => {
+        const m = maths[i];
+        const mpadded = m?.querySelector('mpadded');
+        return {
+          hasMphantom: m?.querySelector('mphantom') != null,
+          mpaddedWidth: mpadded?.getAttribute('width'),
+          mpaddedHeight: mpadded?.getAttribute('height'),
+          mpaddedDepth: mpadded?.getAttribute('depth'),
+          text: m?.textContent,
+        };
+      });
+    }, visibleIndices);
+
+    for (const r of results) {
+      expect(r.hasMphantom).toBe(false);
+      expect(r.mpaddedWidth).toBeNull();
+      expect(r.mpaddedHeight).toBeNull();
+      expect(r.mpaddedDepth).toBeNull();
+      expect(r.text).toBe('a+xyz+b');
+    }
+  });
+
+  test('renders m:show val=0 / val=false as <mphantom> (hidden, space reserved)', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    const results = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      return [4, 6].map((i) => {
+        const m = maths[i];
+        const mphantom = m?.querySelector('mphantom');
+        return {
+          hasMphantom: mphantom != null,
+          hasMpadded: m?.querySelector('mpadded') != null,
+          phantomText: mphantom?.textContent,
+        };
+      });
+    });
+
+    for (const r of results) {
+      expect(r.hasMphantom).toBe(true);
+      expect(r.hasMpadded).toBe(false);
+      expect(r.phantomText).toBe('xyz');
+    }
+  });
+
+  test('zeros individual dimensions on <mpadded> without hiding content', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    // Case 7: m:zeroAsc=1 alone; Case 8: m:zeroDesc=1 alone.
+    const results = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const extract = (i: number) => {
+        const p = maths[i]?.querySelector('mpadded');
+        return {
+          width: p?.getAttribute('width') ?? null,
+          height: p?.getAttribute('height') ?? null,
+          depth: p?.getAttribute('depth') ?? null,
+          hasMphantom: maths[i]?.querySelector('mphantom') != null,
+        };
+      };
+      return { zeroAsc: extract(7), zeroDesc: extract(8) };
+    });
+
+    expect(results.zeroAsc).toEqual({ width: null, height: '0', depth: null, hasMphantom: false });
+    expect(results.zeroDesc).toEqual({ width: null, height: null, depth: '0', hasMphantom: false });
+  });
+
+  test('combines zeroed dimensions with hidden content as <mpadded> wrapping <mphantom>', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    // Case 9: show=0 + zeroDesc=1; Case 10: show=0 + all three zero flags.
+    const results = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const inspect = (i: number) => {
+        const mpadded = maths[i]?.querySelector('mpadded');
+        const inner = mpadded?.querySelector('mphantom');
+        return {
+          mpadded: mpadded
+            ? {
+                width: mpadded.getAttribute('width'),
+                height: mpadded.getAttribute('height'),
+                depth: mpadded.getAttribute('depth'),
+              }
+            : null,
+          innerIsMphantom: inner != null,
+          innerText: inner?.textContent,
+        };
+      };
+      return { case9: inspect(9), case10: inspect(10) };
+    });
+
+    expect(results.case9).toEqual({
+      mpadded: { width: null, height: null, depth: '0' },
+      innerIsMphantom: true,
+      innerText: 'xyz',
+    });
+    expect(results.case10).toEqual({
+      mpadded: { width: '0', height: '0', depth: '0' },
+      innerIsMphantom: true,
+      innerText: 'xyz',
+    });
+  });
+
+  test('m:transp passes through as visible phantom (unsupported in MathML)', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    // Case 11: m:transp=1. No direct MathML equivalent; should fall through
+    // to a visible <mpadded> with no dimension attributes.
+    const result = await superdoc.page.evaluate(() => {
+      const m = document.querySelectorAll('math')[11];
+      const mpadded = m?.querySelector('mpadded');
+      return {
+        hasMphantom: m?.querySelector('mphantom') != null,
+        width: mpadded?.getAttribute('width') ?? null,
+        height: mpadded?.getAttribute('height') ?? null,
+        depth: mpadded?.getAttribute('depth') ?? null,
+        text: m?.textContent,
+      };
+    });
+
+    expect(result).toEqual({
+      hasMphantom: false,
+      width: null,
+      height: null,
+      depth: null,
+      text: 'a+xyz+b',
+    });
+  });
+
+  test('OMML phantom property elements do not leak into the MathML DOM', async ({ superdoc }) => {
+    await superdoc.loadDocument(PHANTOM_DOC);
+    await superdoc.waitForStable();
+
+    // m:phantPr, m:show, m:zeroWid, m:zeroAsc, m:zeroDesc, m:transp are OOXML property
+    // elements — they must not appear in the rendered MathML output.
+    const leaked = await superdoc.page.evaluate(() => {
+      return Array.from(document.querySelectorAll('math *'))
+        .map((el) => el.localName.toLowerCase())
+        .filter((n) => ['phantpr', 'show', 'zerowid', 'zeroasc', 'zerodesc', 'transp'].includes(n));
     });
     expect(leaked).toEqual([]);
   });

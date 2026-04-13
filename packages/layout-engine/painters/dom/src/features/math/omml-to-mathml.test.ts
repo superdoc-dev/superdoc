@@ -3292,3 +3292,164 @@ describe('m:nary converter', () => {
     expect(mo!.textContent).toBe('');
   });
 });
+
+describe('m:phant converter', () => {
+  it('renders phantom with no properties as visible (m:show default)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mphantom')).toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('hides content when m:show has m:val="0"', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:phantPr',
+              elements: [{ name: 'm:show', attributes: { 'm:val': '0' } }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mphantom = result!.querySelector('mphantom');
+    expect(mphantom).not.toBeNull();
+    expect(mphantom!.textContent).toBe('x');
+  });
+
+  it('converts visible phantom with zeroed width to <mpadded width="0">', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:phantPr',
+              elements: [
+                { name: 'm:show', attributes: { 'm:val': '1' } },
+                { name: 'm:zeroWid', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mpadded = result!.querySelector('mpadded');
+    expect(mpadded).not.toBeNull();
+    expect(mpadded!.getAttribute('width')).toBe('0');
+    expect(mpadded!.textContent).toBe('y');
+  });
+
+  it('treats bare <m:show/> (no attributes) as visible', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:phantPr',
+              elements: [{ name: 'm:show' }, { name: 'm:zeroWid', attributes: { 'm:val': '1' } }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'v' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mpadded = result!.querySelector('mpadded');
+    expect(mpadded).not.toBeNull();
+    expect(mpadded!.getAttribute('width')).toBe('0');
+    const mphantom = mpadded!.querySelector('mphantom');
+    expect(mphantom).toBeNull();
+    expect(mpadded!.textContent).toBe('v');
+  });
+
+  it('renders visible phantom with zeroed ascent as <mpadded height="0"> without hiding', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:phantPr',
+              elements: [{ name: 'm:zeroAsc', attributes: { 'm:val': '1' } }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mpadded = result!.querySelector('mpadded');
+    expect(mpadded).not.toBeNull();
+    expect(mpadded!.getAttribute('height')).toBe('0');
+    expect(mpadded!.querySelector('mphantom')).toBeNull();
+    expect(mpadded!.textContent).toBe('z');
+  });
+
+  it('renders invisible phantom with m:show="0" and zeroed height as <mpadded> wrapping <mphantom>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:phant',
+          elements: [
+            {
+              name: 'm:phantPr',
+              elements: [
+                { name: 'm:show', attributes: { 'm:val': '0' } },
+                { name: 'm:zeroAsc', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mpadded = result!.querySelector('mpadded');
+    expect(mpadded).not.toBeNull();
+    expect(mpadded!.getAttribute('height')).toBe('0');
+    expect(mpadded!.querySelector('mphantom')).not.toBeNull();
+  });
+});

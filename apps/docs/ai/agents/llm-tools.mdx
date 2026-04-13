@@ -146,10 +146,10 @@ The generated catalog currently contains 9 grouped intent tools. Most tools use 
 | Tool | Actions | What it does |
 | --- | --- | --- |
 | `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
-| `superdoc_search` | `match` | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_search` | _(single action)_ | Find text or nodes and return handles or addresses for later edits |
 | `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
-| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing` | Apply inline or paragraph formatting |
-| `superdoc_create` | `paragraph`, `heading` | Create structural block elements |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing`, `set_direction`, `set_flow_options` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading`, `table` | Create structural block elements |
 | `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
 | `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
 | `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |

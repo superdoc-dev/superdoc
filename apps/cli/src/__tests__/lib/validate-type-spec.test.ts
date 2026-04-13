@@ -142,3 +142,23 @@ describe('doc.find select schema — accepts canonical and shorthand forms', () 
     expect(() => validateValueAgainstTypeSpec({ type: 'text' }, schema, 'select')).toThrow(CliError);
   });
 });
+
+describe('validateValueAgainstTypeSpec – object without explicit properties', () => {
+  // type: 'object' schemas that use additionalProperties (or nothing at all)
+  // must not crash the validator when `properties` is absent.
+  const schema = {
+    type: 'object',
+    additionalProperties: { type: 'string' },
+  } as unknown as CliTypeSpec;
+
+  test('accepts any object when properties is absent', () => {
+    expect(() => validateValueAgainstTypeSpec({ foo: 'bar' }, schema, 'params')).not.toThrow();
+    expect(() => validateValueAgainstTypeSpec({}, schema, 'params')).not.toThrow();
+  });
+
+  test('still rejects non-object values', () => {
+    expect(() => validateValueAgainstTypeSpec('nope', schema, 'params')).toThrow(CliError);
+    expect(() => validateValueAgainstTypeSpec(42, schema, 'params')).toThrow(CliError);
+    expect(() => validateValueAgainstTypeSpec(null, schema, 'params')).toThrow(CliError);
+  });
+});

@@ -88,9 +88,13 @@ function createWebSocketRuntime(profile: WebSocketCollaborationProfile): Collabo
 
   let provider: SyncableProvider;
   if (profile.providerType === 'y-websocket') {
-    const providerOptions: { params?: Record<string, string> } = {};
+    const params: Record<string, string> = { ...(profile.params ?? {}) };
     if (token) {
-      providerOptions.params = { token };
+      params.token = token;
+    }
+    const providerOptions: { params?: Record<string, string> } = {};
+    if (Object.keys(params).length > 0) {
+      providerOptions.params = params;
     }
     provider = new WebsocketProvider(
       profile.url,
@@ -104,6 +108,7 @@ function createWebSocketRuntime(profile: WebSocketCollaborationProfile): Collabo
       document: ydoc,
       name: profile.documentId,
       token: token ?? '',
+      parameters: profile.params,
       preserveConnection: false,
     }) as unknown as SyncableProvider;
   }

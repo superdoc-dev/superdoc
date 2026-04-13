@@ -538,4 +538,52 @@ describe('marks encoding/decoding round-trip', () => {
     // encodeMarksFromRPr doesn't handle 'caps', so it produces no textTransform mark.
     expect(marksFromCaps.some((m) => m.type === 'textStyle' && m.attrs.textTransform)).toBe(false);
   });
+
+  // SD-2517: per-script fonts (eastAsia, cs) must survive the mark round-trip.
+  // ECMA-376 §17.3.2.26 defines 4 independent font slots: ascii, hAnsi, eastAsia, cs.
+  it('preserves per-script fonts (eastAsia, cs) through encode → decode round-trip', () => {
+    const rPr = {
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'MS Mincho', cs: 'Times New Roman' },
+    };
+    const marks = encodeMarksFromRPr(rPr, {});
+    const textStyleMark = marks.find((m) => m.type === 'textStyle');
+    // Encode should preserve per-script fonts as separate mark attributes
+    expect(textStyleMark.attrs.eastAsiaFontFamily).toMatch(/^MS Mincho/);
+    expect(textStyleMark.attrs.csFontFamily).toMatch(/^Times New Roman/);
+
+    const decoded = decodeRPrFromMarks(marks);
+    // Decode should restore per-script fonts, not flatten to ascii
+    expect(decoded.fontFamily.ascii).toMatch(/^Arial/);
+    expect(decoded.fontFamily.hAnsi).toMatch(/^Arial/);
+    expect(decoded.fontFamily.eastAsia).toMatch(/^MS Mincho/);
+    expect(decoded.fontFamily.cs).toMatch(/^Times New Roman/);
+  });
+
+  it('omits per-script mark attrs when all scripts match ascii', () => {
+    const rPr = {
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+    };
+    const marks = encodeMarksFromRPr(rPr, {});
+    const textStyleMark = marks.find((m) => m.type === 'textStyle');
+    expect(textStyleMark.attrs.eastAsiaFontFamily).toBeUndefined();
+    expect(textStyleMark.attrs.csFontFamily).toBeUndefined();
+
+    const decoded = decodeRPrFromMarks(marks);
+    expect(decoded.fontFamily).toEqual({ ascii: 'Arial', eastAsia: 'Arial', hAnsi: 'Arial', cs: 'Arial' });
+  });
+
+  it('preserves cs font when only cs differs from ascii', () => {
+    const rPr = {
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Times New Roman' },
+    };
+    const marks = encodeMarksFromRPr(rPr, {});
+    const textStyleMark = marks.find((m) => m.type === 'textStyle');
+    expect(textStyleMark.attrs.eastAsiaFontFamily).toBeUndefined();
+    expect(textStyleMark.attrs.csFontFamily).toMatch(/^Times New Roman/);
+
+    const decoded = decodeRPrFromMarks(marks);
+    expect(decoded.fontFamily.ascii).toMatch(/^Arial/);
+    expect(decoded.fontFamily.cs).toMatch(/^Times New Roman/);
+    expect(decoded.fontFamily.eastAsia).toMatch(/^Arial/);
+  });
 });

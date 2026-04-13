@@ -55,7 +55,7 @@ type CoreCommandNames =
   | 'insertTableAt'
   | 'getSelectionMarks';
 
-type CoreCommandSignatures = {
+export type CoreCommandSignatures = {
   [K in CoreCommandNames]: ExtractCommandSignature<(typeof CoreCommandExports)[K]>;
 };
 

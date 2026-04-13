@@ -23,6 +23,7 @@ export type WebSocketCollaborationInput = SharedCollaborationFields & {
   url: string;
   documentId?: string;
   tokenEnv?: string;
+  params?: Record<string, string>;
 };
 
 export type LiveblocksCollaborationInput = SharedCollaborationFields & {
@@ -44,6 +45,7 @@ export type WebSocketCollaborationProfile = SharedCollaborationFields & {
   url: string;
   documentId: string;
   tokenEnv?: string;
+  params?: Record<string, string>;
 };
 
 export type LiveblocksCollaborationProfile = SharedCollaborationFields & {

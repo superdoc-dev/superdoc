@@ -128,3 +128,32 @@ export type TrackedChangeAddress = {
 };
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;
+
+// ---------------------------------------------------------------------------
+// Navigation addressing
+// ---------------------------------------------------------------------------
+
+/**
+ * Address for navigating to a block-level element by its node ID.
+ *
+ * The `nodeId` maps to `paraId` (from OOXML) when available, with fallback
+ * to `sdBlockId` (session-scoped). Use the value returned by Document API
+ * queries (e.g. `query.match`, `find`, `getNode`) as the `nodeId`.
+ *
+ * When `nodeType` is omitted, the lookup searches across all block types.
+ */
+export type BlockNavigationAddress = {
+  kind: 'block';
+  nodeId: string;
+  nodeType?: SelectionEdgeNodeType;
+};
+
+/**
+ * Union of all address types accepted by `navigateTo()`.
+ *
+ * Supports navigation to:
+ * - Blocks by `nodeId` (paragraphs, headings, tables, images, SDTs)
+ * - Comments by `entityId`
+ * - Tracked changes by `entityId`
+ */
+export type NavigableAddress = BlockNavigationAddress | CommentAddress | TrackedChangeAddress;

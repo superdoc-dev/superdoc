@@ -176,6 +176,10 @@ When formatting newly created content, use the right source:
 - **Signature/form fields**: Use justify or left alignment
 - When the user says "heading", use `action: "heading"` with a level, even if the document uses styled paragraphs as titles.
 
+## Understanding document structure
+
+When the user refers to "the first paragraph," they mean the first body text paragraph, NOT the document title or headings. Centered, bold, or ALL-CAPS blocks at the top of a document are titles/headings, not body paragraphs. Identify them correctly before operating.
+
 ## Constraints
 
 - **Format calls must be sequential, one per turn.** Each format call bumps the document revision and invalidates all outstanding refs. Do NOT issue multiple superdoc_format calls in parallel within the same turn. Format one block, then re-fetch if needed for the next block.

@@ -187,7 +187,7 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
       }
     }
 
-    const propertyEntries = Object.entries(schema.properties);
+    const propertyEntries = schema.properties ? Object.entries(schema.properties) : [];
     const shouldRestrictUnknownKeys = propertyEntries.length > 0 || required.length > 0;
 
     // If no object fields are declared, treat it as an unconstrained JSON object.
@@ -272,7 +272,8 @@ function validateResponseValueAgainstTypeSpec(value: unknown, schema: CliTypeSpe
     }
 
     // Validate known properties but allow additional properties (JSON Schema default).
-    for (const [key, propSchema] of Object.entries(schema.properties)) {
+    const properties = schema.properties ?? {};
+    for (const [key, propSchema] of Object.entries(properties)) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
       validateResponseValueAgainstTypeSpec(value[key], propSchema, `${path}.${key}`);
     }

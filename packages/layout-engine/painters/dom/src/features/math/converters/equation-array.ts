@@ -29,7 +29,7 @@ const stripAlignmentMarkers = (nodes: OmmlJsonNode[]): OmmlJsonNode[] =>
  *
  * MathML output:
  *   <mtable columnalign="left">
- *     <mtr> <mtd> row-content </mtd> </mtr>
+ *     <mtr> <mtd> <mrow>row-content</mrow> </mtd> </mtr>
  *     ...
  *   </mtable>
  *
@@ -48,8 +48,10 @@ export const convertEquationArray: MathObjectConverter = (node, doc, convertChil
   for (const row of rows) {
     const mtr = doc.createElementNS(MATHML_NS, 'mtr');
     const mtd = doc.createElementNS(MATHML_NS, 'mtd');
+    const mrow = doc.createElementNS(MATHML_NS, 'mrow');
     const cleanedChildren = stripAlignmentMarkers(row.elements ?? []);
-    mtd.appendChild(convertChildren(cleanedChildren));
+    mrow.appendChild(convertChildren(cleanedChildren));
+    mtd.appendChild(mrow);
     mtr.appendChild(mtd);
     mtable.appendChild(mtr);
   }

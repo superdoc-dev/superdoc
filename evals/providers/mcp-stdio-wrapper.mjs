@@ -47,6 +47,14 @@ const child = spawn(serverCmd, serverArgs, {
   },
 });
 
+child.stdin.on('error', (err) => {
+  serverStderr.write(`wrapper: child stdin error: ${err.message}\n`);
+});
+child.on('error', (err) => {
+  serverStderr.write(`wrapper: child spawn error: ${err.message}\n`);
+  process.exit(1);
+});
+
 // Client → Server: forward stdin to child, log it
 process.stdin.on('data', (chunk) => {
   clientToServer.write(chunk);

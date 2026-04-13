@@ -296,6 +296,10 @@
       "destination": "/modules/toolbar/overview"
     },
     {
+      "source": "/getting-started/ai",
+      "destination": "/ai/overview"
+    },
+    {
       "source": "/getting-started/ai-agents",
       "destination": "/ai/agents/llm-tools"
     },

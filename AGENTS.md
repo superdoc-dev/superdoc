@@ -143,7 +143,7 @@ The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt fr
 
 ### Level 3: DOCX Agent Benchmark (real agents, real documents)
 
-Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their performance with and without SuperDoc tools. 4 conditions x 2 agents x 6 tasks = 48 runs.
+Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their performance with and without SuperDoc tools. 4 conditions x 2 agents x N tasks.
 
 **Conditions:**
 
@@ -160,7 +160,7 @@ Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their perfo
 
 | Command | What it does | Cost |
 |---------|-------------|------|
-| `pnpm --filter @superdoc-testing/evals run eval:benchmark` | Run full benchmark (48 runs) | ~15 min |
+| `pnpm --filter @superdoc-testing/evals run eval:benchmark` | Run full benchmark | ~15 min |
 | `pnpm --filter @superdoc-testing/evals run eval:benchmark:codex` | Run Codex conditions only | ~8 min |
 | `pnpm --filter @superdoc-testing/evals run eval:benchmark:claude` | Run Claude Code conditions only | ~8 min |
 | `pnpm --filter @superdoc-testing/evals run eval:benchmark:report` | Generate comparison report (Markdown + CSV) | Free |
@@ -175,12 +175,12 @@ Runs actual Claude Code and Codex CLIs against DOCX tasks, comparing their perfo
 
 | File | Purpose |
 |------|---------|
-| `evals/promptfooconfig.benchmark.yaml` | Level 3 Promptfoo config (8 providers) |
-| `evals/tests/agent-benchmark.yaml` | 6 benchmark tasks with assertions |
+| `evals/config/benchmark.promptfoo.yaml` | Level 3 Promptfoo config (8 providers) |
+| `evals/suites/benchmark/tests/agent-benchmark-v2.yaml` | Benchmark tasks with assertions |
 | `evals/providers/claude-code-agent.mjs` | Claude Agent SDK provider |
 | `evals/providers/codex-agent.mjs` | Codex SDK provider |
-| `evals/lib/benchmark-report.mjs` | Markdown + CSV report generator |
-| `evals/fixtures/vendor-docx-skill.md` | Anthropic's DOCX skill for baseline-with-docx-skill condition |
+| `evals/suites/benchmark/reports/benchmark-report.mjs` | Markdown + CSV report generator |
+| `evals/fixtures/vendor/vendor-docx-skill.md` | Anthropic's DOCX skill for baseline-with-docx-skill condition |
 
 ## Generated Artifacts
 

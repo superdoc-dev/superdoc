@@ -15,7 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const RESULTS = resolve(__dirname, '../results/benchmark/latest.json');
+const RESULTS = resolve(__dirname, '../artifacts/benchmark-runs/latest.json');
 
 if (!existsSync(RESULTS)) {
   console.error('No results at', RESULTS);

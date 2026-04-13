@@ -29,7 +29,7 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { delimiter, dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
@@ -156,9 +156,9 @@ export default class ClaudeCodeBenchmarkProvider {
       const env = { ...process.env };
       env.ENABLE_TOOL_SEARCH = 'auto:5';
       if (!this.config.superdocOnPath) {
-        env.PATH = env.PATH.split(':')
+        env.PATH = (env.PATH ?? '').split(delimiter)
           .filter(p => !p.includes('superdoc'))
-          .join(':');
+          .join(delimiter);
       }
 
       // Install vendor DOCX skill as CLAUDE.md (Claude reads CLAUDE.md, not AGENTS.md)
@@ -234,8 +234,6 @@ export default class ClaudeCodeBenchmarkProvider {
         prompt: fullPrompt,
         options: queryOptions,
       })) {
-        console.log(message);
-        
         if (message.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
             if (block.type === 'text') agentResponseText += block.text + '\n';

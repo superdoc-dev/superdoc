@@ -16,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const EVALS_ROOT = resolve(__dirname, '..');
+const EVALS_ROOT = resolve(__dirname, '../../../..');
 const RESULTS_DIR = resolve(EVALS_ROOT, 'artifacts/benchmark-runs');
 const INPUT_FILE = resolve(RESULTS_DIR, 'latest.json');
 

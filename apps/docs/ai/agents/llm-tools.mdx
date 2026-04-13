@@ -35,7 +35,7 @@ Install the SDK, create a client, open a document, and wire up an agentic loop.
 
     while (true) {
       const response = await openai.chat.completions.create({
-        model: 'gpt-5.2',
+        model: 'gpt-5.4',
         messages,
         tools,
       });
@@ -88,7 +88,7 @@ Install the SDK, create a client, open a document, and wire up an agentic loop.
 
     while True:
         response = openai.chat.completions.create(
-            model="gpt-5.2", messages=messages, tools=tools
+            model="gpt-5.4", messages=messages, tools=tools
         )
         message = response.choices[0].message
         messages.append(message)
@@ -381,8 +381,8 @@ const fullPrompt = systemPrompt + '\n' + customInstructions;
 
 ## Related
 
-- [How to use](/document-engine/ai-agents/integrations) — step-by-step integration guide with copy-pasteable code
-- [Best practices](/document-engine/ai-agents/best-practices) — prompting, workflow tips, and tested prompt examples
-- [Debugging](/document-engine/ai-agents/debugging) — troubleshoot tool call failures
+- [How to use](/ai/agents/integrations) — step-by-step integration guide with copy-pasteable code
+- [Best practices](/ai/agents/best-practices) — prompting, workflow tips, and tested prompt examples
+- [Debugging](/ai/agents/debugging) — troubleshoot tool call failures
 - [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
 - [Document API](/document-api/overview) — the operation set behind the tools

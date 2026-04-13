@@ -5,7 +5,7 @@ description: Which LLMs work best with SuperDoc's Document API — tested with P
 keywords: "llm eval, model comparison, promptfoo, gpt-5.4, claude haiku, gemini, tool use, document api"
 ---
 
-SuperDoc's Document API exposes [360+ operations](/document-api/available-operations) as LLM tools. Seven models were tested with [Promptfoo](https://promptfoo.dev) to measure how accurately each one calls them.
+SuperDoc's Document API exposes [360+ operations](/document-api/available-operations) as LLM tools. Six models were tested at Level 1, with Gemini 2.5 Pro added for Level 2 (seven total).
 
 <Tip>
 **Recommended models**
@@ -65,7 +65,7 @@ The "gap" column measures how much a model depends on detailed prompt engineerin
 - **Claude Haiku 4.5** has the smallest gap (-13 points) — it degrades least when the prompt is sparse. This makes it the most robust choice if you need to trim the system prompt for token budget reasons.
 - **GPT-4o** is the most prompt-dependent (55-point gap). It scores 97% with the full prompt but drops to 42% without it.
 
-**Takeaway:** always include the full system prompt. Load it from the SDK or copy it from the [LLM tools reference](/document-engine/ai-agents/llm-tools).
+**Takeaway:** always include the full system prompt. Load it from the SDK or copy it from the [LLM tools reference](/ai/agents/llm-tools).
 
 <Tip>
 If you strip down the system prompt to save tokens, expect accuracy to drop. How much depends on the model — Claude Haiku 4.5 loses the least, GPT-4o loses the most.
@@ -91,7 +91,7 @@ Model behavior changes over time. These results are a point-in-time snapshot. Re
   <Card
     title="LLM tools"
     icon="wand"
-    href="/document-engine/ai-agents/llm-tools"
+    href="/ai/agents/llm-tools"
   >
     Tool definitions, dispatch, and the system prompt reference
   </Card>
@@ -107,7 +107,7 @@ Model behavior changes over time. These results are a point-in-time snapshot. Re
   <Card
     title="Skills"
     icon="book"
-    href="/document-engine/ai-agents/skills"
+    href="/ai/agents/skills"
   >
     Reusable prompt templates for common document editing tasks
   </Card>
@@ -115,7 +115,7 @@ Model behavior changes over time. These results are a point-in-time snapshot. Re
   <Card
     title="Integrations"
     icon="plug"
-    href="/document-engine/ai-agents/integrations"
+    href="/ai/agents/integrations"
   >
     Connect to AWS Bedrock, Vercel AI SDK, and other providers
   </Card>

@@ -24,12 +24,14 @@ providers:
     config:
       condition: baseline
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      disallowedTools: ['mcp__superdoc__*']
 
   - id: file://../providers/claude-code-agent.mjs
     label: CC-with-docx-skill
     config:
       condition: baseline-with-docx-skill
       allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      disallowedTools: ['mcp__superdoc__*']
       vendorSkill: true
 
   - id: file://../providers/claude-code-agent.mjs

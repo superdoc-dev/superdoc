@@ -30,8 +30,7 @@ superdoc_edit({
   session_id,
   action: "insert",
   type: "markdown",
-  placement: "end",
-  content: "# Background\n\nThis section covers the project history.\n\n# Next steps\n\n1. Review the proposal\n2. Assign owners\n3. Set a deadline"
+  value: "# Background\n\nThis section covers the project history.\n\n# Next steps\n\n1. Review the proposal\n2. Assign owners\n3. Set a deadline"
 })
 ```
 
@@ -52,8 +51,8 @@ Use `superdoc_mutations` with `format.apply` steps to apply formatting across th
 
 ```
 superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "direct", steps: [
-  {id: "f1", op: "format.apply", where: {by: "node", select: {type: "node", nodeType: "heading", level: 1}}, args: {inline: {bold: true}}, require: "all"},
-  {id: "f2", op: "format.apply", where: {by: "node", select: {type: "node", nodeType: "heading", level: 2}}, args: {inline: {italic: true}}, require: "all"}
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading", level: 1}, require: "all"}, args: {inline: {bold: true}}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading", level: 2}, require: "all"}, args: {inline: {italic: true}}}
 ]})
 ```
 

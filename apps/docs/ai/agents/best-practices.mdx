@@ -73,13 +73,9 @@ When you need to create multiple headings and paragraphs in one operation, use `
 
 ```json
 {
-  "tool": "superdoc_edit",
-  "intent": "insert",
-  "target": { "type": "end" },
-  "content": {
-    "type": "markdown",
-    "value": "## Executive Summary\n\nThis agreement governs the terms of service.\n\n## Key Provisions\n\nThe following provisions apply to all parties."
-  }
+  "action": "insert",
+  "type": "markdown",
+  "value": "## Executive Summary\n\nThis agreement governs the terms of service.\n\n## Key Provisions\n\nThe following provisions apply to all parties."
 }
 ```
 
@@ -204,7 +200,7 @@ These prompts have been tested against the SuperDoc tool set. Use them as inspir
 
 ## Related
 
-- [LLM tools](/document-engine/ai-agents/llm-tools) — tool catalog and SDK functions
-- [How to use](/document-engine/ai-agents/integrations) — step-by-step integration guide
-- [Debugging](/document-engine/ai-agents/debugging) — troubleshoot tool call failures
+- [LLM tools](/ai/agents/llm-tools) — tool catalog and SDK functions
+- [How to use](/ai/agents/integrations) — step-by-step integration guide
+- [Debugging](/ai/agents/debugging) — troubleshoot tool call failures
 - [Document API](/document-api/overview) — the operation set behind the tools

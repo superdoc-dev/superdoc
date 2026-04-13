@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node shared/checks.test.mjs && node --test shared/provider-utils.test.mjs",
+    "test": "node --test shared/*.test.mjs",
     "clean": "rm -rf fixtures/docs/.state* fixtures/docs/tmp-* artifacts/ .promptfoo",
     "view": "npx promptfoo view",
     "preeval": "node scripts/prepare-local-sdk.mjs --light",
@@ -18,7 +18,7 @@
     "eval:analyze": "npx promptfoo eval --env-file .env -c config/tool-quality.promptfoo.yaml -o artifacts/latest/tool-quality.json && node shared/analyze-results.mjs",
     "baseline:save": "node shared/save-baseline.mjs",
     "baseline:compare": "node shared/compare-baselines.mjs",
-    "preeval:benchmark": "cd ../apps/mcp && pnpm run build",
+    "preeval:benchmark": "cd ../apps/cli && pnpm run build && cd ../apps/mcp && pnpm run build",
     "eval:benchmark": "npx promptfoo eval --env-file .env -c config/benchmark.promptfoo.yaml -o artifacts/benchmark-runs/latest.json",
     "eval:benchmark:report": "node suites/benchmark/reports/benchmark-report.mjs",
     "eval:benchmark:claude": "npx promptfoo eval --env-file .env -c config/benchmark.promptfoo.yaml --filter-providers 'CC-*' -o artifacts/benchmark-runs/latest-claude.json",

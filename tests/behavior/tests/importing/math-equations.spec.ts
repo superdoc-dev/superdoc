@@ -12,6 +12,7 @@ const LIMIT_DOC = path.resolve(__dirname, 'fixtures/math-limit-tests.docx');
 const EQARR_DOC = path.resolve(__dirname, 'fixtures/math-eqarr-tests.docx');
 const NARY_DOC = path.resolve(__dirname, 'fixtures/math-nary-tests.docx');
 const PHANTOM_DOC = path.resolve(__dirname, 'fixtures/math-phantom-tests.docx');
+const GROUPCHR_DOC = path.resolve(__dirname, 'fixtures/math-groupchr-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -1263,5 +1264,143 @@ test.describe('m:phant (phantom) rendering', () => {
         .filter((n) => ['phantpr', 'show', 'zerowid', 'zeroasc', 'zerodesc', 'transp'].includes(n));
     });
     expect(leaked).toEqual([]);
+  });
+});
+
+test.describe('m:groupChr (group character) rendering', () => {
+  // Fixture has 12 m:groupChr variants covering every ECMA-376 §22.1.2.41 case:
+  // 1 default, 2 empty m:chr, 3 explicit underbrace, 4 overbrace, 5 ← arrow, 6 → arrow,
+  // 7-10 four pos×vertJc combos, 11 vertJc empty-val, 12 complex base.
+  test('renders every groupChr variant as <munder> or <mover>', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    const counts = await superdoc.page.evaluate(() => ({
+      math: document.querySelectorAll('math').length,
+      wrappers: document.querySelectorAll('munder, mover').length,
+      movers: document.querySelectorAll('mover').length,
+      munders: document.querySelectorAll('munder').length,
+    }));
+
+    expect(counts.math).toBe(12);
+    expect(counts.wrappers).toBe(12);
+    // Variants 4, 5, 7, 8, 11 are pos=top → <mover> (5 total).
+    expect(counts.movers).toBe(5);
+    // Variants 1, 2, 3, 6, 9, 10, 12 are pos=bot or default → <munder> (7 total).
+    expect(counts.munders).toBe(7);
+  });
+
+  test('default (no groupChrPr) falls back to U+23DF bottom curly bracket', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    const firstMunder = await superdoc.page.evaluate(() => {
+      const munder = document.querySelector('munder');
+      const mo = munder?.querySelector('mo');
+      return mo ? { text: mo.textContent, stretchy: mo.getAttribute('stretchy') } : null;
+    });
+
+    expect(firstMunder).not.toBeNull();
+    expect(firstMunder!.text).toBe('\u23DF');
+    expect(firstMunder!.stretchy).toBe('true');
+  });
+
+  test('empty <m:chr/> renders a hidden character', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    // Variant 2 — second munder in DOM order.
+    const hiddenChar = await superdoc.page.evaluate(() => {
+      const munders = document.querySelectorAll('munder');
+      const mo = munders[1]?.querySelector('mo');
+      return mo?.textContent;
+    });
+
+    expect(hiddenChar).toBe('');
+  });
+
+  test('custom m:chr values are preserved (U+23DE, U+2190, U+2192)', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    const chars = await superdoc.page.evaluate(() => {
+      const wrappers = document.querySelectorAll('munder, mover');
+      return Array.from(wrappers).map((w) => w.querySelector('mo')?.textContent ?? null);
+    });
+
+    // Variants 4 (U+23DE), 5 (U+2190), 6 (U+2192).
+    expect(chars[3]).toBe('\u23DE');
+    expect(chars[4]).toBe('\u2190');
+    expect(chars[5]).toBe('\u2192');
+  });
+
+  test('natural vertJc combinations render without baseline shift', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    const natural = await superdoc.page.evaluate(() => {
+      const wrappers = document.querySelectorAll('munder, mover');
+      // Variant 8 (pos=top, vertJc=bot) and variant 9 (pos=bot, vertJc=top) are natural.
+      return {
+        v8: {
+          vertJc: wrappers[7]?.getAttribute('data-vert-jc'),
+          style: wrappers[7]?.getAttribute('style'),
+        },
+        v9: {
+          vertJc: wrappers[8]?.getAttribute('data-vert-jc'),
+          style: wrappers[8]?.getAttribute('style'),
+        },
+      };
+    });
+
+    expect(natural.v8.vertJc).toBe('bot');
+    expect(natural.v8.style).toBeNull();
+    expect(natural.v9.vertJc).toBe('top');
+    expect(natural.v9.style).toBeNull();
+  });
+
+  test('non-natural vertJc combinations shift the construct vertically', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    const shifted = await superdoc.page.evaluate(() => {
+      const wrappers = document.querySelectorAll('munder, mover');
+      return {
+        // Variant 7 (pos=top, vertJc=top) shifts down.
+        v7: {
+          vertJc: wrappers[6]?.getAttribute('data-vert-jc'),
+          style: wrappers[6]?.getAttribute('style'),
+        },
+        // Variant 10 (pos=bot, vertJc=bot) shifts up.
+        v10: {
+          vertJc: wrappers[9]?.getAttribute('data-vert-jc'),
+          style: wrappers[9]?.getAttribute('style'),
+        },
+      };
+    });
+
+    expect(shifted.v7.vertJc).toBe('top');
+    expect(shifted.v7.style).toContain('top: 1em');
+    expect(shifted.v10.vertJc).toBe('bot');
+    expect(shifted.v10.style).toContain('top: -1em');
+  });
+
+  test('m:vertJc without m:val defaults to "bot"', async ({ superdoc }) => {
+    await superdoc.loadDocument(GROUPCHR_DOC);
+    await superdoc.waitForStable();
+
+    // Variant 11 — pos=top with <m:vertJc/> (no val) → defaults to "bot" = natural for pos=top.
+    const v11 = await superdoc.page.evaluate(() => {
+      const wrappers = document.querySelectorAll('munder, mover');
+      return {
+        tag: wrappers[10]?.localName,
+        vertJc: wrappers[10]?.getAttribute('data-vert-jc'),
+        style: wrappers[10]?.getAttribute('style'),
+      };
+    });
+
+    expect(v11.tag).toBe('mover');
+    expect(v11.vertJc).toBe('bot');
+    expect(v11.style).toBeNull();
   });
 });

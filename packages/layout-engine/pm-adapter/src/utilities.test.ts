@@ -752,6 +752,36 @@ describe('Media Utilities', () => {
       expect(result[0].src).toBe('data:image/png;base64,base64data');
     });
 
+    it('hydrates word/media src from media storage key', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'word/media/image.png',
+          runs: [],
+        },
+      ];
+      const mediaFiles = { 'media/image.png': 'base64data' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,base64data');
+    });
+
+    it('hydrates media src from word/media storage key', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      const mediaFiles = { 'word/media/image.png': 'base64data' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,base64data');
+    });
+
     it('uses rId fallback when direct path does not match', () => {
       const blocks: FlowBlock[] = [
         {

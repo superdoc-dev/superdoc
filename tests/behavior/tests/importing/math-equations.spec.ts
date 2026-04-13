@@ -987,23 +987,49 @@ test.describe('m:nary (n-ary operator) rendering', () => {
     expect(data!.bodyText).toContain('f(x)dx');
   });
 
-  test('subHide m:val="true" is treated as ON (§22.9.2.7)', async ({ superdoc }) => {
+  test('subHide/supHide do not hide limits that have content (§22.1.2.72)', async ({ superdoc }) => {
     await superdoc.loadDocument(NARY_DOC);
     await superdoc.waitForStable();
 
-    // Scenario 8 (index 7): m:subHide m:val="true" — sub should be hidden → msup.
+    // Scenarios 7 and 8 in the fixture both set m:subHide (as "true" and as bare element)
+    // but the m:sub elements contain "0" — per spec these are only placeholder-hide flags,
+    // so both limits should still render (msubsup), matching Word's behavior.
     const data = await superdoc.page.evaluate(() => {
-      const math = document.querySelectorAll('math')[7];
-      const msup = math?.querySelector('msup');
+      const maths = document.querySelectorAll('math');
+      const [seven, eight] = [maths[7], maths[8]];
+      const fromMath = (m?: Element | null) => {
+        const mss = m?.querySelector('msubsup');
+        return {
+          hasMsubsup: mss !== null,
+          sub: mss?.children[1]?.textContent ?? null,
+          sup: mss?.children[2]?.textContent ?? null,
+        };
+      };
+      return { seven: fromMath(seven), eight: fromMath(eight) };
+    });
+    expect(data.seven.hasMsubsup).toBe(true);
+    expect(data.seven.sub).toBe('0');
+    expect(data.seven.sup).toBe('1');
+    expect(data.eight.hasMsubsup).toBe(true);
+    expect(data.eight.sub).toBe('0');
+    expect(data.eight.sup).toBe('1');
+  });
+
+  test('Word indefinite integral (empty sub/sup + hide flags) renders as bare <mo>', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 2 (index 1): Word authored ∫ f(x)dx — emits empty m:sub/m:sup with
+    // subHide=supHide=1. This is the real "hide flag suppresses empty placeholder" case.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[1];
       return {
-        hasMsubsup: math?.querySelector('msubsup') !== null,
-        hasMsup: msup !== null,
-        sup: msup?.children[1]?.textContent ?? null,
+        hasScriptWrapper: math?.querySelector('msubsup, msub, msup, munderover, munder, mover') !== null,
+        opChar: math?.querySelector('mo')?.textContent ?? null,
       };
     });
-    expect(data!.hasMsubsup).toBe(false);
-    expect(data!.hasMsup).toBe(true);
-    expect(data!.sup).toBe('1');
+    expect(data!.hasScriptWrapper).toBe(false);
+    expect(data!.opChar).toBe('\u222B');
   });
 
   test('<m:chr/> with no val renders an empty operator (§22.1.2.20)', async ({ superdoc }) => {

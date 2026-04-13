@@ -2846,7 +2846,9 @@ describe('m:nary converter', () => {
     expect(msub).not.toBeNull();
   });
 
-  it('renders only superscript when subHide is set (→ <msup>)', () => {
+  it('subHide/supHide do NOT hide limits that have content (§22.1.2.72)', () => {
+    // Per spec: subHide/supHide only control empty-limit placeholder rendering.
+    // When m:sub/m:sup has content, it is always shown regardless of the flag.
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -2875,15 +2877,48 @@ describe('m:nary converter', () => {
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
+    const msubsup = result!.querySelector('msubsup');
+    expect(msubsup).not.toBeNull();
+    expect(msubsup!.children[1]!.textContent).toBe('0');
+    expect(msubsup!.children[2]!.textContent).toBe('n');
+  });
+
+  it('subHide hides empty m:sub (suppresses placeholder) → <msup>', () => {
+    // Empty m:sub + subHide=ON → no sub slot (spec-correct usage of the hide flag).
+    // This mirrors how Word emits indefinite integrals: empty m:sub/m:sup with hide flags.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:subHide', attributes: { 'm:val': '1' } }],
+            },
+            { name: 'm:sub', elements: [] },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
     const msup = result!.querySelector('msup');
     expect(msup).not.toBeNull();
-    expect(result!.querySelector('msub')).toBeNull();
     expect(result!.querySelector('msubsup')).toBeNull();
-    expect(msup!.children[0]!.textContent).toBe('\u222B');
     expect(msup!.children[1]!.textContent).toBe('n');
   });
 
-  it('treats m:subHide m:val="true" as hidden (ST_OnOff §22.9.2.7)', () => {
+  it('treats m:subHide m:val="true" as ON for empty-limit suppression (§22.9.2.7)', () => {
+    // Empty m:sub + subHide m:val="true" → hidden (regression anchor for commit 2bd58d3).
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -2894,10 +2929,7 @@ describe('m:nary converter', () => {
               name: 'm:naryPr',
               elements: [{ name: 'm:subHide', attributes: { 'm:val': 'true' } }],
             },
-            {
-              name: 'm:sub',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
-            },
+            { name: 'm:sub', elements: [] },
             {
               name: 'm:sup',
               elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
@@ -2916,7 +2948,8 @@ describe('m:nary converter', () => {
     expect(result!.querySelector('msup')).not.toBeNull();
   });
 
-  it('treats bare <m:subHide/> (no attributes) as hidden (ST_OnOff §22.9.2.7)', () => {
+  it('treats bare <m:subHide/> as ON for empty-limit suppression (§22.9.2.7)', () => {
+    // Empty m:sub + bare <m:subHide/> (no attrs) → hidden.
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -2927,10 +2960,7 @@ describe('m:nary converter', () => {
               name: 'm:naryPr',
               elements: [{ name: 'm:subHide' }],
             },
-            {
-              name: 'm:sub',
-              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
-            },
+            { name: 'm:sub', elements: [] },
             {
               name: 'm:sup',
               elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
@@ -2947,6 +2977,40 @@ describe('m:nary converter', () => {
     expect(result).not.toBeNull();
     expect(result!.querySelector('msubsup')).toBeNull();
     expect(result!.querySelector('msup')).not.toBeNull();
+  });
+
+  it('ignores m:ctrlPr when checking for meaningful sub/sup content (Word emits empty-with-ctrlPr)', () => {
+    // Word emits <m:sub><m:ctrlPr>...</m:ctrlPr></m:sub> for empty limits — treat as empty.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [
+                { name: 'm:subHide', attributes: { 'm:val': '1' } },
+                { name: 'm:supHide', attributes: { 'm:val': '1' } },
+              ],
+            },
+            { name: 'm:sub', elements: [{ name: 'm:ctrlPr', elements: [] }] },
+            { name: 'm:sup', elements: [{ name: 'm:ctrlPr', elements: [] }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    expect(result!.querySelector('msup')).toBeNull();
+    expect(result!.querySelector('msub')).toBeNull();
+    // Bare <mo> only
+    expect(result!.querySelector('mo')!.textContent).toBe('\u222B');
   });
 
   it('indefinite integral (no m:sub/m:sup, no hide flags) → bare <mo>', () => {

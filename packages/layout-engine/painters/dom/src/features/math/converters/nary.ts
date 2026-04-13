@@ -68,10 +68,15 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
       el.attributes?.['m:val'] === 'true' ||
       !el.attributes);
 
-  // A limit is rendered only when its element is actually present AND not hidden.
-  // Mirrors radical.ts's handling of m:deg/m:degHide (§22.1.2.70 says sub/sup are optional).
-  const hasSub = sub !== undefined && !isStOnOffTrue(subHide);
-  const hasSup = sup !== undefined && !isStOnOffTrue(supHide);
+  // Meaningful content = any non-property child (m:ctrlPr is a formatting hint, not content).
+  const hasMeaningfulContent = (el?: OmmlJsonNode) =>
+    el !== undefined && (el.elements ?? []).some((e) => e.name !== 'm:ctrlPr');
+
+  // §22.1.2.72: subHide/supHide only control rendering of EMPTY limit placeholders.
+  // When m:sub/m:sup has content, it is always rendered regardless of the hide flag.
+  // When m:sub/m:sup is empty/absent, the hide flag suppresses the placeholder slot.
+  const hasSub = hasMeaningfulContent(sub) || (sub !== undefined && !isStOnOffTrue(subHide));
+  const hasSup = hasMeaningfulContent(sup) || (sup !== undefined && !isStOnOffTrue(supHide));
 
   // §22.1.2.72 m:grow: default is ON (operator grows with operand). When explicitly OFF,
   // suppress enlargement by setting largeop="false" — MathML's operator dictionary otherwise

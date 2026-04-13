@@ -865,30 +865,34 @@ export function tableNodeToBlock(
   if (rows.length === 0) return null;
 
   const tableAttrs: Record<string, unknown> = {};
-  let borderUnit: 'px' | 'eighthPoints' = 'px';
-  const getBorderSource = (): Record<string, unknown> | undefined => {
+
+  const getBorderSource = (): { borders: Record<string, unknown>; unit: 'px' | 'eighthPoints' } | undefined => {
     if (
       node.attrs?.borders &&
       typeof node.attrs.borders === 'object' &&
       node.attrs.borders !== null &&
       Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
     ) {
-      borderUnit = 'px';
-      return node.attrs.borders as Record<string, unknown>;
+      return {
+        borders: node.attrs.borders as Record<string, unknown>,
+        unit: 'px',
+      };
     }
     if (
       hydratedTableStyle?.borders &&
       typeof hydratedTableStyle.borders === 'object' &&
       hydratedTableStyle.borders !== null
     ) {
-      borderUnit = 'eighthPoints';
-      return hydratedTableStyle.borders as Record<string, unknown>;
+      return {
+        borders: hydratedTableStyle.borders as Record<string, unknown>,
+        unit: 'eighthPoints',
+      };
     }
-    return undefined;
   };
+
   const borderSource = getBorderSource();
   const tableBorders: TableBorders | undefined = borderSource
-    ? extractTableBorders(borderSource, { unit: borderUnit })
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
     : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 

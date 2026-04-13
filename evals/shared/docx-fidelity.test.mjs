@@ -21,7 +21,7 @@ import {
 } from './docx-fidelity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURES = resolve(__dirname, '../fixtures');
+const FIXTURES = resolve(__dirname, '../fixtures/docs');
 
 // --- parseDocx ---
 

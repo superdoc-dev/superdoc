@@ -194,7 +194,7 @@ describe('alternateChoiceHandler', () => {
     expect(text).toBe('cell choice');
   });
 
-  it('selects a supported choice when Requires contains multiple namespaces', () => {
+  it('falls back when Requires lists any unsupported namespace (all must be supported)', () => {
     const altNode = {
       type: 'element',
       name: 'mc:AlternateContent',
@@ -203,6 +203,38 @@ describe('alternateChoiceHandler', () => {
           type: 'element',
           name: 'mc:Choice',
           attributes: { Requires: 'foo wps bar' },
+          elements: [createTextRun('choice run')],
+        },
+        {
+          type: 'element',
+          name: 'mc:Fallback',
+          elements: [createTextRun('fallback run')],
+        },
+      ],
+    };
+
+    const { handlerSpy, result } = callHandler([altNode]);
+
+    expect(result.consumed).toBe(1);
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+    const handledCall = handlerSpy.mock.calls[0][0];
+    const handledNodes = handledCall?.nodes ?? [];
+    expect(handledNodes).toHaveLength(1);
+    const run = handledNodes[0];
+    const textElement = run.elements?.find((el) => el.name === 'w:t');
+    const textNode = textElement?.elements?.find((el) => el.type === 'text');
+    expect(textNode?.text).toBe('fallback run');
+  });
+
+  it('selects choice when every Requires namespace is supported', () => {
+    const altNode = {
+      type: 'element',
+      name: 'mc:AlternateContent',
+      elements: [
+        {
+          type: 'element',
+          name: 'mc:Choice',
+          attributes: { Requires: 'wps w14' },
           elements: [createTextRun('supported choice')],
         },
         {

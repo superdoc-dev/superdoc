@@ -5,6 +5,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL_OBJECTS_DOC = path.resolve(__dirname, 'fixtures/math-all-objects.docx');
 const FUNC_DOC = path.resolve(__dirname, 'fixtures/math-func-tests.docx');
+const EQARR_DOC = path.resolve(__dirname, 'fixtures/math-eqarr-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -218,5 +219,111 @@ test.describe('m:func (function apply) rendering', () => {
     expect(fractionData).not.toBeNull();
     expect(fractionData!.hasFunc).toBe(true);
     expect(fractionData!.denominatorText).toBe('x');
+  });
+});
+
+test.describe('m:eqArr (equation array) rendering', () => {
+  // Fixture (math-eqarr-tests.docx) contains 5 Word-native equation arrays:
+  //   1. Basic 2-row               — x=1 / y=2
+  //   2. Row with nested fraction  — a/b=c / x=y
+  //   3. Row with subscript        — x_1=a / y=b
+  //   4. Alignment markers (&)     — x&=1 / yy&=22 (ampersands must be stripped)
+  //   5. With m:eqArrPr properties — x=1 / y=2 (Pr element must be filtered)
+
+  test('renders all 5 equation arrays as <mtable columnalign="left">', async ({ superdoc }) => {
+    await superdoc.loadDocument(EQARR_DOC);
+    await superdoc.waitForStable();
+
+    const data = await superdoc.page.evaluate(() => {
+      const mtables = Array.from(document.querySelectorAll('mtable'));
+      return mtables.map((t) => ({
+        columnalign: t.getAttribute('columnalign'),
+        mtrCount: t.querySelectorAll(':scope > mtr').length,
+      }));
+    });
+
+    expect(data.length).toBe(5);
+    for (const t of data) {
+      expect(t.columnalign).toBe('left');
+      expect(t.mtrCount).toBe(2);
+    }
+  });
+
+  test('preserves nested <mfrac> inside an equation array row (case 2)', async ({ superdoc }) => {
+    await superdoc.loadDocument(EQARR_DOC);
+    await superdoc.waitForStable();
+
+    const hasFracInRow = await superdoc.page.evaluate(() => {
+      const mtables = Array.from(document.querySelectorAll('mtable'));
+      for (const t of mtables) {
+        const frac = t.querySelector(':scope > mtr > mtd mfrac');
+        if (
+          frac &&
+          frac.children.length === 2 &&
+          frac.children[0]?.textContent === 'a' &&
+          frac.children[1]?.textContent === 'b'
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    expect(hasFracInRow).toBe(true);
+  });
+
+  test('preserves nested <msub> inside an equation array row (case 3)', async ({ superdoc }) => {
+    await superdoc.loadDocument(EQARR_DOC);
+    await superdoc.waitForStable();
+
+    const hasSubInRow = await superdoc.page.evaluate(() => {
+      const mtables = Array.from(document.querySelectorAll('mtable'));
+      return mtables.some((t) => t.querySelector(':scope > mtr > mtd msub') !== null);
+    });
+
+    expect(hasSubInRow).toBe(true);
+  });
+
+  test('strips & alignment markers from row content (case 4)', async ({ superdoc }) => {
+    await superdoc.loadDocument(EQARR_DOC);
+    await superdoc.waitForStable();
+
+    // ECMA-376 §22.1.2.34: `&` inside m:t is an alignment marker, not literal text.
+    // The converter does not yet map these to MathML alignment groups, so they
+    // should be stripped rather than rendered as literal ampersands.
+    const alignmentData = await superdoc.page.evaluate(() => {
+      const mtables = Array.from(document.querySelectorAll('mtable'));
+      const texts = mtables.flatMap((t) =>
+        Array.from(t.querySelectorAll(':scope > mtr > mtd')).map((td) => td.textContent ?? ''),
+      );
+      return {
+        anyContainsAmpersand: texts.some((s) => s.includes('&')),
+        hasStrippedRow: texts.some((s) => s === 'yy=22'),
+      };
+    });
+
+    expect(alignmentData.anyContainsAmpersand).toBe(false);
+    expect(alignmentData.hasStrippedRow).toBe(true);
+  });
+
+  test('m:eqArrPr property element is filtered out (case 5)', async ({ superdoc }) => {
+    await superdoc.loadDocument(EQARR_DOC);
+    await superdoc.waitForStable();
+
+    // Word emits m:eqArrPr wrapping m:baseJc / m:maxDist / m:rSp / m:ctrlPr etc.
+    // These must be stripped by the converter — they should never appear as DOM
+    // elements named "eqarrpr" / "basejc" / "maxdist" / "ctrlpr".
+    const leaked = await superdoc.page.evaluate(() => {
+      const leaks: string[] = [];
+      for (const el of document.querySelectorAll('math *')) {
+        const name = el.localName.toLowerCase();
+        if (['eqarrpr', 'basejc', 'maxdist', 'objdist', 'rsp', 'rsprule', 'ctrlpr'].includes(name)) {
+          leaks.push(name);
+        }
+      }
+      return leaks;
+    });
+
+    expect(leaked).toEqual([]);
   });
 });

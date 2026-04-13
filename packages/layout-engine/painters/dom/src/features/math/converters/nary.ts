@@ -68,15 +68,28 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
       el.attributes?.['m:val'] === 'true' ||
       !el.attributes);
 
-  // Meaningful content = any non-property child (m:ctrlPr is a formatting hint, not content).
-  const hasMeaningfulContent = (el?: OmmlJsonNode) =>
-    el !== undefined && (el.elements ?? []).some((e) => e.name !== 'm:ctrlPr');
+  const subHidden = isStOnOffTrue(subHide);
+  const supHidden = isStOnOffTrue(supHide);
 
-  // §22.1.2.72: subHide/supHide only control rendering of EMPTY limit placeholders.
-  // When m:sub/m:sup has content, it is always rendered regardless of the hide flag.
-  // When m:sub/m:sup is empty/absent, the hide flag suppresses the placeholder slot.
-  const hasSub = hasMeaningfulContent(sub) || (sub !== undefined && !isStOnOffTrue(subHide));
-  const hasSup = hasMeaningfulContent(sup) || (sup !== undefined && !isStOnOffTrue(supHide));
+  // Strip m:ctrlPr (formatting hint only) to get each limit's meaningful children.
+  const stripCtrl = (el?: OmmlJsonNode) => (el?.elements ?? []).filter((e) => e.name !== 'm:ctrlPr');
+  const subChildren = stripCtrl(sub);
+  const supChildren = stripCtrl(sup);
+
+  // Word's behavior for subHide/supHide (§22.1.2.72):
+  //   - Empty limit + hide flag ON → suppress the placeholder slot.
+  //   - Non-empty limit + hide flag ON → promote the content into the opposite
+  //     slot (sub → prepended to sup, sup → appended to sub). Word does this so
+  //     author-entered content is never silently dropped.
+  const promotedToSup = subHidden && !supHidden ? subChildren : [];
+  const promotedToSub = supHidden && !subHidden ? supChildren : [];
+  const renderSubChildren = subHidden ? [] : [...subChildren, ...promotedToSub];
+  const renderSupChildren = supHidden ? [] : [...promotedToSup, ...supChildren];
+
+  // A slot is rendered if it has content OR if the element is present for an
+  // empty placeholder (§22.1.2.70 says sub/sup are optional — absent means no slot).
+  const hasSub = renderSubChildren.length > 0 || (sub !== undefined && !subHidden);
+  const hasSup = renderSupChildren.length > 0 || (sup !== undefined && !supHidden);
 
   // §22.1.2.72 m:grow: default is ON (operator grows with operand). When explicitly OFF,
   // suppress enlargement by setting largeop="false" — MathML's operator dictionary otherwise
@@ -98,11 +111,11 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
     operatorEl.appendChild(mo);
 
     const subRow = doc.createElementNS(MATHML_NS, 'mrow');
-    subRow.appendChild(convertChildren(sub.elements ?? []));
+    subRow.appendChild(convertChildren(renderSubChildren));
     operatorEl.appendChild(subRow);
 
     const supRow = doc.createElementNS(MATHML_NS, 'mrow');
-    supRow.appendChild(convertChildren(sup.elements ?? []));
+    supRow.appendChild(convertChildren(renderSupChildren));
     operatorEl.appendChild(supRow);
   } else if (hasSub) {
     const tag = isUndOvr ? 'munder' : 'msub';
@@ -110,7 +123,7 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
     operatorEl.appendChild(mo);
 
     const subRow = doc.createElementNS(MATHML_NS, 'mrow');
-    subRow.appendChild(convertChildren(sub.elements ?? []));
+    subRow.appendChild(convertChildren(renderSubChildren));
     operatorEl.appendChild(subRow);
   } else if (hasSup) {
     const tag = isUndOvr ? 'mover' : 'msup';
@@ -118,7 +131,7 @@ export const convertNary: MathObjectConverter = (node, doc, convertChildren) => 
     operatorEl.appendChild(mo);
 
     const supRow = doc.createElementNS(MATHML_NS, 'mrow');
-    supRow.appendChild(convertChildren(sup.elements ?? []));
+    supRow.appendChild(convertChildren(renderSupChildren));
     operatorEl.appendChild(supRow);
   } else {
     operatorEl = mo;

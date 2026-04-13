@@ -987,32 +987,33 @@ test.describe('m:nary (n-ary operator) rendering', () => {
     expect(data!.bodyText).toContain('f(x)dx');
   });
 
-  test('subHide/supHide do not hide limits that have content (§22.1.2.72)', async ({ superdoc }) => {
+  test('subHide with content promotes sub into sup slot (matches Word)', async ({ superdoc }) => {
     await superdoc.loadDocument(NARY_DOC);
     await superdoc.waitForStable();
 
-    // Scenarios 7 and 8 in the fixture both set m:subHide (as "true" and as bare element)
-    // but the m:sub elements contain "0" — per spec these are only placeholder-hide flags,
-    // so both limits should still render (msubsup), matching Word's behavior.
+    // Scenarios 8 and 9 in the document set m:subHide ("true" / bare) on a nary
+    // that has non-empty m:sub ("0") and m:sup ("1"). Word renders these as
+    // ∫^{01} — the sub content is promoted into the sup slot so nothing is
+    // dropped. Expect <msup> whose sup mrow starts with "0" then "1".
     const data = await superdoc.page.evaluate(() => {
       const maths = document.querySelectorAll('math');
       const [seven, eight] = [maths[7], maths[8]];
       const fromMath = (m?: Element | null) => {
-        const mss = m?.querySelector('msubsup');
+        const msup = m?.querySelector('msup');
         return {
-          hasMsubsup: mss !== null,
-          sub: mss?.children[1]?.textContent ?? null,
-          sup: mss?.children[2]?.textContent ?? null,
+          hasMsubsup: m?.querySelector('msubsup') !== null,
+          hasMsup: msup !== null,
+          supText: msup?.children[1]?.textContent ?? null,
         };
       };
       return { seven: fromMath(seven), eight: fromMath(eight) };
     });
-    expect(data.seven.hasMsubsup).toBe(true);
-    expect(data.seven.sub).toBe('0');
-    expect(data.seven.sup).toBe('1');
-    expect(data.eight.hasMsubsup).toBe(true);
-    expect(data.eight.sub).toBe('0');
-    expect(data.eight.sup).toBe('1');
+    expect(data.seven.hasMsubsup).toBe(false);
+    expect(data.seven.hasMsup).toBe(true);
+    expect(data.seven.supText).toBe('01');
+    expect(data.eight.hasMsubsup).toBe(false);
+    expect(data.eight.hasMsup).toBe(true);
+    expect(data.eight.supText).toBe('01');
   });
 
   test('Word indefinite integral (empty sub/sup + hide flags) renders as bare <mo>', async ({ superdoc }) => {

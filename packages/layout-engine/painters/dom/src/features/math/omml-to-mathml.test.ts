@@ -2846,9 +2846,9 @@ describe('m:nary converter', () => {
     expect(msub).not.toBeNull();
   });
 
-  it('subHide/supHide do NOT hide limits that have content (§22.1.2.72)', () => {
-    // Per spec: subHide/supHide only control empty-limit placeholder rendering.
-    // When m:sub/m:sup has content, it is always shown regardless of the flag.
+  it('subHide with non-empty m:sub promotes sub content into the sup slot (matches Word)', () => {
+    // Word's observed behavior: when subHide is ON but m:sub has content, the
+    // content is prepended to the sup slot so nothing is silently dropped.
     const omml = {
       name: 'm:oMath',
       elements: [
@@ -2877,10 +2877,50 @@ describe('m:nary converter', () => {
     };
     const result = convertOmmlToMathml(omml, doc);
     expect(result).not.toBeNull();
-    const msubsup = result!.querySelector('msubsup');
-    expect(msubsup).not.toBeNull();
-    expect(msubsup!.children[1]!.textContent).toBe('0');
-    expect(msubsup!.children[2]!.textContent).toBe('n');
+    expect(result!.querySelector('msubsup')).toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    // Sup slot contains sub content ("0") followed by sup content ("n")
+    expect(msup!.children[1]!.textContent).toBe('0n');
+  });
+
+  it('supHide with non-empty m:sup promotes sup content into the sub slot (symmetric)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [
+                { name: 'm:chr', attributes: { 'm:val': '\u222B' } },
+                { name: 'm:supHide', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    // Sub slot contains sub content ("a") followed by promoted sup content ("b")
+    expect(msub!.children[1]!.textContent).toBe('ab');
   });
 
   it('subHide hides empty m:sub (suppresses placeholder) → <msup>', () => {

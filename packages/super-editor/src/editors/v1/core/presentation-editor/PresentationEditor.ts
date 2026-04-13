@@ -3246,7 +3246,12 @@ export class PresentationEditor extends EventEmitter {
     };
     const handleSelection = () => {
       // User-initiated selection change (keyboard, mouse) — scroll caret into view.
-      this.#shouldScrollSelectionIntoView = true;
+      // During an active drag, EditorInputManager.#tickAutoScroll owns viewport
+      // movement. Arming this flag per pointermove-driven selection update would
+      // compete with auto-scroll and cause the viewport to oscillate (SD-2541).
+      if (!this.#editorInputManager?.isDragging) {
+        this.#shouldScrollSelectionIntoView = true;
+      }
       // Use immediate rendering for selection-only changes (clicks, arrow keys).
       // Without immediate, the render is RAF-deferred — leaving a window where
       // a remote collaborator's edit can cancel the pending render via

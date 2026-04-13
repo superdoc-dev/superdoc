@@ -745,6 +745,7 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
+      broadcastChanges: true,
     });
 
     commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
@@ -763,6 +764,7 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
+      broadcastChanges: true,
     });
   });
 
@@ -797,7 +799,75 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
+      broadcastChanges: true,
     });
+  });
+
+  it('resyncs tracked-change threads on peer collaboration replays', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = ({ inputType, ySyncMeta, docChanged = false } = {}) => ({
+      docChanged,
+      getMeta: vi.fn((key) => {
+        if (key === 'inputType') return inputType;
+        if (key === ySyncPluginKey) return ySyncMeta;
+        return undefined;
+      }),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction({
+        docChanged: true,
+        ySyncMeta: { isChangeOrigin: true, isUndoRedoOperation: false },
+      }),
+      duration: 6,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      broadcastChanges: false,
+    });
+  });
+
+  it('does not resync tracked-change threads on meta-only collaboration updates', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = ({ inputType, ySyncMeta, docChanged = false } = {}) => ({
+      docChanged,
+      getMeta: vi.fn((key) => {
+        if (key === 'inputType') return inputType;
+        if (key === ySyncPluginKey) return ySyncMeta;
+        return undefined;
+      }),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction({
+        docChanged: false,
+        ySyncMeta: { isChangeOrigin: true, isUndoRedoOperation: false },
+      }),
+      duration: 7,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {

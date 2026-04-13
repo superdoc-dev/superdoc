@@ -1084,19 +1084,48 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 };
 
+const isHistoryUndoRedoInput = (inputType) => inputType === 'historyUndo' || inputType === 'historyRedo';
+
+const isCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  return Boolean(transaction?.docChanged && ySyncMeta?.isChangeOrigin);
+};
+
+const isPeerCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  return (
+    isCollaborationReplayTransaction(transaction, ySyncMeta) &&
+    !isHistoryUndoRedoInput(inputType) &&
+    !Boolean(ySyncMeta?.isUndoRedoOperation)
+  );
+};
+
+const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.getMeta?.(ySyncPluginKey)) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  const isLocalHistoryUndoRedo = isHistoryUndoRedoInput(inputType);
+  const isLocalCollabUndoRedo = Boolean(ySyncMeta?.isUndoRedoOperation);
+
+  // Peer editors do not retain the local UndoManager flag. A collaborator's
+  // undo/redo arrives as a generic Yjs-origin document replay, so treat those
+  // replays as tracked-change resync points and keep the resync path idempotent.
+  return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
+};
+
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
-  const inputType = transaction?.getMeta?.('inputType');
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
-  const isCollabUndoRedo = Boolean(ySyncMeta?.isUndoRedoOperation);
 
   // Call sync on editor transaction for undo/redo in both local history
-  // and collaboration (Yjs UndoManager) modes.
-  // This could be extended to other listeners in the future
-  if (inputType === 'historyUndo' || inputType === 'historyRedo' || isCollabUndoRedo) {
+  // and collaboration replay modes.
+  if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
     syncTrackedChangePositionsWithDocument({ documentId, editor });
-    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor });
+    syncTrackedChangeComments({
+      superdoc: proxy.$superdoc,
+      editor,
+      // Remote replay should rebuild only local sidebar state. The authoritative
+      // collaboration comment update is already shared through the comments ydoc.
+      broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
+    });
   }
 
   emitEditorTransaction(buildEditorTransactionPayload(payload));

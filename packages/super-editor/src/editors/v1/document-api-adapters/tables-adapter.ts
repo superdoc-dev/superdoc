@@ -104,6 +104,7 @@ import {
 import { readTranslatedLinkedStyles } from '../core/parts/adapters/styles-read.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import type { PartId } from '../core/parts/types.js';
+import { cloneBorders, mapBorderSizes } from '../extensions/table/tableHelpers/border-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,33 +215,10 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
 }
 
 function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
-  const clone = cloneBorderMap(value);
-  if (!clone) return undefined;
-
-  for (const border of Object.values(clone)) {
-    if (!border || typeof border !== 'object') continue;
-    const size = (border as { size?: unknown }).size;
-    const pixelSize = convertBorderSizeValueToPixels(size);
-    if (pixelSize != null) {
-      (border as Record<string, unknown>).size = pixelSize;
-    }
-  }
-
+  const clone = cloneBorders(value);
+  if (!clone || Object.keys(clone).length === 0) return undefined;
+  mapBorderSizes(clone, convertBorderSizeValueToPixels);
   return Object.keys(clone).length > 0 ? clone : undefined;
-}
-
-function cloneBorderMap(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const clone: Record<string, unknown> = {};
-  let hasBorder = false;
-
-  for (const [side, borderValue] of Object.entries(value as Record<string, unknown>)) {
-    if (!borderValue || typeof borderValue !== 'object') continue;
-    clone[side] = { ...(borderValue as Record<string, unknown>) };
-    hasBorder = true;
-  }
-
-  return hasBorder ? clone : undefined;
 }
 
 function convertBorderSizeValueToPixels(size: unknown): number | undefined {

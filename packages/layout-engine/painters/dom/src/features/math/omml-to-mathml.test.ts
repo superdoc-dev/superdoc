@@ -2845,4 +2845,346 @@ describe('m:nary converter', () => {
     const msub = result!.querySelector('msub');
     expect(msub).not.toBeNull();
   });
+
+  it('renders only superscript when subHide is set (→ <msup>)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:subHide', attributes: { 'm:val': '1' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const msup = result!.querySelector('msup');
+    expect(msup).not.toBeNull();
+    expect(result!.querySelector('msub')).toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    expect(msup!.children[0]!.textContent).toBe('\u222B');
+    expect(msup!.children[1]!.textContent).toBe('n');
+  });
+
+  it('treats m:subHide m:val="true" as hidden (ST_OnOff §22.9.2.7)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:subHide', attributes: { 'm:val': 'true' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    expect(result!.querySelector('msup')).not.toBeNull();
+  });
+
+  it('treats bare <m:subHide/> (no attributes) as hidden (ST_OnOff §22.9.2.7)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:subHide' }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    expect(result!.querySelector('msup')).not.toBeNull();
+  });
+
+  it('indefinite integral (no m:sub/m:sup, no hide flags) → bare <mo>', () => {
+    // §22.1.2.70: m:sub/m:sup are optional. When absent, no subscript/superscript should be rendered.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr', attributes: { 'm:val': '\u222B' } }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f(x)dx' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+    expect(result!.querySelector('msub')).toBeNull();
+    expect(result!.querySelector('msup')).toBeNull();
+    const mo = result!.querySelector('mo');
+    expect(mo).not.toBeNull();
+    expect(mo!.textContent).toBe('\u222B');
+    expect(result!.textContent).toContain('f(x)dx');
+  });
+
+  it('summation without m:limLoc defaults to <munderover> (§22.1.2.53 + operator heuristic)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr', attributes: { 'm:val': '\u2211' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i=1' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('munderover')).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+  });
+
+  it('<m:limLoc/> with no val attribute defaults to undOvr (§22.1.2.53)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr', attributes: { 'm:val': '\u2211' } }, { name: 'm:limLoc' }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i=1' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('munderover')).not.toBeNull();
+    expect(result!.querySelector('msubsup')).toBeNull();
+  });
+
+  it('integral without m:limLoc keeps subSup (operator heuristic)', () => {
+    // Integrals default to side-limits; only non-integrals default to under/over when limLoc is absent.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr', attributes: { 'm:val': '\u222B' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '0' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'f' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('msubsup')).not.toBeNull();
+    expect(result!.querySelector('munderover')).toBeNull();
+  });
+
+  it('suppresses operator growth when m:grow m:val="0" (§22.1.2.72)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [
+                { name: 'm:chr', attributes: { 'm:val': '\u2211' } },
+                { name: 'm:grow', attributes: { 'm:val': '0' } },
+              ],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i=1' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mo = result!.querySelector('mo');
+    expect(mo).not.toBeNull();
+    expect(mo!.getAttribute('largeop')).toBe('false');
+    expect(mo!.getAttribute('stretchy')).toBe('false');
+  });
+
+  it('leaves operator growth to MathML defaults when m:grow is absent or ON', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr', attributes: { 'm:val': '\u2211' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i=1' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'i' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mo = result!.querySelector('mo');
+    expect(mo).not.toBeNull();
+    // No explicit largeop/stretchy — rely on operator dictionary defaults
+    expect(mo!.hasAttribute('largeop')).toBe(false);
+    expect(mo!.hasAttribute('stretchy')).toBe(false);
+  });
+
+  it('<m:chr/> with no val means "no character" (§22.1.2.20)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:nary',
+          elements: [
+            {
+              name: 'm:naryPr',
+              elements: [{ name: 'm:chr' }, { name: 'm:limLoc', attributes: { 'm:val': 'undOvr' } }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+            {
+              name: 'm:sup',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mo = result!.querySelector('mo');
+    expect(mo).not.toBeNull();
+    expect(mo!.textContent).toBe('');
+  });
 });

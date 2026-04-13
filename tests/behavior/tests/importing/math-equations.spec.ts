@@ -10,6 +10,7 @@ const DELIMITER_DOC = path.resolve(__dirname, 'fixtures/math-delimiter-tests.doc
 const RADICAL_DOC = path.resolve(__dirname, 'fixtures/math-radical-tests.docx');
 const LIMIT_DOC = path.resolve(__dirname, 'fixtures/math-limit-tests.docx');
 const EQARR_DOC = path.resolve(__dirname, 'fixtures/math-eqarr-tests.docx');
+const NARY_DOC = path.resolve(__dirname, 'fixtures/math-nary-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -879,6 +880,180 @@ test.describe('m:eqArr (equation array) rendering', () => {
       return leaks;
     });
 
+    expect(leaked).toEqual([]);
+  });
+});
+
+test.describe('m:nary (n-ary operator) rendering', () => {
+  // Fixture covers 13 m:nary scenarios across every ECMA-376 spec path:
+  //   §22.1.2.20 (m:chr), §22.1.2.53 (m:limLoc), §22.1.2.70 (m:nary),
+  //   §22.1.2.72 (m:naryPr), §22.9.2.7 (ST_OnOff).
+
+  test('renders all 13 scenarios as <math> elements', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    const mathCount = await superdoc.page.evaluate(() => {
+      return document.querySelectorAll('math').length;
+    });
+    expect(mathCount).toBe(13);
+  });
+
+  test('definite integral renders as <msubsup> with both limits', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 1: ∫₀¹ f(x)dx
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[0];
+      const msubsup = math?.querySelector('msubsup');
+      if (!msubsup) return null;
+      return {
+        childCount: msubsup.children.length,
+        opChar: msubsup.children[0]?.textContent,
+        sub: msubsup.children[1]?.textContent,
+        sup: msubsup.children[2]?.textContent,
+      };
+    });
+    expect(data).not.toBeNull();
+    expect(data!.childCount).toBe(3);
+    expect(data!.opChar).toBe('\u222B');
+    expect(data!.sub).toBe('0');
+    expect(data!.sup).toBe('1');
+  });
+
+  test('summation without m:limLoc renders as <munderover> (§22.1.2.53 + operator heuristic)', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 3: ∑_{i=1}^n i with no m:limLoc — spec says default to undOvr in display mode.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[2];
+      const munderover = math?.querySelector('munderover');
+      if (!munderover) return null;
+      return {
+        hasMsubsup: math?.querySelector('msubsup') !== null,
+        opChar: munderover.children[0]?.textContent,
+        under: munderover.children[1]?.textContent,
+        over: munderover.children[2]?.textContent,
+      };
+    });
+    expect(data).not.toBeNull();
+    expect(data!.hasMsubsup).toBe(false);
+    expect(data!.opChar).toBe('\u2211');
+    expect(data!.under).toBe('i=1');
+    expect(data!.over).toBe('n');
+  });
+
+  test('union with supHide renders as <munder> (one-sided undOvr branch)', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 6: ⋃ᵢ Aᵢ — m:supHide=1 + no m:limLoc on a non-integral → munder.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[5];
+      const munder = math?.querySelector('munder');
+      if (!munder) return null;
+      return {
+        hasMsub: math?.querySelector('msub') !== null,
+        opChar: munder.children[0]?.textContent,
+        under: munder.children[1]?.textContent,
+      };
+    });
+    expect(data).not.toBeNull();
+    expect(data!.hasMsub).toBe(false);
+    expect(data!.opChar).toBe('\u22C3');
+    expect(data!.under).toBe('i');
+  });
+
+  test('indefinite integral (no m:sub/m:sup elements) renders as bare <mo>', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 7 (label "2b" in fixture): no sub/sup and no hide flags — expect bare <mo>.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[6];
+      const hasScriptWrapper = math?.querySelector('msubsup, msub, msup, munderover, munder, mover') !== null;
+      const mo = math?.querySelector('mo');
+      return {
+        hasScriptWrapper,
+        opChar: mo?.textContent ?? null,
+        bodyText: math?.textContent ?? null,
+      };
+    });
+    expect(data).not.toBeNull();
+    expect(data!.hasScriptWrapper).toBe(false);
+    expect(data!.opChar).toBe('\u222B');
+    expect(data!.bodyText).toContain('f(x)dx');
+  });
+
+  test('subHide m:val="true" is treated as ON (§22.9.2.7)', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 8 (index 7): m:subHide m:val="true" — sub should be hidden → msup.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[7];
+      const msup = math?.querySelector('msup');
+      return {
+        hasMsubsup: math?.querySelector('msubsup') !== null,
+        hasMsup: msup !== null,
+        sup: msup?.children[1]?.textContent ?? null,
+      };
+    });
+    expect(data!.hasMsubsup).toBe(false);
+    expect(data!.hasMsup).toBe(true);
+    expect(data!.sup).toBe('1');
+  });
+
+  test('<m:chr/> with no val renders an empty operator (§22.1.2.20)', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 11 (index 10): <m:chr/> + limLoc=undOvr — expect munderover with empty <mo>.
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[10];
+      const munderover = math?.querySelector('munderover');
+      const mo = munderover?.querySelector('mo');
+      return {
+        hasMunderover: munderover !== null,
+        opChar: mo?.textContent ?? null,
+      };
+    });
+    expect(data!.hasMunderover).toBe(true);
+    expect(data!.opChar).toBe('');
+  });
+
+  test('m:grow m:val="0" suppresses operator growth (§22.1.2.72)', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // Scenario 13 (index 12): m:grow=0 on ∑ — expect largeop="false" stretchy="false".
+    const data = await superdoc.page.evaluate(() => {
+      const math = document.querySelectorAll('math')[12];
+      const mo = math?.querySelector('mo');
+      return {
+        opChar: mo?.textContent ?? null,
+        largeop: mo?.getAttribute('largeop') ?? null,
+        stretchy: mo?.getAttribute('stretchy') ?? null,
+      };
+    });
+    expect(data!.opChar).toBe('\u2211');
+    expect(data!.largeop).toBe('false');
+    expect(data!.stretchy).toBe('false');
+  });
+
+  test('OMML property elements do not leak into the MathML DOM', async ({ superdoc }) => {
+    await superdoc.loadDocument(NARY_DOC);
+    await superdoc.waitForStable();
+
+    // naryPr/subHide/supHide/limLoc/chr/grow are OMML property elements — they
+    // must not appear in the rendered MathML output.
+    const leaked = await superdoc.page.evaluate(() => {
+      return Array.from(document.querySelectorAll('math *'))
+        .map((el) => el.localName.toLowerCase())
+        .filter((n) => ['narypr', 'subhide', 'suphide', 'limloc', 'chr', 'grow', 'ctrlpr'].includes(n));
+    });
     expect(leaked).toEqual([]);
   });
 });

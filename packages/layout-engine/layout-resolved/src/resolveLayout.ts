@@ -6,11 +6,14 @@ import type {
   Fragment,
   DrawingFragment,
   ImageFragment,
+  ListItemFragment,
+  ParaFragment,
   TableFragment,
   Line,
   ResolvedLayout,
   ResolvedPage,
   ResolvedPaintItem,
+  ResolvedFragmentItem,
   ResolvedParagraphContent,
   ListMeasure,
   ParagraphBlock,
@@ -136,9 +139,9 @@ function resolveFragmentItem(
       return resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
     case 'drawing':
       return resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
-    default:
+    default: {
       // para, list-item — existing generic resolution
-      return {
+      const item: ResolvedFragmentItem = {
         kind: 'fragment',
         id: resolveFragmentId(fragment),
         pageIndex,
@@ -152,6 +155,21 @@ function resolveFragmentItem(
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
+      if (fragment.kind === 'para') {
+        const para = fragment as ParaFragment;
+        if (para.pmStart != null) item.pmStart = para.pmStart;
+        if (para.pmEnd != null) item.pmEnd = para.pmEnd;
+        if (para.continuesFromPrev != null) item.continuesFromPrev = para.continuesFromPrev;
+        if (para.continuesOnNext != null) item.continuesOnNext = para.continuesOnNext;
+        if (para.markerWidth != null) item.markerWidth = para.markerWidth;
+      } else if (fragment.kind === 'list-item') {
+        const listItem = fragment as ListItemFragment;
+        if (listItem.continuesFromPrev != null) item.continuesFromPrev = listItem.continuesFromPrev;
+        if (listItem.continuesOnNext != null) item.continuesOnNext = listItem.continuesOnNext;
+        if (listItem.markerWidth != null) item.markerWidth = listItem.markerWidth;
+      }
+      return item;
+    }
   }
 }
 

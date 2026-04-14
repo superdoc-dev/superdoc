@@ -2929,13 +2929,18 @@ export class DomPainter {
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
 
+      // Prefer resolved item metadata over legacy fragment reads
+      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
+      const paraContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
+      const paraMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
 
       // For TOC entries, override white-space to prevent wrapping
       const isTocEntry = block.attrs?.isTocEntry;
       // For fragments with markers, allow overflow to show markers positioned at negative left
-      const hasMarker = !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+      const hasMarker = !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
       // SDT containers need overflow visible for tooltips/labels positioned above
       const hasSdtContainer =
         block.attrs?.sdt?.type === 'documentSection' ||
@@ -2962,10 +2967,10 @@ export class DomPainter {
         fragmentEl.classList.add('superdoc-toc-entry');
       }
 
-      if (fragment.continuesFromPrev) {
+      if (paraContinuesFromPrev) {
         fragmentEl.dataset.continuesFromPrev = 'true';
       }
-      if (fragment.continuesOnNext) {
+      if (paraContinuesOnNext) {
         fragmentEl.dataset.continuesOnNext = 'true';
       }
 
@@ -3021,7 +3026,7 @@ export class DomPainter {
       } else {
         const dropCapDescriptor = block.attrs?.dropCapDescriptor;
         const dropCapMeasure = measure.dropCap;
-        if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
+        if (dropCapDescriptor && dropCapMeasure && !paraContinuesFromPrev) {
           const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
           fragmentEl.appendChild(dropCapEl);
         }
@@ -3147,7 +3152,7 @@ export class DomPainter {
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
         const listFirstLineTextStartPx =
-          !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+          !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker
             ? resolvePainterListTextStartPx({
                 wordLayout,
                 indentLeftPx: paraIndentLeft,
@@ -3158,8 +3163,8 @@ export class DomPainter {
             : undefined;
 
         const shouldUseSharedInlinePrefixGeometry =
-          !fragment.continuesFromPrev &&
-          fragment.markerWidth &&
+          !paraContinuesFromPrev &&
+          paraMarkerWidth &&
           wordLayout?.marker?.justification === 'left' &&
           wordLayout.firstLineIndentMode !== true &&
           typeof fragment.markerTextWidth === 'number' &&
@@ -3177,7 +3182,7 @@ export class DomPainter {
 
         let listTabWidth = 0;
         let markerStartPos = 0;
-        if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
+        if (!paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker) {
           const markerTextWidth = fragment.markerTextWidth!;
           const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
           const markerJustification = wordLayout.marker.justification ?? 'left';
@@ -3212,8 +3217,7 @@ export class DomPainter {
 
         lines.forEach((line, index) => {
           const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
-          const hasListFirstLineMarker =
-            index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+          const hasListFirstLineMarker = index === 0 && !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
           const shouldUseResolvedListTextStart =
             hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
 
@@ -3238,7 +3242,7 @@ export class DomPainter {
           }
 
           const isLastLineOfFragment = index === lines.length - 1;
-          const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
+          const isLastLineOfParagraph = isLastLineOfFragment && !paraContinuesOnNext;
           const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
 
           const lineEl = this.renderLine(
@@ -3274,7 +3278,7 @@ export class DomPainter {
           if (paraIndentRight && paraIndentRight > 0) {
             lineEl.style.paddingRight = `${paraIndentRight}px`;
           }
-          if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
+          if (!paraContinuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
             if (!hasExplicitSegmentPositioning) {
               lineEl.style.textIndent = `${firstLineOffset}px`;
             }
@@ -3470,6 +3474,11 @@ export class DomPainter {
         throw new Error(`DomPainter: missing list item ${fragment.itemId}`);
       }
 
+      // Prefer resolved item metadata over legacy fragment reads
+      const listContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
+      const listContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
+      const listMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
       applyStyles(fragmentEl, fragmentStyles);
@@ -3495,10 +3504,10 @@ export class DomPainter {
         sdtBoundary,
       );
 
-      if (fragment.continuesFromPrev) {
+      if (listContinuesFromPrev) {
         fragmentEl.dataset.continuesFromPrev = 'true';
       }
-      if (fragment.continuesOnNext) {
+      if (listContinuesOnNext) {
         fragmentEl.dataset.continuesOnNext = 'true';
       }
 
@@ -3513,7 +3522,7 @@ export class DomPainter {
       if (marker) {
         markerEl.textContent = marker.markerText ?? null;
         markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, fragment.markerWidth - LIST_MARKER_GAP)}px`;
+        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
         markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
         markerEl.style.textAlign = marker.justification ?? 'left';
 
@@ -3528,7 +3537,7 @@ export class DomPainter {
         // Fallback: legacy behavior
         markerEl.textContent = item.marker.text;
         markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, fragment.markerWidth - LIST_MARKER_GAP)}px`;
+        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
         markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
         if (item.marker.align) {
           markerEl.style.textAlign = item.marker.align;
@@ -3628,16 +3637,19 @@ export class DomPainter {
       }
 
       // Add PM position markers for transaction targeting
-      if (fragment.pmStart != null) {
-        fragmentEl.dataset.pmStart = String(fragment.pmStart);
+      const imgPmStart = resolvedItem?.pmStart ?? fragment.pmStart;
+      if (imgPmStart != null) {
+        fragmentEl.dataset.pmStart = String(imgPmStart);
       }
-      if (fragment.pmEnd != null) {
-        fragmentEl.dataset.pmEnd = String(fragment.pmEnd);
+      const imgPmEnd = resolvedItem?.pmEnd ?? fragment.pmEnd;
+      if (imgPmEnd != null) {
+        fragmentEl.dataset.pmEnd = String(imgPmEnd);
       }
 
       // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      if (fragment.metadata && !block.attrs?.vmlWatermark) {
-        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(fragment.metadata));
+      const imgMetadata = resolvedItem?.metadata ?? fragment.metadata;
+      if (imgMetadata && !block.attrs?.vmlWatermark) {
+        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
       }
 
       // behindDoc images are supported via z-index; suppress noisy debug logs
@@ -6518,8 +6530,14 @@ export class DomPainter {
   /**
    * Applies PM position data attributes from a legacy Fragment.
    * Extracted from applyFragmentFrame for use in the resolved wrapper path.
+   * When a resolvedItem is provided, its fields take precedence over fragment fields.
    */
-  private applyFragmentPmAttributes(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
+  private applyFragmentPmAttributes(
+    el: HTMLElement,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+    resolvedItem?: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+  ): void {
     // Footnote content is read-only: prevent cursor placement and typing
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
       el.setAttribute('contenteditable', 'false');
@@ -6529,22 +6547,28 @@ export class DomPainter {
       if (section === 'body' || section === undefined) {
         assertFragmentPmPositions(fragment, 'paragraph fragment');
       }
-      if (fragment.pmStart != null) {
-        el.dataset.pmStart = String(fragment.pmStart);
+      // Narrow to ResolvedFragmentItem to access para-specific resolved fields
+      const resolvedFrag = resolvedItem as ResolvedFragmentItem | undefined;
+      const pmStart = resolvedFrag?.pmStart ?? (fragment as ParaFragment).pmStart;
+      if (pmStart != null) {
+        el.dataset.pmStart = String(pmStart);
       } else {
         delete el.dataset.pmStart;
       }
-      if (fragment.pmEnd != null) {
-        el.dataset.pmEnd = String(fragment.pmEnd);
+      const pmEnd = resolvedFrag?.pmEnd ?? (fragment as ParaFragment).pmEnd;
+      if (pmEnd != null) {
+        el.dataset.pmEnd = String(pmEnd);
       } else {
         delete el.dataset.pmEnd;
       }
-      if (fragment.continuesFromPrev) {
+      const continuesFromPrev = resolvedFrag?.continuesFromPrev ?? (fragment as ParaFragment).continuesFromPrev;
+      if (continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {
         delete el.dataset.continuesFromPrev;
       }
-      if (fragment.continuesOnNext) {
+      const continuesOnNext = resolvedFrag?.continuesOnNext ?? (fragment as ParaFragment).continuesOnNext;
+      if (continuesOnNext) {
         el.dataset.continuesOnNext = 'true';
       } else {
         delete el.dataset.continuesOnNext;
@@ -6594,7 +6618,7 @@ export class DomPainter {
       el.style.height = `${item.height}px`;
     }
 
-    this.applyFragmentPmAttributes(el, fragment, section);
+    this.applyFragmentPmAttributes(el, fragment, section, item);
   }
 
   /**
@@ -6611,8 +6635,9 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
   ): void {
     this.applyResolvedFragmentFrame(el, item, fragment, section);
-    el.style.left = `${item.x - fragment.markerWidth}px`;
-    el.style.width = `${item.width + fragment.markerWidth}px`;
+    const mw = item.markerWidth ?? fragment.markerWidth;
+    el.style.left = `${item.x - mw}px`;
+    el.style.width = `${item.width + mw}px`;
   }
 
   /**

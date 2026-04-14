@@ -3,6 +3,7 @@ import type {
   FlowMode,
   Fragment,
   ImageBlock,
+  ImageFragmentMetadata,
   Line,
   PageMargins,
   SectionVerticalAlign,
@@ -105,6 +106,16 @@ export type ResolvedFragmentItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy content rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
+  /** Whether this fragment continues from a previous page. */
+  continuesFromPrev?: boolean;
+  /** Whether this fragment continues on the next page. */
+  continuesOnNext?: boolean;
+  /** List marker box width in pixels (para/list-item only). */
+  markerWidth?: number;
   /** Pre-resolved paragraph content for non-table paragraph fragments. */
   content?: ResolvedParagraphContent;
 };
@@ -205,6 +216,14 @@ export type ResolvedTableItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
+  /** Whether this table fragment continues from a previous page. */
+  continuesFromPrev?: boolean;
+  /** Whether this table fragment continues on the next page. */
+  continuesOnNext?: boolean;
   /** Pre-extracted TableBlock (replaces blockLookup.get()). */
   block: TableBlock;
   /** Pre-extracted TableMeasure (replaces blockLookup.get()). */
@@ -241,8 +260,14 @@ export type ResolvedImageItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
   /** Pre-extracted ImageBlock (replaces blockLookup.get()). */
   block: ImageBlock;
+  /** Image metadata for interactive resizing (original dimensions, aspect ratio). */
+  metadata?: ImageFragmentMetadata;
 };
 
 /**
@@ -271,6 +296,10 @@ export type ResolvedDrawingItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
   /** Pre-extracted DrawingBlock (replaces blockLookup.get()). */
   block: DrawingBlock;
 };

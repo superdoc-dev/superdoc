@@ -988,13 +988,13 @@ const normalizeFormatAttrsForCommentText = (attrs = {}, nodes) => {
   };
 };
 
-const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion }) => {
+const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isReplacement }) => {
   let trackedChangeText = '';
   let deletionText = '';
   let trackedChangeDisplayType = null;
 
   // Extract deletion text first
-  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
+  if (trackedChangeType === TrackDeleteMarkName || isReplacement) {
     deletionText = nodes.reduce((acc, node) => {
       const hasDeleteMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName);
       if (!hasDeleteMark) return acc;
@@ -1004,7 +1004,7 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
     }, '');
   }
 
-  if (trackedChangeType === TrackInsertMarkName || isDeletionInsertion) {
+  if (trackedChangeType === TrackInsertMarkName || isReplacement) {
     trackedChangeText = nodes.reduce((acc, node) => {
       const hasInsertMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName);
       if (!hasInsertMark) return acc;
@@ -1064,17 +1064,14 @@ const createOrUpdateTrackedChangeComment = ({
   const { author, authorEmail, authorImage, date, importedAuthor } = attrs;
   const id = attrs.id;
 
-  // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
-  // for both newly created and imported tracked changes
-  let isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+  let isReplacement = !!(marks.insertedMark && marks.deletionMark);
 
-  // Fallback: If metadata doesn't indicate replacement (e.g., edge cases during import),
-  // check the document state directly to detect replacements by finding both marks with same ID
-  // This ensures robustness even if groupChanges() misses a replacement or metadata isn't set
-  if (!isDeletionInsertion) {
+  // Fallback: check the document for both mark types under the same ID
+  // (covers edge cases where transaction meta only carries one mark)
+  if (!isReplacement) {
     const hasInsertMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackInsertMarkName);
     const hasDeleteMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackDeleteMarkName);
-    isDeletionInsertion = hasInsertMark && hasDeleteMark;
+    isReplacement = hasInsertMark && hasDeleteMark;
   }
 
   // Collect nodes from the tracked changes found
@@ -1097,10 +1094,8 @@ const createOrUpdateTrackedChangeComment = ({
     });
   });
 
-  // For replacements, we need both insertion nodes and deletion nodes
-  // When isDeletionInsertion is true, nodesWithMark should contain both types
   let nodesToUse;
-  if (isDeletionInsertion) {
+  if (isReplacement) {
     // For replacements, prefer nodes found in the document to avoid duplicating text
     // when step.slice/deletionNodes include overlapping content.
     const hasInsertNode = nodesWithMark.some((node) =>
@@ -1128,7 +1123,7 @@ const createOrUpdateTrackedChangeComment = ({
     nodes: nodesToUse,
     mark: trackedMark,
     trackedChangeType,
-    isDeletionInsertion,
+    isReplacement,
     deletionNodes,
   });
 
@@ -1141,10 +1136,10 @@ const createOrUpdateTrackedChangeComment = ({
     type: 'trackedChange',
     documentId,
     changeId: id,
-    trackedChangeType: isDeletionInsertion ? 'both' : trackedChangeType,
+    trackedChangeType: isReplacement ? 'both' : trackedChangeType,
     trackedChangeText,
     trackedChangeDisplayType,
-    deletedText: marks.deletionMark ? deletionText : null,
+    deletedText: isReplacement || marks.deletionMark ? deletionText : null,
     author,
     authorEmail,
     ...(authorImage && { authorImage }),

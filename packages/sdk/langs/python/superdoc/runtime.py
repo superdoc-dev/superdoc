@@ -14,7 +14,11 @@ from typing import Any, Dict, Optional
 from .embedded_cli import resolve_embedded_cli_path
 from .generated.contract import OPERATION_INDEX
 from .protocol import normalize_default_change_mode
-from .transport import AsyncHostTransport, SyncHostTransport
+from .transport import (
+    DEFAULT_STDOUT_BUFFER_LIMIT_BYTES,
+    AsyncHostTransport,
+    SyncHostTransport,
+)
 
 
 class SuperDocSyncRuntime:
@@ -79,7 +83,7 @@ class SuperDocAsyncRuntime:
         request_timeout_ms: Optional[int] = None,
         watchdog_timeout_ms: int = 30_000,
         max_queue_depth: int = 100,
-        stdout_buffer_limit_bytes: int = 64 * 1024 * 1024,
+        stdout_buffer_limit_bytes: int = DEFAULT_STDOUT_BUFFER_LIMIT_BYTES,
         default_change_mode: Optional[str] = None,
         user: Optional[Dict[str, str]] = None,
     ) -> None:

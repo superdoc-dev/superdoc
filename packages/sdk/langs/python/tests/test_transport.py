@@ -499,7 +499,7 @@ class TestAsyncLargeResponse:
     """Responses larger than the StreamReader buffer must not crash the reader."""
 
     @pytest.mark.asyncio
-    async def test_response_above_default_64kb_buffer(self):
+    async def test_response_above_asyncio_default_streamreader_limit(self):
         big_payload = 'x' * (200 * 1024)
         cli = _mock_cli_bin({
             'handshake': 'ok',
@@ -553,5 +553,25 @@ class TestAsyncLargeResponse:
 
             # dispose() after an overflow must be a safe no-op.
             await transport.dispose()
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
+    async def test_client_threads_stdout_buffer_limit_to_transport(self):
+        # End-to-end wiring check: the public AsyncSuperDocClient constructor
+        # must thread stdout_buffer_limit_bytes through SuperDocAsyncRuntime
+        # into AsyncHostTransport. Without this, a silent drop in client.py
+        # or runtime.py would leave the existing overflow test passing while
+        # the public API reverts to the asyncio 64 KiB default.
+        from superdoc.client import AsyncSuperDocClient
+
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            client = AsyncSuperDocClient(
+                env={'SUPERDOC_CLI_BIN': cli},
+                stdout_buffer_limit_bytes=64 * 1024,
+            )
+            transport = client._runtime._transport
+            assert transport._stdout_buffer_limit_bytes == 64 * 1024
         finally:
             _cleanup_wrapper(cli)

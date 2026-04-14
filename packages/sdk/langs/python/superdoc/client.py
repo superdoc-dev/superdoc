@@ -22,6 +22,7 @@ from .generated.client import (
     DocOpenResult as GeneratedDocOpenResult,
 )
 from .runtime import SuperDocAsyncRuntime, SuperDocSyncRuntime
+from .transport import DEFAULT_STDOUT_BUFFER_LIMIT_BYTES
 
 UserIdentity = Dict[str, str]
 
@@ -340,7 +341,9 @@ class AsyncSuperDocClient:
         request_timeout_ms: int | None = None,
         watchdog_timeout_ms: int = 30_000,
         max_queue_depth: int = 100,
-        stdout_buffer_limit_bytes: int = 64 * 1024 * 1024,
+        # Raise if a single host response can exceed this size (e.g. reading
+        # very large documents); otherwise the default is safe.
+        stdout_buffer_limit_bytes: int = DEFAULT_STDOUT_BUFFER_LIMIT_BYTES,
         default_change_mode: Literal['direct', 'tracked'] | None = None,
         user: UserIdentity | None = None,
     ) -> None:

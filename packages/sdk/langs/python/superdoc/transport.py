@@ -43,6 +43,12 @@ from .protocol import (
 
 logger = logging.getLogger('superdoc.transport')
 
+# Default stdout StreamReader buffer for the async transport. Host responses
+# are single newline-delimited JSON lines, so this caps the largest individual
+# response a caller can receive. Raise it if your workload routinely produces
+# responses above this size (e.g. whole-document reads on very large docs).
+DEFAULT_STDOUT_BUFFER_LIMIT_BYTES = 64 * 1024 * 1024
+
 # Opt-in debug logging via SUPERDOC_DEBUG=1 or SUPERDOC_LOG_LEVEL=debug.
 # Only configures the named logger — never mutates root logging config.
 _log_level = os.environ.get('SUPERDOC_LOG_LEVEL', '').lower()
@@ -399,7 +405,7 @@ class AsyncHostTransport:
         request_timeout_ms: Optional[int] = None,
         watchdog_timeout_ms: int = 30_000,
         max_queue_depth: int = 100,
-        stdout_buffer_limit_bytes: int = 64 * 1024 * 1024,
+        stdout_buffer_limit_bytes: int = DEFAULT_STDOUT_BUFFER_LIMIT_BYTES,
         default_change_mode: Optional[ChangeMode] = None,
         user: Optional[Dict[str, str]] = None,
     ) -> None:

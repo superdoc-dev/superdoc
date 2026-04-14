@@ -606,6 +606,11 @@ describe('patchRawProperties validates patch op shapes', () => {
 
 describe('create.contentControl validation', () => {
   const createAdapter = { create: mock(noop) } as any;
+  const validAt = {
+    kind: 'selection' as const,
+    start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+    end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+  };
 
   it('rejects null input', () => {
     expect(() => executeCreateContentControl(createAdapter, null as any)).toThrow(/non-null object/);
@@ -658,11 +663,7 @@ describe('create.contentControl validation', () => {
       executeCreateContentControl(createAdapter, {
         kind: 'inline',
         target: validTarget,
-        at: {
-          kind: 'selection',
-          start: { kind: 'text', blockId: 'p1', offset: 0 },
-          end: { kind: 'text', blockId: 'p1', offset: 5 },
-        },
+        at: validAt,
       } as any),
     ).toThrow(/mutually exclusive/);
   });
@@ -680,11 +681,7 @@ describe('create.contentControl validation', () => {
     expect(() =>
       executeCreateContentControl(createAdapter, {
         kind: 'inline',
-        at: {
-          kind: 'bogus',
-          start: { kind: 'text', blockId: 'p1', offset: 0 },
-          end: { kind: 'text', blockId: 'p1', offset: 5 },
-        },
+        at: { ...validAt, kind: 'bogus' },
       } as any),
     ).toThrow(/valid SelectionTarget/);
   });
@@ -693,11 +690,7 @@ describe('create.contentControl validation', () => {
     const adapter = { create: mock(noop) } as any;
     executeCreateContentControl(adapter, {
       kind: 'inline',
-      at: {
-        kind: 'selection',
-        start: { kind: 'text', blockId: 'p1', offset: 0 },
-        end: { kind: 'text', blockId: 'p1', offset: 5 },
-      },
+      at: validAt,
       tag: 'name',
       alias: 'Name',
     });

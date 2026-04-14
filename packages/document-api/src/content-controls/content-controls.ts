@@ -1034,24 +1034,22 @@ export function executeCreateContentControl(
       { field: 'lockMode', value: input.lockMode },
     );
   }
+  if (input.at !== undefined && input.target !== undefined) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.contentControl: "at" and "target" are mutually exclusive — provide one or neither.`,
+      { field: 'at' },
+    );
+  }
   if (input.target !== undefined) {
     validateCCTarget(input.target, 'create.contentControl');
   }
-  if (input.at !== undefined) {
-    if (input.target !== undefined) {
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `create.contentControl: "at" and "target" are mutually exclusive — provide one or neither.`,
-        { field: 'at' },
-      );
-    }
-    if (!isSelectionTarget(input.at)) {
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `create.contentControl: "at" must be a valid SelectionTarget with kind "selection", start, and end.`,
-        { field: 'at', value: input.at },
-      );
-    }
+  if (input.at !== undefined && !isSelectionTarget(input.at)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.contentControl: "at" must be a valid SelectionTarget with kind "selection", start, and end.`,
+      { field: 'at', value: input.at },
+    );
   }
   if (input.content !== undefined && typeof input.content !== 'string') {
     throw new DocumentApiValidationError(

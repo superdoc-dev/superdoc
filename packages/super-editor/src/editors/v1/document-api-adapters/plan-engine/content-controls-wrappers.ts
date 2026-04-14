@@ -1864,30 +1864,35 @@ function createWrapper(
       dispatchTransaction(editor, tr);
     }
 
+    // Re-acquire the command so it picks up fresh editor state — important
+    // when `at` dispatched a selection change above.
+    const cmd = editor.commands?.[commandName];
+    if (typeof cmd !== 'function') return false;
+
     // Default: delegate to the editor command (inserts at current selection).
     if (contentText !== undefined) {
       if (input.kind === 'block') {
         if (isCheckboxCreate) {
           return Boolean(
-            insertCmd({
+            cmd({
               attrs,
               json: { type: 'paragraph', content: [buildCheckboxTextJson(checkboxSymbol)] },
             }),
           );
         }
         return Boolean(
-          insertCmd({
+          cmd({
             attrs,
             json: { type: 'paragraph', content: [{ type: 'text', text: contentText }] },
           }),
         );
       }
       if (isCheckboxCreate) {
-        return Boolean(insertCmd({ attrs, json: buildCheckboxTextJson(checkboxSymbol) }));
+        return Boolean(cmd({ attrs, json: buildCheckboxTextJson(checkboxSymbol) }));
       }
-      return Boolean(insertCmd({ attrs, text: contentText }));
+      return Boolean(cmd({ attrs, text: contentText }));
     }
-    return Boolean(insertCmd({ attrs }));
+    return Boolean(cmd({ attrs }));
   });
 }
 

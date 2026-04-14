@@ -677,11 +677,12 @@ export function paragraphToFlowBlocks({
     if (drawingBlock.drawingKind !== 'shapeGroup' || rawWrap?.type !== 'Inline') {
       return block;
     }
-    if (!drawingBlock.attrs) {
-      drawingBlock.attrs = {};
-    }
     if (paragraphAttrs.alignment === 'center' || paragraphAttrs.alignment === 'right') {
+      if (!drawingBlock.attrs) drawingBlock.attrs = {};
       drawingBlock.attrs.inlineParagraphAlignment = paragraphAttrs.alignment;
+      const indent = paragraphAttrs.indent;
+      if (typeof indent?.left === 'number') drawingBlock.attrs.paragraphIndentLeft = indent.left;
+      if (typeof indent?.right === 'number') drawingBlock.attrs.paragraphIndentRight = indent.right;
     }
     return block;
   };

@@ -114,10 +114,12 @@ export function layoutDrawingBlock({
 
   const pmRange = extractBlockPmRange(block);
   let x = columnX(state.columnIndex) + marginLeft + indentLeft;
-  if (isInlineShapeGroup && inlineParagraphAlignment === 'center') {
-    x += Math.max(0, maxWidthForBlock - width) / 2;
-  } else if (isInlineShapeGroup && inlineParagraphAlignment === 'right') {
-    x += Math.max(0, maxWidthForBlock - width);
+  if (isInlineShapeGroup && inlineParagraphAlignment) {
+    const pIndentLeft = typeof attrs?.paragraphIndentLeft === 'number' ? attrs.paragraphIndentLeft : 0;
+    const pIndentRight = typeof attrs?.paragraphIndentRight === 'number' ? attrs.paragraphIndentRight : 0;
+    const alignBox = Math.max(0, maxWidthForBlock - pIndentLeft - pIndentRight);
+    const extra = Math.max(0, alignBox - width);
+    x += pIndentLeft + (inlineParagraphAlignment === 'center' ? extra / 2 : extra);
   }
 
   const fragment: DrawingFragment = {

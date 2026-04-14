@@ -841,5 +841,75 @@ describe('layoutDrawingBlock', () => {
       const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(0);
     });
+
+    it('should center within indented text box when paragraph has left indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+            paragraphIndentLeft: 48,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 48 = 552, extra = 552 - 200 = 352, x = 0 + 48 + 176 = 224
+      expect(fragment.x).toBe(224);
+    });
+
+    it('should center within indented text box when paragraph has left and right indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+            paragraphIndentLeft: 48,
+            paragraphIndentRight: 48,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 48 - 48 = 504, extra = 504 - 200 = 304, x = 0 + 48 + 152 = 200
+      expect(fragment.x).toBe(200);
+    });
+
+    it('should right-align within indented text box when paragraph has left indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'right',
+            paragraphIndentLeft: 96,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 96 = 504, extra = 504 - 200 = 304, x = 0 + 96 + 304 = 400
+      expect(fragment.x).toBe(400);
+    });
   });
 });

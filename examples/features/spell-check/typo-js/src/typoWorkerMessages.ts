@@ -18,6 +18,14 @@ export type TypoWorkerRequest = {
   payload: TypoWorkerPayload;
 };
 
+/** Tells the worker to stop work for a timed-out or aborted check (id matches the check request). */
+export type TypoWorkerCancelMessage = {
+  type: 'cancel';
+  id: number;
+};
+
+export type TypoWorkerIncomingMessage = TypoWorkerRequest | TypoWorkerCancelMessage;
+
 type TypoWorkerResultMessage = {
   id: number;
   type: 'result';

@@ -1,4 +1,4 @@
-import type { TypoWorkerRequest, TypoWorkerResponse } from './typoWorkerMessages';
+import type { TypoWorkerCancelMessage, TypoWorkerRequest, TypoWorkerResponse } from './typoWorkerMessages';
 
 type PendingRequest = {
   resolve: (value: { issues: TypoWorkerResponse['issues'] }) => void;
@@ -82,6 +82,8 @@ export async function createTypoJsProvider() {
         const onAbort = () => {
           pending.delete(requestId);
           cleanup();
+          const cancel: TypoWorkerCancelMessage = { type: 'cancel', id: requestId };
+          worker.postMessage(cancel);
           reject(createAbortError());
         };
 

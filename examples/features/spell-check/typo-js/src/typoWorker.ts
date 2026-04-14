@@ -7,12 +7,19 @@ import type {
   TypoWorkerIssue,
   TypoWorkerRequest,
   TypoWorkerResponse,
+  TypoWorkerIncomingMessage,
 } from './typoWorkerMessages';
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 const WORD_RE = /[a-zA-Z'\u2019]+/g;
 
+/** Yields to the worker event loop so `cancel` messages can be processed mid-check. */
+const YIELD_EVERY_WORDS = 25;
+
 let dictionaryPromise: Promise<Typo> | null = null;
+
+/** Abort flags keyed by request id (set by `cancel` messages from the main thread). */
+const abortById = new Map<number, boolean>();
 
 async function loadDictionary(): Promise<Typo> {
   if (!dictionaryPromise) {
@@ -25,15 +32,26 @@ async function loadDictionary(): Promise<Typo> {
   return dictionaryPromise;
 }
 
-function collectIssues(payload: TypoWorkerRequest['payload'], dictionary: Typo): TypoWorkerIssue[] {
+/**
+ * Returns issues, or `null` if the request was cancelled (caller must not post a result).
+ * Yields periodically so abort can be observed while Typo runs synchronously per word.
+ */
+async function collectIssues(
+  payload: TypoWorkerRequest['payload'],
+  dictionary: Typo,
+  isAborted: () => boolean,
+): Promise<TypoWorkerIssue[] | null> {
   const issues: TypoWorkerIssue[] = [];
   const maxSuggestions = payload.maxSuggestions ?? 5;
+  let wordCount = 0;
 
   for (const segment of payload.segments) {
     let match: RegExpExecArray | null;
     WORD_RE.lastIndex = 0;
 
     while ((match = WORD_RE.exec(segment.text)) !== null) {
+      if (isAborted()) return null;
+
       const word = match[0];
       if (word.replace(/['\u2019]/g, '').length < 2) continue;
 
@@ -47,6 +65,13 @@ function collectIssues(payload: TypoWorkerRequest['payload'], dictionary: Typo):
           replacements: maxSuggestions > 0 ? dictionary.suggest(word).slice(0, maxSuggestions) : [],
         });
       }
+
+      wordCount++;
+      if (wordCount % YIELD_EVERY_WORDS === 0) {
+        // Yield to the event loop so abort can be observed mid-check.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (isAborted()) return null;
+      }
     }
   }
 
@@ -58,19 +83,36 @@ function toErrorMessage(error: unknown): string {
   return 'Typo worker failed';
 }
 
-ctx.addEventListener('message', async (event: MessageEvent<TypoWorkerRequest>) => {
-  const { data } = event;
-  if (data.type !== 'check') return;
-
-  const response: TypoWorkerResponse = { id: data.id, type: 'result', issues: [] };
+async function handleCheck(data: TypoWorkerRequest): Promise<void> {
+  const id = data.id;
 
   try {
+    if (abortById.get(id)) return;
+
     const dictionary = await loadDictionary();
-    response.issues = collectIssues(data.payload, dictionary);
+    if (abortById.get(id)) return;
+
+    const collected = await collectIssues(data.payload, dictionary, () => abortById.get(id) === true);
+    if (collected === null) return;
+
+    ctx.postMessage({ id, type: 'result', issues: collected } satisfies TypoWorkerResponse);
   } catch (error) {
-    ctx.postMessage({ id: data.id, type: 'error', error: toErrorMessage(error) } satisfies TypoWorkerResponse);
+    ctx.postMessage({ id, type: 'error', error: toErrorMessage(error) } satisfies TypoWorkerResponse);
+  } finally {
+    abortById.delete(id);
+  }
+}
+
+ctx.addEventListener('message', (event: MessageEvent<TypoWorkerIncomingMessage>) => {
+  const { data } = event;
+
+  if (data.type === 'cancel') {
+    abortById.set(data.id, true);
     return;
   }
 
-  ctx.postMessage(response);
+  if (data.type !== 'check') return;
+
+  abortById.set(data.id, false);
+  handleCheck(data);
 });

@@ -334,6 +334,78 @@ describe('MeasureCache', () => {
       expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 120 });
     });
 
+    it('invalidates when nested table content changes inside a cell block', () => {
+      const nestedTable = (id: string, text: string): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: [
+          {
+            id: `${id}-row-0`,
+            cells: [
+              {
+                id: `${id}-cell-0-0`,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: `${id}-para-0`,
+                    runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const parentTable1: TableBlock = {
+        kind: 'table',
+        id: 'parent-table',
+        rows: [
+          {
+            id: 'parent-row-0',
+            cells: [
+              {
+                id: 'parent-cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'parent-cell-0-0-para',
+                    runs: [{ text: 'Host', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                  nestedTable('nested-table', 'Nested A'),
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const parentTable2: TableBlock = {
+        ...parentTable1,
+        rows: [
+          {
+            ...parentTable1.rows[0],
+            cells: [
+              {
+                ...parentTable1.rows[0].cells[0],
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'parent-cell-0-0-para',
+                    runs: [{ text: 'Host', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                  nestedTable('nested-table', 'Nested B'),
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      cache.set(parentTable1, 800, 600, { totalHeight: 130 });
+      expect(cache.get(parentTable2, 800, 600)).toBeUndefined();
+    });
+
     it('handles legacy single paragraph cells', () => {
       const table1 = tableBlock(
         'table-1',

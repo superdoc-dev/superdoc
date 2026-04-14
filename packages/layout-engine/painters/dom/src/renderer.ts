@@ -7413,6 +7413,9 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
           } else if (cellBlock?.kind) {
+            // Keep this broader than layout-bridge cache.ts on purpose:
+            // renderer hashes any non-paragraph cell block, while cache.ts hashes
+            // nested tables only. If you tighten one side, review the other.
             // Include nested non-paragraph blocks (notably nested tables inside
             // table cells) so edits there invalidate this parent table version.
             hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));

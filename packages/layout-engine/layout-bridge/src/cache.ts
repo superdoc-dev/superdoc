@@ -142,6 +142,9 @@ const hashRuns = (block: FlowBlock): string => {
 
         for (const cellBlock of cellBlocks) {
           if (cellBlock?.kind === 'table') {
+            // Intentional split with renderer.ts: cache.ts hashes nested tables only,
+            // while renderer.ts also hashes non-paragraph cell blocks. Keep both
+            // in sync when adjusting nested-block invalidation behavior.
             // Nested tables inside table cells must contribute to the parent
             // table cache key, otherwise edits can be missed until a later
             // broader invalidation.

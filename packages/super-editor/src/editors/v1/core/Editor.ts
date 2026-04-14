@@ -3268,6 +3268,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      for (const path of Object.keys(this.converter.convertedXml)) {
+        if (!path.startsWith('customXml/')) continue;
+        if (!path.endsWith('.xml') && !path.endsWith('.rels')) continue;
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
       const zipper = new DocxZipper();
 
       if (getUpdatedDocs) {

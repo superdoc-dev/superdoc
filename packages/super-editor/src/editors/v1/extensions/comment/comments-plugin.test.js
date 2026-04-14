@@ -1022,7 +1022,7 @@ describe('internal helper functions', () => {
       nodes: insertionNodes,
       mark: insertMark,
       trackedChangeType: TrackInsertMarkName,
-      isDeletionInsertion: false,
+      isReplacement: false,
     });
     expect(insertionResult.trackedChangeText).toBe('Added');
     expect(insertionResult.deletionText).toBe('');
@@ -1031,7 +1031,7 @@ describe('internal helper functions', () => {
       nodes: deletionNodes,
       mark: deleteMark,
       trackedChangeType: TrackDeleteMarkName,
-      isDeletionInsertion: false,
+      isReplacement: false,
     });
     expect(deletionResult.deletionText).toBe('Removed');
 
@@ -1039,7 +1039,7 @@ describe('internal helper functions', () => {
       nodes: [schema.text('Format', [formatMark])],
       mark: formatMark,
       trackedChangeType: TrackFormatMarkName,
-      isDeletionInsertion: false,
+      isReplacement: false,
     });
     expect(formatResult.trackedChangeText).toBe('italic, removed bold');
     expect(formatResult.trackedChangeDisplayType).toBeNull();
@@ -1053,7 +1053,7 @@ describe('internal helper functions', () => {
       nodes: [schema.text('Format', [deltaFormatMark])],
       mark: deltaFormatMark,
       trackedChangeType: TrackFormatMarkName,
-      isDeletionInsertion: false,
+      isReplacement: false,
     });
     expect(deltaFormatResult.trackedChangeText).toContain('bold');
     expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
@@ -1070,7 +1070,7 @@ describe('internal helper functions', () => {
       nodes: [schema.text('website', [hyperlinkFormatMark, schema.marks.link.create({ href: 'https://example.com' })])],
       mark: hyperlinkFormatMark,
       trackedChangeType: TrackFormatMarkName,
-      isDeletionInsertion: false,
+      isReplacement: false,
     });
     expect(hyperlinkFormatResult).toMatchObject({
       trackedChangeText: 'https://example.com',
@@ -1081,7 +1081,7 @@ describe('internal helper functions', () => {
       nodes: [...insertionNodes, ...deletionNodes],
       mark: insertMark,
       trackedChangeType: TrackInsertMarkName,
-      isDeletionInsertion: true,
+      isReplacement: true,
     });
     expect(combinedResult.deletionText).toBe('Removed');
   });

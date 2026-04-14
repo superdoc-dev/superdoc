@@ -6,6 +6,8 @@ keywords: "angular docx editor, angular word component, superdoc angular, angula
 
 SuperDoc works with Angular through direct DOM manipulation. No wrapper needed.
 
+Examples use signal-based APIs (`viewChild()`, `input()`) introduced in Angular 17.1. For older Angular versions, swap to the decorator-based equivalents (`@ViewChild`, `@Input`).
+
 ## Install
 
 ```bash
@@ -24,7 +26,7 @@ import 'superdoc/style.css';
   template: `<div #editor style="height: 700px"></div>`,
 })
 export class EditorComponent implements AfterViewInit {
-  private readonly editorRef = viewChild.required<ElementRef>('editor');
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
   private superdoc: SuperDoc | null = null;
 
   constructor() {
@@ -63,7 +65,7 @@ import 'superdoc/style.css';
   `,
 })
 export class DocEditorComponent implements AfterViewInit {
-  private readonly editorRef = viewChild.required<ElementRef>('editor');
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
   readonly document = input.required<File | string>();
   readonly user = input<{ name: string; email: string }>();
 
@@ -108,7 +110,7 @@ import 'superdoc/style.css';
   `,
 })
 export class UploadEditorComponent {
-  private readonly editorRef = viewChild.required<ElementRef>('editor');
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
   private superdoc: SuperDoc | null = null;
 
   constructor() {

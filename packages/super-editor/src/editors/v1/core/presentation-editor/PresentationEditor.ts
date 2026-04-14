@@ -333,6 +333,8 @@ export class PresentationEditor extends EventEmitter {
   /**
    * When true, the next selection render scrolls the caret/selection head into view.
    * Only set for user-initiated actions (keyboard/mouse selection, image click, zoom).
+   * Not set on each `selectionUpdate` while a pointer drag is active — edge auto-scroll
+   * owns the viewport then; `notifyDragSelectionEnded` restores one scroll after mouseup.
    * Passive re-renders (virtualization remounts, layout completions, DOM rebuilds) leave
    * this unset so they don't fight the user's scroll position.
    */
@@ -3245,8 +3247,11 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      // User-initiated selection change (keyboard, mouse) — scroll caret into view.
-      this.#shouldScrollSelectionIntoView = true;
+      // User-initiated selection change — scroll caret/head into view once, except during
+      // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView (SD-2541).
+      if (!this.#editorInputManager?.isDragging) {
+        this.#shouldScrollSelectionIntoView = true;
+      }
       // Use immediate rendering for selection-only changes (clicks, arrow keys).
       // Without immediate, the render is RAF-deferred — leaving a window where
       // a remote collaborator's edit can cancel the pending render via
@@ -3566,6 +3571,10 @@ export class PresentationEditor extends EventEmitter {
       selectParagraphAt: (pos: number) => this.#selectParagraphAt(pos),
       finalizeDragSelectionWithDom: (pointer, dragAnchor, dragMode) =>
         this.#finalizeDragSelectionWithDom(pointer, dragAnchor, dragMode),
+      notifyDragSelectionEnded: () => {
+        this.#shouldScrollSelectionIntoView = true;
+        this.#scheduleSelectionUpdate({ immediate: true });
+      },
       hitTestTable: (x: number, y: number) => this.#hitTestTable(x, y),
     });
   }
@@ -4990,7 +4999,8 @@ export class PresentationEditor extends EventEmitter {
     // (virtualization remounts, layout completions) never set this flag, so
     // they won't scroll the viewport to the caret — only real user-initiated
     // selection changes (keyboard, mouse, image click, zoom) will.
-    const shouldScrollIntoView = this.#shouldScrollSelectionIntoView;
+    // Belt-and-suspenders: never scroll from this path while pointer-drag is active.
+    const shouldScrollIntoView = this.#shouldScrollSelectionIntoView && !this.#editorInputManager?.isDragging;
     this.#shouldScrollSelectionIntoView = false;
 
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';

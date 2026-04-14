@@ -3178,6 +3178,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         ? this.converter.schemaToXml(endnotesRelsData.elements[0])
         : null;
 
+      const settingsRelsData = this.converter.convertedXml['word/_rels/settings.xml.rels'];
+      const settingsRelsXml = settingsRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(settingsRelsData.elements[0])
+        : null;
+
       const media = this.converter.addedMedia;
 
       const updatedHeadersFooters: Record<string, string> = {};
@@ -3212,7 +3217,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
       };
 
       if (hasCustomSettings) {
-        updatedDocs['word/settings.xml'] = String(customSettings);
+        let settingsXml = String(customSettings);
+        if (settingsRelsXml) {
+          updatedDocs['word/_rels/settings.xml.rels'] = String(settingsRelsXml);
+        } else if (/<\w+:attachedTemplate\b/i.test(settingsXml)) {
+          // settings.xml references r:id on attachedTemplate via word/_rels/settings.xml.rels.
+          // If that part is missing (e.g. collab joiner), omit the element so the package stays valid.
+          settingsXml = settingsXml.replace(/<\w+:attachedTemplate\b[^>]*\/?>/gi, '');
+        }
+        updatedDocs['word/settings.xml'] = settingsXml;
       }
 
       if (footnotesXml) {

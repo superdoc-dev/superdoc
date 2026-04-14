@@ -255,7 +255,10 @@ export function translatePassthroughNode(params) {
  * @returns {XmlReadyNode} JSON of the XML-ready body node
  */
 function translateBodyNode(params) {
-  let sectPr = params.bodyNode?.elements?.find((n) => n.name === 'w:sectPr');
+  const liveSectPr = params.converter?.bodySectPr;
+  let sectPr =
+    (liveSectPr && typeof liveSectPr === 'object' ? carbonCopy(liveSectPr) : null) ||
+    params.bodyNode?.elements?.find((n) => n.name === 'w:sectPr');
   if (!sectPr) {
     sectPr = {
       type: 'element',

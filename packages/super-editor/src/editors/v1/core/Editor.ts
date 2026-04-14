@@ -3171,6 +3171,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const footnotesRelsXml = footnotesRelsData?.elements?.[0]
         ? this.converter.schemaToXml(footnotesRelsData.elements[0])
         : null;
+      const endnotesData = this.converter.convertedXml['word/endnotes.xml'];
+      const endnotesXml = endnotesData?.elements?.[0] ? this.converter.schemaToXml(endnotesData.elements[0]) : null;
+      const endnotesRelsData = this.converter.convertedXml['word/_rels/endnotes.xml.rels'];
+      const endnotesRelsXml = endnotesRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(endnotesRelsData.elements[0])
+        : null;
 
       const media = this.converter.addedMedia;
 
@@ -3215,6 +3221,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       if (footnotesRelsXml) {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
+      }
+
+      if (endnotesXml) {
+        updatedDocs['word/endnotes.xml'] = String(endnotesXml);
+      }
+
+      if (endnotesRelsXml) {
+        updatedDocs['word/_rels/endnotes.xml.rels'] = String(endnotesRelsXml);
       }
 
       // Serialize each comment file if it exists in convertedXml, otherwise mark as null

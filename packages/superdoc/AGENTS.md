@@ -78,6 +78,36 @@ document.documentElement.classList.add(theme);
 
 Docs: https://docs.superdoc.dev/getting-started/theming
 
+## CSS API contract
+
+SuperDoc exposes a small, stable surface for styling. Everything else is an implementation detail and may change between minor versions.
+
+| Surface | Purpose | Stability |
+|---|---|---|
+| `--sd-*` CSS variables | Theme tokens — colors, fonts, radii, spacing | Stable |
+| `createTheme()` | Programmatic theme application | Stable |
+| `@layer superdoc` | Cascade priority — consumers control when SuperDoc's CSS wins | Stable |
+| `data-sd-part="…"` attributes (coming soon) | Semantic targeting that survives internal refactors | Stable once added |
+| Internal class names (`.sd-*`, `.superdoc-*`, `.toolbar-*`, etc.) | Implementation detail | **Unstable** — may change |
+
+### Cascade control with `@layer`
+
+All SuperDoc styles ship inside a cascade layer named `superdoc`. Any unlayered consumer CSS automatically wins over SuperDoc's styles. Recommended setup for apps that already use CSS layers:
+
+```css
+@layer reset, superdoc, app;
+
+@import 'your-reset.css' layer(reset);
+@import 'superdoc/style.css';   /* self-layered as `superdoc` */
+@import 'your-app.css' layer(app);
+```
+
+Apps that don't use layers still win by default — any unlayered `.my-button { ... }` rule beats every SuperDoc rule, regardless of source order.
+
+### Targeting internals
+
+Prefer `--sd-*` variables and (once available) `data-sd-part` attributes. Avoid targeting SuperDoc's internal class names — they are not part of the public contract and may change in minor releases.
+
 ## Document Engine — programmatic access
 
 Edit DOCX files from backend code or AI agents. Same operations, same document model.

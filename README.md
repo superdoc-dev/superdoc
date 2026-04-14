@@ -80,6 +80,20 @@ Or use the CDN:
 
 For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
+### Styling
+
+SuperDoc's stylesheet ships inside a cascade layer named `superdoc`, so unlayered consumer CSS wins by default. Apps that use CSS layers can explicitly order the cascade:
+
+```css
+@layer reset, superdoc, app;
+
+@import 'your-reset.css' layer(reset);
+@import 'superdoc/style.css';          /* self-layered as `superdoc` */
+@import 'your-app.css' layer(app);
+```
+
+Theme SuperDoc with `--sd-*` CSS variables or `createTheme()`. See the [CSS API contract](packages/superdoc/AGENTS.md#css-api-contract) for the full surface and stability guarantees.
+
 ### Using an AI coding agent?
 
 Set up your project for AI agents and configure the MCP server:

@@ -27,6 +27,12 @@ const makeBlock = (id: string): FlowBlock => ({
   runs: [{ text: id, fontFamily: 'Arial', fontSize: 12 }],
 });
 
+const makeParagraph = (id: string, text: string): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+});
+
 const makeMeasure = (): Measure => ({
   kind: 'paragraph',
   lines: [

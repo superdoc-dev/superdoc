@@ -1163,6 +1163,8 @@ describe('internal helper functions', () => {
     expect(payload?.trackedChangeType).toBe('both');
     expect(payload?.trackedChangeText).toBe('replacement');
     expect(payload?.deletedText).toBe('original');
+    expect(payload?.changeId).toBe('replace-update-1');
+    expect(payload?.trackedChangeDisplayType).toBeNull();
   });
 
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {
@@ -1193,9 +1195,11 @@ describe('internal helper functions', () => {
       changeId: 'create-1',
       trackedChangeText: 'Body',
     });
+    expect(addPayload.deletedText).toBeNull();
 
     const updatePayload = createOrUpdateTrackedChangeComment({ event: 'update', ...baseArgs });
     expect(updatePayload.event).toBe(comments_module_events.UPDATE);
+    expect(updatePayload.deletedText).toBeNull();
 
     const emptyState = EditorState.create({
       schema,

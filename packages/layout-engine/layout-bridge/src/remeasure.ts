@@ -1199,11 +1199,22 @@ export function remeasureParagraph(
     let endChar = currentChar;
     let tabStopCursor = 0;
     let didBreakInThisLine = false;
+    let explicitLineBreakRun = -1;
     let resumeRun = -1;
     let resumeChar = 0;
 
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
+      if (isLineBreakRun(run)) {
+        explicitLineBreakRun = r;
+        if (startRun === r && startChar === 0 && width === 0) {
+          // Preserve leading/manual explicit break as an empty line.
+          endRun = r;
+          endChar = 0;
+        }
+        didBreakInThisLine = true;
+        break;
+      }
       if (run.kind === 'tab') {
         const absCurrentX = width + effectiveIndent;
         const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
@@ -1345,7 +1356,7 @@ export function remeasureParagraph(
     }
 
     // If we didn't consume any chars (e.g., very long single char), force one char
-    if (startRun === endRun && startChar === endChar) {
+    if (explicitLineBreakRun < 0 && startRun === endRun && startChar === endChar) {
       endRun = startRun;
       endChar = startChar + 1;
     }
@@ -1364,8 +1375,14 @@ export function remeasureParagraph(
     lines.push(line);
 
     // Advance to next line start
-    currentRun = endRun;
-    currentChar = endChar;
+    if (explicitLineBreakRun >= 0) {
+      // Explicit break consumed as a line boundary, continue from run after break.
+      currentRun = explicitLineBreakRun + 1;
+      currentChar = 0;
+    } else {
+      currentRun = endRun;
+      currentChar = endChar;
+    }
     if (currentRun >= runs.length) {
       break;
     }

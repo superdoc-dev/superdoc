@@ -1468,6 +1468,21 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       continue;
     }
 
+    // When a text/tab/atomic run follows an explicit lineBreak, currentLine is a
+    // placeholder line seeded with the break run index. Re-anchor it so line ranges
+    // start at the first visible run on the new line.
+    if (
+      currentLine &&
+      currentLine.width === 0 &&
+      currentLine.fromRun === currentLine.toRun &&
+      currentLine.fromChar === 0 &&
+      currentLine.toChar === 0 &&
+      isLineBreakRun(runsToProcess[currentLine.fromRun] as Run)
+    ) {
+      currentLine.fromRun = runIndex;
+      currentLine.toRun = runIndex;
+    }
+
     // Handle tab runs specially
     if (isTabRun(run)) {
       // Clear any previous tab group when we encounter a new tab

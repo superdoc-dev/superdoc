@@ -892,7 +892,30 @@ describe('remeasureParagraph', () => {
       const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, textRun('World')]);
       const measure = remeasureParagraph(block, 200);
 
-      expect(measure.lines.length).toBeGreaterThanOrEqual(1);
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+    });
+
+    it('preserves multiple explicit lineBreak boundaries', () => {
+      const block = createBlock([
+        textRun('One'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Two'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Three'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[2].fromRun).toBe(4);
+      expect(measure.lines[2].toRun).toBe(4);
     });
 
     it('handles tabs followed immediately by line break', () => {

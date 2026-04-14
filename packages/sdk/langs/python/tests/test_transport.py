@@ -516,9 +516,13 @@ class TestAsyncLargeResponse:
             _cleanup_wrapper(cli)
 
     @pytest.mark.asyncio
-    async def test_response_above_custom_buffer_limit_disconnects(self):
-        # Pins that stdout_buffer_limit_bytes is wired through to the spawn:
-        # setting it below the response size reproduces the original failure.
+    async def test_response_above_custom_buffer_limit_raises_protocol_error(self):
+        # Setting stdout_buffer_limit_bytes below the response size should
+        # surface HOST_PROTOCOL_ERROR (actionable) rather than
+        # HOST_DISCONNECTED (misleading — the host is still alive), and the
+        # error should carry a hint to raise the buffer limit.
+        from superdoc.errors import HOST_PROTOCOL_ERROR
+
         big_payload = 'x' * (200 * 1024)
         cli = _mock_cli_bin({
             'handshake': 'ok',
@@ -531,8 +535,23 @@ class TestAsyncLargeResponse:
                 stdout_buffer_limit_bytes=64 * 1024,
             )
             await transport.connect()
+            process = transport._process
+            assert process is not None
             with pytest.raises(SuperDocError) as exc_info:
                 await transport.invoke(_TEST_OP, {'query': 'big'})
-            assert exc_info.value.code == HOST_DISCONNECTED
+            assert exc_info.value.code == HOST_PROTOCOL_ERROR
+            assert 'stdout_buffer_limit_bytes' in str(exc_info.value)
+
+            # The host process must be torn down — not just the transport
+            # state flipped to DISCONNECTED. Otherwise dispose() short-circuits
+            # and leaves an orphaned host running.
+            if transport._cleanup_task is not None:
+                await transport._cleanup_task
+            assert transport._process is None
+            assert transport.state == 'DISCONNECTED'
+            assert process.returncode is not None
+
+            # dispose() after an overflow must be a safe no-op.
+            await transport.dispose()
         finally:
             _cleanup_wrapper(cli)

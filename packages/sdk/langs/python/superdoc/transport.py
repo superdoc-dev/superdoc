@@ -416,6 +416,7 @@ class AsyncHostTransport:
 
         self._process: Optional[asyncio.subprocess.Process] = None
         self._reader_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task] = None
         self._pending: Dict[int, asyncio.Future] = {}
         self._state = _State.DISCONNECTED
         self._next_request_id = 1
@@ -616,19 +617,35 @@ class AsyncHostTransport:
 
         except asyncio.CancelledError:
             return
+        except (asyncio.LimitOverrunError, ValueError) as exc:
+            # StreamReader raises LimitOverrunError (a ValueError subclass on
+            # some Python versions) when a single line exceeds the stdout
+            # buffer limit. The host is still alive — we must kill it so a
+            # later dispose() doesn't short-circuit on DISCONNECTED state.
+            logger.debug('Reader loop buffer overflow: %s', exc)
+            if not self._stopping:
+                self._schedule_cleanup(SuperDocError(
+                    'Host response exceeded stdout buffer limit. '
+                    'Raise stdout_buffer_limit_bytes to accommodate larger responses.',
+                    code=HOST_PROTOCOL_ERROR,
+                    details={
+                        'message': str(exc),
+                        'stdout_buffer_limit_bytes': self._stdout_buffer_limit_bytes,
+                    },
+                ))
+            return
         except Exception as exc:
             logger.debug('Reader loop error: %s', exc)
 
-        # Reader exited (EOF or error) — reject all pending futures.
+        # Reader exited (EOF or unexpected error) — tear down the process so
+        # no orphaned host is left running, then reject pending futures.
         if not self._stopping:
             exit_code = process.returncode
-            error = SuperDocError(
+            self._schedule_cleanup(SuperDocError(
                 'Host process disconnected.',
                 code=HOST_DISCONNECTED,
                 details={'exit_code': exit_code, 'signal': None},
-            )
-            self._reject_all_pending(error)
-            self._state = _State.DISCONNECTED
+            ))
 
     async def _send_request(self, method: str, params: Any, watchdog_ms: int) -> Any:
         """Send a JSON-RPC request and await the matching response future."""
@@ -696,6 +713,18 @@ class AsyncHostTransport:
         await self._cleanup(
             SuperDocError('Host process disconnected.', code=HOST_DISCONNECTED),
         )
+
+    def _schedule_cleanup(self, error: SuperDocError) -> None:
+        """Fire-and-forget cleanup from inside the reader task.
+
+        Must not be awaited from `_reader_loop` itself — `_cleanup` cancels
+        and awaits the reader task, which would deadlock. Scheduling it as a
+        separate task lets the reader return first; by the time cleanup runs
+        the reader task is already done and the cancel/await is a no-op.
+        """
+        if self._cleanup_task and not self._cleanup_task.done():
+            return
+        self._cleanup_task = asyncio.create_task(self._cleanup(error))
 
     async def _cleanup(self, error: Optional[SuperDocError]) -> None:
         """Cancel reader, kill process, reject pending, reset state."""

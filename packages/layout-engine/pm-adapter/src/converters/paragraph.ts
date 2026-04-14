@@ -677,9 +677,15 @@ export function paragraphToFlowBlocks({
     if (drawingBlock.drawingKind !== 'shapeGroup' || rawWrap?.type !== 'Inline') {
       return block;
     }
-    if (paragraphAttrs.alignment === 'center' || paragraphAttrs.alignment === 'right') {
+    // w:jc="distribute" distributes remaining space equally around inline content,
+    // which visually centers a sole inline drawing. normalizeAlignment collapses
+    // 'distribute' to 'justify', so we check the raw justification value to distinguish
+    // it from 'both' (which only stretches inter-word spacing and does not center).
+    const isDistribute = resolvedParagraphProperties.justification === 'distribute';
+    const effectiveAlignment = isDistribute ? 'center' : paragraphAttrs.alignment;
+    if (effectiveAlignment === 'center' || effectiveAlignment === 'right') {
       if (!drawingBlock.attrs) drawingBlock.attrs = {};
-      drawingBlock.attrs.inlineParagraphAlignment = paragraphAttrs.alignment;
+      drawingBlock.attrs.inlineParagraphAlignment = effectiveAlignment;
       const indent = paragraphAttrs.indent;
       if (typeof indent?.left === 'number') drawingBlock.attrs.paragraphIndentLeft = indent.left;
       if (typeof indent?.right === 'number') drawingBlock.attrs.paragraphIndentRight = indent.right;

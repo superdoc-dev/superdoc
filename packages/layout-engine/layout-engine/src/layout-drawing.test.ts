@@ -912,8 +912,8 @@ describe('layoutDrawingBlock', () => {
       expect(fragment.x).toBe(400);
     });
 
-    it('should not offset when alignment is left, justify, or distribute', () => {
-      for (const alignment of ['left', 'justify', 'distribute'] as const) {
+    it('should not offset when alignment is left or justify', () => {
+      for (const alignment of ['left', 'justify'] as const) {
         const context = createMockContext(
           {
             drawingKind: 'shapeGroup',

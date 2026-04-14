@@ -168,12 +168,26 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     items: page.fragments.map((fragment, fragmentIndex) =>
       resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap),
     ),
+    margins: page.margins,
+    footnoteReserved: page.footnoteReserved,
+    numberText: page.numberText,
+    vAlign: page.vAlign,
+    baseMargins: page.baseMargins,
+    sectionIndex: page.sectionIndex,
+    sectionRefs: page.sectionRefs,
+    orientation: page.orientation,
   }));
 
-  return {
+  const resolved: ResolvedLayout = {
     version: 1,
     flowMode,
     pageGap: layout.pageGap ?? 0,
     pages,
   };
+
+  if (layout.layoutEpoch != null) {
+    resolved.layoutEpoch = layout.layoutEpoch;
+  }
+
+  return resolved;
 }

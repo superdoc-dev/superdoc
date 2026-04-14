@@ -1487,4 +1487,186 @@ describe('resolveLayout', () => {
       expect(content.lines[0].availableWidth).toBe(360);
     });
   });
+
+  describe('page metadata fields', () => {
+    it('carries margins through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [],
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36, gutter: 0 },
+          },
+        ],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].margins).toEqual({
+        top: 72,
+        right: 72,
+        bottom: 72,
+        left: 72,
+        header: 36,
+        footer: 36,
+        gutter: 0,
+      });
+    });
+
+    it('leaves margins undefined when page has no margins', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].margins).toBeUndefined();
+    });
+
+    it('carries footnoteReserved through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [], footnoteReserved: 48 }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].footnoteReserved).toBe(48);
+    });
+
+    it('carries numberText through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [], numberText: 'i' }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].numberText).toBe('i');
+    });
+
+    it('carries vAlign and baseMargins through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [],
+            vAlign: 'center',
+            baseMargins: { top: 72, bottom: 72 },
+          },
+        ],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].vAlign).toBe('center');
+      expect(result.pages[0].baseMargins).toEqual({ top: 72, bottom: 72 });
+    });
+
+    it('carries sectionIndex through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [], sectionIndex: 2 }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].sectionIndex).toBe(2);
+    });
+
+    it('carries sectionRefs through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [],
+            sectionRefs: {
+              headerRefs: { default: 'hdr1', first: 'hdr-first' },
+              footerRefs: { default: 'ftr1' },
+            },
+          },
+        ],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].sectionRefs).toEqual({
+        headerRefs: { default: 'hdr1', first: 'hdr-first' },
+        footerRefs: { default: 'ftr1' },
+      });
+    });
+
+    it('carries orientation through to resolved page', () => {
+      const layout: Layout = {
+        pageSize: { w: 792, h: 612 },
+        pages: [{ number: 1, fragments: [], orientation: 'landscape' }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.pages[0].orientation).toBe('landscape');
+    });
+
+    it('leaves optional metadata undefined when not set on source page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const page = result.pages[0];
+      expect(page.margins).toBeUndefined();
+      expect(page.footnoteReserved).toBeUndefined();
+      expect(page.numberText).toBeUndefined();
+      expect(page.vAlign).toBeUndefined();
+      expect(page.baseMargins).toBeUndefined();
+      expect(page.sectionIndex).toBeUndefined();
+      expect(page.sectionRefs).toBeUndefined();
+      expect(page.orientation).toBeUndefined();
+    });
+
+    it('carries all metadata fields together on a fully-populated page', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 3,
+            fragments: [],
+            margins: { top: 72, right: 72, bottom: 72, left: 72 },
+            footnoteReserved: 24,
+            numberText: 'iii',
+            vAlign: 'bottom',
+            baseMargins: { top: 96, bottom: 96 },
+            sectionIndex: 1,
+            sectionRefs: {
+              headerRefs: { default: 'h1' },
+              footerRefs: { default: 'f1', even: 'f-even' },
+            },
+            orientation: 'portrait',
+          },
+        ],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const page = result.pages[0];
+      expect(page.margins).toEqual({ top: 72, right: 72, bottom: 72, left: 72 });
+      expect(page.footnoteReserved).toBe(24);
+      expect(page.numberText).toBe('iii');
+      expect(page.vAlign).toBe('bottom');
+      expect(page.baseMargins).toEqual({ top: 96, bottom: 96 });
+      expect(page.sectionIndex).toBe(1);
+      expect(page.sectionRefs).toEqual({
+        headerRefs: { default: 'h1' },
+        footerRefs: { default: 'f1', even: 'f-even' },
+      });
+      expect(page.orientation).toBe('portrait');
+    });
+  });
+
+  describe('layoutEpoch', () => {
+    it('carries layoutEpoch from source layout to resolved layout', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [],
+        layoutEpoch: 42,
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.layoutEpoch).toBe(42);
+    });
+
+    it('defaults layoutEpoch to undefined when not set', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [],
+      };
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      expect(result.layoutEpoch).toBeUndefined();
+    });
+  });
 });

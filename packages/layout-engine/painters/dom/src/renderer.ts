@@ -1682,7 +1682,7 @@ export class DomPainter {
     }
     this.layoutVersion += 1;
 
-    this.layoutEpoch = layout.layoutEpoch ?? 0;
+    this.layoutEpoch = this.resolvedLayout?.layoutEpoch ?? layout.layoutEpoch ?? 0;
     this.mount = mount;
     this.beginPaintSnapshot(layout);
 
@@ -2193,6 +2193,7 @@ export class DomPainter {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
+    const resolvedPage = this.getResolvedPage(pageIndex);
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
@@ -2203,7 +2204,7 @@ export class DomPainter {
 
     // Render per-page ruler if enabled (suppressed in semantic flow mode)
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
-      const rulerEl = this.renderPageRuler(width, page);
+      const rulerEl = this.renderPageRuler(width, page, resolvedPage);
       if (rulerEl) {
         el.appendChild(rulerEl);
       }
@@ -2213,7 +2214,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
-      pageNumberText: page.numberText,
+      pageNumberText: resolvedPage?.numberText ?? page.numberText,
       pageIndex,
     };
 
@@ -2227,7 +2228,7 @@ export class DomPainter {
         this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
       );
     });
-    this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderDecorationsForPage(el, page, pageIndex, resolvedPage);
     return el;
   }
 
@@ -2249,18 +2250,18 @@ export class DomPainter {
    * - Uses DEFAULT_PAGE_HEIGHT_PX (1056px = 11 inches) if page.size.h is not available
    * - Defaults margins to 0 if not explicitly provided
    */
-  private renderPageRuler(pageWidthPx: number, page: Page): HTMLElement | null {
+  private renderPageRuler(pageWidthPx: number, page: Page, resolvedPage?: ResolvedPage | null): HTMLElement | null {
     if (!this.doc) {
       console.warn('[renderPageRuler] Cannot render ruler: document is not available.');
       return null;
     }
 
-    if (!page.margins) {
+    const margins = resolvedPage?.margins ?? page.margins;
+    if (!margins) {
       console.warn(`[renderPageRuler] Cannot render ruler for page ${page.number}: margins not available.`);
       return null;
     }
 
-    const margins = page.margins;
     const leftMargin = margins.left ?? 0;
     const rightMargin = margins.right ?? 0;
 
@@ -2308,10 +2309,15 @@ export class DomPainter {
     }
   }
 
-  private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
+  private renderDecorationsForPage(
+    pageEl: HTMLElement,
+    page: Page,
+    pageIndex: number,
+    resolvedPage?: ResolvedPage | null,
+  ): void {
     if (this.isSemanticFlow) return;
-    this.renderDecorationSection(pageEl, page, pageIndex, 'header');
-    this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
+    this.renderDecorationSection(pageEl, page, pageIndex, 'header', resolvedPage);
+    this.renderDecorationSection(pageEl, page, pageIndex, 'footer', resolvedPage);
   }
 
   /**
@@ -2349,17 +2355,19 @@ export class DomPainter {
     page: Page,
     kind: 'header' | 'footer',
     effectiveOffset: number,
+    resolvedPage?: ResolvedPage | null,
   ): number {
     if (kind === 'header') {
       return effectiveOffset;
     }
 
-    const bottomMargin = page.margins?.bottom;
+    const pageMargins = resolvedPage?.margins ?? page.margins;
+    const bottomMargin = pageMargins?.bottom;
     if (bottomMargin == null) {
       return effectiveOffset;
     }
 
-    const footnoteReserve = page.footnoteReserved ?? 0;
+    const footnoteReserve = resolvedPage?.footnoteReserved ?? page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
     const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
     const pageHeight =
@@ -2370,11 +2378,18 @@ export class DomPainter {
     return Math.max(0, pageHeight - adjustedBottomMargin);
   }
 
-  private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
+  private renderDecorationSection(
+    pageEl: HTMLElement,
+    page: Page,
+    pageIndex: number,
+    kind: 'header' | 'footer',
+    resolvedPage?: ResolvedPage | null,
+  ): void {
     if (!this.doc) return;
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
     const existing = pageEl.querySelector(`.${className}`);
+    // Provider still receives legacy page — its signature is not changed in this PR
     const data = provider ? provider(page.number, page.margins, page) : null;
 
     if (!data || data.fragments.length === 0) {
@@ -2387,7 +2402,8 @@ export class DomPainter {
     container.innerHTML = '';
     const baseOffset = data.offset ?? (kind === 'footer' ? pageEl.clientHeight - data.height : 0);
     const marginLeft = data.marginLeft ?? 0;
-    const marginRight = page.margins?.right ?? 0;
+    const pageMargins = resolvedPage?.margins ?? page.margins;
+    const marginRight = pageMargins?.right ?? 0;
 
     // For footers, if content is taller than reserved space, expand container upward
     // The container bottom stays anchored at footerMargin from page bottom
@@ -2427,7 +2443,7 @@ export class DomPainter {
     // Header page-relative anchors use raw inner-layout Y and are handled with
     // the simpler effectiveOffset subtraction (unchanged from the baseline).
     const footerAnchorPageOriginY =
-      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset, resolvedPage) : 0;
     const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container
@@ -2452,7 +2468,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: kind,
-      pageNumberText: page.numberText,
+      pageNumberText: resolvedPage?.numberText ?? page.numberText,
       pageIndex,
     };
 
@@ -2622,6 +2638,7 @@ export class DomPainter {
   }
 
   private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
+    const resolvedPage = this.getResolvedPage(pageIndex);
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(pageEl);
@@ -2638,7 +2655,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
-      pageNumberText: page.numberText,
+      pageNumberText: resolvedPage?.numberText ?? page.numberText,
       pageIndex,
     };
 
@@ -2716,7 +2733,7 @@ export class DomPainter {
     });
 
     state.fragments = nextFragments;
-    this.renderDecorationsForPage(pageEl, page, pageIndex);
+    this.renderDecorationsForPage(pageEl, page, pageIndex, resolvedPage);
   }
 
   /**
@@ -2776,6 +2793,7 @@ export class DomPainter {
     if (!this.doc) {
       throw new Error('DomPainter.createPageState requires a document');
     }
+    const resolvedPage = this.getResolvedPage(pageIndex);
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
@@ -2786,6 +2804,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
+      pageNumberText: resolvedPage?.numberText ?? page.numberText,
       pageIndex,
     };
 
@@ -2811,7 +2830,7 @@ export class DomPainter {
       };
     });
 
-    this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderDecorationsForPage(el, page, pageIndex, resolvedPage);
     return { element: el, fragments: fragmentStates };
   }
 

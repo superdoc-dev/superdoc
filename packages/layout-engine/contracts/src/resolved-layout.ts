@@ -1,4 +1,14 @@
-import type { DrawingBlock, FlowMode, Fragment, ImageBlock, Line, TableBlock, TableMeasure } from './index.js';
+import type {
+  DrawingBlock,
+  FlowMode,
+  Fragment,
+  ImageBlock,
+  Line,
+  PageMargins,
+  SectionVerticalAlign,
+  TableBlock,
+  TableMeasure,
+} from './index.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -10,6 +20,8 @@ export type ResolvedLayout = {
   pageGap: number;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
+  /** Document epoch identifier from the source layout. Used for change tracking in the painter. */
+  layoutEpoch?: number;
 };
 
 /** A single resolved page with stable identity and normalized dimensions. */
@@ -26,6 +38,25 @@ export type ResolvedPage = {
   height: number;
   /** Resolved paint items for this page. */
   items: ResolvedPaintItem[];
+  /** Page margins from the source page. Used for ruler rendering and header/footer positioning. */
+  margins?: PageMargins;
+  /** Extra bottom space reserved for footnotes (px). Used for footer space calculation. */
+  footnoteReserved?: number;
+  /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
+  numberText?: string;
+  /** Vertical alignment of content within this page. */
+  vAlign?: SectionVerticalAlign;
+  /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */
+  baseMargins?: { top: number; bottom: number };
+  /** 0-based index of the section this page belongs to. */
+  sectionIndex?: number;
+  /** Header/footer reference IDs for this page's section. */
+  sectionRefs?: {
+    headerRefs?: { default?: string; first?: string; even?: string; odd?: string };
+    footerRefs?: { default?: string; first?: string; even?: string; odd?: string };
+  };
+  /** Page orientation. */
+  orientation?: 'portrait' | 'landscape';
 };
 
 /** Union of all resolved paint item kinds. */

@@ -503,8 +503,8 @@ export function styleApplyWrapper(
     };
   }
 
-  const inlineKeys = Object.keys(input.inline) as InlineRunPatchKey[];
-  ensureInlinePropertyCapabilities(editor, inlineKeys);
+  const inlineKeys = input.inline ? (Object.keys(input.inline) as InlineRunPatchKey[]) : [];
+  if (inlineKeys.length > 0) ensureInlinePropertyCapabilities(editor, inlineKeys);
 
   const mode = options?.changeMode ?? 'direct';
   if (mode === 'tracked') {
@@ -944,7 +944,14 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
 
   // Legacy markdown/html path
   const contentType = input.type ?? 'text';
-  const { value, target, ref } = input as { value: string; target?: SelectionTarget; ref?: string; type?: string };
+  const { value, ref } = input as { value: string; ref?: string; type?: string };
+  const rawTarget = (input as Record<string, unknown>).target;
+  const placement = (input as Record<string, unknown>).placement as
+    | 'before'
+    | 'after'
+    | 'insideStart'
+    | 'insideEnd'
+    | undefined;
 
   // Tracked mode not supported for structured content
   const mode = options?.changeMode ?? 'direct';
@@ -963,7 +970,35 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
     throw new DocumentApiAdapterError('INVALID_TARGET', 'ref must be a non-empty string.', { ref });
   }
 
-  if (target) {
+  // BlockNodeAddress target (markdown/html with block-level positioning)
+  if (
+    rawTarget &&
+    typeof rawTarget === 'object' &&
+    'kind' in rawTarget &&
+    (rawTarget as BlockNodeAddress).kind === 'block'
+  ) {
+    const blockTarget = rawTarget as BlockNodeAddress;
+    let resolved;
+    try {
+      resolved = resolveStructuralInsertTarget(editor, blockTarget);
+    } catch (err) {
+      if (err instanceof DocumentApiAdapterError) throw err;
+      throw new DocumentApiAdapterError(
+        'TARGET_NOT_FOUND',
+        `Cannot resolve insert target for block "${blockTarget.nodeId}".`,
+      );
+    }
+    let insertPos: number;
+    if (resolved.targetNode && resolved.targetNodePos !== undefined) {
+      insertPos = resolvePlacement(editor.state.doc, resolved.targetNodePos, resolved.targetNode, placement);
+    } else {
+      insertPos = resolved.insertPos;
+    }
+    resolvedRange = { from: insertPos, to: insertPos };
+    effectiveTarget = { kind: 'text', blockId: blockTarget.nodeId, range: { start: 0, end: 0 } };
+  } else if (rawTarget) {
+    // SelectionTarget path
+    const target = rawTarget as SelectionTarget;
     const resolved = resolveSelectionTarget(editor, target);
     resolvedRange = { from: resolved.absFrom, to: resolved.absTo };
     // Derive backward-compatible TextAddress from the start point
@@ -1045,7 +1080,9 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
   // Explicit targets with a non-collapsed range indicate a text selection —
   // that's a replace operation, not an insert. Refs are already collapsed
   // to their start position in the ref branch above.
-  if (target && from !== to) {
+  // BlockNodeAddress targets always produce collapsed ranges, so this only
+  // applies to SelectionTarget.
+  if (rawTarget && from !== to) {
     return {
       success: false,
       resolution,

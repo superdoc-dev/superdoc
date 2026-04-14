@@ -26,6 +26,51 @@ interface ToolCallAccumulator {
   argsChunks: string[];
 }
 
+type ParsedToolCall = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  parseError: { ok: false; error: string; details: { toolName: string; rawArguments: string; message: string } } | null;
+};
+
+function parseToolCallArgs(
+  toolName: string,
+  argsStr: string,
+): Pick<ParsedToolCall, 'args' | 'parseError'> {
+  try {
+    const parsed = JSON.parse(argsStr || '{}');
+    if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { args: parsed as Record<string, unknown>, parseError: null };
+    }
+
+    return {
+      args: {},
+      parseError: {
+        ok: false,
+        error: `Tool arguments for ${toolName} must decode to a JSON object.`,
+        details: {
+          toolName,
+          rawArguments: argsStr,
+          message: `Parsed ${Array.isArray(parsed) ? 'an array' : typeof parsed} instead of an object.`,
+        },
+      },
+    };
+  } catch (error) {
+    return {
+      args: {},
+      parseError: {
+        ok: false,
+        error: `Tool arguments for ${toolName} were not valid JSON.`,
+        details: {
+          toolName,
+          rawArguments: argsStr,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      },
+    };
+  }
+}
+
 export async function* executeRun(params: RunParams): AsyncGenerator<RunEvent> {
   const { input, conversationHistory, documentHandle, model, signal } = params;
 
@@ -103,18 +148,13 @@ export async function* executeRun(params: RunParams): AsyncGenerator<RunEvent> {
     }
 
     // Build assistant message with tool_calls
-    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+    const toolCalls: ParsedToolCall[] = [];
     const openaiToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
 
     for (const [, acc] of accumulators) {
       const argsStr = acc.argsChunks.join('');
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(argsStr || '{}');
-      } catch {
-        // malformed JSON from LLM
-      }
-      toolCalls.push({ id: acc.id, name: acc.name, args });
+      const parsedCall = parseToolCallArgs(acc.name, argsStr);
+      toolCalls.push({ id: acc.id, name: acc.name, ...parsedCall });
       openaiToolCalls.push({
         id: acc.id,
         type: 'function',
@@ -134,10 +174,14 @@ export async function* executeRun(params: RunParams): AsyncGenerator<RunEvent> {
 
       const start = Date.now();
       let result: unknown;
-      try {
-        result = await dispatchSuperDocTool(documentHandle, tc.name, tc.args);
-      } catch (err: any) {
-        result = { ok: false, error: err?.message ?? String(err) };
+      if (tc.parseError) {
+        result = tc.parseError;
+      } else {
+        try {
+          result = await dispatchSuperDocTool(documentHandle, tc.name, tc.args);
+        } catch (err: any) {
+          result = { ok: false, error: err?.message ?? String(err) };
+        }
       }
       const durationMs = Date.now() - start;
 

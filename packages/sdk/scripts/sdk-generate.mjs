@@ -84,7 +84,7 @@ async function diffGeneratedArtifacts(tempRoot) {
     // Forward check: every generated file must match repo
     for (const relPath of tempFiles) {
       // Skip manually maintained files that live alongside generated artifacts
-      if (relPath === '__init__.py' || relPath === 'system-prompt.md') continue;
+      if (relPath === '__init__.py' || relPath.split(path.sep).join('/').startsWith('prompt-templates/')) continue;
 
       const tempFile = path.join(tempDir, relPath);
       const repoFile = path.join(repoDir, relPath);
@@ -108,7 +108,7 @@ async function diffGeneratedArtifacts(tempRoot) {
     // Reverse check: repo files absent from generated output are stale
     const tempFileSet = new Set(tempFiles);
     for (const relPath of repoFiles) {
-      if (relPath === '__init__.py' || relPath === 'system-prompt.md') continue;
+      if (relPath === '__init__.py' || relPath.split(path.sep).join('/').startsWith('prompt-templates/')) continue;
       if (!tempFileSet.has(relPath)) {
         drifted.push(`${relPath} (stale — no longer generated)`);
       }

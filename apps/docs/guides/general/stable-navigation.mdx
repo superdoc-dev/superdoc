@@ -13,18 +13,17 @@ SuperDoc has two navigation approaches depending on your use case:
 
 ## Navigate by element ID
 
-`scrollToElement` takes any element ID — paragraph, comment, or tracked change — and scrolls to it. The ID comes from the Document API.
+`scrollToElement` takes any element ID — paragraph, comment, or tracked change — and scrolls to it. Use `doc.extract()` to get all IDs at once, or `query.match` for targeted lookups.
 
 ```javascript
-// Get an element's ID
-const match = editor.doc.query.match({
-  select: { type: 'text', pattern: 'Introduction', mode: 'contains' },
-  require: 'first',
-});
-const nodeId = match.items[0].address.nodeId;
+// Extract all content with stable IDs
+const { blocks, comments } = editor.doc.extract();
 
-// Navigate to it — works for paragraphs, comments, tracked changes
-await superdoc.scrollToElement(nodeId);
+// Navigate to any block
+await superdoc.scrollToElement(blocks[0].nodeId);
+
+// Navigate to a comment
+await superdoc.scrollToElement(comments[0].entityId);
 ```
 
 This is the approach to use for:
@@ -33,7 +32,7 @@ This is the approach to use for:
 - **Search results** — scroll to the matching paragraph
 - **Cross-session addressing** — IDs from DOCX-imported content survive reloads
 
-For the full cross-session pattern, see [cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing).
+For the full extraction pattern, see [content extraction for RAG](/document-api/common-workflows#content-extraction-for-rag). For the cross-session pattern, see [cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing).
 
 ## Track nodes during edits
 
@@ -62,7 +61,7 @@ function goToLink(link) {
 
 ## Best practices
 
-- Use `scrollToElement` when you have an element ID from the Document API.
+- Use `scrollToElement` when you have an element ID from `doc.extract()` or the Document API.
 - Use `PositionTracker` when you need to follow nodes that move during edits.
 - For cross-session use, store `nodeId` values (not `sdBlockId` — those regenerate on each open).
 - Handle missing targets gracefully — both APIs return `false` if the element no longer exists.

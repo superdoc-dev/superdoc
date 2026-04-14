@@ -111,6 +111,20 @@ describe('estimateMathDimensions', () => {
     expect(width).toBe(50); // 5 chars * 10px
   });
 
+  it('increases height for group character (m:groupChr)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:groupChr',
+          elements: [{ name: 'm:e', elements: [{ name: 'm:r' }] }],
+        },
+      ],
+    };
+    const { height } = estimateMathDimensions('x', omml);
+    expect(height).toBeGreaterThan(MATH_DEFAULT_HEIGHT);
+  });
+
   it('enforces minimum width', () => {
     const { width } = estimateMathDimensions('x');
     expect(width).toBe(20); // MATH_MIN_WIDTH

@@ -111,6 +111,8 @@ restore-npm-sdk: ## Restore SDK from npm if currently symlinked
 
 build-local-artifacts: ## Rebuild local editor, SDK, and CLI artifacts used by dev-local
 	@echo "Rebuilding local SuperDoc artifacts..."
+	@echo "  Generating derived SDK/tool artifacts..."
+	@cd $(ROOT) && $(PNPM) run generate:all
 	@echo "  Building @superdoc/super-editor..."
 	@cd $(ROOT) && $(PNPM) --filter @superdoc/super-editor run build
 	@echo "  Building superdoc..."

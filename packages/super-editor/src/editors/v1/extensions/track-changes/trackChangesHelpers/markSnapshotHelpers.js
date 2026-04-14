@@ -92,8 +92,15 @@ export const hasMatchingMark = (marks, stepMark) => {
 };
 
 export const upsertMarkSnapshotByType = (snapshots, incoming) => {
-  const withoutSameType = snapshots.filter((mark) => mark.type !== incoming.type);
-  return [...withoutSameType, incoming];
+  const existing = snapshots.find((mark) => mark.type === incoming.type);
+  if (existing) {
+    const merged = {
+      ...existing,
+      attrs: { ...existing.attrs, ...incoming.attrs },
+    };
+    return snapshots.map((mark) => (mark === existing ? merged : mark));
+  }
+  return [...snapshots, incoming];
 };
 
 const markMatchesSnapshot = (mark, snapshot, exact = true) => {

@@ -1,0 +1,57 @@
+---
+title: Debugging
+sidebarTitle: Debugging
+description: Inspect and troubleshoot SuperDoc MCP tool calls
+keywords: "mcp, debugging, inspector, json-rpc, superdoc, troubleshooting"
+---
+
+## MCP Inspector
+
+Test the server directly with the MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector -- npx @superdoc-dev/mcp
+```
+
+This opens a browser UI where you can call each tool manually and inspect the raw JSON-RPC messages.
+
+## Server logs
+
+The MCP server redirects all console output to stderr (stdout is reserved for JSON-RPC). Log lines are tagged by level:
+
+```
+[mcp:log]   Regular output
+[mcp:info]  Informational messages
+[mcp:debug] Debug details (e.g. editor telemetry)
+[mcp:warn]  Warnings
+```
+
+To see logs when running via an MCP client, check the client's stderr output or log panel.
+
+## Common issues
+
+### "Export named 'X' not found"
+
+The SDK package hasn't been rebuilt after a code change. Run:
+
+```bash
+pnpm --filter @superdoc-dev/sdk build
+```
+
+### Stray stdout corrupts the transport
+
+If the MCP client crashes with a JSON parse error, something is writing to stdout. The server redirects `console.*` methods to stderr, but native C++ addons or direct `process.stdout.write` calls can still leak. Check for third-party dependencies writing to stdout.
+
+### Session not found
+
+The `session_id` is invalid — either the session was closed or was never opened. Call `superdoc_open` to start a new session. Do not reuse session IDs across conversations.
+
+### Refs are stale
+
+Every mutation invalidates all outstanding refs. If a tool returns a ref-related error, re-fetch blocks with `superdoc_get_content({action: "blocks"})` or re-search before retrying.
+
+## Related
+
+- [MCP overview](/ai/mcp/overview) — setup and tool reference
+- [How to use](/ai/mcp/how-to-use) — workflow patterns and common operations
+- [Agent debugging](/ai/agents/debugging) — debugging for SDK-based agent integrations

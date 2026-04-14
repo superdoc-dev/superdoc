@@ -5,7 +5,7 @@
  * that changes document state is a step dispatched by the plan engine.
  */
 
-import type { BlockNodeAddress } from './base.js';
+import type { BlockNodeAddress, BlockNodeType } from './base.js';
 import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
@@ -35,7 +35,13 @@ export type TargetWhere = {
   target: SelectionTarget;
 };
 
-export type StepWhere = SelectWhere | RefWhere | TargetWhere;
+export type BlockWhere = {
+  by: 'block';
+  nodeType: BlockNodeType;
+  nodeId: string;
+};
+
+export type StepWhere = SelectWhere | RefWhere | TargetWhere | BlockWhere;
 
 export type AssertWhere = {
   by: 'select';
@@ -117,7 +123,10 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: InlineRunPatch;
+    inline?: InlineRunPatch;
+    alignment?: 'left' | 'center' | 'right' | 'justify';
+    /** When "block", inline formatting expands to cover the entire parent textblock(s), not just the matched range. Default: "match". */
+    scope?: 'match' | 'block';
   };
 };
 

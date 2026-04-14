@@ -39,6 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -890,6 +891,60 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
+
+/**
+ * Applies alignment to the paragraph node(s) that contain the given range.
+ * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
+ * paragraphProperties.justification via tr.setNodeMarkup.
+ */
+function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
+  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
+  if (!justification) return false;
+
+  let changed = false;
+  const doc = tr.doc;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    // Only set alignment on textblock nodes (paragraphs, headings)
+    if (!node.isTextblock) return;
+
+    const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const currentJustification = existing?.justification;
+
+    if (currentJustification === justification) return;
+
+    const updated = { ...(existing ?? {}), justification };
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, paragraphProperties: updated });
+    changed = true;
+  });
+
+  return changed;
+}
+
+/**
+ * Expands a position range to cover the full content of all textblock nodes
+ * that overlap with it. Used when scope: "block" is set on a format.apply step.
+ */
+function expandToBlockBoundaries(
+  doc: import('prosemirror-model').Node,
+  from: number,
+  to: number,
+): { from: number; to: number } {
+  let expandedFrom = from;
+  let expandedTo = to;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return;
+    const blockContentStart = pos + 1;
+    const blockContentEnd = pos + node.nodeSize - 1;
+    expandedFrom = Math.min(expandedFrom, blockContentStart);
+    expandedTo = Math.max(expandedTo, blockContentEnd);
+  });
+
+  return { from: expandedFrom, to: expandedTo };
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -897,9 +952,27 @@ export function executeStyleApply(
   step: StyleApplyStep,
   mapping: Mapping,
 ): { changed: boolean } {
-  const absFrom = mapping.map(target.absFrom);
-  const absTo = mapping.map(target.absTo);
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  let absFrom = mapping.map(target.absFrom);
+  let absTo = mapping.map(target.absTo);
+
+  // Expand to full block boundaries when scope is "block"
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,10 +1113,26 @@ export function executeSpanStyleApply(
   // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
-  const absFrom = mapping.map(firstSeg.absFrom, 1);
-  const absTo = mapping.map(lastSeg.absTo, -1);
+  let absFrom = mapping.map(firstSeg.absFrom, 1);
+  let absTo = mapping.map(lastSeg.absTo, -1);
 
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------

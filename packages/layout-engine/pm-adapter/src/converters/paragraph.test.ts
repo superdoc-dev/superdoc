@@ -2272,6 +2272,92 @@ describe('paragraph converters', () => {
         expect(drawingBlock?.attrs?.inlineParagraphAlignment).toBeUndefined();
       });
 
+      it('should attach right alignment to inline shapeGroup drawings', () => {
+        const shapeNode: PMNode = { type: 'shapeGroup' };
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            alignment: 'right',
+          },
+          resolvedParagraphProperties: {},
+        } as never);
+
+        vi.mocked(shapeGroupNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          drawingKind: 'shapeGroup',
+          wrap: { type: 'Inline' },
+          attrs: {
+            wrap: { type: 'Inline' },
+          },
+          shapes: [],
+        } as never);
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [shapeNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const drawingBlock = blocks.find((block) => block.kind === 'drawing') as FlowBlock & {
+          attrs?: Record<string, unknown>;
+        };
+        expect(drawingBlock?.attrs?.inlineParagraphAlignment).toBe('right');
+      });
+
+      it('should not attach alignment for left or justify paragraphs', () => {
+        for (const alignment of ['left', 'justify'] as const) {
+          const shapeNode: PMNode = { type: 'shapeGroup' };
+
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {
+              alignment,
+            },
+            resolvedParagraphProperties: {},
+          } as never);
+
+          vi.mocked(shapeGroupNodeToDrawingBlock).mockReturnValue({
+            kind: 'drawing',
+            id: 'drawing-0',
+            drawingKind: 'shapeGroup',
+            wrap: { type: 'Inline' },
+            attrs: {
+              wrap: { type: 'Inline' },
+            },
+            shapes: [],
+          } as never);
+
+          const blocks = paragraphToFlowBlocks(
+            {
+              type: 'paragraph',
+              content: [shapeNode],
+            },
+            nextBlockId,
+            positions,
+            'Arial',
+            16,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
+
+          const drawingBlock = blocks.find((block) => block.kind === 'drawing') as FlowBlock & {
+            attrs?: Record<string, unknown>;
+          };
+          expect(drawingBlock?.attrs?.inlineParagraphAlignment).toBeUndefined();
+        }
+      });
+
       it('should handle shapeContainer node', () => {
         const shapeNode: PMNode = { type: 'shapeContainer' };
 

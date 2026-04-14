@@ -255,7 +255,7 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
 
     // Auto-scroll should be stopped
     expect(rafCallback).toBeNull();
-    // SD-2541: one post-drag hook so PresentationEditor can scroll selection into view after auto-scroll stops
+    // one post-drag hook so PresentationEditor can scroll selection into view after auto-scroll stops
     expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
   });
 

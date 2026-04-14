@@ -2218,7 +2218,12 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const sdtBoundaries = computeSdtBoundaries(
+      page.fragments,
+      this.blockLookup,
+      this.sdtLabelsRendered,
+      resolvedPage?.items,
+    );
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
 
     page.fragments.forEach((fragment, index) => {
@@ -2648,7 +2653,12 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const sdtBoundaries = computeSdtBoundaries(
+      page.fragments,
+      this.blockLookup,
+      this.sdtLabelsRendered,
+      resolvedPage?.items,
+    );
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
 
     const contextBase: FragmentRenderContext = {
@@ -2808,7 +2818,12 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const sdtBoundaries = computeSdtBoundaries(
+      page.fragments,
+      this.blockLookup,
+      this.sdtLabelsRendered,
+      resolvedPage?.items,
+    );
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -6883,9 +6898,18 @@ const computeSdtBoundaries = (
   fragments: readonly Fragment[],
   blockLookup: BlockLookup,
   sdtLabelsRendered: Set<string>,
+  resolvedItems?: readonly ResolvedPaintItem[],
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys = fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
+  const containerKeys: (string | null)[] = resolvedItems
+    ? resolvedItems.map((item) => {
+        if ('sdtContainerKey' in item) {
+          const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
+          return key ?? null;
+        }
+        return null;
+      })
+    : fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
 
   let i = 0;
   while (i < fragments.length) {
@@ -6914,7 +6938,7 @@ const computeSdtBoundaries = (
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
         const nextFragment = fragments[k + 1];
-        const currentHeight = getFragmentHeight(fragment, blockLookup);
+        const currentHeight = resolvedItems?.[k]?.height ?? getFragmentHeight(fragment, blockLookup);
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
         if (gapToNext > 0) {

@@ -2032,4 +2032,350 @@ describe('resolveLayout', () => {
       expect(result.layoutEpoch).toBeUndefined();
     });
   });
+
+  describe('sdtContainerKey resolution', () => {
+    it('sets sdtContainerKey for a paragraph with block structuredContent sdt', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'structuredContent', scope: 'block', id: 'sdt-1' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBe('structuredContent:sdt-1');
+    });
+
+    it('sets sdtContainerKey for a paragraph with documentSection sdt', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'documentSection', id: 'sec-1' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBe('documentSection:sec-1');
+    });
+
+    it('uses sdBlockId for documentSection when id is absent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'documentSection', sdBlockId: 'blk-99' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBe('documentSection:blk-99');
+    });
+
+    it('falls back to containerSdt when primary sdt has no container config', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: {
+            sdt: { type: 'structuredContent', scope: 'inline', id: 'inline-1' },
+            containerSdt: { type: 'documentSection', id: 'sec-2' },
+          },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBe('documentSection:sec-2');
+    });
+
+    it('returns null (omits sdtContainerKey) for inline structuredContent scope', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'structuredContent', scope: 'inline', id: 'inline-1' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBeUndefined();
+    });
+
+    it('omits sdtContainerKey when paragraph has no sdt', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBeUndefined();
+    });
+
+    it('sets sdtContainerKey for a list-item fragment from its item paragraph sdt', () => {
+      const listItemFragment: ListItemFragment = {
+        kind: 'list-item',
+        blockId: 'list1',
+        itemId: 'item-a',
+        fromLine: 0,
+        toLine: 1,
+        x: 108,
+        y: 200,
+        width: 432,
+        markerWidth: 36,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [listItemFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'list',
+          id: 'list1',
+          listType: 'bullet',
+          items: [
+            {
+              id: 'item-a',
+              marker: { text: '•', style: {} },
+              paragraph: {
+                kind: 'paragraph',
+                id: 'item-a-p',
+                runs: [],
+                attrs: { sdt: { type: 'structuredContent', scope: 'block', id: 'list-sdt-1' } },
+              },
+            },
+          ],
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'list',
+          items: [
+            {
+              itemId: 'item-a',
+              markerWidth: 36,
+              markerTextWidth: 10,
+              indentLeft: 36,
+              paragraph: {
+                kind: 'paragraph',
+                lines: [
+                  { fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 400, ascent: 12, descent: 4, lineHeight: 24 },
+                ],
+                totalHeight: 24,
+              },
+            },
+          ],
+          totalHeight: 24,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBe('structuredContent:list-sdt-1');
+    });
+
+    it('sets sdtContainerKey for a table fragment with sdt', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl1',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+        height: 30,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const tableBlock = {
+        kind: 'table' as const,
+        id: 'tbl1',
+        rows: [],
+        attrs: { sdt: { type: 'documentSection' as const, id: 'tbl-sec-1' } },
+      };
+      const tableMeasure = {
+        kind: 'table' as const,
+        rows: [],
+        columnWidths: [],
+        totalWidth: 0,
+        totalHeight: 0,
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+      expect(item.sdtContainerKey).toBe('documentSection:tbl-sec-1');
+    });
+
+    it('omits sdtContainerKey for image and drawing fragments', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img1',
+        x: 100,
+        y: 200,
+        width: 300,
+        height: 250,
+      };
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        blockId: 'dr1',
+        x: 50,
+        y: 60,
+        width: 200,
+        height: 150,
+        geometry: { width: 200, height: 150 },
+        scale: 1,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment, drawingFragment] }],
+      };
+      const imageBlock = { kind: 'image' as const, id: 'img1', src: 'test.png', width: 300, height: 250 };
+      const drawingBlock = {
+        kind: 'drawing' as const,
+        id: 'dr1',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 200, height: 150 },
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [imageBlock, drawingBlock as any],
+        measures: [
+          { kind: 'image', width: 300, height: 250 },
+          { kind: 'drawing', width: 200, height: 150 },
+        ],
+      });
+      const imgItem = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedImageItem;
+      const drItem = result.pages[0].items[1] as import('@superdoc/contracts').ResolvedDrawingItem;
+      expect(imgItem.sdtContainerKey).toBeUndefined();
+      expect(drItem.sdtContainerKey).toBeUndefined();
+    });
+
+    it('returns null (omits key) for structuredContent block scope with no id', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'structuredContent', scope: 'block' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBeUndefined();
+    });
+
+    it('returns null (omits key) for documentSection with no id or sdBlockId', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { sdt: { type: 'documentSection' } },
+        },
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.sdtContainerKey).toBeUndefined();
+    });
+  });
 });

@@ -81,7 +81,7 @@ When you need to create multiple headings and paragraphs in one operation, use `
 
 After inserting, apply formatting in a single `superdoc_mutations` batch using `format.apply` steps — one step per block or range. This reduces a workflow that might otherwise take 40+ calls down to 4: read, search, insert, format.
 
-## Use focused tools; `superdoc_mutations` is an escape hatch
+## Use focused tools — `superdoc_mutations` is an escape hatch
 
 For straightforward edits, use the focused intent tools (`superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`). They validate arguments, give clear errors, and are easier for models to call correctly.
 

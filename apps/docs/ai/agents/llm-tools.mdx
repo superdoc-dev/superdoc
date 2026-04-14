@@ -156,7 +156,7 @@ The generated catalog currently contains 9 grouped intent tools. Most tools use 
 | `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
 
 <Note>
-More tools are being added as we expand coverage — tables, images, hyperlinks, and more. You can also [create custom tools](#creating-custom-tools) for any `doc.*` operation today.
+Built-in tools cover the core operations. For tables, images, hyperlinks, and anything else, [create custom tools](#creating-custom-tools) that call any `doc.*` operation today.
 </Note>
 
 ## Dispatching tool calls
@@ -187,7 +187,7 @@ More tools are being added as we expand coverage — tables, images, hyperlinks,
   </Tab>
 </Tabs>
 
-The dispatcher validates required parameters, enforces mutual exclusivity constraints, and throws descriptive errors if arguments are invalid, so the LLM gets actionable feedback.
+The dispatcher validates required parameters, checks that arguments are compatible, and throws descriptive errors the LLM can act on.
 
 ## System prompt
 

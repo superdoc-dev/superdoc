@@ -2378,4 +2378,237 @@ describe('resolveLayout', () => {
       expect(item.sdtContainerKey).toBeUndefined();
     });
   });
+
+  describe('paragraphBorders pre-computation', () => {
+    it('populates paragraphBorders and paragraphBorderHash for a paragraph with borders', () => {
+      const borders = {
+        top: { style: 'solid' as const, width: 4, color: '#000000' },
+        bottom: { style: 'solid' as const, width: 4, color: '#000000' },
+        left: { style: 'solid' as const, width: 4, color: '#000000' },
+        right: { style: 'solid' as const, width: 4, color: '#000000' },
+        between: { style: 'solid' as const, width: 4, color: '#000000' },
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [], attrs: { borders } }];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.paragraphBorders).toEqual(borders);
+      expect(item.paragraphBorderHash).toBeDefined();
+      expect(typeof item.paragraphBorderHash).toBe('string');
+      expect(item.paragraphBorderHash!.length).toBeGreaterThan(0);
+    });
+
+    it('omits paragraphBorders and paragraphBorderHash when paragraph has no borders', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.paragraphBorders).toBeUndefined();
+      expect(item.paragraphBorderHash).toBeUndefined();
+    });
+
+    it('produces matching hashes for identical border definitions', () => {
+      const borders = {
+        top: { style: 'solid' as const, width: 4, color: '#000000' },
+        bottom: { style: 'solid' as const, width: 4, color: '#000000' },
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              { kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 },
+              { kind: 'para', blockId: 'p2', fromLine: 0, toLine: 1, x: 72, y: 130, width: 468 },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [], attrs: { borders } },
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { borders: { ...borders } } },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+          totalHeight: 20,
+        },
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item0 = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      const item1 = result.pages[0].items[1] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item0.paragraphBorderHash).toBe(item1.paragraphBorderHash);
+    });
+
+    it('produces different hashes for different border definitions', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              { kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 },
+              { kind: 'para', blockId: 'p2', fromLine: 0, toLine: 1, x: 72, y: 130, width: 468 },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [],
+          attrs: { borders: { top: { style: 'solid' as const, width: 4, color: '#000000' } } },
+        },
+        {
+          kind: 'paragraph',
+          id: 'p2',
+          runs: [],
+          attrs: { borders: { top: { style: 'dashed' as const, width: 2, color: '#FF0000' } } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+          totalHeight: 20,
+        },
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item0 = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      const item1 = result.pages[0].items[1] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item0.paragraphBorderHash).not.toBe(item1.paragraphBorderHash);
+    });
+
+    it('populates paragraphBorders for list-item fragments', () => {
+      const borders = {
+        top: { style: 'solid' as const, width: 2, color: '#0000FF' },
+        between: { style: 'solid' as const, width: 1, color: '#0000FF' },
+      };
+      const listItemFragment: ListItemFragment = {
+        kind: 'list-item',
+        blockId: 'list1',
+        itemId: 'item-a',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+        markerWidth: 36,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [listItemFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'list',
+          id: 'list1',
+          listType: 'bullet',
+          items: [
+            {
+              id: 'item-a',
+              marker: { text: '•', style: {} },
+              paragraph: { kind: 'paragraph', id: 'item-a-p', runs: [], attrs: { borders } },
+            },
+          ],
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'list',
+          items: [
+            {
+              itemId: 'item-a',
+              markerWidth: 36,
+              markerTextWidth: 10,
+              indentLeft: 36,
+              paragraph: {
+                kind: 'paragraph',
+                lines: [
+                  { fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 200, ascent: 12, descent: 4, lineHeight: 20 },
+                ],
+                totalHeight: 20,
+              },
+            },
+          ],
+          totalHeight: 20,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.paragraphBorders).toEqual(borders);
+      expect(item.paragraphBorderHash).toBeDefined();
+    });
+
+    it('does not add paragraphBorders to table items', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl1',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+        height: 100,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'table', id: 'tbl1', rows: [{ cells: [] }] } as any];
+      const measures: Measure[] = [
+        {
+          kind: 'table',
+          columnWidths: [468],
+          rows: [{ cells: [{ width: 468, height: 100 }] }],
+        } as any,
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.paragraphBorders).toBeUndefined();
+      expect(item.paragraphBorderHash).toBeUndefined();
+    });
+  });
 });

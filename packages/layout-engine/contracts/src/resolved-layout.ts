@@ -6,6 +6,7 @@ import type {
   ImageFragmentMetadata,
   Line,
   PageMargins,
+  ParagraphBorders,
   SectionVerticalAlign,
   TableBlock,
   TableMeasure,
@@ -120,6 +121,10 @@ export type ResolvedFragmentItem = {
   content?: ResolvedParagraphContent;
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
+  /** Pre-computed hash of paragraph borders for between-border grouping. */
+  paragraphBorderHash?: string;
+  /** Pre-extracted paragraph borders for between-border rendering. */
+  paragraphBorders?: ParagraphBorders;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */

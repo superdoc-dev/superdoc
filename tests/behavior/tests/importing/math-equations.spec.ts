@@ -13,6 +13,7 @@ const EQARR_DOC = path.resolve(__dirname, 'fixtures/math-eqarr-tests.docx');
 const NARY_DOC = path.resolve(__dirname, 'fixtures/math-nary-tests.docx');
 const PHANTOM_DOC = path.resolve(__dirname, 'fixtures/math-phantom-tests.docx');
 const GROUPCHR_DOC = path.resolve(__dirname, 'fixtures/math-groupchr-tests.docx');
+const MATRIX_DOC = path.resolve(__dirname, 'fixtures/math-matrix-tests.docx');
 // Single-object test docs are used for focused verification by community contributors.
 // The all-objects doc is used for behavior tests since it exercises the full pipeline.
 
@@ -1402,5 +1403,104 @@ test.describe('m:groupChr (group character) rendering', () => {
     expect(v11.tag).toBe('mover');
     expect(v11.vertJc).toBe('bot');
     expect(v11.style).toBeNull();
+  });
+});
+
+test.describe('m:m (matrix) rendering', () => {
+  // Fixture contains 10 matrix shapes (§22.1.2.60):
+  //   0: plain 2x2, no delimiter
+  //   1: 2x2 wrapped in [ ] delimiter
+  //   2: 2x2 in ( ) with nested m:f and m:sSup in cells
+  //   3: 2x2 in [ ] with multi-run cells (a+b, c-d, …)
+  //   4: 2x3 in [ ] with empty <m:e/> gaps
+  //   5: 2x3 with per-column m:mcJc=left/center/right (no delimiter)
+  //   6: 1x3 row vector in [ ]
+  //   7: 3x1 column vector in [ ]
+  //   8: 1x2 containing literal '&' in text (non-spec edge case)
+  //   9: inline matrix with m:baseJc=top
+
+  test('imports all 10 matrix equations from docx', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    const mathCount = await superdoc.page.evaluate(() => document.querySelectorAll('math').length);
+    expect(mathCount).toBe(10);
+    const tableCount = await superdoc.page.evaluate(() => document.querySelectorAll('mtable').length);
+    expect(tableCount).toBe(10);
+  });
+
+  test('wraps every <mtd> in <mrow> for cell content grouping', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    const allWrapped = await superdoc.page.evaluate(() => {
+      const tds = Array.from(document.querySelectorAll('mtd'));
+      return tds.every((td) => td.children.length === 1 && td.firstElementChild?.localName === 'mrow');
+    });
+    expect(allWrapped).toBe(true);
+  });
+
+  test('renders matrix wrapped in m:d with delimiter operators around the mtable', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    // Case 1: [ ] brackets around 2x2.
+    const result = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const mtable = maths[1]?.querySelector('mtable');
+      const operators = Array.from(maths[1]?.querySelectorAll('mrow > mo') ?? []).map((el) => el.textContent);
+      return { hasMtable: mtable != null, operators };
+    });
+    expect(result.hasMtable).toBe(true);
+    expect(result.operators).toEqual(['[', ']']);
+  });
+
+  test('preserves nested math (mfrac, msup) inside matrix cells', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    const result = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const m = maths[2];
+      return {
+        hasMfrac: m?.querySelector('mtd mfrac') != null,
+        hasMsup: m?.querySelector('mtd msup') != null,
+      };
+    });
+    expect(result.hasMfrac).toBe(true);
+    expect(result.hasMsup).toBe(true);
+  });
+
+  test('renders empty <m:e/> cells with a U+25A1 placeholder by default (§22.1.2.83)', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    // Case 4: 2x3 with empty cells at (0,1) and (1,0). Expect three columns preserved
+    // with placeholder glyphs at the gaps.
+    const result = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const mtable = maths[4]?.querySelector('mtable');
+      const rows = Array.from(mtable?.querySelectorAll('mtr') ?? []);
+      return rows.map((row) => Array.from(row.querySelectorAll('mtd')).map((td) => td.textContent));
+    });
+    expect(result).toEqual([
+      ['a', '\u25A1', 'c'],
+      ['\u25A1', 'e', 'f'],
+    ]);
+  });
+
+  test('renders multi-run cell content as siblings inside the cell <mrow>', async ({ superdoc }) => {
+    await superdoc.loadDocument(MATRIX_DOC);
+    await superdoc.waitForStable();
+    // Case 3 bottom row cell 0: x, +, y as three separate runs → mi, mo, mi under mrow.
+    const result = await superdoc.page.evaluate(() => {
+      const maths = document.querySelectorAll('math');
+      const mtable = maths[3]?.querySelector('mtable');
+      const cell = mtable?.querySelectorAll('mtr')[1]?.querySelectorAll('mtd')[0];
+      const mrow = cell?.firstElementChild;
+      return {
+        mrowTag: mrow?.localName,
+        childTags: Array.from(mrow?.children ?? []).map((c) => c.localName),
+        text: mrow?.textContent,
+      };
+    });
+    expect(result.mrowTag).toBe('mrow');
+    expect(result.childTags).toEqual(['mi', 'mo', 'mi']);
+    expect(result.text).toBe('x+y');
   });
 });

@@ -3620,3 +3620,312 @@ describe('m:groupChr converter', () => {
     });
   });
 });
+
+describe('m:m converter', () => {
+  it('converts 2x2 matrix to <mtable> with <mtr> and <mtd>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+                },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+                },
+              ],
+            },
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'c' }] }] }],
+                },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'd' }] }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mtable = result!.querySelector('mtable');
+    expect(mtable).not.toBeNull();
+    const rows = mtable!.querySelectorAll('mtr');
+    expect(rows.length).toBe(2);
+    const cells = mtable!.querySelectorAll('mtd');
+    expect(cells.length).toBe(4);
+    expect(cells[0]!.textContent).toBe('a');
+    expect(cells[1]!.textContent).toBe('b');
+    expect(cells[2]!.textContent).toBe('c');
+    expect(cells[3]!.textContent).toBe('d');
+  });
+
+  it('returns null for empty matrix', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:m', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('converts 1x3 row vector', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] }],
+                },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+                },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '3' }] }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mtable = result!.querySelector('mtable');
+    expect(mtable).not.toBeNull();
+    const rows = mtable!.querySelectorAll('mtr');
+    expect(rows.length).toBe(1);
+    const cells = mtable!.querySelectorAll('mtd');
+    expect(cells.length).toBe(3);
+  });
+
+  it('wraps each cell content in <mrow> inside <mtd>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [
+                    { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                    { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '+' }] }] },
+                    { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mtd = result!.querySelector('mtd');
+    expect(mtd).not.toBeNull();
+    // Cell content sits under an <mrow>, not as direct <mtd> siblings.
+    expect(mtd!.children.length).toBe(1);
+    expect(mtd!.firstElementChild!.localName).toBe('mrow');
+    expect(mtd!.textContent).toBe('x+y');
+  });
+
+  it('preserves nested math objects in cells (fraction, superscript)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [
+                    {
+                      name: 'm:f',
+                      elements: [
+                        {
+                          name: 'm:num',
+                          elements: [
+                            { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] },
+                          ],
+                        },
+                        {
+                          name: 'm:den',
+                          elements: [
+                            { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  name: 'm:e',
+                  elements: [
+                    {
+                      name: 'm:sSup',
+                      elements: [
+                        {
+                          name: 'm:e',
+                          elements: [
+                            { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'z' }] }] },
+                          ],
+                        },
+                        {
+                          name: 'm:sup',
+                          elements: [
+                            { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mtable = result!.querySelector('mtable');
+    expect(mtable!.querySelector('mtd mfrac')).not.toBeNull();
+    expect(mtable!.querySelector('mtd msup')).not.toBeNull();
+  });
+
+  it('renders a placeholder in empty <m:e> cells by default (§22.1.2.83 plcHide="0")', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+                },
+                { name: 'm:e' },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'c' }] }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const cells = result!.querySelectorAll('mtd');
+    expect(cells.length).toBe(3);
+    expect(cells[0]!.textContent).toBe('a');
+    expect(cells[1]!.textContent).toBe('\u25A1');
+    expect(cells[2]!.textContent).toBe('c');
+  });
+
+  it('hides empty-cell placeholders when m:plcHide is set (§22.1.2.83)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            { name: 'm:mPr', elements: [{ name: 'm:plcHide', attributes: { 'm:val': '1' } }] },
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+                },
+                { name: 'm:e' },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'c' }] }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const cells = result!.querySelectorAll('mtd');
+    expect(cells.length).toBe(3);
+    expect(cells[1]!.textContent).toBe('');
+  });
+
+  it('ignores m:mPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:m',
+          elements: [
+            {
+              name: 'm:mPr',
+              elements: [
+                {
+                  name: 'm:mcs',
+                  elements: [
+                    {
+                      name: 'm:mc',
+                      elements: [{ name: 'm:mcPr', elements: [{ name: 'm:count', attributes: { 'm:val': '2' } }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'm:mr',
+              elements: [
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+                },
+                {
+                  name: 'm:e',
+                  elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mtable = result!.querySelector('mtable');
+    expect(mtable).not.toBeNull();
+    const cells = mtable!.querySelectorAll('mtd');
+    expect(cells.length).toBe(2);
+    expect(mtable!.textContent).toBe('ab');
+  });
+});

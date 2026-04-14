@@ -13,6 +13,7 @@
  */
 
 import { Fragment, type Node as ProseMirrorNode, type Schema } from 'prosemirror-model';
+import { TextSelection } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import type { ProseMirrorJSON } from '../../core/types/EditorTypes.js';
 import type {
@@ -89,6 +90,7 @@ import type {
 import { DocumentApiAdapterError } from '../errors.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
+import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
 
 // Shared helpers — single source of truth for SDT logic
 import {
@@ -1851,6 +1853,15 @@ function createWrapper(
       tr.insert(insertPos, newNode);
       dispatchTransaction(editor, tr);
       return true;
+    }
+
+    // When a SelectionTarget is provided, set the editor selection to that
+    // range so insertStructuredContentInline/Block wraps the targeted text.
+    if (input.at) {
+      const { absFrom, absTo } = resolveSelectionTarget(editor, input.at);
+      const { tr } = editor.state;
+      tr.setSelection(TextSelection.create(tr.doc, absFrom, absTo));
+      dispatchTransaction(editor, tr);
     }
 
     // Default: delegate to the editor command (inserts at current selection).

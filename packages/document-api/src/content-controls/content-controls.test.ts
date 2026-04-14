@@ -652,4 +652,55 @@ describe('create.contentControl validation', () => {
     });
     expect(adapter.create).toHaveBeenCalled();
   });
+
+  it('rejects at and target together', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        target: validTarget,
+        at: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: 'p1', offset: 0 },
+          end: { kind: 'text', blockId: 'p1', offset: 5 },
+        },
+      } as any),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it('rejects invalid at (missing start)', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        at: { kind: 'selection', end: { kind: 'text', blockId: 'p1', offset: 5 } },
+      } as any),
+    ).toThrow(/valid SelectionTarget/);
+  });
+
+  it('rejects invalid at (wrong kind)', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        at: {
+          kind: 'bogus',
+          start: { kind: 'text', blockId: 'p1', offset: 0 },
+          end: { kind: 'text', blockId: 'p1', offset: 5 },
+        },
+      } as any),
+    ).toThrow(/valid SelectionTarget/);
+  });
+
+  it('accepts valid at (SelectionTarget)', () => {
+    const adapter = { create: mock(noop) } as any;
+    executeCreateContentControl(adapter, {
+      kind: 'inline',
+      at: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 5 },
+      },
+      tag: 'name',
+      alias: 'Name',
+    });
+    expect(adapter.create).toHaveBeenCalled();
+  });
 });

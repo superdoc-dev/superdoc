@@ -6,6 +6,7 @@
  */
 
 import type { NodeKind } from '../types/base.js';
+import type { SelectionTarget } from '../types/address.js';
 import type { ReceiptFailure } from '../types/receipt.js';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +207,8 @@ export interface CreateContentControlInput {
   kind: NodeKind;
   controlType?: ContentControlType;
   target?: ContentControlTarget;
+  /** Text range to wrap in the new content control. Mutually exclusive with `target`. */
+  at?: SelectionTarget;
   tag?: string;
   alias?: string;
   lockMode?: LockMode;

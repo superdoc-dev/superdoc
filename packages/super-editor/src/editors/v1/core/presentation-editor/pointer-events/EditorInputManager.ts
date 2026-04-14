@@ -355,9 +355,9 @@ export type EditorInputCallbacks = {
     dragMode: 'char' | 'word' | 'para',
   ) => void;
   /**
-   * Called when a pointer text-drag selection ends (non-margin path).
+   * Called when a pointer text-drag selection ends.
    * Used to scroll the selection into view once after auto-scroll stops; during drag,
-   * selection-driven scroll is suppressed to avoid fighting edge auto-scroll (SD-2541).
+   * selection-driven scroll is suppressed to avoid fighting edge auto-scroll.
    */
   notifyDragSelectionEnded?: () => void;
   /** Hit test table at coordinates */

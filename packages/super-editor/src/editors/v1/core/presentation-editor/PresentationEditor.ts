@@ -3248,7 +3248,7 @@ export class PresentationEditor extends EventEmitter {
     };
     const handleSelection = () => {
       // User-initiated selection change — scroll caret/head into view once, except during
-      // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView (SD-2541).
+      // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView.
       if (!this.#editorInputManager?.isDragging) {
         this.#shouldScrollSelectionIntoView = true;
       }

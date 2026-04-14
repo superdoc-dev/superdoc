@@ -1,0 +1,290 @@
+# Level 3: DOCX Agent Benchmark — fidelity suite (v2)
+#
+# Tasks designed to test operations where SuperDoc's document model
+# outperforms raw XML manipulation (unzip + sed).
+#
+# Category A: Structural creation (raw approaches can't produce valid OOXML)
+# Category B: Formatting operations (raw approaches can't modify run properties)
+# Category C: Complex edits (tracked changes, comments — track improvement over time)
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY A: Structural creation — SuperDoc proven advantage
+# ═══════════════════════════════════════════════════════════════
+
+- description: 'Structure: create heading with style'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a new section at the end of the document with a properly styled Heading 1 that says "Force Majeure" followed by a paragraph that says "Neither party shall be liable for delays or failures resulting from causes beyond reasonable control."'
+    fidelityChecks: '[{"type":"paragraphStyle","text":"Force Majeure","style":"Heading1"}]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Force Majeure')) return { pass: false, score: 0, reason: 'Force Majeure not found' };
+        if (!t.includes('beyond reasonable control')) return { pass: false, score: 0, reason: 'Body text not found' };
+        return { pass: true, score: 1, reason: 'Section added' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        if (!t.includes('Amazing') && !t.includes('Agreement')) return { pass: false, score: 0, reason: 'Original content removed' };
+        return { pass: true, score: 1, reason: 'Original content preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Structure: create table at end'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a summary table at the end of the document with 2 columns ("Party" and "Role") and 2 data rows: "Amazing Corp" / "Disclosing Party" and "TechCraft LLC" / "Receiving Party". The table should have borders and a header row.'
+    fidelityChecks: '[{"type":"tableCell","table":0,"row":1,"col":0,"text":"Amazing"},{"type":"tableCell","table":0,"row":1,"col":1,"text":"Disclosing"}]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Disclosing Party')) return { pass: false, score: 0, reason: 'Disclosing Party not in table' };
+        if (!t.includes('Receiving Party')) return { pass: false, score: 0, reason: 'Receiving Party not in table' };
+        return { pass: true, score: 1, reason: 'Table created correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document modified' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY B: Formatting operations — SuperDoc proven advantage
+# ═══════════════════════════════════════════════════════════════
+
+- description: 'Format: make specific text bold'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Make all occurrences of "TechCraft LLC" bold throughout the document. Do not change any text content.'
+    fidelityChecks: '[{"type":"formatting","text":"TechCraft","property":"bold"}]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'TechCraft not found' };
+        return { pass: true, score: 1, reason: 'Text preserved' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Amazing')) return { pass: false, score: 0, reason: 'Collateral: Amazing removed' };
+        if (!t.includes('indemnify')) return { pass: false, score: 0, reason: 'Collateral: indemnification removed' };
+        return { pass: true, score: 1, reason: 'Content preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Format: replace text preserving bold'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace all occurrences of "Amazing Corp" with "Apex Holdings" throughout the document. The replacement text must keep the same formatting (bold, italic, etc.) as the original.'
+    fidelityChecks: '[]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Apex Holdings')) return { pass: false, score: 0, reason: 'Apex Holdings not found' };
+        if (t.includes('Amazing Corp')) return { pass: false, score: 0, reason: 'Amazing Corp still present' };
+        return { pass: true, score: 1, reason: 'Replaced correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'TechCraft intact' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY C: Complex edits — track improvement over time
+# These tasks test operations that currently have API issues.
+# As SuperDoc improves, pass rates here should increase.
+# ═══════════════════════════════════════════════════════════════
+
+- description: 'Complex: tracked change replacement'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Using tracked changes (suggesting mode), replace "$500,000" with "$750,000" in the document. The change should appear as a tracked/suggested change, not a direct edit.'
+    fidelityChecks: '[{"type":"trackedChangeCount","min":1}]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('750,000') && !t.includes('750000')) return { pass: false, score: 0, reason: '750,000 not found' };
+        return { pass: true, score: 1, reason: 'Amount updated' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
+        return { pass: true, score: 1, reason: 'Content preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Complex: add comment to clause'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a comment to the indemnification clause that says "Legal review needed before signing". The comment should be anchored to the text about indemnification.'
+    fidelityChecks: '[]'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document modified (comment added)' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('indemnify') && !t.includes('Indemnification')) return { pass: false, score: 0, reason: 'Indemnification clause removed' };
+        return { pass: true, score: 1, reason: 'Clause preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath

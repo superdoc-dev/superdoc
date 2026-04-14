@@ -21,6 +21,27 @@ describe('w:r helper utilities', () => {
       const attrs = { eastAsiaFontFamily: 'Meiryo, sans-serif' };
       expect(resolveFontFamily(attrs, '')).toEqual(attrs);
     });
+
+    // SD-2517: csFontFamily must be stripped from visual attrs (not a CSS property)
+    it('strips csFontFamily from visual attrs for non-EA text', () => {
+      const attrs = { fontFamily: 'Arial', csFontFamily: 'Times New Roman' };
+      const result = resolveFontFamily(attrs, 'Hello');
+      expect(result.csFontFamily).toBeUndefined();
+      expect(result.fontFamily).toBe('Arial');
+    });
+
+    it('strips both eastAsiaFontFamily and csFontFamily for non-EA text', () => {
+      const attrs = { fontFamily: 'Arial', eastAsiaFontFamily: 'MS Mincho', csFontFamily: 'Times New Roman' };
+      const result = resolveFontFamily(attrs, 'Hello');
+      expect(result.eastAsiaFontFamily).toBeUndefined();
+      expect(result.csFontFamily).toBeUndefined();
+      expect(result.fontFamily).toBe('Arial');
+    });
+
+    it('returns attrs unchanged when no per-script fonts are present', () => {
+      const attrs = { fontFamily: 'Arial', fontSize: '12pt' };
+      expect(resolveFontFamily(attrs, 'Hello')).toBe(attrs);
+    });
   });
 
   describe('merge helpers', () => {

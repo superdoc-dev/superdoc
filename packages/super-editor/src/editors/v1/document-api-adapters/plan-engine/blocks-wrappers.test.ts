@@ -573,6 +573,47 @@ describe('blocksListWrapper', () => {
     expect(result.blocks[0]!.textPreview).toBe('Short text');
   });
 
+  it('returns full block text when includeText is true', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Longer full text value' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { includeText: true });
+    expect(result.blocks[0]!.text).toBe('Longer full text value');
+    expect(result.blocks[0]!.textPreview).toBe('Longer full text value');
+  });
+
+  it('omits full block text when includeText is false or omitted', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Body text' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    expect(blocksListWrapper(editor).blocks[0]!.text).toBeUndefined();
+    expect(blocksListWrapper(editor, { includeText: false }).blocks[0]!.text).toBeUndefined();
+  });
+
+  it('returns null full text for non-text blocks when includeText is true', () => {
+    const table = createNode('table', [], {
+      attrs: { blockId: 't1', sdBlockId: 't1' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const doc = createNode('doc', [table], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { includeText: true });
+    expect(result.blocks[0]!.text).toBeNull();
+    expect(result.blocks[0]!.textPreview).toBeNull();
+  });
+
   it('reads alignment from paragraphProperties.justification', () => {
     const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Centered' })], {
       attrs: {
@@ -634,6 +675,182 @@ describe('blocksListWrapper', () => {
     expect(block.bold).toBe(true);
     expect(block.styleId).toBe('Heading1');
     expect(block.headingLevel).toBe(1);
+  });
+
+  it('resolves fontSize from Normal style when inline marks have no fontSize', () => {
+    const textNode = createNode('text', [], {
+      text: 'No inline fontSize',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Times New Roman' } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    // Mock editor with converter that has translatedLinkedStyles
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: { runProperties: { fontSize: 24 } },
+          latentStyles: {},
+          styles: {
+            Normal: { runProperties: { fontSize: 20 } },
+          },
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    // Normal style has fontSize 20 half-points = 10pt
+    expect(block.fontSize).toBe(10);
+  });
+
+  it('resolves fontSize from basedOn chain when block has a styleId', () => {
+    const textNode = createNode('text', [], {
+      text: 'Heading text',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Times New Roman' } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: { runProperties: { fontSize: 20 } },
+          latentStyles: {},
+          styles: {
+            Normal: { runProperties: { fontSize: 20 } },
+            Heading1: { basedOn: 'Normal', runProperties: { fontSize: 28 } },
+          },
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    // Heading1 has fontSize 28 half-points = 14pt
+    expect(block.fontSize).toBe(14);
+  });
+
+  it('walks basedOn chain when style has no fontSize', () => {
+    const textNode = createNode('text', [], {
+      text: 'List text',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Arial' } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1', paragraphProperties: { styleId: 'ListParagraph' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            Normal: { runProperties: { fontSize: 22 } },
+            ListParagraph: { basedOn: 'Normal', runProperties: {} },
+          },
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    // ListParagraph has no fontSize, basedOn Normal which has 22 hp = 11pt
+    expect(block.fontSize).toBe(11);
+  });
+
+  it('falls back to docDefaults when no style defines fontSize', () => {
+    const textNode = createNode('text', [], {
+      text: 'Default text',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Calibri' } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: { runProperties: { fontSize: 24 } },
+          latentStyles: {},
+          styles: { Normal: { runProperties: {} } },
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    // docDefaults has fontSize 24 hp = 12pt
+    expect(block.fontSize).toBe(12);
+  });
+
+  it('falls back to 10pt OOXML default when nothing defines fontSize', () => {
+    const textNode = createNode('text', [], {
+      text: 'Bare text',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Courier' } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {},
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    expect(block.fontSize).toBe(10);
+  });
+
+  it('inline fontSize takes precedence over style chain', () => {
+    const textNode = createNode('text', [], {
+      text: 'Explicit size',
+      marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Arial', fontSize: 16 } }],
+    });
+    const paragraph = createNode('paragraph', [textNode], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: { runProperties: { fontSize: 20 } },
+          latentStyles: {},
+          styles: { Heading1: { runProperties: { fontSize: 28 } } },
+        },
+      },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const block = result.blocks[0] as any;
+    // Inline fontSize 16 takes precedence over Heading1's 28hp (14pt)
+    expect(block.fontSize).toBe(16);
   });
 });
 

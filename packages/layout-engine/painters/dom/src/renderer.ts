@@ -57,6 +57,7 @@ import type {
   ResolvedDrawingItem,
 } from '@superdoc/contracts';
 import {
+  adjustAvailableWidthForTextIndent,
   calculateJustifySpacing,
   computeLinePmRange,
   getCellSpacingPx,
@@ -3206,6 +3207,17 @@ export class DomPainter {
             availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
           }
 
+          // Adjust availableWidth for first-line text indent (hanging indent).
+          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
+          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+            availableWidthOverride = adjustAvailableWidthForTextIndent(
+              availableWidthOverride,
+              firstLineOffset,
+              line.maxWidth,
+            );
+          }
+
           const isLastLineOfFragment = index === lines.length - 1;
           const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
           const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
@@ -3219,9 +3231,6 @@ export class DomPainter {
             shouldSkipJustifyForLastLine,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
-
-          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
 
           if (!isListFirstLine) {
             if (hasExplicitSegmentPositioning) {

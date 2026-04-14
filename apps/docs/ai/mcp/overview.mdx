@@ -1,0 +1,121 @@
+---
+title: MCP Server
+sidebarTitle: Overview
+description: Give AI agents direct access to .docx files through the Model Context Protocol
+keywords: "mcp, model context protocol, ai agents, claude, cursor, windsurf, document automation, llm docx"
+---
+
+The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files. It exposes the same operations as the [Document API](/document-api/overview) through the [Model Context Protocol](https://modelcontextprotocol.io) — the open standard for connecting AI tools to agents.
+
+## How it works
+
+The MCP server runs as a local subprocess, communicating over stdio. It manages document sessions in memory — each `superdoc_open` creates an Editor instance, and all subsequent operations run against that in-memory state until you `superdoc_save`.
+
+```
+AI Agent (Claude, Cursor, Windsurf)
+  │ MCP protocol (stdio)
+  ▼
+@superdoc-dev/mcp
+  │ Document API
+  ▼
+SuperDoc Editor (in-memory)
+  │ export
+  ▼
+.docx file on disk
+```
+
+The MCP server runs locally — SuperDoc never uploads your files. The AI agent you connect still sends content to its own provider.
+
+## Setup
+
+Install once. Your MCP client spawns the server automatically on each conversation.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add superdoc -- npx @superdoc-dev/mcp
+    ```
+  </Tab>
+  <Tab title="Claude Desktop">
+    Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Add to `~/.cursor/mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Tools
+
+The MCP server exposes 12 tools total:
+
+- 3 lifecycle tools: `superdoc_open`, `superdoc_save`, `superdoc_close`
+- 9 grouped intent tools generated from the SDK catalog
+
+All tools except `superdoc_open` take a `session_id` from `superdoc_open`.
+
+### Lifecycle
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_open` | `path` | Open a `.docx` file. Returns `session_id` and file path |
+| `superdoc_save` | `session_id`, `out?` | Save to the original path, or to `out` if specified |
+| `superdoc_close` | `session_id` | Close the session. Unsaved changes are lost |
+
+### Intent tools
+
+| Tool | Actions | Description |
+| --- | --- | --- |
+| `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
+| `superdoc_search` | `match` | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading` | Create structural block elements |
+| `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
+| `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
+| `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
+| `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
+
+Multi-action tools use an `action` argument to select the underlying operation. `superdoc_search` is a single-action tool and does not require `action`.
+
+## Related
+
+- [How to use](/ai/mcp/how-to-use) — workflow patterns, targeting, and common operations
+- [Debugging](/ai/mcp/debugging) — inspect and troubleshoot MCP tool calls
+- [LLM Tools](/ai/agents/llm-tools) — build custom LLM integrations with the SDK
+- [CLI](/document-engine/cli) — edit documents from the terminal

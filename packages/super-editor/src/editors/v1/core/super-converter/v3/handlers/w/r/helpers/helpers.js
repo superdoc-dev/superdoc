@@ -6,9 +6,13 @@ const containsEastAsianCharacters = (text) => EAST_ASIAN_CHARACTER_REGEX.test(te
 export const resolveFontFamily = (textStyleAttrs, text) => {
   if (!text) return textStyleAttrs;
   const eastAsiaFont = textStyleAttrs?.eastAsiaFontFamily;
-  if (!eastAsiaFont) return textStyleAttrs;
+  const hasPerScriptAttrs = eastAsiaFont || textStyleAttrs?.csFontFamily;
+  if (!hasPerScriptAttrs) return textStyleAttrs;
+  // Strip per-script font attrs from the visual mark — they're round-trip metadata
+  // preserved on the ProseMirror mark attrs, not CSS properties. (SD-2517)
   const normalized = { ...textStyleAttrs };
   delete normalized.eastAsiaFontFamily;
+  delete normalized.csFontFamily;
   const shouldUseEastAsia = typeof text === 'string' && containsEastAsianCharacters(text);
   if (!shouldUseEastAsia) return normalized;
   return { ...normalized, fontFamily: eastAsiaFont };

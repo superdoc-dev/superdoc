@@ -1,0 +1,96 @@
+# Level 3: DOCX Agent Benchmark
+#
+# 4 conditions × 2 agents × 12 tasks = 96 runs
+#
+# Conditions:
+#   baseline       — no skill, agent figures out DOCX on its own
+#   baseline-with-docx-skill — Anthropic's DOCX skill (unzip + XML + docx-js)
+#   superdoc-mcp             — SuperDoc MCP server (superdoc_* tools)
+#   superdoc-cli   — SuperDoc CLI on PATH
+#
+# Run:    pnpm run eval:benchmark
+# Report: pnpm run eval:benchmark:report
+
+description: 'Level 3: DOCX Agent Benchmark'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  # ── Claude Code ──
+
+  - id: file://../providers/claude-code-agent.mjs
+    label: CC-baseline
+    config:
+      condition: baseline
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      disallowedTools: ['mcp__superdoc__*']
+
+  - id: file://../providers/claude-code-agent.mjs
+    label: CC-with-docx-skill
+    config:
+      condition: baseline-with-docx-skill
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      disallowedTools: ['mcp__superdoc__*']
+      vendorSkill: true
+
+  - id: file://../providers/claude-code-agent.mjs
+    label: CC-superdoc-mcp
+    config:
+      condition: superdoc-mcp
+      allowedTools: ['Read', 'Glob', 'Grep']
+      superdocMcp: true
+      superdocOnPath: true
+
+  - id: file://../providers/claude-code-agent.mjs
+    label: CC-superdoc-cli-prompt
+    config:
+      condition: superdoc-cli
+      allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
+      superdocOnPath: true
+
+  # ── Codex ──
+
+  - id: file://../providers/codex-agent.mjs
+    label: Codex-baseline
+    config:
+      condition: baseline
+
+  - id: file://../providers/codex-agent.mjs
+    label: Codex-with-docx-skill
+    config:
+      condition: baseline-with-docx-skill
+      vendorSkill: true
+
+  - id: file://../providers/codex-agent.mjs
+    label: Codex-superdoc-mcp
+    config:
+      condition: superdoc-mcp
+      superdocMcp: true
+      superdocOnPath: true
+
+  - id: file://../providers/codex-agent.mjs
+    label: Codex-superdoc-cli
+    config:
+      condition: superdoc-cli
+      superdocOnPath: true
+
+evaluateOptions:
+  maxConcurrency: 2
+  timeoutMs: 300000
+
+derivedMetrics:
+  - name: avg_latency
+    value: 'latency / __count'
+  - name: avg_steps
+    value: 'steps / __count'
+  - name: avg_tokens
+    value: 'tokens / __count'
+  - name: superdoc_usage_pct
+    value: 'path / __count * 100'
+  - name: avg_fidelity
+    value: 'fidelity / __count'
+
+tests:
+  - file://../suites/benchmark/tests/agent-benchmark.yaml
+  - file://../suites/benchmark/tests/agent-benchmark-v2.yaml

@@ -1,0 +1,446 @@
+# Execution tests — real document editing via SuperDoc CLI + AI Gateway.
+#
+# Focus: tool execution MECHANICS, not just content outcomes.
+# The provider returns JSON: { documentText, trace[], toolCalls[], stepCount }
+#
+# Each test validates:
+#   1. TRACE: correct tool sequence, all calls succeeded, reasonable step count
+#   2. CONTENT: minimal check that the edit actually worked (one assertion)
+
+# =============================================================================
+# DOCUMENT.DOCX — bullet lists
+# =============================================================================
+
+- description: 'Read: extracts document text'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Get the full text of this document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('A list of list features')) return { pass: false, score: 0, reason: 'Content missing' };
+        return { pass: true, score: 1, reason: 'Content extracted' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+- description: 'Replace: bullets → bullet points'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Replace "bullets" with "bullet points" everywhere in the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('bullet points') || t.includes('support bullets'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Content correct' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace data' };
+        const count = d.stepCount || d.trace.length;
+        if (count > 6) return { pass: false, score: 0, reason: `${count} steps — too many for a simple replace` };
+        return { pass: true, score: 1, reason: `${count} steps` };
+      metric: efficiency
+
+- description: 'Insert: paragraph at end'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('EVAL TEST PASSED')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Paragraph added' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Insert: heading at end'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Add a heading "Summary" at the end of the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Summary')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Heading added' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+# =============================================================================
+# MEMORANDUM.DOCX — legal memo
+# =============================================================================
+
+- description: 'Read: legal memo'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Get the full text of this document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('MEMORANDUM') || !t.includes('$25,000,000'))
+          return { pass: false, score: 0, reason: 'Key content missing' };
+        return { pass: true, score: 1, reason: 'All sections present' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+- description: 'Replace: party name globally'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Chief Legal Officer') || t.includes('General Counsel'))
+          return { pass: false, score: 0, reason: 'Replace incomplete' };
+        return { pass: true, score: 1, reason: 'All replaced' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Replace: date precision ($25M/$150M untouched)'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace the acquisition limit of "$25,000,000" with "$50,000,000".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$50,000,000')) return { pass: false, score: 0, reason: 'Missing $50M' };
+        if (t.includes('$25,000,000')) return { pass: false, score: 0, reason: '$25M still there' };
+        if (!t.includes('$150,000,000')) return { pass: false, score: 0, reason: 'Collateral: $150M gone' };
+        return { pass: true, score: 1, reason: 'Precise replace' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasSearch = tools.some(t => t.includes('search'));
+        const hasEdit = tools.some(t => t.includes('edit') || t.includes('mutations'));
+        // Mutations with inline selectors (by: "select") do search internally — accept both patterns
+        const hasMutationsWithSelect = d.toolCalls?.some(tc =>
+          tc.tool === 'superdoc_mutations' && tc.args?.steps?.some(s => s.where?.by === 'select'));
+        if (!hasSearch && !hasMutationsWithSelect) return { pass: false, score: 0, reason: `No search step. Tools: ${tools.join('→')}` };
+        if (!hasEdit) return { pass: false, score: 0, reason: `No edit step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Sequence: ${tools.join(' → ')}` };
+      metric: sequence
+
+- description: 'Replace: placeholder → name'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" at the end of the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Sarah Chen') || t.includes('[lawyer]'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Replaced' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+- description: 'Insert: heading + paragraph at end'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Add a heading "CONFIDENTIALITY NOTICE" at the end, followed by "This memorandum is privileged and confidential."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('CONFIDENTIALITY NOTICE') || !t.includes('privileged and confidential'))
+          return { pass: false, score: 0, reason: 'Missing content' };
+        return { pass: true, score: 1, reason: 'Added at end' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Replace: Acquiror → Buyer globally'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace every instance of "Acquiror" with "Buyer" in this document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Buyer') || t.includes('Acquiror'))
+          return { pass: false, score: 0, reason: 'Replace incomplete' };
+        return { pass: true, score: 1, reason: 'All replaced' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+- description: 'Replace: go-shop date, Dec date intact'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "March 1-31, 2025" with "April 1-30, 2025" in the document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('April 1-30, 2025') || t.includes('March 1-31, 2025'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        if (!t.includes('December 30, 2024'))
+          return { pass: false, score: 0, reason: 'Collateral: Dec date gone' };
+        return { pass: true, score: 1, reason: 'Date replaced precisely' };
+
+- description: 'Replace: legal terms'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "reasonable best efforts" with "commercially reasonable efforts" everywhere.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('commercially reasonable efforts') || t.includes('reasonable best efforts'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Terms replaced' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+# =============================================================================
+# TABLE DOC
+# =============================================================================
+
+- description: 'Table: read content'
+  vars:
+    fixture: table-doc.docx
+    keepFile: true
+    task: 'Get the full text of this document.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Component') || !t.includes('Version'))
+          return { pass: false, score: 0, reason: 'Table content missing' };
+        return { pass: true, score: 1, reason: 'Table read' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Table: replace cell content'
+  vars:
+    fixture: table-doc.docx
+    keepFile: true
+    task: 'Replace every cell that says "Test" with "Production" in the table.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Production'))
+          return { pass: false, score: 0, reason: 'Missing "Production"' };
+        return { pass: true, score: 1, reason: 'Cells replaced' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+# =============================================================================
+# MULTI-STEP — compound operations, trace sequence matters most
+# =============================================================================
+
+- description: 'Multi-step: find section + insert after'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Find the section about "Alternative Transaction Proposals" and add a paragraph right after it that says "NOTE: Legal review required for this section."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('NOTE: Legal review required'))
+          return { pass: false, score: 0, reason: 'Note not added' };
+        return { pass: true, score: 1, reason: 'Note inserted' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        if (tools.length < 2) return { pass: false, score: 0, reason: `Only ${tools.length} tool call — expected search + insert` };
+        return { pass: true, score: 1, reason: `${tools.length} steps: ${tools.join(' → ')}` };
+      metric: multi_step
+
+- description: 'Multi-step: replace + disclaimer'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" and add a heading "DISCLAIMER" at the end followed by "This document does not constitute legal advice."'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Sarah Chen') || t.includes('[lawyer]') || !t.includes('DISCLAIMER'))
+          return { pass: false, score: 0, reason: 'Incomplete' };
+        return { pass: true, score: 1, reason: 'Both operations done' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        if (tools.length < 3) return { pass: false, score: 0, reason: `Only ${tools.length} calls — expected search + replace + create` };
+        return { pass: true, score: 1, reason: `${tools.length} steps: ${tools.join(' → ')}` };
+      metric: multi_step
+
+# =============================================================================
+# EXPORT — save edited DOCX
+# =============================================================================
+
+- description: 'Export: replace + heading + save'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "$25,000,000" with "$75,000,000" and add a heading "APPENDIX A" at the end.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$75,000,000') || !t.includes('APPENDIX A'))
+          return { pass: false, score: 0, reason: 'Edit incomplete' };
+        return { pass: true, score: 1, reason: 'Saved correctly' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+
+# =============================================================================
+# LISTS — creation, conversion, multi-item
+# =============================================================================
+
+- description: 'List: create 3-item bullet list'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Add a 3-item bullet list at the end of the document with items: "Review timeline", "Approve budget", "Notify stakeholders".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const hasAll = ['Review timeline', 'Approve budget', 'Notify stakeholders'].every(i => t.includes(i));
+        if (!hasAll) return { pass: false, score: 0, reason: 'Missing list items' };
+        return { pass: true, score: 1, reason: 'All items present' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'List: convert bullet to numbered'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Convert the existing bullet list in the document to a numbered list.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No content' };
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const hasSetType = listCalls.some(tc => tc.args?.action === 'set_type');
+        const hasCreate = listCalls.some(tc => tc.args?.action === 'create');
+        if (!hasSetType && !hasCreate) return { pass: false, score: 0, reason: 'No list conversion call found' };
+        return { pass: true, score: 1, reason: hasSetType ? 'Used set_type' : 'Used create' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const tools = (d.toolCalls || []).map(tc => tc.tool);
+        const hasListCall = tools.some(t => t.includes('list'));
+        if (!hasListCall) return { pass: false, score: 0, reason: `No superdoc_list call. Tools: ${tools.join(' → ')}` };
+        return { pass: true, score: 1, reason: `Used list tool` };
+      metric: tool_selection
+
+# =============================================================================
+# ASPIRATIONAL
+# =============================================================================
+
+- description: 'Aspirational: glossary at end'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Generate a glossary of defined terms at the end. Include "Acquiror", "go-shop period", "GAAP". Heading "GLOSSARY" followed by the terms.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('GLOSSARY')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Glossary created' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Aspirational: bullet list to table'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Turn this bulleted list into a two-column table with headers "Feature" and "Notes".'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.includes('Feature') && t.includes('Notes')) return { pass: true, score: 1, reason: 'Table created' };
+        return { pass: false, score: 0, reason: 'Table headers missing' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'Aspirational: tracked change redline'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'In the "Restrictive Covenants" section, replace "No liquidation" with "Company may not pursue liquidation" using tracked changes.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('MEMORANDUM')) return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Document intact' };
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog

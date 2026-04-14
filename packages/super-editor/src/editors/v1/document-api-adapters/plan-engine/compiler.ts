@@ -14,6 +14,7 @@ import type {
   SelectWhere,
   RefWhere,
   TargetWhere,
+  BlockWhere,
   TextAddress,
 } from '@superdoc/document-api';
 import { MAX_PLAN_STEPS, MAX_PLAN_RESOLVED_TARGETS, isPublicMutationStepOp } from '@superdoc/document-api';
@@ -76,6 +77,10 @@ function isRefWhere(where: MutationStep['where']): where is RefWhere {
 
 function isTargetWhere(where: MutationStep['where']): where is TargetWhere {
   return where.by === 'target';
+}
+
+function isBlockWhere(where: MutationStep['where']): where is BlockWhere {
+  return where.by === 'block';
 }
 
 // ---------------------------------------------------------------------------
@@ -883,6 +888,82 @@ function resolveTargetWhereClause(editor: Editor, step: MutationStep, where: Tar
   };
 }
 
+function buildWholeBlockRangeTarget(
+  editor: Editor,
+  step: MutationStep,
+  candidate: BlockCandidate,
+): CompiledRangeTarget {
+  if (isTextBlockCandidate(candidate)) {
+    const blockText = getBlockText(editor, candidate);
+    const addr: ResolvedAddress = {
+      blockId: candidate.nodeId,
+      from: 0,
+      to: blockText.length,
+      text: blockText,
+      marks: [],
+      blockPos: candidate.pos,
+    };
+    return buildRangeTarget(editor, step, addr, candidate);
+  }
+
+  return {
+    kind: 'range',
+    stepId: step.id,
+    op: step.op,
+    blockId: candidate.nodeId,
+    from: 0,
+    to: 0,
+    absFrom: candidate.pos,
+    absTo: candidate.end,
+    text: '',
+    marks: [],
+    capturedStyle: undefined,
+  };
+}
+
+function resolveBlockWhereClause(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  where: BlockWhere,
+): CompiledRangeTarget {
+  const key = `${where.nodeType}:${where.nodeId}`;
+  if (index.ambiguous.has(key)) {
+    throw planError('AMBIGUOUS_TARGET', `block "${key}" matched multiple blocks`, step.id, {
+      stepId: step.id,
+      stepOp: step.op,
+      whereBy: 'block',
+      target: { nodeType: where.nodeType, nodeId: where.nodeId },
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (!candidate) {
+    throw planError('TARGET_NOT_FOUND', `block "${key}" was not found`, step.id, {
+      stepId: step.id,
+      stepOp: step.op,
+      whereBy: 'block',
+      target: { nodeType: where.nodeType, nodeId: where.nodeId },
+    });
+  }
+
+  if (!isCreateOp(step.op) && !isTextBlockCandidate(candidate)) {
+    throw planError(
+      'INVALID_TARGET',
+      `step "${step.op}" requires a text-bearing block for where.by "block", but "${where.nodeType}" is not text-bearing`,
+      step.id,
+      {
+        stepId: step.id,
+        stepOp: step.op,
+        whereBy: 'block',
+        target: { nodeType: where.nodeType, nodeId: where.nodeId },
+      },
+    );
+  }
+
+  return buildWholeBlockRangeTarget(editor, step, candidate);
+}
+
 /**
  * Captures inline style runs for an absolute PM position range.
  *
@@ -934,12 +1015,15 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
   const refWhere = isRefWhere(where) ? where : undefined;
   const selectWhere = isSelectWhere(where) ? where : undefined;
   const targetWhere = isTargetWhere(where) ? where : undefined;
+  const blockWhere = isBlockWhere(where) ? where : undefined;
 
   let targets: CompiledTarget[];
 
   if (targetWhere) {
     const selectionTarget = resolveTargetWhereClause(editor, step, targetWhere);
     targets = [selectionTarget];
+  } else if (blockWhere) {
+    targets = [resolveBlockWhereClause(editor, index, step, blockWhere)];
   } else if (refWhere) {
     targets = resolveRefTargets(editor, index, step, refWhere);
   } else if (selectWhere) {
@@ -998,7 +1082,7 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
   });
 
   // Target-where always produces exactly one target — return immediately.
-  if (targetWhere) {
+  if (targetWhere || blockWhere) {
     return targets;
   }
 
@@ -1042,23 +1126,45 @@ function buildMatchNotFoundDetails(step: MutationStep, editor?: Editor): Record<
   const where = step.where;
   const select =
     'select' in where ? (where as { select?: { type?: string; pattern?: string; mode?: string } }).select : undefined;
-  const within = 'within' in where ? (where as { within?: { blockId?: string } }).within : undefined;
+  const within = 'within' in where ? (where as { within?: { nodeType?: string; nodeId?: string } }).within : undefined;
 
   let textPreview: string | undefined;
   if (editor) {
-    const docSize = editor.state.doc.content.size;
-    const len = Math.min(docSize, 300);
-    if (len > 0) textPreview = editor.state.doc.textBetween(0, len, '\n', '\n');
+    const rawDocSize = editor.state.doc.content?.size;
+    const len = typeof rawDocSize === 'number' ? Math.min(rawDocSize, 300) : 300;
+    if (len > 0 && typeof editor.state.doc.textBetween === 'function') {
+      textPreview = editor.state.doc.textBetween(0, len, '\n', '\n');
+    }
   }
 
   return {
+    stepId: step.id,
+    stepOp: step.op,
+    whereBy: where.by,
     selectorType: select?.type ?? 'unknown',
     selectorPattern: select?.pattern ?? '',
     selectorMode: select?.mode ?? 'contains',
-    searchScope: within?.blockId ?? 'document',
+    searchScope: within?.nodeId ? `${within.nodeType ?? 'block'}:${within.nodeId}` : 'document',
     candidateCount: 0,
     ...(textPreview ? { textPreview } : {}),
   };
+}
+
+function buildMatchNotFoundMessage(step: MutationStep): string {
+  const where = step.where;
+  const select =
+    'select' in where
+      ? (where as { select?: { type?: string; pattern?: string; nodeType?: string } }).select
+      : undefined;
+  const within = 'within' in where ? (where as { within?: { nodeType?: string; nodeId?: string } }).within : undefined;
+
+  const selectorDescription =
+    select?.type === 'node'
+      ? `node selector for "${select.nodeType ?? 'unknown'}"`
+      : `text selector for "${select?.pattern ?? ''}"`;
+  const scopeDescription = within?.nodeId ? ` within ${within.nodeType ?? 'block'}:${within.nodeId}` : '';
+
+  return `step "${step.id}" (${step.op}) matched zero ranges for ${selectorDescription}${scopeDescription}`;
 }
 
 function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[], editor?: Editor): void {
@@ -1071,7 +1177,7 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[], ed
     if (targets.length === 0) {
       throw planError(
         'MATCH_NOT_FOUND',
-        'selector matched zero ranges',
+        buildMatchNotFoundMessage(step),
         step.id,
         buildMatchNotFoundDetails(step, editor),
       );
@@ -1080,7 +1186,7 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[], ed
     if (targets.length === 0) {
       throw planError(
         'MATCH_NOT_FOUND',
-        'selector matched zero ranges',
+        buildMatchNotFoundMessage(step),
         step.id,
         buildMatchNotFoundDetails(step, editor),
       );
@@ -1094,7 +1200,7 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[], ed
     if (targets.length === 0) {
       throw planError(
         'MATCH_NOT_FOUND',
-        'selector matched zero ranges',
+        buildMatchNotFoundMessage(step),
         step.id,
         buildMatchNotFoundDetails(step, editor),
       );

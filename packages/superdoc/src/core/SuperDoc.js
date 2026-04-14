@@ -1214,6 +1214,31 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Scroll to any document element by its ID.
+   *
+   * Pass any element ID — paragraph nodeId, comment entityId, or tracked
+   * change entityId. The method resolves the element type automatically
+   * and scrolls to it.
+   *
+   * @param {string} elementId - The element's stable ID.
+   * @returns {Promise<boolean>} Whether the element was found and scrolled to.
+   *
+   * @example
+   * // Navigate to a paragraph by its nodeId
+   * await superdoc.scrollToElement('5AF80E61');
+   *
+   * // Navigate to a comment by its entityId
+   * await superdoc.scrollToElement('imported-25def254');
+   */
+  async scrollToElement(elementId) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) return false;
+    const presentationEditor = storeDocs[0].getPresentationEditor?.();
+    if (!presentationEditor?.scrollToElement) return false;
+    return presentationEditor.scrollToElement(elementId);
+  }
+
+  /**
    * Toggle the custom context menu globally.
    * Updates both flow editors and PresentationEditor instances so downstream listeners can short-circuit early.
    * @param {boolean} disabled

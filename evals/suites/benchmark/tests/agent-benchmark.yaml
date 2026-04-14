@@ -1,0 +1,227 @@
+# Level 3: DOCX Agent Benchmark — compact suite (v1)
+#
+# 6 tasks (3 reading + 3 editing) covering the key comparison dimensions.
+# Each task runs against all provider conditions (baseline, superdoc-mcp, etc.)
+#
+# Metrics per task: correctness, collateral, steps, latency, tokens, path
+
+# ── READING (3) — validate agentResponseText, doc must not change ──
+
+- description: 'Read: extract headings'
+  vars:
+    fixture: report-with-formatting.docx
+    task: 'List all headings in this document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = (d.agentResponseText || '').toLowerCase();
+        const found = ['executive summary', 'study overview', 'enrollment', 'safety', 'efficacy'].filter(h => t.includes(h));
+        if (found.length < 2) return { pass: false, score: 0, reason: `Only found: ${found.join(', ')}` };
+        return { pass: true, score: 1, reason: `Headings: ${found.join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Read: extract entity names'
+  vars:
+    fixture: nda.docx
+    task: 'List all the company and organization names mentioned in this document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        const hasAmazing = t.includes('Amazing');
+        const hasTechCraft = t.includes('TechCraft');
+        if (!hasAmazing && !hasTechCraft) return { pass: false, score: 0, reason: 'Neither Amazing nor TechCraft found' };
+        return { pass: true, score: 1, reason: `Found: ${[hasAmazing && 'Amazing', hasTechCraft && 'TechCraft'].filter(Boolean).join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Read: extract financial figures'
+  vars:
+    fixture: memorandum.docx
+    task: 'What are the financial figures mentioned in this document? List all dollar amounts.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.agentResponseText || '';
+        const has25 = t.includes('25') && t.includes('000');
+        const has150 = t.includes('150') || t.includes('50,000,000');
+        if (!has25 && !has150) return { pass: false, score: 0, reason: 'No acquisition threshold amounts found' };
+        return { pass: true, score: 1, reason: `Found: ${[has25 && '$25M', has150 && '$150M'].filter(Boolean).join(', ')}` };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== false) return { pass: false, score: 0, reason: 'Document was modified during read' };
+        return { pass: true, score: 1, reason: 'Document unchanged' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+# ── EDITING (3) — validate documentText after edits, doc must change ──
+
+- description: 'Edit: replace entity name'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Replace every instance of "Amazing" with "SuperDoc Inc" throughout the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('SuperDoc Inc')) return { pass: false, score: 0, reason: 'SuperDoc Inc not found' };
+        if (t.includes('Amazing')) return { pass: false, score: 0, reason: 'Old name Amazing still present' };
+        return { pass: true, score: 1, reason: 'Entity replaced correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('TechCraft')) return { pass: false, score: 0, reason: 'Collateral: TechCraft removed' };
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'TechCraft intact' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Edit: insert new section'
+  vars:
+    fixture: nda.docx
+    keepFile: true
+    task: 'Add a new section at the end of the document with the heading "Force Majeure" and the body text "Neither party shall be liable for delays or failures in performance resulting from causes beyond reasonable control."'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Force Majeure')) return { pass: false, score: 0, reason: 'Force Majeure heading not found' };
+        if (!t.includes('beyond reasonable control')) return { pass: false, score: 0, reason: 'Body text not found' };
+        return { pass: true, score: 1, reason: 'Section added correctly' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document modified' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'Edit: fill placeholders'
+  vars:
+    fixture: employment-offer.docx
+    keepFile: true
+    task: 'Fill in the placeholder "[Candidate Name]" with "Jane Smith" throughout the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Jane Smith')) return { pass: false, score: 0, reason: '"Jane Smith" not found' };
+        if (t.includes('[Candidate Name]')) return { pass: false, score: 0, reason: 'Placeholder still present' };
+        return { pass: true, score: 1, reason: 'Placeholder filled' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        return { pass: true, score: 1, reason: 'Document modified' };
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath

@@ -23,6 +23,7 @@ const VERTICAL_ELEMENTS: Record<string, number> = {
   'm:sSup': 0.1, // Superscript
   'm:sSubSup': 0.2, // Sub-superscript
   'm:sPre': 0.2, // Pre-sub-superscript
+  'm:groupChr': 0.35, // Group character (overbrace/underbrace)
 };
 
 /** Count elements in an m:eqArr (equation array) for row-based height. */

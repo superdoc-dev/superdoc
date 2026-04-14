@@ -618,17 +618,33 @@ export async function generateIntentTools(contract) {
     ),
   ];
 
-  // Browser SDK: embed system-prompt.md as a TypeScript string constant
+  // Assemble system prompts from core + variant header templates, then emit artifacts.
+  // Headers live in tools/prompt-templates/; each uses <!-- #include system-prompt-core.md -->.
   try {
-    const promptMd = await readFile(path.join(TOOLS_OUTPUT_DIR, 'system-prompt.md'), 'utf8');
-    const escaped = promptMd.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const templatesDir = path.join(TOOLS_OUTPUT_DIR, 'prompt-templates');
+    const coreMd = await readFile(path.join(templatesDir, 'system-prompt-core.md'), 'utf8');
+    const assemblePrompt = async (variant) => {
+      const template = await readFile(path.join(templatesDir, `system-prompt-${variant}-header.md`), 'utf8');
+      return template.replace('<!-- #include system-prompt-core.md -->', coreMd).trimEnd() + '\n';
+    };
+    const [sdkPrompt, mcpPrompt] = await Promise.all([assemblePrompt('sdk'), assemblePrompt('mcp')]);
+
+    // Write assembled system-prompt.md (SDK variant) for backward compatibility.
+    // Node SDK and Python SDK read this file at runtime via getSystemPrompt().
+    writes.push(writeGeneratedFile(path.join(TOOLS_OUTPUT_DIR, 'system-prompt.md'), sdkPrompt));
+
+    // Write assembled MCP prompt. MCP server reads this at runtime via getMcpPrompt().
+    writes.push(writeGeneratedFile(path.join(TOOLS_OUTPUT_DIR, 'system-prompt-mcp.md'), mcpPrompt));
+
+    // Browser SDK: embed SDK prompt as a TypeScript string constant
+    const escaped = sdkPrompt.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
     const promptTs =
-      '// Auto-generated from packages/sdk/tools/system-prompt.md\n' +
+      '// Auto-generated from tools/prompt-templates/system-prompt-sdk-header.md + system-prompt-core.md\n' +
       '// Do not edit manually — re-run generate:all to update.\n' +
       'export const SYSTEM_PROMPT = `' + escaped + '`;\n';
     writes.push(writeGeneratedFile(path.join(BROWSER_SDK_DIR, 'system-prompt.ts'), promptTs));
   } catch {
-    // system-prompt.md may not exist yet during initial bootstrap
+    // prompt template source files may not exist yet during initial bootstrap
   }
 
   for (const { formatter, file } of Object.values(providers)) {

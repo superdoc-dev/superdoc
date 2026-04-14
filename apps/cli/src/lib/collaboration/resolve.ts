@@ -19,6 +19,7 @@ function resolveWebSocketProfile(input: WebSocketCollaborationInput, sessionId: 
     url: input.url,
     documentId: input.documentId?.trim() || sessionId,
     tokenEnv: input.tokenEnv,
+    params: input.params,
     syncTimeoutMs: input.syncTimeoutMs,
     onMissing: input.onMissing,
     bootstrapSettlingMs: input.bootstrapSettlingMs,

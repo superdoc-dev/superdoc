@@ -90,6 +90,73 @@ describe('sd:tableOfContents translator', () => {
       const result = config.encode(params);
       expect(result.attrs.rightAlignPageNumbers).toBe(false);
     });
+
+    it('wraps inline children into a paragraph when parent accepts blocks', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [{ type: 'text', text: 'Inline content' }]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\h' },
+            elements: [{ name: 'w:r', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result).toEqual({
+        type: 'tableOfContents',
+        attrs: { instruction: 'TOC \\h', rightAlignPageNumbers: true },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inline content' }] }],
+      });
+    });
+
+    it('does not wrap when content already contains paragraph blocks', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Para' }] },
+          { type: 'text', text: 'trailing inline' },
+        ]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\o "1-3"' },
+            elements: [{ name: 'w:p', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.content).toEqual([
+        { type: 'paragraph', content: [{ type: 'text', text: 'Para' }] },
+        { type: 'text', text: 'trailing inline' },
+      ]);
+    });
+
+    it('filters out null and typeless children when wrapping', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [null, { type: 'text', text: 'valid' }, undefined, {}]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\h' },
+            elements: [{ name: 'w:r', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.content).toEqual([{ type: 'paragraph', content: [{ type: 'text', text: 'valid' }] }]);
+    });
   });
 
   describe('decode', () => {

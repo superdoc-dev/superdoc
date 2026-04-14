@@ -72,7 +72,7 @@ describe('markSnapshotHelpers', () => {
     expect(hasMatchingMark(existing, schema.marks.italic.create())).toBe(false);
   });
 
-  it('upsertMarkSnapshotByType replaces same-type snapshot and preserves others', () => {
+  it('upsertMarkSnapshotByType merges attrs for same-type snapshot in place', () => {
     const snapshots = [
       { type: 'bold', attrs: {} },
       { type: 'textStyle', attrs: { color: '#112233' } },
@@ -83,7 +83,29 @@ describe('markSnapshotHelpers', () => {
 
     expect(updated).toEqual([
       { type: 'bold', attrs: {} },
+      { type: 'textStyle', attrs: { color: '#FF0000' } },
       { type: 'italic', attrs: {} },
+    ]);
+  });
+
+  it('upsertMarkSnapshotByType merges disjoint attrs for same-type snapshot', () => {
+    const snapshots = [{ type: 'textStyle', attrs: { color: '#112233' } }];
+
+    const after1 = upsertMarkSnapshotByType(snapshots, { type: 'textStyle', attrs: { fontFamily: 'Courier New' } });
+    const after2 = upsertMarkSnapshotByType(after1, { type: 'textStyle', attrs: { fontSize: '18pt' } });
+
+    expect(after2).toEqual([
+      { type: 'textStyle', attrs: { color: '#112233', fontFamily: 'Courier New', fontSize: '18pt' } },
+    ]);
+  });
+
+  it('upsertMarkSnapshotByType appends when no matching type exists', () => {
+    const snapshots = [{ type: 'bold', attrs: {} }];
+
+    const updated = upsertMarkSnapshotByType(snapshots, { type: 'textStyle', attrs: { color: '#FF0000' } });
+
+    expect(updated).toEqual([
+      { type: 'bold', attrs: {} },
       { type: 'textStyle', attrs: { color: '#FF0000' } },
     ]);
   });

@@ -220,4 +220,94 @@ describe('doc.replace multi-paragraph integration', () => {
 
     expect(insertedTexts).toEqual(expect.arrayContaining(['Alpha', 'Beta']));
   });
+
+  it('creates an empty paragraph before the replacement when text has a leading newline (direct)', () => {
+    editor = makeEditor();
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'hello world'),
+        text: '\nAlpha',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(paragraphTexts(editor)).toEqual(['', 'Alpha']);
+  });
+
+  it('creates an empty paragraph after the replacement when text has a trailing newline (direct)', () => {
+    editor = makeEditor();
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'hello world'),
+        text: 'Alpha\n',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(paragraphTexts(editor)).toEqual(['Alpha', '']);
+  });
+
+  it('preserves paragraph structure with leading newline in tracked mode', () => {
+    editor = makeEditor();
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'hello world'),
+        text: '\nAlpha',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+
+    const texts = paragraphTexts(editor);
+    expect(texts.length).toBeGreaterThanOrEqual(2);
+
+    const insertedTexts: string[] = [];
+    const deletedTexts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks.some((mark: any) => mark.type.name === TrackInsertMarkName)) {
+        insertedTexts.push(node.text);
+      }
+      if (node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName)) {
+        deletedTexts.push(node.text);
+      }
+    });
+
+    expect(insertedTexts).toEqual(expect.arrayContaining(['Alpha']));
+    expect(deletedTexts.join('')).toContain('hello world');
+  });
+
+  it('preserves paragraph structure with trailing newline in tracked mode', () => {
+    editor = makeEditor();
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'hello world'),
+        text: 'Alpha\n',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+
+    const texts = paragraphTexts(editor);
+    expect(texts.length).toBeGreaterThanOrEqual(2);
+
+    const insertedTexts: string[] = [];
+    const deletedTexts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks.some((mark: any) => mark.type.name === TrackInsertMarkName)) {
+        insertedTexts.push(node.text);
+      }
+      if (node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName)) {
+        deletedTexts.push(node.text);
+      }
+    });
+
+    expect(insertedTexts).toEqual(expect.arrayContaining(['Alpha']));
+    expect(deletedTexts.join('')).toContain('hello world');
+  });
 });

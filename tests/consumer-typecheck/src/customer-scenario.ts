@@ -132,6 +132,12 @@ import type {
   ProofingStatus,
   ProofingError,
 
+  // Context menu
+  ContextMenuContext,
+  ContextMenuItem,
+  ContextMenuSection,
+  ContextMenuConfig,
+
   // Other
   UnsupportedContentItem,
   PageStyles,
@@ -270,6 +276,15 @@ function testEditorCommands(editor: Editor) {
 
   // Chain API
   editor.chain().toggleBold().toggleItalic().run();
+
+  // SD-2334: Chain intermediate methods must return ChainableCommandObject, not boolean.
+  // Reproduces IT-344 (Ontra): chain().setTextSelection(...).setMark(...).run()
+  const chainResult: ChainableCommandObject = editor.chain().setTextSelection({ from: 0, to: 5 });
+  const runResult: boolean = editor.chain().setTextSelection({ from: 0, to: 5 }).setMark('bold').run();
+
+  // SD-2334: can().chain() must return ChainableCommandObject, not boolean
+  const canChain: ChainableCommandObject = editor.can().chain();
+  const canChainRun: boolean = editor.can().chain().toggleBold().run();
 }
 
 function testPresentationEditorCommands(pe: PresentationEditor) {
@@ -408,6 +423,13 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   // Scrolling
   pe.scrollToPosition(100);
   pe.scrollThreadAnchorToClientY('thread-1', 300);
+
+  // Element navigation
+  pe.scrollToElement('paraId-ABC123');
+  pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
+  pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
+  pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 
   // Dispatch
   pe.dispatch(pe.state.tr);
@@ -568,6 +590,41 @@ function testEditorContentMethods(editor: Editor) {
 }
 
 // ============================================
+// SECTION 12b: Context menu types (SD-2514)
+// ============================================
+
+function testContextMenuTypes() {
+  // action receives (editor, context) — both args
+  const item: ContextMenuItem = {
+    id: 'copy-text',
+    label: 'Copy',
+    icon: 'copy',
+    action: (editor, context) => {
+      editor.commands.selectAll();
+      const text: string = context.selectedText;
+    },
+    showWhen: (ctx) => ctx.hasSelection && !ctx.isInTable,
+  };
+
+  const section: ContextMenuSection = {
+    id: 'custom-actions',
+    items: [item],
+  };
+
+  const config: ContextMenuConfig = {
+    customItems: [section],
+    includeDefaultItems: true,
+    menuProvider: (ctx, sections) => sections.filter((s) => s.id !== 'clipboard'),
+  };
+
+  // ContextMenuContext has the full runtime shape
+  const ctx: ContextMenuContext = {} as ContextMenuContext;
+  const _trigger: 'click' | 'slash' = ctx.trigger;
+  const _mode: string = ctx.documentMode;
+  const _marks: string[] = ctx.activeMarks;
+}
+
+// ============================================
 // SECTION 13: Extensions, SuperDoc, and utilities
 // ============================================
 
@@ -663,6 +720,7 @@ export {
   testProofingProvider,
   testEditorStaticMethods,
   testEditorContentMethods,
+  testContextMenuTypes,
   testExtensions,
   testSuperDoc,
   testUtilities,

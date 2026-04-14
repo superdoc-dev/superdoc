@@ -19,7 +19,16 @@ import {
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
+  convertAccent,
+  convertPreSubSuperscript,
+  convertEquationArray,
   convertRadical,
+  convertLowerLimit,
+  convertUpperLimit,
+  convertNary,
+  convertPhantom,
+  convertGroupCharacter,
+  convertMatrix,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -40,27 +49,27 @@ export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Implemented ──────────────────────────────────────────────────────────
   'm:r': convertMathRun,
+  'm:acc': convertAccent, // Accent (diacritical mark above base)
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:d': convertDelimiter, // Delimiter (parentheses, brackets, braces)
+  'm:eqArr': convertEquationArray, // Equation array (vertical array of equations)
   'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
+  'm:limLow': convertLowerLimit, // Lower limit (e.g., lim)
+  'm:limUpp': convertUpperLimit, // Upper limit
+  'm:m': convertMatrix, // Matrix (grid of elements)
+  'm:nary': convertNary, // N-ary operator (integral, summation, product)
+  'm:phant': convertPhantom, // Phantom (invisible spacing placeholder)
+  'm:rad': convertRadical, // Radical (square root, nth root)
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
+  'm:sPre': convertPreSubSuperscript, // Pre-sub-superscript (left of base)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
-  'm:acc': null, // Accent (diacritical mark above base)
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
-  'm:eqArr': null, // Equation array (vertical array of equations)
-  'm:groupChr': null, // Group character (overbrace, underbrace)
-  'm:limLow': null, // Lower limit (e.g., lim)
-  'm:limUpp': null, // Upper limit
-  'm:m': null, // Matrix (grid of elements)
-  'm:nary': null, // N-ary operator (integral, summation, product)
-  'm:phant': null, // Phantom (invisible spacing placeholder)
-  'm:rad': convertRadical, // Radical (square root, nth root)
-  'm:sPre': null, // Pre-sub-superscript (left of base)
+  'm:groupChr': convertGroupCharacter, // Group character (overbrace, underbrace)
 };
 
 /** OMML argument/container elements that wrap children in <mrow>. */

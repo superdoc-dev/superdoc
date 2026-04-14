@@ -102,6 +102,41 @@ export type CalculateJustifySpacingParams = {
  * @param params - Parameters for spacing calculation
  * @returns Extra spacing per space in pixels (can be negative)
  */
+/**
+ * Computes the first-line indent offset from paragraph indent attributes.
+ *
+ * Returns 0 when first-line indent is suppressed.
+ * The result is positive for firstLine indent, negative for hanging indent.
+ */
+export function getFirstLineIndentOffset(
+  indent: { firstLine?: number; hanging?: number } | undefined,
+  suppressFirstLineIndent: boolean,
+): number {
+  if (suppressFirstLineIndent) return 0;
+  return (indent?.firstLine ?? 0) - (indent?.hanging ?? 0);
+}
+
+/**
+ * Adjusts availableWidth for first-line text indent.
+ *
+ * Negative textIndent (hanging indent): the measurer sets line.maxWidth to the
+ * correct wider value, but Math.min with fallbackAvailableWidth clamps it back down.
+ * Always adjust to restore actual available space.
+ *
+ * Positive textIndent (firstLine indent): the measurer already bakes it into
+ * line.maxWidth, so only adjust on the fallback path (maxWidth not set).
+ */
+export function adjustAvailableWidthForTextIndent(
+  availableWidth: number,
+  textIndentOffset: number,
+  lineMaxWidth: number | null | undefined,
+): number {
+  if (textIndentOffset !== 0 && (textIndentOffset < 0 || lineMaxWidth == null)) {
+    return Math.max(0, availableWidth - textIndentOffset);
+  }
+  return availableWidth;
+}
+
 export function calculateJustifySpacing(params: CalculateJustifySpacingParams): number {
   const { lineWidth, availableWidth, spaceCount, shouldJustify } = params;
 

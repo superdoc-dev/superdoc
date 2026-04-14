@@ -87,6 +87,63 @@
  */
 
 // ---------------------------------------------------------------------------
+// Context menu types
+// ---------------------------------------------------------------------------
+
+/**
+ * Context object passed to context menu callbacks (showWhen, render, action, menuProvider).
+ * @typedef {Object} ContextMenuContext
+ * @property {Editor} editor The editor instance
+ * @property {string} selectedText Currently selected text (empty string if no selection)
+ * @property {boolean} hasSelection Whether there is an expanded selection
+ * @property {number} selectionStart ProseMirror start position of the selection
+ * @property {number} selectionEnd ProseMirror end position of the selection
+ * @property {'click' | 'slash'} trigger How the menu was opened
+ * @property {boolean} isInTable Whether the cursor is inside a table
+ * @property {boolean} isInList Whether the cursor is inside a list
+ * @property {boolean} isInSectionNode Whether the cursor is inside a document section
+ * @property {boolean} isCellSelection Whether a table cell selection is active
+ * @property {string | null} tableSelectionKind Kind of table selection (row, column, etc.)
+ * @property {string | null} currentNodeType ProseMirror node type name at the cursor
+ * @property {string[]} activeMarks Names of marks active at the cursor
+ * @property {boolean} isTrackedChange Whether the cursor is on a tracked change
+ * @property {string | null} trackedChangeId ID of the tracked change at the cursor
+ * @property {string} documentMode Current document mode (editing, viewing, suggesting)
+ * @property {boolean} canUndo Whether undo is available
+ * @property {boolean} canRedo Whether redo is available
+ * @property {boolean} isEditable Whether the editor is editable
+ * @property {{ x: number, y: number } | null} cursorPosition Screen coordinates of the cursor
+ */
+
+/**
+ * A single item inside a context menu section.
+ * @typedef {Object} ContextMenuItem
+ * @property {string} id Unique identifier for the menu item
+ * @property {string} label Display text
+ * @property {string} [icon] Icon identifier
+ * @property {unknown} [component] Custom Vue component to render this item
+ * @property {(editor: Editor, context: ContextMenuContext) => void} [action] Callback invoked when the item is clicked
+ * @property {(context: ContextMenuContext) => boolean} [showWhen] Predicate controlling visibility
+ * @property {(context: ContextMenuContext) => HTMLElement} [render] Custom renderer returning an HTML element
+ * @property {string} [shortcut] Keyboard shortcut label displayed beside the item
+ */
+
+/**
+ * A section (group) of items in the context menu.
+ * @typedef {Object} ContextMenuSection
+ * @property {string} id Unique identifier for the section
+ * @property {ContextMenuItem[]} items Menu items in this section
+ */
+
+/**
+ * Configuration for the context menu module.
+ * @typedef {Object} ContextMenuConfig
+ * @property {ContextMenuSection[]} [customItems] Custom menu sections appended (or merged by id) to the default menu
+ * @property {(context: ContextMenuContext, sections: ContextMenuSection[]) => ContextMenuSection[] | null | undefined} [menuProvider] Advanced: transform the final section list before render. Return null/undefined to keep the original sections.
+ * @property {boolean} [includeDefaultItems] Whether to include default menu items (default: true)
+ */
+
+// ---------------------------------------------------------------------------
 // Surface system types
 // ---------------------------------------------------------------------------
 
@@ -469,10 +526,7 @@
  * @property {Object} [toolbar] Toolbar module configuration
  * @property {Object} [links] Link click popover configuration
  * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
- * @property {Object} [contextMenu] Context menu module configuration
- * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
- * @property {Function} [contextMenu.menuProvider] Function to customize menu items
- * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {ContextMenuConfig} [contextMenu] Context menu module configuration
  * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  */

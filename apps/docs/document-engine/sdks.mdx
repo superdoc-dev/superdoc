@@ -287,6 +287,51 @@ Use the explicit `collaboration` object when your server speaks the Hocuspocus p
   </Tab>
 </Tabs>
 
+### Forward custom WebSocket query parameters
+
+Attach arbitrary key-value pairs to the WebSocket connection URL with the `params` field. Use this when your collaboration server expects per-connection metadata (activity tracking, tenant identifiers, feature flags, etc.) that shouldn't live in the document ID.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const doc = await client.open({
+      collaboration: {
+        providerType: 'y-websocket',
+        url: 'wss://collab.example.com/ws',
+        documentId: 'asset_abc',
+        tokenEnv: 'SUPERDOC_COLLAB_TOKEN',
+        params: {
+          customAttributions: 'agent_id:abc,session_id:def,user_id:ghi',
+          region: 'us-east-1',
+        },
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    doc = await client.open({
+        "collaboration": {
+            "providerType": "y-websocket",
+            "url": "wss://collab.example.com/ws",
+            "documentId": "asset_abc",
+            "tokenEnv": "SUPERDOC_COLLAB_TOKEN",
+            "params": {
+                "customAttributions": "agent_id:abc,session_id:def,user_id:ghi",
+                "region": "us-east-1",
+            },
+        }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+Keys and values must both be strings — query parameters serialize as strings on the URL. The field is supported for `y-websocket` and `hocuspocus`; Liveblocks manages its transport differently and does not accept this field.
+
+<Note>
+  `token` is reserved — the CLI sets it automatically from `tokenEnv`. Passing `token` inside `params` is a validation error; use `tokenEnv` for authentication.
+</Note>
+
 ### Connect to Liveblocks
 
 Liveblocks is configured through an explicit `collaboration` object. Two auth modes are supported:
@@ -530,7 +575,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
@@ -990,7 +1035,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |

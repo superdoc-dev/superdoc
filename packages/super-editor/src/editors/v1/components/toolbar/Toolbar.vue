@@ -1,5 +1,14 @@
 <script setup>
-import { ref, getCurrentInstance, onMounted, onDeactivated, onBeforeUnmount, nextTick, computed } from 'vue';
+import {
+  ref,
+  getCurrentInstance,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  nextTick,
+  computed,
+} from 'vue';
 import { throttle } from './helpers.js';
 import ButtonGroup from './ButtonGroup.vue';
 
@@ -65,11 +74,14 @@ function teardownWindowListeners() {
   window.removeEventListener('keydown', onKeyDown);
 }
 
-onMounted(() => {
+function setupWindowListeners() {
+  teardownWindowListeners();
   window.addEventListener('resize', onResizeThrottled);
   window.addEventListener('keydown', onKeyDown);
-});
+}
 
+onMounted(setupWindowListeners);
+onActivated(setupWindowListeners);
 onDeactivated(teardownWindowListeners);
 onBeforeUnmount(teardownWindowListeners);
 

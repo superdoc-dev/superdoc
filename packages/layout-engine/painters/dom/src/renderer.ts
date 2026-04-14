@@ -2693,9 +2693,11 @@ export class DomPainter {
           newPmStart != null &&
           current.element.dataset.pmStart != null &&
           this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
+        const resolvedSig =
+          resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
         const needsRebuild =
           this.changedBlocks.has(fragment.blockId) ||
-          current.signature !== fragmentSignature(fragment, this.blockLookup) ||
+          current.signature !== (resolvedSig ?? fragmentSignature(fragment, this.blockLookup)) ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
           mappingUnreliable;
@@ -2704,7 +2706,7 @@ export class DomPainter {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
-          current.signature = fragmentSignature(fragment, this.blockLookup);
+          current.signature = resolvedSig ?? fragmentSignature(fragment, this.blockLookup);
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2724,11 +2726,13 @@ export class DomPainter {
 
       const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
+      const freshSig =
+        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
       nextFragments.push({
         key,
         fragment,
         element: fresh,
-        signature: fragmentSignature(fragment, this.blockLookup),
+        signature: freshSig ?? fragmentSignature(fragment, this.blockLookup),
         context: contextBase,
       });
     });
@@ -2836,9 +2840,11 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
+      const initSig =
+        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
       return {
         key: fragmentKey(fragment),
-        signature: fragmentSignature(fragment, this.blockLookup),
+        signature: initSig ?? fragmentSignature(fragment, this.blockLookup),
         fragment,
         element: fragmentEl,
         context: contextBase,

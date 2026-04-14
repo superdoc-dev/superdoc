@@ -125,6 +125,8 @@ export type ResolvedFragmentItem = {
   paragraphBorderHash?: string;
   /** Pre-extracted paragraph borders for between-border rendering. */
   paragraphBorders?: ParagraphBorders;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -241,6 +243,8 @@ export type ResolvedTableItem = {
   effectiveColumnWidths: number[];
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /**
@@ -279,6 +283,8 @@ export type ResolvedImageItem = {
   metadata?: ImageFragmentMetadata;
   /** Pre-computed SDT container key for boundary grouping (typically null for images). */
   sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /**
@@ -315,6 +321,8 @@ export type ResolvedDrawingItem = {
   block: DrawingBlock;
   /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
   sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */

@@ -2611,4 +2611,324 @@ describe('resolveLayout', () => {
       expect(item.paragraphBorderHash).toBeUndefined();
     });
   });
+
+  describe('version signature', () => {
+    it('sets version on paragraph fragment items', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(typeof item.version).toBe('string');
+      expect(item.version.length).toBeGreaterThan(0);
+    });
+
+    it('sets version on table fragment items', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'tbl1',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+        height: 100,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'table', id: 'tbl1', rows: [{ cells: [] }] } as any];
+      const measures: Measure[] = [
+        {
+          kind: 'table',
+          columnWidths: [468],
+          rows: [{ cells: [{ width: 468, height: 100 }] }],
+        } as any,
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(typeof item.version).toBe('string');
+    });
+
+    it('sets version on image fragment items', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img1',
+        x: 72,
+        y: 0,
+        width: 200,
+        height: 150,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'image', id: 'img1', src: 'test.png', width: 200, height: 150 } as any];
+      const measures: Measure[] = [{ kind: 'image' } as any];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(typeof item.version).toBe('string');
+    });
+
+    it('sets version on drawing fragment items', () => {
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        blockId: 'dr1',
+        drawingKind: 'image',
+        x: 72,
+        y: 0,
+        width: 200,
+        height: 150,
+        geometry: { width: 200, height: 150 },
+        scale: 1,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [drawingFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'drawing',
+          drawingKind: 'image',
+          id: 'dr1',
+          src: 'test.png',
+          width: 200,
+          height: 150,
+          geometry: { width: 200, height: 150 },
+        } as any,
+      ];
+      const measures: Measure[] = [{ kind: 'drawing' } as any];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(typeof item.version).toBe('string');
+    });
+
+    it('sets version on list-item fragment items', () => {
+      const listFragment: ListItemFragment = {
+        kind: 'list-item',
+        blockId: 'list1',
+        itemId: 'item1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [listFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'list',
+          id: 'list1',
+          items: [
+            {
+              id: 'item1',
+              marker: { text: '1.' },
+              paragraph: {
+                kind: 'paragraph',
+                id: 'p-item1',
+                runs: [{ text: 'item', fontFamily: 'Arial', fontSize: 12 }],
+              },
+            },
+          ],
+        } as any,
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'list',
+          items: [{ itemId: 'item1', paragraph: { kind: 'paragraph', lines: [{ lineHeight: 20 }] } }],
+        } as any,
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(typeof item.version).toBe('string');
+    });
+
+    it('produces different versions when block content changes', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any];
+
+      const blocks1: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+      const blocks2: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'world', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+
+      const result1 = resolveLayout({ layout, flowMode: 'paginated', blocks: blocks1, measures });
+      const result2 = resolveLayout({ layout, flowMode: 'paginated', blocks: blocks2, measures });
+      const ver1 = (result1.pages[0].items[0] as any).version;
+      const ver2 = (result2.pages[0].items[0] as any).version;
+      expect(ver1).not.toBe(ver2);
+    });
+
+    it('produces same version for identical inputs', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any];
+
+      const result1 = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const result2 = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const ver1 = (result1.pages[0].items[0] as any).version;
+      const ver2 = (result2.pages[0].items[0] as any).version;
+      expect(ver1).toBe(ver2);
+    });
+
+    it('produces different versions when fragment line range changes', () => {
+      const fragment1: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const fragment2: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 2,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }, { lineHeight: 20 }] } as any];
+
+      const layout1: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [fragment1] }],
+      };
+      const layout2: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [fragment2] }],
+      };
+
+      const result1 = resolveLayout({ layout: layout1, flowMode: 'paginated', blocks, measures });
+      const result2 = resolveLayout({ layout: layout2, flowMode: 'paginated', blocks, measures });
+      const ver1 = (result1.pages[0].items[0] as any).version;
+      const ver2 = (result2.pages[0].items[0] as any).version;
+      expect(ver1).not.toBe(ver2);
+    });
+
+    it('caches block version across fragments sharing the same block', () => {
+      const frag1: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const frag2: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 1,
+        toLine: 2,
+        x: 72,
+        y: 20,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [frag1, frag2] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello world', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }, { lineHeight: 20 }] } as any];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const ver1 = (result.pages[0].items[0] as any).version;
+      const ver2 = (result.pages[0].items[1] as any).version;
+
+      // Both versions should be defined
+      expect(ver1).toBeDefined();
+      expect(ver2).toBeDefined();
+      // They should differ (different line ranges)
+      expect(ver1).not.toBe(ver2);
+      // But both share the same block version prefix
+      const prefix1 = ver1.split('|')[0];
+      const prefix2 = ver2.split('|')[0];
+      expect(prefix1).toBe(prefix2);
+    });
+
+    it('uses "missing" for fragments with no matching block', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'nonexistent',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const item = result.pages[0].items[0] as any;
+      expect(item.version).toBeDefined();
+      expect(item.version).toContain('missing');
+    });
+  });
 });

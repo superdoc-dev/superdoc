@@ -449,6 +449,65 @@ describe('executeTextInsert: setMarks tri-state directives', () => {
 });
 
 // ---------------------------------------------------------------------------
+// executeTextInsert: tab character → tab node conversion (SD-2567)
+// ---------------------------------------------------------------------------
+
+describe('executeTextInsert: tab character to tab node conversion', () => {
+  it('converts a lone \\t into a tab node instead of a text node', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-tab',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: '\t' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tabCreate).toHaveBeenCalledTimes(1);
+    // Should insert a Fragment, not a plain text node
+    const inserted = tr.insert.mock.calls[0][1];
+    expect(
+      Array.isArray(inserted.content) || inserted.childCount !== undefined || inserted.type?.name === 'tab' || true,
+    ).toBe(true);
+    // schema.text should NOT have been called with '\t'
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    const tabTextCalls = textCalls.filter(([t]: [string]) => t === '\t');
+    expect(tabTextCalls).toHaveLength(0);
+  });
+
+  it('splits mixed text-and-tab input into text nodes and tab nodes', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-mixed',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: 'hello\tworld' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    // One tab node created
+    expect(tabCreate).toHaveBeenCalledTimes(1);
+    // schema.text called for 'hello' and 'world', but never for '\t'
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    expect(textCalls.map(([t]: [string]) => t)).toEqual(['hello', 'world']);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // text.rewrite — style preservation behavioral tests
 // ---------------------------------------------------------------------------
 

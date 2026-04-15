@@ -970,8 +970,24 @@ export function executeTextInsert(
     }
   }
 
-  const textNode = editor.state.schema.text(text, marks);
-  tr.insert(absPos, textNode);
+  const tabNodeType = editor.state.schema.nodes.tab;
+  if (tabNodeType && text.includes('\t')) {
+    const parts = text.split('\t');
+    const nodes: ProseMirrorNode[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i]) {
+        nodes.push(editor.state.schema.text(parts[i], marks));
+      }
+      if (i < parts.length - 1) {
+        nodes.push(tabNodeType.create());
+      }
+    }
+    const fragment = Fragment.from(nodes);
+    tr.insert(absPos, fragment);
+  } else {
+    const textNode = editor.state.schema.text(text, marks);
+    tr.insert(absPos, textNode);
+  }
 
   return { changed: true };
 }

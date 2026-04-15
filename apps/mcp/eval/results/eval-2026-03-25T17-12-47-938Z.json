@@ -1,0 +1,51 @@
+[
+  {
+    "task": {
+      "id": "simple-replace",
+      "name": "Find and replace text"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "simple-replace",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"\",\"info\":{\"counts\":{\"words\":0,\"characters\":0,\"paragraphs\":1,\"headings\":0,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":0},\"outline\":[],\"capabilities\":{\"canFind\":true,\"canGetNode\":true,\"canComment\":true,\"canReplace\":true},\"revision\":\"0\",\"styles\":{\"paragraphStyles\":[]},\"defaults\":{\"styleId\":\"Normal\"}}}",
+          "ms": 6
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": "Acme Corp"
+          },
+          "output": "{\"Acme Corp\":{\"total\":0,\"matches\":[]}}",
+          "ms": 2
+        }
+      ],
+      "errors": 0,
+      "totalMs": 8716,
+      "tokenUsage": {
+        "input": 3614,
+        "output": 329
+      },
+      "finalText": "",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 0
+      }
+    },
+    "score": {
+      "toolCalls": 2,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": false,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": false
+    }
+  }
+]

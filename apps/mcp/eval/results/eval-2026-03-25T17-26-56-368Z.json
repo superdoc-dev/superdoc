@@ -1,0 +1,1934 @@
+[
+  {
+    "task": {
+      "id": "simple-replace",
+      "name": "Find and replace text"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "simple-replace",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"# **MUTUAL NON-DISCLOSURE AGREEMENT**\\n\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\n\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal\\\\@iqidis.com\\n\\nand\\n\\nTechVentures LLC, a limited liability company organized under the laws of the State",
+          "ms": 12
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": "Iqidis Corp"
+          },
+          "output": "{\"Iqidis Corp\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=\",\"matchedText\":\"Iqidis Corp\",\"blockId\":\"00000003\",\"range\":{\"start\":0,\"end\":11}}]}}",
+          "ms": 5
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "replace",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=",
+                "text": "Nova Industries",
+                "matched_text": "Iqidis Corp"
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"stepId\":\"s0\",\"op\":\"text.rewrite\",\"effect\":\"changed\"}]}",
+          "ms": 9
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 11688,
+      "tokenUsage": {
+        "input": 9893,
+        "output": 503
+      },
+      "finalText": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (the \"Agreement\") is entered into as of January 15, 2025 (the \"Effective Date\"), by and between:\nNova Industries, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \"Disclosing Party\"), contact: legal@iqidis.com\nand\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its principal office at 50 Innovation Way, New York, NY 10001 (the \"Receiving Party\").\nEach referred to individually as a \"Party\" and collectively as the \"Parties\".\n1. Definitions\n\"Confidential Information\" means any and all non-public, proprietary, or confidential information disclosed by either Party to the other Party, whether orally, in writing, or by inspection of tangible objects, including but not limited to: trade secrets, business plans, financial data, customer lists, technical specifications, software code, product roadmaps, and marketing strategies.\n2. Obligations of Receiving Party\nThe Receiving Party agrees to the following obligations with respect to Confidential Information:\nMaintain the confidentiality of all Confidential Information using the same degree of care as it uses for its own confidential information, but no less than reasonable care.\nNot disclose Confidential Information to any third party without the prior written consent of the Disclosing Party.\nRestrict access to Confidential Information to employees and contractors who have a need to know and are bound by confidentiality obligations.\nNot use Confidential Information for any purpose other than evaluating the potential business relationship between the Parties.\nPromptly notify the Disclosing Party of any unauthorized use or disclosure of Confidential Information.\n3. Exclusions\nConfidential Information shall not include information that: (a) is or becomes publicly available through no fault of the Receiving Party; (b) was known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party without use of the Confidential Information; or (d) is rightfully obtained from a third party without restriction on disclosure.\n4. Term and Termination\nThis Agreement shall remain in effect for a period of two (2) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) years.\n5. Indemnification\nEach Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $500,000.\n6. Governing Law\nThis Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\n7. Miscellaneous\nThis Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous agreements, whether written or oral. No amendment to this Agreement shall be effective unless made in writing and signed by both Parties.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.\n\nDisclosing Party: [Party A Signature]\nReceiving Party: [Party B Signature]\nDate: [Date]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 4,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "simple-replace",
+      "name": "Find and replace text"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "simple-replace",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "find_content",
+          "input": {
+            "pattern": "Iqidis Corp",
+            "mode": "text",
+            "includeNodes": true
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Iqidis Corp"
+            },
+            "require": "any",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=\",\"text\":\"Iqidis Corp\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"MUTUAL NON-DISCLOSURE AGREEMENT\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal@iqidis.com\\nand\\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its prin",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000003",
+              "range": {
+                "start": 0,
+                "end": 11
+              }
+            },
+            "text": "Nova Industries"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Iqidis Corp"
+            },
+            "require": "any",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=\",\"text\":\"Iqidis Corp\"}]}",
+          "ms": 3
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "blockId": "00000003",
+            "start": 0,
+            "end": 11,
+            "text": "Nova Industries"
+          },
+          "output": "{\"error\":\"Unknown field \\\"blockId\\\" on replace input. Allowed fields: text, target, ref, in.\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000003",
+              "range": {
+                "start": 0,
+                "end": 11
+              }
+            },
+            "text": "Nova Industries"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "insert_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000003",
+              "range": {
+                "start": 0,
+                "end": 11
+              }
+            },
+            "value": "Nova Industries"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 1
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "text": "Nova Industries",
+            "target": {
+              "kind": "text",
+              "blockId": "00000003",
+              "range": {
+                "start": 0,
+                "end": 11
+              }
+            }
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "get_document_info",
+          "input": {},
+          "output": "{\"counts\":{\"words\":531,\"characters\":3562,\"paragraphs\":18,\"headings\":8,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":1},\"outline\":[{\"level\":1,\"text\":\"\",\"nodeId\":\"00000001\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000007\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000009\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000010\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000012\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000014\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000016\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000018\"}],\"ca",
+          "ms": 2
+        },
+        {
+          "name": "get_node_by_id",
+          "input": {
+            "id": "00000003"
+          },
+          "output": "{\"error\":\"Unhandled tool: get_node_by_id\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Iqidis Corp"
+            },
+            "require": "any",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"b1f4f47b-2ad2-4142-b043-0cf022ab5c78\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"Iqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal@iqidis.com\"}}]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"00000003\"}}]}",
+          "ms": 3
+        },
+        {
+          "name": "delete_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "b1f4f47b-2ad2-4142-b043-0cf022ab5c78",
+              "range": {
+                "start": 0,
+                "end": 11
+              }
+            }
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Iqidis Corp"
+            },
+            "require": "any",
+            "includeNodes": false
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"b1f4f47b-2ad2-4142-b043-0cf022ab5c78\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"Iqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal@iqidis.com\"}}]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"00000003\"}}]}",
+          "ms": 9
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Iqidis Corp"
+            },
+            "require": "any",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=\",\"text\":\"Iqidis Corp\"}]}",
+          "ms": 1
+        }
+      ],
+      "errors": 0,
+      "totalMs": 42957,
+      "tokenUsage": {
+        "input": 121968,
+        "output": 1475
+      },
+      "finalText": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (the \"Agreement\") is entered into as of January 15, 2025 (the \"Effective Date\"), by and between:\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \"Disclosing Party\"), contact: legal@iqidis.com\nand\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its principal office at 50 Innovation Way, New York, NY 10001 (the \"Receiving Party\").\nEach referred to individually as a \"Party\" and collectively as the \"Parties\".\n1. Definitions\n\"Confidential Information\" means any and all non-public, proprietary, or confidential information disclosed by either Party to the other Party, whether orally, in writing, or by inspection of tangible objects, including but not limited to: trade secrets, business plans, financial data, customer lists, technical specifications, software code, product roadmaps, and marketing strategies.\n2. Obligations of Receiving Party\nThe Receiving Party agrees to the following obligations with respect to Confidential Information:\nMaintain the confidentiality of all Confidential Information using the same degree of care as it uses for its own confidential information, but no less than reasonable care.\nNot disclose Confidential Information to any third party without the prior written consent of the Disclosing Party.\nRestrict access to Confidential Information to employees and contractors who have a need to know and are bound by confidentiality obligations.\nNot use Confidential Information for any purpose other than evaluating the potential business relationship between the Parties.\nPromptly notify the Disclosing Party of any unauthorized use or disclosure of Confidential Information.\n3. Exclusions\nConfidential Information shall not include information that: (a) is or becomes publicly available through no fault of the Receiving Party; (b) was known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party without use of the Confidential Information; or (d) is rightfully obtained from a third party without restriction on disclosure.\n4. Term and Termination\nThis Agreement shall remain in effect for a period of two (2) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) years.\n5. Indemnification\nEach Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $500,000.\n6. Governing Law\nThis Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\n7. Miscellaneous\nThis Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous agreements, whether written or oral. No amendment to this Agreement shall be effective unless made in writing and signed by both Parties.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.\n\nDisclosing Party: [Party A Signature]\nReceiving Party: [Party B Signature]\nDate: [Date]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 15,
+      "errors": 0,
+      "efficiency": false,
+      "containsExpected": false,
+      "excludesUnwanted": false,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": false
+    }
+  },
+  {
+    "task": {
+      "id": "add-comments",
+      "name": "Review and comment on contract"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "add-comments",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"# **COMMERCIAL LEASE AGREEMENT**\\n\\nThis Commercial Lease Agreement (the \\\"Lease\\\") is made and entered into as of February 1, 2025, by and between:\\n\\nGreenfield Properties Inc., a corporation organized under the laws of the State of California, with its principal office at 789 Market Street, San Francisco, CA 94103 (\\\"Landlord\\\")\\n\\nand\\n\\nNovaTech Solutions, a corporation organized under the laws of the State of California, with its principal office at 321 Startup Lane, Palo Alto,",
+          "ms": 4
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": [
+              "approximately 3,500 square feet",
+              "annual escalation of 3%",
+              "security deposit of $25,500",
+              "within 30 days of lease termination",
+              "general office purposes only",
+              "without prior written consent of the Landlord",
+              "interior maintenance, including plumbing, electrical, and HVAC",
+              "name Landlord as an additional insured",
+              "fails to pay rent within 10 days",
+              "fails to cure within 30 days",
+              "90 days' written notice"
+            ]
+          },
+          "output": "{\"approximately 3,500 square feet\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDA3Iiwic3RhcnQiOjEyNywiZW5kIjoxNTh9XX0=\",\"matchedText\":\"approximately 3,500 square feet\",\"blockId\":\"00000007\",\"range\":{\"start\":127,\"end\":158}}]},\"annual escalation of 3%\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiL",
+          "ms": 9
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Vague Square Footage: The word 'approximately' leaves the exact rentable area undefined. Tenant should request a precise measured square footage and confirm whether this includes common areas (usable vs. rentable sq ft). Consider adding a right to verify measurements.",
+                "block_id": "00000007",
+                "range_start": 127,
+                "range_end": 158
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Automatic Rent Escalation: A 3% annual rent increase is compounding and not capped. Over the 36-month term this adds up significantly. Tenant should negotiate a cap tied to CPI (inflation index) rather than a fixed percentage, or at minimum request a cap on total escalation.",
+                "block_id": "0000000B",
+                "range_start": 136,
+                "range_end": 159
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – High Security Deposit: Three months' rent ($25,500) is a substantial upfront cost. Tenant should negotiate this down to one or two months' rent, which is more standard for commercial leases.",
+                "block_id": "0000000D",
+                "range_start": 67,
+                "range_end": 94
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Security Deposit Return Timeline & Deduction Ambiguity: '30 days' may be too long and the phrase 'damages' is undefined. Tenant should request: (1) a shorter return window (e.g., 14 days), (2) a definition of what constitutes 'damage' vs. normal wear and tear, and (3) an itemized written statement of any deductions.",
+                "block_id": "0000000D",
+                "range_start": 179,
+                "range_end": 214
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Overly Restrictive Use Clause: 'General office purposes only' is vague and could restrict legitimate business activities (e.g., client meetings, light storage, equipment use). Tenant should request a more specific and inclusive use definition tailored to their actual business operations.",
+                "block_id": "0000000F",
+                "range_start": 31,
+                "range_end": 59
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Absolute Assignment/Subletting Restriction: Landlord's consent is required but no standard is given (e.g., 'not to be unreasonably withheld'). This gives Landlord unchecked discretion to block a sublease or assignment. Tenant should insist consent cannot be 'unreasonably withheld, conditioned, or delayed,' especially in the event of a corporate restructuring or merger.",
+                "block_id": "00000011",
+                "range_start": 79,
+                "range_end": 124
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Overly Broad Interior Maintenance Responsibility: Requiring Tenant to maintain plumbing, electrical, and HVAC systems is unusual and costly. These are typically Landlord responsibilities, especially for pre-existing system failures. Tenant should negotiate to limit responsibility to damage caused by Tenant's own misuse, with Landlord handling major system repairs and replacements.",
+                "block_id": "00000013",
+                "range_start": 218,
+                "range_end": 280
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Additional Insured Requirement: Naming the Landlord as an additional insured increases Tenant's insurance costs and exposes Tenant's insurer to Landlord-related claims. Tenant should seek legal and insurance advice and negotiate mutual insurance obligations where both parties carry appropriate coverage.",
+                "block_id": "00000015",
+                "range_start": 153,
+                "range_end": 191
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Short Rent Grace Period: Only 10 days to cure a missed rent payment before default is declared is very tight. Standard commercial leases often provide 3–5 business days for payment after written notice. Tenant should negotiate for a written notice requirement before the cure period begins, rather than an automatic 10-day countdown from the due date.",
+                "block_id": "00000017",
+                "range_start": 10,
+                "range_end": 42
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Broad Default Remedies & Cure Period: While 30 days to cure a non-payment breach is more reasonable, the right to 'all available legal remedies' is vague and one-sided. The lease provides no reciprocal default provisions for Landlord breaches. Tenant should request: (1) a matching default/remedy clause against Landlord, and (2) the right to terminate or withhold rent if Landlord fails to meet its obligations.",
+                "block_id": "00000017",
+                "range_start": 104,
+                "range_end": 132
+              },
+              {
+                "op": "comment",
+                "text": "⚠️ TENANT CONCERN – Onerous Renewal Notice Requirement & Missing Renewal Rent Terms: 90 days' notice is a long lead time and easy to miss, potentially forfeiting the renewal right entirely. More critically, the renewal clause does not specify the rent for the renewal term — will the 3% escalation continue? Will rent be reset to market rate? Tenant should negotiate: (1) a shorter notice window (60 days), (2) a reminder mechanism, and (3) explicit pre-agreed renewal rent terms.",
+                "block_id": "00000019",
+                "range_start": 69,
+                "range_end": 92
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"},{\"op\":\"comment\",\"effect\":\"changed\"}]}",
+          "ms": 29
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 46463,
+      "tokenUsage": {
+        "input": 21666,
+        "output": 2359
+      },
+      "finalText": "COMMERCIAL LEASE AGREEMENT\nThis Commercial Lease Agreement (the \"Lease\") is made and entered into as of February 1, 2025, by and between:\nGreenfield Properties Inc., a corporation organized under the laws of the State of California, with its principal office at 789 Market Street, San Francisco, CA 94103 (\"Landlord\")\nand\nNovaTech Solutions, a corporation organized under the laws of the State of California, with its principal office at 321 Startup Lane, Palo Alto, CA 94301 (\"Tenant\").\n1. Premises\nLandlord hereby leases to Tenant the premises located at 500 Commerce Drive, Suite 200, San Francisco, CA 94107, consisting of approximately 3,500 square feet of office space (the \"Premises\").\n2. Term\nThe lease term shall be 36 months commencing March 1, 2025 and expiring on February 28, 2028 (the \"Term\").\n3. Rent\nTenant shall pay Landlord a base rent of $8,500 per month, payable on the first day of each calendar month. Rent shall be subject to an annual escalation of 3% as detailed in Schedule A below.\n4. Security Deposit\nUpon execution of this Lease, Tenant shall deposit with Landlord a security deposit of $25,500, equivalent to three months' rent. The security deposit shall be returned to Tenant within 30 days of lease termination, less any deductions for damages or unpaid rent.\n5. Use of Premises\nThe Premises shall be used for general office purposes only. Tenant shall not use the Premises for any unlawful purpose or in any manner that would increase the insurance premiums or void the insurance coverage on the building.\n6. Assignment and Subletting\nTenant shall not assign or sublet the whole or any part of the leased premises without prior written consent of the Landlord. Any attempted assignment or subletting without such consent shall be void and shall constitute a default under this Lease.\n7. Maintenance and Repairs\nTenant shall maintain the Premises in good condition and repair during the Term. Landlord shall be responsible for structural repairs, roof maintenance, and common area maintenance. Tenant shall be responsible for all interior maintenance, including plumbing, electrical, and HVAC systems within the Premises.\n8. Insurance Requirements\nTenant shall maintain commercial general liability insurance with a minimum coverage of $1,000,000 per occurrence and $2,000,000 aggregate. Tenant shall name Landlord as an additional insured on all policies and provide certificates of insurance prior to occupancy.\n9. Default and Remedies\nIf Tenant fails to pay rent within 10 days of the due date or breaches any other term of this Lease and fails to cure within 30 days of written notice, Landlord may terminate this Lease and pursue all available legal remedies, including recovery of unpaid rent and damages.\n10. Renewal Option\nTenant may renew this Lease for an additional 24 months by providing 90 days' written notice prior to the expiration of the current Term. The renewal rent shall be subject to fair market adjustment but shall not exceed 5% above the then-current monthly rent.\nSchedule A - Rent Escalation\nYear\nMonthly Rent\nAnnual Total\nYear 1\n$8,500\n$102,000\nYear 2\n$8,755\n$105,060\nYear 3\n$9,018\n$108,216\n\nIN WITNESS WHEREOF, the parties have executed this Lease Agreement as of the date first written above.\nLandlord: Greenfield Properties Inc.\nTenant: NovaTech Solutions",
+      "finalInfo": {
+        "comments": 11,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 4,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "add-comments",
+      "name": "Review and comment on contract"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "add-comments",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"COMMERCIAL LEASE AGREEMENT\\nThis Commercial Lease Agreement (the \\\"Lease\\\") is made and entered into as of February 1, 2025, by and between:\\nGreenfield Properties Inc., a corporation organized under the laws of the State of California, with its principal office at 789 Market Street, San Francisco, CA 94103 (\\\"Landlord\\\")\\nand\\nNovaTech Solutions, a corporation organized under the laws of the State of California, with its principal office at 321 Startup Lane, Palo Alto, CA 94301 (\\\"Tenant\\\").\\n",
+          "ms": 0
+        },
+        {
+          "name": "get_document_info",
+          "input": {},
+          "output": "{\"counts\":{\"words\":531,\"characters\":3319,\"paragraphs\":30,\"headings\":12,\"tables\":1,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":0},\"outline\":[{\"level\":1,\"text\":\"\",\"nodeId\":\"00000001\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000006\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000008\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"0000000A\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"0000000C\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"0000000E\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000010\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000012\"},{\"l",
+          "ms": 2
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "type": "text",
+            "pattern": "Tenant shall not assign or sublet",
+            "includeNodes": true
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "type": "text",
+            "pattern": "Tenant shall maintain the Premises in good condition",
+            "includeNodes": true
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Tenant shall not assign or sublet"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDExIiwic3RhcnQiOjAsImVuZCI6MzN9XX0=\",\"text\":\"Tenant shall not assign or sublet\"}]}",
+          "ms": 12
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "security deposit of $25,500"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDBEIiwic3RhcnQiOjY3LCJlbmQiOjk0fV19\",\"text\":\"security deposit of $25,500\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "annual escalation of 3%"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDBCIiwic3RhcnQiOjEzNiwiZW5kIjoxNTl9XX0=\",\"text\":\"annual escalation of 3%\"}]}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Tenant shall maintain the Premises in good condition"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjAsImVuZCI6NTJ9XX0=\",\"text\":\"Tenant shall maintain the Premises in good condition\"}]}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Tenant shall maintain commercial general liability insurance"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjAsImVuZCI6NjB9XX0=\",\"text\":\"Tenant shall maintain commercial general liability insurance\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "fails to pay rent within 10 days"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE3Iiwic3RhcnQiOjEwLCJlbmQiOjQyfV19\",\"text\":\"fails to pay rent within 10 days\"}]}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "renewal rent shall be subject to fair market adjustment"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE5Iiwic3RhcnQiOjE0MiwiZW5kIjoxOTd9XX0=\",\"text\":\"renewal rent shall be subject to fair market adjustment\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Premises shall be used for general office purposes only"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDBGIiwic3RhcnQiOjQsImVuZCI6NTl9XX0=\",\"text\":\"Premises shall be used for general office purposes only\"}]}",
+          "ms": 0
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "0000000B",
+              "range": {
+                "start": 136,
+                "end": 159
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Rent Escalation: A 3% annual rent increase is automatic and compounding over the 36-month term, meaning rent could rise to ~$9,285/month by Year 3. Tenant should negotiate a cap on cumulative increases or tie escalation to actual CPI changes, which may be lower than 3%. Also, \"Schedule A\" should be clearly defined and attached to this agreement."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"45e41d3e-36c9-4876-9807-7b4279cbd0bb\"}]}",
+          "ms": 12
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "0000000D",
+              "range": {
+                "start": 67,
+                "end": 94
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Security Deposit: Three months' rent ($25,500) is a substantial upfront cost. Tenant should negotiate: (1) a lower deposit (1–2 months is more standard), (2) interest accrual on the held funds, and (3) a shorter return window (30 days is the maximum under CA law, but a shorter period, e.g., 21 days, can be requested). Ensure \"damages\" is clearly defined to prevent unjustified deductions."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"4cb4aac4-6cf8-4f1d-bf58-8e033c7f1b25\"}]}",
+          "ms": 3
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "0000000F",
+              "range": {
+                "start": 4,
+                "end": 59
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Use of Premises: \"General office purposes only\" is vague and may be overly restrictive for a tech company (e.g., it could prohibit lab work, client demos, or equipment storage). Tenant should request a more specific permitted-use clause tailored to NovaTech's business activities. The insurance premium clause is also one-sided — Tenant should not be solely liable for increased premiums caused by the building's other tenants or Landlord's decisions."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"73996358-3d9d-48ac-9854-f1e3ce12cab8\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000011",
+              "range": {
+                "start": 0,
+                "end": 33
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Assignment & Subletting: Landlord's consent is entirely discretionary with no obligation to act reasonably or within a set timeframe. Tenant should negotiate: (1) a \"not to be unreasonably withheld or delayed\" standard, (2) a consent deadline (e.g., 15–30 days), and (3) an explicit carve-out for assignments to affiliates or subsidiaries of NovaTech without requiring consent."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"764644d8-9976-4ff2-9213-51f791d4f05d\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000013",
+              "range": {
+                "start": 0,
+                "end": 52
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Maintenance & Repairs: Tenant is responsible for interior plumbing, electrical, and HVAC — systems that are expensive to repair or replace. This is unusually broad for an office lease; these systems typically remain the Landlord's responsibility. Tenant should negotiate (1) a cap on repair costs, (2) that only routine maintenance (not replacements) falls on Tenant, and (3) clarity on what qualifies as \"interior\" vs. structural for shared systems."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"6e19fc6b-c6e4-4355-a774-68f413f065b7\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000015",
+              "range": {
+                "start": 0,
+                "end": 60
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Insurance Requirements: Naming Landlord as an additional insured on all policies is a significant obligation that may affect Tenant's premiums. Tenant should confirm: (1) whether the required coverage limits ($1M/$2M) are proportionate to business size, (2) whether reciprocal insurance obligations apply to Landlord, and (3) the consequences if coverage lapses temporarily (e.g., during carrier transitions) — the clause is silent on this."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"a1bee66a-da1a-4fc6-988b-c2bb6aa31e90\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000017",
+              "range": {
+                "start": 10,
+                "end": 42
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Default & Remedies: The 10-day grace period for late rent is very short, especially if payment delays are due to banking or administrative errors. Tenant should request: (1) at least a 5-day written notice before the grace period begins, (2) a longer cure period (e.g., 15–30 days for rent, 60 days for non-monetary breaches), and (3) a limit on Landlord's remedies (e.g., no immediate termination on first offense)."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"2103f9ab-8bd4-4983-8cab-3944bd50d30b\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "create_comment",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000019",
+              "range": {
+                "start": 142,
+                "end": 197
+              }
+            },
+            "text": "⚠️ TENANT CONCERN – Renewal Option: \"Fair market adjustment\" is undefined — there is no process for determining fair market rent, no independent appraisal mechanism, and no dispute resolution if the parties disagree. The 5% cap provides some protection, but Tenant should also negotiate: (1) a defined methodology for setting the renewal rent, (2) a right to rescind the renewal notice if the offered rate is unacceptable, and (3) reduction of the 90-day notice requirement to 60 days to allow more flexibility."
+          },
+          "output": "{\"success\":true,\"inserted\":[{\"kind\":\"entity\",\"entityType\":\"comment\",\"entityId\":\"2ca7d44b-a6ff-4753-b655-704940591115\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "save_document",
+          "input": {
+            "inPlace": true
+          },
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 64856,
+      "tokenUsage": {
+        "input": 103632,
+        "output": 3192
+      },
+      "finalText": "COMMERCIAL LEASE AGREEMENT\nThis Commercial Lease Agreement (the \"Lease\") is made and entered into as of February 1, 2025, by and between:\nGreenfield Properties Inc., a corporation organized under the laws of the State of California, with its principal office at 789 Market Street, San Francisco, CA 94103 (\"Landlord\")\nand\nNovaTech Solutions, a corporation organized under the laws of the State of California, with its principal office at 321 Startup Lane, Palo Alto, CA 94301 (\"Tenant\").\n1. Premises\nLandlord hereby leases to Tenant the premises located at 500 Commerce Drive, Suite 200, San Francisco, CA 94107, consisting of approximately 3,500 square feet of office space (the \"Premises\").\n2. Term\nThe lease term shall be 36 months commencing March 1, 2025 and expiring on February 28, 2028 (the \"Term\").\n3. Rent\nTenant shall pay Landlord a base rent of $8,500 per month, payable on the first day of each calendar month. Rent shall be subject to an annual escalation of 3% as detailed in Schedule A below.\n4. Security Deposit\nUpon execution of this Lease, Tenant shall deposit with Landlord a security deposit of $25,500, equivalent to three months' rent. The security deposit shall be returned to Tenant within 30 days of lease termination, less any deductions for damages or unpaid rent.\n5. Use of Premises\nThe Premises shall be used for general office purposes only. Tenant shall not use the Premises for any unlawful purpose or in any manner that would increase the insurance premiums or void the insurance coverage on the building.\n6. Assignment and Subletting\nTenant shall not assign or sublet the whole or any part of the leased premises without prior written consent of the Landlord. Any attempted assignment or subletting without such consent shall be void and shall constitute a default under this Lease.\n7. Maintenance and Repairs\nTenant shall maintain the Premises in good condition and repair during the Term. Landlord shall be responsible for structural repairs, roof maintenance, and common area maintenance. Tenant shall be responsible for all interior maintenance, including plumbing, electrical, and HVAC systems within the Premises.\n8. Insurance Requirements\nTenant shall maintain commercial general liability insurance with a minimum coverage of $1,000,000 per occurrence and $2,000,000 aggregate. Tenant shall name Landlord as an additional insured on all policies and provide certificates of insurance prior to occupancy.\n9. Default and Remedies\nIf Tenant fails to pay rent within 10 days of the due date or breaches any other term of this Lease and fails to cure within 30 days of written notice, Landlord may terminate this Lease and pursue all available legal remedies, including recovery of unpaid rent and damages.\n10. Renewal Option\nTenant may renew this Lease for an additional 24 months by providing 90 days' written notice prior to the expiration of the current Term. The renewal rent shall be subject to fair market adjustment but shall not exceed 5% above the then-current monthly rent.\nSchedule A - Rent Escalation\nYear\nMonthly Rent\nAnnual Total\nYear 1\n$8,500\n$102,000\nYear 2\n$8,755\n$105,060\nYear 3\n$9,018\n$108,216\n\nIN WITNESS WHEREOF, the parties have executed this Lease Agreement as of the date first written above.\nLandlord: Greenfield Properties Inc.\nTenant: NovaTech Solutions",
+      "finalInfo": {
+        "comments": 8,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 21,
+      "errors": 0,
+      "efficiency": false,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": false
+    }
+  },
+  {
+    "task": {
+      "id": "redline",
+      "name": "Redline contract with tracked changes"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "redline",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"# **MUTUAL NON-DISCLOSURE AGREEMENT**\\n\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\n\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal\\\\@iqidis.com\\n\\nand\\n\\nTechVentures LLC, a limited liability company organized under the laws of the State",
+          "ms": 2
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": ["two (2) years", "five (5) years", "$500,000"]
+          },
+          "output": "{\"two (2) years\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjU0LCJlbmQiOjY3fV19\",\"matchedText\":\"two (2) years\",\"blockId\":\"00000013\",\"range\":{\"start\":54,\"end\":67}}]},\"five (5) years\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3Rh",
+          "ms": 6
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "replace",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjU0LCJlbmQiOjY3fV19",
+                "text": "five (5) years",
+                "matched_text": "two (2) years"
+              },
+              {
+                "op": "replace",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjI4OCwiZW5kIjozMDJ9XX0=",
+                "text": "five (5) years",
+                "matched_text": "five (5) years"
+              },
+              {
+                "op": "replace",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjMwOCwiZW5kIjozMTZ9XX0=",
+                "text": "$1,000,000",
+                "matched_text": "$500,000"
+              }
+            ],
+            "tracked": true
+          },
+          "output": "{\"success\":true,\"results\":[{\"stepId\":\"s0\",\"op\":\"text.rewrite\",\"effect\":\"changed\"},{\"stepId\":\"s1\",\"op\":\"text.rewrite\",\"effect\":\"noop\"},{\"stepId\":\"s2\",\"op\":\"text.rewrite\",\"effect\":\"changed\"}]}",
+          "ms": 28
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 26831,
+      "tokenUsage": {
+        "input": 14379,
+        "output": 1208
+      },
+      "finalText": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (the \"Agreement\") is entered into as of January 15, 2025 (the \"Effective Date\"), by and between:\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \"Disclosing Party\"), contact: legal@iqidis.com\nand\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its principal office at 50 Innovation Way, New York, NY 10001 (the \"Receiving Party\").\nEach referred to individually as a \"Party\" and collectively as the \"Parties\".\n1. Definitions\n\"Confidential Information\" means any and all non-public, proprietary, or confidential information disclosed by either Party to the other Party, whether orally, in writing, or by inspection of tangible objects, including but not limited to: trade secrets, business plans, financial data, customer lists, technical specifications, software code, product roadmaps, and marketing strategies.\n2. Obligations of Receiving Party\nThe Receiving Party agrees to the following obligations with respect to Confidential Information:\nMaintain the confidentiality of all Confidential Information using the same degree of care as it uses for its own confidential information, but no less than reasonable care.\nNot disclose Confidential Information to any third party without the prior written consent of the Disclosing Party.\nRestrict access to Confidential Information to employees and contractors who have a need to know and are bound by confidentiality obligations.\nNot use Confidential Information for any purpose other than evaluating the potential business relationship between the Parties.\nPromptly notify the Disclosing Party of any unauthorized use or disclosure of Confidential Information.\n3. Exclusions\nConfidential Information shall not include information that: (a) is or becomes publicly available through no fault of the Receiving Party; (b) was known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party without use of the Confidential Information; or (d) is rightfully obtained from a third party without restriction on disclosure.\n4. Term and Termination\nThis Agreement shall remain in effect for a period of two (2) yearsfive (5) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) yearsfive (5) years.\n5. Indemnification\nEach Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $500,000$1,000,000.\n6. Governing Law\nThis Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\n7. Miscellaneous\nThis Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous agreements, whether written or oral. No amendment to this Agreement shall be effective unless made in writing and signed by both Parties.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.\n\nDisclosing Party: [Party A Signature]\nReceiving Party: [Party B Signature]\nDate: [Date]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 3,
+        "words": 535
+      }
+    },
+    "score": {
+      "toolCalls": 4,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "redline",
+      "name": "Redline contract with tracked changes"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "redline",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"MUTUAL NON-DISCLOSURE AGREEMENT\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal@iqidis.com\\nand\\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its prin",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "pattern": "two (2) years from the Effective Date",
+            "type": "text"
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "pattern": "$500,000",
+            "type": "text"
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "two (2) years from the Effective Date"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjU0LCJlbmQiOjkxfV19\",\"text\":\"two (2) years from the Effective Date\"}]}",
+          "ms": 3
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$500,000"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjMwOCwiZW5kIjozMTZ9XX0=\",\"text\":\"$500,000\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000013",
+              "range": {
+                "start": 54,
+                "end": 91
+              }
+            },
+            "text": "five (5) years from the Effective Date"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "00000015",
+              "range": {
+                "start": 308,
+                "end": 316
+              }
+            },
+            "text": "$1,000,000"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "list_tracked_changes",
+          "input": {},
+          "output": "{\"evaluatedRevision\":\"0\",\"total\":0,\"items\":[],\"page\":{\"limit\":0,\"offset\":0,\"returned\":0}}",
+          "ms": 1
+        },
+        {
+          "name": "get_document_info",
+          "input": {},
+          "output": "{\"counts\":{\"words\":531,\"characters\":3562,\"paragraphs\":18,\"headings\":8,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":1},\"outline\":[{\"level\":1,\"text\":\"\",\"nodeId\":\"00000001\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000007\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000009\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000010\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000012\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000014\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000016\"},{\"level\":2,\"text\":\"\",\"nodeId\":\"00000018\"}],\"ca",
+          "ms": 1
+        },
+        {
+          "name": "get_node_by_id",
+          "input": {
+            "id": "00000013"
+          },
+          "output": "{\"error\":\"Unhandled tool: get_node_by_id\"}",
+          "ms": 0
+        },
+        {
+          "name": "get_node_by_id",
+          "input": {
+            "id": "00000015"
+          },
+          "output": "{\"error\":\"Unhandled tool: get_node_by_id\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "two (2) years from the Effective Date"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"2bd54b03-ae29-40b7-a19c-5557f6d4bb28\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"This Agreement shall remain in effect for a period of two (2) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) years.\"}}]}},\"address\":{\"kind\":\"block",
+          "ms": 3
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$500,000"
+            },
+            "require": "first",
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"97a2c255-e11b-441b-b959-f3e572e2957f\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"Each Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $500,000.\"}}]}},\"address\":",
+          "ms": 1
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "blockId": "00000013",
+            "start": 54,
+            "end": 91,
+            "text": "five (5) years from the Effective Date"
+          },
+          "output": "{\"error\":\"Unknown field \\\"blockId\\\" on replace input. Allowed fields: text, target, ref, in.\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "blockId": "00000015",
+            "start": 308,
+            "end": 316,
+            "text": "$1,000,000"
+          },
+          "output": "{\"error\":\"Unknown field \\\"blockId\\\" on replace input. Allowed fields: text, target, ref, in.\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDEzIiwic3RhcnQiOjU0LCJlbmQiOjkxfV19",
+            "text": "five (5) years from the Effective Date"
+          },
+          "output": "{\"success\":true,\"resolution\":{\"target\":{\"kind\":\"text\",\"blockId\":\"00000013\",\"range\":{\"start\":54,\"end\":91}},\"range\":{\"from\":2374,\"to\":2411}}}",
+          "ms": 4
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjMwOCwiZW5kIjozMTZ9XX0=",
+            "text": "$1,000,000"
+          },
+          "output": "{\"error\":\"REVISION_MISMATCH — Text ref is ephemeral and revision-scoped. Re-run query.match to obtain a fresh handle.ref for revision 1.\"}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$500,000"
+            },
+            "require": "first"
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIxIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjMwOCwiZW5kIjozMTZ9XX0=\",\"text\":\"$500,000\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIxIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDE1Iiwic3RhcnQiOjMwOCwiZW5kIjozMTZ9XX0=",
+            "text": "$1,000,000"
+          },
+          "output": "{\"success\":true,\"resolution\":{\"target\":{\"kind\":\"text\",\"blockId\":\"00000015\",\"range\":{\"start\":308,\"end\":316}},\"range\":{\"from\":2958,\"to\":2966}}}",
+          "ms": 3
+        },
+        {
+          "name": "list_tracked_changes",
+          "input": {},
+          "output": "{\"evaluatedRevision\":\"2\",\"total\":0,\"items\":[],\"page\":{\"limit\":0,\"offset\":0,\"returned\":0}}",
+          "ms": 0
+        },
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"MUTUAL NON-DISCLOSURE AGREEMENT\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal@iqidis.com\\nand\\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its prin",
+          "ms": 0
+        },
+        {
+          "name": "save_document",
+          "input": {
+            "inPlace": true
+          },
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 48896,
+      "tokenUsage": {
+        "input": 138342,
+        "output": 2216
+      },
+      "finalText": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (the \"Agreement\") is entered into as of January 15, 2025 (the \"Effective Date\"), by and between:\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \"Disclosing Party\"), contact: legal@iqidis.com\nand\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its principal office at 50 Innovation Way, New York, NY 10001 (the \"Receiving Party\").\nEach referred to individually as a \"Party\" and collectively as the \"Parties\".\n1. Definitions\n\"Confidential Information\" means any and all non-public, proprietary, or confidential information disclosed by either Party to the other Party, whether orally, in writing, or by inspection of tangible objects, including but not limited to: trade secrets, business plans, financial data, customer lists, technical specifications, software code, product roadmaps, and marketing strategies.\n2. Obligations of Receiving Party\nThe Receiving Party agrees to the following obligations with respect to Confidential Information:\nMaintain the confidentiality of all Confidential Information using the same degree of care as it uses for its own confidential information, but no less than reasonable care.\nNot disclose Confidential Information to any third party without the prior written consent of the Disclosing Party.\nRestrict access to Confidential Information to employees and contractors who have a need to know and are bound by confidentiality obligations.\nNot use Confidential Information for any purpose other than evaluating the potential business relationship between the Parties.\nPromptly notify the Disclosing Party of any unauthorized use or disclosure of Confidential Information.\n3. Exclusions\nConfidential Information shall not include information that: (a) is or becomes publicly available through no fault of the Receiving Party; (b) was known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party without use of the Confidential Information; or (d) is rightfully obtained from a third party without restriction on disclosure.\n4. Term and Termination\nThis Agreement shall remain in effect for a period of five (5) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) years.\n5. Indemnification\nEach Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $1,000,000.\n6. Governing Law\nThis Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\n7. Miscellaneous\nThis Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous agreements, whether written or oral. No amendment to this Agreement shall be effective unless made in writing and signed by both Parties.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.\n\nDisclosing Party: [Party A Signature]\nReceiving Party: [Party B Signature]\nDate: [Date]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 22,
+      "errors": 0,
+      "efficiency": false,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": false,
+      "pass": false
+    }
+  },
+  {
+    "task": {
+      "id": "create-doc",
+      "name": "Create document from scratch"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "create-doc",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"\",\"info\":{\"counts\":{\"words\":0,\"characters\":0,\"paragraphs\":1,\"headings\":0,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":0},\"outline\":[],\"capabilities\":{\"canFind\":true,\"canGetNode\":true,\"canComment\":true,\"canReplace\":true},\"revision\":\"0\",\"styles\":{\"paragraphStyles\":[]},\"defaults\":{\"styleId\":\"Normal\"}}}",
+          "ms": 1
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "insert",
+                "text": "PROJECT STATUS REPORT"
+              },
+              {
+                "op": "insert",
+                "text": "\nDate: June 16, 2025  |  Prepared by: Project Management Office  |  Status: 🟢 On Track\n"
+              },
+              {
+                "op": "insert",
+                "text": "\nEXECUTIVE SUMMARY\n"
+              },
+              {
+                "op": "insert",
+                "text": "The project is progressing on schedule and within budget, with all major milestones for Q2 met as planned. Stakeholder alignment remains strong, and the team is well-positioned to deliver the final product by the established deadline.\n"
+              },
+              {
+                "op": "insert",
+                "text": "\nPROGRESS UPDATE\n"
+              },
+              {
+                "op": "insert",
+                "text": "• Phase 1 – Discovery & Planning (Complete): All requirements have been gathered, documented, and signed off by key stakeholders. The project charter and scope document are finalized.\n"
+              },
+              {
+                "op": "insert",
+                "text": "• Phase 2 – Development & Build (In Progress – 65% Complete): Core features are fully built and undergoing internal QA testing. Three of five modules have passed review with zero critical defects.\n"
+              },
+              {
+                "op": "insert",
+                "text": "• Phase 3 – Stakeholder Review (Upcoming): Initial demos have been scheduled with key stakeholders for June 23–27. Feedback will be incorporated into the final build prior to launch.\n"
+              },
+              {
+                "op": "insert",
+                "text": "\nNEXT STEPS\n"
+              },
+              {
+                "op": "insert",
+                "text": "1. Complete QA testing on remaining two modules by June 20, 2025.\n2. Conduct stakeholder demo sessions and collect structured feedback (June 23–27, 2025).\n3. Finalize revisions and prepare launch-ready deliverables for July 7, 2025 go-live.\n"
+              },
+              {
+                "op": "insert",
+                "text": "\n────────────────────────────────────────────────\nFor questions or concerns, contact: pmo@company.com\n"
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"},{\"op\":\"insert\",\"effect\":\"changed\"}]}",
+          "ms": 37
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": ["PROJECT STATUS REPORT", "EXECUTIVE SUMMARY", "PROGRESS UPDATE", "NEXT STEPS"]
+          },
+          "output": "{\"PROJECT STATUS REPORT\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3BlIjoibWF0Y2giLCJtYXRjaElkIjoibTowIiwic2VnbWVudHMiOlt7ImJsb2NrSWQiOiJmMWYzYjY3MC00YzM2LTRlYWQtOGEyOC0xZjRmMTA3NTRhNGIiLCJzdGFydCI6MCwiZW5kIjoyMX1dfQ==\",\"matchedText\":\"PROJECT STATUS REPORT\",\"blockId\":\"f1f3b670-4c36-4ead-8a28-1f4f10754a4b\",\"range\":{\"start\":0,\"end\":21}}]},\"EXECUTIVE SUMMARY\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3",
+          "ms": 2
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3BlIjoibWF0Y2giLCJtYXRjaElkIjoibTowIiwic2VnbWVudHMiOlt7ImJsb2NrSWQiOiJmMWYzYjY3MC00YzM2LTRlYWQtOGEyOC0xZjRmMTA3NTRhNGIiLCJzdGFydCI6MCwiZW5kIjoyMX1dfQ==",
+                "bold": true
+              },
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3BlIjoibWF0Y2giLCJtYXRjaElkIjoibTowIiwic2VnbWVudHMiOlt7ImJsb2NrSWQiOiIxZGUyYjZhZC0zMmM5LTQxZGEtOWY4Ny1lNmY2ZWZhZjk5NzEiLCJzdGFydCI6MCwiZW5kIjoxN31dfQ==",
+                "bold": true
+              },
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3BlIjoibWF0Y2giLCJtYXRjaElkIjoibTowIiwic2VnbWVudHMiOlt7ImJsb2NrSWQiOiJkM2E2ZmE2My0yZDhiLTQ0ZGItYThkNS04YzBhMzY2YjYyYTEiLCJzdGFydCI6MCwiZW5kIjoxNX1dfQ==",
+                "bold": true
+              },
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIxMiIsInN0b3J5S2V5IjoiYm9keSIsInNjb3BlIjoibWF0Y2giLCJtYXRjaElkIjoibTowIiwic2VnbWVudHMiOlt7ImJsb2NrSWQiOiIwMmQ1YjhmZS0xZjA2LTQwODEtYTgxYy1iOTA0MDZmN2ViOTAiLCJzdGFydCI6MCwiZW5kIjoxMH1dfQ==",
+                "bold": true
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"stepId\":\"s0\",\"op\":\"format.apply\",\"effect\":\"changed\"},{\"stepId\":\"s1\",\"op\":\"format.apply\",\"effect\":\"changed\"},{\"stepId\":\"s2\",\"op\":\"format.apply\",\"effect\":\"changed\"},{\"stepId\":\"s3\",\"op\":\"format.apply\",\"effect\":\"changed\"}]}",
+          "ms": 3
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 33250,
+      "tokenUsage": {
+        "input": 16870,
+        "output": 1896
+      },
+      "finalText": "PROJECT STATUS REPORT\nDate: June 16, 2025  |  Prepared by: Project Management Office  |  Status: 🟢 On Track\nEXECUTIVE SUMMARY\nThe project is progressing on schedule and within budget, with all major milestones for Q2 met as planned. Stakeholder alignment remains strong, and the team is well-positioned to deliver the final product by the established deadline.\nPROGRESS UPDATE\n• Phase 1 – Discovery & Planning (Complete): All requirements have been gathered, documented, and signed off by key stakeholders. The project charter and scope document are finalized.\n• Phase 2 – Development & Build (In Progress – 65% Complete): Core features are fully built and undergoing internal QA testing. Three of five modules have passed review with zero critical defects.\n• Phase 3 – Stakeholder Review (Upcoming): Initial demos have been scheduled with key stakeholders for June 23–27. Feedback will be incorporated into the final build prior to launch.\nNEXT STEPS\nComplete QA testing on remaining two modules by June 20, 2025.\nConduct stakeholder demo sessions and collect structured feedback (June 23–27, 2025).\nFinalize revisions and prepare launch-ready deliverables for July 7, 2025 go-live.\n────────────────────────────────────────────────\nFor questions or concerns, contact: pmo@company.com",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 190
+      }
+    },
+    "score": {
+      "toolCalls": 5,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "create-doc",
+      "name": "Create document from scratch"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "create-doc",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "get_document_info",
+          "input": {},
+          "output": "{\"counts\":{\"words\":0,\"characters\":0,\"paragraphs\":1,\"headings\":0,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":0},\"outline\":[],\"capabilities\":{\"canFind\":true,\"canGetNode\":true,\"canComment\":true,\"canReplace\":true},\"revision\":\"0\",\"styles\":{\"paragraphStyles\":[]},\"defaults\":{\"styleId\":\"Normal\"}}",
+          "ms": 0
+        },
+        {
+          "name": "create_heading",
+          "input": {
+            "text": "Project Status Report",
+            "level": 1
+          },
+          "output": "{\"success\":true,\"heading\":{\"kind\":\"block\",\"nodeType\":\"heading\",\"nodeId\":\"38252c1c-d1ba-4340-afad-bee3982d3d95\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"38252c1c-d1ba-4340-afad-bee3982d3d95\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 9
+        },
+        {
+          "name": "create_heading",
+          "input": {
+            "text": "Executive Summary",
+            "level": 2,
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "heading",
+                "nodeId": "38252c1c-d1ba-4340-afad-bee3982d3d95"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"heading\":{\"kind\":\"block\",\"nodeType\":\"heading\",\"nodeId\":\"e03dc83c-a79e-4314-a83e-72fa9786d6f8\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"e03dc83c-a79e-4314-a83e-72fa9786d6f8\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 2
+        },
+        {
+          "name": "create_paragraph",
+          "input": {
+            "text": "The project is progressing on schedule and within budget, with all major milestones on track for delivery by the target date. The team has successfully completed the planning and design phases and is currently executing the core development workstream.",
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "heading",
+                "nodeId": "e03dc83c-a79e-4314-a83e-72fa9786d6f8"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"paragraph\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"1768b2db-033a-4623-801a-fe59427d5570\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"1768b2db-033a-4623-801a-fe59427d5570\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 2
+        },
+        {
+          "name": "create_heading",
+          "input": {
+            "text": "Progress Update",
+            "level": 2,
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "paragraph",
+                "nodeId": "1768b2db-033a-4623-801a-fe59427d5570"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"heading\":{\"kind\":\"block\",\"nodeType\":\"heading\",\"nodeId\":\"98587e86-8fc8-4375-a200-ba85b740291c\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"98587e86-8fc8-4375-a200-ba85b740291c\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 1
+        },
+        {
+          "name": "create_paragraph",
+          "input": {
+            "text": "Requirements gathering and stakeholder alignment completed ahead of schedule",
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "heading",
+                "nodeId": "98587e86-8fc8-4375-a200-ba85b740291c"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"paragraph\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"0cc4e422-31ef-431a-9d6a-14a37b7c9654\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"0cc4e422-31ef-431a-9d6a-14a37b7c9654\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 2
+        },
+        {
+          "name": "create_paragraph",
+          "input": {
+            "text": "Core system architecture designed, reviewed, and approved by technical leadership",
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "paragraph",
+                "nodeId": "0cc4e422-31ef-431a-9d6a-14a37b7c9654"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"paragraph\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"3c2b90e0-fe16-4a4b-a30a-2c57cccc8948\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"3c2b90e0-fe16-4a4b-a30a-2c57cccc8948\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 4
+        },
+        {
+          "name": "create_paragraph",
+          "input": {
+            "text": "Initial development sprint delivered, with 85% of planned features implemented and tested",
+            "at": {
+              "kind": "after",
+              "target": {
+                "kind": "block",
+                "nodeType": "paragraph",
+                "nodeId": "3c2b90e0-fe16-4a4b-a30a-2c57cccc8948"
+              }
+            }
+          },
+          "output": "{\"success\":true,\"paragraph\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"437e4b0e-b29c-4e66-acf6-cde0a41fe143\"},\"insertionPoint\":{\"kind\":\"text\",\"blockId\":\"437e4b0e-b29c-4e66-acf6-cde0a41fe143\",\"range\":{\"start\":0,\"end\":0}}}",
+          "ms": 5
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "type": "node",
+            "nodeType": "paragraph",
+            "query": "Requirements gathering"
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Requirements gathering and stakeholder alignment completed ahead of schedule"
+            },
+            "require": "exactlyOne"
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiI3Iiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjBjYzRlNDIyLTMxZWYtNDMxYS05ZDZhLTE0YTM3YjdjOTY1NCIsInN0YXJ0IjowLCJlbmQiOjc2fV19\",\"text\":\"Requirements gathering and stakeholder alignment completed ahead of schedule\"}]}",
+          "ms": 2
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Core system architecture designed"
+            },
+            "require": "exactlyOne"
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiI3Iiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjNjMmI5MGUwLWZlMTYtNGE0Yi1hMzBhLTJjNTdjY2NjODk0OCIsInN0YXJ0IjowLCJlbmQiOjMzfV19\",\"text\":\"Core system architecture designed\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "Initial development sprint delivered"
+            },
+            "require": "exactlyOne"
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiI3Iiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjQzN2U0YjBlLWIyOWMtNGU2Ni1hY2Y2LWNkZTBhNDFmZTE0MyIsInN0YXJ0IjowLCJlbmQiOjM2fV19\",\"text\":\"Initial development sprint delivered\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "insert_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "0cc4e422-31ef-431a-9d6a-14a37b7c9654",
+              "range": {
+                "start": 0,
+                "end": 76
+              }
+            },
+            "value": "Requirements gathering and stakeholder alignment completed ahead of schedule",
+            "type": "text"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "node",
+              "nodeType": "paragraph"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":5,\"limit\":5,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"52a93c80-d43e-4623-aa4e-e8180411fd61\",\"paragraph\":{\"inlines\":[]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"41964671\"}},{\"node\":{\"kind\":\"paragraph\",\"id\":\"1768b2db-033a-4623-801a-fe59427d5570\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"The project is progressing on schedule and within budget, with all major milestones on track for delivery by the target date. The team has successfully completed t",
+          "ms": 1
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "node",
+              "nodeType": "paragraph"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":5,\"limit\":5,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"52a93c80-d43e-4623-aa4e-e8180411fd61\",\"paragraph\":{\"inlines\":[]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"41964671\"}},{\"node\":{\"kind\":\"paragraph\",\"id\":\"1768b2db-033a-4623-801a-fe59427d5570\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"The project is progressing on schedule and within budget, with all major milestones on track for delivery by the target date. The team has successfully completed t",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 45079,
+      "tokenUsage": {
+        "input": 119517,
+        "output": 1705
+      },
+      "finalText": "\nProject Status Report\nExecutive Summary\nThe project is progressing on schedule and within budget, with all major milestones on track for delivery by the target date. The team has successfully completed the planning and design phases and is currently executing the core development workstream.\nProgress Update\nRequirements gathering and stakeholder alignment completed ahead of schedule\nCore system architecture designed, reviewed, and approved by technical leadership\nInitial development sprint delivered, with 85% of planned features implemented and tested",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 77
+      }
+    },
+    "score": {
+      "toolCalls": 15,
+      "errors": 0,
+      "efficiency": false,
+      "containsExpected": false,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": false
+    }
+  },
+  {
+    "task": {
+      "id": "read-summarize",
+      "name": "Read and extract information"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "read-summarize",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"**Acme Corporation**\\n\\n123 Innovation Drive, San Francisco, CA 94105\\n\\nhr\\\\@acmecorp.com | (415) 555-0100\\n\\n\\n\\nMarch 15, 2025\\n\\n\\n\\n\\\\[Candidate Name]\\n\\n\\\\[Candidate Address]\\n\\n\\n\\nDear \\\\[Candidate Name],\\n\\n\\n\\nWe are pleased to offer you the position of Senior Software Engineer at Acme Corporation. Your anticipated start date is April 14, 2025, and you will report to the VP of Engineering. This offer is contingent upon satisfactory completion of a background check and profe",
+          "ms": 4
+        }
+      ],
+      "errors": 0,
+      "totalMs": 4216,
+      "tokenUsage": {
+        "input": 3374,
+        "output": 119
+      },
+      "finalText": "Acme Corporation\n123 Innovation Drive, San Francisco, CA 94105\nhr@acmecorp.com | (415) 555-0100\n\nMarch 15, 2025\n\n[Candidate Name]\n[Candidate Address]\n\nDear [Candidate Name],\n\nWe are pleased to offer you the position of Senior Software Engineer at Acme Corporation. Your anticipated start date is April 14, 2025, and you will report to the VP of Engineering. This offer is contingent upon satisfactory completion of a background check and professional references.\nCompensation\nYour base salary will be $185,000 per year, paid on a semi-monthly basis (1st and 15th of each month). Your salary will be subject to annual review and adjustment based on performance.\nEquity\nYou will be granted a stock option grant of 10,000 shares of Acme Corporation common stock, subject to the terms of the company's Equity Incentive Plan. The options will vest over a 4-year period with a 1-year cliff, meaning 25% of the shares will vest after the first year of employment, and the remaining shares will vest monthly over the subsequent 36 months.\nBenefits\nAs a full-time employee, you will be eligible for the following benefits:\nComprehensive health, dental, and vision insurance coverage\n401(k) retirement plan with 4% employer match\n20 days of paid time off (PTO) per year\n10 paid company holidays\nProfessional development stipend of $2,000 per year\nConfidentiality\nAs a condition of employment, you will be required to sign the company's standard Confidentiality and Invention Assignment Agreement on or before your start date.\nAt-Will Employment\nYour employment with Acme Corporation is at-will, meaning that either you or the company may terminate the employment relationship at any time, with or without cause or notice.\n\nWe are excited about the opportunity to have you join our team. Please confirm your acceptance of this offer by signing and returning this letter by [Response Deadline].\n\nSincerely,\n\n[Hiring Manager Name]\n[Title]\nAcme Corporation",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 304
+      }
+    },
+    "score": {
+      "toolCalls": 1,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "read-summarize",
+      "name": "Read and extract information"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "read-summarize",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"Acme Corporation\\n123 Innovation Drive, San Francisco, CA 94105\\nhr@acmecorp.com | (415) 555-0100\\n\\nMarch 15, 2025\\n\\n[Candidate Name]\\n[Candidate Address]\\n\\nDear [Candidate Name],\\n\\nWe are pleased to offer you the position of Senior Software Engineer at Acme Corporation. Your anticipated start date is April 14, 2025, and you will report to the VP of Engineering. This offer is contingent upon satisfactory completion of a background check and professional references.\\nCompensation\\nYour base ",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 4667,
+      "tokenUsage": {
+        "input": 13220,
+        "output": 123
+      },
+      "finalText": "Acme Corporation\n123 Innovation Drive, San Francisco, CA 94105\nhr@acmecorp.com | (415) 555-0100\n\nMarch 15, 2025\n\n[Candidate Name]\n[Candidate Address]\n\nDear [Candidate Name],\n\nWe are pleased to offer you the position of Senior Software Engineer at Acme Corporation. Your anticipated start date is April 14, 2025, and you will report to the VP of Engineering. This offer is contingent upon satisfactory completion of a background check and professional references.\nCompensation\nYour base salary will be $185,000 per year, paid on a semi-monthly basis (1st and 15th of each month). Your salary will be subject to annual review and adjustment based on performance.\nEquity\nYou will be granted a stock option grant of 10,000 shares of Acme Corporation common stock, subject to the terms of the company's Equity Incentive Plan. The options will vest over a 4-year period with a 1-year cliff, meaning 25% of the shares will vest after the first year of employment, and the remaining shares will vest monthly over the subsequent 36 months.\nBenefits\nAs a full-time employee, you will be eligible for the following benefits:\nComprehensive health, dental, and vision insurance coverage\n401(k) retirement plan with 4% employer match\n20 days of paid time off (PTO) per year\n10 paid company holidays\nProfessional development stipend of $2,000 per year\nConfidentiality\nAs a condition of employment, you will be required to sign the company's standard Confidentiality and Invention Assignment Agreement on or before your start date.\nAt-Will Employment\nYour employment with Acme Corporation is at-will, meaning that either you or the company may terminate the employment relationship at any time, with or without cause or notice.\n\nWe are excited about the opportunity to have you join our team. Please confirm your acceptance of this offer by signing and returning this letter by [Response Deadline].\n\nSincerely,\n\n[Hiring Manager Name]\n[Title]\nAcme Corporation",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 304
+      }
+    },
+    "score": {
+      "toolCalls": 1,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "format-text",
+      "name": "Find and format text"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "format-text",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"MEMORANDUM\\n\\n\\n\\nTO: General Counsel\\n\\nFROM: M\\\\&A Practice Group\\n\\nDATE: December 30, 2024\\n\\nRE: Interim Operating Covenants Under Merger Agreement\\n\\n\\n\\nDear General Counsel,\\n\\n\\n\\nThis memorandum outlines your company's key obligations during the period between signing and closing of the merger agreement. These covenants are designed to preserve the business value for the buyer and maintain operational stability during the interim period.\\n\\n\\n\\nOPERATIONAL COVENANTS\\n\\n\\n\\n",
+          "ms": 4
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": "\\$[\\d,]+"
+          },
+          "output": "{\"\\\\$[\\\\d,]+\":{\"total\":0,\"matches\":[]}}",
+          "ms": 2
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": [
+              "$1",
+              "$5",
+              "$10",
+              "$15",
+              "$20",
+              "$25",
+              "$50",
+              "$100",
+              "$250",
+              "$500",
+              "$1,",
+              "$2,",
+              "$3,",
+              "$4,",
+              "$5,",
+              "$6,",
+              "$7,",
+              "$8,",
+              "$9,"
+            ]
+          },
+          "output": "{\"$1\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjU3LCJlbmQiOjU5fV19\",\"matchedText\":\"$1\",\"blockId\":\"01110236\",\"range\":{\"start\":57,\"end\":59}}]},\"$5\":{\"total\":0,\"matches\":[]},\"$10\":{\"total\":0,\"matches\":[]},\"$15\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxv",
+          "ms": 5
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": [
+              "$25,000",
+              "$15,000",
+              "$25 ",
+              "$15 ",
+              "$1 ",
+              "$1,000",
+              "$1 million",
+              "$15 million",
+              "$25 million",
+              "$1,000,000",
+              "$15,000,000",
+              "$25,000,000"
+            ]
+          },
+          "output": "{\"$25,000\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjMzfV19\",\"matchedText\":\"$25,000\",\"blockId\":\"01110236\",\"range\":{\"start\":26,\"end\":33}}]},\"$15,000\":{\"total\":0,\"matches\":[]},\"$25 \":{\"total\":0,\"matches\":[]},\"$15 \":{\"total\":0,\"matches\":[]},\"$1 \":{\"total\":0,\"matches\":[]},\"$1,000\":{\"total\":0,\"matches\":[]},\"$1 million\":{\"total\":0,\"matches\":[]},\"$15 ",
+          "ms": 4
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": ["$1,500,000", "$15,000,000", "$150,000", "$1,500", "$1,000,000,000"]
+          },
+          "output": "{\"$1,500,000\":{\"total\":0,\"matches\":[]},\"$15,000,000\":{\"total\":0,\"matches\":[]},\"$150,000\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjU3LCJlbmQiOjY1fV19\",\"matchedText\":\"$150,000\",\"blockId\":\"01110236\",\"range\":{\"start\":57,\"end\":65}}]},\"$1,500\":{\"total\":0,\"matches\":[]},\"$1,000,000,000\":{\"total\":0,\"matches\":[]}}",
+          "ms": 1
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": [
+              "$25,000,000",
+              "$150,000",
+              "$500,000",
+              "$1,000,000",
+              "$2,000,000",
+              "$5,000,000",
+              "$10,000,000",
+              "$50,000,000",
+              "$100,000,000"
+            ]
+          },
+          "output": "{\"$25,000,000\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjM3fV19\",\"matchedText\":\"$25,000,000\",\"blockId\":\"01110236\",\"range\":{\"start\":26,\"end\":37}}]},\"$150,000\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjU3LC",
+          "ms": 3
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjM3fV19",
+                "bold": true
+              },
+              {
+                "op": "format",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjU3LCJlbmQiOjY1fV19",
+                "bold": true
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"stepId\":\"s0\",\"op\":\"format.apply\",\"effect\":\"changed\"},{\"stepId\":\"s1\",\"op\":\"format.apply\",\"effect\":\"changed\"}]}",
+          "ms": 5
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 30378,
+      "tokenUsage": {
+        "input": 34929,
+        "output": 1259
+      },
+      "finalText": "MEMORANDUM\n\nTO: General Counsel\nFROM: M&A Practice Group\nDATE: December 30, 2024\nRE: Interim Operating Covenants Under Merger Agreement\n\nDear General Counsel,\n\nThis memorandum outlines your company's key obligations during the period between signing and closing of the merger agreement. These covenants are designed to preserve the business value for the buyer and maintain operational stability during the interim period.\n\nOPERATIONAL COVENANTS\n\nAffirmative Obligations (What You Must Do)\n\n1. Business Operations\n   - Maintain the company in good standing under applicable laws\n   - Conduct business in the ordinary course, with exceptions for an ongoing real estate sale measures\n   - Use reasonable best efforts to preserve material assets, contracts, and business relationships\n   - Maintain current insurance levels\n   - Keep current officers and key employees available\n\n2. Stakeholder Relations\n   - Preserve relationships with customers, suppliers, partners, platform providers, manufacturers, distributors, lessors, licensors, licensees, creditors, and contractors\n   - Maintain goodwill with all key business relationships\n\nRestrictive Covenants (What You Cannot Do)\n\n1. Corporate Structure and Governance\n   - No amendments to charter, bylaws, or organizational documents (except minor administrative changes for wholly-owned subsidiaries)\n   - No liquidation, dissolution, merger, consolidation, restructuring, or reorganization\n   - No entry into new business segments unrelated to existing operations\n\n2. Securities and Capital Structure\n   - No issuance, sale, or delivery of company securities (subject to limited exceptions)\n   - No stock splits, combinations, or reclassifications\n   - No declaration of dividends or distributions (subject to specific exceptions)\n   - No pledging or encumbering of capital stock\n\n3. Financial Matters\n   - No incurrence of new indebtedness (subject to exceptions)\n   - No assumption of third-party obligations (except for wholly-owned subsidiaries)\n   - No creation of liens (other than permitted liens)\n   - No material changes to accounting practices (unless required by law or GAAP)\n\n4. Employee Matters\n   - No termination or hiring of any employees or above without buyer consultation\n   - No adoption or modification of employee benefit plans (subject to exceptions)\n   - No compensation increases or special bonuses\n   - No new severance arrangements\n   - No plant closings or mass layoffs\n   - No voluntary recognition of labor unions\n\n5. Tax Matters\n   - No amendment of material tax returns\n   - No material tax elections or changes in accounting methods\n   - No settlements of material tax claims\n   - No extension of limitation periods for material tax claims\n\n6. Commercial Operations\n   - No capital expenditures outside approved budget\n   - No material modifications to significant contracts\n   - No material customer refunds or credits outside ordinary course\n   - No disposal of material business lines\n   - No material changes to privacy policies or IT security\n\nKey Monetary Thresholds\n- Acquisitions limited to $25,000,000 per transaction or $150,000,000 aggregate\n- Other specific thresholds as detailed in the disclosure schedules\n\nProcess for Exceptions\n1. Any proposed actions that may violate these covenants should be promptly brought to our attention\n2. We can help assess whether the action falls within any exceptions or requires buyer consent\n3. When in doubt, consult with us before proceeding\n\nCRITICAL DEAL-RELATED OBLIGATIONS\n\n1. Public Communications\n   - Coordinate all deal-related communications with the Acquiror\n   - Any press releases, employee communications, or public statements about the transaction must be reviewed and approved by the Acquiror in advance\n   - Exercise particular caution in social media communications that could relate to the transaction\n\n2. Alternative Transaction Proposals\n   - Exercise extreme caution regarding any incoming inquiries about alternative transactions\n   - Promptly notify the Acquiror of any alternative transaction proposals received\n   - Do not encourage or solicit alternative proposals, other than during the go-shop period (March 1-31, 2025)\n   - Maintain careful records of any interactions with third parties regarding potential transactions\n   - Consult with counsel immediately upon receiving any alternative proposal\n\nPlease note that this summary is not exhaustive, and specific exceptions exist for many of these restrictions. We recommend consulting with us before taking any significant actions that could implicate these covenants.\n\nBest regards,\n\n[lawyer]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 639
+      }
+    },
+    "score": {
+      "toolCalls": 8,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "format-text",
+      "name": "Find and format text"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "format-text",
+      "config": "sdk",
+      "toolCalls": [
+        {
+          "name": "get_document_text",
+          "input": {},
+          "output": "\"MEMORANDUM\\n\\nTO: General Counsel\\nFROM: M&A Practice Group\\nDATE: December 30, 2024\\nRE: Interim Operating Covenants Under Merger Agreement\\n\\nDear General Counsel,\\n\\nThis memorandum outlines your company's key obligations during the period between signing and closing of the merger agreement. These covenants are designed to preserve the business value for the buyer and maintain operational stability during the interim period.\\n\\nOPERATIONAL COVENANTS\\n\\nAffirmative Obligations (What You Must ",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "pattern": "\\$[\\d,]+(?:\\.\\d+)?(?:\\s*(?:million|billion|thousand))?",
+            "mode": "regex",
+            "includeNodes": true
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "query": "$",
+            "type": "text",
+            "includeNodes": true
+          },
+          "output": "{\"error\":\"SDFindInput requires a \\\"select\\\" object with a \\\"type\\\" field (\\\"text\\\" or \\\"node\\\").\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":2,\"limit\":2,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"ada461d4-e878-4919-b706-762281e87808\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"- Acquisitions limited to $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"25\"}},{\"kind\":\"run\",\"run\":{\"text\":\",000,000 per transaction or $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"1\"}},{\"kind\":\"run\",\"run\":{\"text\":\"50,000,000 aggregate\"}}]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"01110236\"}},{\"node\":{\"kind\":\"paragraph\",\"id\":\"ada461d4-e8",
+          "ms": 2
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$25,000,000 per transaction or $150,000,000 aggregate"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjc5fV19\",\"text\":\"$25,000,000 per transaction or $150,000,000 aggregate\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$25,000,000"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjM3fV19\",\"text\":\"$25,000,000\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$150,000,000"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjU3LCJlbmQiOjY5fV19\",\"text\":\"$150,000,000\"}]}",
+          "ms": 0
+        },
+        {
+          "name": "format_bold",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "01110236",
+              "range": {
+                "start": 26,
+                "end": 37
+              }
+            },
+            "value": true
+          },
+          "output": "{\"error\":\"Unknown field \\\"value\\\" on format.apply input. Allowed fields: target, ref, inline, in.\"}",
+          "ms": 0
+        },
+        {
+          "name": "format_bold",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "01110236",
+              "range": {
+                "start": 57,
+                "end": 69
+              }
+            },
+            "value": true
+          },
+          "output": "{\"error\":\"Unknown field \\\"value\\\" on format.apply input. Allowed fields: target, ref, inline, in.\"}",
+          "ms": 0
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$25,000,000"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"ada461d4-e878-4919-b706-762281e87808\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"- Acquisitions limited to $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"25\"}},{\"kind\":\"run\",\"run\":{\"text\":\",000,000 per transaction or $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"1\"}},{\"kind\":\"run\",\"run\":{\"text\":\"50,000,000 aggregate\"}}]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"01110236\"}}]}",
+          "ms": 1
+        },
+        {
+          "name": "find_content",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$150,000,000"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"limit\":1,\"offset\":0,\"items\":[{\"node\":{\"kind\":\"paragraph\",\"id\":\"ada461d4-e878-4919-b706-762281e87808\",\"paragraph\":{\"inlines\":[{\"kind\":\"run\",\"run\":{\"text\":\"- Acquisitions limited to $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"25\"}},{\"kind\":\"run\",\"run\":{\"text\":\",000,000 per transaction or $\"}},{\"kind\":\"run\",\"run\":{\"text\":\"1\"}},{\"kind\":\"run\",\"run\":{\"text\":\"50,000,000 aggregate\"}}]}},\"address\":{\"kind\":\"block\",\"nodeType\":\"paragraph\",\"nodeId\":\"01110236\"}}]}",
+          "ms": 0
+        },
+        {
+          "name": "format_bold",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "01110236",
+              "range": {
+                "start": 26,
+                "end": 37
+              }
+            }
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "get_document_info",
+          "input": {},
+          "output": "{\"counts\":{\"words\":639,\"characters\":4607,\"paragraphs\":94,\"headings\":0,\"tables\":0,\"images\":0,\"comments\":0,\"trackedChanges\":0,\"sdtFields\":0,\"lists\":0},\"outline\":[],\"capabilities\":{\"canFind\":true,\"canGetNode\":true,\"canComment\":true,\"canReplace\":true},\"revision\":\"0\",\"styles\":{\"paragraphStyles\":[]},\"defaults\":{\"fontFamily\":\"Aptos, Arial, sans-serif\",\"fontSize\":12,\"styleId\":\"Normal\"}}",
+          "ms": 1
+        },
+        {
+          "name": "get_node_by_id",
+          "input": {
+            "id": "01110236"
+          },
+          "output": "{\"error\":\"Unhandled tool: get_node_by_id\"}",
+          "ms": 0
+        },
+        {
+          "name": "query_match",
+          "input": {
+            "select": {
+              "type": "text",
+              "pattern": "$25,000,000"
+            },
+            "includeNodes": true
+          },
+          "output": "{\"total\":1,\"items\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAxMTEwMjM2Iiwic3RhcnQiOjI2LCJlbmQiOjM3fV19\",\"text\":\"$25,000,000\"}]}",
+          "ms": 1
+        },
+        {
+          "name": "decide_tracked_change",
+          "input": {
+            "decision": "accept",
+            "target": {
+              "scope": "all"
+            }
+          },
+          "output": "{\"error\":\"Unhandled tool: decide_tracked_change\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "target": {
+              "kind": "text",
+              "blockId": "01110236",
+              "range": {
+                "start": 26,
+                "end": 37
+              }
+            },
+            "text": "$25,000,000"
+          },
+          "output": "{\"error\":\"target must be a SelectionTarget object.\"}",
+          "ms": 0
+        },
+        {
+          "name": "replace_content",
+          "input": {
+            "blockId": "01110236",
+            "start": 26,
+            "end": 37,
+            "text": "$25,000,000"
+          },
+          "output": "{\"error\":\"Unknown field \\\"blockId\\\" on replace input. Allowed fields: text, target, ref, in.\"}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 38343,
+      "tokenUsage": {
+        "input": 131795,
+        "output": 1623
+      },
+      "finalText": "MEMORANDUM\n\nTO: General Counsel\nFROM: M&A Practice Group\nDATE: December 30, 2024\nRE: Interim Operating Covenants Under Merger Agreement\n\nDear General Counsel,\n\nThis memorandum outlines your company's key obligations during the period between signing and closing of the merger agreement. These covenants are designed to preserve the business value for the buyer and maintain operational stability during the interim period.\n\nOPERATIONAL COVENANTS\n\nAffirmative Obligations (What You Must Do)\n\n1. Business Operations\n   - Maintain the company in good standing under applicable laws\n   - Conduct business in the ordinary course, with exceptions for an ongoing real estate sale measures\n   - Use reasonable best efforts to preserve material assets, contracts, and business relationships\n   - Maintain current insurance levels\n   - Keep current officers and key employees available\n\n2. Stakeholder Relations\n   - Preserve relationships with customers, suppliers, partners, platform providers, manufacturers, distributors, lessors, licensors, licensees, creditors, and contractors\n   - Maintain goodwill with all key business relationships\n\nRestrictive Covenants (What You Cannot Do)\n\n1. Corporate Structure and Governance\n   - No amendments to charter, bylaws, or organizational documents (except minor administrative changes for wholly-owned subsidiaries)\n   - No liquidation, dissolution, merger, consolidation, restructuring, or reorganization\n   - No entry into new business segments unrelated to existing operations\n\n2. Securities and Capital Structure\n   - No issuance, sale, or delivery of company securities (subject to limited exceptions)\n   - No stock splits, combinations, or reclassifications\n   - No declaration of dividends or distributions (subject to specific exceptions)\n   - No pledging or encumbering of capital stock\n\n3. Financial Matters\n   - No incurrence of new indebtedness (subject to exceptions)\n   - No assumption of third-party obligations (except for wholly-owned subsidiaries)\n   - No creation of liens (other than permitted liens)\n   - No material changes to accounting practices (unless required by law or GAAP)\n\n4. Employee Matters\n   - No termination or hiring of any employees or above without buyer consultation\n   - No adoption or modification of employee benefit plans (subject to exceptions)\n   - No compensation increases or special bonuses\n   - No new severance arrangements\n   - No plant closings or mass layoffs\n   - No voluntary recognition of labor unions\n\n5. Tax Matters\n   - No amendment of material tax returns\n   - No material tax elections or changes in accounting methods\n   - No settlements of material tax claims\n   - No extension of limitation periods for material tax claims\n\n6. Commercial Operations\n   - No capital expenditures outside approved budget\n   - No material modifications to significant contracts\n   - No material customer refunds or credits outside ordinary course\n   - No disposal of material business lines\n   - No material changes to privacy policies or IT security\n\nKey Monetary Thresholds\n- Acquisitions limited to $25,000,000 per transaction or $150,000,000 aggregate\n- Other specific thresholds as detailed in the disclosure schedules\n\nProcess for Exceptions\n1. Any proposed actions that may violate these covenants should be promptly brought to our attention\n2. We can help assess whether the action falls within any exceptions or requires buyer consent\n3. When in doubt, consult with us before proceeding\n\nCRITICAL DEAL-RELATED OBLIGATIONS\n\n1. Public Communications\n   - Coordinate all deal-related communications with the Acquiror\n   - Any press releases, employee communications, or public statements about the transaction must be reviewed and approved by the Acquiror in advance\n   - Exercise particular caution in social media communications that could relate to the transaction\n\n2. Alternative Transaction Proposals\n   - Exercise extreme caution regarding any incoming inquiries about alternative transactions\n   - Promptly notify the Acquiror of any alternative transaction proposals received\n   - Do not encourage or solicit alternative proposals, other than during the go-shop period (March 1-31, 2025)\n   - Maintain careful records of any interactions with third parties regarding potential transactions\n   - Consult with counsel immediately upon receiving any alternative proposal\n\nPlease note that this summary is not exhaustive, and specific exceptions exist for many of these restrictions. We recommend consulting with us before taking any significant actions that could implicate these covenants.\n\nBest regards,\n\n[lawyer]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 639
+      }
+    },
+    "score": {
+      "toolCalls": 18,
+      "errors": 0,
+      "efficiency": false,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": false
+    }
+  }
+]

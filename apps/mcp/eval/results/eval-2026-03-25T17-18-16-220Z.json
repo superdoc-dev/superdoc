@@ -1,0 +1,106 @@
+[
+  {
+    "task": {
+      "id": "simple-replace",
+      "name": "Find and replace text"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "simple-replace",
+      "config": "experimental",
+      "toolCalls": [
+        {
+          "name": "read_document",
+          "input": {},
+          "output": "{\"content\":\"# **MUTUAL NON-DISCLOSURE AGREEMENT**\\n\\nThis Mutual Non-Disclosure Agreement (the \\\"Agreement\\\") is entered into as of January 15, 2025 (the \\\"Effective Date\\\"), by and between:\\n\\nIqidis Corp, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \\\"Disclosing Party\\\"), contact: legal\\\\@iqidis.com\\n\\nand\\n\\nTechVentures LLC, a limited liability company organized under the laws of the State",
+          "ms": 8
+        },
+        {
+          "name": "find_in_document",
+          "input": {
+            "pattern": "Iqidis Corp"
+          },
+          "output": "{\"Iqidis Corp\":{\"total\":1,\"matches\":[{\"ref\":\"text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=\",\"matchedText\":\"Iqidis Corp\",\"blockId\":\"00000003\",\"range\":{\"start\":0,\"end\":11}}]}}",
+          "ms": 4
+        },
+        {
+          "name": "edit_document",
+          "input": {
+            "operations": [
+              {
+                "op": "replace",
+                "ref": "text:v4:eyJ2Ijo0LCJyZXYiOiIwIiwic3RvcnlLZXkiOiJib2R5Iiwic2NvcGUiOiJtYXRjaCIsIm1hdGNoSWQiOiJtOjAiLCJzZWdtZW50cyI6W3siYmxvY2tJZCI6IjAwMDAwMDAzIiwic3RhcnQiOjAsImVuZCI6MTF9XX0=",
+                "text": "Nova Industries",
+                "matched_text": "Iqidis Corp"
+              }
+            ]
+          },
+          "output": "{\"success\":true,\"results\":[{\"stepId\":\"s0\",\"op\":\"text.rewrite\",\"effect\":\"changed\"}]}",
+          "ms": 6
+        },
+        {
+          "name": "save_document",
+          "input": {},
+          "output": "{\"saved\":true}",
+          "ms": 0
+        }
+      ],
+      "errors": 0,
+      "totalMs": 11592,
+      "tokenUsage": {
+        "input": 9877,
+        "output": 493
+      },
+      "finalText": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (the \"Agreement\") is entered into as of January 15, 2025 (the \"Effective Date\"), by and between:\nNova Industries, a corporation organized under the laws of the State of Delaware, with its principal office at 200 Tech Boulevard, Suite 400, San Jose, CA 95110 (the \"Disclosing Party\"), contact: legal@iqidis.com\nand\nTechVentures LLC, a limited liability company organized under the laws of the State of New York, with its principal office at 50 Innovation Way, New York, NY 10001 (the \"Receiving Party\").\nEach referred to individually as a \"Party\" and collectively as the \"Parties\".\n1. Definitions\n\"Confidential Information\" means any and all non-public, proprietary, or confidential information disclosed by either Party to the other Party, whether orally, in writing, or by inspection of tangible objects, including but not limited to: trade secrets, business plans, financial data, customer lists, technical specifications, software code, product roadmaps, and marketing strategies.\n2. Obligations of Receiving Party\nThe Receiving Party agrees to the following obligations with respect to Confidential Information:\nMaintain the confidentiality of all Confidential Information using the same degree of care as it uses for its own confidential information, but no less than reasonable care.\nNot disclose Confidential Information to any third party without the prior written consent of the Disclosing Party.\nRestrict access to Confidential Information to employees and contractors who have a need to know and are bound by confidentiality obligations.\nNot use Confidential Information for any purpose other than evaluating the potential business relationship between the Parties.\nPromptly notify the Disclosing Party of any unauthorized use or disclosure of Confidential Information.\n3. Exclusions\nConfidential Information shall not include information that: (a) is or becomes publicly available through no fault of the Receiving Party; (b) was known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party without use of the Confidential Information; or (d) is rightfully obtained from a third party without restriction on disclosure.\n4. Term and Termination\nThis Agreement shall remain in effect for a period of two (2) years from the Effective Date, January 15, 2025. Either Party may terminate this Agreement upon thirty (30) days' written notice to the other Party. The obligations of confidentiality shall survive termination for a period of five (5) years.\n5. Indemnification\nEach Party shall mutually indemnify, defend, and hold harmless the other Party from and against any and all claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to any breach of this Agreement. The total liability under this section shall not exceed $500,000.\n6. Governing Law\nThis Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\n7. Miscellaneous\nThis Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous agreements, whether written or oral. No amendment to this Agreement shall be effective unless made in writing and signed by both Parties.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.\n\nDisclosing Party: [Party A Signature]\nReceiving Party: [Party B Signature]\nDate: [Date]",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 531
+      }
+    },
+    "score": {
+      "toolCalls": 4,
+      "errors": 0,
+      "efficiency": true,
+      "containsExpected": true,
+      "excludesUnwanted": true,
+      "commentsOk": true,
+      "trackedChangesOk": true,
+      "pass": true
+    }
+  },
+  {
+    "task": {
+      "id": "simple-replace",
+      "name": "Find and replace text"
+    },
+    "config": "sdk",
+    "result": {
+      "taskId": "simple-replace",
+      "config": "sdk",
+      "toolCalls": [],
+      "errors": 1,
+      "totalMs": 0,
+      "tokenUsage": {
+        "input": 0,
+        "output": 0
+      },
+      "finalText": "",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 0
+      }
+    },
+    "score": {
+      "toolCalls": 0,
+      "errors": 1,
+      "efficiency": false,
+      "containsExpected": false,
+      "excludesUnwanted": true,
+      "commentsOk": false,
+      "trackedChangesOk": false,
+      "pass": false
+    }
+  }
+]

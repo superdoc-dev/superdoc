@@ -1,0 +1,36 @@
+[
+  {
+    "task": {
+      "id": "read-summarize",
+      "name": "Read and extract information"
+    },
+    "config": "experimental",
+    "result": {
+      "taskId": "read-summarize",
+      "config": "experimental",
+      "toolCalls": [],
+      "errors": 1,
+      "totalMs": 0,
+      "tokenUsage": {
+        "input": 0,
+        "output": 0
+      },
+      "finalText": "",
+      "finalInfo": {
+        "comments": 0,
+        "trackedChanges": 0,
+        "words": 0
+      }
+    },
+    "score": {
+      "toolCalls": 0,
+      "errors": 1,
+      "efficiency": false,
+      "containsExpected": false,
+      "excludesUnwanted": true,
+      "commentsOk": false,
+      "trackedChangesOk": false,
+      "pass": false
+    }
+  }
+]

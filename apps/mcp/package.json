@@ -10,21 +10,26 @@
   ],
   "scripts": {
     "dev": "bun run src/index.ts",
+    "dev:experimental": "bun run src/experimental.ts",
     "build": "bun build src/index.ts --outdir dist --target node --format esm",
     "test": "NODE_ENV=test bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval": "bun run eval/run.ts",
+    "eval:experimental": "bun run eval/run.ts --config experimental",
+    "eval:sdk": "bun run eval/run.ts --config sdk"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@superdoc-dev/sdk": "workspace:*",
     "@superdoc/document-api": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@superdoc/super-editor": "workspace:*",
-    "superdoc": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "superdoc": "workspace:*",
     "typescript": "catalog:"
   },
   "publishConfig": {

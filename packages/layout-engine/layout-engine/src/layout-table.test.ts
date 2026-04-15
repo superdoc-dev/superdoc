@@ -727,6 +727,56 @@ describe('layoutTableBlock', () => {
       const rightFragment = layoutWithJustification('right');
       expect(rightFragment.x).toBe(300);
     });
+
+    it('allows centered wide tables to overflow into both margins', () => {
+      const measure = createMockTableMeasure([300, 300], [20]);
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+      const block = createMockTableBlock(1, undefined, { justification: 'center' });
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 500,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].width).toBe(600);
+      expect(fragments[0].x).toBe(-50);
+    });
+
+    it('allows right-aligned wide tables to overflow into the left margin', () => {
+      const measure = createMockTableMeasure([300, 300], [20]);
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+      const block = createMockTableBlock(1, undefined, { justification: 'right' });
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 500,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].width).toBe(600);
+      expect(fragments[0].x).toBe(-100);
+    });
   });
 
   describe('table start preflight', () => {
@@ -3356,6 +3406,33 @@ describe('layoutTableBlock', () => {
         expect(fragments[0].width).toBe(240); // 200 - (-40)
       });
 
+      it('preserves width for wide tables with positive indent', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 30 } } as TableAttrs;
+        const measure = createMockTableMeasure([300, 300], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 500,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(30);
+        expect(fragments[0].width).toBe(600);
+      });
+
       it('should clamp width to 0 when indent exceeds width', () => {
         const block = createMockTableBlock(1);
         block.attrs = { tableIndent: { width: 250 } } as TableAttrs;
@@ -4167,7 +4244,9 @@ describe('layoutTableBlock', () => {
     it('should rescale column widths when table is wider than section content width', () => {
       // Simulate a table measured at landscape width (700px) but rendered in
       // a portrait section (450px). Column widths should be rescaled to fit.
-      const block = createMockTableBlock(2);
+      const block = createMockTableBlock(2, undefined, {
+        tableWidth: { value: 5000, type: 'pct' },
+      });
       const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
       // measure.totalWidth = 700
 
@@ -4236,7 +4315,9 @@ describe('layoutTableBlock', () => {
 
     it('should rescale column widths on paginated table fragments', () => {
       // Table that splits across pages should have rescaled column widths on each fragment
-      const block = createMockTableBlock(4);
+      const block = createMockTableBlock(4, undefined, {
+        tableWidth: { value: 5000, type: 'pct' },
+      });
       const measure = createMockTableMeasure([300, 300], [200, 200, 200, 200]);
       // totalWidth = 600, each row = 200px
 
@@ -4276,7 +4357,9 @@ describe('layoutTableBlock', () => {
     });
 
     it('should generate metadata boundaries from rescaled column widths when table is clamped', () => {
-      const block = createMockTableBlock(2);
+      const block = createMockTableBlock(2, undefined, {
+        tableWidth: { value: 5000, type: 'pct' },
+      });
       const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
 
       const fragments: TableFragment[] = [];

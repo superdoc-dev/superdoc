@@ -3029,7 +3029,7 @@ describe('DomPainter', () => {
     expect(appliedWordSpacing).toBeCloseTo(expectedWordSpacing, 5);
   });
 
-  it('reuses fragment DOM nodes when layout geometry changes', () => {
+  it('rebuilds fragment DOM nodes when layout geometry changes to keep line epochs in sync', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
@@ -3051,9 +3051,12 @@ describe('DomPainter', () => {
 
     painter.paint(movedLayout, mount);
     const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    const lineAfter = fragmentAfter.querySelector('.superdoc-line') as HTMLElement;
 
-    expect(fragmentAfter).toBe(fragmentBefore);
+    expect(fragmentAfter).not.toBe(fragmentBefore);
     expect(fragmentAfter.style.left).toBe('60px');
+    expect(fragmentAfter.dataset.layoutEpoch).toBeTruthy();
+    expect(lineAfter.dataset.layoutEpoch).toBe(fragmentAfter.dataset.layoutEpoch);
   });
 
   it('rebuilds fragment DOM when block content changes via setData', () => {
@@ -5016,10 +5019,13 @@ describe('DomPainter', () => {
     painter.paint(updatedLayout, mount);
 
     const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    expect(updatedWrapper).toBe(initialWrapper);
+    const updatedLine = updatedWrapper.querySelector('.superdoc-line') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
     expect(updatedWrapper.style.left).toBe('90px');
     expect(updatedWrapper.style.top).toBe('55px');
     expect(updatedWrapper.style.width).toBe('310px');
+    expect(updatedWrapper.dataset.layoutEpoch).toBeTruthy();
+    expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
   it('applies resolved zIndex only to anchored media fragments', () => {

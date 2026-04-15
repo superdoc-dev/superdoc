@@ -2748,6 +2748,7 @@ export class DomPainter {
 
       if (current) {
         existing.delete(key);
+        const geometryChanged = hasFragmentGeometryChanged(current.fragment, fragment);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
         // Detect mismatch in any between-border property
         const betweenBorderMismatch =
@@ -2764,6 +2765,7 @@ export class DomPainter {
           current.element.dataset.pmStart != null &&
           this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
         const needsRebuild =
+          geometryChanged ||
           this.changedBlocks.has(fragment.blockId) ||
           current.signature !== fragmentSignature(fragment, this.blockLookup) ||
           sdtBoundaryMismatch ||
@@ -7321,6 +7323,16 @@ const fragmentSignature = (fragment: Fragment, lookup: BlockLookup): string => {
   }
   return base;
 };
+
+const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean =>
+  previous.x !== next.x ||
+  previous.y !== next.y ||
+  previous.width !== next.width ||
+  ('height' in previous &&
+    'height' in next &&
+    typeof previous.height === 'number' &&
+    typeof next.height === 'number' &&
+    previous.height !== next.height);
 
 const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
   if (!metadata) return '';

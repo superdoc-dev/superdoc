@@ -6,6 +6,7 @@
  */
 
 import type { NodeKind } from '../types/base.js';
+import type { SelectionTarget } from '../types/address.js';
 import type { ReceiptFailure } from '../types/receipt.js';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +207,12 @@ export interface CreateContentControlInput {
   kind: NodeKind;
   controlType?: ContentControlType;
   target?: ContentControlTarget;
+  /**
+   * Text range to wrap in the new content control. Mutually exclusive with `target`.
+   * When `content` is also provided, it replaces the selected text inside the new SDT.
+   * When `content` is omitted, the existing text in the range becomes the SDT content.
+   */
+  at?: SelectionTarget;
   tag?: string;
   alias?: string;
   lockMode?: LockMode;

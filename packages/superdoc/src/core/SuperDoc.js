@@ -1335,10 +1335,6 @@ export class SuperDoc extends EventEmitter {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'editing');
     });
-
-    if (this.toolbar) {
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #setModeSuggesting() {
@@ -1355,10 +1351,6 @@ export class SuperDoc extends EventEmitter {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'suggesting');
     });
-
-    if (this.toolbar) {
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #setModeViewing() {
@@ -1384,10 +1376,6 @@ export class SuperDoc extends EventEmitter {
       }
       this.#applyDocumentMode(doc, 'viewing');
     });
-
-    if (this.toolbar) {
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #syncViewingVisibility() {

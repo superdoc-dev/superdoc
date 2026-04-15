@@ -736,6 +736,7 @@ export class SuperToolbar extends EventEmitter {
   #scheduleRestoreEditorFocus() {
     if (!this.activeEditor || this.activeEditor.options.isHeaderOrFooter) return;
 
+    clearTimeout(this._restoreFocusTimeoutId);
     this._restoreFocusTimeoutId = setTimeout(() => {
       this._restoreFocusTimeoutId = null;
       if (!this.activeEditor || this.activeEditor.options.isHeaderOrFooter) return;

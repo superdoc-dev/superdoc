@@ -120,8 +120,6 @@ import {
 } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
-  getFragmentParagraphBorders,
-  getFragmentHeight,
   createParagraphDecorationLayers,
   applyParagraphBorderStyles,
   applyParagraphShadingStyles,
@@ -249,35 +247,25 @@ export type RenderedLineInfo = {
 /**
  * Input to `DomPainter.paint()`.
  *
- * `resolvedLayout` is the canonical resolved data. The remaining fields are
- * still required bridge data until the painter can render solely from resolved
- * items for lookups, change tracking, and non-paragraph fragment rendering.
+ * `resolvedLayout` is the canonical resolved data the painter reads from.
+ * `sourceLayout` is the raw Layout retained for legacy internal access paths.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
-  /** Raw Layout for internal fragment access (bridge, will be removed once render loops iterate resolved items). */
+  /** Raw Layout for internal fragment access. */
   sourceLayout: Layout;
-  /** Main document blocks/measures used for lookups and version tracking. */
-  blocks: FlowBlock[];
-  measures: Measure[];
-  /** Header block data (still needed for decoration rendering, no resolved path yet). */
-  headerBlocks?: FlowBlock[];
-  headerMeasures?: Measure[];
-  /** Footer block data (still needed for decoration rendering, no resolved path yet). */
-  footerBlocks?: FlowBlock[];
-  footerMeasures?: Measure[];
 };
 
-type OptionalBlockMeasurePair = {
-  blocks: FlowBlock[];
-  measures: Measure[];
-};
-
-type PageDecorationPayload = {
+export type PageDecorationPayload = {
   fragments: Fragment[];
-  /** Resolved items aligned 1:1 with `fragments`. Same length, same order.
-   *  Absent when provider has no resolved data (painter falls back to blockLookup). */
+  /**
+   * Resolved items aligned 1:1 with `fragments`. Same length, same order.
+   * When omitted, the painter treats fragments as having no resolved metadata
+   * (no paragraph borders, no SDT container keys).
+   */
   items?: ResolvedPaintItem[];
+  /** Minimum Y coordinate from layout; negative when content extends above y=0. */
+  minY?: number;
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
@@ -339,10 +327,6 @@ type PainterOptions = {
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
-
-// BlockLookup lives in the shared types module (single source of truth)
-import type { BlockLookupEntry, BlockLookup } from './features/paragraph-borders/types.js';
-export type { BlockLookup, BlockLookupEntry };
 
 type FragmentDomState = {
   key: string;
@@ -1235,7 +1219,6 @@ const applyLinkDataset = (element: HTMLElement, dataset?: Record<string, string>
  * ```
  */
 export class DomPainter {
-  private blockLookup: BlockLookup;
   private readonly options: PainterOptions;
   private mount: HTMLElement | null = null;
   private doc: Document | null = null;
@@ -1311,7 +1294,6 @@ export class DomPainter {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
-    this.blockLookup = new Map();
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
 
@@ -1590,80 +1572,10 @@ export class DomPainter {
     };
   }
 
-  /**
-   * Builds a new block lookup from the input data, merging header/footer blocks,
-   * and tracks which blocks changed since the last paint cycle.
-   */
-  private normalizeOptionalBlockMeasurePair(
-    label: 'header' | 'footer',
-    blocks: FlowBlock[] | undefined,
-    measures: Measure[] | undefined,
-  ): OptionalBlockMeasurePair | undefined {
-    const hasBlocks = blocks !== undefined;
-    const hasMeasures = measures !== undefined;
-
-    if (hasBlocks !== hasMeasures) {
-      throw new Error(
-        `DomPainter.paint requires ${label}Blocks and ${label}Measures to both be provided or both be omitted`,
-      );
-    }
-
-    if (!hasBlocks || !hasMeasures) {
-      return undefined;
-    }
-
-    return { blocks, measures };
-  }
-
-  private updateBlockLookup(input: DomPainterInput): void {
-    const { blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
-    const resolvedBlockVersions = this.resolvedLayout?.blockVersions;
-
-    // Build lookup for main document blocks
-    const nextLookup = this.buildBlockLookup(blocks, measures, resolvedBlockVersions);
-
-    const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
-    if (normalizedHeader) {
-      const headerLookup = this.buildBlockLookup(
-        normalizedHeader.blocks,
-        normalizedHeader.measures,
-        resolvedBlockVersions,
-      );
-      headerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
-    if (normalizedFooter) {
-      const footerLookup = this.buildBlockLookup(
-        normalizedFooter.blocks,
-        normalizedFooter.measures,
-        resolvedBlockVersions,
-      );
-      footerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    // Track changed blocks (decoration only now, body change detection uses resolved version)
-    const changed = new Set<string>();
-    nextLookup.forEach((entry, id) => {
-      const previous = this.blockLookup.get(id);
-      if (!previous || previous.version !== entry.version) {
-        changed.add(id);
-      }
-    });
-    this.blockLookup = nextLookup;
-    this.changedBlocks = changed;
-  }
-
   public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
     const layout = input.sourceLayout;
     this.resolvedLayout = input.resolvedLayout;
-
-    // Update block lookup and change tracking (absorbs former setData logic)
-    this.updateBlockLookup(input);
+    this.changedBlocks.clear();
 
     if (!(mount instanceof HTMLElement)) {
       throw new Error('DomPainter.paint requires a valid HTMLElement mount');
@@ -1686,8 +1598,6 @@ export class DomPainter {
           if ('blockId' in item) this.changedBlocks.add(item.blockId);
         }
       }
-      // Also mark all header/footer blocks as changed.
-      this.blockLookup.forEach((_, id) => this.changedBlocks.add(id));
       this.currentMapping = null;
     } else {
       this.currentMapping = mapping ?? null;
@@ -2246,13 +2156,9 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -2454,12 +2360,11 @@ export class DomPainter {
    * Used to determine special Y positioning for page-relative anchored media
    * in header/footer decoration sections.
    */
-  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem?: ResolvedPaintItem): boolean {
+  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
-    const resolvedBlock = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
-    const block = resolvedBlock ?? this.blockLookup.get(fragment.blockId)?.block;
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
     if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) {
       return false;
     }
@@ -2600,7 +2505,8 @@ export class DomPainter {
     };
 
     // Compute between-border flags for header/footer paragraph fragments
-    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup, data.items);
+    const decorationItems = data.items ?? [];
+    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, decorationItems);
 
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
@@ -2613,10 +2519,11 @@ export class DomPainter {
       const fragment = data.fragments[fi];
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
+        const resolvedItem = decorationItems[fi] as ResolvedDrawingItem | undefined;
         isBehindDoc =
           fragment.behindDoc === true ||
           (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
-          this.shouldRenderBehindPageContent(fragment, kind);
+          this.shouldRenderBehindPageContent(fragment, kind, resolvedItem);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
@@ -2791,13 +2698,9 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2813,6 +2716,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      const resolvedSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
 
       if (current) {
         existing.delete(key);
@@ -2832,12 +2736,10 @@ export class DomPainter {
           newPmStart != null &&
           current.element.dataset.pmStart != null &&
           this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
-        const resolvedSig =
-          resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
         const needsRebuild =
           geometryChanged ||
           this.changedBlocks.has(fragment.blockId) ||
-          current.signature !== (resolvedSig ?? fragmentSignature(fragment, this.blockLookup)) ||
+          current.signature !== resolvedSig ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
           mappingUnreliable;
@@ -2846,7 +2748,7 @@ export class DomPainter {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
-          current.signature = resolvedSig ?? fragmentSignature(fragment, this.blockLookup);
+          current.signature = resolvedSig;
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2866,13 +2768,11 @@ export class DomPainter {
 
       const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
-      const freshSig =
-        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
       nextFragments.push({
         key,
         fragment,
         element: fresh,
-        signature: freshSig ?? fragmentSignature(fragment, this.blockLookup),
+        signature: resolvedSig,
         context: contextBase,
       });
     });
@@ -2967,13 +2867,9 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
@@ -2985,11 +2881,10 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      const initSig =
-        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
+      const initSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
       return {
         key: fragmentKey(fragment),
-        signature: initSig ?? fragmentSignature(fragment, this.blockLookup),
+        signature: initSig,
         fragment,
         element: fragmentEl,
         context: contextBase,
@@ -3086,16 +2981,12 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const { block, measure } = this.resolveBlockAndMeasure<ParagraphBlock, ParagraphMeasure>(
-        fragment,
-        resolvedItem?.block,
-        resolvedItem?.measure,
-        'paragraph',
-        'paragraph',
-        'paragraph block/measure',
-      );
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'paragraph' || resolvedItem?.measure?.kind !== 'paragraph') {
+        throw new Error(`DomPainter: missing resolved paragraph block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ParagraphBlock;
+      const measure = resolvedItem.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
 
@@ -3631,16 +3522,12 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const { block, measure } = this.resolveBlockAndMeasure<ListBlock, ListMeasure>(
-        fragment,
-        resolvedItem?.block,
-        resolvedItem?.measure,
-        'list',
-        'list',
-        'list block/measure',
-      );
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'list' || resolvedItem?.measure?.kind !== 'list') {
+        throw new Error(`DomPainter: missing resolved list block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ListBlock;
+      const measure = resolvedItem.measure as ListMeasure;
       const item = block.items.find((entry) => entry.id === fragment.itemId);
       const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
       if (!item || !itemMeasure) {
@@ -3775,9 +3662,11 @@ export class DomPainter {
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
     try {
-      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const block = this.resolveBlock<ImageBlock>(fragment, resolvedItem?.block, 'image', 'image block');
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'image') {
+        throw new Error(`DomPainter: missing resolved image block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ImageBlock;
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
@@ -3975,9 +3864,11 @@ export class DomPainter {
     resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
     try {
-      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const block = this.resolveBlock<DrawingBlock>(fragment, resolvedItem?.block, 'drawing', 'drawing block');
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'drawing') {
+        throw new Error(`DomPainter: missing resolved drawing block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as DrawingBlock;
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
@@ -4978,28 +4869,14 @@ export class DomPainter {
     cellSpacingPx: number;
     effectiveColumnWidths: number[];
   } {
-    if (resolvedItem) {
-      return {
-        block: resolvedItem.block,
-        measure: resolvedItem.measure,
-        cellSpacingPx: resolvedItem.cellSpacingPx,
-        effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
-      };
+    if (!resolvedItem) {
+      throw new Error(`DomPainter: missing resolved table item for fragment ${fragment.blockId}`);
     }
-
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
-      throw new Error(`DomPainter: missing table block for fragment ${fragment.blockId}`);
-    }
-
-    const block = lookup.block as TableBlock;
-    const measure = lookup.measure as TableMeasure;
-
     return {
-      block,
-      measure,
-      cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
-      effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+      block: resolvedItem.block,
+      measure: resolvedItem.measure,
+      cellSpacingPx: resolvedItem.cellSpacingPx,
+      effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
     };
   }
 
@@ -6961,21 +6838,24 @@ export class DomPainter {
   private shouldRenderBehindPageContent(
     fragment: ImageFragment | DrawingFragment,
     section: 'header' | 'footer',
+    resolvedItem?: ResolvedDrawingItem,
   ): boolean {
     if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(fragment);
+    return (
+      section === 'header' &&
+      fragment.kind === 'drawing' &&
+      this.isHeaderWordArtWatermark(resolvedItem?.block)
+    );
   }
 
-  private isHeaderWordArtWatermark(fragment: DrawingFragment): boolean {
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== 'drawing' || lookup.block.drawingKind !== 'vectorShape') {
+  private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
+    if (!block || block.kind !== 'drawing' || block.drawingKind !== 'vectorShape') {
       return false;
     }
 
-    const block = lookup.block;
     const attrs = (block.attrs as Record<string, unknown> | undefined) ?? {};
     const hasTextContent = Array.isArray(block.textContent?.parts) && block.textContent.parts.length > 0;
 
@@ -7062,89 +6942,11 @@ export class DomPainter {
     if (resolvedItem && 'height' in resolvedItem && typeof resolvedItem.height === 'number') {
       return resolvedItem.height;
     }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    const measure = lookup?.measure;
-
-    if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
-      return measure.totalHeight;
-    }
-
-    if (fragment.kind === 'list-item' && measure?.kind === 'list') {
-      return measure.totalHeight;
-    }
-
-    if (fragment.kind === 'table') {
+    // Atomic fragment kinds carry their own height on the fragment.
+    if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
       return fragment.height;
     }
-
-    if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-      return fragment.height;
-    }
-
     return 0;
-  }
-
-  /**
-   * Resolves the block + measure pair for a fragment. Body fragments get these from the
-   * ResolvedFragmentItem; header/footer fragments fall back to the blockLookup map.
-   */
-  private resolveBlockAndMeasure<B extends FlowBlock, M extends Measure>(
-    fragment: { blockId: string },
-    resolvedBlock: FlowBlock | undefined,
-    resolvedMeasure: Measure | undefined,
-    blockKind: B['kind'],
-    measureKind: M['kind'],
-    errorLabel: string,
-  ): { block: B; measure: M } {
-    if (resolvedBlock?.kind === blockKind && resolvedMeasure?.kind === measureKind) {
-      return { block: resolvedBlock as B, measure: resolvedMeasure as M };
-    }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== blockKind || lookup.measure.kind !== measureKind) {
-      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
-    }
-    return { block: lookup.block as B, measure: lookup.measure as M };
-  }
-
-  /**
-   * Resolves only the block for a fragment (image/drawing rendering doesn't consume the measure).
-   * Body fragments get this from the ResolvedImageItem/ResolvedDrawingItem; header/footer
-   * fragments fall back to the blockLookup map.
-   */
-  private resolveBlock<B extends FlowBlock>(
-    fragment: { blockId: string },
-    resolvedBlock: B | undefined,
-    blockKind: B['kind'],
-    errorLabel: string,
-  ): B {
-    if (resolvedBlock?.kind === blockKind) {
-      return resolvedBlock;
-    }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== blockKind) {
-      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
-    }
-    return lookup.block as B;
-  }
-
-  private buildBlockLookup(
-    blocks: FlowBlock[],
-    measures: Measure[],
-    precomputedVersions?: Record<string, string>,
-  ): BlockLookup {
-    if (blocks.length !== measures.length) {
-      throw new Error('DomPainter requires the same number of blocks and measures');
-    }
-
-    const lookup: BlockLookup = new Map();
-    blocks.forEach((block, index) => {
-      lookup.set(block.id, {
-        block,
-        measure: measures[index],
-        version: precomputedVersions?.[block.id] ?? deriveBlockVersion(block),
-      });
-    });
-    return lookup;
   }
 
   /**
@@ -7313,46 +7115,20 @@ export class DomPainter {
   }
 }
 
-const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup): string | null => {
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return null;
-  const block = lookup.block;
-
-  if (fragment.kind === 'para' && block.kind === 'paragraph') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'list-item' && block.kind === 'list') {
-    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
-    const attrs = item?.paragraph.attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'table' && block.kind === 'table') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  return null;
-};
-
 const computeSdtBoundaries = (
   fragments: readonly Fragment[],
-  blockLookup: BlockLookup,
+  resolvedItems: readonly ResolvedPaintItem[],
   sdtLabelsRendered: Set<string>,
-  resolvedItems?: readonly ResolvedPaintItem[],
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys: (string | null)[] = resolvedItems
-    ? resolvedItems.map((item) => {
-        if ('sdtContainerKey' in item) {
-          const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
-          return key ?? null;
-        }
-        return null;
-      })
-    : fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
+  const containerKeys: (string | null)[] = fragments.map((_frag, idx) => {
+    const item = resolvedItems[idx];
+    if (item && 'sdtContainerKey' in item) {
+      const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
+      return key ?? null;
+    }
+    return null;
+  });
 
   let i = 0;
   while (i < fragments.length) {
@@ -7381,7 +7157,7 @@ const computeSdtBoundaries = (
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
         const nextFragment = fragments[k + 1];
-        const currentHeight = resolvedItems?.[k]?.height ?? getFragmentHeight(fragment, blockLookup);
+        const currentHeight = (resolvedItems[k] as { height?: number } | undefined)?.height ?? 0;
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
         if (gapToNext > 0) {
@@ -7409,7 +7185,7 @@ const computeSdtBoundaries = (
   return boundaries;
 };
 
-// getFragmentParagraphBorders, computeBetweenBorderFlags — moved to features/paragraph-borders/
+// computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   if (fragment.kind === 'para') {
@@ -7435,66 +7211,6 @@ const fragmentKey = (fragment: Fragment): string => {
   // Exhaustive check - all fragment kinds should be handled above
   const _exhaustiveCheck: never = fragment;
   return _exhaustiveCheck;
-};
-
-const fragmentSignature = (fragment: Fragment, lookup: BlockLookup): string => {
-  const base = lookup.get(fragment.blockId)?.version ?? 'missing';
-  if (fragment.kind === 'para') {
-    // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-    return [
-      base,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.markerWidth ?? '', // Include markerWidth to trigger re-render when list status changes
-    ].join('|');
-  }
-  if (fragment.kind === 'list-item') {
-    return [
-      base,
-      fragment.itemId,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-    ].join('|');
-  }
-  if (fragment.kind === 'image') {
-    return [base, fragment.width, fragment.height].join('|');
-  }
-  if (fragment.kind === 'drawing') {
-    return [
-      base,
-      fragment.drawingKind,
-      fragment.drawingContentId ?? '',
-      fragment.width,
-      fragment.height,
-      fragment.geometry.width,
-      fragment.geometry.height,
-      fragment.geometry.rotation ?? 0,
-      fragment.scale ?? 1,
-      fragment.zIndex ?? '',
-    ].join('|');
-  }
-  if (fragment.kind === 'table') {
-    // Include all properties that affect table fragment rendering
-    const partialSig = fragment.partialRow
-      ? `${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}-${fragment.partialRow.partialHeight}`
-      : '';
-    return [
-      base,
-      fragment.fromRow,
-      fragment.toRow,
-      fragment.width,
-      fragment.height,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.repeatHeaderCount ?? 0,
-      partialSig,
-    ].join('|');
-  }
-  return base;
 };
 
 const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean =>

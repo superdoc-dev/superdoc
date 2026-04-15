@@ -918,6 +918,34 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[2].toRun).toBe(4);
     });
 
+    it('preserves trailing explicit lineBreak as final empty line', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      // Final empty line should be anchored to trailing break run.
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+    });
+
+    it('preserves multiple trailing explicit lineBreak runs as multiple empty lines', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(2);
+      expect(measure.lines[2].toRun).toBe(2);
+      expect(measure.lines[2].toChar).toBe(0);
+    });
+
     it('handles tabs followed immediately by line break', () => {
       const block = createBlock([textRun('A'), tabRun(), textRun('')]);
       const measure = remeasureParagraph(block, 200);

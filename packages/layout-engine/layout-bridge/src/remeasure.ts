@@ -1376,8 +1376,21 @@ export function remeasureParagraph(
 
     // Advance to next line start
     if (explicitLineBreakRun >= 0) {
-      // Explicit break consumed as a line boundary, continue from run after break.
-      currentRun = explicitLineBreakRun + 1;
+      // Preserve trailing/manual break boundaries:
+      // - If this line started on the break, we've already emitted its empty-line boundary,
+      //   so advance past it.
+      // - If this line ended before the break (text + break), only keep the break for the
+      //   next iteration when it is trailing or followed by another break. Otherwise consume
+      //   it immediately so mid-paragraph breaks don't create extra blank lines.
+      const emittedBreakBoundary =
+        startRun === explicitLineBreakRun && startChar === 0 && endRun === explicitLineBreakRun && endChar === 0;
+      if (emittedBreakBoundary) {
+        currentRun = explicitLineBreakRun + 1;
+      } else {
+        const nextRun = runs[explicitLineBreakRun + 1];
+        const preserveBoundaryForNextIteration = !nextRun || isLineBreakRun(nextRun);
+        currentRun = preserveBoundaryForNextIteration ? explicitLineBreakRun : explicitLineBreakRun + 1;
+      }
       currentChar = 0;
     } else {
       currentRun = endRun;
@@ -1386,7 +1399,7 @@ export function remeasureParagraph(
     if (currentRun >= runs.length) {
       break;
     }
-    if (currentChar >= runText(runs[currentRun]).length) {
+    if (!isLineBreakRun(runs[currentRun]) && currentChar >= runText(runs[currentRun]).length) {
       currentRun += 1;
       currentChar = 0;
     }

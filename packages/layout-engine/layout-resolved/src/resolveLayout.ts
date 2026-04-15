@@ -37,7 +37,7 @@ export type ResolveLayoutInput = {
   measures: Measure[];
 };
 
-function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
+export function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
   const map = new Map<string, BlockMapEntry>();
   for (let i = 0; i < blocks.length; i++) {
     map.set(blocks[i].id, { block: blocks[i], measure: measures[i] });
@@ -190,7 +190,7 @@ function computeBlockVersion(
   return version;
 }
 
-function resolveFragmentItem(
+export function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
   pageIndex: number,

@@ -1942,6 +1942,8 @@ export type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedHeaderFooterPage,
+  ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
 

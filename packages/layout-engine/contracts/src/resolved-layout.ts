@@ -348,6 +348,22 @@ export function isResolvedDrawingItem(item: ResolvedPaintItem): item is Resolved
   return item.kind === 'fragment' && 'fragmentKind' in item && item.fragmentKind === 'drawing' && 'block' in item;
 }
 
+/** A resolved header/footer page — mirrors HeaderFooterPage but with resolved items. */
+export type ResolvedHeaderFooterPage = {
+  number: number;
+  numberText?: string;
+  items: ResolvedPaintItem[];
+};
+
+/** A resolved header/footer layout — mirrors HeaderFooterLayout but with resolved pages. */
+export type ResolvedHeaderFooterLayout = {
+  height: number;
+  minY?: number;
+  maxY?: number;
+  renderHeight?: number;
+  pages: ResolvedHeaderFooterPage[];
+};
+
 /** Resolved list marker rendering data with pre-computed positioning. */
 export type ResolvedListMarkerItem = {
   /** Marker text content (e.g., "1.", "a)", bullet). */

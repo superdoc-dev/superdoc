@@ -51,3 +51,78 @@ describe('section properties export', () => {
     }
   });
 });
+
+// Regression coverage for SD-2534: in the collab-joiner path, the original
+// bodyNode sectPr can be stale (missing first-page header/footer references
+// added during collaboration). converter.bodySectPr holds the live version
+// and must take precedence over bodyNode.sectPr when present.
+describe('section properties export — bodySectPr precedence', () => {
+  it('uses converter.bodySectPr over the body node sectPr when both are present', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('basic-paragraph.docx');
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      // Simulate the collab-hydrated state: live sectPr carries a marker the
+      // body node does not. If the export uses the body node sectPr instead,
+      // this marker will be missing from the output.
+      editor.converter.bodySectPr = {
+        type: 'element',
+        name: 'w:sectPr',
+        attributes: { 'w:rsidR': 'LIVESECTPR' },
+        elements: [
+          { type: 'element', name: 'w:pgSz', attributes: { 'w:w': '12240', 'w:h': '15840' } },
+          {
+            type: 'element',
+            name: 'w:pgMar',
+            attributes: { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' },
+          },
+          { type: 'element', name: 'w:titlePg' },
+        ],
+      };
+
+      const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+      const documentXml = updatedDocs['word/document.xml'];
+      expect(documentXml).toContain('LIVESECTPR');
+      expect(documentXml).toContain('w:titlePg');
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('falls back to body node sectPr when converter.bodySectPr is null', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('basic-paragraph.docx');
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      editor.converter.bodySectPr = null;
+
+      const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+      const exportedDocXml = parseXmlToJson(updatedDocs['word/document.xml']);
+      const body = exportedDocXml?.elements?.[0]?.elements?.find((el) => el.name === 'w:body');
+      const sectPr = body?.elements?.find((el) => el.name === 'w:sectPr');
+      expect(sectPr).toBeDefined();
+      // The body node sectPr (or default) should still produce a valid sectPr.
+      const pgSz = sectPr.elements?.find((el) => el.name === 'w:pgSz');
+      expect(pgSz).toBeDefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('treats non-object converter.bodySectPr as missing', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('basic-paragraph.docx');
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      // typeof check guards against truthy non-objects
+      editor.converter.bodySectPr = 'not-an-object';
+
+      const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+      const documentXml = updatedDocs['word/document.xml'];
+      // Should not crash and should not include the bogus value
+      expect(documentXml).not.toContain('not-an-object');
+    } finally {
+      editor.destroy();
+    }
+  });
+});

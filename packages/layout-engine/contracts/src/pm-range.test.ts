@@ -32,6 +32,37 @@ describe('pm-range', () => {
     expect(result).toEqual({ pmStart: 10, pmEnd: 15 });
   });
 
+  it('uses expandedRuns when line run indices refer to measurer-expanded newlines', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'nl-expand',
+      runs: [
+        {
+          text: 'a\nb',
+          fontFamily: 'Arial',
+          fontSize: 14,
+          pmStart: 10,
+          pmEnd: 13,
+        },
+      ],
+    };
+    const base = block.runs[0] as {
+      text: string;
+      fontFamily: string;
+      fontSize: number;
+      pmStart: number;
+      pmEnd: number;
+    };
+    const expandedRuns = [
+      { ...base, text: 'a', pmStart: 10, pmEnd: 11 },
+      { kind: 'break' as const, breakType: 'line' as const, pmStart: 11, pmEnd: 12 },
+      { ...base, text: 'b', pmStart: 12, pmEnd: 13 },
+    ];
+    const line = makeLine({ fromRun: 2, fromChar: 0, toRun: 2, toChar: 1 });
+    expect(computeLinePmRange(block, line)).toEqual({});
+    expect(computeLinePmRange(block, line, expandedRuns)).toEqual({ pmStart: 12, pmEnd: 13 });
+  });
+
   it('treats field annotations as atomic units (pmEnd fallback = pmStart + 1)', () => {
     const block: ParagraphBlock = {
       kind: 'paragraph',

@@ -332,5 +332,6 @@ export function resolveParagraphContent(
     continuesFromPrev: fragment.continuesFromPrev,
     continuesOnNext: fragment.continuesOnNext,
     paragraphEndsWithLineBreak,
+    runsForSlicing: measure.expandedRuns,
   };
 }

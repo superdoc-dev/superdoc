@@ -3,6 +3,7 @@ import type {
   Fragment,
   Line,
   ParagraphBlock,
+  Run,
   SdtMetadata,
   TableBlock,
   TableFragment,
@@ -47,6 +48,8 @@ export type TableRenderDependencies = {
     context: FragmentRenderContext,
     lineIndex: number,
     isLastLine: boolean,
+    resolvedListTextStartPx?: number,
+    runsForSlicing?: readonly Run[],
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (

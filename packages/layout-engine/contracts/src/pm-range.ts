@@ -1,4 +1,4 @@
-import type { FlowBlock, Line, ParagraphBlock, ParagraphMeasure } from './index.js';
+import type { FlowBlock, Line, ParagraphBlock, ParagraphMeasure, Run } from './index.js';
 
 /**
  * Represents a ProseMirror position range for a line or fragment.
@@ -79,15 +79,17 @@ const coercePmEnd = (run: unknown): number | undefined => {
  * - For text runs, uses character offsets to compute precise PM boundaries
  * - Handles first/last run slicing based on line.fromChar and line.toChar
  */
-export function computeLinePmRange(block: FlowBlock, line: Line): LinePmRange {
+export function computeLinePmRange(block: FlowBlock, line: Line, runsSource?: readonly Run[]): LinePmRange {
   if (!line) return {};
   if (block.kind !== 'paragraph') return {};
+
+  const runs = runsSource ?? block.runs;
 
   let pmStart: number | undefined;
   let pmEnd: number | undefined;
 
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (!run) continue;
 
     const runPmStart = coercePmStart(run);
@@ -145,6 +147,7 @@ export function computeFragmentPmRange(
   lines: ParagraphMeasure['lines'],
   fromLine: number,
   toLine: number,
+  runsSource?: readonly Run[],
 ): LinePmRange {
   let pmStart: number | undefined;
   let pmEnd: number | undefined;
@@ -152,7 +155,7 @@ export function computeFragmentPmRange(
   for (let index = fromLine; index < toLine; index += 1) {
     const line = lines[index];
     if (!line) continue;
-    const range = computeLinePmRange(block, line);
+    const range = computeLinePmRange(block, line, runsSource);
     if (range.pmStart != null && pmStart == null) {
       pmStart = range.pmStart;
     }

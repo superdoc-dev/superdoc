@@ -1,4 +1,4 @@
-import type { DrawingBlock, FlowMode, Fragment, ImageBlock, Line, TableBlock, TableMeasure } from './index.js';
+import type { DrawingBlock, FlowMode, Fragment, ImageBlock, Line, Run, TableBlock, TableMeasure } from './index.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -92,6 +92,11 @@ export type ResolvedParagraphContent = {
   continuesOnNext?: boolean;
   /** Whether the source paragraph ends with a lineBreak run. */
   paragraphEndsWithLineBreak?: boolean;
+  /**
+   * When set, `Line` run indices and segment `runIndex` refer to this array for slicing
+   * and PM mapping; otherwise use `ParagraphBlock.runs`.
+   */
+  runsForSlicing?: Run[];
 };
 
 /** A single resolved text line with pre-computed rendering geometry. */

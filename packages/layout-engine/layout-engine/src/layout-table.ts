@@ -688,7 +688,10 @@ function computeCellPmRange(
 
       if (lines && lines.length > 0 && localFrom < localTo) {
         // Use line-level PM range computation when lines are available
-        mergePmRange(range, computeFragmentPmRange(block as ParagraphBlock, lines, localFrom, localTo));
+        mergePmRange(
+          range,
+          computeFragmentPmRange(block as ParagraphBlock, lines, localFrom, localTo, paraMeasure.expandedRuns),
+        );
       } else {
         // Fallback to block-level PM range when no lines or no overlap
         // This handles cases where the paragraph has PM range in attrs but no line data

@@ -152,10 +152,11 @@ export const computeFragmentPmRange = (
   lines: ParagraphMeasure['lines'],
   fromLine: number,
   toLine: number,
-): LinePmRange => computeFragmentPmRangeUnified(block, lines, fromLine, toLine);
+  runsSource?: readonly Run[],
+): LinePmRange => computeFragmentPmRangeUnified(block, lines, fromLine, toLine, runsSource);
 
-export const computeLinePmRange = (block: ParagraphBlock, line: Line): LinePmRange =>
-  computeLinePmRangeUnified(block, line);
+export const computeLinePmRange = (block: ParagraphBlock, line: Line, runsSource?: readonly Run[]): LinePmRange =>
+  computeLinePmRangeUnified(block, line, runsSource);
 
 /**
  * Per-paragraph contextual spacing (OOXML w:contextualSpacing).

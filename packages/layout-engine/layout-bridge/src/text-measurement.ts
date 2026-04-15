@@ -41,15 +41,16 @@ const isWordChar = (char: string): boolean => {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "'";
 };
 
-const lineContainsManualTabWithoutSegments = (block: FlowBlock, line: Line): boolean => {
+const lineContainsManualTabWithoutSegments = (block: FlowBlock, line: Line, runsSource?: readonly Run[]): boolean => {
   if (block.kind !== 'paragraph') return false;
   if (line.segments?.some((seg) => seg.x !== undefined)) {
     return false;
   }
+  const runs = runsSource ?? block.runs;
   const fromRun = line.fromRun ?? 0;
   const toRun = line.toRun ?? fromRun;
   for (let runIndex = fromRun; runIndex <= toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (run && isTabRun(run)) {
       return true;
     }
@@ -207,13 +208,16 @@ const getJustifyAdjustment = (
   isLastLineOfParagraph?: boolean,
   paragraphEndsWithLineBreak?: boolean,
   skipJustifyOverride?: boolean,
+  runsSource?: readonly Run[],
 ): JustifyAdjustment => {
   if (block.kind !== 'paragraph') {
     return { extraPerSpace: 0, totalSpaces: 0 };
   }
 
+  const effectiveRuns = runsSource ?? block.runs;
+
   // Guard against empty runs array
-  if (block.runs.length === 0) {
+  if (effectiveRuns.length === 0) {
     return { extraPerSpace: 0, totalSpaces: 0 };
   }
 
@@ -222,10 +226,10 @@ const getJustifyAdjustment = (
 
   // Derive last-line info from block/line when not explicitly provided.
   // This ensures measurement matches rendering even when callers don't pass these flags.
-  const lastRunIndex = block.runs.length - 1;
-  const lastRun = block.runs[lastRunIndex];
+  const lastRunIndex = effectiveRuns.length - 1;
   const derivedIsLastLine = line.toRun >= lastRunIndex;
-  const derivedEndsWithLineBreak = lastRun ? lastRun.kind === 'lineBreak' : false;
+  const blockLastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+  const derivedEndsWithLineBreak = blockLastRun ? blockLastRun.kind === 'lineBreak' : false;
   // Determine if justify should be applied using shared logic
   const shouldJustify = shouldApplyJustify({
     alignment,
@@ -242,7 +246,7 @@ const getJustifyAdjustment = (
   // Use pre-computed spaceCount if available, otherwise count manually
   let totalSpaces = line.spaceCount ?? 0;
   if (totalSpaces === 0) {
-    const runs = sliceRunsForLine(block, line);
+    const runs = sliceRunsForLine(block, line, runsSource);
     totalSpaces = runs.reduce((sum, run) => {
       if (
         isTabRun(run) ||
@@ -312,12 +316,14 @@ export function getRunFontString(run: Run): string {
  * @param line - The line to extract runs for
  * @returns Array of runs present in the line
  */
-export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
+export function sliceRunsForLine(block: FlowBlock, line: Line, runsSource?: readonly Run[]): Run[] {
   const result: Run[] = [];
   if (block.kind !== 'paragraph') return result;
 
+  const runs = runsSource ?? block.runs;
+
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (!run) continue;
 
     if (isTabRun(run)) {
@@ -399,6 +405,7 @@ export function measureCharacterX(
   charOffset: number,
   availableWidthOverride?: number,
   alignmentOverride?: string,
+  runsForSlicing?: readonly Run[],
 ): number {
   const ctx = getMeasurementContext();
   const availableWidth =
@@ -406,7 +413,7 @@ export function measureCharacterX(
     line.maxWidth ??
     // Fallback: if no maxWidth, approximate available width as line width (no slack)
     line.width;
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
+  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line, runsForSlicing);
   // Pass availableWidth to justify calculation to match painter's word-spacing
   const justify = getJustifyAdjustment(
     block,
@@ -416,6 +423,7 @@ export function measureCharacterX(
     undefined,
     undefined,
     manualTabWithoutSegments,
+    runsForSlicing,
   );
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
@@ -433,12 +441,12 @@ export function measureCharacterX(
   // When segments have explicit X positions, we must use segment-based calculation
   // to match the actual DOM positioning
   if (hasExplicitPositioning && line.segments && ctx) {
-    return measureCharacterXSegmentBased(block, line, charOffset, ctx);
+    return measureCharacterXSegmentBased(block, line, charOffset, ctx, runsForSlicing);
   }
 
   if (!ctx) {
     // Fallback to ratio-based calculation if Canvas unavailable
-    const runs = sliceRunsForLine(block, line);
+    const runs = sliceRunsForLine(block, line, runsForSlicing);
     const charsInLine = Math.max(
       1,
       runs.reduce((sum, run) => {
@@ -457,7 +465,7 @@ export function measureCharacterX(
     return (charOffset / charsInLine) * renderedLineWidth;
   }
 
-  const runs = sliceRunsForLine(block, line);
+  const runs = sliceRunsForLine(block, line, runsForSlicing);
   let currentX = 0;
   let currentCharOffset = 0;
   let spaceTally = 0;
@@ -547,15 +555,18 @@ function measureCharacterXSegmentBased(
   line: Line,
   charOffset: number,
   ctx: CanvasRenderingContext2D,
+  runsSource?: readonly Run[],
 ): number {
   if (block.kind !== 'paragraph' || !line.segments) return 0;
+
+  const runs = runsSource ?? block.runs;
 
   // Build a map of cumulative character offsets per run
   // to translate line-relative charOffset to run-relative offsets
   let lineCharCount = 0;
 
   for (const segment of line.segments) {
-    const run = block.runs[segment.runIndex];
+    const run = runs[segment.runIndex];
     if (!run) continue;
 
     const segmentChars = segment.toChar - segment.fromChar;
@@ -574,7 +585,7 @@ function measureCharacterXSegmentBased(
         segmentBaseX = 0;
         for (const prevSeg of line.segments) {
           if (prevSeg === segment) break;
-          const prevRun = block.runs[prevSeg.runIndex];
+          const prevRun = runs[prevSeg.runIndex];
           if (!prevRun) continue;
 
           if (prevSeg.x !== undefined) {
@@ -668,7 +679,13 @@ function measureCharacterXSegmentBased(
  * charOffsetToPm(block, line, 7, 0); // returns 9
  * ```
  */
-export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number, fallbackPmStart: number): number {
+export function charOffsetToPm(
+  block: FlowBlock,
+  line: Line,
+  charOffset: number,
+  fallbackPmStart: number,
+  runsForSlicing?: readonly Run[],
+): number {
   // Validate inputs
   if (!Number.isFinite(charOffset) || !Number.isFinite(fallbackPmStart)) {
     console.warn('[charOffsetToPm] Invalid input:', { charOffset, fallbackPmStart });
@@ -682,7 +699,7 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
     return fallbackPmStart + safeCharOffset;
   }
 
-  const runs = sliceRunsForLine(block, line);
+  const runs = sliceRunsForLine(block, line, runsForSlicing);
   let cursor = 0;
   let lastPm = fallbackPmStart;
 
@@ -739,6 +756,7 @@ export function findCharacterAtX(
   pmStart: number,
   availableWidthOverride?: number,
   alignmentOverride?: string,
+  runsForSlicing?: readonly Run[],
 ): { charOffset: number; pmPosition: number } {
   const ctx = getMeasurementContext();
   const availableWidth =
@@ -747,7 +765,7 @@ export function findCharacterAtX(
     // Fallback: approximate with line width when no maxWidth is present
     line.width;
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
+  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line, runsForSlicing);
   const justify = getJustifyAdjustment(
     block,
     line,
@@ -756,6 +774,7 @@ export function findCharacterAtX(
     undefined,
     undefined,
     manualTabWithoutSegments,
+    runsForSlicing,
   );
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
@@ -772,7 +791,7 @@ export function findCharacterAtX(
 
   if (!ctx) {
     // Fallback to ratio-based calculation
-    const runs = sliceRunsForLine(block, line);
+    const runs = sliceRunsForLine(block, line, runsForSlicing);
     const charsInLine = Math.max(
       1,
       runs.reduce((sum, run) => {
@@ -790,14 +809,14 @@ export function findCharacterAtX(
     );
     const ratio = Math.max(0, Math.min(1, (x - alignmentOffset) / renderedLineWidth));
     const charOffset = Math.round(ratio * charsInLine);
-    const pmPosition = charOffsetToPm(block, line, charOffset, pmStart);
+    const pmPosition = charOffsetToPm(block, line, charOffset, pmStart, runsForSlicing);
     return {
       charOffset,
       pmPosition,
     };
   }
 
-  const runs = sliceRunsForLine(block, line);
+  const runs = sliceRunsForLine(block, line, runsForSlicing);
   const safeX = Math.max(0, Math.min(renderedLineWidth, x - alignmentOffset));
 
   let currentX = 0;
@@ -813,7 +832,7 @@ export function findCharacterAtX(
         const midpoint = startX + tabWidth / 2;
         const offsetInRun = safeX < midpoint ? 0 : TAB_CHAR_LENGTH;
         const charOffset = currentCharOffset + offsetInRun;
-        const pmPosition = charOffsetToPm(block, line, charOffset, pmStart);
+        const pmPosition = charOffsetToPm(block, line, charOffset, pmStart, runsForSlicing);
         return {
           charOffset,
           pmPosition,
@@ -865,7 +884,7 @@ export function findCharacterAtX(
       if (charX >= safeX) {
         if (i === 0) {
           // First character, return this position
-          const pmPosition = charOffsetToPm(block, line, currentCharOffset, pmStart);
+          const pmPosition = charOffsetToPm(block, line, currentCharOffset, pmStart, runsForSlicing);
           return {
             charOffset: currentCharOffset,
             pmPosition,
@@ -882,7 +901,7 @@ export function findCharacterAtX(
 
         const charOffset = distToPrev < distToCurrent ? currentCharOffset + i - 1 : currentCharOffset + i;
 
-        const pmPosition = charOffsetToPm(block, line, charOffset, pmStart);
+        const pmPosition = charOffsetToPm(block, line, charOffset, pmStart, runsForSlicing);
         return {
           charOffset,
           pmPosition,
@@ -900,7 +919,7 @@ export function findCharacterAtX(
   }
 
   // If we're past all characters, return the end of the line
-  const pmPosition = charOffsetToPm(block, line, currentCharOffset, pmStart);
+  const pmPosition = charOffsetToPm(block, line, currentCharOffset, pmStart, runsForSlicing);
   return {
     charOffset: currentCharOffset,
     pmPosition,

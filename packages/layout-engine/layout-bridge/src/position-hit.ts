@@ -184,19 +184,28 @@ export const mapPointToPm = (
   isRTL: boolean,
   availableWidthOverride?: number,
   alignmentOverride?: string,
+  runsForSlicing?: readonly Run[],
 ): number | null => {
   if (block.kind !== 'paragraph') return null;
-  const range = computeLinePmRange(block, line);
+  const range = computeLinePmRange(block, line, runsForSlicing);
   if (range.pmStart == null || range.pmEnd == null) return null;
 
-  const result = findCharacterAtX(block, line, x, range.pmStart, availableWidthOverride, alignmentOverride);
+  const result = findCharacterAtX(
+    block,
+    line,
+    x,
+    range.pmStart,
+    availableWidthOverride,
+    alignmentOverride,
+    runsForSlicing,
+  );
 
   let pmPosition = result.pmPosition;
   if (isRTL) {
     const charOffset = result.charOffset;
     const charsInLine = Math.max(1, line.toChar - line.fromChar);
     const reversedOffset = Math.max(0, Math.min(charsInLine, charsInLine - charOffset));
-    pmPosition = charOffsetToPm(block, line, reversedOffset, range.pmStart);
+    pmPosition = charOffsetToPm(block, line, reversedOffset, range.pmStart, runsForSlicing);
   }
 
   return pmPosition;
@@ -664,7 +673,7 @@ export function resolvePositionHitFromDomPosition(
                 for (let localIndex = 0; localIndex < fragment.lines.length; localIndex++) {
                   const line = fragment.lines[localIndex];
                   if (!line) continue;
-                  const range = computeLinePmRange(blocks[blockIndex], line);
+                  const range = computeLinePmRange(blocks[blockIndex], line, measure.expandedRuns);
                   if (range.pmStart != null && range.pmEnd != null) {
                     if (domPos >= range.pmStart && domPos <= range.pmEnd) {
                       lineIndex = fragment.fromLine + localIndex;
@@ -676,7 +685,7 @@ export function resolvePositionHitFromDomPosition(
                 for (let li = fragment.fromLine; li < fragment.toLine; li++) {
                   const line = measure.lines[li];
                   if (!line) continue;
-                  const range = computeLinePmRange(blocks[blockIndex], line);
+                  const range = computeLinePmRange(blocks[blockIndex], line, measure.expandedRuns);
                   if (range.pmStart != null && range.pmEnd != null) {
                     if (domPos >= range.pmStart && domPos <= range.pmEnd) {
                       lineIndex = li;
@@ -811,7 +820,15 @@ export function clickToPositionGeometry(
       const isJustified = paraAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
 
-      const pos = mapPointToPm(block, line, pageRelativePoint.x - fragment.x, isRTL, availableWidth, alignmentOverride);
+      const pos = mapPointToPm(
+        block,
+        line,
+        pageRelativePoint.x - fragment.x,
+        isRTL,
+        availableWidth,
+        alignmentOverride,
+        measure.expandedRuns,
+      );
       if (pos == null) {
         return null;
       }
@@ -893,7 +910,15 @@ export function clickToPositionGeometry(
       const isJustified = cellAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
 
-      const pos = mapPointToPm(cellBlock, line, localX, isRTL, availableWidth, alignmentOverride);
+      const pos = mapPointToPm(
+        cellBlock,
+        line,
+        localX,
+        isRTL,
+        availableWidth,
+        alignmentOverride,
+        cellMeasure.expandedRuns,
+      );
 
       if (pos != null) {
         return {

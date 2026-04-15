@@ -462,6 +462,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   }
 
   let lines = normalizeLines(measure);
+  let paragraphMeasureForPm: ParagraphMeasure = measure;
 
   // Check if paragraph was measured at a wider width than the current column.
   // This happens when a document has sections with different column counts -
@@ -491,6 +492,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const newMeasure = remeasureParagraph(block, columnWidth, firstLineIndent);
     const newLines = normalizeLines(newMeasure);
     lines = newLines;
+    paragraphMeasureForPm = newMeasure;
     didRemeasureForColumnWidth = true;
     // Capture marker info from remeasure (may have updated markerTextWidth)
     if (newMeasure.marker) {
@@ -553,7 +555,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       x,
       y: state.cursorY + yOffset,
       width: fragmentWidth,
-      ...computeFragmentPmRange(block, lines, 0, lines.length),
+      ...computeFragmentPmRange(block, lines, 0, lines.length, paragraphMeasureForPm.expandedRuns),
     };
 
     if (measure.marker || remeasuredMarkerInfo) {
@@ -860,7 +862,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       x: adjustedX,
       y: state.cursorY + borderExpansion.top,
       width: adjustedWidth,
-      ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
+      ...computeFragmentPmRange(block, lines, fromLine, slice.toLine, paragraphMeasureForPm.expandedRuns),
     };
 
     // Store remeasured lines in fragment so renderer can use them.

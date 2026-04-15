@@ -4,6 +4,7 @@ import type {
   Line,
   ParagraphBlock,
   PartialRowInfo,
+  Run,
   SdtMetadata,
   TableBlock,
   TableBorders,
@@ -162,6 +163,8 @@ type TableRowRenderDependencies = {
     context: FragmentRenderContext,
     lineIndex: number,
     isLastLine: boolean,
+    resolvedListTextStartPx?: number,
+    runsForSlicing?: readonly Run[],
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (

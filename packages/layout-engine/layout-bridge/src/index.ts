@@ -270,11 +270,12 @@ const logSelectionMapDebug = (payload: Record<string, unknown>): void => {
  * // Returns: "Hello world" (combining partial run text)
  * ```
  */
-const buildLineText = (block: FlowBlock, line: Line): string => {
+const buildLineText = (block: FlowBlock, line: Line, runsSource?: readonly Run[]): string => {
   if (block.kind !== 'paragraph') return '';
+  const runs = runsSource ?? block.runs;
   let text = '';
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (
       !run ||
       'src' in run ||
@@ -566,7 +567,7 @@ export function selectionToRects(
           if (index < fragment.fromLine || index >= fragment.toLine) {
             return;
           }
-          const range = computeLinePmRange(block, line);
+          const range = computeLinePmRange(block, line, measure.expandedRuns);
           if (range.pmStart == null || range.pmEnd == null) return;
           const sliceFrom = Math.max(range.pmStart, from);
           const sliceTo = Math.min(range.pmEnd, to);
@@ -574,8 +575,8 @@ export function selectionToRects(
 
           // Convert PM positions to character offsets properly
           // (accounts for gaps in PM positions between runs)
-          const charOffsetFrom = pmPosToCharOffset(block, line, sliceFrom);
-          const charOffsetTo = pmPosToCharOffset(block, line, sliceTo);
+          const charOffsetFrom = pmPosToCharOffset(block, line, sliceFrom, measure.expandedRuns);
+          const charOffsetTo = pmPosToCharOffset(block, line, sliceTo, measure.expandedRuns);
           // Detect list items by checking for marker presence
           const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
           const isListItemFlag = isListItem(markerWidth, block);
@@ -594,6 +595,7 @@ export function selectionToRects(
             alignmentOverride,
             isFirstLine,
             fragmentMarkerTextWidth,
+            measure.expandedRuns,
           );
           const endX = mapPmToX(
             block,
@@ -603,6 +605,7 @@ export function selectionToRects(
             alignmentOverride,
             isFirstLine,
             fragmentMarkerTextWidth,
+            measure.expandedRuns,
           );
 
           // Calculate text indent using shared utility
@@ -635,7 +638,8 @@ export function selectionToRects(
           });
 
           if (SELECTION_DEBUG_ENABLED) {
-            const runs = block.runs.slice(line.fromRun, line.toRun + 1).map((run: Run, idx: number) => {
+            const dbgRuns = (measure.expandedRuns ?? block.runs).slice(line.fromRun, line.toRun + 1);
+            const runs = dbgRuns.map((run: Run, idx: number) => {
               const isAtomic =
                 'src' in run ||
                 run.kind === 'lineBreak' ||
@@ -680,8 +684,8 @@ export function selectionToRects(
               endX,
               rect: { x: rectX, y: rectY, width: rectWidth, height: line.lineHeight },
               runs,
-              lineText: buildLineText(block, line),
-              selectedText: buildLineText(block, line).slice(
+              lineText: buildLineText(block, line, measure.expandedRuns),
+              selectedText: buildLineText(block, line, measure.expandedRuns).slice(
                 Math.min(charOffsetFrom, charOffsetTo),
                 Math.max(charOffsetFrom, charOffsetTo),
               ),
@@ -895,14 +899,14 @@ export function selectionToRects(
                 if (index < info.startLine || index >= info.endLine) {
                   return;
                 }
-                const range = computeLinePmRange(info.block, line);
+                const range = computeLinePmRange(info.block, line, info.measure.expandedRuns);
                 if (range.pmStart == null || range.pmEnd == null) return;
                 const sliceFrom = Math.max(range.pmStart, from);
                 const sliceTo = Math.min(range.pmEnd, to);
                 if (sliceFrom >= sliceTo) return;
 
-                const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
-                const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
+                const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom, info.measure.expandedRuns);
+                const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo, info.measure.expandedRuns);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
                 const isFirstLine = index === 0;
                 const cellMarkerTextWidth = info.measure?.marker?.markerTextWidth ?? undefined;
@@ -914,6 +918,7 @@ export function selectionToRects(
                   alignmentOverride,
                   isFirstLine,
                   cellMarkerTextWidth,
+                  info.measure.expandedRuns,
                 );
                 const endX = mapPmToX(
                   info.block,
@@ -923,6 +928,7 @@ export function selectionToRects(
                   alignmentOverride,
                   isFirstLine,
                   cellMarkerTextWidth,
+                  info.measure.expandedRuns,
                 );
 
                 // Calculate text indent using shared utility
@@ -1127,7 +1133,7 @@ export function findLinesIntersectingRange(
   }
   const hits: { line: Line; index: number }[] = [];
   measure.lines.forEach((line: Line, idx: number) => {
-    const range = computeLinePmRange(block, line);
+    const range = computeLinePmRange(block, line, measure.expandedRuns);
     if (range.pmStart == null || range.pmEnd == null) {
       return;
     }
@@ -1190,8 +1196,12 @@ export function findLinesIntersectingRange(
  *
  * @see pmPosToCharOffset - Related function that skips empty runs during character offset calculation
  */
-export function computeLinePmRange(block: FlowBlock, line: Line): { pmStart?: number; pmEnd?: number } {
-  return computeLinePmRangeUnified(block, line);
+export function computeLinePmRange(
+  block: FlowBlock,
+  line: Line,
+  runsSource?: readonly Run[],
+): { pmStart?: number; pmEnd?: number } {
+  return computeLinePmRangeUnified(block, line, runsSource);
 }
 
 /**
@@ -1233,13 +1243,14 @@ export function computeLinePmRange(block: FlowBlock, line: Line): { pmStart?: nu
  * // offset = 2 (ratio: (12-10)/(15-10) * 5 = 2/5 * 5 = 2)
  * ```
  */
-export function pmPosToCharOffset(block: FlowBlock, line: Line, pmPos: number): number {
+export function pmPosToCharOffset(block: FlowBlock, line: Line, pmPos: number, runsSource?: readonly Run[]): number {
   if (block.kind !== 'paragraph') return 0;
 
+  const runs = runsSource ?? block.runs;
   let charOffset = 0;
 
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (!run) continue;
 
     const text =
@@ -1380,6 +1391,7 @@ const mapPmToX = (
    * measured width, not on raw `marker.markerText` attribute.
    */
   markerTextWidth?: number,
+  runsForSlicing?: readonly Run[],
 ): number => {
   if (fragmentWidth <= 0 || line.width <= 0) return 0;
 
@@ -1434,7 +1446,7 @@ const mapPmToX = (
   }
 
   // Use shared text measurement utility for pixel-perfect accuracy
-  return measureCharacterX(block, line, offset, availableWidth, alignmentOverride);
+  return measureCharacterX(block, line, offset, availableWidth, alignmentOverride, runsForSlicing);
 };
 
 const _sliceRunsForLine = (block: FlowBlock, line: Line): Run[] => {

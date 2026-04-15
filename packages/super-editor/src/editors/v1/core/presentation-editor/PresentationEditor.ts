@@ -4178,6 +4178,7 @@ export class PresentationEditor extends EventEmitter {
         const positionMapStart = perfNow();
         const positionMap =
           this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
+        console.log('positionMap', positionMap);
         const positionMapEnd = perfNow();
         perfLog(`[Perf] buildPositionMapFromPmDoc: ${(positionMapEnd - positionMapStart).toFixed(2)}ms`);
         const commentsEnabled =
@@ -4197,6 +4198,7 @@ export class PresentationEditor extends EventEmitter {
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });
+        console.log('result', result);
         const toFlowBlocksEnd = perfNow();
         perfLog(
           `[Perf] toFlowBlocks: ${(toFlowBlocksEnd - toFlowBlocksStart).toFixed(2)}ms (blocks=${result.blocks.length})`,

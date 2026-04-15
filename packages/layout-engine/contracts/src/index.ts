@@ -1565,6 +1565,12 @@ export type ParagraphMeasure = {
     /** Drop cap mode: 'drop' inside text area, 'margin' in the margin. */
     mode: 'drop' | 'margin';
   };
+  /**
+   * When the DOM measurer splits inline `\\n` into synthetic break runs, `Line.fromRun` /
+   * `toRun` / segment `runIndex` refer to this array instead of `ParagraphBlock.runs`.
+   * Omitted when measurement used the original runs only.
+   */
+  expandedRuns?: Run[];
 };
 
 export type ImageMeasure = {

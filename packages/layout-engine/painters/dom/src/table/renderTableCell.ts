@@ -10,6 +10,7 @@ import type {
   ParagraphIndent,
   ParagraphMeasure,
   PartialRowInfo,
+  Run,
   SdtMetadata,
   TableBlock,
   TableFragment,
@@ -545,6 +546,7 @@ type EmbeddedTableRenderParams = {
     lineIndex: number,
     isLastLine: boolean,
     resolvedListTextStartPx?: number,
+    runsForSlicing?: readonly Run[],
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (
@@ -869,6 +871,7 @@ type TableCellRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
     resolvedListTextStartPx?: number,
+    runsForSlicing?: readonly Run[],
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (
@@ -1410,6 +1413,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             lineIdx,
             isLastLine,
             lineIdx === 0 && localStartLine === 0 ? listFirstLineTextStartPx : undefined,
+            paragraphMeasure.expandedRuns,
           );
           lineEl.style.paddingLeft = '';
           lineEl.style.paddingRight = '';

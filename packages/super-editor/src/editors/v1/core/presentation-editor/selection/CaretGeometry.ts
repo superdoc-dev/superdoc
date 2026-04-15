@@ -14,6 +14,7 @@ import type {
   Line,
   Measure,
   ParaFragment,
+  ParagraphMeasure,
   TableBlock,
   TableFragment,
   TableMeasure,
@@ -50,10 +51,11 @@ function findLineContainingPos(
   pos: number,
 ): FindLineResult | null {
   if (measure.kind !== 'paragraph' || block.kind !== 'paragraph') return null;
+  const paraMeasure = measure as ParagraphMeasure;
   for (let lineIndex = fromLine; lineIndex < toLine; lineIndex += 1) {
     const line = measure.lines[lineIndex];
     if (!line) continue;
-    const range = computeLinePmRange(block, line);
+    const range = computeLinePmRange(block, line, paraMeasure.expandedRuns);
     if (range.pmStart == null || range.pmEnd == null) continue;
     if (pos >= range.pmStart && pos <= range.pmEnd) {
       return { line, index: lineIndex };
@@ -162,15 +164,16 @@ export function computeCaretLayoutRectGeometry(
   if (!block || block.kind !== 'paragraph' || measure?.kind !== 'paragraph') return null;
   if (hit.fragment.kind !== 'para') return null;
   const fragment: ParaFragment = hit.fragment;
+  const paraMeasure = measure as ParagraphMeasure;
 
   const lineInfo = findLineContainingPos(block, measure, fragment.fromLine, fragment.toLine, effectivePos);
   if (!lineInfo) return null;
   const { line, index } = lineInfo;
-  const range = computeLinePmRange(block, line);
+  const range = computeLinePmRange(block, line, paraMeasure.expandedRuns);
   if (range.pmStart == null || range.pmEnd == null) return null;
 
   // Calculate character offset from PM position using layout-aware mapping (accounts for PM gaps)
-  const pmOffset = pmPosToCharOffset(block, line, effectivePos);
+  const pmOffset = pmPosToCharOffset(block, line, effectivePos, paraMeasure.expandedRuns);
 
   const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
   const markerTextWidth = fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined;
@@ -195,7 +198,7 @@ export function computeCaretLayoutRectGeometry(
   });
 
   const availableWidth = Math.max(0, fragment.width - (indentAdjust + indent.right));
-  const charX = measureCharacterX(block, line, pmOffset, availableWidth);
+  const charX = measureCharacterX(block, line, pmOffset, availableWidth, undefined, paraMeasure.expandedRuns);
   const localX = fragment.x + indentAdjust + charX;
   const lineOffset = lineHeightBeforeIndex(measure.lines, fragment.fromLine, index);
   const localY = fragment.y + lineOffset;

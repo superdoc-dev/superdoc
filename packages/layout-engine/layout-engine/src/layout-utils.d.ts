@@ -1,4 +1,4 @@
-import type { Line, ParagraphBlock, ParagraphMeasure } from '@superdoc/contracts';
+import type { Line, ParagraphBlock, ParagraphMeasure, Run } from '@superdoc/contracts';
 export declare function normalizeLines(measure: ParagraphMeasure): ParagraphMeasure['lines'];
 export declare function sliceLines(
   lines: ParagraphMeasure['lines'],
@@ -17,8 +17,13 @@ export declare const computeFragmentPmRange: (
   lines: ParagraphMeasure['lines'],
   fromLine: number,
   toLine: number,
+  runsSource?: readonly Run[],
 ) => LinePmRange;
-export declare const computeLinePmRange: (block: ParagraphBlock, line: Line) => LinePmRange;
+export declare const computeLinePmRange: (
+  block: ParagraphBlock,
+  line: Line,
+  runsSource?: readonly Run[],
+) => LinePmRange;
 export declare function shouldSuppressOwnSpacing(
   ownStyleId: string | undefined,
   ownContextualSpacing: boolean,

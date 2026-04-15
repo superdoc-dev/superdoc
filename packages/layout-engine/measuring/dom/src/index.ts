@@ -2491,10 +2491,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
   const totalHeight = lines.reduce((sum, line) => sum + line.lineHeight, 0);
 
+  const expansionApplied = runsToProcess.length !== (normalizedRuns as Run[]).length;
+
   return {
     kind: 'paragraph',
     lines,
     totalHeight,
+    ...(expansionApplied ? { expandedRuns: runsToProcess.slice() } : {}),
     ...(markerInfo ? { marker: markerInfo } : {}),
     ...(dropCapMeasure ? { dropCap: dropCapMeasure } : {}),
   };

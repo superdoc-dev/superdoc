@@ -3030,6 +3030,7 @@ export class DomPainter {
             resolvedLine.skipJustify,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
+            content.runsForSlicing,
           );
 
           // Apply pre-computed indent values
@@ -3230,6 +3231,8 @@ export class DomPainter {
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
+            undefined,
+            measure.expandedRuns,
           );
 
           if (!isListFirstLine) {
@@ -3552,7 +3555,17 @@ export class DomPainter {
         attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
       };
       lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        const lineEl = this.renderLine(
+          paraForList,
+          line,
+          context,
+          fragment.width,
+          fragment.fromLine + idx,
+          true,
+          undefined,
+          undefined,
+          itemMeasure.paragraph.expandedRuns,
+        );
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
@@ -4656,12 +4669,23 @@ export class DomPainter {
         lineIndex: number,
         isLastLine: boolean,
         resolvedListTextStartPx?: number,
+        runsForSlicing?: readonly Run[],
       ): HTMLElement => {
         const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
         const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+        return this.renderLine(
+          block,
+          line,
+          ctx,
+          undefined,
+          lineIndex,
+          shouldSkipJustify,
+          resolvedListTextStartPx,
+          undefined,
+          runsForSlicing,
+        );
       };
 
       /**
@@ -5648,13 +5672,14 @@ export class DomPainter {
     skipJustify?: boolean,
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
+    runsForSlicing?: readonly Run[],
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
 
-    const lineRange = computeLinePmRange(block, line);
-    let runsForLine = sliceRunsForLine(block, line);
+    const lineRange = computeLinePmRange(block, line, runsForSlicing);
+    let runsForLine = sliceRunsForLine(block, line, runsForSlicing);
 
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
@@ -7696,11 +7721,12 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
  * // Returns runs or run slices that fall within the specified character range
  * ```
  */
-export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
+export const sliceRunsForLine = (block: ParagraphBlock, line: Line, runsSource?: readonly Run[]): Run[] => {
   const result: Run[] = [];
+  const runs = runsSource ?? block.runs;
 
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (!run) continue;
 
     // FIXED: ImageRun handling - images are atomic units, no slicing needed

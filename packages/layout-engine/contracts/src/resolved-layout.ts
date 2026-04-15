@@ -5,8 +5,12 @@ import type {
   ImageBlock,
   ImageFragmentMetadata,
   Line,
+  ListBlock,
+  ListMeasure,
   PageMargins,
+  ParagraphBlock,
   ParagraphBorders,
+  ParagraphMeasure,
   SectionVerticalAlign,
   TableBlock,
   TableMeasure,
@@ -127,6 +131,10 @@ export type ResolvedFragmentItem = {
   paragraphBorders?: ParagraphBorders;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-extracted block for paragraph (ParagraphBlock) or list-item (ListBlock) fragments. */
+  block?: ParagraphBlock | ListBlock;
+  /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
+  measure?: ParagraphMeasure | ListMeasure;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */

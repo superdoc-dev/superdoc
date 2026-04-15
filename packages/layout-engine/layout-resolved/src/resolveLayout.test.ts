@@ -638,6 +638,163 @@ describe('resolveLayout', () => {
     });
   });
 
+  describe('paragraph/list-item block and measure lifting', () => {
+    it('lifts block and measure from a paragraph fragment', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'p1', runs: [] };
+      const paragraphMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 400, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [paragraphBlock],
+        measures: [paragraphMeasure],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.block).toBe(paragraphBlock);
+      expect(item.measure).toBe(paragraphMeasure);
+    });
+
+    it('lifts block and measure from a list-item fragment', () => {
+      const listItemFragment: ListItemFragment = {
+        kind: 'list-item',
+        blockId: 'list1',
+        itemId: 'item-a',
+        fromLine: 0,
+        toLine: 1,
+        x: 108,
+        y: 200,
+        width: 432,
+        markerWidth: 36,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [listItemFragment] }],
+      };
+      const listBlock: FlowBlock = {
+        kind: 'list',
+        id: 'list1',
+        listType: 'bullet',
+        items: [
+          {
+            id: 'item-a',
+            marker: { text: '•', style: {} },
+            paragraph: { kind: 'paragraph', id: 'item-a-p', runs: [] },
+          },
+        ],
+      };
+      const listMeasure: Measure = {
+        kind: 'list',
+        items: [
+          {
+            itemId: 'item-a',
+            markerWidth: 36,
+            markerTextWidth: 10,
+            indentLeft: 36,
+            paragraph: {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 400, ascent: 12, descent: 4, lineHeight: 24 },
+              ],
+              totalHeight: 24,
+            },
+          },
+        ],
+        totalHeight: 24,
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [listBlock],
+        measures: [listMeasure],
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.block).toBe(listBlock);
+      expect(item.measure).toBe(listMeasure);
+    });
+
+    it('leaves block and measure undefined when the block entry is missing', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'missing',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
+      expect(item.block).toBeUndefined();
+      expect(item.measure).toBeUndefined();
+    });
+
+    it('does not set ResolvedFragmentItem.block on table fragments (they use ResolvedTableItem.block)', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 't1',
+        fromRow: 0,
+        toRow: 1,
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 80,
+        columnWidths: [200, 200],
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const tableBlock = {
+        kind: 'table' as const,
+        id: 't1',
+        rows: [],
+        columnWidths: [200, 200],
+      };
+      const tableMeasure = {
+        kind: 'table' as const,
+        columnWidths: [200, 200],
+        rows: [],
+        totalHeight: 80,
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock as any],
+        measures: [tableMeasure as any],
+      });
+      // Table items carry block/measure as ResolvedTableItem typed fields.
+      // They should NOT use the optional ResolvedFragmentItem.block path (no fall-through to the default branch).
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+      expect(item.fragmentKind).toBe('table');
+      expect(item.block).toBe(tableBlock);
+      expect(item.measure).toBe(tableMeasure);
+    });
+  });
+
   describe('fragment metadata lifting', () => {
     it('lifts pmStart and pmEnd from a paragraph fragment', () => {
       const paraFragment: ParaFragment = {

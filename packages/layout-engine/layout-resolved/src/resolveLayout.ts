@@ -239,6 +239,19 @@ function resolveFragmentItem(
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
 
+      // Pre-extract block/measure for para and list-item fragments so the painter
+      // can prefer resolved data over a blockLookup read.
+      const entry = blockMap.get(fragment.blockId);
+      if (entry) {
+        if (fragment.kind === 'para' && entry.block.kind === 'paragraph' && entry.measure.kind === 'paragraph') {
+          item.block = entry.block as ParagraphBlock;
+          item.measure = entry.measure as ParagraphMeasure;
+        } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
+          item.block = entry.block as ListBlock;
+          item.measure = entry.measure as ListMeasure;
+        }
+      }
+
       // Pre-compute paragraph border data for between-border grouping
       const borders = resolveFragmentParagraphBorders(fragment, blockMap);
       if (borders) {

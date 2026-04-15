@@ -2936,17 +2936,26 @@ export class DomPainter {
     resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'paragraph' || lookup.measure.kind !== 'paragraph') {
-        throw new Error(`DomPainter: missing block/measure for fragment ${fragment.blockId}`);
-      }
-
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
 
-      const block = lookup.block as ParagraphBlock;
-      const measure = lookup.measure as ParagraphMeasure;
+      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup.
+      let block: ParagraphBlock;
+      let measure: ParagraphMeasure;
+      const resolvedBlock = resolvedItem?.block;
+      const resolvedMeasure = resolvedItem?.measure;
+      if (resolvedBlock?.kind === 'paragraph' && resolvedMeasure?.kind === 'paragraph') {
+        block = resolvedBlock as ParagraphBlock;
+        measure = resolvedMeasure as ParagraphMeasure;
+      } else {
+        const lookup = this.blockLookup.get(fragment.blockId);
+        if (!lookup || lookup.block.kind !== 'paragraph' || lookup.measure.kind !== 'paragraph') {
+          throw new Error(`DomPainter: missing block/measure for fragment ${fragment.blockId}`);
+        }
+        block = lookup.block as ParagraphBlock;
+        measure = lookup.measure as ParagraphMeasure;
+      }
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
 
@@ -3478,17 +3487,26 @@ export class DomPainter {
     resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'list' || lookup.measure.kind !== 'list') {
-        throw new Error(`DomPainter: missing list data for fragment ${fragment.blockId}`);
-      }
-
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
 
-      const block = lookup.block as ListBlock;
-      const measure = lookup.measure as ListMeasure;
+      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup.
+      let block: ListBlock;
+      let measure: ListMeasure;
+      const resolvedBlock = resolvedItem?.block;
+      const resolvedMeasure = resolvedItem?.measure;
+      if (resolvedBlock?.kind === 'list' && resolvedMeasure?.kind === 'list') {
+        block = resolvedBlock as ListBlock;
+        measure = resolvedMeasure as ListMeasure;
+      } else {
+        const lookup = this.blockLookup.get(fragment.blockId);
+        if (!lookup || lookup.block.kind !== 'list' || lookup.measure.kind !== 'list') {
+          throw new Error(`DomPainter: missing list data for fragment ${fragment.blockId}`);
+        }
+        block = lookup.block as ListBlock;
+        measure = lookup.measure as ListMeasure;
+      }
       const item = block.items.find((entry) => entry.id === fragment.itemId);
       const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
       if (!item || !itemMeasure) {

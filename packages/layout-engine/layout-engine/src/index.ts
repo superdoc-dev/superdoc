@@ -742,11 +742,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     headerContentHeight: number,
     currentHeaderDistance: number,
     baseTopMargin: number,
+    pageHeight: number,
+    effectiveBottomMargin: number,
   ): number => {
-    if (headerContentHeight > 0) {
-      return Math.max(baseTopMargin, currentHeaderDistance + headerContentHeight);
-    }
-    return baseTopMargin;
+    const rawTopMargin =
+      headerContentHeight > 0 ? Math.max(baseTopMargin, currentHeaderDistance + headerContentHeight) : baseTopMargin;
+    const minimumContentHeight = 1;
+    const maxAllowedTopMargin = pageHeight - effectiveBottomMargin - minimumContentHeight;
+    return Math.min(rawTopMargin, maxAllowedTopMargin);
   };
 
   /**
@@ -794,8 +797,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const footerDistance = margins.footer ?? margins.bottom;
   const defaultHeaderHeight = getHeaderHeightForPage('default', undefined);
   const defaultFooterHeight = getFooterHeightForPage('default', undefined);
-  const effectiveTopMargin = calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top);
   const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
+  const effectiveTopMargin = calculateEffectiveTopMargin(
+    defaultHeaderHeight,
+    headerDistance,
+    margins.top,
+    pageSize.h,
+    effectiveBottomMargin,
+  );
 
   let activeTopMargin = effectiveTopMargin;
   let activeBottomMargin = effectiveBottomMargin;
@@ -1343,11 +1352,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Always recalculate to ensure pages without headers reset to base margin
         // (not the inflated margin from a previous page with a header).
         // Use section base margins, not document defaults, for correct per-section behavior.
-        activeTopMargin = calculateEffectiveTopMargin(headerHeight, activeHeaderDistance, activeSectionBaseTopMargin);
         activeBottomMargin = calculateEffectiveBottomMargin(
           footerHeight,
           activeFooterDistance,
           activeSectionBaseBottomMargin,
+        );
+        activeTopMargin = calculateEffectiveTopMargin(
+          headerHeight,
+          activeHeaderDistance,
+          activeSectionBaseTopMargin,
+          activePageSize.h,
+          activeBottomMargin,
         );
 
         layoutLog(

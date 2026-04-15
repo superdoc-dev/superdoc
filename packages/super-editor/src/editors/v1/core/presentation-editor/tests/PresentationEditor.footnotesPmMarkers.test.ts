@@ -113,6 +113,7 @@ vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: mockResolveLayout,
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({

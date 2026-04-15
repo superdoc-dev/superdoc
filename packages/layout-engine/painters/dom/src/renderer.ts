@@ -2940,22 +2940,16 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup.
-      let block: ParagraphBlock;
-      let measure: ParagraphMeasure;
-      const resolvedBlock = resolvedItem?.block;
-      const resolvedMeasure = resolvedItem?.measure;
-      if (resolvedBlock?.kind === 'paragraph' && resolvedMeasure?.kind === 'paragraph') {
-        block = resolvedBlock as ParagraphBlock;
-        measure = resolvedMeasure as ParagraphMeasure;
-      } else {
-        const lookup = this.blockLookup.get(fragment.blockId);
-        if (!lookup || lookup.block.kind !== 'paragraph' || lookup.measure.kind !== 'paragraph') {
-          throw new Error(`DomPainter: missing block/measure for fragment ${fragment.blockId}`);
-        }
-        block = lookup.block as ParagraphBlock;
-        measure = lookup.measure as ParagraphMeasure;
-      }
+      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
+      // for header/footer fragments that don't have a resolved item.
+      const { block, measure } = this.resolveBlockAndMeasure<ParagraphBlock, ParagraphMeasure>(
+        fragment,
+        resolvedItem?.block,
+        resolvedItem?.measure,
+        'paragraph',
+        'paragraph',
+        'paragraph block/measure',
+      );
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
 
@@ -3491,22 +3485,16 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup.
-      let block: ListBlock;
-      let measure: ListMeasure;
-      const resolvedBlock = resolvedItem?.block;
-      const resolvedMeasure = resolvedItem?.measure;
-      if (resolvedBlock?.kind === 'list' && resolvedMeasure?.kind === 'list') {
-        block = resolvedBlock as ListBlock;
-        measure = resolvedMeasure as ListMeasure;
-      } else {
-        const lookup = this.blockLookup.get(fragment.blockId);
-        if (!lookup || lookup.block.kind !== 'list' || lookup.measure.kind !== 'list') {
-          throw new Error(`DomPainter: missing list data for fragment ${fragment.blockId}`);
-        }
-        block = lookup.block as ListBlock;
-        measure = lookup.measure as ListMeasure;
-      }
+      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
+      // for header/footer fragments that don't have a resolved item.
+      const { block, measure } = this.resolveBlockAndMeasure<ListBlock, ListMeasure>(
+        fragment,
+        resolvedItem?.block,
+        resolvedItem?.measure,
+        'list',
+        'list',
+        'list block/measure',
+      );
       const item = block.items.find((entry) => entry.id === fragment.itemId);
       const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
       if (!item || !itemMeasure) {
@@ -3641,17 +3629,9 @@ export class DomPainter {
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
     try {
-      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
-      // is a legacy ResolvedFragmentItem without the block field.
-      const block: ImageBlock =
-        resolvedItem?.block ??
-        (() => {
-          const lookup = this.blockLookup.get(fragment.blockId);
-          if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
-            throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
-          }
-          return lookup.block as ImageBlock;
-        })();
+      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
+      // for header/footer fragments that don't have a resolved item.
+      const block = this.resolveBlock<ImageBlock>(fragment, resolvedItem?.block, 'image', 'image block');
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
@@ -3830,17 +3810,9 @@ export class DomPainter {
     resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
     try {
-      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
-      // is a legacy ResolvedFragmentItem without the block field.
-      const block: DrawingBlock =
-        resolvedItem?.block ??
-        (() => {
-          const lookup = this.blockLookup.get(fragment.blockId);
-          if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
-            throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
-          }
-          return lookup.block as DrawingBlock;
-        })();
+      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
+      // for header/footer fragments that don't have a resolved item.
+      const block = this.resolveBlock<DrawingBlock>(fragment, resolvedItem?.block, 'drawing', 'drawing block');
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
@@ -6710,6 +6682,49 @@ export class DomPainter {
     }
 
     return 0;
+  }
+
+  /**
+   * Resolves the block + measure pair for a fragment. Body fragments get these from the
+   * ResolvedFragmentItem; header/footer fragments fall back to the blockLookup map.
+   */
+  private resolveBlockAndMeasure<B extends FlowBlock, M extends Measure>(
+    fragment: { blockId: string },
+    resolvedBlock: FlowBlock | undefined,
+    resolvedMeasure: Measure | undefined,
+    blockKind: B['kind'],
+    measureKind: M['kind'],
+    errorLabel: string,
+  ): { block: B; measure: M } {
+    if (resolvedBlock?.kind === blockKind && resolvedMeasure?.kind === measureKind) {
+      return { block: resolvedBlock as B, measure: resolvedMeasure as M };
+    }
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== blockKind || lookup.measure.kind !== measureKind) {
+      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
+    }
+    return { block: lookup.block as B, measure: lookup.measure as M };
+  }
+
+  /**
+   * Resolves only the block for a fragment (image/drawing rendering doesn't consume the measure).
+   * Body fragments get this from the ResolvedImageItem/ResolvedDrawingItem; header/footer
+   * fragments fall back to the blockLookup map.
+   */
+  private resolveBlock<B extends FlowBlock>(
+    fragment: { blockId: string },
+    resolvedBlock: B | undefined,
+    blockKind: B['kind'],
+    errorLabel: string,
+  ): B {
+    if (resolvedBlock?.kind === blockKind) {
+      return resolvedBlock;
+    }
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== blockKind) {
+      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
+    }
+    return lookup.block as B;
   }
 
   private buildBlockLookup(blocks: FlowBlock[], measures: Measure[]): BlockLookup {

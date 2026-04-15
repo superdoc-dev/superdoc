@@ -20,6 +20,7 @@ import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
+import { buildInlineContentFromText } from '../../core/helpers/buildInlineContentFromText.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 export type WithinResult = { ok: true; range: { start: number; end: number } | undefined } | { ok: false };
@@ -228,8 +229,8 @@ export function insertParagraphAtEnd(
   applyMeta?: (tr: Transaction) => Transaction,
 ): void {
   const schema = editor.state.schema;
-  const textNode = schema.text(text);
-  const paragraph = schema.nodes.paragraph.create(null, textNode);
+  const inlineContent = buildInlineContentFromText(schema, text);
+  const paragraph = schema.nodes.paragraph.create(null, inlineContent.content);
   const tr = editor.state.tr;
   tr.insert(pos, paragraph);
   if (applyMeta) applyMeta(tr);

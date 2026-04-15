@@ -50,6 +50,7 @@ import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
+import { buildInlineContentFromText } from '../../core/helpers/buildInlineContentFromText.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
@@ -746,9 +747,12 @@ export function executeTextRewrite(
 
   const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
-
-  const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
-  tr.replaceWith(absFrom, absTo, textNode);
+  const replacementContent = buildInlineContentFromText(
+    editor.state.schema,
+    replacementText,
+    asProseMirrorMarks(marks) as ProseMirrorMark[],
+  );
+  tr.replaceWith(absFrom, absTo, replacementContent.content);
 
   return { changed: replacementText !== target.text };
 }
@@ -782,8 +786,8 @@ export function executeTextInsert(
     marks = resolvedPos.marks();
   }
 
-  const textNode = editor.state.schema.text(text, marks);
-  tr.insert(absPos, textNode);
+  const inlineContent = buildInlineContentFromText(editor.state.schema, text, marks as ProseMirrorMark[]);
+  tr.insert(absPos, inlineContent.content);
 
   return { changed: true };
 }

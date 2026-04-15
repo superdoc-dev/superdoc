@@ -10,6 +10,7 @@ import { markInsertion } from './trackChangesHelpers/markInsertion.js';
 import { collectTrackedChanges, isTrackedChangeActionAllowed } from './permission-helpers.js';
 import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from '../comment/comments-plugin.js';
 import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
+import { buildInlineContentFromText } from '../../core/helpers/buildInlineContentFromText.js';
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
 
 export const TrackChanges = Extension.create({
@@ -344,14 +345,17 @@ export const TrackChanges = Extension.create({
 
           // Step 2: Insert the new text after the deleted content
           let insertedMark = null;
-          let insertedNode = null;
+          let insertedNodes = [];
+          let insertedSize = 0;
           if (text) {
-            insertedNode = state.schema.text(text, marks);
-            tr.insert(insertPos, insertedNode);
+            const inlineContent = buildInlineContentFromText(state.schema, text, marks);
+            insertedNodes = inlineContent.nodes;
+            insertedSize = inlineContent.size;
+            tr.insert(insertPos, inlineContent.content);
 
             // Step 3: Mark the insertion
             const insertedFrom = insertPos;
-            const insertedTo = insertPos + insertedNode.nodeSize;
+            const insertedTo = insertPos + insertedSize;
             insertedMark = markInsertion({
               tr,
               from: insertedFrom,
@@ -368,11 +372,12 @@ export const TrackChanges = Extension.create({
 
           // Store metadata for external consumers (pass full mark objects for comments plugin)
           // Create a mock step with slice for the comments plugin to extract nodes
-          const mockStep = insertedNode
-            ? {
-                slice: { content: { content: [insertedNode] } },
-              }
-            : null;
+          const mockStep =
+            insertedNodes.length > 0
+              ? {
+                  slice: { content: { content: insertedNodes } },
+                }
+              : null;
 
           tr.setMeta(TrackChangesBasePluginKey, {
             insertedMark: insertedMark || null,

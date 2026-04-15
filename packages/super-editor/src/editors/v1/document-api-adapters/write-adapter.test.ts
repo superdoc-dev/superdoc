@@ -42,6 +42,9 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     child(index: number) {
       return children[index]!;
     },
+    sameMarkup(other: ProseMirrorNode) {
+      return other?.type?.name === typeName;
+    },
     descendants(callback: (node: ProseMirrorNode, pos: number) => void) {
       let offset = 0;
       for (const child of children) {
@@ -59,6 +62,7 @@ function makeEditor(text = 'Hello'): {
   textBetween: ReturnType<typeof vi.fn>;
   tr: {
     insertText: ReturnType<typeof vi.fn>;
+    replaceWith: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     setMeta: ReturnType<typeof vi.fn>;
     addMark: ReturnType<typeof vi.fn>;
@@ -74,11 +78,13 @@ function makeEditor(text = 'Hello'): {
 
   const tr = {
     insertText: vi.fn(),
+    replaceWith: vi.fn(),
     delete: vi.fn(),
     setMeta: vi.fn(),
     addMark: vi.fn(),
   };
   tr.insertText.mockReturnValue(tr);
+  tr.replaceWith.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
@@ -96,8 +102,19 @@ function makeEditor(text = 'Hello'): {
       doc: {
         ...doc,
         textBetween,
+        resolve: vi.fn(() => ({ marks: () => [] })),
       },
       tr,
+      schema: {
+        text: vi.fn((value: string, marks?: unknown[]) => createNode('text', [], { text: value, attrs: { marks } })),
+        nodes: {
+          tab: {
+            create: vi.fn((_attrs?: unknown, _content?: unknown, marks?: unknown[]) =>
+              createNode('tab', [], { attrs: { marks }, isInline: true, isLeaf: true, nodeSize: 1 }),
+            ),
+          },
+        },
+      },
     },
     commands: {
       insertTrackedChange,
@@ -484,6 +501,29 @@ describe('writeAdapter', () => {
     });
     expect(tr.insertText).toHaveBeenCalledWith('World', 1, 6);
     expect(tr.setMeta).toHaveBeenCalledWith('inputType', 'programmatic');
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('materializes tab characters as structured inline content for direct writes', () => {
+    const { editor, dispatch, tr } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'replace',
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        text: 'A\tB',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(tr.insertText).not.toHaveBeenCalled();
+    expect(tr.replaceWith).toHaveBeenCalledTimes(1);
+    const replacement = tr.replaceWith.mock.calls[0]?.[2];
+    expect(replacement?.content?.[0]?.type?.name).toBe('text');
+    expect(replacement?.content?.[1]?.type?.name).toBe('tab');
+    expect(replacement?.content?.[2]?.type?.name).toBe('text');
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 

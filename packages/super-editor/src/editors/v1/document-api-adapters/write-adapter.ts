@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Editor } from '../core/Editor.js';
 import type { MutationOptions, ReceiptFailure, TextAddress, TextMutationReceipt } from '@superdoc/document-api';
+import { buildInlineContentFromText } from '../core/helpers/buildInlineContentFromText.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
@@ -218,8 +219,19 @@ function applyDirectWrite(
   }
 
   // text is guaranteed non-empty for insert/replace after validateWriteRequest
+  const insertionText = request.text ?? '';
+  if (insertionText.includes('\t')) {
+    const marks = editor.state.doc.resolve(resolvedTarget.range.from).marks();
+    const inlineContent = buildInlineContentFromText(editor.state.schema, insertionText, marks);
+    const tr = applyDirectMutationMeta(
+      editor.state.tr.replaceWith(resolvedTarget.range.from, resolvedTarget.range.to, inlineContent.content),
+    );
+    editor.dispatch(tr);
+    return { success: true, resolution: resolvedTarget.resolution };
+  }
+
   const tr = applyDirectMutationMeta(
-    editor.state.tr.insertText(request.text ?? '', resolvedTarget.range.from, resolvedTarget.range.to),
+    editor.state.tr.insertText(insertionText, resolvedTarget.range.from, resolvedTarget.range.to),
   );
   editor.dispatch(tr);
   return { success: true, resolution: resolvedTarget.resolution };

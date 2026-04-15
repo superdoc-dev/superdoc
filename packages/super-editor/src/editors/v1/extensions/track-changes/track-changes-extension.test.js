@@ -1865,6 +1865,42 @@ describe('TrackChanges extension commands', () => {
       expect(hasInsertMark).toBe(true);
     });
 
+    it('materializes tab characters as tab nodes for tracked insertions', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 6,
+        to: 6,
+        text: '\tworld',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(nextState.doc.textContent).toBe('Helloworld');
+
+      let tabCount = 0;
+      let hasInsertMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.type.name === 'tab') tabCount += 1;
+        if (node.marks.some((m) => m.type.name === TrackInsertMarkName)) hasInsertMark = true;
+      });
+
+      expect(tabCount).toBe(1);
+      expect(hasInsertMark).toBe(true);
+    });
+
     it('replacement marks share the same ID for proper comment linking', () => {
       const doc = createDoc('Hello world');
       const state = createState(doc);

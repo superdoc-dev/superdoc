@@ -116,8 +116,6 @@ import {
 } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
-  getFragmentParagraphBorders,
-  getFragmentHeight,
   createParagraphDecorationLayers,
   applyParagraphBorderStyles,
   applyParagraphShadingStyles,
@@ -245,32 +243,25 @@ export type RenderedLineInfo = {
 /**
  * Input to `DomPainter.paint()`.
  *
- * `resolvedLayout` is the canonical resolved data. The remaining fields are
- * bridge data carried for internal rendering of non-paragraph fragments
- * (tables, images, drawings) that have not yet been migrated to resolved items.
+ * `resolvedLayout` is the canonical resolved data the painter reads from.
+ * `sourceLayout` is the raw Layout retained for legacy internal access paths.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
-  /** Raw Layout for internal fragment access (bridge, will be removed once render loops iterate resolved items). */
+  /** Raw Layout for internal fragment access. */
   sourceLayout: Layout;
-  /** Header block data (still needed for decoration rendering, no resolved path yet). */
-  headerBlocks?: FlowBlock[];
-  headerMeasures?: Measure[];
-  /** Footer block data (still needed for decoration rendering, no resolved path yet). */
-  footerBlocks?: FlowBlock[];
-  footerMeasures?: Measure[];
 };
 
-type OptionalBlockMeasurePair = {
-  blocks: FlowBlock[];
-  measures: Measure[];
-};
-
-type PageDecorationPayload = {
+export type PageDecorationPayload = {
   fragments: Fragment[];
-  /** Resolved items aligned 1:1 with `fragments`. Same length, same order.
-   *  Absent when provider has no resolved data (painter falls back to blockLookup). */
+  /**
+   * Resolved items aligned 1:1 with `fragments`. Same length, same order.
+   * When omitted, the painter treats fragments as having no resolved metadata
+   * (no paragraph borders, no SDT container keys).
+   */
   items?: ResolvedPaintItem[];
+  /** Minimum Y coordinate from layout; negative when content extends above y=0. */
+  minY?: number;
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
@@ -332,10 +323,6 @@ type PainterOptions = {
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
-
-// BlockLookup lives in the shared types module (single source of truth)
-import type { BlockLookupEntry, BlockLookup } from './features/paragraph-borders/types.js';
-export type { BlockLookup, BlockLookupEntry };
 
 type FragmentDomState = {
   key: string;
@@ -1226,7 +1213,6 @@ const applyLinkDataset = (element: HTMLElement, dataset?: Record<string, string>
  * ```
  */
 export class DomPainter {
-  private blockLookup: BlockLookup;
   private readonly options: PainterOptions;
   private mount: HTMLElement | null = null;
   private doc: Document | null = null;
@@ -1302,7 +1288,6 @@ export class DomPainter {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
-    this.blockLookup = new Map();
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
 
@@ -1581,69 +1566,10 @@ export class DomPainter {
     };
   }
 
-  /**
-   * Builds a new block lookup from the input data, merging header/footer blocks,
-   * and tracks which blocks changed since the last paint cycle.
-   */
-  private normalizeOptionalBlockMeasurePair(
-    label: 'header' | 'footer',
-    blocks: FlowBlock[] | undefined,
-    measures: Measure[] | undefined,
-  ): OptionalBlockMeasurePair | undefined {
-    const hasBlocks = blocks !== undefined;
-    const hasMeasures = measures !== undefined;
-
-    if (hasBlocks !== hasMeasures) {
-      throw new Error(
-        `DomPainter.paint requires ${label}Blocks and ${label}Measures to both be provided or both be omitted`,
-      );
-    }
-
-    if (!hasBlocks || !hasMeasures) {
-      return undefined;
-    }
-
-    return { blocks, measures };
-  }
-
-  private updateBlockLookup(input: DomPainterInput): void {
-    const { headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
-    const nextLookup: BlockLookup = new Map();
-
-    const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
-    if (normalizedHeader) {
-      const headerLookup = this.buildBlockLookup(normalizedHeader.blocks, normalizedHeader.measures);
-      headerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
-    if (normalizedFooter) {
-      const footerLookup = this.buildBlockLookup(normalizedFooter.blocks, normalizedFooter.measures);
-      footerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    // Track changed blocks (decoration only now, body change detection uses resolved version)
-    const changed = new Set<string>();
-    nextLookup.forEach((entry, id) => {
-      const previous = this.blockLookup.get(id);
-      if (!previous || previous.version !== entry.version) {
-        changed.add(id);
-      }
-    });
-    this.blockLookup = nextLookup;
-    this.changedBlocks = changed;
-  }
-
   public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
     const layout = input.sourceLayout;
     this.resolvedLayout = input.resolvedLayout;
-
-    // Update block lookup and change tracking (absorbs former setData logic)
-    this.updateBlockLookup(input);
+    this.changedBlocks.clear();
 
     if (!(mount instanceof HTMLElement)) {
       throw new Error('DomPainter.paint requires a valid HTMLElement mount');
@@ -1666,8 +1592,6 @@ export class DomPainter {
           if ('blockId' in item) this.changedBlocks.add(item.blockId);
         }
       }
-      // Also mark all header/footer blocks as changed.
-      this.blockLookup.forEach((_, id) => this.changedBlocks.add(id));
       this.currentMapping = null;
     } else {
       this.currentMapping = mapping ?? null;
@@ -2225,13 +2149,9 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -2337,12 +2257,11 @@ export class DomPainter {
    * Used to determine special Y positioning for page-relative anchored media
    * in header/footer decoration sections.
    */
-  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem?: ResolvedPaintItem): boolean {
+  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
-    const resolvedBlock = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
-    const block = resolvedBlock ?? this.blockLookup.get(fragment.blockId)?.block;
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
     if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) {
       return false;
     }
@@ -2483,7 +2402,8 @@ export class DomPainter {
     };
 
     // Compute between-border flags for header/footer paragraph fragments
-    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup, data.items);
+    const decorationItems = data.items ?? [];
+    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, decorationItems);
 
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
@@ -2672,13 +2592,9 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2694,6 +2610,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      const resolvedSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
 
       if (current) {
         existing.delete(key);
@@ -2712,11 +2629,9 @@ export class DomPainter {
           newPmStart != null &&
           current.element.dataset.pmStart != null &&
           this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
-        const resolvedSig =
-          resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
         const needsRebuild =
           this.changedBlocks.has(fragment.blockId) ||
-          current.signature !== (resolvedSig ?? fragmentSignature(fragment, this.blockLookup)) ||
+          current.signature !== resolvedSig ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
           mappingUnreliable;
@@ -2725,7 +2640,7 @@ export class DomPainter {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
-          current.signature = resolvedSig ?? fragmentSignature(fragment, this.blockLookup);
+          current.signature = resolvedSig;
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2745,13 +2660,11 @@ export class DomPainter {
 
       const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
-      const freshSig =
-        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
       nextFragments.push({
         key,
         fragment,
         element: fresh,
-        signature: freshSig ?? fragmentSignature(fragment, this.blockLookup),
+        signature: resolvedSig,
         context: contextBase,
       });
     });
@@ -2841,13 +2754,9 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(
-      page.fragments,
-      this.blockLookup,
-      this.sdtLabelsRendered,
-      resolvedPage?.items,
-    );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
+    const resolvedItems = resolvedPage?.items ?? [];
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
@@ -2859,11 +2768,10 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      const initSig =
-        resolvedItem && 'version' in resolvedItem ? (resolvedItem as { version?: string }).version : undefined;
+      const initSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
       return {
         key: fragmentKey(fragment),
-        signature: initSig ?? fragmentSignature(fragment, this.blockLookup),
+        signature: initSig,
         fragment,
         element: fragmentEl,
         context: contextBase,
@@ -2959,16 +2867,12 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const { block, measure } = this.resolveBlockAndMeasure<ParagraphBlock, ParagraphMeasure>(
-        fragment,
-        resolvedItem?.block,
-        resolvedItem?.measure,
-        'paragraph',
-        'paragraph',
-        'paragraph block/measure',
-      );
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'paragraph' || resolvedItem?.measure?.kind !== 'paragraph') {
+        throw new Error(`DomPainter: missing resolved paragraph block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ParagraphBlock;
+      const measure = resolvedItem.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
 
@@ -3504,16 +3408,12 @@ export class DomPainter {
         throw new Error('DomPainter: document is not available');
       }
 
-      // Prefer pre-extracted block/measure from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const { block, measure } = this.resolveBlockAndMeasure<ListBlock, ListMeasure>(
-        fragment,
-        resolvedItem?.block,
-        resolvedItem?.measure,
-        'list',
-        'list',
-        'list block/measure',
-      );
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'list' || resolvedItem?.measure?.kind !== 'list') {
+        throw new Error(`DomPainter: missing resolved list block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ListBlock;
+      const measure = resolvedItem.measure as ListMeasure;
       const item = block.items.find((entry) => entry.id === fragment.itemId);
       const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
       if (!item || !itemMeasure) {
@@ -3648,9 +3548,11 @@ export class DomPainter {
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
     try {
-      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const block = this.resolveBlock<ImageBlock>(fragment, resolvedItem?.block, 'image', 'image block');
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'image') {
+        throw new Error(`DomPainter: missing resolved image block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ImageBlock;
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
@@ -3829,9 +3731,11 @@ export class DomPainter {
     resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
     try {
-      // Prefer pre-extracted block from the resolved item; fall back to blockLookup
-      // for header/footer fragments that don't have a resolved item.
-      const block = this.resolveBlock<DrawingBlock>(fragment, resolvedItem?.block, 'drawing', 'drawing block');
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'drawing') {
+        throw new Error(`DomPainter: missing resolved drawing block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as DrawingBlock;
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
@@ -4666,28 +4570,14 @@ export class DomPainter {
     cellSpacingPx: number;
     effectiveColumnWidths: number[];
   } {
-    if (resolvedItem) {
-      return {
-        block: resolvedItem.block,
-        measure: resolvedItem.measure,
-        cellSpacingPx: resolvedItem.cellSpacingPx,
-        effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
-      };
+    if (!resolvedItem) {
+      throw new Error(`DomPainter: missing resolved table item for fragment ${fragment.blockId}`);
     }
-
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
-      throw new Error(`DomPainter: missing table block for fragment ${fragment.blockId}`);
-    }
-
-    const block = lookup.block as TableBlock;
-    const measure = lookup.measure as TableMeasure;
-
     return {
-      block,
-      measure,
-      cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
-      effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+      block: resolvedItem.block,
+      measure: resolvedItem.measure,
+      cellSpacingPx: resolvedItem.cellSpacingPx,
+      effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
     };
   }
 
@@ -6689,85 +6579,11 @@ export class DomPainter {
     if (resolvedItem && 'height' in resolvedItem && typeof resolvedItem.height === 'number') {
       return resolvedItem.height;
     }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    const measure = lookup?.measure;
-
-    if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
-      return measure.totalHeight;
-    }
-
-    if (fragment.kind === 'list-item' && measure?.kind === 'list') {
-      return measure.totalHeight;
-    }
-
-    if (fragment.kind === 'table') {
+    // Atomic fragment kinds carry their own height on the fragment.
+    if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
       return fragment.height;
     }
-
-    if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-      return fragment.height;
-    }
-
     return 0;
-  }
-
-  /**
-   * Resolves the block + measure pair for a fragment. Body fragments get these from the
-   * ResolvedFragmentItem; header/footer fragments fall back to the blockLookup map.
-   */
-  private resolveBlockAndMeasure<B extends FlowBlock, M extends Measure>(
-    fragment: { blockId: string },
-    resolvedBlock: FlowBlock | undefined,
-    resolvedMeasure: Measure | undefined,
-    blockKind: B['kind'],
-    measureKind: M['kind'],
-    errorLabel: string,
-  ): { block: B; measure: M } {
-    if (resolvedBlock?.kind === blockKind && resolvedMeasure?.kind === measureKind) {
-      return { block: resolvedBlock as B, measure: resolvedMeasure as M };
-    }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== blockKind || lookup.measure.kind !== measureKind) {
-      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
-    }
-    return { block: lookup.block as B, measure: lookup.measure as M };
-  }
-
-  /**
-   * Resolves only the block for a fragment (image/drawing rendering doesn't consume the measure).
-   * Body fragments get this from the ResolvedImageItem/ResolvedDrawingItem; header/footer
-   * fragments fall back to the blockLookup map.
-   */
-  private resolveBlock<B extends FlowBlock>(
-    fragment: { blockId: string },
-    resolvedBlock: B | undefined,
-    blockKind: B['kind'],
-    errorLabel: string,
-  ): B {
-    if (resolvedBlock?.kind === blockKind) {
-      return resolvedBlock;
-    }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== blockKind) {
-      throw new Error(`DomPainter: missing ${errorLabel} for fragment ${fragment.blockId}`);
-    }
-    return lookup.block as B;
-  }
-
-  private buildBlockLookup(blocks: FlowBlock[], measures: Measure[]): BlockLookup {
-    if (blocks.length !== measures.length) {
-      throw new Error('DomPainter requires the same number of blocks and measures');
-    }
-
-    const lookup: BlockLookup = new Map();
-    blocks.forEach((block, index) => {
-      lookup.set(block.id, {
-        block,
-        measure: measures[index],
-        version: deriveBlockVersion(block),
-      });
-    });
-    return lookup;
   }
 
   /**
@@ -6936,46 +6752,20 @@ export class DomPainter {
   }
 }
 
-const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup): string | null => {
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return null;
-  const block = lookup.block;
-
-  if (fragment.kind === 'para' && block.kind === 'paragraph') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'list-item' && block.kind === 'list') {
-    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
-    const attrs = item?.paragraph.attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'table' && block.kind === 'table') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  return null;
-};
-
 const computeSdtBoundaries = (
   fragments: readonly Fragment[],
-  blockLookup: BlockLookup,
+  resolvedItems: readonly ResolvedPaintItem[],
   sdtLabelsRendered: Set<string>,
-  resolvedItems?: readonly ResolvedPaintItem[],
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys: (string | null)[] = resolvedItems
-    ? resolvedItems.map((item) => {
-        if ('sdtContainerKey' in item) {
-          const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
-          return key ?? null;
-        }
-        return null;
-      })
-    : fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
+  const containerKeys: (string | null)[] = fragments.map((_frag, idx) => {
+    const item = resolvedItems[idx];
+    if (item && 'sdtContainerKey' in item) {
+      const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
+      return key ?? null;
+    }
+    return null;
+  });
 
   let i = 0;
   while (i < fragments.length) {
@@ -7004,7 +6794,7 @@ const computeSdtBoundaries = (
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
         const nextFragment = fragments[k + 1];
-        const currentHeight = resolvedItems?.[k]?.height ?? getFragmentHeight(fragment, blockLookup);
+        const currentHeight = (resolvedItems[k] as { height?: number } | undefined)?.height ?? 0;
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
         if (gapToNext > 0) {
@@ -7032,7 +6822,7 @@ const computeSdtBoundaries = (
   return boundaries;
 };
 
-// getFragmentParagraphBorders, computeBetweenBorderFlags — moved to features/paragraph-borders/
+// computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   if (fragment.kind === 'para') {
@@ -7058,532 +6848,6 @@ const fragmentKey = (fragment: Fragment): string => {
   // Exhaustive check - all fragment kinds should be handled above
   const _exhaustiveCheck: never = fragment;
   return _exhaustiveCheck;
-};
-
-const fragmentSignature = (fragment: Fragment, lookup: BlockLookup): string => {
-  const base = lookup.get(fragment.blockId)?.version ?? 'missing';
-  if (fragment.kind === 'para') {
-    // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-    return [
-      base,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.markerWidth ?? '', // Include markerWidth to trigger re-render when list status changes
-    ].join('|');
-  }
-  if (fragment.kind === 'list-item') {
-    return [
-      base,
-      fragment.itemId,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-    ].join('|');
-  }
-  if (fragment.kind === 'image') {
-    return [base, fragment.width, fragment.height].join('|');
-  }
-  if (fragment.kind === 'drawing') {
-    return [
-      base,
-      fragment.drawingKind,
-      fragment.drawingContentId ?? '',
-      fragment.width,
-      fragment.height,
-      fragment.geometry.width,
-      fragment.geometry.height,
-      fragment.geometry.rotation ?? 0,
-      fragment.scale ?? 1,
-      fragment.zIndex ?? '',
-    ].join('|');
-  }
-  if (fragment.kind === 'table') {
-    // Include all properties that affect table fragment rendering
-    const partialSig = fragment.partialRow
-      ? `${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}-${fragment.partialRow.partialHeight}`
-      : '';
-    return [
-      base,
-      fragment.fromRow,
-      fragment.toRow,
-      fragment.width,
-      fragment.height,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.repeatHeaderCount ?? 0,
-      partialSig,
-    ].join('|');
-  }
-  return base;
-};
-
-const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  if ('id' in metadata && metadata.id != null) {
-    return String(metadata.id);
-  }
-  return '';
-};
-
-const getSdtMetadataLockMode = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  return metadata.type === 'structuredContent' ? (metadata.lockMode ?? '') : '';
-};
-
-const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
-};
-
-/**
- * Type guard to validate list marker attributes structure.
- *
- * @param attrs - The paragraph attributes to validate
- * @returns True if the attrs contain valid list marker properties
- */
-const hasListMarkerProperties = (
-  attrs: unknown,
-): attrs is {
-  numberingProperties: { numId?: number | string; ilvl?: number };
-  wordLayout?: { marker?: { markerText?: string } };
-} => {
-  if (!attrs || typeof attrs !== 'object') return false;
-  const obj = attrs as Record<string, unknown>;
-
-  if (!obj.numberingProperties || typeof obj.numberingProperties !== 'object') return false;
-  const numProps = obj.numberingProperties as Record<string, unknown>;
-
-  // Validate numId is number or string if present
-  if ('numId' in numProps) {
-    const numId = numProps.numId;
-    if (typeof numId !== 'number' && typeof numId !== 'string') return false;
-  }
-
-  // Validate ilvl is number if present
-  if ('ilvl' in numProps) {
-    const ilvl = numProps.ilvl;
-    if (typeof ilvl !== 'number') return false;
-  }
-
-  // Validate wordLayout structure if present
-  if ('wordLayout' in obj && obj.wordLayout !== undefined) {
-    if (typeof obj.wordLayout !== 'object' || obj.wordLayout === null) return false;
-    const wordLayout = obj.wordLayout as Record<string, unknown>;
-
-    if ('marker' in wordLayout && wordLayout.marker !== undefined) {
-      if (typeof wordLayout.marker !== 'object' || wordLayout.marker === null) return false;
-      const marker = wordLayout.marker as Record<string, unknown>;
-
-      if ('markerText' in marker && marker.markerText !== undefined) {
-        if (typeof marker.markerText !== 'string') return false;
-      }
-    }
-  }
-
-  return true;
-};
-
-/**
- * Derives a version string for a flow block based on its content and styling properties.
- *
- * This version string is used for cache invalidation - when any visual property of the block
- * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
- *
- * The version includes all properties that affect visual rendering:
- * - Text content
- * - Font properties (family, size, bold, italic)
- * - Text decorations (underline style/color, strike, highlight)
- * - Spacing (letterSpacing)
- * - Position markers (pmStart, pmEnd)
- * - Special tokens (page numbers, etc.)
- * - List marker properties (numId, ilvl, markerText) - for list indent changes
- * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, rtl, tabs)
- * - Table cell content and paragraph formatting within cells
- *
- * For table blocks, a deep hash is computed across all rows and cells, including:
- * - Cell block content (paragraph runs, text, formatting)
- * - Paragraph-level attributes in cells (alignment, spacing, line height, indent, borders, shading)
- * - Run-level formatting (color, highlight, bold, italic, fontSize, fontFamily, underline, strike)
- *
- * This ensures toolbar commands that modify paragraph or run formatting within tables
- * trigger proper DOM updates.
- *
- * @param block - The flow block to generate a version string for
- * @returns A pipe-delimited string representing all visual properties of the block.
- *          Changes to any included property will change the version string.
- */
-const deriveBlockVersion = (block: FlowBlock): string => {
-  if (block.kind === 'paragraph') {
-    // Include list marker info in version to detect indent/marker changes
-    const markerVersion = hasListMarkerProperties(block.attrs)
-      ? `marker:${block.attrs.numberingProperties.numId ?? ''}:${block.attrs.numberingProperties.ilvl ?? 0}:${block.attrs.wordLayout?.marker?.markerText ?? ''}`
-      : '';
-
-    const runsVersion = block.runs
-      .map((run) => {
-        // Handle ImageRun
-        if (run.kind === 'image') {
-          const imgRun = run as ImageRun;
-          return [
-            'img',
-            imgRun.src,
-            imgRun.width,
-            imgRun.height,
-            imgRun.alt ?? '',
-            imgRun.title ?? '',
-            imgRun.clipPath ?? '',
-            imgRun.distTop ?? '',
-            imgRun.distBottom ?? '',
-            imgRun.distLeft ?? '',
-            imgRun.distRight ?? '',
-            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
-            // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          ].join(',');
-        }
-
-        // Handle LineBreakRun
-        if (run.kind === 'lineBreak') {
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          return 'linebreak';
-        }
-
-        // Handle TabRun
-        if (run.kind === 'tab') {
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          return [run.text ?? '', 'tab'].join(',');
-        }
-
-        // Handle FieldAnnotationRun
-        if (run.kind === 'fieldAnnotation') {
-          const size = run.size ? `${run.size.width ?? ''}x${run.size.height ?? ''}` : '';
-          const highlighted = run.highlighted !== false ? 1 : 0;
-          return [
-            'field',
-            run.variant ?? '',
-            run.displayLabel ?? '',
-            run.fieldColor ?? '',
-            run.borderColor ?? '',
-            highlighted,
-            run.hidden ? 1 : 0,
-            run.visibility ?? '',
-            run.imageSrc ?? '',
-            run.linkUrl ?? '',
-            run.rawHtml ?? '',
-            size,
-            run.fontFamily ?? '',
-            run.fontSize ?? '',
-            run.textColor ?? '',
-            run.textHighlight ?? '',
-            run.bold ? 1 : 0,
-            run.italic ? 1 : 0,
-            run.underline ? 1 : 0,
-            run.fieldId ?? '',
-            run.fieldType ?? '',
-          ].join(',');
-        }
-
-        // Handle TextRun (kind is 'text' or undefined)
-        const textRun = run as TextRun;
-        return [
-          textRun.text ?? '',
-          textRun.fontFamily,
-          textRun.fontSize,
-          textRun.bold ? 1 : 0,
-          textRun.italic ? 1 : 0,
-          textRun.color ?? '',
-          // Text decorations - ensures DOM updates when decoration properties change.
-          textRun.underline?.style ?? '',
-          textRun.underline?.color ?? '',
-          textRun.strike ? 1 : 0,
-          textRun.highlight ?? '',
-          textRun.letterSpacing != null ? textRun.letterSpacing : '',
-          textRun.vertAlign ?? '',
-          textRun.baselineShift != null ? textRun.baselineShift : '',
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          textRun.token ?? '',
-          // Tracked changes - force re-render when added or removed tracked change
-          textRun.trackedChange ? 1 : 0,
-          // Comment annotations - force re-render when comments are enabled/disabled
-          textRun.comments?.length ?? 0,
-        ].join(',');
-      })
-      .join('|');
-
-    // Include paragraph-level attributes that affect rendering (alignment, spacing, indent, etc.)
-    // This ensures DOM updates when toolbar commands like "align center" change these properties.
-    const attrs = block.attrs as ParagraphAttrs | undefined;
-
-    const paragraphAttrsVersion = attrs
-      ? [
-          attrs.alignment ?? '',
-          attrs.spacing?.before ?? '',
-          attrs.spacing?.after ?? '',
-          attrs.spacing?.line ?? '',
-          attrs.spacing?.lineRule ?? '',
-          attrs.indent?.left ?? '',
-          attrs.indent?.right ?? '',
-          attrs.indent?.firstLine ?? '',
-          attrs.indent?.hanging ?? '',
-          attrs.borders ? hashParagraphBorders(attrs.borders) : '',
-          attrs.shading?.fill ?? '',
-          attrs.shading?.color ?? '',
-          attrs.direction ?? '',
-          attrs.rtl ? '1' : '',
-          attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
-        ].join(':')
-      : '';
-
-    // Include SDT metadata so lock-mode (and other SDT property) changes invalidate the cache.
-    const sdtAttrs = (block.attrs as ParagraphAttrs | undefined)?.sdt;
-    const sdtVersion = getSdtMetadataVersion(sdtAttrs);
-
-    // Combine marker version, runs version, paragraph attrs version, and SDT version
-    const parts = [markerVersion, runsVersion, paragraphAttrsVersion, sdtVersion].filter(Boolean);
-    return parts.join('|');
-  }
-
-  if (block.kind === 'list') {
-    return block.items.map((item) => `${item.id}:${item.marker.text}:${deriveBlockVersion(item.paragraph)}`).join('|');
-  }
-
-  if (block.kind === 'image') {
-    const imgSdt = (block as ImageBlock).attrs?.sdt;
-    const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockClipPath(block),
-      imgSdtVersion,
-    ].join('|');
-  }
-
-  if (block.kind === 'drawing') {
-    if (block.drawingKind === 'image') {
-      // Type narrowing: block is ImageDrawing (not ImageBlock)
-      const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
-      ].join('|');
-    }
-    if (block.drawingKind === 'vectorShape') {
-      const vector = block as VectorShapeDrawing;
-      return [
-        'drawing:vector',
-        vector.shapeKind ?? '',
-        vector.fillColor ?? '',
-        vector.strokeColor ?? '',
-        vector.strokeWidth ?? '',
-        vector.geometry.width,
-        vector.geometry.height,
-        vector.geometry.rotation ?? 0,
-        vector.geometry.flipH ? 1 : 0,
-        vector.geometry.flipV ? 1 : 0,
-      ].join('|');
-    }
-    if (block.drawingKind === 'shapeGroup') {
-      const group = block as ShapeGroupDrawing;
-      const childSignature = group.shapes
-        .map((child) => `${child.shapeType}:${JSON.stringify(child.attrs ?? {})}`)
-        .join(';');
-      return [
-        'drawing:group',
-        group.geometry.width,
-        group.geometry.height,
-        group.groupTransform ? JSON.stringify(group.groupTransform) : '',
-        childSignature,
-      ].join('|');
-    }
-    if (block.drawingKind === 'chart') {
-      return [
-        'drawing:chart',
-        block.chartData?.chartType ?? '',
-        block.chartData?.series?.length ?? 0,
-        block.geometry.width,
-        block.geometry.height,
-        block.chartRelId ?? '',
-      ].join('|');
-    }
-    // Exhaustiveness check: if a new drawingKind is added, TypeScript will error here
-    const _exhaustive: never = block;
-    return `drawing:unknown:${(block as DrawingBlock).id}`;
-  }
-
-  if (block.kind === 'table') {
-    const tableBlock = block as TableBlock;
-    /**
-     * Local hash function for strings using FNV-1a algorithm.
-     * Used to create a robust hash across all table rows/cells so deep edits invalidate version.
-     *
-     * @param seed - Initial hash value
-     * @param value - String value to hash
-     * @returns Updated hash value
-     */
-    const hashString = (seed: number, value: string): number => {
-      let hash = seed >>> 0;
-      for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
-        hash = Math.imul(hash, 16777619); // FNV-style mix
-      }
-      return hash >>> 0;
-    };
-
-    /**
-     * Local hash function for numbers.
-     * Handles undefined/null values safely by treating them as 0.
-     *
-     * @param seed - Initial hash value
-     * @param value - Number value to hash (or undefined/null)
-     * @returns Updated hash value
-     */
-    const hashNumber = (seed: number, value: number | undefined | null): number => {
-      const n = Number.isFinite(value) ? (value as number) : 0;
-      let hash = seed ^ n;
-      hash = Math.imul(hash, 16777619);
-      hash ^= hash >>> 13;
-      return hash >>> 0;
-    };
-
-    let hash = 2166136261;
-    hash = hashString(hash, block.id);
-    hash = hashNumber(hash, tableBlock.rows.length);
-    hash = (tableBlock.columnWidths ?? []).reduce((acc, width) => hashNumber(acc, Math.round(width * 1000)), hash);
-
-    // Defensive guards: ensure rows array exists and iterate safely
-    const rows = tableBlock.rows ?? [];
-    for (const row of rows) {
-      if (!row || !Array.isArray(row.cells)) continue;
-      hash = hashNumber(hash, row.cells.length);
-      for (const cell of row.cells) {
-        if (!cell) continue;
-        const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
-        hash = hashNumber(hash, cellBlocks.length);
-        // Include cell attributes that affect rendering (rowSpan, colSpan, borders, etc.)
-        hash = hashNumber(hash, cell.rowSpan ?? 1);
-        hash = hashNumber(hash, cell.colSpan ?? 1);
-
-        // Include cell-level attributes (borders, padding, background) that affect rendering
-        // This ensures cache invalidation when cell formatting changes (e.g., remove borders).
-        if (cell.attrs) {
-          const cellAttrs = cell.attrs as TableCellAttrs;
-          if (cellAttrs.borders) {
-            hash = hashString(hash, hashCellBorders(cellAttrs.borders));
-          }
-          if (cellAttrs.padding) {
-            const p = cellAttrs.padding;
-            hash = hashNumber(hash, p.top ?? 0);
-            hash = hashNumber(hash, p.right ?? 0);
-            hash = hashNumber(hash, p.bottom ?? 0);
-            hash = hashNumber(hash, p.left ?? 0);
-          }
-          if (cellAttrs.verticalAlign) {
-            hash = hashString(hash, cellAttrs.verticalAlign);
-          }
-          if (cellAttrs.background) {
-            hash = hashString(hash, cellAttrs.background);
-          }
-        }
-
-        for (const cellBlock of cellBlocks) {
-          hash = hashString(hash, cellBlock?.kind ?? 'unknown');
-          if (cellBlock?.kind === 'paragraph') {
-            const paragraphBlock = cellBlock as ParagraphBlock;
-            const runs = paragraphBlock.runs ?? [];
-            hash = hashNumber(hash, runs.length);
-
-            // Include paragraph-level attributes that affect rendering
-            // (alignment, spacing, indent, etc.) - fixes toolbar commands not updating tables
-            const attrs = paragraphBlock.attrs as ParagraphAttrs | undefined;
-
-            if (attrs) {
-              hash = hashString(hash, attrs.alignment ?? '');
-              hash = hashNumber(hash, attrs.spacing?.before ?? 0);
-              hash = hashNumber(hash, attrs.spacing?.after ?? 0);
-              hash = hashNumber(hash, attrs.spacing?.line ?? 0);
-              hash = hashString(hash, attrs.spacing?.lineRule ?? '');
-              hash = hashNumber(hash, attrs.indent?.left ?? 0);
-              hash = hashNumber(hash, attrs.indent?.right ?? 0);
-              hash = hashNumber(hash, attrs.indent?.firstLine ?? 0);
-              hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
-              hash = hashString(hash, attrs.shading?.fill ?? '');
-              hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, attrs.direction ?? '');
-              hash = hashString(hash, attrs.rtl ? '1' : '');
-              if (attrs.borders) {
-                hash = hashString(hash, hashParagraphBorders(attrs.borders));
-              }
-            }
-
-            for (const run of runs) {
-              // Only text runs have .text property; ImageRun does not
-              if ('text' in run && typeof run.text === 'string') {
-                hash = hashString(hash, run.text);
-              }
-              hash = hashNumber(hash, run.pmStart ?? -1);
-              hash = hashNumber(hash, run.pmEnd ?? -1);
-
-              // Include run formatting properties that affect rendering
-              // (color, highlight, bold, italic, etc.) - fixes toolbar commands not updating tables
-              hash = hashString(hash, getRunStringProp(run, 'color'));
-              hash = hashString(hash, getRunStringProp(run, 'highlight'));
-              hash = hashString(hash, getRunBooleanProp(run, 'bold') ? '1' : '');
-              hash = hashString(hash, getRunBooleanProp(run, 'italic') ? '1' : '');
-              hash = hashNumber(hash, getRunNumberProp(run, 'fontSize'));
-              hash = hashString(hash, getRunStringProp(run, 'fontFamily'));
-              hash = hashString(hash, getRunUnderlineStyle(run));
-              hash = hashString(hash, getRunUnderlineColor(run));
-              hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
-              hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
-              hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
-            }
-          }
-        }
-      }
-    }
-
-    // Include table-level attributes (borders, etc.) that affect rendering
-    // This ensures cache invalidation when table formatting changes (e.g., remove borders).
-    if (tableBlock.attrs) {
-      const tblAttrs = tableBlock.attrs as TableAttrs;
-      if (tblAttrs.borders) {
-        hash = hashString(hash, hashTableBorders(tblAttrs.borders));
-      }
-      if (tblAttrs.borderCollapse) {
-        hash = hashString(hash, tblAttrs.borderCollapse);
-      }
-      if (tblAttrs.cellSpacing !== undefined) {
-        const cs = tblAttrs.cellSpacing;
-        if (typeof cs === 'number') {
-          hash = hashNumber(hash, cs);
-        } else {
-          // Stable key: value and type only (avoid JSON.stringify key-order variance)
-          const v = (cs as { value?: number; type?: string }).value ?? 0;
-          const t = (cs as { value?: number; type?: string }).type ?? 'px';
-          hash = hashString(hash, `cs:${v}:${t}`);
-        }
-      }
-      // Include SDT metadata so lock-mode changes invalidate the cache.
-      if (tblAttrs.sdt) {
-        hash = hashString(hash, tblAttrs.sdt.type);
-        hash = hashString(hash, getSdtMetadataLockMode(tblAttrs.sdt));
-        hash = hashString(hash, getSdtMetadataId(tblAttrs.sdt));
-      }
-    }
-
-    return [block.id, tableBlock.rows.length, hash.toString(16)].join('|');
-  }
-
-  return block.id;
 };
 
 const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;

@@ -15,7 +15,7 @@
  */
 
 // Group analysis
-export { computeBetweenBorderFlags, getFragmentParagraphBorders, getFragmentHeight } from './group-analysis.js';
+export { computeBetweenBorderFlags } from './group-analysis.js';
 export type { BetweenBorderInfo } from './group-analysis.js';
 
 // DOM layers and CSS
@@ -27,6 +27,3 @@ export {
   stampBetweenBorderDataset,
   computeBorderSpaceExpansion,
 } from './border-layer.js';
-
-// Shared types
-export type { BlockLookup, BlockLookupEntry } from './types.js';

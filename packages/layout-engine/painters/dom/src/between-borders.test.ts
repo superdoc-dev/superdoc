@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyParagraphBorderStyles,
-  getFragmentParagraphBorders,
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
   getParagraphBorderBox,
   computeBorderSpaceExpansion,
-  type BlockLookup,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
+import { hashParagraphBorders } from './paragraph-hash-utils.js';
 
 /** Helper to create BetweenBorderInfo for tests that previously passed a boolean. */
 const betweenOn: BetweenBorderInfo = {
@@ -36,6 +35,8 @@ import type {
   ParaFragment,
   ListItemFragment,
   ImageFragment,
+  ResolvedPaintItem,
+  ResolvedFragmentItem,
 } from '@superdoc/contracts';
 
 // ---------------------------------------------------------------------------
@@ -65,24 +66,54 @@ const makeListBlock = (id: string, items: { itemId: string; borders?: ParagraphB
   })),
 });
 
-const stubMeasure = { kind: 'paragraph' as const, lines: [], totalHeight: 0 };
-const stubListMeasure = {
-  kind: 'list' as const,
-  items: [],
-  totalHeight: 0,
+/**
+ * Test surrogate for the old BlockLookup — a list of blocks keyed by id that
+ * `buildResolvedItems` consumes to synthesize per-fragment ResolvedPaintItems.
+ */
+type TestBlockList = ReadonlyArray<ParagraphBlock | ListBlock>;
+
+const buildLookup = (entries: { block: ParagraphBlock | ListBlock; measure?: unknown }[]): TestBlockList =>
+  entries.map((e) => e.block);
+
+/**
+ * Build resolved items aligned 1:1 with the given fragments.
+ * Looks up each fragment's block (+ list item) to extract paragraph borders,
+ * then produces a ResolvedFragmentItem carrying the borders and a border hash.
+ */
+const buildResolvedItems = (fragments: readonly Fragment[], blocks: TestBlockList): ResolvedPaintItem[] => {
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  return fragments.map((fragment, index): ResolvedPaintItem => {
+    const block = byId.get(fragment.blockId);
+    let borders: ParagraphBorders | undefined;
+
+    if (fragment.kind === 'para' && block?.kind === 'paragraph') {
+      borders = block.attrs?.borders;
+    } else if (fragment.kind === 'list-item' && block?.kind === 'list') {
+      const item = block.items.find((listItem) => listItem.id === fragment.itemId);
+      borders = item?.paragraph.attrs?.borders;
+    }
+
+    const item: ResolvedFragmentItem = {
+      kind: 'fragment',
+      id: `item:${index}`,
+      pageIndex: 0,
+      x: fragment.x,
+      y: fragment.y,
+      width: fragment.width,
+      height: 'height' in fragment && typeof fragment.height === 'number' ? fragment.height : 0,
+      fragmentKind: fragment.kind,
+      blockId: fragment.blockId,
+      fragmentIndex: index,
+      paragraphBorders: borders,
+      paragraphBorderHash: borders ? hashParagraphBorders(borders) : undefined,
+    };
+    return item;
+  });
 };
 
-const buildLookup = (entries: { block: ParagraphBlock | ListBlock; measure?: unknown }[]): BlockLookup => {
-  const map: BlockLookup = new Map();
-  for (const e of entries) {
-    map.set(e.block.id, {
-      block: e.block,
-      measure: (e.measure ?? (e.block.kind === 'list' ? stubListMeasure : stubMeasure)) as never,
-      version: '1',
-    });
-  }
-  return map;
-};
+/** Test helper: run computeBetweenBorderFlags given fragments and the underlying blocks. */
+const runFlags = (fragments: readonly Fragment[], blocks: TestBlockList) =>
+  computeBetweenBorderFlags(fragments, buildResolvedItems(fragments, blocks));
 
 const paraFragment = (blockId: string, overrides?: Partial<ParaFragment>): ParaFragment => ({
   kind: 'para',
@@ -399,56 +430,6 @@ describe('createParagraphDecorationLayers — gap extension', () => {
 });
 
 // ---------------------------------------------------------------------------
-// getFragmentParagraphBorders
-// ---------------------------------------------------------------------------
-
-describe('getFragmentParagraphBorders', () => {
-  it('returns borders from a paragraph block', () => {
-    const borders: ParagraphBorders = { top: { style: 'solid', width: 1 } };
-    const block = makeParagraphBlock('b1', borders);
-    const lookup = buildLookup([{ block }]);
-    expect(getFragmentParagraphBorders(paraFragment('b1'), lookup)).toEqual(borders);
-  });
-
-  it('returns undefined for paragraph block without borders', () => {
-    const block = makeParagraphBlock('b1');
-    const lookup = buildLookup([{ block }]);
-    expect(getFragmentParagraphBorders(paraFragment('b1'), lookup)).toBeUndefined();
-  });
-
-  it('returns borders from a list-item block', () => {
-    const borders: ParagraphBorders = { between: { style: 'solid', width: 1 } };
-    const block = makeListBlock('l1', [{ itemId: 'i1', borders }]);
-    const lookup = buildLookup([{ block }]);
-    expect(getFragmentParagraphBorders(listItemFragment('l1', 'i1'), lookup)).toEqual(borders);
-  });
-
-  it('returns undefined when list item is not found', () => {
-    const block = makeListBlock('l1', [{ itemId: 'i1' }]);
-    const lookup = buildLookup([{ block }]);
-    expect(getFragmentParagraphBorders(listItemFragment('l1', 'missing'), lookup)).toBeUndefined();
-  });
-
-  it('returns undefined when blockId is not in lookup', () => {
-    const lookup = buildLookup([]);
-    expect(getFragmentParagraphBorders(paraFragment('missing'), lookup)).toBeUndefined();
-  });
-
-  it('returns undefined for image fragment', () => {
-    const block = makeParagraphBlock('b1', { top: { style: 'solid', width: 1 } });
-    const lookup = buildLookup([{ block }]);
-    expect(getFragmentParagraphBorders(imageFragment('b1'), lookup)).toBeUndefined();
-  });
-
-  it('returns undefined for kind/block mismatch (para fragment with list block)', () => {
-    const block = makeListBlock('l1', [{ itemId: 'i1' }]);
-    const lookup = buildLookup([{ block }]);
-    // para fragment referencing a list block
-    expect(getFragmentParagraphBorders(paraFragment('l1'), lookup)).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // computeBetweenBorderFlags
 // ---------------------------------------------------------------------------
 
@@ -460,7 +441,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.has(0)).toBe(true);
     expect(flags.get(0)?.showBetweenBorder).toBe(true);
     // Fragment 1 also gets an entry (suppressTopBorder)
@@ -478,7 +459,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(2);
     // First fragment: bottom border suppressed (no between separator, single box)
     expect(flags.get(0)?.suppressBottomBorder).toBe(true);
@@ -501,7 +482,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   // --- page-split handling ---
@@ -511,7 +492,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1', { continuesOnNext: true }), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   it('does not flag when next fragment continuesFromPrev (page split continuation)', () => {
@@ -520,7 +501,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2', { continuesFromPrev: true })];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   // --- same-block deduplication ---
@@ -532,7 +513,7 @@ describe('computeBetweenBorderFlags', () => {
       paraFragment('b1', { fromLine: 3, toLine: 6 }),
     ];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   it('does not flag same blockId + same itemId list-item fragments', () => {
@@ -543,7 +524,7 @@ describe('computeBetweenBorderFlags', () => {
       listItemFragment('l1', 'i1', { fromLine: 2, toLine: 4 }),
     ];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   it('flags different itemIds in same list block', () => {
@@ -554,7 +535,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block }]);
     const fragments: Fragment[] = [listItemFragment('l1', 'i1'), listItemFragment('l1', 'i2')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.has(0)).toBe(true);
   });
 
@@ -567,7 +548,7 @@ describe('computeBetweenBorderFlags', () => {
     const fragments: Fragment[] = [paraFragment('b1'), imageFragment('img1'), paraFragment('b2')];
 
     // Index 0 can't pair with index 1 (image), index 1 is image (skip)
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.has(0)).toBe(false);
     // Index 1 is image, skipped — but index 1→2 is image→para, image is skipped
     expect(flags.size).toBe(0);
@@ -580,7 +561,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block }]);
     const fragments: Fragment[] = [paraFragment('b1'), listItemFragment('l1', 'i1')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).has(0)).toBe(true);
+    expect(runFlags(fragments, lookup).has(0)).toBe(true);
   });
 
   it('flags list-item followed by para with matching borders', () => {
@@ -589,7 +570,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block }, { block: b2 }]);
     const fragments: Fragment[] = [listItemFragment('l1', 'i1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).has(0)).toBe(true);
+    expect(runFlags(fragments, lookup).has(0)).toBe(true);
   });
 
   // --- multiple consecutive ---
@@ -600,7 +581,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }, { block: b3 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2'), paraFragment('b3')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.has(0)).toBe(true);
     expect(flags.get(0)?.showBetweenBorder).toBe(true);
     expect(flags.has(1)).toBe(true);
@@ -623,7 +604,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }, { block: b3 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2'), paraFragment('b3')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(0);
   });
 
@@ -635,7 +616,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   it('does not flag when only second fragment has between border', () => {
@@ -645,19 +626,19 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   // --- edge: empty / single fragment ---
   it('returns empty set for empty fragment list', () => {
     const lookup = buildLookup([]);
-    expect(computeBetweenBorderFlags([], lookup).size).toBe(0);
+    expect(runFlags([], lookup).size).toBe(0);
   });
 
   it('returns empty set for single fragment', () => {
     const b1 = makeParagraphBlock('b1', MATCHING_BORDERS);
     const lookup = buildLookup([{ block: b1 }]);
-    expect(computeBetweenBorderFlags([paraFragment('b1')], lookup).size).toBe(0);
+    expect(runFlags([paraFragment('b1')], lookup).size).toBe(0);
   });
 
   // --- edge: missing block in lookup ---
@@ -667,7 +648,7 @@ describe('computeBetweenBorderFlags', () => {
     // b1 is not in lookup
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   // --- edge: between borders match but other sides differ ---
@@ -686,7 +667,7 @@ describe('computeBetweenBorderFlags', () => {
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
     // Full border hash differs (top is different), so not same border group
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
   // --- edge: last fragment on page ---
@@ -695,7 +676,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }]);
     const fragments: Fragment[] = [paraFragment('b1')];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.has(0)).toBe(false);
   });
 
@@ -709,7 +690,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1', { y: 100, x: 0 }), paraFragment('b2', { y: 0, x: 300 })];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(0);
   });
 
@@ -723,7 +704,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1', { y: 0, x: 50 }), paraFragment('b2', { y: 16, x: 50 })];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(2);
   });
 
@@ -741,7 +722,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1', { y: 0 }), paraFragment('b2', { y: 20 })];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(2);
     // First fragment: suppressBottomBorder (not showBetweenBorder)
     expect(flags.get(0)?.showBetweenBorder).toBe(false);
@@ -769,7 +750,7 @@ describe('computeBetweenBorderFlags', () => {
       paraFragment('b3', { y: 40 }),
     ];
 
-    const flags = computeBetweenBorderFlags(fragments, lookup);
+    const flags = runFlags(fragments, lookup);
     expect(flags.size).toBe(3);
     // First: suppress bottom, keep top
     expect(flags.get(0)?.suppressBottomBorder).toBe(true);
@@ -796,7 +777,7 @@ describe('computeBetweenBorderFlags', () => {
     const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
     const fragments: Fragment[] = [paraFragment('b1'), paraFragment('b2')];
 
-    expect(computeBetweenBorderFlags(fragments, lookup).size).toBe(0);
+    expect(runFlags(fragments, lookup).size).toBe(0);
   });
 });
 

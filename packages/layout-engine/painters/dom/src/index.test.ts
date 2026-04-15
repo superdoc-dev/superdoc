@@ -27,14 +27,9 @@ const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageG
  * rewriting every call site.
  */
 function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
-  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
+  const { blocks: initBlocks, measures: initMeasures, headerProvider, footerProvider, ...painterOpts } = opts;
   let lastPaintSnapshot: PaintSnapshot | null = null;
-  const painter = createDomPainter({
-    ...painterOpts,
-    onPaintSnapshot: (snapshot) => {
-      lastPaintSnapshot = snapshot;
-    },
-  });
+
   let currentBlocks: FlowBlock[] = initBlocks ?? [];
   let currentMeasures: Measure[] = initMeasures ?? [];
   let currentResolved: ResolvedLayout = emptyResolved;
@@ -42,8 +37,61 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
   let headerMeasures: Measure[] | undefined;
   let footerBlocks: FlowBlock[] | undefined;
   let footerMeasures: Measure[] | undefined;
-
   let resolvedLayoutOverridden = false;
+
+  /**
+   * Resolve decoration items from the currently-registered decoration blocks/measures
+   * (plus body blocks, which historically also carry decoration block ids in tests).
+   * This lets tests keep using providers that return `{ fragments, height }` without items:
+   * the wrapper synthesizes `items` by running the fragments through `resolveLayout`.
+   */
+  const resolveDecorationItems = (
+    fragments: readonly import('@superdoc/contracts').Fragment[],
+    kind: 'header' | 'footer',
+  ): import('@superdoc/contracts').ResolvedPaintItem[] | undefined => {
+    const decorationBlocks = kind === 'header' ? headerBlocks : footerBlocks;
+    const decorationMeasures = kind === 'header' ? headerMeasures : footerMeasures;
+    const mergedBlocks = [...(currentBlocks ?? []), ...(decorationBlocks ?? [])];
+    const mergedMeasures = [...(currentMeasures ?? []), ...(decorationMeasures ?? [])];
+    if (mergedBlocks.length !== mergedMeasures.length || mergedBlocks.length === 0) {
+      return undefined;
+    }
+    const fakeLayout: Layout = { pageSize: { w: 400, h: 500 }, pages: [{ number: 1, fragments: [...fragments] }] };
+    try {
+      const resolved = resolveLayout({
+        layout: fakeLayout,
+        flowMode: opts.flowMode ?? 'paginated',
+        blocks: mergedBlocks,
+        measures: mergedMeasures,
+      });
+      return resolved.pages[0]?.items;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const wrapProvider = (
+    provider: import('./renderer.js').PageDecorationProvider | undefined,
+    kind: 'header' | 'footer',
+  ): import('./renderer.js').PageDecorationProvider | undefined => {
+    if (!provider) return undefined;
+    return (pageNumber, pageMargins, page) => {
+      const payload = provider(pageNumber, pageMargins, page);
+      if (!payload) return payload;
+      if (payload.items) return payload;
+      const items = resolveDecorationItems(payload.fragments, kind);
+      return items ? { ...payload, items } : payload;
+    };
+  };
+
+  const painter = createDomPainter({
+    ...painterOpts,
+    headerProvider: wrapProvider(headerProvider, 'header'),
+    footerProvider: wrapProvider(footerProvider, 'footer'),
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
 
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
@@ -55,24 +103,9 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
             blocks: currentBlocks,
             measures: currentMeasures,
           });
-      // Tests historically pass header/footer blocks via the main `blocks` array and
-      // rely on the blockLookup containing them. Merge body blocks into headerBlocks
-      // so header/footer fragments from providers can resolve their block data.
-      const mergedHeaderBlocks =
-        headerBlocks || currentBlocks.length > 0 ? [...currentBlocks, ...(headerBlocks ?? [])] : undefined;
-      const mergedHeaderMeasures =
-        headerMeasures || currentMeasures.length > 0 ? [...currentMeasures, ...(headerMeasures ?? [])] : undefined;
-      const mergedFooterBlocks =
-        footerBlocks || currentBlocks.length > 0 ? [...currentBlocks, ...(footerBlocks ?? [])] : undefined;
-      const mergedFooterMeasures =
-        footerMeasures || currentMeasures.length > 0 ? [...currentMeasures, ...(footerMeasures ?? [])] : undefined;
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
         sourceLayout: layout,
-        headerBlocks: mergedHeaderBlocks,
-        headerMeasures: mergedHeaderMeasures,
-        footerBlocks: mergedFooterBlocks,
-        footerMeasures: mergedFooterMeasures,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -4676,6 +4709,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -4705,6 +4740,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -4819,6 +4856,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-anchored',
               fragmentIndex: 0,
+              block: anchoredDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
             {
               kind: 'fragment',
@@ -4832,6 +4870,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-inline',
               fragmentIndex: 1,
+              block: inlineDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
           ],
         },
@@ -4903,6 +4942,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-indent',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -4996,6 +5037,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-marker',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -5089,6 +5132,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-drop-cap',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {

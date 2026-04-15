@@ -4376,47 +4376,6 @@ export class PresentationEditor extends EventEmitter {
         );
       }
 
-      // Extract header/footer blocks and measures from layout results
-      const headerBlocks: FlowBlock[] = [];
-      const headerMeasures: Measure[] = [];
-      if (headerLayouts) {
-        for (const headerResult of headerLayouts) {
-          headerBlocks.push(...headerResult.blocks);
-          headerMeasures.push(...headerResult.measures);
-        }
-      }
-      // Also include per-rId header blocks for multi-section support
-      const headerLayoutsByRId = this.#headerFooterSession?.headerLayoutsByRId;
-      if (headerLayoutsByRId) {
-        for (const rIdResult of headerLayoutsByRId.values()) {
-          headerBlocks.push(...rIdResult.blocks);
-          headerMeasures.push(...rIdResult.measures);
-        }
-      }
-
-      const footerBlocks: FlowBlock[] = [];
-      const footerMeasures: Measure[] = [];
-      if (footerLayouts) {
-        for (const footerResult of footerLayouts) {
-          footerBlocks.push(...footerResult.blocks);
-          footerMeasures.push(...footerResult.measures);
-        }
-      }
-      // Also include per-rId footer blocks for multi-section support
-      const footerLayoutsByRId = this.#headerFooterSession?.footerLayoutsByRId;
-      if (footerLayoutsByRId) {
-        for (const rIdResult of footerLayoutsByRId.values()) {
-          footerBlocks.push(...rIdResult.blocks);
-          footerMeasures.push(...rIdResult.measures);
-        }
-      }
-
-      // Merge any extra lookup blocks (e.g., footnotes injected into page fragments)
-      if (extraBlocks && extraMeasures && extraBlocks.length === extraMeasures.length && extraBlocks.length > 0) {
-        footerBlocks.push(...extraBlocks);
-        footerMeasures.push(...extraMeasures);
-      }
-
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
@@ -4427,10 +4386,6 @@ export class PresentationEditor extends EventEmitter {
       const paintInput: DomPainterInput = {
         resolvedLayout,
         sourceLayout: layout,
-        headerBlocks: headerBlocks.length > 0 ? headerBlocks : undefined,
-        headerMeasures: headerMeasures.length > 0 ? headerMeasures : undefined,
-        footerBlocks: footerBlocks.length > 0 ? footerBlocks : undefined,
-        footerMeasures: footerMeasures.length > 0 ? footerMeasures : undefined,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();

@@ -1,8 +1,16 @@
-import type { FlowBlock, Fragment, Layout, Measure, Page, PageMargins, ResolvedLayout } from '@superdoc/contracts';
+import type { FlowBlock, Layout, Measure, PageMargins, ResolvedLayout, Page } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import type { PageStyles } from './styles.js';
-import type { DomPainterInput, PaintSnapshot, PositionMapping, RulerOptions, FlowMode } from './renderer.js';
+import type {
+  DomPainterInput,
+  PageDecorationPayload,
+  PageDecorationProvider,
+  PaintSnapshot,
+  PositionMapping,
+  RulerOptions,
+  FlowMode,
+} from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -56,32 +64,7 @@ export type { PmPositionValidationStats } from './pm-position-validation.js';
 
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 export type { FlowMode } from './renderer.js';
-export type PageDecorationPayload = {
-  fragments: Fragment[];
-  height: number;
-  /**
-   * Decoration fragments are expressed in header/footer-local coordinates.
-   * Header/footer layout normalizes page- and margin-relative anchors before
-   * they reach the painter.
-   */
-  /** Optional measured content height; when provided, footer content will be bottom-aligned within its box. */
-  contentHeight?: number;
-  offset?: number;
-  marginLeft?: number;
-  contentWidth?: number;
-  headerFooterRefId?: string;
-  sectionType?: string;
-  /** Minimum Y coordinate from layout; negative when content extends above y=0 */
-  minY?: number;
-  box?: { x: number; y: number; width: number; height: number };
-  hitRegion?: { x: number; y: number; width: number; height: number };
-};
-
-export type PageDecorationProvider = (
-  pageNumber: number,
-  pageMargins?: PageMargins,
-  page?: Page,
-) => PageDecorationPayload | null;
+export type { PageDecorationPayload, PageDecorationProvider } from './renderer.js';
 
 export type DomPainterOptions = {
   /**
@@ -133,16 +116,7 @@ export type DomPainterOptions = {
 type LegacyDomPainterState = {
   blocks: FlowBlock[];
   measures: Measure[];
-  headerBlocks?: FlowBlock[];
-  headerMeasures?: Measure[];
-  footerBlocks?: FlowBlock[];
-  footerMeasures?: Measure[];
   resolvedLayout: ResolvedLayout | null;
-};
-
-type BlockMeasurePair = {
-  blocks: FlowBlock[];
-  measures: Measure[];
 };
 
 export type DomPainterHandle = {
@@ -151,14 +125,7 @@ export type DomPainterHandle = {
    * Legacy compatibility API.
    * New callers should pass block/measure data via `paint(input, mount)`.
    */
-  setData(
-    blocks: FlowBlock[],
-    measures: Measure[],
-    headerBlocks?: FlowBlock[],
-    headerMeasures?: Measure[],
-    footerBlocks?: FlowBlock[],
-    footerMeasures?: Measure[],
-  ): void;
+  setData(blocks: FlowBlock[], measures: Measure[]): void;
   /**
    * Legacy compatibility API.
    * New callers should pass resolved data via `paint(input, mount)`.
@@ -176,26 +143,6 @@ function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], meas
   if (blocks.length !== measures.length) {
     throw new Error(`${label} blocks and measures must have the same length.`);
   }
-}
-
-function normalizeOptionalBlockMeasurePair(
-  label: 'header' | 'footer',
-  blocks: FlowBlock[] | undefined,
-  measures: Measure[] | undefined,
-): BlockMeasurePair | undefined {
-  const hasBlocks = blocks !== undefined;
-  const hasMeasures = measures !== undefined;
-
-  if (hasBlocks !== hasMeasures) {
-    throw new Error(`${label}Blocks and ${label}Measures must both be provided or both be omitted.`);
-  }
-
-  if (!hasBlocks || !hasMeasures) {
-    return undefined;
-  }
-
-  assertRequiredBlockMeasurePair(label, blocks, measures);
-  return { blocks, measures };
 }
 
 function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: number | undefined): ResolvedLayout {
@@ -237,10 +184,6 @@ function buildLegacyPaintInput(
   return {
     resolvedLayout,
     sourceLayout: layout,
-    headerBlocks: legacyState.headerBlocks,
-    headerMeasures: legacyState.headerMeasures,
-    footerBlocks: legacyState.footerBlocks,
-    footerMeasures: legacyState.footerMeasures,
   };
 }
 
@@ -274,24 +217,10 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
         : buildLegacyPaintInput(input, legacyState, options.flowMode, options.pageGap);
       painter.paint(normalizedInput, mount, mapping);
     },
-    setData(
-      blocks: FlowBlock[],
-      measures: Measure[],
-      headerBlocks?: FlowBlock[],
-      headerMeasures?: Measure[],
-      footerBlocks?: FlowBlock[],
-      footerMeasures?: Measure[],
-    ) {
+    setData(blocks: FlowBlock[], measures: Measure[]) {
       assertRequiredBlockMeasurePair('body', blocks, measures);
-      const normalizedHeader = normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
-      const normalizedFooter = normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
-
       legacyState.blocks = blocks;
       legacyState.measures = measures;
-      legacyState.headerBlocks = normalizedHeader?.blocks;
-      legacyState.headerMeasures = normalizedHeader?.measures;
-      legacyState.footerBlocks = normalizedFooter?.blocks;
-      legacyState.footerMeasures = normalizedFooter?.measures;
     },
     setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
       legacyState.resolvedLayout = resolvedLayout;

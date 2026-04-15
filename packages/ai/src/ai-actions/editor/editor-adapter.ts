@@ -1,6 +1,7 @@
 import type { Editor, FoundMatch, MarkType } from '../../shared';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import { generateId, stripListPrefix } from '../../shared';
+import { getWordChanges } from './word-diff';
 
 /**
  * Default highlight color for text selections.
@@ -630,6 +631,17 @@ export class EditorAdapter {
     const replacementEnd = suggestedText.length - suffix;
     const replacementText = suggestedText.slice(prefix, replacementEnd);
 
+    // Try word-level diff for more granular tracked changes
+    const wordChanges = getWordChanges(originalText.slice(prefix, originalTextLength - suffix), replacementText);
+
+    if (wordChanges.length > 1) {
+      // Multiple word-level changes: apply each separately in reverse order
+      // so that earlier positions remain valid while we modify later ones.
+      this.applyGranularChanges(changeFrom, changeTo, wordChanges);
+      return;
+    }
+
+    // 0 or 1 word change: use existing single-replacement logic (better mark handling)
     const segments = this.collectTextSegments(changeFrom, changeTo);
     const nodes = this.buildTextNodes(changeFrom, changeTo, replacementText, segments);
     const tr = state.tr.delete(changeFrom, changeTo);
@@ -637,6 +649,95 @@ export class EditorAdapter {
     for (const node of nodes) {
       tr.insert(insertPos, node);
       insertPos += node.nodeSize;
+    }
+
+    this.editor.dispatch(tr);
+  }
+
+  /**
+   * Applies multiple word-level changes in a single transaction.
+   * Changes are applied in reverse document order to preserve positions.
+   *
+   * @param rangeFrom - Start of the overall change range in document positions
+   * @param rangeTo - End of the overall change range in document positions
+   * @param changes - Word diff operations with character offsets relative to the range text
+   * @private
+   */
+  private applyGranularChanges(
+    rangeFrom: number,
+    rangeTo: number,
+    changes: Array<
+      | { type: 'replace'; oldFrom: number; oldTo: number; newText: string }
+      | { type: 'delete'; oldFrom: number; oldTo: number }
+      | { type: 'insert'; insertAt: number; newText: string }
+    >,
+  ): void {
+    const { state } = this.editor;
+    if (!state) {
+      return;
+    }
+
+    // Pre-compute all document positions from the current (unmodified) state.
+    // Character offsets in changes are relative to the range text (rangeFrom..rangeTo).
+    const mappedChanges = changes.map((change) => {
+      if (change.type === 'insert') {
+        return {
+          ...change,
+          docPos: this.mapCharOffsetToPosition(rangeFrom, rangeTo, change.insertAt),
+        };
+      }
+      return {
+        ...change,
+        docFrom: this.mapCharOffsetToPosition(rangeFrom, rangeTo, change.oldFrom),
+        docTo: this.mapCharOffsetToPosition(rangeFrom, rangeTo, change.oldTo),
+      };
+    });
+
+    // Apply changes in forward order, remapping pre-computed positions through
+    // steps added during this loop so that length changes from earlier
+    // replacements are accounted for.
+    const tr = state.tr;
+    const baseSteps = tr.steps.length;
+    for (let i = 0; i < mappedChanges.length; i++) {
+      const change = mappedChanges[i];
+
+      // Remap pre-computed positions through steps added in this loop
+      const remap = (pos: number) => {
+        for (let s = baseSteps; s < tr.steps.length; s++) {
+          const step = tr.steps[s] as { getMap?: () => { map: (p: number) => number } } | undefined;
+          if (step && typeof step.getMap === 'function') {
+            pos = step.getMap().map(pos);
+          }
+        }
+        return pos;
+      };
+
+      if (change.type === 'delete') {
+        tr.delete(remap(change.docFrom), remap(change.docTo));
+      } else if (change.type === 'insert') {
+        const marks = this.getMarksAtPosition(change.docPos);
+        const node = state.schema.text(change.newText, marks);
+        tr.insert(remap(change.docPos), node);
+      } else {
+        // replace: use replaceWith for a single atomic step when available,
+        // fall back to delete+insert for test mocks that lack replaceWith.
+        const from = remap(change.docFrom);
+        const to = remap(change.docTo);
+        const segments = this.collectTextSegments(from, to);
+        const nodes = this.buildTextNodes(from, to, change.newText, segments);
+        if (typeof (tr as Record<string, unknown>).replaceWith === 'function') {
+          (
+            tr as unknown as { replaceWith: (from: number, to: number, content: ProseMirrorNode[]) => void }
+          ).replaceWith(from, to, nodes);
+        } else {
+          tr.delete(from, to);
+          let insertPos = from;
+          for (const node of nodes) {
+            tr.insert(insertPos, node);
+            insertPos += node.nodeSize;
+          }
+        }
+      }
     }
 
     this.editor.dispatch(tr);

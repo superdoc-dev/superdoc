@@ -745,8 +745,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     pageHeight: number,
     effectiveBottomMargin: number,
   ): number => {
-    const rawTopMargin =
-      headerContentHeight > 0 ? Math.max(baseTopMargin, currentHeaderDistance + headerContentHeight) : baseTopMargin;
+    if (headerContentHeight <= 0) {
+      return baseTopMargin;
+    }
+
+    const rawTopMargin = Math.max(baseTopMargin, currentHeaderDistance + headerContentHeight);
+    const baseContentHeight = pageHeight - effectiveBottomMargin - baseTopMargin;
+    if (baseContentHeight <= 0) {
+      return rawTopMargin;
+    }
+
     const minimumContentHeight = 1;
     const maxAllowedTopMargin = pageHeight - effectiveBottomMargin - minimumContentHeight;
     return Math.min(rawTopMargin, maxAllowedTopMargin);
@@ -764,11 +772,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     footerContentHeight: number,
     currentFooterDistance: number,
     baseBottomMargin: number,
+    pageHeight: number,
+    baseTopMargin: number,
   ): number => {
-    if (footerContentHeight > 0) {
-      return Math.max(baseBottomMargin, currentFooterDistance + footerContentHeight);
+    if (footerContentHeight <= 0) {
+      return baseBottomMargin;
     }
-    return baseBottomMargin;
+
+    const rawBottomMargin = Math.max(baseBottomMargin, currentFooterDistance + footerContentHeight);
+    const baseContentHeight = pageHeight - baseTopMargin - baseBottomMargin;
+    if (baseContentHeight <= 0) {
+      return rawBottomMargin;
+    }
+
+    const minimumContentHeight = 1;
+    const maxAllowedBottomMargin = pageHeight - baseTopMargin - minimumContentHeight;
+    return Math.min(rawBottomMargin, maxAllowedBottomMargin);
   };
 
   // Calculate the maximum header/footer content heights (used for fallback and section breaks)
@@ -797,7 +816,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const footerDistance = margins.footer ?? margins.bottom;
   const defaultHeaderHeight = getHeaderHeightForPage('default', undefined);
   const defaultFooterHeight = getFooterHeightForPage('default', undefined);
-  const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
+  const effectiveBottomMargin = calculateEffectiveBottomMargin(
+    defaultFooterHeight,
+    footerDistance,
+    margins.bottom,
+    pageSize.h,
+    margins.top,
+  );
   const effectiveTopMargin = calculateEffectiveTopMargin(
     defaultHeaderHeight,
     headerDistance,
@@ -1356,6 +1381,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           footerHeight,
           activeFooterDistance,
           activeSectionBaseBottomMargin,
+          activePageSize.h,
+          activeSectionBaseTopMargin,
         );
         activeTopMargin = calculateEffectiveTopMargin(
           headerHeight,

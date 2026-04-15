@@ -1160,6 +1160,48 @@ describe('layoutDocument', () => {
     expect(secondPage.margins?.bottom).toBeGreaterThanOrEqual(50);
   });
 
+  it('clamps header-expanded top margin to preserve a non-zero body area', () => {
+    const layout = layoutDocument([{ kind: 'paragraph', id: 'p1', runs: [] }], [makeMeasure([1])], {
+      pageSize: { w: 400, h: 100 },
+      margins: { top: 10, right: 30, bottom: 10, left: 30, header: 80, footer: 10 },
+      headerContentHeights: { default: 50 },
+    });
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].margins?.top).toBe(89);
+    expect(layout.pages[0].fragments[0]?.y).toBe(89);
+  });
+
+  it('clamps footer-expanded bottom margin to preserve a non-zero body area', () => {
+    const layout = layoutDocument([{ kind: 'paragraph', id: 'p1', runs: [] }], [makeMeasure([1])], {
+      pageSize: { w: 400, h: 100 },
+      margins: { top: 10, right: 30, bottom: 10, left: 30, header: 10, footer: 80 },
+      footerContentHeights: { default: 50 },
+    });
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].margins?.bottom).toBe(89);
+    expect(layout.pages[0].fragments[0]?.y).toBe(10);
+  });
+
+  it('preserves invalid-margin failure when no header content inflates the top margin', () => {
+    expect(() =>
+      layoutDocument([{ kind: 'paragraph', id: 'p1', runs: [] }], [makeMeasure([1])], {
+        pageSize: { w: 400, h: 100 },
+        margins: { top: 10, right: 30, bottom: 100, left: 30 },
+      }),
+    ).toThrow(/non-positive content area/);
+  });
+
+  it('preserves invalid-margin failure when no footer content inflates the bottom margin', () => {
+    expect(() =>
+      layoutDocument([{ kind: 'paragraph', id: 'p1', runs: [] }], [makeMeasure([1])], {
+        pageSize: { w: 400, h: 100 },
+        margins: { top: 100, right: 30, bottom: 10, left: 30 },
+      }),
+    ).toThrow(/non-positive content area/);
+  });
+
   describe('section type behavior', () => {
     it('continuous with requirePageBoundary: forces a page break (Word-style upgrade)', () => {
       const sectionBreak: FlowBlock = {

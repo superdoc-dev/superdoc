@@ -750,4 +750,171 @@ describe('updateToolbarState', () => {
       expect(redoItem.setDisabled).toHaveBeenCalledWith(true);
     });
   });
+
+  describe('headless state adapter branches', () => {
+    const buildItem = (name, extras = {}) => ({
+      name: { value: name },
+      resetDisabled: vi.fn(),
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      setDisabled: vi.fn(),
+      allowWithoutEditor: { value: false },
+      ...extras,
+    });
+
+    it('activates textAlign with snapshot value and deactivates when null', () => {
+      const item = buildItem('textAlign');
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-align': { value: 'center', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ textAlign: 'center' });
+
+      item.activate.mockClear();
+      item.deactivate.mockClear();
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-align': { value: null, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).not.toHaveBeenCalled();
+      expect(item.deactivate).toHaveBeenCalled();
+    });
+
+    it('sets lineHeight selectedValue from snapshot value', () => {
+      const item = buildItem('lineHeight', { selectedValue: { value: '' } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'line-height': { value: '1.5', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.selectedValue.value).toBe('1.5');
+    });
+
+    it('formats numeric zoom value as a percentage string for the dropdown', () => {
+      const item = buildItem('zoom', { onActivate: vi.fn() });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          zoom: { value: 150, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.onActivate).toHaveBeenCalledWith({ zoom: '150%' });
+    });
+
+    it('sets link active and href attributes from snapshot', () => {
+      const item = buildItem('link', {
+        active: { value: false },
+        attributes: { value: {} },
+      });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          link: { active: true, value: 'https://example.com', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.active.value).toBe(true);
+      expect(item.attributes.value).toEqual({ href: 'https://example.com' });
+    });
+
+    it('activates color with snapshot value and deactivates when null', () => {
+      const item = buildItem('color');
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-color': { value: '#ff0000', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ color: '#ff0000' });
+    });
+
+    it('activates highlight with snapshot value and deactivates when null', () => {
+      const item = buildItem('highlight', { nestedOptions: { value: [] } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'highlight-color': { value: '#ffff00', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ color: '#ffff00' });
+    });
+
+    it('activates fontSize with isMultiple flag when snapshot reports active without a value (mixed selection)', () => {
+      const item = buildItem('fontSize', { defaultLabel: { value: '' } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'font-size': { active: true, value: null, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({}, true);
+    });
+
+    it('disables tableActions when every table command is disabled', () => {
+      const item = buildItem('tableActions', { disabled: { value: false } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'table-add-row-before': { disabled: true },
+          'table-add-row-after': { disabled: true },
+          'table-delete-row': { disabled: true },
+          'table-add-column-before': { disabled: true },
+          'table-add-column-after': { disabled: true },
+          'table-delete-column': { disabled: true },
+          'table-delete': { disabled: true },
+          'table-remove-borders': { disabled: true },
+          'table-merge-cells': { disabled: true },
+          'table-split-cell': { disabled: true },
+          'table-fix': { disabled: true },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.setDisabled).toHaveBeenCalledWith(true);
+    });
+
+    it('enables tableActions when at least one table command is enabled', () => {
+      const item = buildItem('tableActions', { disabled: { value: false } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'table-add-row-before': { disabled: true },
+          'table-add-row-after': { disabled: false },
+          'table-delete-row': { disabled: true },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.setDisabled).toHaveBeenCalledWith(false);
+    });
+  });
 });

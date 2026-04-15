@@ -4427,8 +4427,6 @@ export class PresentationEditor extends EventEmitter {
       const paintInput: DomPainterInput = {
         resolvedLayout,
         sourceLayout: layout,
-        blocks: blocksForLayout,
-        measures,
         headerBlocks: headerBlocks.length > 0 ? headerBlocks : undefined,
         headerMeasures: headerMeasures.length > 0 ? headerMeasures : undefined,
         footerBlocks: footerBlocks.length > 0 ? footerBlocks : undefined,

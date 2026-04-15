@@ -1,5 +1,6 @@
 import type { FlowBlock, Fragment, Layout, Measure, Page, PageMargins, ResolvedLayout } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { PageStyles } from './styles.js';
 import type { DomPainterInput, PaintSnapshot, PositionMapping, RulerOptions, FlowMode } from './renderer.js';
 
@@ -207,7 +208,7 @@ function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: numb
 }
 
 function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
-  return 'resolvedLayout' in value && 'sourceLayout' in value && 'blocks' in value && 'measures' in value;
+  return 'resolvedLayout' in value && 'sourceLayout' in value;
 }
 
 function buildLegacyPaintInput(
@@ -216,11 +217,26 @@ function buildLegacyPaintInput(
   flowMode: FlowMode | undefined,
   pageGap: number | undefined,
 ): DomPainterInput {
+  // Derive a resolved layout from the legacy block/measure state when the caller
+  // has not supplied one via `setResolvedLayout`. The painter now reads all body
+  // fragment data from the resolved layout, so an empty resolved layout would
+  // produce a blank render.
+  let resolvedLayout: ResolvedLayout;
+  if (legacyState.resolvedLayout) {
+    resolvedLayout = legacyState.resolvedLayout;
+  } else if (legacyState.blocks.length === 0 && legacyState.measures.length === 0) {
+    resolvedLayout = createEmptyResolvedLayout(flowMode, pageGap);
+  } else {
+    resolvedLayout = resolveLayout({
+      layout,
+      flowMode: flowMode ?? 'paginated',
+      blocks: legacyState.blocks,
+      measures: legacyState.measures,
+    });
+  }
   return {
-    resolvedLayout: legacyState.resolvedLayout ?? createEmptyResolvedLayout(flowMode, pageGap),
+    resolvedLayout,
     sourceLayout: layout,
-    blocks: legacyState.blocks,
-    measures: legacyState.measures,
     headerBlocks: legacyState.headerBlocks,
     headerMeasures: legacyState.headerMeasures,
     footerBlocks: legacyState.footerBlocks,

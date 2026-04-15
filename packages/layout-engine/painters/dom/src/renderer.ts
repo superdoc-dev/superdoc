@@ -71,16 +71,6 @@ import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
-import {
-  getRunBooleanProp,
-  getRunNumberProp,
-  getRunStringProp,
-  getRunUnderlineColor,
-  getRunUnderlineStyle,
-  hashCellBorders,
-  hashParagraphBorders,
-  hashTableBorders,
-} from './paragraph-hash-utils.js';
 import { assertFragmentPmPositions, assertPmPositions } from './pm-position-validation.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {

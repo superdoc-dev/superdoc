@@ -11,7 +11,6 @@ import { Fragment } from 'prosemirror-model';
  *   content: import('prosemirror-model').Node | import('prosemirror-model').Fragment,
  *   nodes: import('prosemirror-model').Node[],
  *   size: number,
- *   hasSpecialInlineNodes: boolean,
  * }}
  */
 export function buildInlineContentFromText(schema, text, marks = []) {
@@ -24,7 +23,6 @@ export function buildInlineContentFromText(schema, text, marks = []) {
       content: textNode,
       nodes: [textNode],
       size: textNode.nodeSize,
-      hasSpecialInlineNodes: false,
     };
   }
 
@@ -48,6 +46,5 @@ export function buildInlineContentFromText(schema, text, marks = []) {
     content,
     nodes,
     size,
-    hasSpecialInlineNodes: nodes.some((node) => node.type?.name === 'tab'),
   };
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
 import type { Editor } from '../core/Editor.js';
+import { writeAdapter } from './write-adapter.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -41,6 +42,7 @@ describe('doc API tab export integration', () => {
       media: docData.media,
       mediaFiles: docData.mediaFiles,
       fonts: docData.fonts,
+      user: { email: 'reviewer@example.com', name: 'Reviewer' },
       useImmediateSetTimeout: false,
     }));
 
@@ -56,6 +58,36 @@ describe('doc API tab export integration', () => {
     const documentXml = exportedFiles['word/document.xml'];
 
     expect(documentXml).toMatch(/<w:tab\s*\/>/);
+    expect(documentXml).not.toMatch(/<w:t[^>]*>[^<]*\t[^<]*<\/w:t>/);
+  });
+
+  it('exports tracked adapter tab insertion as tracked w:tab content instead of a raw tab character in w:t', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+      useImmediateSetTimeout: false,
+    }));
+
+    const insertResult = await Promise.resolve(
+      writeAdapter(
+        editor,
+        {
+          kind: 'insert',
+          text: 'Left\tRight',
+        },
+        { changeMode: 'tracked' },
+      ),
+    );
+
+    expect(insertResult.success).toBe(true);
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+
+    expect(documentXml).toMatch(/<w:ins\b[\s\S]*<w:tab\s*\/>[\s\S]*<\/w:ins>/);
     expect(documentXml).not.toMatch(/<w:t[^>]*>[^<]*\t[^<]*<\/w:t>/);
   });
 });

@@ -11,7 +11,7 @@ import type {
 } from './typoWorkerMessages';
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
-const WORD_RE = /[a-zA-Z'\u2019]+/g;
+const WORD_PATTERN = /[a-zA-Z'\u2019]+/g;
 
 /** Yields to the worker event loop so `cancel` messages can be processed mid-check. */
 const YIELD_EVERY_WORDS = 25;
@@ -46,10 +46,7 @@ async function collectIssues(
   let wordCount = 0;
 
   for (const segment of payload.segments) {
-    let match: RegExpExecArray | null;
-    WORD_RE.lastIndex = 0;
-
-    while ((match = WORD_RE.exec(segment.text)) !== null) {
+    for (const match of segment.text.matchAll(WORD_PATTERN)) {
       if (isAborted()) return null;
 
       const word = match[0];

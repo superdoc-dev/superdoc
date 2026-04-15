@@ -7959,11 +7959,50 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
  * // Returns runs or run slices that fall within the specified character range
  * ```
  */
+const expandRunsForInlineNewlines = (runs: Run[]): Run[] => {
+  const expanded: Run[] = [];
+
+  for (const run of runs) {
+    if ((run as TextRun).text && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\n')) {
+      const textRun = run as TextRun;
+      const segments = textRun.text.split('\n');
+      let cursor = textRun.pmStart ?? 0;
+
+      segments.forEach((segment, idx) => {
+        expanded.push({
+          ...textRun,
+          text: segment,
+          pmStart: cursor,
+          pmEnd: cursor + segment.length,
+        });
+        cursor += segment.length;
+
+        if (idx !== segments.length - 1) {
+          expanded.push({
+            kind: 'break',
+            breakType: 'line',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            sdt: textRun.sdt,
+          });
+          cursor += 1;
+        }
+      });
+      continue;
+    }
+
+    expanded.push(run);
+  }
+
+  return expanded;
+};
+
 export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
+  const runs = expandRunsForInlineNewlines(block.runs as Run[]);
   const result: Run[] = [];
 
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
+    const run = runs[runIndex];
     if (!run) continue;
 
     // FIXED: ImageRun handling - images are atomic units, no slicing needed

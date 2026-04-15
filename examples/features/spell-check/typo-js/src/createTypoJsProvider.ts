@@ -1,7 +1,7 @@
-import type { TypoWorkerCancelMessage, TypoWorkerRequest, TypoWorkerResponse } from './typoWorkerMessages';
+import type { TypoWorkerCancelMessage, TypoWorkerIssue, TypoWorkerRequest, TypoWorkerResponse } from './typoWorkerMessages';
 
 type PendingRequest = {
-  resolve: (value: { issues: TypoWorkerResponse['issues'] }) => void;
+  resolve: (value: { issues: TypoWorkerIssue[] }) => void;
   reject: (error: unknown) => void;
   cleanup: () => void;
 };
@@ -71,7 +71,7 @@ export async function createTypoJsProvider() {
         throw createAbortError();
       }
 
-      return new Promise<{ issues: TypoWorkerResponse['issues'] }>((resolve, reject) => {
+      return new Promise<{ issues: TypoWorkerIssue[] }>((resolve, reject) => {
         const requestId = ++nextRequestId;
         const maxSuggestions = request.maxSuggestions ?? 5;
 

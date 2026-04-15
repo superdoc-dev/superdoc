@@ -18,8 +18,8 @@ const YIELD_EVERY_WORDS = 25;
 
 let dictionaryPromise: Promise<Typo> | null = null;
 
-/** Abort flags keyed by request id (set by `cancel` messages from the main thread). */
-const abortById = new Map<number, boolean>();
+/** Cancelled request ids (added by `cancel` messages from the main thread). */
+const cancelledIds = new Set<number>();
 
 async function loadDictionary(): Promise<Typo> {
   if (!dictionaryPromise) {
@@ -84,19 +84,19 @@ async function handleCheck(data: TypoWorkerRequest): Promise<void> {
   const id = data.id;
 
   try {
-    if (abortById.get(id)) return;
+    if (cancelledIds.has(id)) return;
 
     const dictionary = await loadDictionary();
-    if (abortById.get(id)) return;
+    if (cancelledIds.has(id)) return;
 
-    const collected = await collectIssues(data.payload, dictionary, () => abortById.get(id) === true);
+    const collected = await collectIssues(data.payload, dictionary, () => cancelledIds.has(id));
     if (collected === null) return;
 
     ctx.postMessage({ id, type: 'result', issues: collected } satisfies TypoWorkerResponse);
   } catch (error) {
     ctx.postMessage({ id, type: 'error', error: toErrorMessage(error) } satisfies TypoWorkerResponse);
   } finally {
-    abortById.delete(id);
+    cancelledIds.delete(id);
   }
 }
 
@@ -104,12 +104,11 @@ ctx.addEventListener('message', (event: MessageEvent<TypoWorkerIncomingMessage>)
   const { data } = event;
 
   if (data.type === 'cancel') {
-    abortById.set(data.id, true);
+    cancelledIds.add(data.id);
     return;
   }
 
   if (data.type !== 'check') return;
 
-  abortById.set(data.id, false);
   handleCheck(data);
 });

@@ -14,9 +14,11 @@ const FOOTNOTES_CONFIG = {
   noteName: 'w:footnote',
   refName: 'w:footnoteRef',
   refStyle: 'FootnoteReference',
-  settingsPropertyName: 'w:footnotePr',
   relationshipType: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes',
   relationshipTarget: 'footnotes.xml',
+  // Footnotes own the settings.xml export side-effects (footnoteProperties +
+  // viewSetting). The endnote path skips them so we don't double-apply.
+  applySettingsSideEffects: true,
 };
 
 const ENDNOTES_CONFIG = {
@@ -26,9 +28,9 @@ const ENDNOTES_CONFIG = {
   noteName: 'w:endnote',
   refName: 'w:endnoteRef',
   refStyle: 'EndnoteReference',
-  settingsPropertyName: 'w:endnotePr',
   relationshipType: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes',
   relationshipTarget: 'endnotes.xml',
+  applySettingsSideEffects: false,
 };
 
 const paragraphHasFootnoteRef = (node) => {
@@ -136,8 +138,8 @@ export const createFootnoteElement = (footnote, exportContext, config = FOOTNOTE
   return base;
 };
 
-const applyFootnotePropertiesToSettings = (converter, convertedXml, settingsPropertyName = 'w:footnotePr') => {
-  const props = settingsPropertyName === 'w:endnotePr' ? converter?.endnoteProperties : converter?.footnoteProperties;
+const applyFootnotePropertiesToSettings = (converter, convertedXml) => {
+  const props = converter?.footnoteProperties;
   if (!props || props.source !== 'settings' || !props.originalXml) {
     return convertedXml;
   }
@@ -151,7 +153,7 @@ const applyFootnotePropertiesToSettings = (converter, convertedXml, settingsProp
   if (!updatedRoot) return convertedXml;
 
   const elements = Array.isArray(updatedRoot.elements) ? updatedRoot.elements : [];
-  const nextElements = elements.filter((el) => el?.name !== settingsPropertyName);
+  const nextElements = elements.filter((el) => el?.name !== 'w:footnotePr');
   nextElements.push(carbonCopy(props.originalXml));
   updatedRoot.elements = nextElements;
 
@@ -214,11 +216,14 @@ const createNotesXmlDefinition = (config) => {
 };
 
 const prepareNotesXmlForExport = ({ notes, editor, converter, convertedXml, config }) => {
-  let updatedXml = applyFootnotePropertiesToSettings(converter, convertedXml, config.settingsPropertyName);
-  // NOTE: applyViewSettingToSettings lives here because this function already
-  // modifies settings.xml during export. If the footnotes export path is ever
-  // refactored, this call must move to wherever settings.xml is written.
-  updatedXml = applyViewSettingToSettings(converter, updatedXml);
+  // Settings.xml side-effects (re-emitting w:footnotePr and w:view) belong to
+  // the footnotes path only. The endnote path skips them so we don't redo the
+  // same idempotent work twice per export.
+  let updatedXml = convertedXml;
+  if (config.applySettingsSideEffects) {
+    updatedXml = applyFootnotePropertiesToSettings(converter, updatedXml);
+    updatedXml = applyViewSettingToSettings(converter, updatedXml);
+  }
 
   if (!notes || !Array.isArray(notes) || notes.length === 0) {
     return { updatedXml, relationships: [], media: {} };

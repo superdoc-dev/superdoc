@@ -3038,6 +3038,60 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(60, 0);
   });
 
+  it('excludes wrapNone anchored drawings from header measurement height but still renders them', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const drawingBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-wrap-none',
+      drawingKind: 'vectorShape',
+      geometry: { width: 160, height: 45 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        alignH: 'center',
+        alignV: 'center',
+      },
+      wrap: {
+        type: 'None',
+      },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const drawingMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 160,
+      height: 45,
+      scale: 1,
+      naturalWidth: 160,
+      naturalHeight: 45,
+      geometry: { width: 160, height: 45, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, drawingBlock],
+      [paragraphMeasure, drawingMeasure],
+      {
+        width: 200,
+        height: 100,
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+    expect(layout.pages[0]?.fragments.some((fragment) => fragment.kind === 'drawing')).toBe(true);
+  });
+
   it('returns minimal height when header contains only behindDoc fragments with extreme offsets', () => {
     const imageBlock1: FlowBlock = {
       kind: 'image',

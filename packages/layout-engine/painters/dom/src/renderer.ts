@@ -2335,6 +2335,28 @@ export class DomPainter {
   }
 
   /**
+   * Header/footer page-relative wrapNone media behaves like page-layer decoration in Word.
+   * Route it behind body text even when OOXML does not explicitly mark behindDoc.
+   */
+  private isPageBackgroundDecorationFragment(fragment: Fragment, section?: 'header' | 'footer'): boolean {
+    if (!section) {
+      return false;
+    }
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
+      return false;
+    }
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup) {
+      return false;
+    }
+    const block = lookup.block;
+    if (block.kind !== 'image' && block.kind !== 'drawing') {
+      return false;
+    }
+    return block.anchor?.vRelativeFrom === 'page' && block.wrap?.type === 'None';
+  }
+
+  /**
    * Header/footer layout emits normalized anchor Y coordinates:
    * - headers: local to the header container origin
    * - footers: local to the top of the footer band (pageHeight - bottomMargin)
@@ -2471,7 +2493,9 @@ export class DomPainter {
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         isBehindDoc =
-          fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
+          fragment.behindDoc === true ||
+          (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
+          this.isPageBackgroundDecorationFragment(fragment, kind);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
@@ -3639,40 +3663,15 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
-      // Apply rotation and flip transforms from OOXML a:xfrm
-      const transforms: string[] = [];
-
-      // Calculate translation offset to keep top-left corner fixed when rotating
-      if (block.rotation != null && block.rotation !== 0) {
-        const angleRad = (block.rotation * Math.PI) / 180;
-        const w = block.width ?? fragment.width;
-        const h = block.height ?? fragment.height;
-
-        // Calculate how much the top-left corner moves when rotating around center
-        // Top-left corner starts at (0, 0) in element space
-        // Center is at (w/2, h/2)
-        // After rotation, we need to translate to keep top-left at (0, 0)
-        const cosA = Math.cos(angleRad);
-        const sinA = Math.sin(angleRad);
-
-        // Position of top-left corner after rotation (relative to original top-left)
-        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
-        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
-
-        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
-        transforms.push(`rotate(${block.rotation}deg)`);
-      }
-      if (block.flipH) {
-        transforms.push('scaleX(-1)');
-      }
-      if (block.flipV) {
-        transforms.push('scaleY(-1)');
-      }
-
-      if (transforms.length > 0) {
-        img.style.transform = transforms.join(' ');
-        img.style.transformOrigin = 'center';
-      }
+      // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
+      // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
+      this.applyImageGeometryTransform(fragmentEl, {
+        width: block.width ?? fragment.width,
+        height: block.height ?? fragment.height,
+        rotation: block.rotation,
+        flipH: block.flipH,
+        flipV: block.flipV,
+      });
 
       const filters = buildImageFilters(block);
       if (filters.length > 0) {
@@ -3688,6 +3687,50 @@ export class DomPainter {
       console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
       return this.createErrorPlaceholder(fragment.blockId, error);
     }
+  }
+
+  private buildImageGeometryTransform(attrs: {
+    width: number;
+    height: number;
+    rotation?: number;
+    flipH?: boolean;
+    flipV?: boolean;
+  }): string {
+    const transforms: string[] = [];
+    if (attrs.rotation != null && attrs.rotation !== 0) {
+      const angleRad = (attrs.rotation * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      const newTopLeftX = (attrs.width / 2) * (1 - cosA) + (attrs.height / 2) * sinA;
+      const newTopLeftY = (attrs.width / 2) * sinA + (attrs.height / 2) * (1 - cosA);
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${attrs.rotation}deg)`);
+    }
+    if (attrs.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (attrs.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    return transforms.join(' ');
+  }
+
+  private applyImageGeometryTransform(
+    target: HTMLElement,
+    attrs: {
+      width: number;
+      height: number;
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    },
+  ): void {
+    const transform = this.buildImageGeometryTransform(attrs);
+    if (!transform) {
+      return;
+    }
+    target.style.transform = transform;
+    target.style.transformOrigin = 'center';
   }
 
   /**
@@ -3884,6 +3927,9 @@ export class DomPainter {
     contentContainer.style.top = `${offsetY}px`;
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
+    if (applyTransforms && geometry) {
+      this.applyVectorShapeTransforms(contentContainer, geometry);
+    }
 
     // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
     // even when the source shape only had a:custGeom and no a:prstGeom.
@@ -3909,9 +3955,6 @@ export class DomPainter {
         }
 
         this.applyLineEnds(svgElement, block);
-        if (applyTransforms && geometry) {
-          this.applyVectorShapeTransforms(svgElement, geometry);
-        }
         contentContainer.appendChild(svgElement);
 
         // Apply text content as an overlay div (not inside SVG to avoid viewBox scaling)
@@ -3950,9 +3993,6 @@ export class DomPainter {
       contentContainer.appendChild(textDiv);
     }
 
-    if (applyTransforms && geometry) {
-      this.applyVectorShapeTransforms(contentContainer, geometry);
-    }
     container.appendChild(contentContainer);
     return container;
   }

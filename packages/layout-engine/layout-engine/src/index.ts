@@ -2581,12 +2581,19 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
  * Excluded fragments:
- * 1. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
- * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
+ * 1. Header/footer wrapNone anchored fragments — floating overlay content that
+ *    must not reserve body flow space.
+ * 2. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
+ * 3. Page-relative anchored fragments whose local Y range [y, y+h] does not
  *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
  *    the measurement used by body pagination.
  */
-function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canvasHeight: number): boolean {
+function shouldExcludeFromMeasurement(
+  fragment: Fragment,
+  block: FlowBlock,
+  canvasHeight: number,
+  regionKind?: 'header' | 'footer',
+): boolean {
   const isAnchoredFragment =
     (fragment.kind === 'image' || fragment.kind === 'drawing') &&
     (fragment as { isAnchored?: boolean }).isAnchored === true;
@@ -2600,6 +2607,10 @@ function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canv
   }
 
   const anchoredBlock = block as ImageBlock | DrawingBlock;
+
+  // Floating header/footer overlays (e.g. watermarks/textboxes anchored with wrapNone)
+  // should render, but they must not inflate measured header/footer height.
+  if (regionKind && anchoredBlock.wrap?.type === 'None') return true;
 
   // behindDoc fragments never affect measurement
   if (anchoredBlock.anchor?.behindDoc) return true;
@@ -2704,7 +2715,7 @@ export function layoutHeaderFooter(
       if (bottom > renderMaxY) renderMaxY = bottom;
 
       // Determine whether this fragment should be excluded from measurement (pagination) bounds
-      if (shouldExcludeFromMeasurement(fragment, block, height)) continue;
+      if (shouldExcludeFromMeasurement(fragment, block, height, kind)) continue;
 
       if (fragment.y < measureMinY) measureMinY = fragment.y;
       if (bottom > measureMaxY) measureMaxY = bottom;

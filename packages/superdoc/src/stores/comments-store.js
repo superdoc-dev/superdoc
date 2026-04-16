@@ -952,7 +952,7 @@ export const useCommentsStore = defineStore('comments', () => {
         return;
       }
 
-      const creatorName = comment.creatorName.replace('(imported)', '');
+      const creatorName = comment.creatorName?.replace('(imported)', '') ?? '';
       const importedName = `${creatorName} (imported)`;
       const newComment = useComment({
         fileId: documentId,

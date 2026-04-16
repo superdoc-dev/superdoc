@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom search highlight colors */
+:root {
+  --sd-ui-search-match-bg: rgba(255, 165, 0, 0.4);
+  --sd-ui-search-match-active-bg: rgba(255, 140, 0, 0.6);
+}

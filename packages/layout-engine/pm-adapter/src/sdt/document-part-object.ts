@@ -56,7 +56,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
       { blocks, recordBlockKind },
     );
   } else if (paragraphToFlowBlocks) {
-    // For non-ToC gallery types (page numbers, etc.), process child paragraphs normally
+    // For non-ToC gallery types (page numbers, etc.), process child paragraphs and tables normally
     for (const child of node.content) {
       if (child.type === 'paragraph') {
         const childBlocks = paragraphToFlowBlocks({
@@ -75,6 +75,40 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           blocks.push(block);
           recordBlockKind?.(block.kind);
         }
+      } else if (child.type === 'table') {
+        const tableBlock = converters.tableNodeToBlock(child, {
+          nextBlockId,
+          positions,
+          trackedChangesConfig,
+          bookmarks,
+          hyperlinkConfig,
+          themeColors,
+          converterContext,
+          converters,
+          enableComments,
+        });
+        if (tableBlock) {
+          blocks.push(tableBlock);
+          recordBlockKind?.(tableBlock.kind);
+        }
+      } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
+        // A nested tableOfContents node (e.g. from a "Custom Table of Contents" SDT where
+        // the TOC field codes were preprocessed into an sd:tableOfContents element)
+        processTocChildren(
+          child.content,
+          { docPartGallery: docPartGallery ?? '', docPartObjectId, tocInstruction, sdtMetadata: docPartSdtMetadata },
+          {
+            nextBlockId,
+            positions,
+            bookmarks,
+            hyperlinkConfig,
+            enableComments,
+            trackedChangesConfig,
+            converters,
+            converterContext,
+          },
+          { blocks, recordBlockKind },
+        );
       }
     }
   }

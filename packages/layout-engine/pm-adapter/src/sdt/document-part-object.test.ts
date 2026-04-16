@@ -438,6 +438,98 @@ describe('document-part-object', () => {
       });
     });
 
+    // ==================== Table Children Tests ====================
+    describe('Table children', () => {
+      it('should process table children for non-TOC docPartGallery types', () => {
+        const tableNode: PMNode = {
+          type: 'table',
+          content: [{ type: 'tableRow', content: [] }],
+          attrs: {},
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tableNode],
+          attrs: { docPartGallery: 'Building Block Gallery' },
+        };
+
+        const tableBlock = { kind: 'table' as const, id: 'tbl-1', rows: [] };
+        const mockTableNodeToBlock = vi.fn(() => tableBlock);
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Building Block Gallery');
+
+        const contextWithTable: NodeHandlerContext = {
+          ...mockContext,
+          converters: {
+            ...mockContext.converters,
+            tableNodeToBlock: mockTableNodeToBlock,
+          },
+        };
+
+        handleDocumentPartObjectNode(node, contextWithTable);
+
+        expect(mockTableNodeToBlock).toHaveBeenCalledWith(
+          tableNode,
+          expect.objectContaining({
+            nextBlockId: mockBlockIdGenerator,
+            positions: mockPositionMap,
+            hyperlinkConfig: mockHyperlinkConfig,
+            converterContext: mockConverterContext,
+            enableComments: mockEnableComments,
+          }),
+        );
+        expect(contextWithTable.blocks).toHaveLength(1);
+        expect(contextWithTable.blocks[0]).toBe(tableBlock);
+      });
+
+      it('should not push block when tableNodeToBlock returns null for non-TOC type', () => {
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'table', content: [], attrs: {} }],
+          attrs: { docPartGallery: 'Building Block Gallery' },
+        };
+
+        const mockTableNodeToBlock = vi.fn(() => null);
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Building Block Gallery');
+
+        const contextWithTable: NodeHandlerContext = {
+          ...mockContext,
+          converters: {
+            ...mockContext.converters,
+            tableNodeToBlock: mockTableNodeToBlock,
+          },
+        };
+
+        handleDocumentPartObjectNode(node, contextWithTable);
+
+        expect(contextWithTable.blocks).toHaveLength(0);
+      });
+
+      it('should process tableOfContents children for non-"Table of Contents" gallery types (e.g. "Custom Table of Contents")', () => {
+        const tocNode: PMNode = {
+          type: 'tableOfContents',
+          content: [{ type: 'paragraph', content: [] }],
+          attrs: { instruction: 'TOC \\o "1-3"' },
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tocNode],
+          attrs: { docPartGallery: 'Custom Table of Contents' },
+        };
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Custom Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(undefined as never);
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(tocModule.processTocChildren).toHaveBeenCalledOnce();
+        const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
+        expect(callArgs[0]).toEqual(tocNode.content);
+        expect(callArgs[1]).toMatchObject({ docPartGallery: 'Custom Table of Contents' });
+      });
+    });
+
     // ==================== Edge Cases ====================
     describe('Edge cases', () => {
       it('should handle docPartGallery with different case sensitivity', () => {

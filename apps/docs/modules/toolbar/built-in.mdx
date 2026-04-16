@@ -323,23 +323,21 @@ Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
 
 ## Font configuration
 
+The toolbar dropdown lists only what you register in `fonts`. Imported documents don't auto-populate the list — if a user opens a `.docx` that uses Cambria and Cambria isn't registered, the current-selection indicator shows "Cambria" but the user can't pick it from the dropdown.
+
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">
     <ParamField path="label" type="string" required>
-      Display name
+      Display name shown in the dropdown
     </ParamField>
     <ParamField path="key" type="string" required>
-      Font-family CSS value
+      Font-family CSS value applied to text
     </ParamField>
     <ParamField path="fontWeight" type="number">
       Font weight
     </ParamField>
   </Expandable>
 </ParamField>
-
-<Info>
-SuperDoc does not load fonts automatically. Custom fonts from imported DOCX files will display in the toolbar, but won't be selectable unless you load them in your application (via CSS `@font-face`, Google Fonts, etc.) and add them to the `fonts` array.
-</Info>
 
 ```javascript
 fonts: [
@@ -348,6 +346,55 @@ fonts: [
   { label: 'Brand Font', key: 'BrandFont, sans-serif', fontWeight: 400 }
 ]
 ```
+
+<Info>
+  Registering a font in `fonts` makes it **selectable**. It doesn't load any font files. To make the font actually render with its real glyphs, load it on your host page via `@font-face` or a `<link>` to a font service. Fonts the browser can't find fall back to the CSS generic.
+</Info>
+
+### Loading web fonts
+
+Any font loaded on your host page is available inside the editor. Load it, then register it in `fonts`:
+
+```html
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap" />
+```
+
+```javascript
+modules: {
+  toolbar: {
+    fonts: [{ label: 'Inter', key: 'Inter, sans-serif' }]
+  }
+}
+```
+
+### Substituting Microsoft Office fonts
+
+Most `.docx` files use Cambria, Calibri, or Aptos — fonts bundled with Word on desktop but not present in browsers. Google hosts free metric-compatible replacements:
+
+| Office font | Free substitute | Notes |
+|---|---|---|
+| Calibri | [Carlito](https://fonts.google.com/specimen/Carlito) | Sans-serif, metric-identical — designed as a direct drop-in |
+| Cambria | [Tinos](https://fonts.google.com/specimen/Tinos) or [Gelasio](https://fonts.google.com/specimen/Gelasio) | Serif |
+| Aptos | [Carlito](https://fonts.google.com/specimen/Carlito) or [Inter](https://fonts.google.com/specimen/Inter) | Sans-serif — no free metric-identical match exists yet |
+
+Download the `.woff2` files from Google Fonts, host them with your app, and alias each substitute to the original Word name via `@font-face`. The browser will then render real Carlito/Tinos glyphs whenever the document asks for Calibri/Cambria — no document or SuperDoc changes needed.
+
+```html
+<style>
+  @font-face {
+    font-family: 'Calibri';
+    src: url('/fonts/Carlito-Regular.woff2') format('woff2');
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Cambria';
+    src: url('/fonts/Tinos-Regular.woff2') format('woff2');
+    font-display: swap;
+  }
+</style>
+```
+
+Self-hosting the `.woff2` files is more reliable than linking to Google Fonts CDN URLs directly — those URLs change when Google updates a font version.
 
 ## Responsive behavior
 
@@ -484,12 +531,12 @@ const superdoc = new SuperDoc({
 
 ### `setZoom`
 
-Set the editor zoom level programmatically.
+Set the editor zoom level programmatically through the owning `SuperDoc` instance.
 
 <CodeGroup>
 
 ```javascript Usage
-toolbar.setZoom(150); // 150%
+superdoc.setZoom(150); // 150%
 ```
 
 ```javascript Full Example
@@ -501,8 +548,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   toolbar: '#toolbar',
   onReady: (superdoc) => {
-    const toolbar = superdoc.toolbar;
-    toolbar.setZoom(150); // 150%
+    superdoc.setZoom(150); // 150%
   },
 });
 ```
@@ -536,38 +582,6 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
-## Events
-
-### `superdoc-command`
-
-Fired when a SuperDoc-level command is executed (zoom, document mode).
-
-<CodeGroup>
-
-```javascript Usage
-toolbar.on('superdoc-command', ({ item, argument }) => {
-  console.log(`Command: ${item.command}, arg: ${argument}`);
-});
-```
-
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
-
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  toolbar: '#toolbar',
-  onReady: (superdoc) => {
-    const toolbar = superdoc.toolbar;
-    toolbar.on('superdoc-command', ({ item, argument }) => {
-      console.log(`Command: ${item.command}, arg: ${argument}`);
-    });
-  },
-});
-```
-
-</CodeGroup>
 
 ### `exception`
 

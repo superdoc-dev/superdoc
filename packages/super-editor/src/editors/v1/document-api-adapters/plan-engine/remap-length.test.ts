@@ -123,6 +123,10 @@ function makeTr() {
     docChanged: true,
     doc: {
       resolve: () => ({ marks: () => [] }),
+      textBetween: vi.fn((from: number, to: number) => '\x01'.repeat(to - from)),
+      nodesBetween: vi.fn((from: number, to: number, cb: (node: any, pos: number) => void) => {
+        cb({ isText: true, nodeSize: to - from }, from);
+      }),
     },
   };
   tr.replaceWith.mockReturnValue(tr);

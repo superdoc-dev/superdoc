@@ -41,7 +41,7 @@ Drop SuperDoc into any HTML page via `<script>` tag. No bundler, no `npm install
   href="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/style.css"
 />
 <div id="editor" style="height: 100vh"></div>
-<script src="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/superdoc.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/superdoc.min.js"></script>
 <script>
   const superdoc = new SuperDoc({
     selector: '#editor',
@@ -82,8 +82,8 @@ Add `yjs`, `y-prosemirror`, `@hocuspocus/provider`, or `pdfjs-dist` to the impor
 ### Production pinning and integrity
 
 - **Pin to a minor** (`@1.27`) for patch updates, or **exact** (`@1.27.0`) if you're hash-pinning.
-- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production: `openssl dgst -sha384 -binary superdoc.global.js | openssl base64 -A`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` / `<link>`.
-- jsDelivr serves immutable, gzipped responses (~1.4 MB on the wire for `superdoc.global.js`).
+- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production: `openssl dgst -sha384 -binary superdoc.min.js | openssl base64 -A`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` / `<link>`.
+- jsDelivr serves immutable, gzipped responses (~1.4 MB on the wire for `superdoc.min.js`).
 
 Unpkg is mirrored automatically: replace `cdn.jsdelivr.net/npm/` with `unpkg.com/`.
 

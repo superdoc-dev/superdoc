@@ -17,7 +17,7 @@ export const SuperDocEditor = ({
 
     if (isDev) {
       try {
-        const res = await fetch(`${DEV_DIST_URL}/superdoc.global.js`, { method: 'HEAD' });
+        const res = await fetch(`${DEV_DIST_URL}/superdoc.min.js`, { method: 'HEAD' });
         if (res.ok) {
           console.info('[SuperDoc Docs] Using local build from', DEV_DIST_URL);
           return DEV_DIST_URL;
@@ -45,10 +45,10 @@ export const SuperDocEditor = ({
     document.head.appendChild(link);
   };
 
-  const loadSuperDocLibrary = (baseUrl) => {
+  const loadSuperDoc = (baseUrl) => {
     if (window.SuperDoc) return Promise.resolve();
 
-    const scriptSrc = `${baseUrl}/superdoc.global.js`;
+    const scriptSrc = `${baseUrl}/superdoc.min.js`;
     const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
 
     if (existingScript) {
@@ -95,7 +95,7 @@ export const SuperDocEditor = ({
       try {
         const baseUrl = await getBaseUrl();
         ensureStyle(baseUrl);
-        await loadSuperDocLibrary(baseUrl);
+        await loadSuperDoc(baseUrl);
         if (!cancelled) initEditor();
       } catch (error) {
         console.error('Failed to boot SuperDoc:', error);

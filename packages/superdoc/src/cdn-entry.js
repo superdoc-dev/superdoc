@@ -1,4 +1,4 @@
-// Entry point for the CDN IIFE build (vite.config.cdn.js → superdoc.global.js).
+// Entry point for the CDN IIFE build (vite.config.cdn.js → superdoc.min.js).
 // Exposes the SuperDoc class as `window.SuperDoc` directly (so consumers write
 // `new SuperDoc({...})`) while still attaching every named export as a static
 // property (`SuperDoc.createTheme`, `SuperDoc.DOCX`, etc.). Pattern borrowed

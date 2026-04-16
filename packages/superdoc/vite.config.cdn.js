@@ -34,7 +34,7 @@ export default defineConfig(({ command }) => {
         formats: ['iife'],
         name: 'SuperDoc',
         cssFileName: 'style',
-        fileName: () => 'superdoc.global.js',
+        fileName: () => 'superdoc.min.js',
       },
       minify: 'esbuild',
       sourcemap: true,

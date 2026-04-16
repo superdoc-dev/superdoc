@@ -89,7 +89,7 @@ console.log('[audit-bundle] ✓ Verified single prosemirror-view copy per emitte
 // Size budgets (raw file size in bytes). Hard = fail the build, soft = warn.
 // Keep headroom above current sizes so legitimate growth doesn't break CI.
 const SIZE_BUDGETS = [
-  { file: 'superdoc.global.js', soft: 5_242_880, hard: 6_291_456 }, // 5 MB warn / 6 MB fail
+  { file: 'superdoc.min.js', soft: 5_242_880, hard: 6_291_456 }, // 5 MB warn / 6 MB fail
   { file: 'superdoc.es.js', soft: 3_145_728, hard: 4_194_304 }, // 3 MB warn / 4 MB fail
   { file: 'style.css', soft: 153_600, hard: 204_800 }, // 150 KB warn / 200 KB fail
 ];

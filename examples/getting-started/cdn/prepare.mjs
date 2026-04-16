@@ -14,7 +14,7 @@ const sampleSource = resolve(
 );
 
 const assets = [
-  [resolve(dist, 'superdoc.global.js'), resolve(here, 'superdoc.global.js')],
+  [resolve(dist, 'superdoc.min.js'), resolve(here, 'superdoc.min.js')],
   [resolve(dist, 'style.css'), resolve(here, 'style.css')],
   [sampleSource, resolve(here, 'test_file.docx')],
 ];

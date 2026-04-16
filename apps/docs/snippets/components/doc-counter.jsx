@@ -23,7 +23,7 @@ export const DocCounter = ({ height = '350px' }) => {
       window.Buffer = window.buffer.Buffer;
 
       const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.global.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js';
       script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
       document.body.appendChild(script);
     };

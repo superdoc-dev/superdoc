@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('IIFE bundle (superdoc.global.js) exposes SuperDoc class on window', async ({ page }) => {
+test('IIFE bundle (superdoc.min.js) exposes SuperDoc class on window', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
 

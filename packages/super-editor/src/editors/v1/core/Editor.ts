@@ -3107,12 +3107,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * - `exportXmlOnly: true` → `string` (raw XML)
    * - `exportJsonOnly: true` → `string` (JSON string)
    * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
-   * - Default → `Blob` (browser) or `Buffer` (Node.js headless)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js headless). The runtime
+   *   value is determined by the editor's `isHeadless` option at construction
+   *   time, which the type system cannot see — so the default overload is
+   *   generic with `Blob` as the default. Browser consumers get `Blob`
+   *   automatically; Node headless consumers opt in with `exportDocx<Buffer>()`.
    */
   async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
-  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
+  async exportDocx<T extends Blob | Buffer = Blob>(
+    params?: ExportDocxParams & { exportXmlOnly?: false; exportJsonOnly?: false; getUpdatedDocs?: false },
+  ): Promise<T>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',

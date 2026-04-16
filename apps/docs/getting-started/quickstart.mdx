@@ -131,18 +131,33 @@ Done. Ask your agent to open a `.docx` file and make an edit.
   </Step>
 
   <Step title="Mount the editor">
-    ```html
-    <div id="editor" style="height: 100vh"></div>
+    <Tabs>
+      <Tab title="npm">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
 
-    <script type="module">
-      import { SuperDoc } from 'superdoc';
-      import 'superdoc/style.css';
+        <script type="module">
+          import { SuperDoc } from 'superdoc';
+          import 'superdoc/style.css';
 
-      const superdoc = new SuperDoc({
-        selector: '#editor',
-      });
-    </script>
-    ```
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+      <Tab title="CDN">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
+
+        <script>
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+    </Tabs>
     That's a blank editor. Now give it a file.
   </Step>
 

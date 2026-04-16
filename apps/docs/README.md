@@ -47,11 +47,11 @@ pnpm dev:docs
 
 This starts three processes:
 
-- **Vite dev server** (port 9094) — serves the built UMD bundle at `/dist`
-- **UMD watcher** — rebuilds `dist/superdoc.umd.js` automatically when source files change
+- **Vite dev server** (port 9094) — serves the built CDN bundle at `/dist`
+- **CDN watcher** — rebuilds `dist/superdoc.min.js` automatically when source files change
 - **Mintlify** (port 3001) — the docs dev server
 
-The `<SuperDocEditor>` widget detects `localhost` and loads SuperDoc from the local Vite server instead of unpkg. After saving a source file, the UMD watcher rebuilds automatically — refresh the docs page to see the changes.
+The `<SuperDocEditor>` widget detects `localhost` and loads SuperDoc from the local Vite server instead of jsDelivr. After saving a source file, the CDN watcher rebuilds automatically — refresh the docs page to see the changes.
 
 ### Available Scripts
 

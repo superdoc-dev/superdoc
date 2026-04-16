@@ -16,11 +16,11 @@ npx serve .
 Replace the local `<script>` and `<link>` with jsDelivr URLs:
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/style.css" />
-<script src="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/superdoc.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js"></script>
 ```
 
-Pin to a minor (`@1.27`) in production and add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for integrity.
+Pin to a specific version (e.g. `superdoc@1.26.0`) in production and add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for integrity.
 
 ## Learn more
 

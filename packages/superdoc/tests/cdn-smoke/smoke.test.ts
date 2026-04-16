@@ -18,8 +18,9 @@ test('IIFE bundle (superdoc.min.js) exposes SuperDoc class on window', async ({ 
   expect(globalShape.hasCreateTheme).toBe(true);
   expect(globalShape.hasDOCX).toBe(true);
 
-  const ready = await page.evaluate(() => (window as any).__SUPERDOC_READY__ === true);
-  expect(ready).toBe(true);
+  await page.waitForFunction(() => (window as any).__SUPERDOC_READY__ === true, null, {
+    timeout: 15_000,
+  });
 
   expect(errors).toEqual([]);
 });

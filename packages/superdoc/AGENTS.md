@@ -38,10 +38,10 @@ Drop SuperDoc into any HTML page via `<script>` tag. No bundler, no `npm install
 ```html
 <link
   rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/style.css"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
 />
 <div id="editor" style="height: 100vh"></div>
-<script src="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/superdoc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js"></script>
 <script>
   const superdoc = new SuperDoc({
     selector: '#editor',
@@ -60,12 +60,12 @@ For modern apps that want peer-dep control and smaller payload:
 ```html
 <link
   rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/style.css"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
 />
 <script type="importmap">
   {
     "imports": {
-      "superdoc": "https://cdn.jsdelivr.net/npm/superdoc@1.27/dist/superdoc.es.js",
+      "superdoc": "https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.es.js",
       "vue": "https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js"
     }
   }
@@ -81,9 +81,9 @@ Add `yjs`, `y-prosemirror`, `@hocuspocus/provider`, or `pdfjs-dist` to the impor
 
 ### Production pinning and integrity
 
-- **Pin to a minor** (`@1.27`) for patch updates, or **exact** (`@1.27.0`) if you're hash-pinning.
-- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production: `openssl dgst -sha384 -binary superdoc.min.js | openssl base64 -A`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` / `<link>`.
-- jsDelivr serves immutable, gzipped responses (~1.4 MB on the wire for `superdoc.min.js`).
+- The examples above use `@latest` for copy-paste. **In production, pin to a specific version** (e.g. `superdoc@1.26.0`) so you control upgrades.
+- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production. Generate with: `curl -s https://cdn.jsdelivr.net/npm/superdoc@1.26.0/dist/superdoc.min.js | openssl dgst -sha384 -binary | openssl base64 -A | sed 's/^/sha384-/'`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` and `<link>`.
+- jsDelivr serves immutable, gzipped responses (~1.5 MB on the wire for `superdoc.min.js`).
 
 Unpkg is mirrored automatically: replace `cdn.jsdelivr.net/npm/` with `unpkg.com/`.
 

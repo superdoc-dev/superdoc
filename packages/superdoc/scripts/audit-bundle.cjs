@@ -88,16 +88,27 @@ console.log('[audit-bundle] ✓ Verified single prosemirror-view copy per emitte
 
 // Size budgets (raw file size in bytes). Hard = fail the build, soft = warn.
 // Keep headroom above current sizes so legitimate growth doesn't break CI.
+// Files in `requiredAfterFullBuild` MUST exist after a full `pnpm build` —
+// missing them is a CI failure. Other files are skipped if the current build
+// phase didn't emit them (e.g. running build:es alone).
 const SIZE_BUDGETS = [
   { file: 'superdoc.min.js', soft: 5_242_880, hard: 6_291_456 }, // 5 MB warn / 6 MB fail
   { file: 'superdoc.es.js', soft: 3_145_728, hard: 4_194_304 }, // 3 MB warn / 4 MB fail
   { file: 'style.css', soft: 153_600, hard: 204_800 }, // 150 KB warn / 200 KB fail
 ];
+const requiredAfterFullBuild = new Set(['superdoc.min.js', 'superdoc.es.js', 'style.css']);
+const isFullBuild = fs.existsSync(path.join(distRoot, 'superdoc.es.js'));
 
 let sizeFailed = false;
 for (const { file, soft, hard } of SIZE_BUDGETS) {
   const full = path.join(distRoot, file);
-  if (!fs.existsSync(full)) continue; // skip if this build phase didn't emit it
+  if (!fs.existsSync(full)) {
+    if (isFullBuild && requiredAfterFullBuild.has(file)) {
+      console.error(`[audit-bundle] ✗ ${file} missing after full build`);
+      sizeFailed = true;
+    }
+    continue;
+  }
   const size = fs.statSync(full).size;
   const kb = (size / 1024).toFixed(0);
   if (size > hard) {

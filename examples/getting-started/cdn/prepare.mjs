@@ -2,7 +2,7 @@
 // so `index.html` is self-contained and can be served with `npx serve .`.
 // Run before `dev` or the Playwright smoke test.
 
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,14 +19,15 @@ const assets = [
   [sampleSource, resolve(here, 'test_file.docx')],
 ];
 
-const missing = assets.filter(([src]) => !existsSync(src)).map(([src]) => src);
+const missing = assets.filter(([src]) => !existsSync(src));
 if (missing.length) {
-  console.error('[cdn-example/prepare] Missing sources:\n  ' + missing.join('\n  '));
-  console.error('Run `pnpm --filter superdoc build` first.');
+  console.error('[cdn-example/prepare] Build the SuperDoc bundle first:');
+  console.error('  pnpm --filter superdoc build');
+  console.error('Missing files:');
+  for (const [src] of missing) console.error('  ' + src);
   process.exit(1);
 }
 
-if (!existsSync(here)) mkdirSync(here, { recursive: true });
 for (const [src, dst] of assets) {
   copyFileSync(src, dst);
   console.log('[cdn-example/prepare] copied', dst.replace(here + '/', ''));

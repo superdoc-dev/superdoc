@@ -52,11 +52,13 @@ test.describe('cdn example', () => {
       return {
         hasChildren: (el?.children.length || 0) > 0,
         innerHTMLLength: el?.innerHTML.length || 0,
-        visibleText: (el as HTMLElement)?.innerText?.trim().slice(0, 200) || '',
+        visibleText: (el as HTMLElement)?.innerText || '',
       };
     });
     expect(rendered.hasChildren).toBe(true);
     expect(rendered.innerHTMLLength).toBeGreaterThan(1000);
-    expect(rendered.visibleText.length).toBeGreaterThan(0);
+    // The bundled sample DOCX contains "Lorem ipsum" — prove the doc parsed,
+    // not just that editor chrome rendered.
+    expect(rendered.visibleText).toContain('Lorem ipsum');
   });
 });

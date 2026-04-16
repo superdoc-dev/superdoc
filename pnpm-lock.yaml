@@ -2116,6 +2116,8 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
+  examples/getting-started/cdn: {}
+
   examples/getting-started/laravel:
     dependencies:
       concurrently:
@@ -3070,7 +3072,7 @@ importers:
         specifier: 'catalog:'
         version: 1.6.11
 
-  packages/superdoc/tests/umd-smoke:
+  packages/superdoc/tests/cdn-smoke:
     devDependencies:
       '@playwright/test':
         specifier: 'catalog:'
@@ -6400,6 +6402,7 @@ packages:
   '@microsoft/teamsapp-cli@3.0.2':
     resolution: {integrity: sha512-AowuJwrrUxeF9Bq/frxuy9YZjK/ECk3pi0UBXl3CQLZ4XNWfgWatiFi/UWpyHDLccFs+0Za3nNYATFvgsxEFwQ==}
     engines: {node: '>=12'}
+    deprecated: This package is deprecated and supported Node.js version is 18-22. Please use @microsoft/m365agentstoolkit-cli instead.
     hasBin: true
 
   '@microsoft/teamsfx-api@0.23.1':

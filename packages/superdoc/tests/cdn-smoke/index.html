@@ -9,8 +9,12 @@
   <body>
     <div id="editor" style="height: 100vh"></div>
     <script>
-      var superdoc = new SuperDoc({ selector: '#editor' });
-      window.__SUPERDOC_READY__ = true;
+      var superdoc = new SuperDoc({
+        selector: '#editor',
+        onReady: function () {
+          window.__SUPERDOC_READY__ = true;
+        },
+      });
     </script>
   </body>
 </html>

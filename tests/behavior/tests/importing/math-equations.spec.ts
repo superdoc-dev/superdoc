@@ -957,14 +957,18 @@ test.describe('m:nary (n-ary operator) rendering', () => {
       const math = document.querySelectorAll('math')[5];
       const munder = math?.querySelector('munder');
       if (!munder) return null;
+      // The n-ary body contains m:sSub (Aᵢ), which legitimately renders as <msub>.
+      // Assert only on the n-ary's own wrapper — the element parenting <mo>⋃</mo>.
+      const unionOp = Array.from(math.querySelectorAll('mo')).find((m) => m.textContent === '\u22C3');
+      const naryWrapperTag = unionOp?.parentElement?.tagName.toLowerCase();
       return {
-        hasMsub: math?.querySelector('msub') !== null,
+        naryWrapperTag,
         opChar: munder.children[0]?.textContent,
         under: munder.children[1]?.textContent,
       };
     });
     expect(data).not.toBeNull();
-    expect(data!.hasMsub).toBe(false);
+    expect(data!.naryWrapperTag).toBe('munder');
     expect(data!.opChar).toBe('\u22C3');
     expect(data!.under).toBe('i');
   });

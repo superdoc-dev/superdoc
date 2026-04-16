@@ -2093,7 +2093,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
         isNewFile: this.options.isNewFile ?? false,
-        trackedChangesOptions: (this.options as { trackedChanges?: unknown }).trackedChanges ?? null,
+        trackedChangesOptions: this.options.trackedChanges ?? null,
       });
     }
   }

@@ -182,8 +182,8 @@ export const TrackChanges = Extension.create({
 
       acceptTrackedChangeById:
         (id) =>
-        ({ editor, state, tr, commands }) => {
-          const toResolve = getChangesByIdToResolve(state, id, readPairReplacements(editor)) || [];
+        ({ state, tr, commands }) => {
+          const toResolve = getChangesByIdToResolve(state, id) || [];
 
           return toResolve
             .map(({ from, to }) => {
@@ -204,8 +204,8 @@ export const TrackChanges = Extension.create({
 
       rejectTrackedChangeById:
         (id) =>
-        ({ editor, state, tr, commands }) => {
-          const toReject = getChangesByIdToResolve(state, id, readPairReplacements(editor)) || [];
+        ({ state, tr, commands }) => {
+          const toReject = getChangesByIdToResolve(state, id) || [];
 
           return toReject
             .map(({ from, to }) => {
@@ -315,17 +315,26 @@ export const TrackChanges = Extension.create({
           // Get marks from original position BEFORE any changes for format preservation
           const marks = state.doc.resolve(from).marks();
 
-          // For replacements (both deletion and insertion), generate a shared ID upfront
-          // so the deletion and insertion marks are linked together. When the
-          // consumer opts out via modules.trackChanges.pairReplacements: false,
-          // each mark gets its own UUID so they're independent revisions.
+          // id-minting strategy for a tracked insert/delete/replace:
+          //  - One `primaryId` anchors the operation. When the caller supplies
+          //    `id` (e.g. the Document API write adapter), that becomes the
+          //    primary; otherwise we mint a fresh UUID.
+          //  - The primary id is used for the insertion (pure insert) or the
+          //    lone deletion (pure delete), and always as the `changeId` we
+          //    report back — comment threads key off this id too.
+          //  - For a replacement: in paired mode both halves share the
+          //    primary id (Google-Docs-like one-click resolve). In unpaired
+          //    mode (modules.trackChanges.pairReplacements: false), the
+          //    insertion keeps the primary id and the deletion mints its own
+          //    fresh id via markDeletion, so each revision is independently
+          //    addressable per ECMA-376 §17.13.5.
           const pairReplacements = readPairReplacements(editor);
           const isReplacement = from !== to && text;
-          const sharedId = id ?? (isReplacement && pairReplacements ? uuidv4() : null);
-          const deletionId = id ?? sharedId;
-          const insertionId = id ?? sharedId;
+          const primaryId = id ?? uuidv4();
+          const insertionId = primaryId;
+          const deletionId = pairReplacements || !isReplacement ? primaryId : null;
 
-          let changeId = sharedId;
+          const changeId = primaryId;
           let insertPos = to; // Default insert position is after the selection
           let deletionMark = null;
           let deletionNodes = [];
@@ -342,9 +351,6 @@ export const TrackChanges = Extension.create({
             });
             deletionMark = result.deletionMark;
             deletionNodes = result.nodes || [];
-            if (!changeId) {
-              changeId = deletionMark.attrs.id;
-            }
             // Map the insert position through the deletion mapping
             insertPos = result.deletionMap.map(to);
           }
@@ -367,10 +373,6 @@ export const TrackChanges = Extension.create({
               date,
               id: insertionId,
             });
-
-            if (!changeId) {
-              changeId = insertedMark.attrs.id;
-            }
           }
 
           // Store metadata for external consumers (pass full mark objects for comments plugin)
@@ -668,19 +670,21 @@ const dispatchTrackedChangeResolution = ({ state, tr, dispatch, editor, touchedC
   return true;
 };
 
-const getChangesByIdToResolve = (state, id, pairReplacements = true) => {
+const getChangesByIdToResolve = (state, id) => {
   const trackedChanges = getTrackChanges(state);
   const changeIndex = trackedChanges.findIndex(({ mark }) => mark.attrs.id === id);
   if (changeIndex === -1) return;
 
   const matchingChange = trackedChanges[changeIndex];
-
-  // In unpaired mode, each mark is its own logical change — no neighbor walk.
-  if (!pairReplacements) {
-    return [matchingChange];
-  }
-
   const matchingId = matchingChange.mark.attrs.id;
+
+  // The neighbor walk collects every adjacent segment that shares the same id.
+  // This catches:
+  //   - A single logical mark split across multiple segments (e.g. because
+  //     surrounding text marks differ) — always correct to resolve together.
+  //   - The paired opposite-type mark when pairReplacements is true (shared id).
+  // In unpaired mode, the ins/del halves have distinct ids so the walk stops
+  // at the revision boundary naturally — no special casing needed here.
 
   const linkedBefore = [];
   const linkedAfter = [];

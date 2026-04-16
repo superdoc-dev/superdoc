@@ -232,6 +232,18 @@ new SuperDoc({
 });
 ```
 
+Opt into Microsoft Word / ECMA-376-style independent revisions, where each insertion and each deletion has its own id and resolves on its own:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    trackChanges: { pairReplacements: false },
+  },
+});
+```
+
 ### Toolbar module
 
 <ParamField path="modules.toolbar" type="Object">

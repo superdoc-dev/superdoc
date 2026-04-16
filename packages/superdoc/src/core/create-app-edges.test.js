@@ -19,11 +19,7 @@ vi.mock('../SuperDoc.vue', () => ({ default: { name: 'SuperDocMock' } }));
 
 const setupAppMocks = () => {
   const originalUnmount = vi.fn();
-  const app = {
-    use: vi.fn(),
-    directive: vi.fn(),
-    unmount: originalUnmount,
-  };
+  const app = { use: vi.fn(), directive: vi.fn(), unmount: originalUnmount };
   createAppMock.mockReturnValue(app);
   createPiniaMock.mockReturnValue({});
   useSuperdocStoreMock.mockReturnValue({});
@@ -34,12 +30,10 @@ const setupAppMocks = () => {
 
 const safeDelete = (key) => {
   const desc = Object.getOwnPropertyDescriptor(globalThis, key);
-  if (!desc || desc.configurable !== false) {
-    delete globalThis[key];
-  }
+  if (!desc || desc.configurable !== false) delete globalThis[key];
 };
 
-describe('createSuperdocVueApp edge cases', () => {
+describe('createSuperdocVueApp', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -52,49 +46,7 @@ describe('createSuperdocVueApp edge cases', () => {
     safeDelete('__VUE_DEVTOOLS_PLUGINS__');
   });
 
-  it('handles queue replacement via property setter', async () => {
-    const { app } = setupAppMocks();
-    const { createSuperdocVueApp } = await import('./create-app.js');
-    createSuperdocVueApp({ disablePiniaDevtools: true });
-
-    const newQueue = [];
-    globalThis.__VUE_DEVTOOLS_PLUGINS__ = newQueue;
-    newQueue.push([{ id: 'dev.esm.pinia', app }, vi.fn()]);
-    expect(newQueue).toHaveLength(0);
-
-    const otherApp = {};
-    newQueue.push([{ id: 'dev.esm.pinia', app: otherApp }, vi.fn()]);
-    expect(newQueue).toHaveLength(1);
-  });
-
-  it('handles multiple unmount calls safely', async () => {
-    const { app } = setupAppMocks();
-    const { createSuperdocVueApp } = await import('./create-app.js');
-    createSuperdocVueApp({ disablePiniaDevtools: true });
-    app.unmount();
-    app.unmount(); // second call — no-op via ref count guard
-    expect(true).toBe(true);
-  });
-
-  it('handles non-array pre-existing queue', async () => {
-    globalThis.__VUE_DEVTOOLS_PLUGINS__ = { notAnArray: true };
-    const { app } = setupAppMocks();
-    const { createSuperdocVueApp } = await import('./create-app.js');
-    expect(() => createSuperdocVueApp({ disablePiniaDevtools: true })).not.toThrow();
-  });
-
-  it('emits unrelated events without suppression', async () => {
-    const emitSpy = vi.fn(() => 'emitted');
-    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: emitSpy };
-    const { app } = setupAppMocks();
-    const { createSuperdocVueApp } = await import('./create-app.js');
-    createSuperdocVueApp({ disablePiniaDevtools: true });
-    const hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
-    expect(hook.emit('other-event', { id: 'other', app: {} })).toBe('emitted');
-    expect(emitSpy).toHaveBeenCalled();
-  });
-
-  it('returns app + stores from factory', async () => {
+  it('returns the Vue app with all stores', async () => {
     const { app } = setupAppMocks();
     const { createSuperdocVueApp } = await import('./create-app.js');
     const result = createSuperdocVueApp({ disablePiniaDevtools: false });
@@ -105,36 +57,61 @@ describe('createSuperdocVueApp edge cases', () => {
     expect(result.highContrastModeStore).toBeDefined();
   });
 
-  it('replacing hook at runtime picks up new hook instance', async () => {
+  // Outcome-focused: when suppressed, the Pinia devtools plugin for this app
+  // is never surfaced via the hook or queue. The test does not pin the
+  // specific suppression mechanism (hook-emit patch vs. queue-push patch),
+  // so it survives refactors of the strategy.
+  it('keeps the Pinia devtools plugin hidden from consumers when suppressed', async () => {
+    const emitSpy = vi.fn(() => 'emitted');
+    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: emitSpy };
     const { app } = setupAppMocks();
     const { createSuperdocVueApp } = await import('./create-app.js');
     createSuperdocVueApp({ disablePiniaDevtools: true });
 
-    const firstEmit = vi.fn(() => 'a');
-    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: firstEmit };
-    let hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
+    const hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
+    // Hook emit for this app is swallowed
     expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app }, vi.fn())).toBeUndefined();
+    expect(emitSpy).not.toHaveBeenCalled();
 
-    const secondEmit = vi.fn(() => 'b');
-    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: secondEmit };
-    hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
-    expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app }, vi.fn())).toBeUndefined();
+    // Queue pushes for this app are dropped
+    const queue = globalThis.__VUE_DEVTOOLS_PLUGINS__;
+    queue.push([{ id: 'dev.esm.pinia', app }, vi.fn()]);
+    expect(queue).toHaveLength(0);
+
+    // Unrelated apps are not suppressed
+    const otherApp = {};
+    expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app: otherApp }, vi.fn())).toBe('emitted');
+    queue.push([{ id: 'dev.esm.pinia', app: otherApp }, vi.fn()]);
+    expect(queue).toHaveLength(1);
+
+    // Suppression lifts after unmount
+    app.unmount();
+    expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app }, vi.fn())).toBe('emitted');
   });
 
-  it('replacement queue also intercepts pinia setup for suppressed app', async () => {
+  it('does not suppress anything when disablePiniaDevtools is false', async () => {
+    const emitSpy = vi.fn(() => 'emitted');
+    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: emitSpy };
     const { app } = setupAppMocks();
     const { createSuperdocVueApp } = await import('./create-app.js');
-    createSuperdocVueApp({ disablePiniaDevtools: true });
+    createSuperdocVueApp({ disablePiniaDevtools: false });
 
-    const replacement1 = [];
-    globalThis.__VUE_DEVTOOLS_PLUGINS__ = replacement1;
-    replacement1.push([{ id: 'dev.esm.pinia', app }, vi.fn()]);
-    expect(replacement1).toHaveLength(0);
+    const hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
+    expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app }, vi.fn())).toBe('emitted');
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
 
-    // Replace again — new queue should also get patched
-    const replacement2 = [];
-    globalThis.__VUE_DEVTOOLS_PLUGINS__ = replacement2;
-    replacement2.push([{ id: 'dev.esm.pinia', app }, vi.fn()]);
-    expect(replacement2).toHaveLength(0);
+  it('cleans up suppression state when app initialization throws', async () => {
+    const emitSpy = vi.fn(() => 'emitted');
+    globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__ = { emit: emitSpy };
+    const { app } = setupAppMocks();
+    app.use.mockImplementation(() => {
+      throw new Error('init failed');
+    });
+    const { createSuperdocVueApp } = await import('./create-app.js');
+    expect(() => createSuperdocVueApp({ disablePiniaDevtools: true })).toThrow('init failed');
+
+    const hook = globalThis.__VUE_DEVTOOLS_GLOBAL_HOOK__;
+    expect(hook.emit('devtools-plugin:setup', { id: 'dev.esm.pinia', app }, vi.fn())).toBe('emitted');
   });
 });

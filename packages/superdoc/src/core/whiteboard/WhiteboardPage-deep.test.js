@@ -50,12 +50,14 @@ const makeLayer = () => {
 
 const makeStage = () => {
   const stageListeners = new Map();
+  const layers = [];
   const stage = makeNode();
   stage.on = vi.fn((events, fn) => events.split(' ').forEach((e) => stageListeners.set(e, fn)));
-  stage.add = vi.fn();
+  stage.add = vi.fn((l) => layers.push(l));
   stage.size = vi.fn();
   stage.getPointerPosition = vi.fn(() => ({ x: 10, y: 10 }));
   stage._listeners = stageListeners;
+  stage._layers = layers;
   return stage;
 };
 
@@ -86,6 +88,9 @@ const makeRenderer = () => {
   return { Stage, Layer, Line, Text, Image, Transformer };
 };
 
+const mountedPages = [];
+const mountedContainers = [];
+
 const mountPage = (opts = {}) => {
   const renderer = opts.Renderer ?? makeRenderer();
   const page = new WhiteboardPage({
@@ -99,6 +104,8 @@ const mountPage = (opts = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   page.mount(container);
+  mountedPages.push(page);
+  mountedContainers.push(container);
   return { page, renderer, container };
 };
 
@@ -123,6 +130,10 @@ describe('WhiteboardPage: image async + transform paths', () => {
   });
 
   afterEach(() => {
+    // Destroy mounted pages so the window keydown listeners they installed
+    // are removed. Leaking them across tests causes cross-test coupling.
+    while (mountedPages.length) mountedPages.pop().destroy();
+    while (mountedContainers.length) mountedContainers.pop().remove();
     window.Image = originalImage;
   });
 
@@ -133,7 +144,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
     });
     page.render();
     // Flush microtasks so onload fires
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     expect(renderer.Image).toHaveBeenCalled();
   });
 
@@ -151,7 +162,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
     const { page, renderer } = mountPage();
     page.applyData({ images: [{ id: 'i1', xN: 0, yN: 0, src: '/x.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     expect(renderer.Image).not.toHaveBeenCalled();
   });
 
@@ -161,7 +172,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
       images: [{ id: 'i1', xN: 0.1, yN: 0.1, src: '/x.png', widthN: 0.5, heightN: 0.5 }],
     });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     const callsBefore = renderer.Image.mock.calls.length;
 
     // Re-render with same id — should update existing, not recreate
@@ -169,7 +180,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
       images: [{ id: 'i1', xN: 0.2, yN: 0.2, src: '/x.png', widthN: 0.5, heightN: 0.5 }],
     });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     expect(renderer.Image.mock.calls.length).toBe(callsBefore);
   });
 
@@ -182,15 +193,17 @@ describe('WhiteboardPage: image async + transform paths', () => {
       ],
     });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
+    const createdNodes = renderer.Image.mock.results.map((r) => r.value);
+    const i1Node = createdNodes.find((n) => n._whiteboardId === 'i1');
+    expect(i1Node).toBeDefined();
 
-    // Now remove i1
+    // Drop i1 from the model and re-render
     page.applyData({ images: [{ id: 'i2', xN: 0, yN: 0, src: '/b.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
-    // i1 node should have been destroyed during renderImages cleanup; no assertion on count
-    // (Konva mock doesn't expose destroy counts per node id here) — just ensure render does not throw.
-    expect(true).toBe(true);
+    await Promise.resolve();
+    expect(i1Node.destroy).toHaveBeenCalled();
+    expect(page.images.map((i) => i.id)).toEqual(['i2']);
   });
 
   it('image node transformend recomputes normalized width/height/position', async () => {
@@ -198,7 +211,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
     const { page, renderer } = mountPage({ onChange });
     page.applyData({ images: [{ id: 'i1', xN: 0, yN: 0, src: '/a.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     const imageNode = renderer.Image.mock.results.at(-1).value;
     imageNode.scaleX(2);
     imageNode.scaleY(2);
@@ -218,7 +231,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
     const { page, renderer } = mountPage({ onChange });
     page.applyData({ images: [{ id: 'i1', xN: 0, yN: 0, src: '/a.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     const imageNode = renderer.Image.mock.results.at(-1).value;
     imageNode.x(50);
     imageNode.y(50);
@@ -227,15 +240,19 @@ describe('WhiteboardPage: image async + transform paths', () => {
     expect(page.images[0].xN).toBeCloseTo(0.5);
   });
 
-  it('clicking an image node selects it', async () => {
+  it('clicking an image node in select mode attaches a selection overlay', async () => {
     const { page, renderer } = mountPage();
     page.setTool('select');
     page.applyData({ images: [{ id: 'i1', xN: 0, yN: 0, src: '/a.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     const imageNode = renderer.Image.mock.results.at(-1).value;
+    const stage = renderer.Stage.mock.results[0].value;
+    const layer = stage._layers[0];
+    const childCountBefore = layer._children.length;
     imageNode._listeners.get('click')({});
-    expect(renderer.Transformer).toHaveBeenCalled();
+    // Selection attaches a Transformer node to the visible layer
+    expect(layer._children.length).toBe(childCountBefore + 1);
   });
 
   it('text node transform keeps height fixed (text resize only horizontally)', () => {
@@ -326,7 +343,7 @@ describe('WhiteboardPage: image async + transform paths', () => {
     page.setTool('select');
     page.applyData({ images: [{ id: 'i1', xN: 0, yN: 0, src: '/a.png' }] });
     page.render();
-    await new Promise((r) => setTimeout(r, 0));
+    await Promise.resolve();
     const imageNode = renderer.Image.mock.results.at(-1).value;
     imageNode._whiteboardId = 'i1';
     imageNode._listeners.get('click')({});

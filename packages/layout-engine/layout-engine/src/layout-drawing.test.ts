@@ -778,5 +778,248 @@ describe('layoutDrawingBlock', () => {
       expect(fragment.width).toBe(600);
       expect(fragment.height).toBeCloseTo(333 * expectedScale, 10); // Allow floating point precision
     });
+
+    it('should center inline shapeGroup drawings using paragraph alignment metadata', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      expect(fragment.x).toBe(200);
+    });
+
+    it('should right-align inline shapeGroup drawings using paragraph alignment metadata', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'right',
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      expect(fragment.x).toBe(400);
+    });
+
+    it('should not apply paragraph alignment metadata when shapeGroup is not inline', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Square' },
+            inlineParagraphAlignment: 'center',
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      expect(fragment.x).toBe(0);
+    });
+
+    it('should center within indented text box when paragraph has left indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+            paragraphIndentLeft: 48,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 48 = 552, extra = 552 - 200 = 352, x = 0 + 48 + 176 = 224
+      expect(fragment.x).toBe(224);
+    });
+
+    it('should center within indented text box when paragraph has left and right indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+            paragraphIndentLeft: 48,
+            paragraphIndentRight: 48,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 48 - 48 = 504, extra = 504 - 200 = 304, x = 0 + 48 + 152 = 200
+      expect(fragment.x).toBe(200);
+    });
+
+    it('should right-align within indented text box when paragraph has left indent', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'right',
+            paragraphIndentLeft: 96,
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // alignBox = 600 - 96 = 504, extra = 504 - 200 = 304, x = 0 + 96 + 304 = 400
+      expect(fragment.x).toBe(400);
+    });
+
+    it('should not offset when alignment is left or justify', () => {
+      for (const alignment of ['left', 'justify'] as const) {
+        const context = createMockContext(
+          {
+            drawingKind: 'shapeGroup',
+            attrs: {
+              pmStart: 10,
+              pmEnd: 11,
+              wrap: { type: 'Inline' },
+              inlineParagraphAlignment: alignment,
+            },
+          },
+          { width: 200, height: 150 },
+        );
+        const state = context.ensurePage();
+
+        layoutDrawingBlock(context);
+
+        const fragment = state.page.fragments[0] as DrawingFragment;
+        expect(fragment.x).toBe(0);
+      }
+    });
+
+    it('should not offset non-shapeGroup drawings even with inline wrap and alignment', () => {
+      for (const drawingKind of ['image', 'vectorShape', 'chart'] as const) {
+        const context = createMockContext(
+          {
+            drawingKind,
+            attrs: {
+              pmStart: 10,
+              pmEnd: 11,
+              wrap: { type: 'Inline' },
+              inlineParagraphAlignment: 'center',
+            },
+          },
+          { width: 200, height: 150 },
+        );
+        const state = context.ensurePage();
+
+        layoutDrawingBlock(context);
+
+        const fragment = state.page.fragments[0] as DrawingFragment;
+        expect(fragment.x).toBe(0);
+      }
+    });
+
+    it('should not offset shapeGroup when wrap is undefined', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            inlineParagraphAlignment: 'center',
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      expect(fragment.x).toBe(0);
+    });
+
+    it('should not offset shapeGroup when wrap has no type', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: {},
+            inlineParagraphAlignment: 'center',
+          },
+        },
+        { width: 200, height: 150 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      expect(fragment.x).toBe(0);
+    });
+
+    it('should not shift oversized centered shapeGroup after width scaling', () => {
+      const context = createMockContext(
+        {
+          drawingKind: 'shapeGroup',
+          attrs: {
+            pmStart: 10,
+            pmEnd: 11,
+            wrap: { type: 'Inline' },
+            inlineParagraphAlignment: 'center',
+          },
+        },
+        { width: 800, height: 600 },
+      );
+      const state = context.ensurePage();
+
+      layoutDrawingBlock(context);
+
+      const fragment = state.page.fragments[0] as DrawingFragment;
+      // Scaled to maxWidthForBlock (600), no slack left, x = 0
+      expect(fragment.width).toBe(600);
+      expect(fragment.x).toBe(0);
+    });
   });
 });

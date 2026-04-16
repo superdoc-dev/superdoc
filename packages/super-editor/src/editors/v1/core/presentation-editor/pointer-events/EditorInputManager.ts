@@ -1061,12 +1061,12 @@ export class EditorInputManager {
       return;
     }
 
-    const editor = this.#deps.getEditor();
-    if (this.#handleSingleCommentHighlightClick(event, target, editor)) {
+    const bodyEditor = this.#deps.getEditor();
+    if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
       return;
     }
 
-    if (this.#handleRepeatClickOnActiveComment(event, target, editor)) {
+    if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
       return;
     }
 
@@ -1093,6 +1093,7 @@ export class EditorInputManager {
 
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const editor = sessionMode === 'body' ? bodyEditor : this.#deps.getActiveEditor();
     if (sessionMode !== 'body') {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
         return;
@@ -1106,8 +1107,10 @@ export class EditorInputManager {
       normalizedPoint.pageLocalY,
     );
     if (headerFooterRegion) {
-      event.preventDefault(); // Prevent native selection before double-click handles it
-      return; // Will be handled by double-click
+      if (sessionMode === 'body') {
+        event.preventDefault(); // Prevent native selection before double-click handles it
+        return; // Will be handled by double-click
+      }
     }
 
     // Get hit position
@@ -1281,15 +1284,12 @@ export class EditorInputManager {
 
     // Handle double/triple click selection
     let handledByDepth = false;
-    const sessionModeForDepth = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionModeForDepth === 'body') {
-      const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
+    const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
 
-      if (clickDepth >= 3) {
-        handledByDepth = this.#callbacks.selectParagraphAt?.(selectionPos) ?? false;
-      } else if (clickDepth === 2) {
-        handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
-      }
+    if (clickDepth >= 3) {
+      handledByDepth = this.#callbacks.selectParagraphAt?.(selectionPos) ?? false;
+    } else if (clickDepth === 2) {
+      handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
     }
 
     const hasFocus = editor.view?.hasFocus?.() ?? false;
@@ -1475,13 +1475,15 @@ export class EditorInputManager {
       normalized.pageLocalY,
     );
     if (region) {
-      event.preventDefault();
-      event.stopPropagation();
+      if (sessionMode === 'body') {
+        event.preventDefault();
+        event.stopPropagation();
 
-      // Materialization (if needed) now happens inside #enterMode via
-      // ensureExplicitHeaderFooterSlot. The pointer handler only triggers
-      // activation — it is not responsible for slot creation.
-      this.#callbacks.activateHeaderFooterRegion?.(region);
+        // Materialization (if needed) now happens inside #enterMode via
+        // ensureExplicitHeaderFooterSlot. The pointer handler only triggers
+        // activation — it is not responsible for slot creation.
+        this.#callbacks.activateHeaderFooterRegion?.(region);
+      }
     } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
       this.#callbacks.exitHeaderFooterMode?.();
     }
@@ -2267,7 +2269,7 @@ export class EditorInputManager {
    * operations with tracked changes.
    */
   #focusEditor(): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     const view = editor?.view;
     const editorDom = view?.dom as HTMLElement | undefined;
     if (!editorDom) return;

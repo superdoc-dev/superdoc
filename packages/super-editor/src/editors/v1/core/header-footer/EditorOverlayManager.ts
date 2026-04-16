@@ -11,6 +11,14 @@
  * - Toggle visibility between static decoration content and live editors
  * - Manage dimming overlay for body content during editing
  * - Control selection overlay visibility to prevent double caret rendering
+ *
+ * @deprecated (transitional)
+ * This visible child-PM overlay is the legacy header/footer editing model.
+ * When {@link PresentationEditorOptions.useHiddenHostForStoryParts} is enabled,
+ * header/footer editing runs through the story-session/hidden-host path
+ * (see `presentation-editor/story-session/`) and this overlay is bypassed.
+ * It will be retired once the story-session path has shipped and the flag
+ * defaults to `true`. See `plans/story-backed-parts-presentation-editing.md`.
  */
 
 import type { HeaderFooterRegion } from './types.js';

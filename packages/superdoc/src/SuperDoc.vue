@@ -719,6 +719,7 @@ const editorOptions = (doc) => {
     viewOptions: proxy.$superdoc.config.viewOptions,
     contained: proxy.$superdoc.config.contained,
     linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
+    useHiddenHostForStoryParts: proxy.$superdoc.config.useHiddenHostForStoryParts,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),

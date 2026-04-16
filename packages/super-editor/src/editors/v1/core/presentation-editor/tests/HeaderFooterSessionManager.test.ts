@@ -261,4 +261,191 @@ describe('HeaderFooterSessionManager', () => {
 
     expect(manager.computeSelectionRects(1, 10)).toEqual([{ pageIndex: 1, x: 60, y: 870, width: 200, height: 32 }]);
   });
+
+  it('activates header editing through the story-session manager without creating an overlay host', async () => {
+    const pageElement = document.createElement('div');
+    pageElement.dataset.pageIndex = '0';
+    painterHost.appendChild(pageElement);
+
+    const overlayManager = {
+      showEditingOverlay: vi.fn(() => ({
+        success: true,
+        editorHost: document.createElement('div'),
+        reason: null,
+      })),
+      hideEditingOverlay: vi.fn(),
+      showSelectionOverlay: vi.fn(),
+      hideSelectionOverlay: vi.fn(),
+      setOnDimmingClick: vi.fn(),
+      getActiveEditorHost: vi.fn(() => null),
+      destroy: vi.fn(),
+    };
+
+    const storyEditor = createHeaderFooterEditorStub(document.createElement('div'));
+    const activate = vi.fn(() => ({ editor: storyEditor }));
+    const exit = vi.fn();
+    const descriptor = { id: 'rId-header-default', variant: 'default' };
+
+    mockInitHeaderFooterRegistry.mockReturnValue({
+      overlayManager,
+      headerFooterIdentifier: null,
+      headerFooterManager: {
+        getDescriptorById: vi.fn(() => descriptor),
+        getDescriptors: vi.fn(() => [descriptor]),
+        ensureEditor: vi.fn(),
+        refresh: vi.fn(),
+        destroy: vi.fn(),
+      },
+      headerFooterAdapter: null,
+      cleanups: [],
+    });
+
+    manager = new HeaderFooterSessionManager({
+      painterHost,
+      visibleHost,
+      selectionOverlay,
+      editor: createMainEditorStub(),
+      defaultPageSize: { w: 612, h: 792 },
+      defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+    });
+
+    manager.setDependencies({
+      getLayoutOptions: vi.fn(() => ({ zoom: 1 })),
+      getPageElement: vi.fn(() => pageElement),
+      scrollPageIntoView: vi.fn(),
+      waitForPageMount: vi.fn(async () => true),
+      convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+      isViewLocked: vi.fn(() => false),
+      getBodyPageHeight: vi.fn(() => 800),
+      notifyInputBridgeTargetChanged: vi.fn(),
+      scheduleRerender: vi.fn(),
+      setPendingDocChange: vi.fn(),
+      getBodyPageCount: vi.fn(() => 3),
+      getStorySessionManager: vi.fn(() => ({ activate, exit })),
+    });
+
+    manager.initialize();
+
+    const region = {
+      kind: 'header' as const,
+      headerFooterRefId: 'rId-header-default',
+      sectionType: 'default',
+      sectionId: 'section-0',
+      sectionIndex: 0,
+      pageIndex: 0,
+      pageNumber: 1,
+      localX: 36,
+      localY: 24,
+      width: 480,
+      height: 72,
+    };
+    manager.headerRegions.set(region.pageIndex, region);
+
+    manager.activateRegion(region);
+    await vi.waitFor(() => expect(manager.activeEditor).toBe(storyEditor));
+
+    expect(overlayManager.showEditingOverlay).not.toHaveBeenCalled();
+    expect(activate).toHaveBeenCalledWith(
+      {
+        kind: 'story',
+        storyType: 'headerFooterPart',
+        refId: 'rId-header-default',
+      },
+      expect.objectContaining({
+        commitPolicy: 'onExit',
+        preferHiddenHost: true,
+        hostWidthPx: 480,
+        editorContext: expect.objectContaining({
+          availableWidth: 480,
+          availableHeight: 72,
+          currentPageNumber: 1,
+          totalPageCount: 3,
+          surfaceKind: 'header',
+        }),
+      }),
+    );
+  });
+
+  it('exits the active story session when leaving header/footer mode', async () => {
+    const pageElement = document.createElement('div');
+    pageElement.dataset.pageIndex = '0';
+    painterHost.appendChild(pageElement);
+
+    const overlayManager = {
+      showEditingOverlay: vi.fn(),
+      hideEditingOverlay: vi.fn(),
+      showSelectionOverlay: vi.fn(),
+      hideSelectionOverlay: vi.fn(),
+      setOnDimmingClick: vi.fn(),
+      getActiveEditorHost: vi.fn(() => null),
+      destroy: vi.fn(),
+    };
+
+    const storyEditor = createHeaderFooterEditorStub(document.createElement('div'));
+    const activate = vi.fn(() => ({ editor: storyEditor }));
+    const exit = vi.fn();
+    const descriptor = { id: 'rId-header-default', variant: 'default' };
+
+    mockInitHeaderFooterRegistry.mockReturnValue({
+      overlayManager,
+      headerFooterIdentifier: null,
+      headerFooterManager: {
+        getDescriptorById: vi.fn(() => descriptor),
+        getDescriptors: vi.fn(() => [descriptor]),
+        ensureEditor: vi.fn(),
+        refresh: vi.fn(),
+        destroy: vi.fn(),
+      },
+      headerFooterAdapter: null,
+      cleanups: [],
+    });
+
+    manager = new HeaderFooterSessionManager({
+      painterHost,
+      visibleHost,
+      selectionOverlay,
+      editor: createMainEditorStub(),
+      defaultPageSize: { w: 612, h: 792 },
+      defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+    });
+
+    manager.setDependencies({
+      getLayoutOptions: vi.fn(() => ({ zoom: 1 })),
+      getPageElement: vi.fn(() => pageElement),
+      scrollPageIntoView: vi.fn(),
+      waitForPageMount: vi.fn(async () => true),
+      convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+      isViewLocked: vi.fn(() => false),
+      getBodyPageHeight: vi.fn(() => 800),
+      notifyInputBridgeTargetChanged: vi.fn(),
+      scheduleRerender: vi.fn(),
+      setPendingDocChange: vi.fn(),
+      getBodyPageCount: vi.fn(() => 1),
+      getStorySessionManager: vi.fn(() => ({ activate, exit })),
+    });
+
+    manager.initialize();
+
+    const region = {
+      kind: 'header' as const,
+      headerFooterRefId: 'rId-header-default',
+      sectionType: 'default',
+      sectionId: 'section-0',
+      sectionIndex: 0,
+      pageIndex: 0,
+      pageNumber: 1,
+      localX: 36,
+      localY: 24,
+      width: 480,
+      height: 72,
+    };
+    manager.headerRegions.set(region.pageIndex, region);
+
+    manager.activateRegion(region);
+    await vi.waitFor(() => expect(manager.activeEditor).toBe(storyEditor));
+
+    manager.exitMode();
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(manager.session.mode).toBe('body');
+  });
 });

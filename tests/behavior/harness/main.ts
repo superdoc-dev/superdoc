@@ -32,6 +32,7 @@ const replacementsParam = params.get('replacements');
 const replacements: 'paired' | 'independent' = replacementsParam === 'independent' ? 'independent' : 'paired';
 const allowSelectionInViewMode = params.get('allowSelectionInViewMode') === '1';
 const documentMode = params.get('documentMode') as 'editing' | 'viewing' | 'suggesting' | null;
+const useHiddenHostForStoryParts = params.get('useHiddenHostForStoryParts') === '1';
 const contentOverride = params.get('contentOverride') ?? undefined;
 const overrideType = (params.get('overrideType') as OverrideType | null) ?? undefined;
 
@@ -72,6 +73,7 @@ function init(file?: File, content?: ContentOverrideInput) {
   const config: SuperDocConfig = {
     selector: '#editor',
     useLayoutEngine: layout,
+    useHiddenHostForStoryParts,
     telemetry: { enabled: false },
     onReady: ({ superdoc }: SuperDocReadyPayload) => {
       harnessWindow.superdoc = superdoc;

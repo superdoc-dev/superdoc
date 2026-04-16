@@ -64,6 +64,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   };
   let mockDeps: EditorInputDependencies;
   let mockCallbacks: EditorInputCallbacks;
+  let activateRenderedNoteSession: Mock;
 
   beforeEach(() => {
     viewportHost = document.createElement('div');
@@ -106,6 +107,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     mockDeps = {
       getActiveEditor: vi.fn(() => mockEditor as unknown as ReturnType<EditorInputDependencies['getActiveEditor']>),
+      getActiveStorySession: vi.fn(() => null),
       getEditor: vi.fn(() => mockEditor as unknown as ReturnType<EditorInputDependencies['getEditor']>),
       getLayoutState: vi.fn(() => ({ layout: {} as any, blocks: [], measures: [] })),
       getEpochMapper: vi.fn(() => ({
@@ -124,10 +126,12 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     };
 
     mockCallbacks = {
+      activateRenderedNoteSession: vi.fn(() => true),
       normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
     };
+    activateRenderedNoteSession = mockCallbacks.activateRenderedNoteSession as Mock;
 
     manager = new EditorInputManager();
     manager.setDependencies(mockDeps);
@@ -148,7 +152,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     );
   }
 
-  it('does not change editor selection on direct footnote fragment click', () => {
+  it('activates a note session on direct footnote fragment click', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
     const nestedEl = document.createElement('span');
@@ -167,12 +171,15 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    // Expected behavior: footnote click should not relocate caret to start of the document.
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'footnote', noteId: '1' },
+      expect.objectContaining({ clientX: 10, clientY: 10 }),
+    );
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
-  it('does not change editor selection when hit-test resolves to a footnote block', () => {
+  it('keeps legacy read-only behavior for stale footnote hits without a rendered footnote target', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
@@ -197,26 +204,47 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    // Expected behavior: block edits in footnotes without resetting user selection.
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
-  it('does not change editor selection when hit-test resolves to a semantic footnote block', () => {
+  it('does not reactivate the same note session when clicking inside the active note', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
       pageIndex: 0,
-      blockId: '__sd_semantic_footnote-1-1',
+      blockId: 'footnote-1-1',
       column: 0,
       lineIndex: -1,
     });
 
-    const target = document.createElement('span');
-    viewportHost.appendChild(target);
+    const activeNoteEditor = {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: { ...mockEditor.state.doc, content: { size: 50 } },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+      },
+    };
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
 
     const PointerEventImpl = getPointerEventImpl();
-    target.dispatchEvent(
+    nestedEl.dispatchEvent(
       new PointerEventImpl('pointerdown', {
         bubbles: true,
         cancelable: true,
@@ -227,11 +255,11 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).toHaveBeenCalled();
   });
 
-  it('does not change editor selection on semantic footnotes heading click', () => {
+  it('does not activate a note session on semantic footnotes heading click', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 
     const headingEl = document.createElement('div');
@@ -252,7 +280,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).toHaveBeenCalled();
   });
 });

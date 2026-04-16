@@ -925,6 +925,13 @@ export class HeaderFooterSessionManager {
           return;
         }
 
+        if (region.kind === 'footer') {
+          const editorContainer = editorHost.querySelector('.super-editor');
+          if (editorContainer instanceof HTMLElement) {
+            editorContainer.style.transform = '';
+          }
+        }
+
         const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
         try {
           editor = await this.#headerFooterManager.ensureEditor(descriptor, {

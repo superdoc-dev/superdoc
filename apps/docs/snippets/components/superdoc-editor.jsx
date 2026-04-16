@@ -17,7 +17,7 @@ export const SuperDocEditor = ({
 
     if (isDev) {
       try {
-        const res = await fetch(`${DEV_DIST_URL}/superdoc.umd.js`, { method: 'HEAD' });
+        const res = await fetch(`${DEV_DIST_URL}/superdoc.global.js`, { method: 'HEAD' });
         if (res.ok) {
           console.info('[SuperDoc Docs] Using local build from', DEV_DIST_URL);
           return DEV_DIST_URL;
@@ -46,13 +46,13 @@ export const SuperDocEditor = ({
   };
 
   const loadSuperDocLibrary = (baseUrl) => {
-    if (window.SuperDocLibrary) return Promise.resolve();
+    if (window.SuperDoc) return Promise.resolve();
 
-    const scriptSrc = `${baseUrl}/superdoc.umd.js`;
+    const scriptSrc = `${baseUrl}/superdoc.global.js`;
     const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
 
     if (existingScript) {
-      if (window.SuperDocLibrary) return Promise.resolve();
+      if (window.SuperDoc) return Promise.resolve();
 
       return new Promise((resolve, reject) => {
         existingScript.addEventListener('load', resolve, { once: true });
@@ -71,11 +71,11 @@ export const SuperDocEditor = ({
 
   const initEditor = () => {
     setTimeout(() => {
-      if (!window.SuperDocLibrary) return;
+      if (!window.SuperDoc) return;
       if (!document.getElementById(containerIdRef.current)) return;
       if (editorRef.current) return;
 
-      editorRef.current = new window.SuperDocLibrary.SuperDoc({
+      editorRef.current = new window.SuperDoc({
         selector: `#${containerIdRef.current}`,
         html,
         rulers: true,

@@ -12,6 +12,8 @@ import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from '../commen
 import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
 
+const readPairReplacements = (editor) => editor?.options?.trackedChanges?.pairReplacements !== false;
+
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
 
@@ -180,8 +182,8 @@ export const TrackChanges = Extension.create({
 
       acceptTrackedChangeById:
         (id) =>
-        ({ state, tr, commands }) => {
-          const toResolve = getChangesByIdToResolve(state, id) || [];
+        ({ editor, state, tr, commands }) => {
+          const toResolve = getChangesByIdToResolve(state, id, readPairReplacements(editor)) || [];
 
           return toResolve
             .map(({ from, to }) => {
@@ -202,8 +204,8 @@ export const TrackChanges = Extension.create({
 
       rejectTrackedChangeById:
         (id) =>
-        ({ state, tr, commands }) => {
-          const toReject = getChangesByIdToResolve(state, id) || [];
+        ({ editor, state, tr, commands }) => {
+          const toReject = getChangesByIdToResolve(state, id, readPairReplacements(editor)) || [];
 
           return toReject
             .map(({ from, to }) => {
@@ -314,9 +316,14 @@ export const TrackChanges = Extension.create({
           const marks = state.doc.resolve(from).marks();
 
           // For replacements (both deletion and insertion), generate a shared ID upfront
-          // so the deletion and insertion marks are linked together
+          // so the deletion and insertion marks are linked together. When the
+          // consumer opts out via modules.trackChanges.pairReplacements: false,
+          // each mark gets its own UUID so they're independent revisions.
+          const pairReplacements = readPairReplacements(editor);
           const isReplacement = from !== to && text;
-          const sharedId = id ?? (isReplacement ? uuidv4() : null);
+          const sharedId = id ?? (isReplacement && pairReplacements ? uuidv4() : null);
+          const deletionId = id ?? sharedId;
+          const insertionId = id ?? sharedId;
 
           let changeId = sharedId;
           let insertPos = to; // Default insert position is after the selection
@@ -331,7 +338,7 @@ export const TrackChanges = Extension.create({
               to,
               user: resolvedUser,
               date,
-              id: sharedId,
+              id: deletionId,
             });
             deletionMark = result.deletionMark;
             deletionNodes = result.nodes || [];
@@ -358,7 +365,7 @@ export const TrackChanges = Extension.create({
               to: insertedTo,
               user: resolvedUser,
               date,
-              id: sharedId,
+              id: insertionId,
             });
 
             if (!changeId) {
@@ -661,12 +668,18 @@ const dispatchTrackedChangeResolution = ({ state, tr, dispatch, editor, touchedC
   return true;
 };
 
-const getChangesByIdToResolve = (state, id) => {
+const getChangesByIdToResolve = (state, id, pairReplacements = true) => {
   const trackedChanges = getTrackChanges(state);
   const changeIndex = trackedChanges.findIndex(({ mark }) => mark.attrs.id === id);
   if (changeIndex === -1) return;
 
   const matchingChange = trackedChanges[changeIndex];
+
+  // In unpaired mode, each mark is its own logical change — no neighbor walk.
+  if (!pairReplacements) {
+    return [matchingChange];
+  }
+
   const matchingId = matchingChange.mark.attrs.id;
 
   const linkedBefore = [];

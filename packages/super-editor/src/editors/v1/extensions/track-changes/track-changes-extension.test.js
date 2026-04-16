@@ -1896,6 +1896,39 @@ describe('TrackChanges extension commands', () => {
       expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
     });
 
+    it('gives each replacement mark its own ID when pairReplacements is false', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: {
+            user: { name: 'Default', email: 'default@example.com' },
+            trackedChanges: { pairReplacements: false },
+          },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark).toBeDefined();
+      expect(meta.deletionMark).toBeDefined();
+      expect(meta.insertedMark.attrs.id).not.toBe(meta.deletionMark.attrs.id);
+    });
+
     it('attaches comment to replacement using shared ID', () => {
       const doc = createDoc('Hello world');
       const state = createState(doc);

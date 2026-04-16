@@ -8,13 +8,18 @@ describe('cdn-entry', () => {
     expect(SuperDoc.name).toBe('SuperDoc');
   });
 
-  it('attaches every named export as a static property on SuperDoc', () => {
-    const missing = [];
+  it('attaches every named export as a static property on SuperDoc with identity preserved', () => {
+    const mismatched = [];
     for (const key of Object.keys(namespace)) {
       if (key === 'SuperDoc' || key === 'default') continue;
-      if (SuperDoc[key] === undefined) missing.push(key);
+      if (SuperDoc[key] !== namespace[key]) mismatched.push(key);
     }
-    expect(missing).toEqual([]);
+    expect(mismatched).toEqual([]);
+  });
+
+  it('does not leak wrapper aliases like SuperDoc.SuperDoc or SuperDoc.default', () => {
+    expect(SuperDoc).not.toHaveProperty('SuperDoc');
+    expect(SuperDoc).not.toHaveProperty('default');
   });
 
   it('preserves Function intrinsics (name, prototype) — no clobbering', () => {

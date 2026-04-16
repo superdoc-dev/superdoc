@@ -98,7 +98,7 @@
     "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
-    "build:cdn": "vite build --config vite.config.cdn.js && node ./scripts/emit-umd-alias.cjs",
+    "build:cdn": "vite build --config vite.config.cdn.js",
     "watch:cdn": "vite build --watch --config vite.config.cdn.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",

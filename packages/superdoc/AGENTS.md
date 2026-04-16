@@ -51,7 +51,7 @@ Drop SuperDoc into any HTML page via `<script>` tag. No bundler, no `npm install
 </script>
 ```
 
-`window.SuperDoc` is the class directly. Named exports are attached as static properties (`SuperDoc.createTheme`, `SuperDoc.DOCX`, etc.). Collaboration (Yjs) and PDF viewing peers are **not** bundled — use the ESM path below if you need them.
+`window.SuperDoc` is the class directly. Named exports are attached as static properties (`SuperDoc.createTheme`, `SuperDoc.DOCX`, etc.). Collaboration (Yjs) is included. PDF viewing (`pdfjs-dist`) is not — use the ESM path below if you need it.
 
 ### ES modules + import map
 

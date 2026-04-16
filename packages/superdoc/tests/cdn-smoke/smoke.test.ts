@@ -23,17 +23,3 @@ test('IIFE bundle (superdoc.global.js) exposes SuperDoc class on window', async 
 
   expect(errors).toEqual([]);
 });
-
-test('deprecated superdoc.umd.js alias still works and warns', async ({ page }) => {
-  const warnings: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'warning') warnings.push(msg.text());
-  });
-
-  await page.goto('/tests/cdn-smoke/index.umd-alias.html');
-
-  const ready = await page.evaluate(() => (window as any).__SUPERDOC_READY__ === true);
-  expect(ready).toBe(true);
-
-  expect(warnings.some((w) => w.includes('superdoc.umd.js is deprecated'))).toBe(true);
-});

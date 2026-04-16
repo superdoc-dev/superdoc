@@ -1,7 +1,40 @@
 ---
-title: Font Support
+title: Font support
+sidebarTitle: Fonts
 ---
 
-Loading toolbar <a href="/modules/toolbar#font-configuration">font config</a>...
+A `.docx` file carries font *names*, not font data. Word renders documents correctly on desktop because Office bundles its own fonts — Cambria, Calibri, Aptos — with the application. Browsers don't have that library. If your page doesn't load a font, `font-family: Cambria` falls back to the browser's CSS generic (usually Arial or Helvetica).
 
-{(() => { window.location.href = '/modules/toolbar#font-configuration'; })()}
+SuperDoc doesn't load any fonts automatically. You decide what's available by loading web fonts on your host page and registering them in the toolbar.
+
+## Add a font
+
+Any font loaded on your host page is available to the editor. Register it in the toolbar so users can select it:
+
+```html
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap" />
+```
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  toolbar: '#toolbar',
+  modules: {
+    toolbar: {
+      fonts: [{ label: 'Inter', key: 'Inter, sans-serif' }]
+    }
+  }
+});
+```
+
+## Microsoft Office fonts
+
+Most `.docx` files use Cambria, Calibri, or Aptos. Those fonts ship with Word on desktop and aren't available to browsers. Google hosts free metric-compatible substitutes you can alias:
+
+| Office font | Free substitute |
+|---|---|
+| Calibri | [Carlito](https://fonts.google.com/specimen/Carlito) (metric-identical) |
+| Cambria | [Tinos](https://fonts.google.com/specimen/Tinos) or [Gelasio](https://fonts.google.com/specimen/Gelasio) |
+
+See [Font configuration](/modules/toolbar/built-in#font-configuration) for the `@font-face` alias pattern that maps the document's original font names to these substitutes.

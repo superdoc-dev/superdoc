@@ -1501,6 +1501,55 @@ describe('comments-store', () => {
     expect(store.commentsList[0].createdTime).toBe(now);
   });
 
+  it('loads imported comments without creatorName metadata', () => {
+    store.init({
+      readOnly: true,
+      allowResolve: false,
+      comments: [],
+    });
+
+    expect(() =>
+      store.processLoadedDocxComments({
+        superdoc: __mockSuperdoc,
+        editor: null,
+        comments: [
+          {
+            commentId: 'c-missing-author',
+            creatorEmail: 'imported@example.com',
+            createdTime: 123,
+            elements: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'run',
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Imported comment text',
+                        attrs: {
+                          type: 'element',
+                          attributes: {},
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        documentId: 'doc-1',
+      }),
+    ).not.toThrow();
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0].commentId).toBe('c-missing-author');
+    expect(store.commentsList[0].importedAuthor).toEqual({
+      email: 'imported@example.com',
+    });
+  });
+
   describe('clearEditorCommentPositions', () => {
     it('clears all editor comment positions', () => {
       // Setup editorCommentPositions with data

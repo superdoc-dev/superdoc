@@ -1830,6 +1830,57 @@ describe('DomPainter', () => {
     expect((img?.parentElement as HTMLElement).style.left).toBe('20px');
   });
 
+  it('preserves clip-path zoom while applying rotation on anchored image fragments', () => {
+    const clipPath = 'inset(10% 20% 30% 40%)';
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-block',
+      src: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/',
+      width: 150,
+      height: 100,
+      rotation: 15,
+      attrs: {
+        clipPath,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 150,
+      height: 100,
+    };
+    const imageLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'image',
+              blockId: 'img-block',
+              x: 20,
+              y: 30,
+              width: 150,
+              height: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+    painter.paint(imageLayout, mount);
+
+    const fragmentEl = mount.querySelector('.superdoc-image-fragment') as HTMLElement | null;
+    const img = fragmentEl?.querySelector('img') as HTMLElement | null;
+    expect(fragmentEl).toBeTruthy();
+    expect(img).toBeTruthy();
+    expect(fragmentEl?.style.overflow).toBe('hidden');
+    expect(fragmentEl?.style.transform).toContain('rotate(15deg)');
+    expect(img?.style.clipPath).toBe(clipPath);
+    expect(img?.style.transformOrigin).toBe('0 0');
+    expect(img?.style.transform).toMatch(/translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/);
+  });
+
   it('annotates fragments and runs with SDT metadata', () => {
     const painter = createTestPainter({ blocks: [sdtBlock], measures: [sdtMeasure] });
     painter.paint(sdtLayout, mount);
@@ -3527,6 +3578,136 @@ describe('DomPainter', () => {
     expect(foundBehindDoc).toBe(true);
   });
 
+  it('renders header WordArt watermarks behind page content even when behindDoc is false in OOXML', () => {
+    const watermarkBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-wordart-watermark',
+      drawingKind: 'vectorShape',
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+      textAlign: 'center',
+      textContent: {
+        parts: [{ text: 'AUTE', formatting: { fontFamily: 'Arial', fontSize: 24, color: 'C0C0C0' } }],
+      },
+      attrs: { isWordArt: true, isTextBox: true },
+    };
+    const watermarkMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 200,
+      height: 60,
+      scale: 1,
+      naturalWidth: 200,
+      naturalHeight: 60,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+    };
+    const watermarkFragment = {
+      kind: 'drawing' as const,
+      blockId: 'header-wordart-watermark',
+      drawingKind: 'vectorShape' as const,
+      x: 40,
+      y: 180,
+      width: 240,
+      height: 120,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      scale: 1,
+      isAnchored: true,
+      behindDoc: false,
+      zIndex: 251658241,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, watermarkBlock],
+      measures: [measure, watermarkMeasure],
+      headerProvider: () => ({
+        fragments: [watermarkFragment],
+        height: 40,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement | null;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    const behindDocWatermark = pageEl?.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-wordart-watermark"]',
+    ) as HTMLElement | null;
+    const watermarkInHeader = headerEl?.querySelector('[data-block-id="header-wordart-watermark"]');
+    const watermarkText = behindDocWatermark?.querySelector('.superdoc-wordart-text text') as SVGTextElement | null;
+
+    expect(behindDocWatermark).toBeTruthy();
+    expect(watermarkInHeader).toBeNull();
+    expect(behindDocWatermark?.style.zIndex).toBe('0');
+    expect(watermarkText).toBeTruthy();
+    expect(watermarkText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
+  });
+
+  it('keeps non-WordArt page-relative header media in the header container', () => {
+    const headerImageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-image',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
+    const headerImageMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const headerFragment = {
+      kind: 'image' as const,
+      blockId: 'header-image',
+      x: 0,
+      y: 40,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: false,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, headerImageBlock],
+      measures: [measure, headerImageMeasure],
+      headerProvider: () => ({
+        fragments: [headerFragment],
+        height: 100,
+        offset: 60,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
+    const behindDocImage = pageEl.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-image"]',
+    ) as HTMLElement | null;
+    const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
+
+    expect(behindDocImage).toBeNull();
+    expect(imageInHeader).toBeTruthy();
+  });
+
   it('cleans up behindDoc fragments on re-render (no accumulation)', () => {
     // This test verifies that behindDoc fragments don't accumulate across re-renders.
     // Since they're inserted directly on the page (not in header container), they must
@@ -4837,6 +5018,73 @@ describe('DomPainter', () => {
 
     expect(anchoredDrawingEl.style.zIndex).toBe('7');
     expect(inlineDrawingEl.style.zIndex).toBe('');
+  });
+
+  it('applies vector shape transforms to the shared drawing wrapper so text overlays rotate with the shape', () => {
+    const vectorShapeBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-with-text',
+      drawingKind: 'vectorShape',
+      geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textContent: {
+        parts: [
+          {
+            text: 'AUTE',
+            fontFamily: 'Arial',
+            fontSize: 32,
+            color: '#c0c0c0',
+          },
+        ],
+      },
+      textAlign: 'center',
+    };
+
+    const vectorShapeMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 100,
+      height: 50,
+      scale: 1,
+      naturalWidth: 100,
+      naturalHeight: 50,
+      geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+    };
+
+    const vectorShapeLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'drawing',
+              drawingKind: 'vectorShape',
+              blockId: 'drawing-with-text',
+              x: 30,
+              y: 40,
+              width: 100,
+              height: 50,
+              geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+              scale: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [vectorShapeBlock], measures: [vectorShapeMeasure] });
+    painter.paint(vectorShapeLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
+    const svgEl = shapeEl?.querySelector('svg') as HTMLElement | null;
+
+    expect(shapeEl).toBeTruthy();
+    expect(drawingInner).toBeTruthy();
+    expect(drawingInner?.style.transform).toContain('rotate(320deg)');
+    expect(shapeEl?.textContent).toContain('AUTE');
+    expect(svgEl?.style.transform).toBe('');
   });
 
   describe('resolved paragraph rendering', () => {

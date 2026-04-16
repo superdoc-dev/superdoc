@@ -5,11 +5,12 @@ Zero build tools. A single HTML file plus the SuperDoc global bundle.
 ## Run locally
 
 ```bash
-pnpm prepare
+pnpm --filter superdoc build  # one-time, builds the CDN bundle
+pnpm setup                    # copies the bundle + sample DOCX in
 npx serve .
 ```
 
-`pnpm prepare` copies the built `superdoc.min.js`, `style.css`, and a sample `test_file.docx` into this directory so the example is self-contained.
+`pnpm setup` copies the built `superdoc.min.js`, `style.css`, and a sample `test_file.docx` into this directory so the example is self-contained.
 
 ## Use from the public CDN
 

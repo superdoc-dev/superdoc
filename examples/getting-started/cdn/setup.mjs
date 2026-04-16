@@ -21,7 +21,7 @@ const assets = [
 
 const missing = assets.filter(([src]) => !existsSync(src));
 if (missing.length) {
-  console.error('[cdn-example/prepare] Build the SuperDoc bundle first:');
+  console.error('[cdn-example/setup] Build the SuperDoc bundle first:');
   console.error('  pnpm --filter superdoc build');
   console.error('Missing files:');
   for (const [src] of missing) console.error('  ' + src);
@@ -30,5 +30,5 @@ if (missing.length) {
 
 for (const [src, dst] of assets) {
   copyFileSync(src, dst);
-  console.log('[cdn-example/prepare] copied', dst.replace(here + '/', ''));
+  console.log('[cdn-example/setup] copied', dst.replace(here + '/', ''));
 }

@@ -52,10 +52,43 @@ import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
+import { getWordChanges } from './word-diff.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
+
+// ---------------------------------------------------------------------------
+// Character-offset → document-position mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a character offset (within the text content of a range) to the
+ * corresponding ProseMirror document position.  Needed because inline
+ * node boundaries (run open/close) create gaps in the position space
+ * that `textBetween` hides.
+ */
+function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+  let count = 0;
+  let foundPos = -1;
+
+  doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+    if (foundPos >= 0) return false;
+    if (!node.isText) return true; // descend into non-text nodes
+
+    const textStart = Math.max(pos, rangeFrom);
+    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+    const textLen = textEnd - textStart;
+
+    if (count + textLen >= charOffset) {
+      foundPos = textStart + (charOffset - count);
+    }
+    count += textLen;
+    return false;
+  });
+
+  return foundPos >= 0 ? foundPos : rangeTo;
+}
 
 // ---------------------------------------------------------------------------
 // Style resolution helpers
@@ -804,8 +837,76 @@ export function executeTextRewrite(
     }
   }
 
-  const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
-  tr.replaceWith(absFrom, absTo, textNode);
+  // 1. Character-level prefix/suffix trim to narrow the replacement range.
+  //    This handles cases where only a few characters differ (e.g., a "(" added
+  //    before a URL, or "YoY" → "year over year") without replacing the full range.
+  const originalText = tr.doc.textBetween(absFrom, absTo, '', '');
+  const origLen = originalText.length;
+  const replLen = replacementText.length;
+
+  let prefix = 0;
+  while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
+    prefix++;
+  }
+  if (prefix === origLen && prefix === replLen) {
+    return { changed: false }; // texts are identical
+  }
+  let suffix = 0;
+  while (
+    suffix < origLen - prefix &&
+    suffix < replLen - prefix &&
+    originalText[origLen - 1 - suffix] === replacementText[replLen - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const trimmedFrom = charOffsetToDocPos(tr.doc, absFrom, absTo, prefix);
+  const trimmedTo = charOffsetToDocPos(tr.doc, absFrom, absTo, origLen - suffix);
+  const trimmedOld = originalText.slice(prefix, origLen - suffix);
+  const trimmedNew = replacementText.slice(prefix, replLen - suffix);
+
+  // 2. Word-level diff on the trimmed range for multi-word granularity.
+  const wordChanges = getWordChanges(trimmedOld, trimmedNew);
+
+  if (wordChanges.length > 1) {
+    // Multiple word-level changes: apply each granularly.
+    const doc = tr.doc;
+    const baseSteps = tr.steps.length;
+    const mapped = wordChanges.map((change) => {
+      if (change.type === 'insert') {
+        return { ...change, docPos: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.insertAt) };
+      }
+      return {
+        ...change,
+        docFrom: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldFrom),
+        docTo: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldTo),
+      };
+    });
+
+    for (let i = 0; i < mapped.length; i++) {
+      const change = mapped[i];
+      const remap = (pos: number) => {
+        for (let s = baseSteps; s < tr.steps.length; s++) {
+          pos = tr.steps[s].getMap().map(pos);
+        }
+        return pos;
+      };
+
+      if (change.type === 'delete') {
+        tr.delete(remap(change.docFrom), remap(change.docTo));
+      } else if (change.type === 'insert') {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.insert(remap(change.docPos), node);
+      } else {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.replaceWith(remap(change.docFrom), remap(change.docTo), node);
+      }
+    }
+  } else {
+    // 0 or 1 word change: replace just the trimmed range.
+    const textNode = editor.state.schema.text(trimmedNew, asProseMirrorMarks(marks));
+    tr.replaceWith(trimmedFrom, trimmedTo, textNode);
+  }
 
   return { changed: replacementText !== target.text };
 }

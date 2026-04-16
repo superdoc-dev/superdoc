@@ -3038,6 +3038,66 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(60, 0);
   });
 
+  it('excludes centered page-relative header overlays from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const centeredOverlay: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-1',
+      drawingKind: 'vectorShape',
+      geometry: { width: 596, height: 531 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 596,
+      height: 531,
+      scale: 1,
+      naturalWidth: 596,
+      naturalHeight: 531,
+      geometry: { width: 596, height: 531, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, centeredOverlay],
+      [paragraphMeasure, overlayMeasure],
+      constraints,
+      'header',
+    );
+    const overlayFragment = layout.pages[0]?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+      | DrawingFragment
+      | undefined;
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(500);
+    expect(overlayFragment).toBeDefined();
+    expect(overlayFragment?.y).toBeGreaterThan(150);
+  });
+
   it('returns minimal height when header contains only behindDoc fragments with extreme offsets', () => {
     const imageBlock1: FlowBlock = {
       kind: 'image',
@@ -3252,6 +3312,77 @@ describe('layoutHeaderFooter', () => {
     // But render bounds should include it
     expect(layout.minY).toBeLessThan(0);
     expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('keeps top-aligned page-relative header anchors in measurement height', () => {
+    const overlayBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-top',
+      drawingKind: 'vectorShape',
+      geometry: { width: 120, height: 60 },
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 40,
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 120,
+      height: 60,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 60,
+      geometry: { width: 120, height: 60, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter([overlayBlock], [overlayMeasure], constraints, 'header');
+
+    expect(layout.height).toBeCloseTo(100);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
+  });
+
+  it('keeps bottom-aligned page-relative footer anchors in measurement height', () => {
+    const footerOverlay: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+        hRelativeFrom: 'page',
+        offsetH: 0,
+      },
+    };
+    const footerOverlayMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    const layout = layoutHeaderFooter([footerOverlay], [footerOverlayMeasure], constraints, 'footer');
+
+    expect(layout.height).toBeCloseTo(72);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
   });
 
   it('post-normalizes page-relative anchors in footer layout', () => {

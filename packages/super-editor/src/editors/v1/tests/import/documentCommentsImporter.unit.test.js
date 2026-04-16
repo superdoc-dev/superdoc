@@ -32,11 +32,14 @@ const buildDocx = ({ comments = [], extended = [], documentRanges = [] } = {}) =
     name: 'w:comment',
     attributes: {
       'w:id': String(comment.id),
-      'w:author': comment.author ?? 'Author Name',
+      'w:author': comment.author ?? (comment.customAuthor == null ? 'Author Name' : undefined),
       'w:email': comment.email,
       'w:initials': comment.initials,
       'w:date': comment.date ?? '2024-01-01T00:00:00Z',
       'custom:internalId': comment.internalId,
+      'custom:author': comment.customAuthor,
+      'custom:email': comment.customEmail,
+      'custom:initials': comment.customInitials,
       'custom:trackedChange': comment.trackedChange,
       'custom:trackedChangeText': comment.trackedChangeText,
       'custom:trackedChangeType': comment.trackedChangeType,
@@ -139,6 +142,26 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.createdTime).toBe(createdTime);
     expect(comment.initials).toBeUndefined();
     expect(comment.isDone).toBe(false);
+  });
+
+  it('falls back to custom comment author metadata when Word attributes are absent', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 14,
+          author: undefined,
+          initials: undefined,
+          customAuthor: 'Author A',
+          customInitials: 'AA',
+          date: '2026-04-14T09:47:00Z',
+        },
+      ],
+    });
+
+    const [comment] = importCommentData({ docx });
+
+    expect(comment.creatorName).toBe('Author A');
+    expect(comment.initials).toBe('AA');
   });
 
   it('falls back to uuid when created date is missing', () => {

@@ -192,6 +192,9 @@ export class EditorOverlayManager {
           // Find the editor container (first child with super-editor class)
           const editorContainer = editorHost.querySelector('.super-editor');
           if (editorContainer instanceof HTMLElement) {
+            // Reset any stale transform from prior footer sessions before
+            // reapplying the top offset for the current region.
+            editorContainer.style.transform = '';
             // Instead of top: 0, position from the calculated offset
             editorContainer.style.top = `${contentOffset}px`;
           }

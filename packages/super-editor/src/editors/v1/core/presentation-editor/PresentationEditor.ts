@@ -74,6 +74,7 @@ import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
+import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { createHeaderFooterEditor } from '../../extensions/pagination/pagination-helpers.js';
@@ -127,6 +128,37 @@ type ThreadAnchorScrollPlan = {
   achievedClientY: number;
   applyScroll: (behavior: ScrollBehavior) => void;
 };
+
+type RenderedNoteTarget = {
+  storyType: 'footnote' | 'endnote';
+  noteId: string;
+};
+
+type NoteLayoutContext = {
+  target: RenderedNoteTarget;
+  blocks: FlowBlock[];
+  measures: Measure[];
+  firstPageIndex: number;
+  hostWidthPx: number;
+};
+
+function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
+  if (typeof blockId !== 'string' || blockId.length === 0) {
+    return null;
+  }
+
+  if (blockId.startsWith('footnote-')) {
+    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('__sd_semantic_footnote-')) {
+    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  return null;
+}
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
 import {
@@ -387,6 +419,8 @@ export class PresentationEditor extends EventEmitter {
   #a11yLastAnnouncedSelectionKey: string | null = null;
   #headerFooterSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #headerFooterEditor: Editor | null = null;
+  #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
+  #storySessionEditor: Editor | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -1110,6 +1144,21 @@ export class PresentationEditor extends EventEmitter {
     return activeHfEditor;
   }
 
+  #getActiveStorySession(): StoryPresentationSession | null {
+    return this.#storySessionManager?.getActiveSession() ?? null;
+  }
+
+  #getActiveNoteStorySession(): StoryPresentationSession | null {
+    const session = this.#getActiveStorySession();
+    if (!session || session.kind !== 'note') {
+      return null;
+    }
+    if (session.locator.storyType !== 'footnote' && session.locator.storyType !== 'endnote') {
+      return null;
+    }
+    return session;
+  }
+
   /**
    * Access the generic story-session manager when the
    * {@link PresentationEditorOptions.useHiddenHostForStoryParts} rollout
@@ -1603,9 +1652,13 @@ export class PresentationEditor extends EventEmitter {
 
     let usedDomRects = false;
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    const activeNoteSession = this.#getActiveNoteStorySession();
     const layoutRectSource = () => {
       if (sessionMode !== 'body') {
         return this.#computeHeaderFooterSelectionRects(start, end);
+      }
+      if (activeNoteSession) {
+        return this.#computeNoteSelectionRects(start, end);
       }
       const domRects = this.#computeSelectionRectsFromDom(start, end);
       if (domRects != null) {
@@ -1631,7 +1684,7 @@ export class PresentationEditor extends EventEmitter {
     let domCaretStart: { pageIndex: number; x: number; y: number } | null = null;
     let domCaretEnd: { pageIndex: number; x: number; y: number } | null = null;
     const pageDelta: Record<number, { dx: number; dy: number }> = {};
-    if (!usedDomRects) {
+    if (!usedDomRects && !activeNoteSession) {
       // Geometry fallback path: apply a small DOM-based delta to reduce drift.
       try {
         domCaretStart = this.#computeDomCaretPageLocal(start);
@@ -2086,6 +2139,34 @@ export class PresentationEditor extends EventEmitter {
       return hit;
     }
 
+    const noteContext = this.#buildActiveNoteLayoutContext();
+    if (noteContext) {
+      const rawHit =
+        resolvePointerPositionHit({
+          layout: this.#layoutState.layout,
+          blocks: noteContext.blocks,
+          measures: noteContext.measures,
+          containerPoint: normalized,
+          domContainer: this.#viewportHost,
+          clientX,
+          clientY,
+          geometryHelper: this.#pageGeometryHelper ?? undefined,
+        }) ?? null;
+      if (!rawHit) {
+        return null;
+      }
+
+      const doc = this.getActiveEditor().state?.doc;
+      if (!doc) {
+        return rawHit;
+      }
+
+      return {
+        ...rawHit,
+        pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)),
+      };
+    }
+
     if (!this.#layoutState.layout) {
       return null;
     }
@@ -2343,6 +2424,36 @@ export class PresentationEditor extends EventEmitter {
         left: coords.x * zoom - scrollLeft + containerRect.left,
         right: coords.x * zoom - scrollLeft + containerRect.left + rect.width * zoom,
         width: rect.width * zoom,
+        height: rect.height * zoom,
+      };
+    }
+
+    if (this.#getActiveNoteStorySession()) {
+      const rects = this.#computeNoteSelectionRects(pos, pos);
+      let rect = rects?.[0] ?? null;
+      if (!rect) {
+        rect = this.#computeNoteCaretRect(pos);
+      }
+      if (!rect) {
+        return null;
+      }
+
+      const zoom = this.#layoutOptions.zoom ?? 1;
+      const containerRect = this.#visibleHost.getBoundingClientRect();
+      const scrollLeft = this.#visibleHost.scrollLeft ?? 0;
+      const scrollTop = this.#visibleHost.scrollTop ?? 0;
+      const pageHeight = this.#getBodyPageHeight();
+      const pageGap = this.#layoutState.layout?.pageGap ?? 0;
+      const pageLocalY = rect.y - rect.pageIndex * (pageHeight + pageGap);
+      const coords = this.#convertPageLocalToOverlayCoords(rect.pageIndex, rect.x, pageLocalY);
+      if (!coords) return null;
+
+      return {
+        top: coords.y * zoom - scrollTop + containerRect.top,
+        bottom: coords.y * zoom - scrollTop + containerRect.top + rect.height * zoom,
+        left: coords.x * zoom - scrollLeft + containerRect.left,
+        right: coords.x * zoom - scrollLeft + containerRect.left + Math.max(1, rect.width) * zoom,
+        width: Math.max(1, rect.width) * zoom,
         height: rect.height * zoom,
       };
     }
@@ -2971,6 +3082,8 @@ export class PresentationEditor extends EventEmitter {
       this.#a11ySelectionAnnounceTimeout = null;
     }
 
+    this.#teardownStorySessionEventBridge();
+
     // Unregister from static registry
     if (this.#registryKey) {
       PresentationEditor.#instances.delete(this.#registryKey);
@@ -3574,6 +3687,7 @@ export class PresentationEditor extends EventEmitter {
       getDocumentMode: () => this.#documentMode,
       getPageElement: (pageIndex: number) => this.#getPageElement(pageIndex),
       isSelectionAwareVirtualizationEnabled: () => this.#isSelectionAwareVirtualizationEnabled(),
+      getActiveStorySession: () => this.#getActiveStorySession(),
     });
 
     // Set callbacks - functions that the manager calls to interact with PresentationEditor
@@ -3609,6 +3723,8 @@ export class PresentationEditor extends EventEmitter {
       finalizeDragSelectionWithDom: (pointer, dragAnchor, dragMode) =>
         this.#finalizeDragSelectionWithDom(pointer, dragAnchor, dragMode),
       hitTestTable: (x: number, y: number) => this.#hitTestTable(x, y),
+      activateRenderedNoteSession: (target, options) => this.#activateRenderedNoteSession(target, options),
+      exitActiveStorySession: () => this.#exitActiveStorySession(),
     });
   }
 
@@ -3928,6 +4044,34 @@ export class PresentationEditor extends EventEmitter {
     this.#headerFooterSession.initialize();
   }
 
+  #teardownStorySessionEventBridge(): void {
+    if (this.#storySessionEditor && this.#storySessionSelectionHandler) {
+      this.#storySessionEditor.off?.('selectionUpdate', this.#storySessionSelectionHandler);
+    }
+    this.#storySessionEditor = null;
+    this.#storySessionSelectionHandler = null;
+  }
+
+  #syncStorySessionEventBridge(session: StoryPresentationSession | null): void {
+    this.#teardownStorySessionEventBridge();
+
+    if (!session || session.kind !== 'note') {
+      this.#scheduleSelectionUpdate({ immediate: true });
+      return;
+    }
+
+    const handler = () => {
+      this.#scheduleSelectionUpdate();
+      this.#scheduleA11ySelectionAnnouncement();
+    };
+
+    session.editor.on?.('selectionUpdate', handler);
+    this.#storySessionEditor = session.editor;
+    this.#storySessionSelectionHandler = handler;
+    this.#scheduleSelectionUpdate({ immediate: true });
+    this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+  }
+
   /**
    * Set up the generic story-session manager.
    *
@@ -3992,6 +4136,7 @@ export class PresentationEditor extends EventEmitter {
         };
       },
       onActiveSessionChanged: () => {
+        this.#syncStorySessionEventBridge(this.#storySessionManager?.getActiveSession() ?? null);
         this.#inputBridge?.notifyTargetChanged();
       },
     });
@@ -5112,6 +5257,10 @@ export class PresentationEditor extends EventEmitter {
       this.#updateHeaderFooterSelection();
       return;
     }
+    if (this.#getActiveNoteStorySession()) {
+      this.#updateNoteSelection();
+      return;
+    }
 
     // Only clear local layer, preserve remote cursor layer
     if (!this.#localSelectionLayer) {
@@ -5716,6 +5865,148 @@ export class PresentationEditor extends EventEmitter {
     this.#pendingDocChange = true;
     this.#scheduleRerender();
 
+    this.#editor.view?.focus();
+  }
+
+  #buildNoteLayoutContext(target: RenderedNoteTarget | null | undefined): NoteLayoutContext | null {
+    const layout = this.#layoutState.layout;
+    if (!target || !layout) {
+      return null;
+    }
+
+    const blocks: FlowBlock[] = [];
+    const measures: Measure[] = [];
+    const noteBlockIds = new Set<string>();
+
+    this.#layoutState.blocks.forEach((block, index) => {
+      const blockId = typeof block?.id === 'string' ? block.id : '';
+      const parsed = parseRenderedNoteTarget(blockId);
+      if (!parsed) {
+        return;
+      }
+      if (parsed.storyType !== target.storyType || parsed.noteId !== target.noteId) {
+        return;
+      }
+      blocks.push(block);
+      measures.push(this.#layoutState.measures[index]);
+      noteBlockIds.add(blockId);
+    });
+
+    if (blocks.length === 0 || measures.length !== blocks.length) {
+      return null;
+    }
+
+    let firstPageIndex = -1;
+    let hostWidthPx = 0;
+
+    layout.pages.forEach((page, pageIndex) => {
+      page.fragments.forEach((fragment) => {
+        if (!noteBlockIds.has(fragment.blockId)) {
+          return;
+        }
+        if (firstPageIndex < 0) {
+          firstPageIndex = pageIndex;
+        }
+        const fragmentWidth = typeof fragment.width === 'number' ? fragment.width : 0;
+        hostWidthPx = Math.max(hostWidthPx, fragmentWidth);
+      });
+    });
+
+    if (firstPageIndex < 0) {
+      firstPageIndex = 0;
+    }
+
+    if (!(hostWidthPx > 0)) {
+      const page = layout.pages[firstPageIndex];
+      const pageWidth = page?.size?.w ?? layout.pageSize.w ?? DEFAULT_PAGE_SIZE.w;
+      const margins = page?.margins ?? this.#layoutOptions.margins ?? DEFAULT_MARGINS;
+      const marginLeft = margins.left ?? DEFAULT_MARGINS.left ?? 0;
+      const marginRight = margins.right ?? DEFAULT_MARGINS.right ?? 0;
+      hostWidthPx = Math.max(1, pageWidth - marginLeft - marginRight);
+    }
+
+    return {
+      target,
+      blocks,
+      measures,
+      firstPageIndex,
+      hostWidthPx: Math.max(1, hostWidthPx),
+    };
+  }
+
+  #buildActiveNoteLayoutContext(): NoteLayoutContext | null {
+    const session = this.#getActiveNoteStorySession();
+    if (!session) {
+      return null;
+    }
+    return this.#buildNoteLayoutContext({
+      storyType: session.locator.storyType,
+      noteId: session.locator.noteId,
+    });
+  }
+
+  #activateRenderedNoteSession(
+    target: RenderedNoteTarget,
+    options: { clientX: number; clientY: number; pageIndex?: number },
+  ): boolean {
+    const storySessionManager = this.#storySessionManager;
+    if (!storySessionManager) {
+      return false;
+    }
+
+    if (target.storyType !== 'footnote' && target.storyType !== 'endnote') {
+      return false;
+    }
+
+    const targetContext = this.#buildNoteLayoutContext(target);
+    const totalPageCount = this.#layoutState.layout?.pages?.length ?? 1;
+    const pageNumber = Math.max(1, (options.pageIndex ?? targetContext?.firstPageIndex ?? 0) + 1);
+
+    const session = storySessionManager.activate(
+      {
+        kind: 'story',
+        storyType: target.storyType,
+        noteId: target.noteId,
+      },
+      {
+        commitPolicy: 'onExit',
+        preferHiddenHost: true,
+        hostWidthPx: targetContext?.hostWidthPx ?? this.#visibleHost.clientWidth ?? 1,
+        editorContext: {
+          currentPageNumber: pageNumber,
+          totalPageCount: Math.max(1, totalPageCount),
+          surfaceKind: target.storyType === 'endnote' ? 'endnote' : 'note',
+        },
+      },
+    );
+
+    const hit = this.hitTest(options.clientX, options.clientY);
+    const doc = session.editor.state?.doc;
+    if (hit && doc) {
+      const clampedPos = Math.max(0, Math.min(hit.pos, doc.content.size));
+      try {
+        const tr = session.editor.state.tr.setSelection(TextSelection.create(doc, clampedPos));
+        session.editor.view?.dispatch(tr);
+      } catch {
+        // Ignore stale pointer hits during activation races.
+      }
+    }
+
+    session.editor.view?.focus();
+    this.#shouldScrollSelectionIntoView = true;
+    this.#scheduleSelectionUpdate({ immediate: true });
+    return true;
+  }
+
+  #exitActiveStorySession(): void {
+    const session = this.#getActiveStorySession();
+    if (!session) {
+      return;
+    }
+
+    this.#storySessionManager?.exit();
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
     this.#editor.view?.focus();
   }
 
@@ -6332,6 +6623,41 @@ export class PresentationEditor extends EventEmitter {
     return this.#headerFooterSession?.computeCaretRect(pos) ?? null;
   }
 
+  #computeNoteSelectionRects(from: number, to: number): LayoutRect[] {
+    const context = this.#buildActiveNoteLayoutContext();
+    const layout = this.#layoutState.layout;
+    if (!context || !layout) {
+      return [];
+    }
+
+    return (
+      selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined) ?? []
+    );
+  }
+
+  #computeNoteCaretRect(pos: number): LayoutRect | null {
+    const context = this.#buildActiveNoteLayoutContext();
+    const layout = this.#layoutState.layout;
+    if (!context || !layout) {
+      return null;
+    }
+
+    const geometry = computeCaretLayoutRectGeometryFromHelper(
+      {
+        layout,
+        blocks: context.blocks,
+        measures: context.measures,
+        painterHost: this.#painterHost,
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+      },
+      pos,
+      true,
+    );
+    return geometry ? { ...geometry, width: 1 } : null;
+  }
+
   #syncTrackedChangesPreferences(): boolean {
     const mode = this.#deriveTrackedChangesMode();
     const enabled = this.#deriveTrackedChangesEnabled();
@@ -6823,6 +7149,21 @@ export class PresentationEditor extends EventEmitter {
     if (session && session.mode !== 'body') {
       return session.pageIndex ?? 0;
     }
+    if (this.#getActiveNoteStorySession()) {
+      const selection = this.getActiveEditor().state?.selection;
+      if (!selection) {
+        return this.#buildActiveNoteLayoutContext()?.firstPageIndex ?? 0;
+      }
+      const rects = this.#computeNoteSelectionRects(selection.from, selection.to);
+      if (rects.length > 0) {
+        return rects[0]?.pageIndex ?? 0;
+      }
+      return (
+        this.#computeNoteCaretRect(selection.from)?.pageIndex ??
+        this.#buildActiveNoteLayoutContext()?.firstPageIndex ??
+        0
+      );
+    }
     const layout = this.#layoutState.layout;
     const selection = this.#editor.state?.selection;
     if (!layout || !selection) {
@@ -7021,6 +7362,76 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
+      }
+    }
+  }
+
+  #updateNoteSelection() {
+    this.#clearSelectedFieldAnnotationClass();
+
+    if (!this.#localSelectionLayer) {
+      return;
+    }
+
+    const activeEditor = this.getActiveEditor();
+    const selection = activeEditor?.state?.selection;
+    if (!selection) {
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
+    const { from, to } = selection;
+
+    if (from === to) {
+      const caretRect = this.#computeNoteCaretRect(from);
+      if (!caretRect) {
+        try {
+          this.#localSelectionLayer.innerHTML = '';
+        } catch {}
+        return;
+      }
+
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+        renderCaretOverlay({
+          localSelectionLayer: this.#localSelectionLayer,
+          caretLayout: {
+            pageIndex: caretRect.pageIndex,
+            x: caretRect.x,
+            y:
+              caretRect.y -
+              caretRect.pageIndex * (this.#getBodyPageHeight() + (this.#layoutState.layout?.pageGap ?? 0)),
+            height: caretRect.height,
+          },
+          convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+        });
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[PresentationEditor] Failed to render note caret:', error);
+        }
+      }
+      return;
+    }
+
+    const rects = this.#computeNoteSelectionRects(from, to);
+    if (!rects.length) {
+      return;
+    }
+
+    try {
+      this.#localSelectionLayer.innerHTML = '';
+      renderSelectionRects({
+        localSelectionLayer: this.#localSelectionLayer,
+        rects,
+        pageHeight: this.#getBodyPageHeight(),
+        pageGap: this.#layoutState.layout?.pageGap ?? 0,
+        convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PresentationEditor] Failed to render note selection rects:', error);
       }
     }
   }

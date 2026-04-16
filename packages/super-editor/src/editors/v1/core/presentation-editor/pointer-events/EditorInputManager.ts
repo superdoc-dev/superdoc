@@ -23,6 +23,7 @@ import type { PositionHit, PageGeometryHelper, TableHitResult } from '@superdoc/
 import type { SelectionDebugHudState } from '../selection/SelectionDebug.js';
 import type { EpochPositionMapper } from '../layout/EpochPositionMapper.js';
 import type { HeaderFooterSessionManager } from '../header-footer/HeaderFooterSessionManager.js';
+import type { StoryPresentationSession } from '../story-session/types.js';
 
 import { getFragmentAtPosition } from '@superdoc/layout-bridge';
 import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
@@ -77,6 +78,29 @@ type CommentThreadHit = {
  */
 function isFootnoteBlockId(blockId: string): boolean {
   return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
+}
+
+type RenderedNoteTarget = {
+  storyType: 'footnote' | 'endnote';
+  noteId: string;
+};
+
+function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
+  if (typeof blockId !== 'string' || blockId.length === 0) {
+    return null;
+  }
+
+  if (blockId.startsWith('footnote-')) {
+    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('__sd_semantic_footnote-')) {
+    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  return null;
 }
 
 function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
@@ -283,6 +307,8 @@ export type EditorInputDependencies = {
   getPageElement: (pageIndex: number) => HTMLElement | null;
   /** Check if selection-aware virtualization is enabled */
   isSelectionAwareVirtualizationEnabled: () => boolean;
+  /** Get the currently active non-body story session, if any */
+  getActiveStorySession?: () => StoryPresentationSession | null;
 };
 
 /**
@@ -356,6 +382,13 @@ export type EditorInputCallbacks = {
   ) => void;
   /** Hit test table at coordinates */
   hitTestTable?: (x: number, y: number) => TableHitResult | null;
+  /** Activate a rendered note session from a visible note block click */
+  activateRenderedNoteSession?: (
+    target: RenderedNoteTarget,
+    options: { clientX: number; clientY: number; pageIndex?: number },
+  ) => boolean;
+  /** Exit the active generic story session */
+  exitActiveStorySession?: () => void;
 };
 
 // =============================================================================
@@ -1071,18 +1104,46 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
-    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
     const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
     const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
-    if (isFootnoteBlockId(clickedBlockId)) {
-      if (!isDraggableAnnotation) event.preventDefault();
-      this.#focusEditor();
-      return;
-    }
+    const clickedNoteTarget = parseRenderedNoteTarget(clickedBlockId);
 
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    const editor = sessionMode === 'body' ? bodyEditor : this.#deps.getActiveEditor();
+    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+    const activeNoteSession = activeStorySession?.kind === 'note' ? activeStorySession : null;
+    const activeNoteTarget =
+      activeNoteSession &&
+      (activeNoteSession.locator.storyType === 'footnote' || activeNoteSession.locator.storyType === 'endnote')
+        ? {
+            storyType: activeNoteSession.locator.storyType,
+            noteId: activeNoteSession.locator.noteId,
+          }
+        : null;
+
+    if (clickedNoteTarget) {
+      const isSameActiveNote =
+        activeNoteTarget?.storyType === clickedNoteTarget.storyType &&
+        activeNoteTarget.noteId === clickedNoteTarget.noteId;
+      if (!isSameActiveNote) {
+        if (!isDraggableAnnotation) event.preventDefault();
+        const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          pageIndex: normalizedPoint.pageIndex,
+        });
+        if (activated) {
+          return;
+        }
+        this.#focusEditor();
+        return;
+      }
+    } else if (activeNoteSession) {
+      this.#callbacks.exitActiveStorySession?.();
+    }
+
+    const isNoteEditing = activeNoteSession != null;
+    const editor = sessionMode === 'body' && !isNoteEditing ? bodyEditor : this.#deps.getActiveEditor();
     if (sessionMode !== 'body') {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
         return;
@@ -1119,15 +1180,21 @@ export class EditorInputManager {
     const doc = editor.state?.doc;
     const epochMapper = this.#deps.getEpochMapper();
     const mapped =
-      rawHit && doc ? epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1) : null;
+      rawHit && doc && !isNoteEditing
+        ? epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1)
+        : null;
 
     if (mapped && !mapped.ok) {
       debugLog('warn', 'pointerdown mapping failed', mapped);
     }
 
     const hit =
-      rawHit && doc && mapped?.ok
-        ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
+      rawHit && doc
+        ? isNoteEditing
+          ? { ...rawHit, pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)), layoutEpoch: rawHit.layoutEpoch }
+          : mapped?.ok
+            ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
+            : null
         : null;
 
     this.#debugLastHit = hit
@@ -1183,9 +1250,19 @@ export class EditorInputManager {
       return;
     }
 
-    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
-    // Keep the current selection unchanged instead of moving caret to document start.
-    if (isFootnoteBlockId(rawHit.blockId)) {
+    // Guard against stale note hits after a session switch or partial rerender.
+    if (
+      isNoteEditing &&
+      activeNoteTarget &&
+      parseRenderedNoteTarget(rawHit.blockId)?.noteId !== activeNoteTarget.noteId
+    ) {
+      this.#callbacks.exitActiveStorySession?.();
+      this.#focusEditor();
+      return;
+    }
+
+    // Disallow entering read-only note content unless it has been activated into a story session.
+    if (isFootnoteBlockId(rawHit.blockId) && !isNoteEditing) {
       this.#focusEditor();
       return;
     }
@@ -1331,6 +1408,10 @@ export class EditorInputManager {
     // Handle header/footer hover
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
+    if (this.#deps.getActiveStorySession?.()?.kind === 'note') {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
     this.#handleHover(normalized);
   }
 
@@ -1433,6 +1514,20 @@ export class EditorInputManager {
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
 
+    const targetBlockId =
+      (target?.closest?.('[data-block-id]') as HTMLElement | null)?.getAttribute?.('data-block-id') ?? '';
+    const clickedNoteTarget = parseRenderedNoteTarget(targetBlockId);
+    if (clickedNoteTarget) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageIndex: normalized.pageIndex,
+      });
+      return;
+    }
+
     const region = this.#callbacks.hitTestHeaderFooterRegion?.(
       normalized.x,
       normalized.y,
@@ -1479,9 +1574,15 @@ export class EditorInputManager {
     if (!this.#deps) return;
 
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
     if (event.key === 'Escape' && sessionMode !== 'body') {
       event.preventDefault();
       this.#callbacks.exitHeaderFooterMode?.();
+      return;
+    }
+    if (event.key === 'Escape' && activeStorySession?.kind === 'note') {
+      event.preventDefault();
+      this.#callbacks.exitActiveStorySession?.();
       return;
     }
 

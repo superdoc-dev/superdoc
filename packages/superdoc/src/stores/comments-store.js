@@ -928,6 +928,22 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
+   * Imported DOCX comments can omit the normalized author string.
+   * Strip the exporter suffix when present and tolerate missing metadata.
+   *
+   * @param {string | null | undefined} creatorName
+   * @returns {string | null}
+   */
+  const normalizeImportedCreatorName = (creatorName) => {
+    if (typeof creatorName !== 'string') {
+      return null;
+    }
+
+    const normalizedName = creatorName.replace(/\s*\(imported\)\s*$/u, '').trim();
+    return normalizedName || null;
+  };
+
+  /**
    * Initialize loaded comments into SuperDoc by mapping the imported
    * comment data to SuperDoc useComment objects.
    *
@@ -952,8 +968,8 @@ export const useCommentsStore = defineStore('comments', () => {
         return;
       }
 
-      const creatorName = comment.creatorName.replace('(imported)', '');
-      const importedName = `${creatorName} (imported)`;
+      const creatorName = normalizeImportedCreatorName(comment.creatorName);
+      const importedName = creatorName ? `${creatorName} (imported)` : null;
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
@@ -966,13 +982,13 @@ export const useCommentsStore = defineStore('comments', () => {
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,
         importedAuthor: {
-          name: importedName,
+          ...(importedName ? { name: importedName } : {}),
           email: comment.creatorEmail,
         },
         commentText: htmlContent,
         resolvedTime: comment.isDone ? Date.now() : null,
         resolvedByEmail: comment.isDone ? comment.creatorEmail : null,
-        resolvedByName: comment.isDone ? importedName : null,
+        resolvedByName: comment.isDone ? importedName || '(Imported)' : null,
         trackedChange: comment.trackedChange || false,
         trackedChangeText: comment.trackedChangeText,
         trackedChangeType: comment.trackedChangeType,

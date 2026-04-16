@@ -287,11 +287,6 @@ vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 
-vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
-  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
-}));
-
 describe('PresentationEditor - Zoom Functionality', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;

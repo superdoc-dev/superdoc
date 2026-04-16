@@ -184,11 +184,6 @@ vi.mock('y-prosemirror', () => ({
   relativePositionToAbsolutePosition: mockRelativePositionToAbsolutePosition,
 }));
 
-vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
-  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
-}));
-
 /**
  * Create a mock Awareness instance for testing collaboration features
  * @returns {Awareness} Mock awareness instance

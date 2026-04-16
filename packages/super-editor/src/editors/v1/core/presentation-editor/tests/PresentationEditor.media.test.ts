@@ -126,11 +126,6 @@ vi.mock('y-prosemirror', () => ({
   relativePositionToAbsolutePosition: vi.fn((relPos) => relPos?.pos ?? null),
 }));
 
-vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
-  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
-}));
-
 describe('SD-1313: toFlowBlocks receives media from storage.image.media', () => {
   let editor: PresentationEditor;
   let container: HTMLElement;

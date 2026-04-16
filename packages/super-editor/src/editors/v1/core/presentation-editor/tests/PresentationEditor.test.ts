@@ -315,11 +315,6 @@ vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
 }));
 
-vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: mockResolveLayout,
-  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
-}));
-
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   createHeaderFooterEditor: mockCreateHeaderFooterEditor,
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,

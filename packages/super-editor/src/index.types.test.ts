@@ -667,10 +667,6 @@ vi.mock('./editors/v1/core/header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 
-vi.mock('@superdoc/layout-resolved', () => ({
-  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
-}));
-
 // ============================================
 // TYPE VERIFICATION TESTS
 // ============================================

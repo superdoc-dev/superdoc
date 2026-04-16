@@ -1,8 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+  <!--
+    For production use, load from jsDelivr and pin a version:
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css">
+      <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+    This demo uses local copies (populated by setup.mjs) so it runs against
+    in-tree builds in CI before a release is published.
+  -->
+  <link rel="stylesheet" href="./style.css">
+  <script src="./superdoc.min.js"></script>
   <link rel="stylesheet" href="./file-upload.css">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

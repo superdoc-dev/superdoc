@@ -206,9 +206,34 @@ jobs:
       - name: Run CLI tests
         run: pnpm run test:cli
 
+  coverage:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install
+
+      - run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
+
+      - run: pnpm --filter superdoc exec vitest run --coverage
+
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: packages/superdoc/coverage/lcov.info
+          flags: superdoc
+
   validate:
     if: always()
-    needs: [build, unit-tests, cli-tests]
+    needs: [build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

@@ -349,6 +349,8 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  #layoutLookupBlocks: FlowBlock[] = [];
+  #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
@@ -3104,6 +3106,8 @@ export class PresentationEditor extends EventEmitter {
 
     // Clear flow block cache to free memory
     this.#flowBlockCache.clear();
+    this.#layoutLookupBlocks = [];
+    this.#layoutLookupMeasures = [];
 
     this.#painterAdapter.reset();
     this.#pageGeometryHelper = null;
@@ -4075,12 +4079,12 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Set up the generic story-session manager.
    *
-   * Only instantiated when {@link PresentationEditorOptions.useHiddenHostForStoryParts}
-   * is `true`. While the flag is off the manager stays `null` and the
-   * legacy visible header/footer overlay path remains active.
+   * Instantiated by default. Passing
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} as `false`
+   * opts out and keeps the legacy visible header/footer overlay path active.
    */
   #setupStorySessionManager() {
-    if (!this.#options.useHiddenHostForStoryParts) return;
+    if (this.#options.useHiddenHostForStoryParts === false) return;
 
     this.#storySessionManager = new StoryPresentationSessionManager({
       resolveRuntime: (locator) => resolveStoryRuntime(this.#editor, locator, { intent: 'write' }),
@@ -4512,6 +4516,8 @@ export class PresentationEditor extends EventEmitter {
       let footerLayouts: HeaderFooterLayoutResult[] | undefined;
       let extraBlocks: FlowBlock[] | undefined;
       let extraMeasures: Measure[] | undefined;
+      let resolveBlocks: FlowBlock[] = blocksForLayout;
+      let resolveMeasures: Measure[] = previousMeasures;
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();
@@ -4551,8 +4557,8 @@ export class PresentationEditor extends EventEmitter {
 
         // Include footnote-injected blocks (separators, footnote paragraphs) so
         // resolveLayout can find them when resolving page fragments.
-        const resolveBlocks = extraBlocks ? [...blocksForLayout, ...extraBlocks] : blocksForLayout;
-        const resolveMeasures = extraMeasures ? [...measures, ...extraMeasures] : measures;
+        resolveBlocks = extraBlocks ? [...blocksForLayout, ...extraBlocks] : blocksForLayout;
+        resolveMeasures = extraMeasures ? [...measures, ...extraMeasures] : measures;
 
         resolvedLayout = resolveLayout({
           layout,
@@ -4581,6 +4587,8 @@ export class PresentationEditor extends EventEmitter {
       }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
       this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
+      this.#layoutLookupBlocks = resolveBlocks;
+      this.#layoutLookupMeasures = resolveMeasures;
 
       // Build blockId → pageNumber map for TOC page-number resolution.
       // Stored on editor.storage so the document-api adapter layer can read it
@@ -5878,7 +5886,7 @@ export class PresentationEditor extends EventEmitter {
     const measures: Measure[] = [];
     const noteBlockIds = new Set<string>();
 
-    this.#layoutState.blocks.forEach((block, index) => {
+    this.#layoutLookupBlocks.forEach((block, index) => {
       const blockId = typeof block?.id === 'string' ? block.id : '';
       const parsed = parseRenderedNoteTarget(blockId);
       if (!parsed) {
@@ -5888,7 +5896,7 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
       blocks.push(block);
-      measures.push(this.#layoutState.measures[index]);
+      measures.push(this.#layoutLookupMeasures[index]);
       noteBlockIds.add(blockId);
     });
 

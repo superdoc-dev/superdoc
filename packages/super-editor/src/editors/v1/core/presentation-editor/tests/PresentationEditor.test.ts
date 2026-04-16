@@ -974,6 +974,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       // Verify by checking that Editor was called with documentMode: 'editing'
@@ -999,6 +1000,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1015,6 +1017,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1030,6 +1033,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1050,6 +1054,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       // Call with invalid mode should throw
@@ -1125,6 +1130,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1139,6 +1145,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1158,6 +1165,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const result = editor.normalizeClientPoint(120, 80);
@@ -1168,6 +1176,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1182,6 +1191,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1200,6 +1210,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -1222,6 +1233,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
@@ -2172,6 +2184,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
@@ -2230,6 +2243,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
@@ -2298,6 +2312,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
@@ -2356,6 +2371,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
@@ -2446,6 +2462,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
@@ -2482,6 +2499,7 @@ describe('PresentationEditor', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
+        useHiddenHostForStoryParts: false,
       });
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());

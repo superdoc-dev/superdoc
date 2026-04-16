@@ -169,17 +169,21 @@ export function createStoryEditor(
   // Store parent editor reference as a non-enumerable property to avoid
   // circular reference issues during serialization while still allowing
   // access when needed.
-  Object.defineProperty(storyEditor.options, 'parentEditor', {
-    enumerable: false,
-    configurable: true,
-    get() {
-      return parentEditor;
-    },
-  });
+  if (storyEditor.options && typeof storyEditor.options === 'object') {
+    Object.defineProperty(storyEditor.options, 'parentEditor', {
+      enumerable: false,
+      configurable: true,
+      get() {
+        return parentEditor;
+      },
+    });
+  }
 
   // Start non-editable; the caller (e.g. PresentationEditor) will enable
   // editing when entering edit mode.
-  storyEditor.setEditable(false, false);
+  if (typeof storyEditor.setEditable === 'function') {
+    storyEditor.setEditable(false, false);
+  }
 
   return storyEditor;
 }

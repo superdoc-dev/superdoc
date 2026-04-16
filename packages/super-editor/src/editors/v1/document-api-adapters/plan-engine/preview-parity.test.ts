@@ -116,6 +116,7 @@ function makeEditor(text = 'Hello'): {
       textContent: text,
       descendants: vi.fn(),
       textBetween: vi.fn(() => text),
+      nodesBetween: vi.fn(),
     },
   };
   tr.replaceWith.mockReturnValue(tr);

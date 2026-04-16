@@ -97,6 +97,8 @@ function makeFreshEditor(): { editor: Editor; dispatch: ReturnType<typeof vi.fn>
     doc: {
       resolve: () => ({ marks: () => [] }),
       textContent: 'Hello world',
+      textBetween: vi.fn(() => 'Hello world'),
+      nodesBetween: vi.fn(),
     },
   };
   tr.replaceWith.mockReturnValue(tr);

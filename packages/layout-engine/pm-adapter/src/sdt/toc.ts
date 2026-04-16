@@ -151,22 +151,6 @@ export function processTocChildren(
         context,
         outputArrays,
       );
-    } else if (child.type === 'table') {
-      // Table child (e.g. a TOC rendered as a plain table) - convert and emit as-is
-      const tableBlock = context.converters.tableNodeToBlock(child, {
-        nextBlockId: context.nextBlockId,
-        positions: context.positions,
-        trackedChangesConfig: context.trackedChangesConfig,
-        bookmarks: context.bookmarks,
-        hyperlinkConfig: context.hyperlinkConfig,
-        converterContext: context.converterContext,
-        converters: context.converters,
-        enableComments: context.enableComments,
-      });
-      if (tableBlock) {
-        blocks.push(tableBlock);
-        recordBlockKind?.(tableBlock.kind);
-      }
     }
   });
 }

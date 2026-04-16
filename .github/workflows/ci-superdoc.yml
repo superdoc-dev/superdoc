@@ -223,7 +223,7 @@ jobs:
 
       - run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
 
-      - run: pnpm --filter superdoc exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=lcov
+      - run: pnpm --filter superdoc exec vitest run --coverage
 
       - uses: codecov/codecov-action@v5
         with:

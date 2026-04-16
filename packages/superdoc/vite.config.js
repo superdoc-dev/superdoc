@@ -167,6 +167,21 @@ export default defineConfig(({ mode, command }) => {
         '**/*.spec.js',
         'tests/umd-smoke/**',
       ],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text-summary', 'lcov'],
+        include: ['src/**'],
+        exclude: [
+          'src/dev/**',
+          'src/index.js',
+          'src/main.js',
+          'src/types.ts',
+          'src/super-editor.js',
+          'src/headless-toolbar.js',
+          'src/headless-toolbar-react.js',
+          'src/headless-toolbar-vue.js',
+        ],
+      },
     },
     build: {
       target: 'es2022',

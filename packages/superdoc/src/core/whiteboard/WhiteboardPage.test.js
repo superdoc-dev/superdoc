@@ -659,14 +659,21 @@ describe('WhiteboardPage', () => {
     });
 
     it('ignores key presses from input/textarea target', () => {
-      const page = makePage();
+      const onChange = vi.fn();
+      const page = makePage({ onChange });
+      page.setSize({ width: 200, height: 300 });
+      page.applyData({
+        text: [{ id: 't1', xN: 0.1, yN: 0.2, content: 'hi', fontSizeN: 0.05 }],
+      });
       mountWithSize(page);
       const target = document.createElement('input');
       document.body.appendChild(target);
       const e = new KeyboardEvent('keydown', { key: 'Delete' });
       Object.defineProperty(e, 'target', { value: target });
       window.dispatchEvent(e);
-      expect(true).toBe(true); // no throw
+      // The text item was NOT deleted because the keydown came from an input element
+      expect(page.text.find((t) => t.id === 't1')).toBeDefined();
+      expect(onChange).not.toHaveBeenCalled();
       target.remove();
     });
   });

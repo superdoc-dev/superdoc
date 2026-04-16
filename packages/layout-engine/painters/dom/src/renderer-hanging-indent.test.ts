@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, Line } from '@superdoc/contracts';
 
 describe('DomPainter hanging indent with tabs', () => {
@@ -165,7 +165,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(13, true); // true = has explicit positioning
       const layout = createLayout(blockId, 13);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -187,7 +187,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(13, true);
       const layout = createLayout(blockId, 13);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -209,7 +209,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -231,7 +231,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(17, false); // false = no explicit positioning
       const layout = createLayout(blockId, 17);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -253,7 +253,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(12, false);
       const layout = createLayout(blockId, 12);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -274,7 +274,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true); // Has tabs
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -296,7 +296,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -342,7 +342,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lines = container.querySelectorAll('.superdoc-line');
@@ -368,7 +368,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(13, true);
       const layout = createLayout(blockId, 13, true); // continuesFromPrev = true
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -391,7 +391,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -413,7 +413,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -432,7 +432,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(13, true);
       const layout = createLayout(blockId, 13);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -475,7 +475,7 @@ describe('DomPainter hanging indent with tabs', () => {
 
       const layout = createLayout(blockId, 14);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -495,7 +495,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -516,7 +516,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -599,7 +599,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -683,7 +683,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -768,7 +768,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -857,7 +857,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -944,7 +944,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -972,7 +972,7 @@ describe('DomPainter hanging indent with tabs', () => {
       const measure = createMeasure(8, true);
       const layout = createLayout(blockId, 8);
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1057,7 +1057,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1142,7 +1142,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1227,7 +1227,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1314,7 +1314,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1402,7 +1402,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1488,7 +1488,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -1565,7 +1565,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       // Verify segments are rendered with correct positioning
@@ -1645,7 +1645,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       // Verify segments are rendered with correct positioning
@@ -1743,7 +1743,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       // Get the second line's segments
@@ -1823,7 +1823,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       // Verify segments are rendered with correct positioning
@@ -1901,7 +1901,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       // With all zero indents, indentOffset = 0
@@ -1965,7 +1965,7 @@ describe('DomPainter hanging indent with tabs', () => {
       };
 
       const layout = createLayout(blockId, 13);
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -2011,7 +2011,7 @@ describe('DomPainter hanging indent with tabs', () => {
       };
 
       const layout = createLayout(blockId, 13);
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -2096,7 +2096,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lines = container.querySelectorAll('.superdoc-line');
@@ -2141,7 +2141,7 @@ describe('DomPainter hanging indent with tabs', () => {
       };
 
       const layout = createLayout(blockId, 17);
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -2225,7 +2225,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lines = container.querySelectorAll('.superdoc-line');
@@ -2276,7 +2276,7 @@ describe('DomPainter hanging indent with tabs', () => {
       };
 
       const layout = createLayout(blockId, 13);
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -2323,7 +2323,7 @@ describe('DomPainter hanging indent with tabs', () => {
       };
 
       const layout = createLayout(blockId, 13);
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
 
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
@@ -2427,7 +2427,7 @@ describe('DomPainter hanging indent with tabs', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      const painter = createTestPainter({ blocks: [block], measures: [measure], container });
       painter.paint(layout, container);
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
       expect(lineEl).toBeTruthy();

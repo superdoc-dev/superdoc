@@ -2479,6 +2479,9 @@ importers:
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../layout-engine
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../layout-resolved
       '@superdoc/measuring-dom':
         specifier: workspace:*
         version: link:../measuring/dom

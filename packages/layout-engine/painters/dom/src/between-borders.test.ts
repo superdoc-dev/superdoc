@@ -22,7 +22,7 @@ const betweenOff: BetweenBorderInfo = {
   suppressBottomBorder: false,
   gapBelow: 0,
 };
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type {
   ParagraphBorders,
   ParagraphBorder,
@@ -1068,7 +1068,7 @@ describe('DomPainter between-border incremental update', () => {
     const b1: FlowBlock = { kind: 'paragraph', id: 'b1', runs: [] };
     const b2: FlowBlock = { kind: 'paragraph', id: 'b2', runs: [] };
 
-    const painter = createDomPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
+    const painter = createTestPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
     painter.paint(layout, mount);
 
     const page = mount.querySelector('[data-page-number="1"]') as HTMLElement;
@@ -1116,7 +1116,7 @@ describe('DomPainter between-border incremental update', () => {
       attrs: { borders: MATCHING_BORDERS },
     };
 
-    const painter = createDomPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
+    const painter = createTestPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
     painter.paint(layout, mount);
 
     const page = mount.querySelector('[data-page-number="1"]') as HTMLElement;

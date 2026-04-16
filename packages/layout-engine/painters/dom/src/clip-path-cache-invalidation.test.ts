@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 
 const DATA_URL =
@@ -72,7 +72,7 @@ describe('DomPainter clipPath cache invalidation', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+    const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
     painter.paint(imageLayout, mount);
 
     const wrapperBefore = mount.querySelector('.superdoc-inline-image-clip-wrapper') as HTMLElement;
@@ -141,7 +141,7 @@ describe('DomPainter clipPath cache invalidation', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+    const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
     painter.paint(imageLayout, mount);
 
     const fragmentBefore = mount.querySelector('.superdoc-image-fragment') as HTMLElement;
@@ -216,7 +216,7 @@ describe('DomPainter clipPath cache invalidation', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [drawingBlock], measures: [drawingMeasure] });
+    const painter = createTestPainter({ blocks: [drawingBlock], measures: [drawingMeasure] });
     painter.paint(drawingLayout, mount);
 
     const fragmentBefore = mount.querySelector('.superdoc-drawing-fragment') as HTMLElement;

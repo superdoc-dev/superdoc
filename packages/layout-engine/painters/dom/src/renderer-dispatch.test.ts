@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import { DomPainter } from './renderer.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 
@@ -331,7 +331,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderParagraphFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = paragraphFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('para');
@@ -341,7 +341,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderListItemFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = listItemFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('list-item');
@@ -351,7 +351,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderImageFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = imageFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('image');
@@ -361,7 +361,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderDrawingFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = drawingFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('drawing');
@@ -371,7 +371,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderDrawingFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = chartDrawingFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].drawingKind).toBe('chart');
@@ -381,7 +381,7 @@ describe('renderFragment dispatch', () => {
     const dummyDiv = document.createElement('div');
     const spy = vi.spyOn(DomPainter.prototype as any, 'renderTableFragment').mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = tableFixtures();
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('table');
@@ -406,7 +406,7 @@ describe('renderFragment dispatch', () => {
         },
       ],
     };
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     expect(() => painter.paint(layout, container)).toThrow('unsupported fragment kind');
   });
 });

@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, ParagraphMeasure, Line, Run } from '@superdoc/contracts';
 import { normalizeLines, type NormalizedLine } from './test-utils/normalize-line.js';
 
@@ -187,7 +187,7 @@ function tableCellFixtures(opts: { text?: string; runs?: Run[]; attrs?: Record<s
 
 function renderAndNormalize(fixtures: { blocks: FlowBlock[]; measures: Measure[]; layout: Layout }): NormalizedLine[] {
   const container = document.createElement('div');
-  const painter = createDomPainter({ blocks: fixtures.blocks, measures: fixtures.measures });
+  const painter = createTestPainter({ blocks: fixtures.blocks, measures: fixtures.measures });
   painter.paint(fixtures.layout, container);
   return normalizeLines(container);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { DrawingGeometry, FlowBlock, Layout, Measure, SolidFillWithAlpha } from '@superdoc/contracts';
 
 type DrawingFlowBlock = Extract<FlowBlock, { kind: 'drawing' }>;
@@ -79,7 +79,7 @@ describe('DomPainter shape regressions', () => {
     };
 
     const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, mount);
 
     const renderedPath = mount.querySelector(`.superdoc-vector-shape svg path[d="${customPath}"]`);
@@ -103,7 +103,7 @@ describe('DomPainter shape regressions', () => {
     };
 
     const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, mount);
 
     const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
@@ -146,7 +146,7 @@ describe('DomPainter shape regressions', () => {
     };
 
     const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
-    const painter = createDomPainter({ blocks, measures });
+    const painter = createTestPainter({ blocks, measures });
     painter.paint(layout, mount);
 
     const textOverlay = mount.querySelector(

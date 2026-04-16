@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 
 /**
@@ -80,7 +80,7 @@ describe('DomPainter - Link Rendering', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [linkBlock], measures: [measure] });
+    const painter = createTestPainter({ blocks: [linkBlock], measures: [measure] });
     painter.paint(layout, container);
 
     const linkElement = container.querySelector('a.superdoc-link') as HTMLAnchorElement;
@@ -154,7 +154,7 @@ describe('DomPainter - Link Rendering', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [linkBlock], measures: [measure] });
+    const painter = createTestPainter({ blocks: [linkBlock], measures: [measure] });
     painter.paint(layout, container);
 
     const linkElement = container.querySelector('a.superdoc-link') as HTMLAnchorElement;
@@ -222,7 +222,7 @@ describe('DomPainter - Link Rendering', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [linkBlock], measures: [measure] });
+    const painter = createTestPainter({ blocks: [linkBlock], measures: [measure] });
     painter.paint(layout, container);
 
     const linkElement = container.querySelector('a.superdoc-link') as HTMLAnchorElement;
@@ -307,7 +307,7 @@ describe('DomPainter - Link Rendering', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [linkBlock], measures: [measure] });
+    const painter = createTestPainter({ blocks: [linkBlock], measures: [measure] });
     painter.paint(layout, container);
 
     const linkElements = container.querySelectorAll('a.superdoc-link');
@@ -384,7 +384,7 @@ describe('DomPainter - Link Rendering', () => {
       ],
     };
 
-    const painter = createDomPainter({ blocks: [mixedBlock], measures: [measure] });
+    const painter = createTestPainter({ blocks: [mixedBlock], measures: [measure] });
     painter.paint(layout, container);
 
     // Should have one link and spans for regular text

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, DrawingGeometry } from '@superdoc/contracts';
 
 describe('DomPainter vector shape geometry', () => {
@@ -89,7 +89,7 @@ describe('DomPainter vector shape geometry', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [drawingBlock],
         measures: [drawingMeasure],
       });
@@ -171,7 +171,7 @@ describe('DomPainter vector shape geometry', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [drawingBlock],
         measures: [drawingMeasure],
       });
@@ -243,7 +243,7 @@ describe('DomPainter vector shape geometry', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [drawingBlock],
         measures: [drawingMeasure],
       });

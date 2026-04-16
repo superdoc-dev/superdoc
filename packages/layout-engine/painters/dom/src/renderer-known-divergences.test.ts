@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, Line } from '@superdoc/contracts';
 import { normalizeLines } from './test-utils/normalize-line.js';
 
@@ -235,7 +235,7 @@ function tableCellFixtures(alignment: string) {
 
 function renderAndNormalize(fixtures: { blocks: FlowBlock[]; measures: Measure[]; layout: Layout }) {
   const container = document.createElement('div');
-  const painter = createDomPainter({ blocks: fixtures.blocks, measures: fixtures.measures });
+  const painter = createTestPainter({ blocks: fixtures.blocks, measures: fixtures.measures });
   painter.paint(fixtures.layout, container);
   return normalizeLines(container);
 }
@@ -253,7 +253,7 @@ describe('known divergences (frozen — delete when resolved)', () => {
     it('list-item fragment forces textAlign to left even when paragraph alignment is justify', () => {
       const container = document.createElement('div');
       const fix = listItemFixtures({ alignment: 'justify' });
-      const painter = createDomPainter({ blocks: fix.blocks, measures: fix.measures });
+      const painter = createTestPainter({ blocks: fix.blocks, measures: fix.measures });
       painter.paint(fix.layout, container);
 
       // The list-item content div overrides textAlign to 'left'
@@ -265,7 +265,7 @@ describe('known divergences (frozen — delete when resolved)', () => {
     it('list-item fragment forces textAlign to left even when paragraph alignment is center', () => {
       const container = document.createElement('div');
       const fix = listItemFixtures({ alignment: 'center' });
-      const painter = createDomPainter({ blocks: fix.blocks, measures: fix.measures });
+      const painter = createTestPainter({ blocks: fix.blocks, measures: fix.measures });
       painter.paint(fix.layout, container);
 
       const contentEl = container.querySelector('.superdoc-list-content') as HTMLElement | null;

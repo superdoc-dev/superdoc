@@ -180,6 +180,9 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar.js',
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
+          // Pure JSDoc typedef files (body is `export {}`, no runtime code)
+          'src/core/types/**',
+          '**/types.js',
         ],
       },
     },

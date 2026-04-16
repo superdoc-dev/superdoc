@@ -200,6 +200,21 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * @default false
    */
   allowSelectionInViewMode?: boolean;
+  /**
+   * Route interactive story-backed part editing (headers, footers, and future
+   * story parts such as notes) through the body-style presentation editing
+   * architecture: a hidden off-screen ProseMirror host plus layout-engine
+   * rendering. When `false`, header/footer editing continues to mount a
+   * visible child PM overlay via {@link EditorOverlayManager}.
+   *
+   * This is a transitional flag governing the rollout of the story-backed
+   * parts presentation editing refactor. See
+   * `plans/story-backed-parts-presentation-editing.md`.
+   *
+   * @default false
+   * @experimental
+   */
+  useHiddenHostForStoryParts?: boolean;
 };
 
 /**

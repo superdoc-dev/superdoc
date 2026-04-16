@@ -631,6 +631,7 @@
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
  * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
+ * @property {boolean} [useHiddenHostForStoryParts=false] Route story-backed part editing (headers, footers, and future story parts) through PresentationEditor's hidden-host editing path instead of the legacy mounted overlay editor
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {'paginated' | 'semantic'} [layoutEngineOptions.flowMode='paginated'] Layout engine flow mode.
  *   - 'paginated': standard page-first layout (default)

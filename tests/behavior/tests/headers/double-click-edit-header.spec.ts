@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.use({ config: { useHiddenHostForStoryParts: true, showCaret: true, showSelection: true } });
 
 test('double-click header to enter edit mode, type, and exit', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
@@ -23,21 +24,16 @@ test('double-click header to enter edit mode, type, and exit', async ({ superdoc
   await superdoc.page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await superdoc.waitForStable();
 
-  // After dblclick, SuperDoc creates a separate editor host for the header
-  const editorHost = superdoc.page.locator('.superdoc-header-editor-host').first();
-  await editorHost.waitFor({ state: 'visible', timeout: 10_000 });
+  const storyHost = superdoc.page
+    .locator('.presentation-editor__story-hidden-host[data-story-kind="headerFooter"]')
+    .first();
+  await expect(storyHost).toHaveAttribute('data-story-key', /.+/);
 
-  // Focus the PM editor inside the host, select all, move to end, then insert text
-  const pm = editorHost.locator('.ProseMirror');
-  await pm.click();
+  // Editing runs through the hidden-host PM while the visible header remains painted.
   await superdoc.page.keyboard.press('End');
-  // Use insertText instead of type() to avoid character-by-character key events
-  // which may trigger PM shortcuts
   await superdoc.page.keyboard.insertText(' - Edited');
   await superdoc.waitForStable();
-
-  // Editor host should contain the typed text
-  await expect(editorHost).toContainText('Edited');
+  await expect(header).toContainText('Edited');
 
   // Press Escape to exit header edit mode
   await superdoc.page.keyboard.press('Escape');
@@ -64,19 +60,15 @@ test('double-click footer to enter edit mode, type, and exit', async ({ superdoc
   await superdoc.page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await superdoc.waitForStable();
 
-  // After dblclick, SuperDoc creates a separate editor host for the footer
-  const editorHost = superdoc.page.locator('.superdoc-footer-editor-host').first();
-  await editorHost.waitFor({ state: 'visible', timeout: 10_000 });
+  const storyHost = superdoc.page
+    .locator('.presentation-editor__story-hidden-host[data-story-kind="headerFooter"]')
+    .first();
+  await expect(storyHost).toHaveAttribute('data-story-key', /.+/);
 
-  // Focus the PM editor inside the host, select all, move to end, then insert text
-  const pm = editorHost.locator('.ProseMirror');
-  await pm.click();
   await superdoc.page.keyboard.press('End');
   await superdoc.page.keyboard.insertText(' - Edited');
   await superdoc.waitForStable();
-
-  // Editor host should contain the typed text
-  await expect(editorHost).toContainText('Edited');
+  await expect(footer).toContainText('Edited');
 
   // Press Escape to exit footer edit mode
   await superdoc.page.keyboard.press('Escape');

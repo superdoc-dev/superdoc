@@ -13,6 +13,7 @@
 
 import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
+import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
 
 import type { Editor } from '../../Editor.js';
 import type {
@@ -135,6 +136,11 @@ export type SessionManagerDependencies = {
   setPendingDocChange: () => void;
   /** Get total page count from body layout */
   getBodyPageCount: () => number;
+  /** Get the generic story-session manager when enabled */
+  getStorySessionManager?: () => {
+    activate: (locator: HeaderFooterPartStoryLocator, options?: Record<string, unknown>) => { editor: Editor };
+    exit: () => void;
+  } | null;
 };
 
 /**
@@ -725,6 +731,7 @@ export class HeaderFooterSessionManager {
 
     // Capture headerFooterRefId before clearing session - needed for cache invalidation
     const editedHeaderId = this.#session.headerFooterRefId;
+    const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
 
     if (this.#activeEditor) {
       this.#activeEditor.setEditable(false);
@@ -732,8 +739,12 @@ export class HeaderFooterSessionManager {
     }
     this.#teardownActiveEditorEventBridge();
 
-    this.#overlayManager?.hideEditingOverlay();
-    this.#overlayManager?.showSelectionOverlay();
+    if (storySessionManager) {
+      storySessionManager.exit();
+    } else {
+      this.#overlayManager?.hideEditingOverlay();
+      this.#overlayManager?.showSelectionOverlay();
+    }
 
     this.#activeEditor = null;
     this.#session = { mode: 'body' };
@@ -765,9 +776,38 @@ export class HeaderFooterSessionManager {
     this.activateRegion(region);
   }
 
+  #activateStorySessionForRegion(region: HeaderFooterRegion, descriptor: HeaderFooterDescriptor): Editor | null {
+    const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
+    if (!storySessionManager) {
+      return null;
+    }
+
+    const locator: HeaderFooterPartStoryLocator = {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: descriptor.id,
+    };
+
+    const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
+    const session = storySessionManager.activate(locator, {
+      commitPolicy: 'onExit',
+      preferHiddenHost: true,
+      hostWidthPx: Math.max(1, region.width),
+      editorContext: {
+        availableWidth: Math.max(1, region.width),
+        availableHeight: Math.max(1, region.height),
+        currentPageNumber: Math.max(1, region.pageNumber ?? 1),
+        totalPageCount: Math.max(1, bodyPageCount),
+        surfaceKind: region.kind,
+      },
+    });
+
+    return session?.editor ?? null;
+  }
+
   async #enterMode(region: HeaderFooterRegion): Promise<void> {
     try {
-      if (!this.#headerFooterManager || !this.#overlayManager) {
+      if (!this.#headerFooterManager) {
         this.clearHover();
         return;
       }
@@ -854,46 +894,63 @@ export class HeaderFooterSessionManager {
         return;
       }
 
-      const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
-      const { success, editorHost, reason } = this.#overlayManager.showEditingOverlay(
-        pageElement,
-        region,
-        layoutOptions.zoom ?? 1,
-      );
-      if (!success || !editorHost) {
-        console.error('[HeaderFooterSessionManager] Failed to create editor host:', reason);
-        this.clearHover();
-        this.#callbacks.onError?.({
-          error: new Error(`Failed to create editor host: ${reason}`),
-          context: 'enterMode.showOverlay',
-        });
-        return;
-      }
-
-      const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
       let editor;
-      try {
-        editor = await this.#headerFooterManager.ensureEditor(descriptor, {
-          editorHost,
-          availableWidth: region.width,
-          availableHeight: region.height,
-          currentPageNumber: region.pageNumber,
-          totalPageCount: bodyPageCount,
-        });
-      } catch (editorError) {
-        console.error('[HeaderFooterSessionManager] Error creating editor:', editorError);
-        this.#overlayManager.hideEditingOverlay();
-        this.clearHover();
-        this.#callbacks.onError?.({
-          error: editorError,
-          context: 'enterMode.ensureEditor',
-        });
-        return;
+      const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
+      if (storySessionManager) {
+        try {
+          editor = this.#activateStorySessionForRegion(region, descriptor);
+        } catch (editorError) {
+          console.error('[HeaderFooterSessionManager] Error creating story session:', editorError);
+          this.clearHover();
+          this.#callbacks.onError?.({
+            error: editorError,
+            context: 'enterMode.storySession',
+          });
+          return;
+        }
+      } else {
+        const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+        const { success, editorHost, reason } = this.#overlayManager.showEditingOverlay(
+          pageElement,
+          region,
+          layoutOptions.zoom ?? 1,
+        );
+        if (!success || !editorHost) {
+          console.error('[HeaderFooterSessionManager] Failed to create editor host:', reason);
+          this.clearHover();
+          this.#callbacks.onError?.({
+            error: new Error(`Failed to create editor host: ${reason}`),
+            context: 'enterMode.showOverlay',
+          });
+          return;
+        }
+
+        const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
+        try {
+          editor = await this.#headerFooterManager.ensureEditor(descriptor, {
+            editorHost,
+            availableWidth: region.width,
+            availableHeight: region.height,
+            currentPageNumber: region.pageNumber,
+            totalPageCount: bodyPageCount,
+          });
+        } catch (editorError) {
+          console.error('[HeaderFooterSessionManager] Error creating editor:', editorError);
+          this.#overlayManager.hideEditingOverlay();
+          this.clearHover();
+          this.#callbacks.onError?.({
+            error: editorError,
+            context: 'enterMode.ensureEditor',
+          });
+          return;
+        }
       }
 
       if (!editor) {
         console.warn('[HeaderFooterSessionManager] Failed to ensure editor for descriptor:', descriptor);
-        this.#overlayManager.hideEditingOverlay();
+        if (!storySessionManager) {
+          this.#overlayManager.hideEditingOverlay();
+        }
         this.clearHover();
         this.#callbacks.onError?.({
           error: new Error('Failed to create editor instance'),
@@ -902,43 +959,9 @@ export class HeaderFooterSessionManager {
         return;
       }
 
-      // For footers, apply positioning adjustments
-      if (region.kind === 'footer') {
-        const editorContainer = editorHost.firstElementChild;
-        if (editorContainer instanceof HTMLElement) {
-          editorContainer.style.overflow = 'visible';
-          if (region.minY != null && region.minY < 0) {
-            const shiftDown = Math.abs(region.minY);
-            editorContainer.style.transform = `translateY(${shiftDown}px)`;
-          } else {
-            editorContainer.style.transform = '';
-          }
-        }
-      }
-
       try {
         editor.setEditable(true);
         editor.setOptions({ documentMode: 'editing' });
-
-        // Ensure the header/footer editor receives focus on user interaction.
-        // Without this, subsequent clicks in newly-activated editors may not
-        // update ProseMirror selection because the view never regains focus.
-        try {
-          const editorView = editor.view;
-          if (editorView && editorHost) {
-            const focusHandler = () => {
-              try {
-                editorView.focus();
-              } catch {
-                // Ignore focus errors; selection updates will still work when possible.
-              }
-            };
-            editorHost.addEventListener('mousedown', focusHandler);
-            this.#managerCleanups.push(() => editorHost.removeEventListener('mousedown', focusHandler));
-          }
-        } catch {
-          // Best-effort: if we can't wire the focus handler, continue without it.
-        }
 
         // Move caret to end of content
         try {
@@ -953,7 +976,9 @@ export class HeaderFooterSessionManager {
         }
       } catch (editableError) {
         console.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
-        this.#overlayManager.hideEditingOverlay();
+        if (!storySessionManager) {
+          this.#overlayManager.hideEditingOverlay();
+        }
         this.clearHover();
         this.#callbacks.onError?.({
           error: editableError,
@@ -1485,6 +1510,53 @@ export class HeaderFooterSessionManager {
     }
 
     return layoutRects;
+  }
+
+  computeCaretRect(pos: number): LayoutRect | null {
+    if (this.#session.mode === 'body') {
+      return null;
+    }
+
+    const activeEditor = this.#activeEditor;
+    const view = activeEditor?.view;
+    if (!view || typeof view.coordsAtPos !== 'function') {
+      return null;
+    }
+
+    const context = this.getContext();
+    if (!context) {
+      return null;
+    }
+
+    const region = context.region;
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+
+    try {
+      const coords = view.coordsAtPos(pos);
+      const editorDom = view.dom as HTMLElement;
+      const editorHostRect = editorDom.getBoundingClientRect();
+      const localX = (coords.left - editorHostRect.left) / zoom;
+      const localY = (coords.top - editorHostRect.top) / zoom;
+      const height = Math.max(1, (coords.bottom - coords.top) / zoom);
+      if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+        return null;
+      }
+
+      return {
+        pageIndex: region.pageIndex,
+        x: region.localX + localX,
+        y: region.pageIndex * bodyPageHeight + region.localY + localY,
+        width: 1,
+        height,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -73,6 +73,10 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
+import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
+import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { createStoryEditor } from '../story-editor-factory.js';
+import { createHeaderFooterEditor } from '../../extensions/pagination/pagination-helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -367,6 +371,14 @@ export class PresentationEditor extends EventEmitter {
   #trackedChangesOverrides: TrackedChangesOverrides | undefined;
   // Header/footer session management
   #headerFooterSession: HeaderFooterSessionManager | null = null;
+  /**
+   * Generic story-backed presentation-session manager. Only constructed when
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} is true.
+   * When active, interactive editing of story-backed parts (headers, footers,
+   * future notes) runs through this manager instead of the visible-PM
+   * overlay owned by {@link HeaderFooterSessionManager}.
+   */
+  #storySessionManager: StoryPresentationSessionManager | null = null;
   #hoverOverlay: HTMLElement | null = null;
   #hoverTooltip: HTMLElement | null = null;
   #modeBanner: HTMLElement | null = null;
@@ -683,6 +695,7 @@ export class PresentationEditor extends EventEmitter {
       }
 
       this.#setupHeaderFooterSession();
+      this.#setupStorySessionManager();
       this.#applyZoom();
       this.#setupEditorListeners();
       this.#initializeEditorInputManager();
@@ -1084,12 +1097,35 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   getActiveEditor(): Editor {
+    // Story-session path (behind useHiddenHostForStoryParts) takes
+    // precedence over the legacy header/footer overlay.
+    const storySession = this.#storySessionManager?.getActiveSession();
+    if (storySession) return storySession.editor;
+
     const session = this.#headerFooterSession?.session;
     const activeHfEditor = this.#headerFooterSession?.activeEditor;
     if (!session || session.mode === 'body' || !activeHfEditor) {
       return this.#editor;
     }
     return activeHfEditor;
+  }
+
+  /**
+   * Access the generic story-session manager when the
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} rollout
+   * flag is enabled. Returns `null` when the flag is off — in that case
+   * story-backed interactive editing still runs through the legacy
+   * `HeaderFooterSessionManager` / visible-PM overlay path.
+   *
+   * This is a transitional surface exposed so tests and opt-in callers
+   * can drive activation while the full Phase 3/4 geometry/pointer
+   * plumbing is landed incrementally. Do not rely on it from product
+   * code yet.
+   *
+   * @experimental
+   */
+  getStorySessionManager(): StoryPresentationSessionManager | null {
+    return this.#storySessionManager;
   }
 
   // -------------------------------------------------------------------
@@ -1535,7 +1571,7 @@ export class PresentationEditor extends EventEmitter {
    * Return layout-relative rects for the current document selection.
    */
   getSelectionRects(relativeTo?: HTMLElement): RangeRect[] {
-    const selection = this.#editor.state?.selection;
+    const selection = this.getActiveEditor().state?.selection;
     if (!selection || selection.empty) return [];
     return this.getRangeRects(selection.from, selection.to, relativeTo);
   }
@@ -1615,11 +1651,8 @@ export class PresentationEditor extends EventEmitter {
       }
     }
 
-    // Fix Issue #1: Get actual header/footer page height instead of hardcoded 1
-    // When in header/footer mode, we need to use the real page height from the layout context
-    // to correctly map coordinates for selection highlighting
-    const pageHeight = sessionMode === 'body' ? this.#getBodyPageHeight() : this.#getHeaderFooterPageHeight();
-    const pageGap = this.#layoutState.layout?.pageGap ?? 0;
+    const pageHeight = this.#getBodyPageHeight();
+    const pageGap = sessionMode === 'body' ? (this.#layoutState.layout?.pageGap ?? 0) : 0;
     const finalRects = rawRects
       .map((rect: LayoutRect, idx: number, allRects: LayoutRect[]) => {
         let adjustedX = rect.x;
@@ -2286,11 +2319,14 @@ export class PresentationEditor extends EventEmitter {
 
       // Get selection rects from the header/footer layout (already transformed to viewport)
       const rects = this.#computeHeaderFooterSelectionRects(pos, pos);
-      if (!rects || rects.length === 0) {
+      let rect = rects?.[0] ?? null;
+      if (!rect) {
+        rect = this.#computeHeaderFooterCaretRect(pos);
+      }
+      if (!rect) {
         return null;
       }
 
-      const rect = rects[0];
       const zoom = this.#layoutOptions.zoom ?? 1;
       const containerRect = this.#visibleHost.getBoundingClientRect();
       const scrollLeft = this.#visibleHost.scrollLeft ?? 0;
@@ -2946,6 +2982,12 @@ export class PresentationEditor extends EventEmitter {
       this.#headerFooterSession?.destroy();
       this.#headerFooterSession = null;
     }, 'Header/footer session manager');
+
+    // Clean up generic story-session manager (if the flag enabled it)
+    safeCleanup(() => {
+      this.#storySessionManager?.destroy();
+      this.#storySessionManager = null;
+    }, 'Story presentation session manager');
 
     // Clear flow block cache to free memory
     this.#flowBlockCache.clear();
@@ -3794,6 +3836,7 @@ export class PresentationEditor extends EventEmitter {
         this.#pendingDocChange = true;
       },
       getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
+      getStorySessionManager: () => this.#storySessionManager,
     });
 
     // Set up callbacks
@@ -3886,6 +3929,75 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Set up the generic story-session manager.
+   *
+   * Only instantiated when {@link PresentationEditorOptions.useHiddenHostForStoryParts}
+   * is `true`. While the flag is off the manager stays `null` and the
+   * legacy visible header/footer overlay path remains active.
+   */
+  #setupStorySessionManager() {
+    if (!this.#options.useHiddenHostForStoryParts) return;
+
+    this.#storySessionManager = new StoryPresentationSessionManager({
+      resolveRuntime: (locator) => resolveStoryRuntime(this.#editor, locator, { intent: 'write' }),
+      getMountContainer: () => {
+        const doc = this.#visibleHost?.ownerDocument;
+        return doc?.body ?? this.#visibleHost ?? null;
+      },
+      editorFactory: ({ runtime, hostElement, activationOptions }) => {
+        const existing = runtime.editor;
+        const pmJson = existing.getJSON() as unknown as Record<string, unknown>;
+        const editorContext = activationOptions.editorContext ?? {};
+        const surfaceKind = editorContext.surfaceKind;
+
+        let fresh: Editor;
+        if (
+          runtime.kind === 'headerFooter' &&
+          (surfaceKind === 'header' || surfaceKind === 'footer') &&
+          runtime.locator.storyType === 'headerFooterPart'
+        ) {
+          const editorContainer = hostElement.ownerDocument.createElement('div');
+          fresh = createHeaderFooterEditor({
+            editor: this.#editor,
+            data: pmJson,
+            editorContainer,
+            editorHost: hostElement,
+            headerFooterRefId: runtime.locator.refId,
+            type: surfaceKind,
+            availableWidth: editorContext.availableWidth,
+            availableHeight: editorContext.availableHeight,
+            currentPageNumber: editorContext.currentPageNumber,
+            totalPageCount: editorContext.totalPageCount,
+          });
+        } else {
+          fresh = createStoryEditor(this.#editor, pmJson, {
+            documentId: runtime.storyKey,
+            isHeaderOrFooter: runtime.kind === 'headerFooter',
+            headless: false,
+            element: hostElement,
+            currentPageNumber: editorContext.currentPageNumber,
+            totalPageCount: editorContext.totalPageCount,
+          });
+        }
+
+        return {
+          editor: fresh,
+          dispose: () => {
+            try {
+              fresh.destroy();
+            } catch {
+              // best-effort teardown
+            }
+          },
+        };
+      },
+      onActiveSessionChanged: () => {
+        this.#inputBridge?.notifyTargetChanged();
+      },
+    });
+  }
+
+  /**
    * Attempts to perform a table hit test for the given normalized coordinates.
    *
    * @param normalizedX - X coordinate in layout space
@@ -3926,7 +4038,8 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #selectWordAt(pos: number): boolean {
-    const state = this.#editor.state;
+    const activeEditor = this.getActiveEditor();
+    const state = activeEditor.state;
     if (!state?.doc) {
       return false;
     }
@@ -3938,7 +4051,7 @@ export class PresentationEditor extends EventEmitter {
 
     const tr = state.tr.setSelection(TextSelection.create(state.doc, range.from, range.to));
     try {
-      this.#editor.view?.dispatch(tr);
+      activeEditor.view?.dispatch(tr);
       return true;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -3964,7 +4077,8 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #selectParagraphAt(pos: number): boolean {
-    const state = this.#editor.state;
+    const activeEditor = this.getActiveEditor();
+    const state = activeEditor.state;
     if (!state?.doc) {
       return false;
     }
@@ -3974,7 +4088,7 @@ export class PresentationEditor extends EventEmitter {
     }
     const tr = state.tr.setSelection(TextSelection.create(state.doc, range.from, range.to));
     try {
-      this.#editor.view?.dispatch(tr);
+      activeEditor.view?.dispatch(tr);
       return true;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -5606,6 +5720,12 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #getActiveDomTarget(): HTMLElement | null {
+    // Story-session path (behind useHiddenHostForStoryParts) takes
+    // precedence: while a hidden-host story session is active, the
+    // active DOM target is the story editor's DOM, not the body's.
+    const storyTarget = this.#storySessionManager?.getActiveEditorDomTarget();
+    if (storyTarget) return storyTarget;
+
     const session = this.#headerFooterSession?.session;
     if (session && session.mode !== 'body') {
       const activeEditor = this.#headerFooterSession?.activeEditor;
@@ -6206,6 +6326,10 @@ export class PresentationEditor extends EventEmitter {
    */
   #computeHeaderFooterSelectionRects(from: number, to: number): LayoutRect[] {
     return this.#headerFooterSession?.computeSelectionRects(from, to) ?? [];
+  }
+
+  #computeHeaderFooterCaretRect(pos: number): LayoutRect | null {
+    return this.#headerFooterSession?.computeCaretRect(pos) ?? null;
   }
 
   #syncTrackedChangesPreferences(): boolean {
@@ -6823,8 +6947,8 @@ export class PresentationEditor extends EventEmitter {
    * selection rectangles in layout space, then renders them into the shared
    * selection overlay so selection behaves consistently with body content.
    *
-   * Caret rendering is left to the ProseMirror header/footer editor; this
-   * overlay only mirrors non-collapsed selections.
+   * In hidden-host mode this also renders the caret from the active story
+   * editor's hidden DOM geometry.
    */
   #updateHeaderFooterSelection() {
     this.#clearSelectedFieldAnnotationClass();
@@ -6844,11 +6968,32 @@ export class PresentationEditor extends EventEmitter {
 
     const { from, to } = selection;
 
-    // Let the header/footer ProseMirror editor handle caret rendering.
     if (from === to) {
+      const caretRect = this.#computeHeaderFooterCaretRect(from);
+      if (!caretRect) {
+        try {
+          this.#localSelectionLayer.innerHTML = '';
+        } catch {}
+        return;
+      }
+
       try {
         this.#localSelectionLayer.innerHTML = '';
-      } catch {}
+        renderCaretOverlay({
+          localSelectionLayer: this.#localSelectionLayer,
+          caretLayout: {
+            pageIndex: caretRect.pageIndex,
+            x: caretRect.x,
+            y: caretRect.y - caretRect.pageIndex * this.#getBodyPageHeight(),
+            height: caretRect.height,
+          },
+          convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+        });
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[PresentationEditor] Failed to render header/footer caret:', error);
+        }
+      }
       return;
     }
 

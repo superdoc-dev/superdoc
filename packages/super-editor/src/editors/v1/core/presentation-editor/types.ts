@@ -212,7 +212,8 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * parts presentation editing refactor. See
    * `plans/story-backed-parts-presentation-editing.md`.
    *
-   * @default false
+   * Enabled by default. Pass `false` to opt back into the legacy mounted
+   * overlay path while it still exists.
    * @experimental
    */
   useHiddenHostForStoryParts?: boolean;

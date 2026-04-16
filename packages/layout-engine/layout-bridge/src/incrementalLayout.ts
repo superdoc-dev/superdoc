@@ -229,7 +229,9 @@ const assignFootnotesToColumns = (
 
     if (columns && columns.count > 1 && page) {
       const fragment = findFragmentForPos(page, ref.pos);
-      if (fragment && typeof fragment.x === 'number') {
+      if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
+        columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
+      } else if (fragment && typeof fragment.x === 'number') {
         const widths = Array.isArray(columns.widths) && columns.widths.length > 0 ? columns.widths : undefined;
         if (widths) {
           let cursorX = columns.left;
@@ -1748,6 +1750,7 @@ export async function incrementalLayout(
                   page.fragments.push({
                     kind: 'table',
                     blockId: range.blockId,
+                    columnIndex,
                     fromRow: 0,
                     toRow: block.rows.length,
                     x: tableX,

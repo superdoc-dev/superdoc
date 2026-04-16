@@ -1838,6 +1838,8 @@ export type PartialRowInfo = {
 export type TableFragment = {
   kind: 'table';
   blockId: BlockId;
+  /** Flow column that owns this fragment, distinct from visual x when overflow crosses margins. */
+  columnIndex?: number;
   fromRow: number;
   toRow: number;
   x: number;

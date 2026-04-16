@@ -1269,6 +1269,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   const fragment: TableFragment = {
     kind: 'table',
     blockId: context.block.id,
+    columnIndex: state.columnIndex,
     fromRow: 0,
     toRow: context.block.rows.length,
     x,
@@ -1420,6 +1421,7 @@ export function layoutTableBlock({
     const fragment: TableFragment = {
       kind: 'table',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromRow: 0,
       toRow: 0,
       x,
@@ -1573,6 +1575,7 @@ export function layoutTableBlock({
         const fragment: TableFragment = {
           kind: 'table',
           blockId: block.id,
+          columnIndex: state.columnIndex,
           fromRow: rowIndex,
           toRow: rowIndex + 1,
           x,
@@ -1688,6 +1691,7 @@ export function layoutTableBlock({
       const fragment: TableFragment = {
         kind: 'table',
         blockId: block.id,
+        columnIndex: state.columnIndex,
         fromRow: bodyStartRow,
         toRow: forcedEndRow,
         x,
@@ -1738,6 +1742,7 @@ export function layoutTableBlock({
     const fragment: TableFragment = {
       kind: 'table',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromRow: bodyStartRow,
       toRow: endRow,
       x,

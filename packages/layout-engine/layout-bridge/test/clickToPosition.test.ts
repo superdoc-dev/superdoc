@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { clickToPosition, hitTestPage, hitTestTableFragment } from '../src/index.ts';
-import type { Layout, FlowBlock, Measure, Line, ParaFragment } from '@superdoc/contracts';
+import type {
+  Layout,
+  FlowBlock,
+  Measure,
+  Line,
+  ParaFragment,
+  TableBlock,
+  TableMeasure,
+  TableFragment,
+} from '@superdoc/contracts';
 import {
   simpleLayout,
   blocks,
@@ -41,6 +50,90 @@ describe('clickToPosition', () => {
     const result = clickToPosition(drawingLayout, [drawingBlock], [drawingMeasure], { x: 70, y: 90 });
     expect(result?.blockId).toBe('drawing-0');
     expect(result?.pos).toBe(20);
+  });
+
+  it('uses table fragment columnIndex instead of visual x for multi-column overflow tables', () => {
+    const cellParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'table-cell-para',
+      runs: [{ text: 'Wide table', fontFamily: 'Arial', fontSize: 16, pmStart: 100, pmEnd: 110 }],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'wide-table',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [{ id: 'cell-0-0', blocks: [cellParagraph] }],
+        },
+      ],
+    };
+
+    const cellParagraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 10,
+          width: 120,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [cellParagraphMeasure],
+              paragraph: cellParagraphMeasure,
+              width: 320,
+              height: 28,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 28,
+        },
+      ],
+      columnWidths: [320],
+      totalWidth: 320,
+      totalHeight: 28,
+    };
+
+    const tableFragment: TableFragment = {
+      kind: 'table',
+      blockId: 'wide-table',
+      columnIndex: 1,
+      fromRow: 0,
+      toRow: 1,
+      x: 220,
+      y: 40,
+      width: 320,
+      height: 28,
+      pmStart: 100,
+      pmEnd: 110,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      columns: { count: 2, gap: 20 },
+      pages: [{ number: 1, fragments: [tableFragment] }],
+    };
+
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 340, y: 54 });
+
+    expect(result?.blockId).toBe('wide-table');
+    expect(result?.column).toBe(1);
   });
 });
 

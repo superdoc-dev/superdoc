@@ -3578,10 +3578,85 @@ describe('DomPainter', () => {
     expect(foundBehindDoc).toBe(true);
   });
 
-  it('renders page-relative wrapNone header media directly on page behind body text', () => {
-    const backgroundImageBlock: FlowBlock = {
+  it('renders header WordArt watermarks behind page content even when behindDoc is false in OOXML', () => {
+    const watermarkBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-wordart-watermark',
+      drawingKind: 'vectorShape',
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+      textAlign: 'center',
+      textContent: {
+        parts: [{ text: 'AUTE', formatting: { fontFamily: 'Arial', fontSize: 24, color: 'C0C0C0' } }],
+      },
+      attrs: { isWordArt: true, isTextBox: true },
+    };
+    const watermarkMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 200,
+      height: 60,
+      scale: 1,
+      naturalWidth: 200,
+      naturalHeight: 60,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+    };
+    const watermarkFragment = {
+      kind: 'drawing' as const,
+      blockId: 'header-wordart-watermark',
+      drawingKind: 'vectorShape' as const,
+      x: 40,
+      y: 180,
+      width: 240,
+      height: 120,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      scale: 1,
+      isAnchored: true,
+      behindDoc: false,
+      zIndex: 251658241,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, watermarkBlock],
+      measures: [measure, watermarkMeasure],
+      headerProvider: () => ({
+        fragments: [watermarkFragment],
+        height: 40,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement | null;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    const behindDocWatermark = pageEl?.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-wordart-watermark"]',
+    ) as HTMLElement | null;
+    const watermarkInHeader = headerEl?.querySelector('[data-block-id="header-wordart-watermark"]');
+    const watermarkText = behindDocWatermark?.querySelector('.superdoc-wordart-text text') as SVGTextElement | null;
+
+    expect(behindDocWatermark).toBeTruthy();
+    expect(watermarkInHeader).toBeNull();
+    expect(behindDocWatermark?.style.zIndex).toBe('0');
+    expect(watermarkText).toBeTruthy();
+    expect(watermarkText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
+  });
+
+  it('keeps non-WordArt page-relative header media in the header container', () => {
+    const headerImageBlock: FlowBlock = {
       kind: 'image',
-      id: 'header-background-img',
+      id: 'header-image',
       src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       width: 200,
       height: 100,
@@ -3594,15 +3669,14 @@ describe('DomPainter', () => {
         type: 'None',
       },
     };
-    const backgroundImageMeasure: Measure = {
+    const headerImageMeasure: Measure = {
       kind: 'image',
       width: 200,
       height: 100,
     };
-
     const headerFragment = {
       kind: 'image' as const,
-      blockId: 'header-background-img',
+      blockId: 'header-image',
       x: 0,
       y: 40,
       width: 200,
@@ -3612,8 +3686,8 @@ describe('DomPainter', () => {
     };
 
     const painter = createTestPainter({
-      blocks: [block, backgroundImageBlock],
-      measures: [measure, backgroundImageMeasure],
+      blocks: [block, headerImageBlock],
+      measures: [measure, headerImageMeasure],
       headerProvider: () => ({
         fragments: [headerFragment],
         height: 100,
@@ -3624,14 +3698,14 @@ describe('DomPainter', () => {
     painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
 
     const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
-    const headerEl = mount.querySelector('.superdoc-page-header');
-    const pageBackgroundEl = pageEl.querySelector(
-      '[data-behind-doc-section="header"][data-block-id="header-background-img"]',
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
+    const behindDocImage = pageEl.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-image"]',
     ) as HTMLElement | null;
+    const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
 
-    expect(pageBackgroundEl).toBeTruthy();
-    expect(pageBackgroundEl?.style.top).toBe('40px');
-    expect(headerEl?.querySelector('[data-block-id="header-background-img"]')).toBeNull();
+    expect(behindDocImage).toBeNull();
+    expect(imageInHeader).toBeTruthy();
   });
 
   it('cleans up behindDoc fragments on re-render (no accumulation)', () => {
@@ -4946,7 +5020,7 @@ describe('DomPainter', () => {
     expect(inlineDrawingEl.style.zIndex).toBe('');
   });
 
-  it('applies vector shape transforms to the shared content container so text overlays rotate with the shape', () => {
+  it('applies vector shape transforms to the shared drawing wrapper so text overlays rotate with the shape', () => {
     const vectorShapeBlock: FlowBlock = {
       kind: 'drawing',
       id: 'drawing-with-text',
@@ -5003,13 +5077,13 @@ describe('DomPainter', () => {
     painter.paint(vectorShapeLayout, mount);
 
     const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
-    const contentContainer = shapeEl?.firstElementChild as HTMLElement | null;
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
     const svgEl = shapeEl?.querySelector('svg') as HTMLElement | null;
 
     expect(shapeEl).toBeTruthy();
-    expect(contentContainer).toBeTruthy();
-    expect(contentContainer?.style.transform).toContain('rotate(320deg)');
-    expect(contentContainer?.textContent).toContain('AUTE');
+    expect(drawingInner).toBeTruthy();
+    expect(drawingInner?.style.transform).toContain('rotate(320deg)');
+    expect(shapeEl?.textContent).toContain('AUTE');
     expect(svgEl?.style.transform).toBe('');
   });
 

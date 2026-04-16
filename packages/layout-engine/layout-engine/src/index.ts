@@ -2577,22 +2577,53 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
   return bottom;
 }
 
+type VerticalBand = {
+  start: number;
+  end: number;
+};
+
+function rangesIntersect(startA: number, endA: number, startB: number, endB: number): boolean {
+  return endA > startB && startA < endB;
+}
+
+function getPageRelativeMeasurementBand(
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): VerticalBand | null {
+  if (!kind || !constraints.margins) {
+    return null;
+  }
+
+  const bandSize = kind === 'header' ? constraints.margins.top : constraints.margins.bottom;
+  if (!Number.isFinite(bandSize) || bandSize == null || bandSize <= 0) {
+    return null;
+  }
+
+  return {
+    start: 0,
+    end: bandSize,
+  };
+}
+
 /**
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
  * Excluded fragments:
- * 1. Header/footer wrapNone anchored fragments — floating overlay content that
- *    must not reserve body flow space.
- * 2. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
- * 3. Page-relative anchored fragments whose local Y range [y, y+h] does not
+ * 1. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
+ * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
  *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
  *    the measurement used by body pagination.
+ * 3. Page-relative header/footer overlays that do not intersect the region's
+ *    reserved margin band — they should still render, but must not reserve
+ *    body space like true header/footer content.
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
   block: FlowBlock,
+  fragmentBottom: number,
   canvasHeight: number,
-  regionKind?: 'header' | 'footer',
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
 ): boolean {
   const isAnchoredFragment =
     (fragment.kind === 'image' || fragment.kind === 'drawing') &&
@@ -2608,21 +2639,22 @@ function shouldExcludeFromMeasurement(
 
   const anchoredBlock = block as ImageBlock | DrawingBlock;
 
-  // Floating header/footer overlays (e.g. watermarks/textboxes anchored with wrapNone)
-  // should render, but they must not inflate measured header/footer height.
-  if (regionKind && anchoredBlock.wrap?.type === 'None') return true;
-
   // behindDoc fragments never affect measurement
   if (anchoredBlock.anchor?.behindDoc) return true;
 
   // Page-relative anchored fragments that sit entirely outside the measurement band
   // should not inflate pagination height.
   if (isPageRelativeAnchor(anchoredBlock)) {
-    const fragmentHeight = (fragment as { height?: number }).height ?? 0;
     const fragmentTop = fragment.y;
-    const fragmentBottom = fragment.y + fragmentHeight;
     // Exclude if the fragment range [top, bottom] does not intersect [0, canvasHeight]
     if (fragmentBottom <= 0 || fragmentTop >= canvasHeight) {
+      return true;
+    }
+  }
+
+  if (anchoredBlock.anchor?.vRelativeFrom === 'page') {
+    const measurementBand = getPageRelativeMeasurementBand(kind, constraints);
+    if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
   }
@@ -2715,7 +2747,7 @@ export function layoutHeaderFooter(
       if (bottom > renderMaxY) renderMaxY = bottom;
 
       // Determine whether this fragment should be excluded from measurement (pagination) bounds
-      if (shouldExcludeFromMeasurement(fragment, block, height, kind)) continue;
+      if (shouldExcludeFromMeasurement(fragment, block, bottom, height, kind, constraints)) continue;
 
       if (fragment.y < measureMinY) measureMinY = fragment.y;
       if (bottom > measureMaxY) measureMaxY = bottom;

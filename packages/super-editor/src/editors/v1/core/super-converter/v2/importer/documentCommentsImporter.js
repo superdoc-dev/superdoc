@@ -34,9 +34,9 @@ export function importCommentData({ docx, editor, converter }) {
   const extractedComments = allComments.map((el) => {
     const { attributes } = el;
     const importedId = attributes['w:id'];
-    const authorName = attributes['w:author'];
-    const authorEmail = attributes['w:email'];
-    const initials = attributes['w:initials'];
+    const authorName = readCommentAttribute(attributes, 'w:author', 'custom:author');
+    const authorEmail = readCommentAttribute(attributes, 'w:email', 'custom:email');
+    const initials = readCommentAttribute(attributes, 'w:initials', 'custom:initials');
     const createdDate = attributes['w:date'];
     const internalId = attributes['custom:internalId'];
     const trackedChange = attributes['custom:trackedChange'] === 'true';
@@ -112,6 +112,11 @@ export function importCommentData({ docx, editor, converter }) {
   }
   return extendedComments;
 }
+
+const readCommentAttribute = (attributes, primaryName, fallbackName) => {
+  if (!attributes) return undefined;
+  return attributes[primaryName] ?? attributes[fallbackName];
+};
 
 /**
  * Import the commentsExtended.xml file to get the extended comment details

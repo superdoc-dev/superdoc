@@ -1,5 +1,5 @@
 {
-  "name": "@superdoc/umd-smoke-test",
+  "name": "@superdoc/cdn-smoke-test",
   "private": true,
   "scripts": {
     "test": "playwright test"

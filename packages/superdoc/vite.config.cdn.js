@@ -3,6 +3,11 @@ import { defineConfig } from 'vite';
 import { version } from './package.json';
 import { getAliases } from './vite.config.js';
 
+// Standalone browser bundle for CDN / <script> tag consumption.
+// Exposes `window.SuperDoc`. Inlines all runtime deps (Vue, ProseMirror,
+// Yjs, Hocuspocus) so a single <script> tag is enough — these peers are
+// ESM-only and can't be loaded as globals. Only pdfjs-dist stays external
+// because of its size; PDF viewing requires the ESM + import-map path.
 export default defineConfig(({ command }) => {
   const plugins = [vue()];
   const isDev = command === 'serve';
@@ -10,6 +15,7 @@ export default defineConfig(({ command }) => {
   return {
     define: {
       __APP_VERSION__: JSON.stringify(version),
+      __SUPERDOC_BUILD__: JSON.stringify('cdn-iife'),
       'process.env.NODE_ENV': JSON.stringify('production'),
     },
     plugins,
@@ -24,18 +30,16 @@ export default defineConfig(({ command }) => {
       target: 'es2022',
       cssCodeSplit: false,
       lib: {
-        entry: 'src/index.js',
-        formats: ['umd'],
-        name: 'SuperDocLibrary',
+        entry: 'src/cdn-entry.js',
+        formats: ['iife'],
+        name: 'SuperDoc',
         cssFileName: 'style',
-        fileName: (format) => `superdoc.${format}.js`,
+        fileName: () => 'superdoc.global.js',
       },
-      minify: false,
+      minify: 'esbuild',
       sourcemap: true,
       rollupOptions: {
         external: [
-          'yjs',
-          '@hocuspocus/provider',
           'pdfjs-dist',
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
@@ -43,9 +47,10 @@ export default defineConfig(({ command }) => {
         ],
         output: {
           globals: {
-            yjs: 'Yjs',
-            '@hocuspocus/provider': 'HocuspocusProvider',
-            'pdfjs-dist': 'PDFJS',
+            'pdfjs-dist': 'pdfjsLib',
+            'pdfjs-dist/build/pdf.mjs': 'pdfjsLib',
+            'pdfjs-dist/legacy/build/pdf.mjs': 'pdfjsLib',
+            'pdfjs-dist/web/pdf_viewer.mjs': 'pdfjsViewer',
           },
         },
       },

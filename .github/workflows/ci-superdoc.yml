@@ -171,13 +171,13 @@ jobs:
         if: matrix.name == 'other-packages'
         run: pnpm test:slow
 
-      - name: Install Playwright for UMD smoke test
+      - name: Install Playwright for CDN smoke test
         if: matrix.name == 'other-packages'
-        run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
+        run: pnpm --filter @superdoc/cdn-smoke-test exec playwright install --with-deps chromium
 
-      - name: Run UMD smoke test
+      - name: Run CDN smoke test
         if: matrix.name == 'other-packages'
-        working-directory: packages/superdoc/tests/umd-smoke
+        working-directory: packages/superdoc/tests/cdn-smoke
         run: pnpm test
 
   cli-tests:

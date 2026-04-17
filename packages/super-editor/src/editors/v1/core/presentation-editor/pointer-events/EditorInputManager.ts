@@ -101,6 +101,11 @@ function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean 
   return getCommentHighlightThreadIds(target).length === 1;
 }
 
+function isDirectTrackedChangeHit(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest(TRACK_CHANGE_SELECTOR) != null;
+}
+
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) {
     return null;
@@ -220,11 +225,11 @@ function shouldIgnoreRepeatClickOnActiveComment(
     return false;
   }
 
-  // Direct clicks on commented text should place a caret at the clicked
-  // position and let the comments plugin infer the active thread from the
-  // resulting selection. Only preserve the pointerdown short-circuit for
-  // nearby non-text surfaces, such as split-run gaps.
-  if (isDirectSingleCommentHighlightHit(target)) {
+  // Direct clicks on single-thread comment text or tracked-change text should
+  // place a caret at the clicked position and let comment/thread activation be
+  // inferred from the resulting selection. Only preserve the pointerdown
+  // short-circuit for nearby non-text surfaces, such as split-run gaps.
+  if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
     return false;
   }
 
@@ -2274,7 +2279,9 @@ export class EditorInputManager {
   }
 
   #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
-    if (isDirectSingleCommentHighlightHit(target)) {
+    // Direct hits on inline annotated text should not be intercepted here.
+    // Let generic click-to-position place the caret at the clicked pixel.
+    if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
       return false;
     }
 

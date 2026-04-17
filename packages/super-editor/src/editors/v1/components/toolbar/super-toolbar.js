@@ -622,6 +622,16 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
+      list: () => {
+        const markerToStyle = { '•': 'disc', '◦': 'circle', '▪': 'square' };
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = markerToStyle[commandState.value] ?? null;
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();

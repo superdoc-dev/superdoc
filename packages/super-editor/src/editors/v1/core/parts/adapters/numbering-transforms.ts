@@ -30,7 +30,14 @@ interface GenerateOptions {
   text?: string | null;
   fmt?: string | null;
   markerFontFamily?: string | null;
+  bulletStyle?: 'disc' | 'circle' | 'square' | null;
 }
+
+const BULLET_STYLE_CHARS: Record<string, { char: string; font: string }> = {
+  disc: { char: '\uf0b7', font: 'Symbol' },
+  circle: { char: 'o', font: 'Courier New' },
+  square: { char: '\uf0a7', font: 'Wingdings' },
+};
 
 interface GenerateResult {
   numId: number;
@@ -72,7 +79,7 @@ function buildNumDef(numId: number, abstractId: number): any {
  */
 export function generateNewListDefinition(numbering: NumberingModel, options: GenerateOptions): GenerateResult {
   let { listType } = options;
-  const { numId, level, start, text, fmt, markerFontFamily } = options;
+  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle } = options;
   if (typeof listType !== 'string') listType = (listType as any).name;
 
   const definition = listType === 'orderedList' ? baseOrderedListDef : baseBulletList;
@@ -85,6 +92,28 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
       attributes: { ...definition.attributes, 'w:abstractNumId': String(newAbstractId) },
     }),
   );
+
+  if (bulletStyle && listType !== 'orderedList') {
+    const styleChars = BULLET_STYLE_CHARS[bulletStyle];
+    if (styleChars) {
+      const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
+      if (lvl0) {
+        const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
+        if (lvlText) lvlText.attributes['w:val'] = styleChars.char;
+        let rPr = lvl0.elements.find((el: any) => el.name === 'w:rPr');
+        if (!rPr) {
+          rPr = { type: 'element', name: 'w:rPr', elements: [] };
+          lvl0.elements.push(rPr);
+        }
+        rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+        rPr.elements.push({
+          type: 'element',
+          name: 'w:rFonts',
+          attributes: { 'w:ascii': styleChars.font, 'w:hAnsi': styleChars.font, 'w:hint': 'default' },
+        });
+      }
+    }
+  }
 
   if (level != null && start != null && text != null && fmt != null) {
     if (numbering.definitions[numId]) {

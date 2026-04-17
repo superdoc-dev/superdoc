@@ -33,10 +33,10 @@ interface GenerateOptions {
   bulletStyle?: 'disc' | 'circle' | 'square' | null;
 }
 
-const BULLET_STYLE_CHARS: Record<string, { char: string; font: string }> = {
-  disc: { char: '\uf0b7', font: 'Symbol' },
-  circle: { char: 'o', font: 'Courier New' },
-  square: { char: '\uf0a7', font: 'Wingdings' },
+const BULLET_STYLE_CHARS: Record<string, string> = {
+  disc: '•',
+  circle: '◦',
+  square: '▪',
 };
 
 interface GenerateResult {
@@ -93,24 +93,19 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
     }),
   );
 
-  if (bulletStyle && listType !== 'orderedList') {
-    const styleChars = BULLET_STYLE_CHARS[bulletStyle];
-    if (styleChars) {
+  // Override the bullet style for the new list if a bullet style is provided
+  const shouldOverrideBulletStyle = bulletStyle && listType !== 'orderedList';
+  if (shouldOverrideBulletStyle) {
+    const char = BULLET_STYLE_CHARS[bulletStyle];
+    if (char) {
       const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
       if (lvl0) {
         const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
-        if (lvlText) lvlText.attributes['w:val'] = styleChars.char;
-        let rPr = lvl0.elements.find((el: any) => el.name === 'w:rPr');
-        if (!rPr) {
-          rPr = { type: 'element', name: 'w:rPr', elements: [] };
-          lvl0.elements.push(rPr);
-        }
-        rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
-        rPr.elements.push({
-          type: 'element',
-          name: 'w:rFonts',
-          attributes: { 'w:ascii': styleChars.font, 'w:hAnsi': styleChars.font, 'w:hint': 'default' },
-        });
+        if (lvlText) lvlText.attributes['w:val'] = char;
+
+        // Remove any inherited font so the Unicode char renders in the document's default font
+        const rPr = lvl0.elements.find((el: any) => el.name === 'w:rPr');
+        if (rPr) rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
       }
     }
   }

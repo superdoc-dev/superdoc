@@ -3272,23 +3272,29 @@ export class PresentationEditor extends EventEmitter {
     const handleTransaction = (event?: { transaction?: Transaction }) => {
       const tr = event?.transaction;
       this.#postPaintPipeline.recordDecorationTransaction(tr);
+
+      // For doc-changing transactions, handleUpdate already schedules a rerender
+      // which syncs decorations. Skip the expensive hasDecorationChanges() check
+      // that calls plugin.props.decorations() on every eligible plugin — this
+      // causes freezes on large documents.
+      if (tr?.docChanged) return;
+
+      // For meta-only transactions (e.g., setFocus, clearFocus), we need to check
+      // if decorations changed and trigger a rerender if so.
       const state = this.#editor?.view?.state;
       const decorationChanged = state && this.#postPaintPipeline.hasDecorationChanges(state);
       // Sync immediately whenever decorations changed so e.g. clearFocus removes
-      // highlight-selection in the same tick. Only restore when we had a doc change.
+      // highlight-selection in the same tick.
       if (decorationChanged) {
-        const restoreEmpty = tr ? tr.docChanged === true : false;
         this.#postPaintPipeline.syncDecorations(state!, this.#domPositionIndex, {
-          restoreEmptyDecorations: restoreEmpty,
+          restoreEmptyDecorations: false,
         });
-      } else {
-        // No immediate sync; schedule coalesced sync on next frame.
-        this.#scheduleDecorationSync();
-      }
-      if (decorationChanged) {
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
       }
     };
 

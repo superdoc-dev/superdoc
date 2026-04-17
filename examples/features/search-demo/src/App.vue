@@ -8,6 +8,8 @@ const loading = ref(false);
 const ready = ref(false);
 const query = ref('');
 const results = ref([]);
+const activeResult = ref(null);
+const replaceText = ref('');
 
 // SuperDoc instance
 let superdoc = null;
@@ -32,6 +34,14 @@ const initSuperdoc = (doc = null) => {
     pagination: true,
     toolbar: 'toolbar',
     toolbarGroups: ['left', 'center', 'right'],
+    trackChanges: {
+      enabled: true,
+      visible: true,
+    },
+    user: {
+      name: 'Demo User',
+      email: 'demo@example.com',
+    },
     onReady: () => {
       loading.value = false;
       ready.value = true;
@@ -64,9 +74,39 @@ const search = () => {
 const goToResult = (result) => {
   // Scrolls to the result and highlights it
   superdoc?.goToSearchResult(result);
+  activeResult.value = result;
 };
 
 // ============================================
+// REPLACE CODE
+// ============================================
+
+const replacing = ref(false);
+
+const replace = async () => {
+  if (!superdoc || !activeResult.value) return;
+
+  const { from, to } = activeResult.value;
+  const editor = superdoc.activeEditor;
+
+  replacing.value = true;
+
+  try {
+    editor.commands.insertTrackedChange({
+      from,
+      to,
+      text: replaceText.value,
+    });
+  } catch (err) {
+    console.error('[replace] error:', err);
+  }
+
+  // Clear state and re-search
+  activeResult.value = null;
+  replaceText.value = '';
+  replacing.value = false;
+  search();
+};
 
 const truncate = (text, max = 40) => {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -80,7 +120,6 @@ const truncate = (text, max = 40) => {
     <header class="header">
       <div class="header-left">
         <span class="badge">SEARCH DEMO</span>
-        <span class="version">v1.25.0</span>
       </div>
       <div class="header-right">
         <label class="file-btn">
@@ -123,10 +162,26 @@ const truncate = (text, max = 40) => {
               v-for="(r, i) in results"
               :key="i"
               class="result"
+              :class="{ active: activeResult === r }"
               @click="goToResult(r)"
             >
               <span class="result-index">{{ i + 1 }}.</span>
               <span class="result-text">{{ truncate(r.text) }}</span>
+            </button>
+          </div>
+
+          <!-- Replace section -->
+          <div v-if="activeResult" class="replace-section">
+            <label class="label">Replace with</label>
+            <textarea
+              v-model="replaceText"
+              class="replace-input"
+              placeholder="Enter replacement text..."
+              rows="3"
+            ></textarea>
+
+            <button class="replace-btn" :disabled="replacing" @click="replace">
+              {{ replacing ? 'Replacing...' : 'Replace as Tracked Change' }}
             </button>
           </div>
         </div>
@@ -164,11 +219,6 @@ const truncate = (text, max = 40) => {
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 4px;
-}
-
-.version {
-  color: #64748b;
-  font-size: 12px;
 }
 
 .header-right {
@@ -321,6 +371,11 @@ const truncate = (text, max = 40) => {
   background: #f8fafc;
 }
 
+.result.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
 .result-index {
   font-weight: 600;
   color: #3b82f6;
@@ -330,5 +385,49 @@ const truncate = (text, max = 40) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Replace section */
+.replace-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.replace-input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.replace-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.replace-btn {
+  padding: 8px 12px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.replace-btn:hover {
+  background: #2563eb;
+}
+
+.replace-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
 }
 </style>

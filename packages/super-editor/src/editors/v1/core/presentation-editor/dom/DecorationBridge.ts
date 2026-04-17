@@ -615,6 +615,35 @@ export class DecorationBridge {
     state: EditorState,
     docSize: number,
   ): { ranges: PreviousRange[]; decorationSet: DecorationSet } {
+    // Fast path for doc-changing transactions: skip expensive plugin.props.decorations()
+    // call and remap previous ranges using the transaction mapping instead.
+    // This avoids O(n) decoration rebuilds on in large documents.
+    if (this.#lastTransactionWasDocChange) {
+      const previousRanges = this.#previousRanges.get(plugin);
+      const prevDecorationSet = this.#prevDecorationSets.get(plugin);
+
+      // If we have cached data, remap it
+      if (previousRanges && prevDecorationSet) {
+        const rangesToken = this.#previousRangesTokenByPlugin.get(plugin) ?? -1;
+        const mappings = this.#getMappingsSinceToken(rangesToken);
+        if (mappings.length > 0) {
+          const remapped = this.#remapRangesThroughMappings(previousRanges, mappings, state.doc, docSize);
+          if (remapped.length > 0 || previousRanges.length === 0) {
+            return { ranges: remapped, decorationSet: prevDecorationSet };
+          }
+        } else if (rangesToken === this.#lastDocChangeToken) {
+          // Ranges are already current for this doc-change token
+          return { ranges: previousRanges, decorationSet: prevDecorationSet };
+        }
+      }
+
+      // No cached data, but this is a doc-changing transaction.
+      // Return empty rather than calling expensive plugin.props.decorations().
+      // Decorations will be properly synced on the next meta-only transaction
+      // (e.g., setFocus, search update) which doesn't use this fast path.
+      return { ranges: [], decorationSet: DecorationSet.empty };
+    }
+
     const decorationSet = this.#getDecorationSet(plugin, state);
     const prevDecorationSet = this.#prevDecorationSets.get(plugin);
     const remapped = this.#remapUnchangedPluginRangesIfNeeded(
@@ -662,6 +691,40 @@ export class DecorationBridge {
   }
 
   /**
+   * Remaps ranges through transaction mappings without calling plugin.props.decorations().
+   * Used as a fast path for doc-changing transactions.
+   *
+   * IMPORTANT: This intentionally skips text-based relocation (findRangeByText) because
+   * that function calls doc.textBetween(0, docSize) which is O(n) for each range.
+   * With many ranges, this becomes O(n*m) and freezes on large documents.
+   * Position-based mapping is O(1) per range and sufficient for most cases.
+   */
+  #remapRangesThroughMappings(
+    ranges: PreviousRange[],
+    mappings: PositionMapping[],
+    _doc: ProseMirrorNode,
+    docSize: number,
+  ): PreviousRange[] {
+    const remapped: PreviousRange[] = [];
+    for (const prev of ranges) {
+      // Use position mapping only - O(1) per range
+      // Skip text-based lookup which is O(n) per range and causes freezes
+      const from = this.#mapThroughMappings(prev.from, -1, mappings);
+      const to = this.#mapThroughMappings(prev.to, 1, mappings);
+      if (from < 0 || to <= from || to > docSize) continue;
+      remapped.push({
+        from,
+        to,
+        classes: prev.classes,
+        style: prev.style,
+        dataAttrs: prev.dataAttrs,
+        text: prev.text,
+      });
+    }
+    return remapped;
+  }
+
+  /**
    * Resolves effective ranges (restore empty + prefer full when partial) and what to store
    * as previous. Shared by collectDecorationRanges and #collectDesiredState.
    */
@@ -674,18 +737,25 @@ export class DecorationBridge {
     lastTransactionWasDocChange: boolean,
   ): { effectiveRanges: PreviousRange[]; rangesToStore: PreviousRange[] } {
     let current = pluginRanges;
+
+    // For doc-changing transactions, skip expensive text-based restore operations.
+    // The position-based remapping in #collectPluginRanges is sufficient.
+    // Text-based restore (restoreRangesFromPrevious, preferFullRestoredWhenPartial) calls
+    // findRangeByText which does O(n) doc.textBetween for each range, causing freezes.
+    if (lastTransactionWasDocChange) return { effectiveRanges: current, rangesToStore: current };
+
+    // For non-doc-changing transactions (e.g., search, setFocus), use original logic
     if (current.length === 0 && restoreEmpty && previousPluginRanges?.length) {
       current = restoreRangesFromPrevious(doc, docSize, previousPluginRanges);
     }
 
-    const effectiveRanges =
-      lastTransactionWasDocChange && restoreEmpty && previousPluginRanges?.length
-        ? preferFullRestoredWhenPartial(current, previousPluginRanges, doc, docSize)
-        : current;
+    // Note: preferFullRestoredWhenPartial was originally only called for doc-changing
+    // transactions, but we now skip those entirely above. So this is never reached
+    // in the original use case. Keep the simple path for non-doc-changing.
+    const effectiveRanges = current;
 
-    const storeExpandedOnDocChange = lastTransactionWasDocChange && effectiveRanges !== current;
-    const rangesToStore =
-      pluginRanges.length > 0 ? (storeExpandedOnDocChange ? effectiveRanges : pluginRanges) : effectiveRanges;
+    const storeExpandedOnDocChange = false; // We already returned early for doc changes
+    const rangesToStore = pluginRanges.length > 0 ? pluginRanges : effectiveRanges;
 
     return { effectiveRanges, rangesToStore };
   }

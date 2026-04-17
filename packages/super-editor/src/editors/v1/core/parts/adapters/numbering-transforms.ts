@@ -97,8 +97,10 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
   const shouldOverrideBulletStyle = bulletStyle && listType !== 'orderedList';
   if (shouldOverrideBulletStyle) {
     const char = BULLET_STYLE_CHARS[bulletStyle];
+
     if (char) {
       const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
+
       if (lvl0) {
         const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
         if (lvlText) lvlText.attributes['w:val'] = char;

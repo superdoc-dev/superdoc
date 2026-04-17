@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "superdoc": "latest",
+    "superdoc": "1.25.0-pr.2854.1776397995",
     "vue": "^3.5.0"
   },
   "devDependencies": {

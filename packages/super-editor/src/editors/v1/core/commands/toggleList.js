@@ -26,10 +26,18 @@ function getParagraphListKind(node, editor) {
   return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
 }
 
-function paragraphMatchesToggleListType(node, editor, listType) {
+/** @type {Record<string, string>} */
+const MARKER_TEXT_TO_STYLE = { '•': 'disc', '◦': 'circle', '▪': 'square' };
+
+function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
   const kind = getParagraphListKind(node, editor);
   if (!kind) return false;
-  if (listType === 'bulletList') return kind === 'bullet';
+  if (listType === 'bulletList') {
+    if (kind !== 'bullet') return false;
+    if (!bulletStyle) return true;
+    const markerText = node.attrs.listRendering?.markerText;
+    return MARKER_TEXT_TO_STYLE[markerText] === bulletStyle;
+  }
   if (listType === 'orderedList') return kind === 'ordered';
   return false;
 }
@@ -60,13 +68,13 @@ function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
 }
 
 export const toggleList =
-  (listType) =>
+  (listType, bulletStyle) =>
   ({ editor, state, tr, dispatch }) => {
     if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
 
-    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType);
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -127,7 +135,7 @@ export const toggleList =
 
     if (mode === 'create') {
       const numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
+      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor, bulletStyle });
       sharedNumberingProperties = {
         numId: Number(numId),
         ilvl: 0,

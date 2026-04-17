@@ -542,6 +542,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: null,
     });
   });
 

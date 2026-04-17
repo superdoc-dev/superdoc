@@ -39,10 +39,21 @@ import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
  * @param {string} [param0.text]
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
+ * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
-export const generateNewListDefinition = ({ numId, listType, level, start, text, fmt, editor, markerFontFamily }) => {
+export const generateNewListDefinition = ({
+  numId,
+  listType,
+  level,
+  start,
+  text,
+  fmt,
+  editor,
+  markerFontFamily,
+  bulletStyle,
+}) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
 
@@ -55,6 +66,7 @@ export const generateNewListDefinition = ({ numId, listType, level, start, text,
       text,
       fmt,
       markerFontFamily,
+      bulletStyle,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });

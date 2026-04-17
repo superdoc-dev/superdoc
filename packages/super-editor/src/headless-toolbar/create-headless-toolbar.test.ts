@@ -473,10 +473,10 @@ describe('createHeadlessToolbar', () => {
   });
 
   it('executes bullet-list through the registry direct command path', () => {
-    const toggleBulletList = vi.fn(() => true);
+    const toggleBulletListStyle = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
-        toggleBulletList,
+        toggleBulletListStyle,
       },
       state: createSelectionState({
         empty: true,
@@ -495,7 +495,7 @@ describe('createHeadlessToolbar', () => {
     });
 
     expect(controller.execute?.('bullet-list')).toBe(true);
-    expect(toggleBulletList).toHaveBeenCalledTimes(1);
+    expect(toggleBulletListStyle).toHaveBeenCalledTimes(1);
 
     controller.destroy();
   });

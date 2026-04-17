@@ -173,6 +173,7 @@ export const Paragraph = OxmlNode.create({
       listRendering: {
         keepOnSplit: false,
         renderDOM: ({ listRendering }) => {
+          console.log('listRendering', listRendering);
           return {
             'data-marker-type': listRendering?.markerText,
             'data-list-level': listRendering?.path ? JSON.stringify(listRendering.path) : null,
@@ -321,6 +322,17 @@ export const Paragraph = OxmlNode.create({
        */
       toggleBulletList: () => (params) => {
         return toggleList('bulletList')(params);
+      },
+
+      /**
+       * Toggle a bullet list with a specific bullet style at the current selection
+       * @category Command
+       * @example
+       * editor.commands.toggleBulletListStyle('disc')
+       * @note Style can be 'disc' (•), 'circle' (◦), or 'square' (▪)
+       */
+      toggleBulletListStyle: (style) => (params) => {
+        return toggleList('bulletList', style)(params);
       },
 
       /**

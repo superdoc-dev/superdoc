@@ -4,6 +4,7 @@ import { sanitizeNumber } from './helpers';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
+import BulletStyleButtons from './BulletStyleButtons.vue';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -630,16 +631,34 @@ export const makeDefaultItems = ({
 
   // bullet list
   const bulletedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'list',
-    command: 'toggleBulletList',
+    command: 'toggleBulletListStyle',
     icon: toolbarIcons.bulletList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
+    suppressActiveHighlight: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'bullet-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(bulletedList);
+            const item = { ...bulletedList, command: 'toggleBulletListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(BulletStyleButtons, {
+            selectedStyle: bulletedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // number list

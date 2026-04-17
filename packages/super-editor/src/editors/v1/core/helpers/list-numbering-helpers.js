@@ -30,6 +30,17 @@ import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
 // ---------------------------------------------------------------------------
 
 /**
+ * Maps a bullet marker character (from `listRendering.markerText`) to its named bullet style.
+ * Returns null for unrecognized markers.
+ * @param {string|null|undefined} markerText
+ * @returns {'disc'|'circle'|'square'|null}
+ */
+export function markerTextToBulletStyle(markerText) {
+  const map = { '•': 'disc', '◦': 'circle', '▪': 'square' };
+  return map[markerText] ?? null;
+}
+
+/**
  * Generate a new list definition for the given list type.
  * @param {Object} param0
  * @param {number} param0.numId

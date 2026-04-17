@@ -20,6 +20,7 @@ import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
+import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -623,10 +624,9 @@ export class SuperToolbar extends EventEmitter {
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
       list: () => {
-        const markerToStyle = { '•': 'disc', '◦': 'circle', '▪': 'square' };
         if (commandState?.active) {
           item.activate();
-          item.selectedValue.value = markerToStyle[commandState.value] ?? null;
+          item.selectedValue.value = markerTextToBulletStyle(commandState.value);
         } else {
           item.deactivate();
           item.selectedValue.value = null;

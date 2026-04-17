@@ -1,6 +1,6 @@
 // @ts-check
 import { updateNumberingProperties } from './changeListLevel.js';
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { Selection, TextSelection } from 'prosemirror-state';
@@ -26,9 +26,6 @@ function getParagraphListKind(node, editor) {
   return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
 }
 
-/** @type {Record<string, string>} */
-const MARKER_TEXT_TO_STYLE = { '•': 'disc', '◦': 'circle', '▪': 'square' };
-
 function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
   const kind = getParagraphListKind(node, editor);
   if (!kind) return false;
@@ -36,7 +33,7 @@ function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
     if (kind !== 'bullet') return false;
     if (!bulletStyle) return true;
     const markerText = node.attrs.listRendering?.markerText;
-    return MARKER_TEXT_TO_STYLE[markerText] === bulletStyle;
+    return markerTextToBulletStyle(markerText) === bulletStyle;
   }
   if (listType === 'orderedList') return kind === 'ordered';
   return false;

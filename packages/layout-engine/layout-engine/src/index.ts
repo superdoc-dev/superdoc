@@ -1,5 +1,6 @@
 import type {
   ColumnLayout,
+  ColumnRegion,
   FlowBlock,
   Fragment,
   HeaderFooterLayout,
@@ -946,11 +947,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
     // Check if columns are changing: either explicitly to a different config,
-    // or implicitly resetting to single column (undefined = single column in OOXML)
+    // or implicitly resetting to single column (undefined = single column in OOXML).
+    // withSeparator must be compared because a sep-only toggle still needs a new
+    // column region so the renderer can draw (or stop drawing) the separator from
+    // the toggle point onward.
     const isColumnsChanging =
       (block.columns &&
-        (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap)) ||
-      (!block.columns && next.activeColumns.count > 1);
+        (block.columns.count !== next.activeColumns.count ||
+          block.columns.gap !== next.activeColumns.gap ||
+          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator))) ||
+      (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -2326,6 +2332,39 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
     }
+  }
+
+  // Serialize constraint boundaries into page.columnRegions so DomPainter can
+  // draw per-region overlays (e.g. column separator lines) bounded by the
+  // correct Y span. Continuous section breaks with a changed column config
+  // push boundaries into PageState.constraintBoundaries during layout; without
+  // this step the renderer only sees the page-start column config and would
+  // draw a single full-page separator across regions it no longer applies to.
+  for (const state of states) {
+    const boundaries = state.constraintBoundaries;
+    if (boundaries.length === 0) continue;
+
+    const regions: ColumnRegion[] = [];
+    // First region spans from the top of the content area to the first boundary.
+    // Its columns come from page.columns (set at page creation before any
+    // mid-page region change) or fall back to a single-column default so the
+    // contract stays self-describing even when the page starts single-column.
+    const firstRegionColumns: ColumnLayout = state.page.columns ?? { count: 1, gap: 0 };
+    regions.push({
+      yStart: state.topMargin,
+      yEnd: boundaries[0].y,
+      columns: firstRegionColumns,
+    });
+    for (let i = 0; i < boundaries.length; i++) {
+      const start = boundaries[i];
+      const end = boundaries[i + 1];
+      regions.push({
+        yStart: start.y,
+        yEnd: end ? end.y : state.contentBottom,
+        columns: start.columns,
+      });
+    }
+    state.page.columnRegions = regions;
   }
 
   return {

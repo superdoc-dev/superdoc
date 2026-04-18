@@ -1420,6 +1420,23 @@ export type ColumnLayout = {
   withSeparator?: boolean;
 };
 
+/**
+ * A vertical region of a page that shares a single column configuration.
+ *
+ * Continuous section breaks can introduce multiple column configurations on the
+ * same page (see ECMA-376 §17.6.22 and §17.18.77). A page may therefore carry
+ * multiple regions stacked vertically. Consumers (e.g. DomPainter) use
+ * `yStart`/`yEnd` to bound any per-region overlays such as column separators.
+ */
+export type ColumnRegion = {
+  /** Inclusive top of the region, in pixels from the page top. */
+  yStart: number;
+  /** Exclusive bottom of the region, in pixels from the page top. */
+  yEnd: number;
+  /** Column configuration active within this region. */
+  columns: ColumnLayout;
+};
+
 /** A measured line within a block, output by the measurer. */
 export type Line = {
   fromRun: number;
@@ -1646,10 +1663,27 @@ export type Page = {
   sectionIndex?: number;
   /**
    * Column layout configuration for this page.
-   * Used by the renderer to draw column separator lines when
-   * `withSeparator` is set to true.
+   *
+   * Reflects the column configuration at page start. For pages with continuous
+   * section breaks that change column layout mid-page, use `columnRegions` for
+   * accurate per-region information.
+   *
+   * Used by the renderer to draw column separator lines when `withSeparator`
+   * is set to true.
    */
   columns?: ColumnLayout;
+  /**
+   * Vertical column regions on this page, ordered top to bottom.
+   *
+   * Populated when continuous section breaks change column layout mid-page. Each
+   * region pairs a `{yStart, yEnd}` span with the column config active inside it
+   * (see ECMA-376 §17.6.22). Renderers should prefer this field over
+   * `columns` when drawing per-region overlays (e.g. column separators).
+   *
+   * If omitted, the page has a single column region and consumers can fall back
+   * to `columns`.
+   */
+  columnRegions?: ColumnRegion[];
 };
 
 /** A paragraph fragment positioned on a page. */

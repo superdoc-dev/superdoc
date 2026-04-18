@@ -59,16 +59,24 @@ function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
  * @returns True if column layout is changing
  */
 function isColumnConfigChanging(
-  blockColumns: { count: number; gap: number } | undefined,
-  activeColumns: { count: number; gap: number },
+  blockColumns: { count: number; gap: number; withSeparator?: boolean } | undefined,
+  activeColumns: { count: number; gap: number; withSeparator?: boolean },
 ): boolean {
   if (blockColumns) {
-    // Explicit column change
-    return blockColumns.count !== activeColumns.count || blockColumns.gap !== activeColumns.gap;
+    // Explicit column change: any of count, gap, or separator presence differs.
+    // withSeparator must be included because a sep-only toggle still needs a new
+    // column region so the renderer can draw (or stop drawing) the separator from
+    // the toggle point onward.
+    return (
+      blockColumns.count !== activeColumns.count ||
+      blockColumns.gap !== activeColumns.gap ||
+      Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator)
+    );
   }
-  // No columns specified = reset to single column (OOXML default)
-  // This is a change only if currently in multi-column layout
-  return activeColumns.count > 1;
+  // No columns specified = reset to single column (OOXML default).
+  // This is a change if currently in multi-column layout, or if the separator was on
+  // (the reset implicitly turns it off).
+  return activeColumns.count > 1 || Boolean(activeColumns.withSeparator);
 }
 
 /**

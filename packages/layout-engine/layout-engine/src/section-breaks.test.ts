@@ -140,6 +140,44 @@ describe('scheduleSectionBreak', () => {
         expect(result.decision.forceMidPageRegion).toBe(false);
         expect(result.state.pendingColumns).toEqual({ count: 2, gap: 48 });
       });
+
+      it('detects column change when only withSeparator toggles on', () => {
+        const state = createSectionState({ activeColumns: { count: 2, gap: 48, withSeparator: false } });
+        const block = createSectionBreak({
+          type: 'continuous',
+          columns: { count: 2, gap: 48, withSeparator: true },
+        });
+
+        const result = scheduleSectionBreak(block, state, BASE_MARGINS);
+
+        expect(result.decision.forceMidPageRegion).toBe(true);
+        expect(result.state.pendingColumns).toEqual({ count: 2, gap: 48, withSeparator: true });
+      });
+
+      it('detects column change when only withSeparator toggles off', () => {
+        const state = createSectionState({ activeColumns: { count: 2, gap: 48, withSeparator: true } });
+        const block = createSectionBreak({
+          type: 'continuous',
+          columns: { count: 2, gap: 48, withSeparator: false },
+        });
+
+        const result = scheduleSectionBreak(block, state, BASE_MARGINS);
+
+        expect(result.decision.forceMidPageRegion).toBe(true);
+        expect(result.state.pendingColumns).toEqual({ count: 2, gap: 48, withSeparator: false });
+      });
+
+      it('does not trigger mid-page region change when undefined and defined false match', () => {
+        const state = createSectionState({ activeColumns: { count: 2, gap: 48, withSeparator: false } });
+        const block = createSectionBreak({
+          type: 'continuous',
+          columns: { count: 2, gap: 48 },
+        });
+
+        const result = scheduleSectionBreak(block, state, BASE_MARGINS);
+
+        expect(result.decision.forceMidPageRegion).toBe(false);
+      });
     });
 
     describe('first section handling', () => {

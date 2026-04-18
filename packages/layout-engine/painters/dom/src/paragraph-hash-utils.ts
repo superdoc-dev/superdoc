@@ -24,13 +24,16 @@ export const hashParagraphBorder = (border: ParagraphBorder): string => {
 };
 
 export const hashParagraphBorders = (borders: ParagraphBorders): string => {
+  // Intentionally excludes `bar` — w:bar does not participate in between-border
+  // grouping (Word groups paragraphs on top/right/bottom/left/between only) and
+  // is not rendered by this painter, so including it would create spurious
+  // hash misses that break grouping for paragraphs that differ only in w:bar.
   const parts: string[] = [];
   if (borders.top) parts.push(`t:[${hashParagraphBorder(borders.top)}]`);
   if (borders.right) parts.push(`r:[${hashParagraphBorder(borders.right)}]`);
   if (borders.bottom) parts.push(`b:[${hashParagraphBorder(borders.bottom)}]`);
   if (borders.left) parts.push(`l:[${hashParagraphBorder(borders.left)}]`);
   if (borders.between) parts.push(`bw:[${hashParagraphBorder(borders.between)}]`);
-  if (borders.bar) parts.push(`bar:[${hashParagraphBorder(borders.bar)}]`);
   return parts.join(';');
 };
 

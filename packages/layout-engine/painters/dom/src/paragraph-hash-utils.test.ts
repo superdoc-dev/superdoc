@@ -226,4 +226,32 @@ describe('hashParagraphBorders', () => {
     };
     expect(hashParagraphBorders(borders)).not.toContain('bw:');
   });
+
+  // w:bar is intentionally excluded from the grouping hash — Word does not
+  // use w:bar when deciding whether consecutive paragraphs form a between-border
+  // group, and SuperDoc does not render w:bar. Including it would cause
+  // spurious grouping mismatches between paragraphs that differ only in bar.
+  it('excludes bar from the grouping hash', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      bar: { style: 'solid', width: 4, color: '#FF0000' },
+    };
+    expect(hashParagraphBorders(borders)).not.toContain('bar:');
+  });
+
+  it('produces the same hash for borders that differ only in bar', () => {
+    const withRedBar: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      bottom: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+      bar: { style: 'solid', width: 4, color: '#FF0000' },
+    };
+    const withGreenBar: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      bottom: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+      bar: { style: 'solid', width: 4, color: '#00FF00' },
+    };
+    expect(hashParagraphBorders(withRedBar)).toBe(hashParagraphBorders(withGreenBar));
+  });
 });

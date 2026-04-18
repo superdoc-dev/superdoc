@@ -582,6 +582,44 @@ describe('normalizeParagraphBorders', () => {
     });
   });
 
+  describe('bar border (w:bar — §17.3.1.4)', () => {
+    // w:bar is the decorative "Paragraph Border Between Facing Pages" border.
+    // It is parsed and preserved through the data model for round-trip fidelity,
+    // but intentionally not rendered — Word itself ignores it in all observed
+    // configurations, and the spec explicitly permits ignoring it.
+    it('should normalize bar border alongside other sides', () => {
+      const input = {
+        top: { val: 'single', size: 1, color: 'FF0000' },
+        bar: { val: 'single', size: 24, color: '4F81BD' },
+      };
+      const result = normalizeParagraphBorders(input);
+      expect(result?.top).toBeDefined();
+      expect(result?.bar).toBeDefined();
+      expect(result?.bar?.style).toBe('solid');
+      expect(result?.bar?.color).toContain('4F81BD');
+    });
+
+    it('should drop bar border when val is nil/none', () => {
+      const input = {
+        left: { val: 'single', size: 16, color: '008000' },
+        bar: { val: 'none' },
+      };
+      const result = normalizeParagraphBorders(input);
+      expect(result?.left).toBeDefined();
+      expect(result?.bar).toBeUndefined();
+    });
+
+    it('should normalize bar as the only defined side', () => {
+      const input = {
+        bar: { val: 'single', size: 24, color: 'FF0000' },
+      };
+      const result = normalizeParagraphBorders(input);
+      expect(result).toBeDefined();
+      expect(result?.bar).toBeDefined();
+      expect(result?.bar?.style).toBe('solid');
+    });
+  });
+
   describe('invalid inputs', () => {
     it('should return undefined for null', () => {
       expect(normalizeParagraphBorders(null)).toBeUndefined();

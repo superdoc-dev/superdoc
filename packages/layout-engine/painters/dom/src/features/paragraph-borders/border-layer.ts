@@ -9,6 +9,14 @@
  * @ooxml w:pPr/w:pBdr/w:between — between border (rendered as bottom within groups)
  * @ooxml w:pPr/w:shd — paragraph shading (background fill)
  * @spec  ECMA-376 §17.3.1.24 (pBdr), §17.3.1.31 (shd)
+ *
+ * Note on w:bar (§17.3.1.4): the decorative "Paragraph Border Between Facing
+ * Pages" is parsed and preserved through the data model (see `ParagraphBorders.bar`)
+ * but intentionally NOT rendered. The spec explicitly permits ignoring it
+ * ("This information is present... for legacy document format compatibility,
+ * and it can be removed and/or ignored as required"), and Microsoft Word
+ * itself does not render w:bar in any observed configuration. Rendering it
+ * would diverge from Word's output on every document that uses it.
  */
 import type { ParagraphAttrs, ParagraphBorder, ParagraphBorders } from '@superdoc/contracts';
 import type { BetweenBorderInfo } from './group-analysis.js';
@@ -42,21 +50,6 @@ export const getParagraphBorderBox = (
 // ─── Border space (padding between border and text) ─────────────────
 
 /**
- * Resolves the effective left-side border for layout purposes.
- *
- * `applyParagraphBorderStyles` draws `w:bar` on the CSS `border-left` slot,
- * overriding any `w:left` border when bar is present and not 'none'. To keep
- * geometry helpers in sync with what's actually rendered, the same resolution
- * must be used when sizing/positioning the border layer.
- *
- * @spec ECMA-376 §17.3.1.4 — w:bar (paragraph bar border)
- */
-const getEffectiveLeftBorder = (borders?: ParagraphBorders): ParagraphBorder | undefined => {
-  if (borders?.bar && borders.bar.style !== 'none') return borders.bar;
-  return borders?.left;
-};
-
-/**
  * Computes the outward expansion for the border/shading layers based on
  * the `space` attribute (OOXML: distance between border and text, in points).
  *
@@ -74,7 +67,6 @@ export const computeBorderSpaceExpansion = (
   const suppressTop = betweenInfo?.suppressTopBorder ?? false;
   const suppressBottom = betweenInfo?.suppressBottomBorder ?? false;
   const showBetween = betweenInfo?.showBetweenBorder ?? false;
-  const effectiveLeft = getEffectiveLeftBorder(borders);
 
   return {
     // When top is suppressed (non-first group member), use the between border's space
@@ -87,7 +79,7 @@ export const computeBorderSpaceExpansion = (
         ? borders.top.space * PX_PER_PT
         : 0,
     bottom: !suppressBottom && !showBetween && borders.bottom?.space ? borders.bottom.space * PX_PER_PT : 0,
-    left: effectiveLeft?.space ? effectiveLeft.space * PX_PER_PT : 0,
+    left: borders.left?.space ? borders.left.space * PX_PER_PT : 0,
     right: borders.right?.space ? borders.right.space * PX_PER_PT : 0,
   };
 };
@@ -189,7 +181,7 @@ const computeRenderedBorderWidths = (
   return {
     top: !suppressTop ? (borders.top?.width ?? 0) : 0,
     bottom: showBetween ? (borders.between?.width ?? 0) : !suppressBottom ? (borders.bottom?.width ?? 0) : 0,
-    left: getEffectiveLeftBorder(borders)?.width ?? 0,
+    left: borders.left?.width ?? 0,
     right: borders.right?.width ?? 0,
   };
 };
@@ -220,10 +212,7 @@ export const applyParagraphBorderStyles = (
   BORDER_SIDES.forEach((side) => {
     if (side === 'top' && suppressTopBorder) return;
     if (side === 'bottom' && suppressBottomBorder) return;
-    // The decorative bar border (OOXML §17.3.1.4) renders on the left CSS slot,
-    // overriding any w:left border. getEffectiveLeftBorder mirrors the geometry
-    // helpers above so layout and paint agree on which border occupies that slot.
-    const border = side === 'left' ? getEffectiveLeftBorder(borders) : borders[side];
+    const border = borders[side];
     if (!border) return;
     setBorderSideStyle(element, side, border);
   });

@@ -3107,12 +3107,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * - `exportXmlOnly: true` → `string` (raw XML)
    * - `exportJsonOnly: true` → `string` (JSON string)
    * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
-   * - Default → `Blob` (browser) or `Buffer` (Node.js headless)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js headless). The runtime
+   *   value is determined by the editor's `isHeadless` option at construction
+   *   time, which the type system cannot see — so the default overload is
+   *   generic with `Blob` as the default. Browser consumers get `Blob`
+   *   automatically; Node headless consumers opt in with `exportDocx<Buffer>()`.
    */
   async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
-  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
+  async exportDocx<T extends Blob | Buffer = Blob>(
+    params?: ExportDocxParams & { exportXmlOnly?: false; exportJsonOnly?: false; getUpdatedDocs?: false },
+  ): Promise<T>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',
@@ -3171,6 +3177,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const footnotesRelsXml = footnotesRelsData?.elements?.[0]
         ? this.converter.schemaToXml(footnotesRelsData.elements[0])
         : null;
+      const endnotesData = this.converter.convertedXml['word/endnotes.xml'];
+      const endnotesXml = endnotesData?.elements?.[0] ? this.converter.schemaToXml(endnotesData.elements[0]) : null;
+      const endnotesRelsData = this.converter.convertedXml['word/_rels/endnotes.xml.rels'];
+      const endnotesRelsXml = endnotesRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(endnotesRelsData.elements[0])
+        : null;
+
+      const settingsRelsData = this.converter.convertedXml['word/_rels/settings.xml.rels'];
+      const settingsRelsXml = settingsRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(settingsRelsData.elements[0])
+        : null;
 
       const media = this.converter.addedMedia;
 
@@ -3206,7 +3223,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
       };
 
       if (hasCustomSettings) {
-        updatedDocs['word/settings.xml'] = String(customSettings);
+        let settingsXml = String(customSettings);
+        if (settingsRelsXml) {
+          updatedDocs['word/_rels/settings.xml.rels'] = String(settingsRelsXml);
+        } else if (/<\w+:attachedTemplate\b/i.test(settingsXml)) {
+          // settings.xml references r:id on attachedTemplate via word/_rels/settings.xml.rels.
+          // If that part is missing (e.g. collab joiner), omit the element so the package stays valid.
+          settingsXml = settingsXml.replace(/<\w+:attachedTemplate\b[^>]*\/?>/gi, '');
+        }
+        updatedDocs['word/settings.xml'] = settingsXml;
       }
 
       if (footnotesXml) {
@@ -3215,6 +3240,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       if (footnotesRelsXml) {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
+      }
+
+      if (endnotesXml) {
+        updatedDocs['word/endnotes.xml'] = String(endnotesXml);
+      }
+
+      if (endnotesRelsXml) {
+        updatedDocs['word/_rels/endnotes.xml.rels'] = String(endnotesRelsXml);
       }
 
       // Serialize each comment file if it exists in convertedXml, otherwise mark as null
@@ -3236,6 +3269,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       for (const path of bibliographyPartPaths) {
         const partData = this.converter.convertedXml[path];
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      for (const path of Object.keys(this.converter.convertedXml)) {
+        if (!path.startsWith('customXml/')) continue;
+        if (!path.endsWith('.xml') && !path.endsWith('.rels')) continue;
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
           updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
         }

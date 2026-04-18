@@ -447,9 +447,24 @@ class TestAsyncDisconnect:
         try:
             transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
             await transport.connect()
+            process = transport._process
+            assert process is not None
             with pytest.raises(SuperDocError) as exc_info:
                 await transport.invoke(_TEST_OP, {'query': 'test'})
-            assert exc_info.value.code in (HOST_DISCONNECTED, HOST_TIMEOUT)
+            # The reader-loop EOF branch now goes through _schedule_cleanup,
+            # which rejects the pending future synchronously enough that the
+            # invoke() never has to fall back to the watchdog timeout.
+            assert exc_info.value.code == HOST_DISCONNECTED
+
+            # Cleanup must tear the process down — pre-fix, the inline
+            # _reject_all_pending + state flip left the process orphaned.
+            cleanup_task = transport._cleanup_task
+            if cleanup_task is not None:
+                await cleanup_task
+            assert transport._process is None
+            assert transport.state == 'DISCONNECTED'
+            await process.wait()
+            assert process.returncode is not None
         finally:
             _cleanup_wrapper(cli)
 
@@ -545,14 +560,25 @@ class TestAsyncLargeResponse:
             # The host process must be torn down — not just the transport
             # state flipped to DISCONNECTED. Otherwise dispose() short-circuits
             # and leaves an orphaned host running.
-            if transport._cleanup_task is not None:
-                await transport._cleanup_task
+            cleanup_task = transport._cleanup_task
+            if cleanup_task is not None:
+                await cleanup_task
             assert transport._process is None
             assert transport.state == 'DISCONNECTED'
+            # The captured handle should be reaped by _cleanup; await wait()
+            # rather than reading returncode to avoid a CI-timing flake if the
+            # 2 s wait inside _cleanup didn't finish reaping in time.
+            await process.wait()
             assert process.returncode is not None
 
-            # dispose() after an overflow must be a safe no-op.
+            # dispose() after an overflow must be a safe no-op: state and
+            # process stay as cleanup left them, no exception is raised, and
+            # a second dispose() is also safe.
             await transport.dispose()
+            assert transport.state == 'DISCONNECTED'
+            assert transport._process is None
+            await transport.dispose()
+            assert transport.state == 'DISCONNECTED'
         finally:
             _cleanup_wrapper(cli)
 

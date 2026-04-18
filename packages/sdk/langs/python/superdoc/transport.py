@@ -594,7 +594,29 @@ class AsyncHostTransport:
 
         try:
             while True:
-                raw = await process.stdout.readline()
+                try:
+                    raw = await process.stdout.readline()
+                except ValueError as exc:
+                    # asyncio.StreamReader.readline() re-raises LimitOverrunError
+                    # from readuntil() as ValueError when a single line exceeds
+                    # `limit` (see CPython asyncio/streams.py). The host is still
+                    # alive — schedule cleanup so a later dispose() doesn't
+                    # short-circuit on DISCONNECTED state. Scoped to readline()
+                    # only so unrelated ValueErrors from dispatch aren't
+                    # reclassified as a buffer-limit error.
+                    logger.debug('Reader loop buffer overflow: %s', exc)
+                    if not self._stopping:
+                        self._schedule_cleanup(SuperDocError(
+                            'Host response exceeded stdout buffer limit. '
+                            'Raise stdout_buffer_limit_bytes to accommodate larger responses.',
+                            code=HOST_PROTOCOL_ERROR,
+                            details={
+                                'message': str(exc),
+                                'stdout_buffer_limit_bytes': self._stdout_buffer_limit_bytes,
+                            },
+                        ))
+                    return
+
                 if not raw:
                     # EOF — process died.
                     break
@@ -622,23 +644,6 @@ class AsyncHostTransport:
                     continue
 
         except asyncio.CancelledError:
-            return
-        except (asyncio.LimitOverrunError, ValueError) as exc:
-            # StreamReader raises LimitOverrunError (a ValueError subclass on
-            # some Python versions) when a single line exceeds the stdout
-            # buffer limit. The host is still alive — we must kill it so a
-            # later dispose() doesn't short-circuit on DISCONNECTED state.
-            logger.debug('Reader loop buffer overflow: %s', exc)
-            if not self._stopping:
-                self._schedule_cleanup(SuperDocError(
-                    'Host response exceeded stdout buffer limit. '
-                    'Raise stdout_buffer_limit_bytes to accommodate larger responses.',
-                    code=HOST_PROTOCOL_ERROR,
-                    details={
-                        'message': str(exc),
-                        'stdout_buffer_limit_bytes': self._stdout_buffer_limit_bytes,
-                    },
-                ))
             return
         except Exception as exc:
             logger.debug('Reader loop error: %s', exc)
@@ -721,15 +726,25 @@ class AsyncHostTransport:
         )
 
     def _schedule_cleanup(self, error: SuperDocError) -> None:
-        """Fire-and-forget cleanup from inside the reader task.
+        """Fire-and-forget teardown from inside the reader task.
 
-        Must not be awaited from `_reader_loop` itself — `_cleanup` cancels
-        and awaits the reader task, which would deadlock. Scheduling it as a
-        separate task lets the reader return first; by the time cleanup runs
-        the reader task is already done and the cancel/await is a no-op.
+        Why a separate task: `_cleanup` cancels and awaits `self._reader_task`.
+        Awaiting it from inside the reader itself would deadlock — so we punt
+        to a fresh task, and by the time it runs the reader has already
+        returned (so cancel+await is a no-op).
+
+        Synchronously flips state to DISPOSING so concurrent `invoke()` callers
+        observe the failed transport immediately rather than passing the
+        CONNECTED fast path and blocking on a future the dead reader can never
+        resolve until `watchdog_timeout_ms`.
+
+        Idempotent: if a cleanup is already in flight, subsequent errors are
+        dropped — the first one wins. Callers may observe completion via
+        `self._cleanup_task`.
         """
         if self._cleanup_task and not self._cleanup_task.done():
             return
+        self._state = _State.DISPOSING
         self._cleanup_task = asyncio.create_task(self._cleanup(error))
 
     async def _cleanup(self, error: Optional[SuperDocError]) -> None:

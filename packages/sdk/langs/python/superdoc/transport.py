@@ -443,10 +443,14 @@ class AsyncHostTransport:
             # A reader-triggered cleanup is in flight (or an earlier teardown
             # left state in DISPOSING briefly). Wait for it so the caller
             # observes "host fully torn down" by the time dispose() returns.
+            # shield() so a cancelled dispose() doesn't interrupt _cleanup
+            # mid-flight and leak the host process.
             existing = self._cleanup_task
             if existing and not existing.done():
                 try:
-                    await existing
+                    await asyncio.shield(existing)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     pass
             return
@@ -527,6 +531,20 @@ class AsyncHostTransport:
 
     async def _ensure_connected(self) -> None:
         """Lazy connect: spawn and handshake if not already connected."""
+        # Drain any in-flight teardown before spawning a new host. Without
+        # this, a concurrent reader-triggered cleanup would still be running
+        # when _start_host reassigns self._process / self._reader_task; the
+        # cleanup task would then cancel the fresh reader and kill the fresh
+        # process. shield() so we don't cancel the cleanup if our caller is.
+        cleanup = self._cleanup_task
+        if cleanup and not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
         if self._state == _State.CONNECTED and self._process and self._process.returncode is None:
             return
 
@@ -614,18 +632,18 @@ class AsyncHostTransport:
                     # alive — schedule cleanup so a later dispose() doesn't
                     # short-circuit on DISCONNECTED state. Scoped to readline()
                     # only so unrelated ValueErrors from dispatch aren't
-                    # reclassified as a buffer-limit error.
+                    # reclassified as a buffer-limit error. _schedule_cleanup
+                    # is a no-op when _stopping is set (graceful dispose path).
                     logger.debug('Reader loop buffer overflow: %s', exc)
-                    if not self._stopping:
-                        self._schedule_cleanup(SuperDocError(
-                            'Host response exceeded stdout buffer limit. '
-                            'Raise stdout_buffer_limit_bytes to accommodate larger responses.',
-                            code=HOST_PROTOCOL_ERROR,
-                            details={
-                                'message': str(exc),
-                                'stdout_buffer_limit_bytes': self._stdout_buffer_limit_bytes,
-                            },
-                        ))
+                    self._schedule_cleanup(SuperDocError(
+                        'Host response exceeded stdout buffer limit. '
+                        'Raise stdout_buffer_limit_bytes to accommodate larger responses.',
+                        code=HOST_PROTOCOL_ERROR,
+                        details={
+                            'message': str(exc),
+                            'stdout_buffer_limit_bytes': self._stdout_buffer_limit_bytes,
+                        },
+                    ))
                     return
 
                 if not raw:
@@ -661,13 +679,14 @@ class AsyncHostTransport:
 
         # Reader exited (EOF or unexpected error) — tear down the process so
         # no orphaned host is left running, then reject pending futures.
-        if not self._stopping:
-            exit_code = process.returncode
-            self._schedule_cleanup(SuperDocError(
-                'Host process disconnected.',
-                code=HOST_DISCONNECTED,
-                details={'exit_code': exit_code, 'signal': None},
-            ))
+        # _schedule_cleanup is a no-op when _stopping is set (graceful
+        # dispose path) so we don't race the dispose teardown.
+        exit_code = process.returncode
+        self._schedule_cleanup(SuperDocError(
+            'Host process disconnected.',
+            code=HOST_DISCONNECTED,
+            details={'exit_code': exit_code, 'signal': None},
+        ))
 
     async def _send_request(self, method: str, params: Any, watchdog_ms: int) -> Any:
         """Send a JSON-RPC request and await the matching response future."""
@@ -739,11 +758,18 @@ class AsyncHostTransport:
         `_reject_all_pending` and `process.kill`. If a cleanup is already in
         flight, await it; otherwise own a fresh task in the same slot so a
         later concurrent caller sees us instead of starting its own.
+
+        shield() the await so caller cancellation (e.g. an `invoke()` task
+        that times out and is then cancelled by the user) does NOT propagate
+        into `_cleanup` — interrupting cleanup mid-flight would leak the
+        subprocess and wedge state in DISPOSING.
         """
         existing = self._cleanup_task
         if existing and not existing.done():
             try:
-                await existing
+                await asyncio.shield(existing)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             return
@@ -753,7 +779,9 @@ class AsyncHostTransport:
         ))
         self._cleanup_task = task
         try:
-            await task
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
 
@@ -770,27 +798,55 @@ class AsyncHostTransport:
         CONNECTED fast path and blocking on a future the dead reader can never
         resolve until `watchdog_timeout_ms`.
 
+        Skips when `_stopping` is set: a graceful `dispose()` is already
+        tearing down, and a parallel cleanup task would race on
+        `_reject_all_pending` and `process.kill`.
+
         Idempotent: if a cleanup is already in flight, subsequent errors are
         dropped — the first one wins. Callers may observe completion via
         `self._cleanup_task`.
         """
+        if self._stopping:
+            return
         if self._cleanup_task and not self._cleanup_task.done():
             return
         self._state = _State.DISPOSING
         self._cleanup_task = asyncio.create_task(self._cleanup(error))
 
     async def _cleanup(self, error: Optional[SuperDocError]) -> None:
-        """Cancel reader, kill process, reject pending, reset state."""
+        """Cancel reader, kill process, reject pending, reset state.
+
+        Capture handles and flip user-visible state SYNCHRONOUSLY at the top
+        before any awaits. That way, even if cancellation arrives during
+        `process.wait()`, observers see a consistent "torn down" transport
+        (state DISCONNECTED, _process None, pending futures rejected) rather
+        than a half-disposed one. The async work below is best-effort
+        process reaping.
+        """
+        # Snapshot and clear before any await so concurrent callers see a
+        # fully torn-down transport from this point on.
+        reader_task = self._reader_task
+        process = self._process
+        self._reader_task = None
+        self._process = None
+        self._state = _State.DISCONNECTED
+
+        if error is not None:
+            self._reject_all_pending(error)
+        else:
+            # Dispose path — reject remaining with generic disconnect.
+            self._reject_all_pending(
+                SuperDocError('Host process was disposed.', code=HOST_DISCONNECTED),
+            )
+
         try:
-            if self._reader_task and not self._reader_task.done():
-                self._reader_task.cancel()
+            if reader_task and not reader_task.done():
+                reader_task.cancel()
                 try:
-                    await self._reader_task
+                    await reader_task
                 except (asyncio.CancelledError, Exception):
                     pass
-            self._reader_task = None
 
-            process = self._process
             if process:
                 try:
                     process.kill()
@@ -798,19 +854,8 @@ class AsyncHostTransport:
                     pass
                 try:
                     await asyncio.wait_for(process.wait(), timeout=2)
-                except (asyncio.TimeoutError, Exception):
+                except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
                     pass
-            self._process = None
-
-            if error:
-                self._reject_all_pending(error)
-            else:
-                # Dispose path — reject remaining with generic disconnect.
-                self._reject_all_pending(
-                    SuperDocError('Host process was disposed.', code=HOST_DISCONNECTED),
-                )
-
-            self._state = _State.DISCONNECTED
         finally:
             # Release the task handle if we are the in-flight cleanup task,
             # so introspection doesn't surface a stale done handle and the

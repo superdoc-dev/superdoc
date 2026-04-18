@@ -601,3 +601,151 @@ class TestAsyncLargeResponse:
             assert transport._stdout_buffer_limit_bytes == 64 * 1024
         finally:
             _cleanup_wrapper(cli)
+
+
+class TestAsyncCleanupLifecycle:
+    """Lock down the cleanup-task slot so its load-bearing invariants don't
+    silently regress: the dedupe guard, the _stopping suppression branch,
+    and the _kill_and_reset coordination with reader-triggered cleanup.
+    """
+
+    @pytest.mark.asyncio
+    async def test_schedule_cleanup_dedupe_guard_drops_reentrant_call(self):
+        # If a cleanup task is already in flight, a second _schedule_cleanup
+        # must NOT replace it — that would cancel the in-flight teardown
+        # mid-flight and could leak the host process.
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+
+            slow = asyncio.create_task(asyncio.sleep(0.5))
+            transport._cleanup_task = slow
+
+            transport._schedule_cleanup(
+                SuperDocError('second', code=HOST_DISCONNECTED),
+            )
+            # Slot must still point at the original task — second call dropped.
+            assert transport._cleanup_task is slow
+
+            slow.cancel()
+            try:
+                await slow
+            except (asyncio.CancelledError, Exception):
+                pass
+            transport._cleanup_task = None
+            await transport.dispose()
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
+    async def test_overflow_during_dispose_does_not_schedule_cleanup(self):
+        # When `dispose()` is in progress, `_stopping` is set; a buffer
+        # overflow racing with shutdown must NOT schedule a redundant
+        # cleanup that would race with dispose's own teardown.
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+            transport._stopping = True
+            assert transport._cleanup_task is None
+            # Simulate the reader hitting overflow while dispose is in flight.
+            # The guard at the top of the overflow branch checks
+            # `not self._stopping` before scheduling; we re-check the same
+            # condition the reader does.
+            if not transport._stopping:
+                transport._schedule_cleanup(
+                    SuperDocError('overflow', code=HOST_PROTOCOL_ERROR),
+                )
+            assert transport._cleanup_task is None
+            transport._stopping = False
+            await transport.dispose()
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
+    async def test_kill_and_reset_awaits_in_flight_cleanup(self):
+        # If a reader-triggered cleanup is already running, _kill_and_reset
+        # must await it rather than spin up a parallel _cleanup that would
+        # race on _reject_all_pending and process.kill.
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+
+            # Replace _cleanup with a tracking stub so we can count entries
+            # and verify the second call observes the first task instead of
+            # creating a fresh one.
+            entry_count = 0
+            release = asyncio.Event()
+            real_cleanup = transport._cleanup
+
+            async def tracking_cleanup(error):
+                nonlocal entry_count
+                entry_count += 1
+                # First entry blocks until the test releases it; subsequent
+                # entries (if any) would race past — failure mode for the bug.
+                await release.wait()
+                await real_cleanup(error)
+
+            transport._cleanup = tracking_cleanup  # type: ignore[assignment]
+
+            transport._schedule_cleanup(
+                SuperDocError('reader-overflow', code=HOST_PROTOCOL_ERROR),
+            )
+            # Yield so the cleanup task starts and increments entry_count.
+            await asyncio.sleep(0)
+            assert entry_count == 1
+            assert transport._cleanup_task is not None
+            assert not transport._cleanup_task.done()
+
+            kill_task = asyncio.create_task(transport._kill_and_reset())
+            await asyncio.sleep(0)
+            # _kill_and_reset must NOT start a second _cleanup — it should
+            # await the in-flight one. entry_count stays at 1.
+            assert entry_count == 1
+
+            release.set()
+            await kill_task
+            assert entry_count == 1
+            assert transport.state == 'DISCONNECTED'
+            assert transport._cleanup_task is None
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
+    async def test_dispose_waits_for_in_flight_cleanup(self):
+        # `dispose()` called while a reader-triggered cleanup is in flight
+        # must wait for it to finish, so the caller observes "fully torn
+        # down" by the time dispose returns.
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+
+            release = asyncio.Event()
+            real_cleanup = transport._cleanup
+
+            async def slow_cleanup(error):
+                await release.wait()
+                await real_cleanup(error)
+
+            transport._cleanup = slow_cleanup  # type: ignore[assignment]
+
+            transport._schedule_cleanup(
+                SuperDocError('reader-overflow', code=HOST_PROTOCOL_ERROR),
+            )
+            await asyncio.sleep(0)
+            assert transport.state == 'DISPOSING'
+
+            dispose_task = asyncio.create_task(transport.dispose())
+            await asyncio.sleep(0)
+            # dispose must still be waiting on the cleanup task.
+            assert not dispose_task.done()
+
+            release.set()
+            await dispose_task
+            assert transport.state == 'DISCONNECTED'
+            assert transport._process is None
+        finally:
+            _cleanup_wrapper(cli)

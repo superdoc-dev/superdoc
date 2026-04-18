@@ -33,6 +33,11 @@ export class SessionManager {
     const editor = await Editor.open(bytes, {
       documentId: absolutePath,
       user: { id: 'mcp', name: 'MCP Server' },
+      telemetry: {
+        metadata: {
+          source: 'superdoc-mcp',
+        },
+      },
     });
 
     const adapters = getDocumentApiAdapters(editor);

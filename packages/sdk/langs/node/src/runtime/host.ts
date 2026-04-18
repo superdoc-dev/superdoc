@@ -33,6 +33,10 @@ type JsonRpcError = {
 const HOST_PROTOCOL_VERSION = '1.0';
 const REQUIRED_FEATURES = ['cli.invoke', 'host.shutdown'];
 const CHANGE_MODES: readonly ChangeMode[] = ['direct', 'tracked'];
+const FORWARD_HOST_STDERR =
+  typeof process !== 'undefined' && typeof process.env?.SUPERDOC_DEBUG_TEXT_REWRITE === 'string'
+    ? process.env.SUPERDOC_DEBUG_TEXT_REWRITE === '1'
+    : false;
 
 const JSON_RPC_TIMEOUT_CODE = -32011;
 
@@ -188,8 +192,11 @@ export class HostTransport {
       this.onStdoutLine(line);
     });
 
-    child.stderr.on('data', () => {
-      // stderr intentionally ignored in host mode
+    child.stderr.on('data', (chunk) => {
+      if (!FORWARD_HOST_STDERR) {
+        return;
+      }
+      process.stderr.write(`[superdoc-host] ${String(chunk)}`);
     });
 
     child.on('error', (error) => {

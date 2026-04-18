@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MeasureCache } from '../src/cache';
-import type { FlowBlock, ImageRun, TableBlock, TableCell } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ImageBlock,
+  ImageRun,
+  ParagraphBlock,
+  TableBlock,
+  TableCell,
+  VectorShapeDrawing,
+} from '@superdoc/contracts';
 
 const block = (id: string, text: string): FlowBlock => ({
   kind: 'paragraph',
@@ -19,6 +27,12 @@ const blockWithImage = (id: string, imgRun: ImageRun): FlowBlock => ({
   kind: 'paragraph',
   id,
   runs: [imgRun],
+});
+
+const paragraphBlock = (id: string, text: string): ParagraphBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
 });
 
 /**
@@ -51,6 +65,43 @@ const tableBlock = (id: string, cellContents: string[][], useMultiBlock = false)
       return cell;
     }),
   })),
+});
+
+/**
+ * Creates a single-cell table whose content is defined by explicit cell blocks.
+ */
+const tableWithCellBlocks = (id: string, blocks: FlowBlock[]): TableBlock => ({
+  kind: 'table',
+  id,
+  rows: [
+    {
+      id: `${id}-row-0`,
+      cells: [
+        {
+          id: `${id}-cell-0-0`,
+          blocks,
+        },
+      ],
+    },
+  ],
+});
+
+const imageBlock = (id: string, src: string, width: number, height: number): ImageBlock => ({
+  kind: 'image',
+  id,
+  src,
+  width,
+  height,
+});
+
+const vectorShapeBlock = (id: string, width: number, height: number, fillColor: string): VectorShapeDrawing => ({
+  kind: 'drawing',
+  id,
+  drawingKind: 'vectorShape',
+  geometry: { width, height },
+  fillColor,
+  strokeColor: '#000000',
+  strokeWidth: 1,
 });
 
 describe('MeasureCache', () => {
@@ -332,6 +383,63 @@ describe('MeasureCache', () => {
       cache.set(table1, 800, 600, { totalHeight: 120 });
       // Multi-block format with identical content should cache hit
       expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 120 });
+    });
+
+    it('invalidates when nested table content changes inside a cell block', () => {
+      const nestedTable = (id: string, text: string): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: [
+          {
+            id: `${id}-row-0`,
+            cells: [
+              {
+                id: `${id}-cell-0-0`,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: `${id}-para-0`,
+                    runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const hostParagraph = paragraphBlock('parent-cell-0-0-para', 'Host');
+      const parentTable1 = tableWithCellBlocks('parent-table', [
+        hostParagraph,
+        nestedTable('nested-table', 'Nested A'),
+      ]);
+      const parentTable2 = tableWithCellBlocks('parent-table', [
+        hostParagraph,
+        nestedTable('nested-table', 'Nested B'),
+      ]);
+
+      cache.set(parentTable1, 800, 600, { totalHeight: 130 });
+      expect(cache.get(parentTable2, 800, 600)).toBeUndefined();
+    });
+
+    it.each([
+      {
+        name: 'image blocks',
+        initialBlock: imageBlock('cell-image', 'data:image/png;base64,AAA', 48, 32),
+        updatedBlock: imageBlock('cell-image', 'data:image/png;base64,BBB', 96, 64),
+      },
+      {
+        name: 'drawing blocks',
+        initialBlock: vectorShapeBlock('cell-drawing', 48, 32, '#ff0000'),
+        updatedBlock: vectorShapeBlock('cell-drawing', 96, 64, '#00ff00'),
+      },
+    ])('invalidates when $name change inside a cell block', ({ initialBlock, updatedBlock }) => {
+      const hostParagraph = paragraphBlock('parent-cell-0-0-para', 'Host');
+      const parentTable1 = tableWithCellBlocks('parent-table', [hostParagraph, initialBlock]);
+      const parentTable2 = tableWithCellBlocks('parent-table', [hostParagraph, updatedBlock]);
+
+      cache.set(parentTable1, 800, 600, { totalHeight: 130 });
+      expect(cache.get(parentTable2, 800, 600)).toBeUndefined();
     });
 
     it('handles legacy single paragraph cells', () => {

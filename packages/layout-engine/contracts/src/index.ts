@@ -29,6 +29,8 @@ export {
 export {
   shouldApplyJustify,
   calculateJustifySpacing,
+  getFirstLineIndentOffset,
+  adjustAvailableWidthForTextIndent,
   SPACE_CHARS,
   type ShouldApplyJustifyParams,
   type CalculateJustifySpacingParams,

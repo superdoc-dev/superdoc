@@ -74,12 +74,24 @@ export interface SessionPool {
 }
 
 // ---------------------------------------------------------------------------
-// Collab fingerprint (preserved from old pool)
+// Collab fingerprint
 // ---------------------------------------------------------------------------
 
+// Stable stringify that sorts keys at every depth so nested objects (e.g.
+// `params`) contribute to the hash. JSON.stringify's array replacer is a
+// single global allow-list applied at all depths, which silently strips
+// unlisted nested keys.
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const entries = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
 function profileToFingerprint(profile: CollaborationProfile): string {
-  const sortedJson = JSON.stringify(profile, Object.keys(profile).sort());
-  return createHash('sha256').update(sortedJson).digest('hex');
+  return createHash('sha256').update(stableStringify(profile)).digest('hex');
 }
 
 // ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@ superdoc-extension/
 ├── popup.html/popup.js     # Extension popup interface
 ├── modal.html/modal.css    # Modal interface for document viewer
 ├── lib/                   # SuperDoc library files
-│   ├── superdoc.umd.js
+│   ├── superdoc.min.js
 │   └── style.css
 ├── icons/                 # Extension icons
 ├── dist/                  # Built files

@@ -97,6 +97,10 @@ function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
     .filter(Boolean);
 }
 
+function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean {
+  return getCommentHighlightThreadIds(target).length === 1;
+}
+
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) {
     return null;
@@ -213,6 +217,14 @@ function shouldIgnoreRepeatClickOnActiveComment(
   activeThreadId: string | null,
 ): boolean {
   if (!activeThreadId) {
+    return false;
+  }
+
+  // Direct clicks on commented text should place a caret at the clicked
+  // position and let the comments plugin infer the active thread from the
+  // resulting selection. Only preserve the pointerdown short-circuit for
+  // nearby non-text surfaces, such as split-run gaps.
+  if (isDirectSingleCommentHighlightHit(target)) {
     return false;
   }
 
@@ -1278,9 +1290,13 @@ export class EditorInputManager {
     if (!handledByDepth) {
       try {
         // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        // Exception: clicks inside tables nested in this SDT should use text
+        // selection so caret placement/editing inside table cells works.
         const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
-        if (sdtBlock) {
+        const insideTableInSdt =
+          !!sdtBlock && this.#isInsideTableWithinStructuredContentBlock(doc, hit.pos, sdtBlock.pos);
+        if (sdtBlock && !insideTableInSdt) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
           nextSelection = TextSelection.create(doc, hit.pos);
@@ -1583,6 +1599,34 @@ export class EditorInputManager {
     }
 
     return null;
+  }
+
+  #isInsideTableWithinStructuredContentBlock(doc: ProseMirrorNode, pos: number, sdtPos: number): boolean {
+    if (!Number.isFinite(pos) || !Number.isFinite(sdtPos)) return false;
+
+    try {
+      const $pos = doc.resolve(pos);
+      let tableDepth = -1;
+      let blockDepth = -1;
+
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const nodeName = $pos.node(depth)?.type?.name;
+        if (tableDepth === -1 && nodeName === 'table') {
+          tableDepth = depth;
+        }
+        if (nodeName === 'structuredContentBlock') {
+          const candidatePos = $pos.before(depth);
+          if (candidatePos === sdtPos) {
+            blockDepth = depth;
+            break;
+          }
+        }
+      }
+
+      return tableDepth !== -1 && blockDepth !== -1 && tableDepth > blockDepth;
+    } catch {
+      return false;
+    }
   }
 
   #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
@@ -2230,6 +2274,10 @@ export class EditorInputManager {
   }
 
   #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+    if (isDirectSingleCommentHighlightHit(target)) {
+      return false;
+    }
+
     const clickedThreadId = resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY);
     if (!clickedThreadId) {
       return false;

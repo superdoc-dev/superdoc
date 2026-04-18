@@ -13,17 +13,17 @@ export const DocCounter = ({ height = '350px' }) => {
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
+    link.href = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css';
     document.head.appendChild(link);
 
-    // Buffer polyfill — required by the UMD build for document hashing
+    // Buffer polyfill — required for document hashing
     const bufferScript = document.createElement('script');
     bufferScript.src = 'https://cdn.jsdelivr.net/npm/buffer@6/index.min.js';
     bufferScript.onload = () => {
       window.Buffer = window.buffer.Buffer;
 
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js';
       script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
       document.body.appendChild(script);
     };
@@ -95,8 +95,8 @@ export const DocCounter = ({ height = '350px' }) => {
       config.html = '<p>Upload a DOCX file to see how document counting works.</p>';
     }
 
-    if (window.SuperDocLibrary) {
-      superdocRef.current = new window.SuperDocLibrary.SuperDoc(config);
+    if (window.SuperDoc) {
+      superdocRef.current = new window.SuperDoc(config);
     }
   };
 

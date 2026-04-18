@@ -765,6 +765,69 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
+### `scrollToElement`
+
+Scroll to any document element by its ID. Pass a paragraph `nodeId`, comment `entityId`, or tracked change `entityId` — the method figures out what kind of element it is and scrolls there.
+
+<ParamField path="elementId" type="string" required>
+  The element's stable ID. Get this from `query.match` results (`address.nodeId`), `comments.list` (`entityId`), or `trackChanges.list` (`entityId`).
+</ParamField>
+
+**Returns:** `Promise<boolean>` — `true` if the element was found and scrolled to, `false` otherwise. Never throws.
+
+<CodeGroup>
+
+```javascript Usage
+// Get a paragraph's nodeId from the Document API
+const result = editor.doc.query.match({
+  select: { type: 'text', pattern: 'Introduction', mode: 'contains' },
+  require: 'first',
+});
+const nodeId = result.items[0].address.nodeId;
+
+// Scroll to it — one call, any element type
+await superdoc.scrollToElement(nodeId);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  modules: { comments: {} },
+  onReady: async (superdoc) => {
+    const editor = superdoc.editor;
+
+    // Navigate to a paragraph
+    const match = editor.doc.query.match({
+      select: { type: 'text', pattern: 'Summary', mode: 'contains' },
+      require: 'first',
+    });
+    await superdoc.scrollToElement(match.items[0].address.nodeId);
+
+    // Navigate to a comment
+    const comments = editor.doc.comments.list();
+    if (comments.items.length > 0) {
+      await superdoc.scrollToElement(comments.items[0].entityId);
+    }
+
+    // Navigate to a tracked change
+    const changes = editor.doc.trackChanges.list();
+    if (changes.items.length > 0) {
+      await superdoc.scrollToElement(changes.items[0].entityId);
+    }
+  },
+});
+```
+
+</CodeGroup>
+
+<Info>
+For DOCX-imported documents, paragraph `nodeId` values come from the OOXML `paraId` attribute and are stable across sessions. See [cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing) for the full pattern.
+</Info>
+
 ## User management
 
 ### `addSharedUser`

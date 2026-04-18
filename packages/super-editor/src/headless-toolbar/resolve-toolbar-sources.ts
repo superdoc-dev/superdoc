@@ -6,15 +6,12 @@ import type { ResolvedToolbarSources } from './internal-types.js';
 // Normalize raw Editor and PresentationEditor into one toolbar-facing shape.
 // PresentationEditor remains the routing authority whenever it is available.
 
-const resolveSurface = (editor: PresentationEditor): HeadlessToolbarSurface => {
-  const activeEditor = editor.getActiveEditor();
+const resolveSurface = (activeEditor: Editor | null | undefined): HeadlessToolbarSurface => {
   if (activeEditor?.options?.isHeaderOrFooter) {
     const headerFooterType = activeEditor.options?.headerFooterType;
     if (headerFooterType === 'footer') return 'footer';
     if (headerFooterType === 'header') return 'header';
   }
-  const mode = editor.getEffectiveSelectionContext?.()?.surface;
-  if (mode === 'header' || mode === 'footer') return mode;
   return 'body';
 };
 
@@ -70,15 +67,16 @@ export const resolveToolbarSources = (superdoc: {
 
   if (presentationEditor) {
     // Follow PresentationEditor routing instead of superdoc.activeEditor so
-    // toolbar state stays aligned with the active body/header/footer surface.
+    // toolbar state stays aligned with the active body/header/footer editor.
+    // Surface is derived from the routed editor directly to avoid selection-range
+    // resolution during snapshot rebuilds (for example, CellSelection).
     const routedEditor = presentationEditor.getActiveEditor();
-
     return {
       activeEditor: routedEditor ?? null,
       presentationEditor,
       context: {
         target: createPresentationToolbarTarget(presentationEditor),
-        surface: resolveSurface(presentationEditor),
+        surface: resolveSurface(routedEditor),
         isEditable: presentationEditor.isEditable,
         selectionEmpty: resolveSelectionEmpty(presentationEditor),
         editor: routedEditor ?? undefined,

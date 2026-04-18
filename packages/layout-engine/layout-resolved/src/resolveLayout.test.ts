@@ -1196,5 +1196,295 @@ describe('resolveLayout', () => {
       // availableWidth = fragment.width - max(0, left) - max(0, right) = 468 - 36 - 36 = 396
       expect(line0.availableWidth).toBe(396);
     });
+
+    it('increases availableWidth on first line when hanging indent produces negative textIndent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line' }],
+          attrs: { indent: { left: 160, hanging: 160 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: textIndent = -160 (firstLine(0) - hanging(160))
+      // availableWidth should account for the negative textIndent:
+      // base = 468 - max(0, 160) = 308, then adjusted by -(-160) = 308 + 160 = 468
+      expect(content.lines[0].textIndentPx).toBe(-160);
+      expect(content.lines[0].availableWidth).toBe(468);
+      // Body line: no textIndent adjustment, availableWidth stays at base
+      expect(content.lines[1].textIndentPx).toBe(0);
+      expect(content.lines[1].availableWidth).toBe(308);
+    });
+
+    it('decreases availableWidth on first line when firstLine indent produces positive textIndent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line' }],
+          attrs: { indent: { left: 36, firstLine: 72 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: textIndent = 72 (firstLine(72) - hanging(0))
+      // availableWidth should be reduced: base = 468 - 36 = 432, then 432 - 72 = 360
+      expect(content.lines[0].textIndentPx).toBe(72);
+      expect(content.lines[0].availableWidth).toBe(360);
+      // Body line: no textIndent, availableWidth = 468 - 36 = 432
+      expect(content.lines[1].textIndentPx).toBe(0);
+      expect(content.lines[1].availableWidth).toBe(432);
+    });
+
+    it('adjusts availableWidth for hanging indent even when line.maxWidth is set (Math.min clamps it)', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line' }],
+          attrs: { indent: { left: 160, hanging: 160 } },
+        },
+      ];
+      // The measurer sets maxWidth = contentWidth - firstLineOffset = (468-160) - (-160) = 468
+      // but Math.min(468, fallback=308) clamps it to 308. The textIndent adjustment restores it.
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine({ maxWidth: 468 }), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: min(468, 308) = 308, then adjusted by -(-160) = 468
+      expect(content.lines[0].textIndentPx).toBe(-160);
+      expect(content.lines[0].availableWidth).toBe(468);
+    });
+
+    it('does not adjust availableWidth for list paragraphs with hanging indent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 0,
+                toLine: 2,
+                x: 72,
+                y: 100,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'List item text here' }],
+          attrs: {
+            indent: { left: 36, hanging: 36 },
+            wordLayout: {
+              marker: {
+                markerText: '1.',
+                justification: 'left',
+                suffix: 'tab',
+                run: { fontFamily: 'Arial', fontSize: 12 },
+              },
+            },
+          },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // List first line: textIndentPx should be 0 (list marker occupies the hanging region),
+      // so availableWidth should NOT be adjusted for hanging indent.
+      expect(content.lines[0].textIndentPx).toBe(0);
+      // base = 468 - max(0, 36) = 432 — stays at 432, no hanging indent adjustment
+      expect(content.lines[0].availableWidth).toBe(432);
+    });
+
+    it('does not adjust availableWidth on continuation fragment even with hanging indent', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 100, width: 468 }],
+          },
+          {
+            number: 2,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'p1',
+                fromLine: 1,
+                toLine: 2,
+                x: 72,
+                y: 72,
+                width: 468,
+                continuesFromPrev: true,
+              },
+            ],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line continued' }],
+          attrs: { indent: { left: 160, hanging: 160 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      // Page 1: first line of paragraph — gets hanging indent adjustment
+      const page1Content = (result.pages[0].items[0] as any).content;
+      expect(page1Content.lines[0].textIndentPx).toBe(-160);
+      expect(page1Content.lines[0].availableWidth).toBe(468);
+
+      // Page 2: continuation fragment — first line here is NOT the paragraph's first line,
+      // so textIndentPx should be 0 and availableWidth should NOT be adjusted.
+      const page2Content = (result.pages[1].items[0] as any).content;
+      expect(page2Content.lines[0].textIndentPx).toBe(0);
+      // base = 468 - max(0, 160) = 308 — no adjustment
+      expect(page2Content.lines[0].availableWidth).toBe(308);
+    });
+
+    it('does not adjust availableWidth when suppressFirstLineIndent is true', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line' }],
+          attrs: { indent: { left: 160, hanging: 160 }, suppressFirstLineIndent: true } as any,
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine(), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // suppressFirstLineIndent zeroes the firstLineOffset, so textIndent = 0
+      // and availableWidth stays at base = 468 - max(0, 160) = 308
+      expect(content.lines[0].textIndentPx).toBe(0);
+      expect(content.lines[0].availableWidth).toBe(308);
+    });
+
+    it('does not double-subtract positive firstLine indent when line.maxWidth already accounts for it', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 100, width: 468 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ kind: 'text', text: 'Hello world test line' }],
+          attrs: { indent: { left: 36, firstLine: 72 } },
+        },
+      ];
+      // The measurer sets maxWidth = contentWidth - firstLineOffset = 432 - 72 = 360
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [makeLine({ maxWidth: 360 }), makeLine({ fromChar: 10, toChar: 20 })],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      // First line: min(360, 432) = 360 — already correct, should NOT subtract again
+      expect(content.lines[0].textIndentPx).toBe(72);
+      expect(content.lines[0].availableWidth).toBe(360);
+    });
   });
 });

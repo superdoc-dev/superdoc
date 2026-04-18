@@ -518,6 +518,14 @@ export type LayoutOptions = {
    * overlay behavior in paragraph-free header/footer regions.
    */
   allowParagraphlessAnchoredTableFallback?: boolean;
+  /**
+   * Allow body layout to synthesize page 1 when section metadata exists but no
+   * renderable body blocks survive conversion.
+   *
+   * Header/footer layout keeps this disabled to preserve existing empty-region
+   * behavior for paragraph-free overlays.
+   */
+  allowSectionBreakOnlyPageFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -589,6 +597,10 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
+  return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
 // List constants sourced from shared/common
@@ -813,6 +825,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
   const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -1082,6 +1095,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
     'decimal';
   let activePageCounter = 1;
+  let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;
   // Section header/footer ref tracking state
   type SectionRefs = {
@@ -1109,6 +1123,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
   if (typeof initialSectionMetadata?.numbering?.start === 'number') {
     activePageCounter = initialSectionMetadata.numbering.start;
+    activeSectionPageCounterStart = activePageCounter;
   }
   let activeSectionRefs: SectionRefs | null = null;
   let pendingSectionRefs: SectionRefs | null = null;
@@ -1152,6 +1167,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
+        const isApplyingPendingSection =
+          pendingTopMargin !== null ||
+          pendingBottomMargin !== null ||
+          pendingLeftMargin !== null ||
+          pendingRightMargin !== null ||
+          pendingHeaderDistance !== null ||
+          pendingFooterDistance !== null ||
+          pendingPageSize !== null ||
+          pendingColumns !== null ||
+          pendingOrientation !== null ||
+          pendingNumbering !== null ||
+          pendingSectionRefs !== null ||
+          pendingSectionIndex !== null ||
+          pendingVAlign !== undefined ||
+          pendingSectionBaseTopMargin !== null ||
+          pendingSectionBaseBottomMargin !== null;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1232,6 +1263,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pendingSectionBaseBottomMargin !== null) {
           activeSectionBaseBottomMargin = pendingSectionBaseBottomMargin;
           pendingSectionBaseBottomMargin = null;
+        }
+        if (isApplyingPendingSection) {
+          activeSectionPageCounterStart = activePageCounter;
         }
         pageCount += 1;
 
@@ -1750,6 +1784,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (sectionMetadata.numbering.format) activeNumberFormat = sectionMetadata.numbering.format;
           if (typeof sectionMetadata.numbering.start === 'number') {
             activePageCounter = sectionMetadata.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           // Non-first section: schedule for next page
@@ -1760,6 +1795,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (effectiveBlock.numbering.format) activeNumberFormat = effectiveBlock.numbering.format;
           if (typeof effectiveBlock.numbering.start === 'number') {
             activePageCounter = effectiveBlock.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           pendingNumbering = { ...effectiveBlock.numbering };
@@ -2262,6 +2298,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // a final blank page for continuous final sections.
   paginator.pruneTrailingEmptyPages();
 
+  const resetPaginationStateForBlankPageFallback = (): void => {
+    pageCount = 0;
+    activePageCounter = activeSectionPageCounterStart;
+    sectionFirstPageNumbers.clear();
+  };
+
+  if (
+    pages.length === 0 &&
+    ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
+  ) {
+    resetPaginationStateForBlankPageFallback();
+  }
+
   if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
     const state = paginator.ensurePage();
 
@@ -2282,6 +2332,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
       placedAnchoredTableIds.add(tableBlock.id);
     }
+  }
+
+  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+    paginator.ensurePage();
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -2523,6 +2577,34 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
   return bottom;
 }
 
+type VerticalBand = {
+  start: number;
+  end: number;
+};
+
+function rangesIntersect(startA: number, endA: number, startB: number, endB: number): boolean {
+  return endA > startB && startA < endB;
+}
+
+function getPageRelativeMeasurementBand(
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): VerticalBand | null {
+  if (!kind || !constraints.margins) {
+    return null;
+  }
+
+  const bandSize = kind === 'header' ? constraints.margins.top : constraints.margins.bottom;
+  if (!Number.isFinite(bandSize) || bandSize == null || bandSize <= 0) {
+    return null;
+  }
+
+  return {
+    start: 0,
+    end: bandSize,
+  };
+}
+
 /**
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
@@ -2531,8 +2613,18 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
  * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
  *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
  *    the measurement used by body pagination.
+ * 3. Page-relative header/footer overlays that do not intersect the region's
+ *    reserved margin band — they should still render, but must not reserve
+ *    body space like true header/footer content.
  */
-function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canvasHeight: number): boolean {
+function shouldExcludeFromMeasurement(
+  fragment: Fragment,
+  block: FlowBlock,
+  fragmentBottom: number,
+  canvasHeight: number,
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): boolean {
   const isAnchoredFragment =
     (fragment.kind === 'image' || fragment.kind === 'drawing') &&
     (fragment as { isAnchored?: boolean }).isAnchored === true;
@@ -2553,11 +2645,16 @@ function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canv
   // Page-relative anchored fragments that sit entirely outside the measurement band
   // should not inflate pagination height.
   if (isPageRelativeAnchor(anchoredBlock)) {
-    const fragmentHeight = (fragment as { height?: number }).height ?? 0;
     const fragmentTop = fragment.y;
-    const fragmentBottom = fragment.y + fragmentHeight;
     // Exclude if the fragment range [top, bottom] does not intersect [0, canvasHeight]
     if (fragmentBottom <= 0 || fragmentTop >= canvasHeight) {
+      return true;
+    }
+  }
+
+  if (anchoredBlock.anchor?.vRelativeFrom === 'page') {
+    const measurementBand = getPageRelativeMeasurementBand(kind, constraints);
+    if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
   }
@@ -2605,6 +2702,7 @@ export function layoutHeaderFooter(
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
     allowParagraphlessAnchoredTableFallback: false,
+    allowSectionBreakOnlyPageFallback: false,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.
@@ -2649,7 +2747,7 @@ export function layoutHeaderFooter(
       if (bottom > renderMaxY) renderMaxY = bottom;
 
       // Determine whether this fragment should be excluded from measurement (pagination) bounds
-      if (shouldExcludeFromMeasurement(fragment, block, height)) continue;
+      if (shouldExcludeFromMeasurement(fragment, block, bottom, height, kind, constraints)) continue;
 
       if (fragment.y < measureMinY) measureMinY = fragment.y;
       if (bottom > measureMaxY) measureMaxY = bottom;

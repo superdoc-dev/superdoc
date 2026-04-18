@@ -5,6 +5,7 @@ from .tools_api import (
     choose_tools,
     dispatch_superdoc_tool,
     dispatch_superdoc_tool_async,
+    get_mcp_prompt,
     get_system_prompt,
     get_tool_catalog,
     list_tools,
@@ -24,5 +25,6 @@ __all__ = [
     "choose_tools",
     "dispatch_superdoc_tool",
     "dispatch_superdoc_tool_async",
+    "get_mcp_prompt",
     "get_system_prompt",
 ]

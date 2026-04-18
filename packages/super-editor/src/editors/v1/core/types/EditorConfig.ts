@@ -85,17 +85,38 @@ export type LinkPopoverResolution =
 export type LinkPopoverResolver = (ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined;
 
 /**
+ * Configuration for a font option in the toolbar font picker.
+ *
+ * Each entry represents a selectable font that appears in the toolbar dropdown.
+ * The `props.style.fontFamily` value is applied to text when the font is selected.
+ */
+export interface FontConfig {
+  /** Unique key identifying this font */
+  key: string;
+  /** Display label shown in the font picker dropdown */
+  label: string;
+  /** Font weight (e.g. 400 for normal, 700 for bold) */
+  fontWeight?: number;
+  /** CSS properties applied when this font is selected */
+  props?: {
+    style?: {
+      fontFamily?: string;
+    };
+  };
+}
+
+/**
  * User information for collaboration
  */
 export interface User {
   /** The user's name */
-  name: string;
+  name?: string;
 
   /** The user's email */
-  email: string;
+  email?: string;
 
   /** The user's photo URL */
-  image: string | null;
+  image?: string | null;
 
   /**
    * Explicit permission-range principal identifiers for this user.

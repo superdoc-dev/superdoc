@@ -105,9 +105,9 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
         const newFormatMark = state.schema.marks[TrackFormatMarkName].create({
           id: wid,
           sourceId: formatChangeMark?.attrs?.sourceId || '',
-          author: user.name,
-          authorEmail: user.email,
-          authorImage: user.image,
+          author: user.name || '',
+          authorEmail: user.email || '',
+          authorImage: user.image || '',
           date,
           before,
           after,

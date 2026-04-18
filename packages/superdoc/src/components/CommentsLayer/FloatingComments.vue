@@ -205,6 +205,13 @@ const totalHeight = computed(() => {
   return max + 50;
 });
 
+// The inner sidebar is translated by sidebarOffsetY. When shifted down, the
+// rendered bottom edge can exceed totalHeight and get clipped by parent scroll
+// containers. Expand wrapper height to include positive translate offset.
+const wrapperMinHeight = computed(() => {
+  return totalHeight.value + Math.max(0, sidebarOffsetY.value);
+});
+
 // Set up IntersectionObserver to track which placeholders are near the viewport
 const setupObserver = () => {
   if (observer) observer.disconnect();
@@ -287,6 +294,17 @@ const handleResize = (comment) => {
     const dialog = el.querySelector('.comments-dialog');
     if (!dialog) return;
     storeHeight(key, dialog.getBoundingClientRect().height);
+
+    const isActiveThread = key === activeCommentKey.value;
+    const isPending = key === 'pending';
+    const isEditingThread = !!editingCommentId.value && editingCommentId.value === comment?.commentId;
+    if (!isActiveThread && !isPending && !isEditingThread) return;
+
+    // Reflow nearby cards after size changes of the active/pending/editing thread.
+    // Avoid force-snapping to anchor here because it can over-shift the whole lane
+    // near viewport boundaries and make bottom clipping more frequent.
+    remeasureCommentKeys(allPositions.value.map((pos) => pos.id));
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
   });
 };
 
@@ -355,6 +373,25 @@ const remeasureCommentKeys = (keys) => {
   }
 };
 
+// 50ms: after Vue nextTick + browser rAF settle the initial DOM change.
+// 350ms: after .comment-placeholder transition (300ms ease) completes.
+const REMEASURE_AFTER_DOM_SETTLE_MS = 50;
+const REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS = 350;
+
+/**
+ * Cancels any pending delayed remeasure passes, then schedules two remeasure runs.
+ * Pass an array of keys, or a getter so keys are resolved when each timeout fires
+ * (e.g. when `allPositions` may have changed).
+ */
+const scheduleDeferredRemeasure = (keysOrGetter) => {
+  clearDeferredRemeasureTimers();
+  const resolveKeys = typeof keysOrGetter === 'function' ? keysOrGetter : () => keysOrGetter;
+  remeasureTimers.push(setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_DOM_SETTLE_MS));
+  remeasureTimers.push(
+    setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS),
+  );
+};
+
 const finishInstantSidebarAlignment = () => {
   clearInstantSidebarAlignment();
   requestAnimationFrame(() => {
@@ -382,16 +419,13 @@ watch(activeCommentKey, (newKey, oldKey) => {
   const hasPendingInstantAlignment =
     newKey && newKey === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
 
-  // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
-  // 350ms: after .comment-placeholder transition (300ms ease) completes
   nextTick(() => {
     if (hasPendingInstantAlignment) {
       remeasureCommentKeys(keysToRemeasure);
       return;
     }
 
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 50));
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(keysToRemeasure), 350));
+    scheduleDeferredRemeasure(keysToRemeasure);
   });
 });
 
@@ -408,8 +442,7 @@ watch(editingCommentId, () => {
   clearDeferredRemeasureTimers();
 
   nextTick(() => {
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 50));
-    remeasureTimers.push(setTimeout(() => remeasureCommentKeys(allPositions.value.map((pos) => pos.id)), 350));
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
   });
 });
 
@@ -567,7 +600,7 @@ onBeforeUnmount(() => {
     class="section-wrapper"
     ref="floatingCommentsContainer"
     :style="{
-      minHeight: totalHeight + 'px',
+      minHeight: wrapperMinHeight + 'px',
       transition: disableInstantLayoutTransitions ? 'none' : undefined,
     }"
   >

@@ -57,6 +57,7 @@ import type {
   ResolvedDrawingItem,
 } from '@superdoc/contracts';
 import {
+  adjustAvailableWidthForTextIndent,
   calculateJustifySpacing,
   computeLinePmRange,
   getCellSpacingPx,
@@ -789,6 +790,8 @@ const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
  * Prevents XSS and malformed data URL attacks.
  */
 const VALID_IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|svg\+xml|webp|bmp|ico|tiff?);base64,/i;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const WORDART_LINE_FILL_RATIO = 0.9;
 
 /**
  * Maximum resize multiplier for image metadata.
@@ -2470,7 +2473,9 @@ export class DomPainter {
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         isBehindDoc =
-          fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
+          fragment.behindDoc === true ||
+          (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
+          this.shouldRenderBehindPageContent(fragment, kind);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
@@ -3206,6 +3211,17 @@ export class DomPainter {
             availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
           }
 
+          // Adjust availableWidth for first-line text indent (hanging indent).
+          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
+          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+            availableWidthOverride = adjustAvailableWidthForTextIndent(
+              availableWidthOverride,
+              firstLineOffset,
+              line.maxWidth,
+            );
+          }
+
           const isLastLineOfFragment = index === lines.length - 1;
           const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
           const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
@@ -3219,9 +3235,6 @@ export class DomPainter {
             shouldSkipJustifyForLastLine,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
-
-          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
 
           if (!isListFirstLine) {
             if (hasExplicitSegmentPositioning) {
@@ -3630,40 +3643,15 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
-      // Apply rotation and flip transforms from OOXML a:xfrm
-      const transforms: string[] = [];
-
-      // Calculate translation offset to keep top-left corner fixed when rotating
-      if (block.rotation != null && block.rotation !== 0) {
-        const angleRad = (block.rotation * Math.PI) / 180;
-        const w = block.width ?? fragment.width;
-        const h = block.height ?? fragment.height;
-
-        // Calculate how much the top-left corner moves when rotating around center
-        // Top-left corner starts at (0, 0) in element space
-        // Center is at (w/2, h/2)
-        // After rotation, we need to translate to keep top-left at (0, 0)
-        const cosA = Math.cos(angleRad);
-        const sinA = Math.sin(angleRad);
-
-        // Position of top-left corner after rotation (relative to original top-left)
-        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
-        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
-
-        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
-        transforms.push(`rotate(${block.rotation}deg)`);
-      }
-      if (block.flipH) {
-        transforms.push('scaleX(-1)');
-      }
-      if (block.flipV) {
-        transforms.push('scaleY(-1)');
-      }
-
-      if (transforms.length > 0) {
-        img.style.transform = transforms.join(' ');
-        img.style.transformOrigin = 'center';
-      }
+      // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
+      // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
+      this.applyImageGeometryTransform(fragmentEl, {
+        width: block.width ?? fragment.width,
+        height: block.height ?? fragment.height,
+        rotation: block.rotation,
+        flipH: block.flipH,
+        flipV: block.flipV,
+      });
 
       const filters = buildImageFilters(block);
       if (filters.length > 0) {
@@ -3679,6 +3667,50 @@ export class DomPainter {
       console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
       return this.createErrorPlaceholder(fragment.blockId, error);
     }
+  }
+
+  private buildImageGeometryTransform(attrs: {
+    width: number;
+    height: number;
+    rotation?: number;
+    flipH?: boolean;
+    flipV?: boolean;
+  }): string {
+    const transforms: string[] = [];
+    if (attrs.rotation != null && attrs.rotation !== 0) {
+      const angleRad = (attrs.rotation * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      const newTopLeftX = (attrs.width / 2) * (1 - cosA) + (attrs.height / 2) * sinA;
+      const newTopLeftY = (attrs.width / 2) * sinA + (attrs.height / 2) * (1 - cosA);
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${attrs.rotation}deg)`);
+    }
+    if (attrs.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (attrs.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    return transforms.join(' ');
+  }
+
+  private applyImageGeometryTransform(
+    target: HTMLElement,
+    attrs: {
+      width: number;
+      height: number;
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    },
+  ): void {
+    const transform = this.buildImageGeometryTransform(attrs);
+    if (!transform) {
+      return;
+    }
+    target.style.transform = transform;
+    target.style.transformOrigin = 'center';
   }
 
   /**
@@ -3765,8 +3797,6 @@ export class DomPainter {
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
-      const isVectorShapeBlock = block.kind === 'drawing' && block.drawingKind === 'vectorShape';
-
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-drawing-fragment');
       applyStyles(fragmentEl, fragmentStyles);
@@ -3791,11 +3821,9 @@ export class DomPainter {
 
       const scale = fragment.scale ?? 1;
       const transforms: string[] = ['translate(-50%, -50%)'];
-      if (!isVectorShapeBlock) {
-        transforms.push(`rotate(${fragment.geometry.rotation ?? 0}deg)`);
-        transforms.push(`scaleX(${fragment.geometry.flipH ? -1 : 1})`);
-        transforms.push(`scaleY(${fragment.geometry.flipV ? -1 : 1})`);
-      }
+      transforms.push(`rotate(${fragment.geometry.rotation ?? 0}deg)`);
+      transforms.push(`scaleX(${fragment.geometry.flipH ? -1 : 1})`);
+      transforms.push(`scaleY(${fragment.geometry.flipV ? -1 : 1})`);
       transforms.push(`scale(${scale})`);
       innerWrapper.style.transform = transforms.join(' ');
 
@@ -3821,7 +3849,7 @@ export class DomPainter {
       return this.createDrawingImageElement(block);
     }
     if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, true, 1, 1, context);
+      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
@@ -3875,6 +3903,9 @@ export class DomPainter {
     contentContainer.style.top = `${offsetY}px`;
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
+    if (applyTransforms && geometry) {
+      this.applyVectorShapeTransforms(contentContainer, geometry);
+    }
 
     // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
     // even when the source shape only had a:custGeom and no a:prstGeom.
@@ -3900,23 +3931,18 @@ export class DomPainter {
         }
 
         this.applyLineEnds(svgElement, block);
-        if (applyTransforms && geometry) {
-          this.applyVectorShapeTransforms(svgElement, geometry);
-        }
         contentContainer.appendChild(svgElement);
 
-        // Apply text content as an overlay div (not inside SVG to avoid viewBox scaling)
-        if (block.textContent && block.textContent.parts.length > 0) {
-          const textDiv = this.createFallbackTextElement(
-            block.textContent,
-            block.textAlign ?? 'center',
-            block.textVerticalAlign,
-            block.textInsets,
+        if (this.hasShapeTextContent(block.textContent)) {
+          const textElement = this.createShapeTextElement(
+            block,
+            innerWidth,
+            innerHeight,
             groupScaleX,
             groupScaleY,
             context,
           );
-          contentContainer.appendChild(textDiv);
+          contentContainer.appendChild(textElement);
         }
 
         container.appendChild(contentContainer);
@@ -3927,23 +3953,18 @@ export class DomPainter {
     // Fallback rendering when no preset shape SVG is available
     this.applyFallbackShapeStyle(contentContainer, block);
 
-    // Apply text content to fallback rendering
-    if (block.textContent && block.textContent.parts.length > 0) {
-      const textDiv = this.createFallbackTextElement(
-        block.textContent,
-        block.textAlign ?? 'center',
-        block.textVerticalAlign,
-        block.textInsets,
+    if (this.hasShapeTextContent(block.textContent)) {
+      const textElement = this.createShapeTextElement(
+        block,
+        innerWidth,
+        innerHeight,
         groupScaleX,
         groupScaleY,
         context,
       );
-      contentContainer.appendChild(textDiv);
+      contentContainer.appendChild(textElement);
     }
 
-    if (applyTransforms && geometry) {
-      this.applyVectorShapeTransforms(contentContainer, geometry);
-    }
     container.appendChild(contentContainer);
     return container;
   }
@@ -3980,6 +4001,193 @@ export class DomPainter {
       container.style.border = `${strokeWidth}px solid ${block.strokeColor}`;
     } else {
       container.style.border = '1px solid rgba(15, 23, 42, 0.3)';
+    }
+  }
+
+  private hasShapeTextContent(textContent?: ShapeTextContent): textContent is ShapeTextContent {
+    return Array.isArray(textContent?.parts) && textContent.parts.length > 0;
+  }
+
+  private createShapeTextElement(
+    block: VectorShapeDrawing,
+    width: number,
+    height: number,
+    groupScaleX = 1,
+    groupScaleY = 1,
+    context?: FragmentRenderContext,
+  ): Element {
+    const textContent = block.textContent;
+    if (!this.hasShapeTextContent(textContent)) {
+      return this.doc!.createElement('div');
+    }
+
+    if (this.shouldUseWordArtTextRenderer(block)) {
+      return this.createWordArtTextElement(
+        textContent,
+        block.textAlign ?? 'center',
+        block.textInsets,
+        width,
+        height,
+        context,
+      );
+    }
+
+    return this.createFallbackTextElement(
+      textContent,
+      block.textAlign ?? 'center',
+      block.textVerticalAlign,
+      block.textInsets,
+      groupScaleX,
+      groupScaleY,
+      context,
+    );
+  }
+
+  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
+    return block.attrs?.isWordArt === true && this.hasShapeTextContent(block.textContent);
+  }
+
+  private createWordArtTextElement(
+    textContent: ShapeTextContent,
+    textAlign: string,
+    textInsets: { top: number; right: number; bottom: number; left: number } | undefined,
+    width: number,
+    height: number,
+    context?: FragmentRenderContext,
+  ): SVGSVGElement {
+    const svg = this.doc!.createElementNS(SVG_NS, 'svg');
+    svg.classList.add('superdoc-wordart-text');
+    svg.setAttribute('xmlns', SVG_NS);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.position = 'absolute';
+    svg.style.left = '0';
+    svg.style.top = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.overflow = 'visible';
+    svg.style.pointerEvents = 'none';
+
+    const insets = textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const availableWidth = Math.max(1, width - insets.left - insets.right);
+    const availableHeight = Math.max(1, height - insets.top - insets.bottom);
+    const lines = this.buildWordArtLines(textContent, context);
+    const lineCount = Math.max(lines.length, 1);
+    const lineHeight = availableHeight / lineCount;
+    const fontSize = Math.max(1, lineHeight * WORDART_LINE_FILL_RATIO);
+    const textAnchor = this.getWordArtTextAnchor(textAlign);
+    const textX = this.getWordArtTextX(textAlign, insets.left, availableWidth);
+
+    lines.forEach((parts, lineIndex) => {
+      if (parts.length === 0) {
+        return;
+      }
+
+      const textEl = this.doc!.createElementNS(SVG_NS, 'text');
+      textEl.setAttribute('xml:space', 'preserve');
+      textEl.setAttribute('x', String(textX));
+      textEl.setAttribute('y', String(insets.top + lineHeight * (lineIndex + 0.5)));
+      textEl.setAttribute('text-anchor', textAnchor);
+      textEl.setAttribute('dominant-baseline', 'middle');
+      textEl.setAttribute('font-size', String(fontSize));
+      textEl.setAttribute('textLength', String(availableWidth));
+      textEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+
+      parts.forEach((part) => {
+        const tspan = this.doc!.createElementNS(SVG_NS, 'tspan');
+        tspan.setAttribute('xml:space', 'preserve');
+        tspan.textContent = part.text;
+        this.applyWordArtTextFormatting(tspan, part.formatting);
+        textEl.appendChild(tspan);
+      });
+
+      svg.appendChild(textEl);
+    });
+
+    return svg;
+  }
+
+  private buildWordArtLines(
+    textContent: ShapeTextContent,
+    context?: FragmentRenderContext,
+  ): Array<Array<{ text: string; formatting?: ShapeTextContent['parts'][number]['formatting'] }>> {
+    const lines: Array<Array<{ text: string; formatting?: ShapeTextContent['parts'][number]['formatting'] }>> = [[]];
+
+    textContent.parts.forEach((part) => {
+      if (part.isLineBreak) {
+        lines.push([]);
+        return;
+      }
+
+      const resolvedText = this.resolveShapeTextPartText(part, context);
+      if (!resolvedText) {
+        return;
+      }
+
+      lines[lines.length - 1].push({
+        text: resolvedText,
+        formatting: part.formatting,
+      });
+    });
+
+    const nonEmptyLines = lines.filter((line) => line.length > 0);
+    return nonEmptyLines.length > 0 ? nonEmptyLines : [[]];
+  }
+
+  private resolveShapeTextPartText(part: ShapeTextContent['parts'][number], context?: FragmentRenderContext): string {
+    if (part.fieldType === 'PAGE') {
+      return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
+    }
+    if (part.fieldType === 'NUMPAGES') {
+      return String(context?.totalPages ?? 1);
+    }
+    return part.text;
+  }
+
+  private getWordArtTextAnchor(textAlign: string): 'start' | 'middle' | 'end' {
+    if (textAlign === 'right' || textAlign === 'r') {
+      return 'end';
+    }
+    if (textAlign === 'center') {
+      return 'middle';
+    }
+    return 'start';
+  }
+
+  private getWordArtTextX(textAlign: string, leftInset: number, availableWidth: number): number {
+    if (textAlign === 'right' || textAlign === 'r') {
+      return leftInset + availableWidth;
+    }
+    if (textAlign === 'center') {
+      return leftInset + availableWidth / 2;
+    }
+    return leftInset;
+  }
+
+  private applyWordArtTextFormatting(
+    element: SVGTextElement | SVGTSpanElement,
+    formatting?: ShapeTextContent['parts'][number]['formatting'],
+  ): void {
+    if (!formatting) {
+      return;
+    }
+    if (formatting.bold) {
+      element.setAttribute('font-weight', 'bold');
+    }
+    if (formatting.italic) {
+      element.setAttribute('font-style', 'italic');
+    }
+    if (formatting.fontFamily) {
+      element.setAttribute('font-family', formatting.fontFamily);
+    }
+    if (formatting.color) {
+      const validatedColor = validateHexColor(formatting.color);
+      if (validatedColor) {
+        element.setAttribute('fill', validatedColor);
+      }
+    }
+    if (formatting.letterSpacing != null) {
+      element.setAttribute('letter-spacing', String(formatting.letterSpacing));
     }
   }
 
@@ -4058,16 +4266,6 @@ export class DomPainter {
     // Override inherited white-space: pre from parent fragment to allow text wrapping
     currentParagraph.style.whiteSpace = 'normal';
 
-    const resolvePartText = (part: ShapeTextContent['parts'][number]) => {
-      if (part.fieldType === 'PAGE') {
-        return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
-      }
-      if (part.fieldType === 'NUMPAGES') {
-        return String(context?.totalPages ?? 1);
-      }
-      return part.text;
-    };
-
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
         // Finish current paragraph and start a new one
@@ -4082,7 +4280,7 @@ export class DomPainter {
         }
       } else {
         const span = this.doc!.createElement('span');
-        span.textContent = resolvePartText(part);
+        span.textContent = this.resolveShapeTextPartText(part, context);
         if (part.formatting) {
           if (part.formatting.bold) {
             span.style.fontWeight = 'bold';
@@ -6532,6 +6730,40 @@ export class DomPainter {
     return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
   }
 
+  private shouldRenderBehindPageContent(
+    fragment: ImageFragment | DrawingFragment,
+    section: 'header' | 'footer',
+  ): boolean {
+    if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
+      return true;
+    }
+
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(fragment);
+  }
+
+  private isHeaderWordArtWatermark(fragment: DrawingFragment): boolean {
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== 'drawing' || lookup.block.drawingKind !== 'vectorShape') {
+      return false;
+    }
+
+    const block = lookup.block;
+    const attrs = (block.attrs as Record<string, unknown> | undefined) ?? {};
+    const hasTextContent = Array.isArray(block.textContent?.parts) && block.textContent.parts.length > 0;
+
+    return (
+      attrs.isWordArt === true &&
+      attrs.isTextBox === true &&
+      hasTextContent &&
+      block.anchor?.isAnchored === true &&
+      block.anchor.hRelativeFrom === 'page' &&
+      block.anchor.alignH === 'center' &&
+      block.anchor.vRelativeFrom === 'page' &&
+      block.anchor.alignV === 'center' &&
+      block.wrap?.type === 'None'
+    );
+  }
+
   /**
    * Only anchored images and drawings participate in explicit wrapper stacking.
    * Inline media intentionally rely on DOM order to preserve legacy paint order.
@@ -7403,6 +7635,12 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
+          } else if (cellBlock?.kind) {
+            // Non-paragraph cell blocks participate in the parent table version
+            // through their own block-level signatures. layout-bridge/cache.ts
+            // mirrors this policy so repaint and remeasure stay aligned for
+            // nested tables, images, drawings, and other embedded cell content.
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }

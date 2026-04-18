@@ -1,0 +1,32 @@
+{
+  "name": "@superdoc-dev/create",
+  "version": "0.0.1",
+  "description": "Set up SuperDoc in your project — AGENTS.md, skills, and MCP configuration",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "create-superdoc": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skill"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "catalog:",
+    "@semantic-release/git": "catalog:",
+    "@semantic-release/github": "^11.0.0",
+    "semantic-release": "catalog:",
+    "semantic-release-ai-notes": "catalog:",
+    "semantic-release-commit-filter": "catalog:",
+    "semantic-release-linear-app": "catalog:"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "test": "bun test",
+    "release": "pnpx semantic-release",
+    "release:dry-run": "pnpx semantic-release --dry-run"
+  }
+}

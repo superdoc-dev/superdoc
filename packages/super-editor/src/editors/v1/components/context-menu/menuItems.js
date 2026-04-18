@@ -1,0 +1,482 @@
+import TableGrid from '../toolbar/TableGrid.vue';
+import AIWriter from '../toolbar/AIWriter.vue';
+import TableActions from '../toolbar/TableActions.vue';
+import LinkInput from '../toolbar/LinkInput.vue';
+import CellBackgroundPicker from './CellBackgroundPicker.vue';
+import { TEXTS, ICONS, TRIGGERS } from './constants.js';
+import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
+import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
+import { handleClipboardPaste } from '../../core/InputRule.js';
+
+/**
+ * Build a minimal clipboard event-like object so ProseMirror paste hooks
+ * can access text/html and text/plain data.
+ * @param {{ html?: string, text?: string }} clipboard
+ * @returns {{ clipboardData: { getData: (type: string) => string } }}
+ */
+const createPasteEventShim = (clipboard) => {
+  const html = clipboard?.html || '';
+  const text = clipboard?.text || '';
+
+  return {
+    type: 'paste',
+    preventDefault: () => {},
+    stopPropagation: () => {},
+    clipboardData: {
+      getData: (type) => {
+        if (type === 'text/html') return html;
+        if (type === 'text/plain') return text;
+        return '';
+      },
+    },
+  };
+};
+
+/**
+ * Check if a module is enabled based on editor options
+ * This is used for hiding menu items based on module availability
+ *
+ *  Example for future use cases
+ *  case 'comments':
+ *     return !!editorOptions?.isCommentsEnabled;
+ *
+ * @param {Object} editorOptions - Editor options
+ * @param {string} moduleName - Name of the module to check (e.g. 'ai')
+ * @returns {boolean} Whether the module is enabled
+ */
+const isModuleEnabled = (editorOptions, moduleName) => {
+  switch (moduleName) {
+    case 'ai':
+      return !!editorOptions?.isAiEnabled;
+
+    default:
+      return true;
+  }
+};
+
+/**
+ * Universal menu item filtering function using showWhen logic
+ * @param {Object} item - Menu item to check
+ * @param {Object} context - Editor context with all necessary information
+ * @returns {boolean} Whether the item should be shown
+ */
+const shouldShowItem = (item, context) => {
+  // If item has a custom showWhen function, use it
+  if (typeof item.showWhen === 'function') {
+    try {
+      return Boolean(item.showWhen(context));
+    } catch (error) {
+      console.warn('[ContextMenu] showWhen error for item', item.id, ':', error);
+      return false;
+    }
+  }
+  // Items without showWhen are always shown
+  return true;
+};
+
+const canPerformTrackedChange = (context, action) => {
+  if (!context?.editor) return true;
+  return isTrackedChangeActionAllowed({
+    editor: context.editor,
+    action,
+    trackedChanges: context.trackedChanges ?? [],
+  });
+};
+
+/**
+ * Build flat proofing menu items for the current context.
+ * The context menu only renders a single-level item list, so provider
+ * suggestions must be emitted as normal clickable rows.
+ *
+ * @param {Object} context
+ * @returns {Array<Object>}
+ */
+const buildProofingItems = (context) => {
+  const items = [];
+  const proofing = context?.proofingContext;
+
+  if (context?.trigger === TRIGGERS.click && proofing?.issue && proofing?.suggestions?.length) {
+    proofing.suggestions.forEach((suggestion, i) => {
+      items.push({
+        id: `proofing-replace-${i}`,
+        label: suggestion,
+        isDefault: true,
+        action: (editor) => {
+          const { state, dispatch } = editor.view;
+          const { pmFrom, pmTo } = proofing.issue;
+
+          // Collect marks common to ALL text nodes in the replaced range
+          // (intersection). This preserves marks that covered the entire
+          // word (including non-inclusive marks like links) while avoiding
+          // over-expansion of marks that only appeared on some text nodes.
+          let commonMarks = null;
+          state.doc.nodesBetween(pmFrom, pmTo, (node) => {
+            if (node.isText) {
+              if (commonMarks === null) {
+                commonMarks = [...node.marks];
+              } else {
+                commonMarks = commonMarks.filter((existing) => node.marks.some((m) => existing.eq(m)));
+              }
+            }
+          });
+          const existingMarks = commonMarks ?? [];
+
+          // Use replaceWith instead of insertText so the replacement carries
+          // exactly the intersection marks. insertText inherits inclusive
+          // marks from the left boundary, which over-expands formatting when
+          // only part of the word was marked.
+          const tr = state.tr;
+          const replacement = state.schema.text(suggestion, existingMarks);
+          tr.replaceWith(pmFrom, pmTo, replacement);
+
+          dispatch(tr);
+        },
+      });
+    });
+  }
+
+  items.push({
+    id: 'proofing-ignore',
+    label: 'Ignore',
+    isDefault: true,
+    action: (editor, context) => {
+      const proofing = context.proofingContext;
+      if (!proofing?.word) return;
+      proofing.ignoreWord(proofing.word);
+    },
+    showWhen: (context) => {
+      return (
+        context.trigger === TRIGGERS.click && !!context.proofingContext?.canIgnore && !!context.proofingContext?.word
+      );
+    },
+  });
+
+  return items;
+};
+
+/**
+ * Get menu sections based on context (trigger, selection, node, etc)
+ * @param {Object} context - { editor, selectedText, pos, node, event, trigger }
+ * @param {Array} customItems - Optional custom menu items from configuration
+ * @param {boolean} includeDefaultItems - Whether to include default items
+ * @returns {Array} Array of menu sections
+ */
+export function getItems(context, customItems = [], includeDefaultItems = true) {
+  const { selectedText, editor } = context;
+
+  if (editor?.options?.slashMenuConfig && !editor?.options?.contextMenuConfig) {
+    console.warn('[ContextMenu] editor.options.slashMenuConfig is deprecated. Use contextMenuConfig instead.');
+  }
+  const menuConfig = editor?.options?.contextMenuConfig ?? editor?.options?.slashMenuConfig;
+  if (arguments.length === 1 && menuConfig) {
+    customItems = menuConfig.items || menuConfig.customItems || [];
+    includeDefaultItems = menuConfig.includeDefaultItems !== false;
+  }
+
+  // Enhanced context object - ensure we have all necessary computed properties
+  const enhancedContext = {
+    ...context,
+    isInTable: context.isInTable ?? false,
+    isInSectionNode: context.isInSectionNode ?? false,
+    isTrackedChange: context.isTrackedChange ?? false,
+    isCellSelection: context.isCellSelection ?? false,
+    tableSelectionKind: context.tableSelectionKind ?? null,
+    clipboardContent: context.clipboardContent ?? { hasContent: false },
+    selectedText: context.selectedText ?? '',
+    hasSelection: context.hasSelection ?? Boolean(context.selectedText),
+  };
+
+  // Define default sections with isDefault flag
+  const defaultSections = [
+    {
+      id: 'proofing',
+      isDefault: true,
+      items: buildProofingItems(enhancedContext),
+    },
+    {
+      id: 'ai-content',
+      isDefault: true,
+      items: [
+        {
+          id: 'insert-text',
+          label: selectedText ? TEXTS.replaceText : TEXTS.insertText,
+          icon: ICONS.ai,
+          component: AIWriter,
+          isDefault: true,
+          action: (editor) => {
+            if (editor?.commands && typeof editor.commands?.insertAiMark === 'function') {
+              editor.commands.insertAiMark();
+            }
+          },
+          showWhen: (context) => {
+            const { trigger } = context;
+            const allowedTriggers = [TRIGGERS.slash, TRIGGERS.click];
+            return allowedTriggers.includes(trigger) && isModuleEnabled(context.editor?.options, 'ai');
+          },
+        },
+      ],
+    },
+    {
+      id: 'track-changes',
+      isDefault: true,
+      items: [
+        {
+          id: 'track-changes-accept',
+          icon: ICONS.trackChangesAccept,
+          label: TEXTS.trackChangesAccept,
+          isDefault: true,
+          action: (editor, context) => {
+            editor.commands.acceptTrackedChangeFromContextMenu({
+              from: context?.selectionStart,
+              to: context?.selectionEnd,
+              trackedChangeId: context?.trackedChangeId,
+            });
+          },
+          showWhen: (context) => {
+            const { trigger, isTrackedChange } = context;
+            return trigger === TRIGGERS.click && isTrackedChange && canPerformTrackedChange(context, 'accept');
+          },
+        },
+        {
+          id: 'track-changes-reject',
+          label: TEXTS.trackChangesReject,
+          icon: ICONS.trackChangesReject,
+          isDefault: true,
+          action: (editor, context) => {
+            editor.commands.rejectTrackedChangeFromContextMenu({
+              from: context?.selectionStart,
+              to: context?.selectionEnd,
+              trackedChangeId: context?.trackedChangeId,
+            });
+          },
+          showWhen: (context) => {
+            const { trigger, isTrackedChange } = context;
+            return trigger === TRIGGERS.click && isTrackedChange && canPerformTrackedChange(context, 'reject');
+          },
+        },
+      ],
+    },
+    {
+      id: 'document-sections',
+      isDefault: true,
+      items: [
+        {
+          id: 'insert-document-section',
+          label: TEXTS.createDocumentSection,
+          icon: ICONS.addDocumentSection,
+          isDefault: true,
+          action: (editor) => {
+            editor.commands.createDocumentSection();
+          },
+          // TODO: Temporarily disabled - restore original: `return trigger === TRIGGERS.click;`
+          showWhen: () => {
+            return false;
+          },
+        },
+        {
+          id: 'remove-section',
+          label: TEXTS.removeDocumentSection,
+          icon: ICONS.removeDocumentSection,
+          isDefault: true,
+          action: (editor) => {
+            editor.commands.removeSectionAtSelection();
+          },
+          showWhen: (context) => {
+            const { trigger, isInSectionNode } = context;
+            return trigger === TRIGGERS.click && isInSectionNode;
+          },
+        },
+      ],
+    },
+    {
+      id: 'general',
+      isDefault: true,
+      items: [
+        {
+          id: 'insert-link',
+          label: TEXTS.insertLink,
+          icon: ICONS.link,
+          component: LinkInput,
+          isDefault: true,
+          showWhen: (context) => {
+            const { trigger } = context;
+            return trigger === TRIGGERS.click;
+          },
+        },
+        {
+          id: 'insert-table',
+          label: TEXTS.insertTable,
+          icon: ICONS.table,
+          component: TableGrid,
+          isDefault: true,
+          showWhen: (context) => {
+            const { trigger, isInTable } = context;
+            const allowedTriggers = [TRIGGERS.slash, TRIGGERS.click];
+            return allowedTriggers.includes(trigger) && !isInTable;
+          },
+        },
+        {
+          id: 'edit-table',
+          label: TEXTS.editTable,
+          icon: ICONS.table,
+          component: TableActions,
+          isDefault: true,
+          showWhen: (context) => {
+            const { trigger, isInTable } = context;
+            const allowedTriggers = [TRIGGERS.slash, TRIGGERS.click];
+            return allowedTriggers.includes(trigger) && isInTable;
+          },
+        },
+        {
+          id: 'cell-background',
+          label: TEXTS.cellBackground,
+          icon: ICONS.cellBackground,
+          component: CellBackgroundPicker,
+          isDefault: true,
+          showWhen: (context) => {
+            return context.trigger === TRIGGERS.click && (context.isCellSelection || context.isInTable);
+          },
+        },
+      ],
+    },
+    {
+      id: 'clipboard',
+      isDefault: true,
+      items: [
+        {
+          id: 'cut',
+          label: TEXTS.cut,
+          icon: ICONS.cut,
+          isDefault: true,
+          action: (editor) => {
+            editor.focus?.();
+            document.execCommand('cut');
+          },
+          showWhen: (context) => {
+            const { trigger, selectedText } = context;
+            return trigger === TRIGGERS.click && selectedText;
+          },
+        },
+        {
+          id: 'copy',
+          label: TEXTS.copy,
+          icon: ICONS.copy,
+          isDefault: true,
+          action: (editor) => {
+            editor.focus?.();
+            document.execCommand('copy');
+          },
+          showWhen: (context) => {
+            const { trigger, selectedText } = context;
+            return trigger === TRIGGERS.click && selectedText;
+          },
+        },
+        {
+          id: 'paste',
+          label: TEXTS.paste,
+          icon: ICONS.paste,
+          isDefault: true,
+          action: async (editor) => {
+            const { view } = editor ?? {};
+            if (!view) return;
+            // Save the current selection before focusing. When the context menu
+            // is open, its hidden search input holds focus, so the PM editor's
+            // contenteditable is blurred. A raw `view.dom.focus()` would restart
+            // ProseMirror's DOMObserver which reads the stale browser selection
+            // (collapsed at the document start) and overwrites the PM state.
+            // Using `view.focus()` (ProseMirror-aware) prevents this by writing
+            // the PM selection to the DOM before restarting the observer. We also
+            // save/restore as a safety net against async drift during clipboard reads.
+            const savedFrom = view.state.selection.from;
+            const savedTo = view.state.selection.to;
+            view.focus();
+            const { html, text } = await readClipboardRaw();
+            // Restore selection after the async gap — ProseMirror's DOMObserver
+            // may have overwritten the PM selection with a stale DOM selection
+            // (collapsed at document start) while awaiting the clipboard read.
+            if (view.state?.doc?.content) {
+              const { tr, doc } = view.state;
+              const maxPos = doc.content.size;
+              const safeFrom = Math.min(savedFrom, maxPos);
+              const safeTo = Math.min(savedTo, maxPos);
+              const SelectionType = view.state.selection.constructor;
+              if (typeof SelectionType.create === 'function') {
+                view.dispatch(tr.setSelection(SelectionType.create(doc, safeFrom, safeTo)));
+              }
+            }
+            const handled = handleClipboardPaste({ editor, view }, html, text);
+            if (!handled) {
+              const pasteEvent = createPasteEventShim({ html, text });
+
+              if (html && typeof view.pasteHTML === 'function') {
+                view.pasteHTML(html, pasteEvent);
+                return;
+              }
+
+              if (text && typeof view.pasteText === 'function') {
+                view.pasteText(text, pasteEvent);
+                return;
+              }
+
+              if (text && editor.commands?.insertContent) {
+                editor.commands.insertContent(text, { contentType: 'text' });
+              }
+            }
+          },
+          showWhen: (context) => {
+            const { trigger } = context;
+            const allowedTriggers = [TRIGGERS.click, TRIGGERS.slash];
+            return allowedTriggers.includes(trigger);
+          },
+        },
+      ],
+    },
+  ];
+
+  let allSections = [];
+
+  if (includeDefaultItems) {
+    allSections = [...defaultSections];
+  }
+
+  if (customItems.length > 0) {
+    customItems.forEach((customSection) => {
+      const existingSectionIndex = allSections.findIndex((section) => section.id === customSection.id);
+
+      if (existingSectionIndex !== -1) {
+        allSections[existingSectionIndex].items = [
+          ...allSections[existingSectionIndex].items,
+          ...customSection.items.map((item) => ({ ...item, isDefault: false })),
+        ];
+      } else {
+        allSections.push({
+          ...customSection,
+          isDefault: false,
+          items: customSection.items.map((item) => ({ ...item, isDefault: false })),
+        });
+      }
+    });
+  }
+
+  // Apply menuProvider if present - advanced use case
+  if (menuConfig?.menuProvider) {
+    try {
+      allSections = menuConfig.menuProvider(enhancedContext, allSections) || allSections;
+    } catch (error) {
+      console.warn('[ContextMenu] menuProvider error:', error);
+    }
+  }
+
+  const filteredSections = allSections
+    .map((section) => {
+      const filteredItems = section.items.filter((item) => shouldShowItem(item, enhancedContext));
+
+      return {
+        ...section,
+        items: filteredItems,
+      };
+    })
+    .filter((section) => section.items.length > 0);
+
+  return filteredSections;
+}

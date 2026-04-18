@@ -134,9 +134,17 @@ Complete eSign component API
 
 <ParamField path="onFieldsDiscovered" type="function">
   Called when document fields are found
-  
+
   ```typescript
   (fields: FieldInfo[]) => void
+  ```
+</ParamField>
+
+<ParamField path="onZoomChange" type="function">
+  Called when zoom level changes
+
+  ```typescript
+  (data: { zoom: number }) => void
   ```
 </ParamField>
 
@@ -299,6 +307,8 @@ interface SuperDocESignHandle {
   getAuditTrail: () => AuditEvent[];
   reset: () => void;
   updateFieldInDocument: (field: DocumentField) => void;
+  setZoom: (percent: number) => void;
+  getZoom: () => number;
 }
 ```
 
@@ -324,6 +334,10 @@ ref.current?.reset();
 // Update field in the document programatically
 ref.current?.updateFieldInDocument({ id: '1', value: 'Updated value' });
 
+// Control zoom
+ref.current?.setZoom(150);       // Zoom to 150%
+const zoom = ref.current?.getZoom(); // Get current zoom
+
 return <SuperDocESign ref={ref} ... />
 ```
 
@@ -333,6 +347,8 @@ return <SuperDocESign ref={ref} ... />
 - `getAuditTrail()` - Returns audit events array
 - `reset()` - Clear all state and start over
 - `updateFieldInDocument()` - Update a document field by id
+- `setZoom(percent)` - Set zoom level as a percentage (e.g., `150` for 150%)
+- `getZoom()` - Returns current zoom level as a percentage (default: `100`)
 
 ## Field components
 

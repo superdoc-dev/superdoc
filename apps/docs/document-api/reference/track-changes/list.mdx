@@ -6,8 +6,6 @@ description: List all tracked changes in the document.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 List all tracked changes in the document.
@@ -22,7 +20,7 @@ List all tracked changes in the document.
 
 ## Expected result
 
-Returns a TrackChangesListResult with an array of tracked change entries and total count.
+Returns a TrackChangesListResult with tracked change entries, total count, and raw imported Word OOXML revision IDs (`w:id`) when available.
 
 ## Input fields
 
@@ -66,14 +64,17 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
         "kind": "entity"
       },
       "author": "Jane Doe",
-      "authorEmail": "jane@example.com",
       "handle": {
         "ref": "handle:abc123",
         "refStability": "stable",
         "targetKind": "text"
       },
       "id": "id-001",
-      "type": "insert"
+      "type": "insert",
+      "wordRevisionIds": {
+        "delete": "example",
+        "insert": "example"
+      }
     }
   ],
   "page": {
@@ -101,12 +102,15 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
   "additionalProperties": false,
   "properties": {
     "limit": {
+      "description": "Maximum number of tracked changes to return.",
       "type": "integer"
     },
     "offset": {
+      "description": "Number of tracked changes to skip for pagination.",
       "type": "integer"
     },
     "type": {
+      "description": "Filter by change type: 'insert', 'delete', or 'format'.",
       "enum": [
         "insert",
         "delete",
@@ -161,6 +165,25 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
               "delete",
               "format"
             ]
+          },
+          "wordRevisionIds": {
+            "additionalProperties": false,
+            "description": "Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. This is provenance metadata, not the canonical SuperDoc tracked-change ID. Replacements may include both `insert` and `delete` IDs.",
+            "properties": {
+              "delete": {
+                "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:del>` element when this logical change includes a deletion.",
+                "type": "string"
+              },
+              "format": {
+                "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:rPrChange>` element when this logical change includes a formatting revision.",
+                "type": "string"
+              },
+              "insert": {
+                "description": "Raw imported Word OOXML revision ID (`w:id`) from a `<w:ins>` element when this logical change includes an insertion.",
+                "type": "string"
+              }
+            },
+            "type": "object"
           }
         },
         "required": [

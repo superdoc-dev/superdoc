@@ -17,7 +17,7 @@ import path from 'path';
  * Test fixture paths
  */
 const FIXTURES = {
-  basicComment: path.join(__dirname, '../../../super-editor/src/tests/data/basic-comment.docx'),
+  basicComment: path.join(__dirname, '../../../super-editor/src/editors/v1/tests/data/basic-comment.docx'),
   sdt: path.join(__dirname, '../fixtures/sdt-flow-input.json'),
 } as const;
 

@@ -38,6 +38,8 @@ export type CliOperationParamSpec = {
   type: 'string' | 'number' | 'boolean' | 'string[]' | 'json';
   required?: boolean;
   schema?: CliTypeSpec;
+  /** Human-readable description for agent tool schemas. */
+  description?: string;
   /** When false, param is a transport-envelope detail hidden from agent tool schemas. */
   agentVisible?: boolean;
 };
@@ -128,11 +130,13 @@ export type CliCategory =
   | 'history'
   | 'session';
 
-/** The 10 CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
+/** The CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
 export const CLI_ONLY_OPERATIONS = [
   'open',
   'save',
   'close',
+  'insertTab',
+  'insertLineBreak',
   'status',
   'describe',
   'describeCommand',

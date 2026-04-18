@@ -22,6 +22,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     onStateChange,
     onFieldChange,
     onFieldsDiscovered,
+    onZoomChange,
     telemetry,
     licenseKey,
     isDisabled = false,
@@ -45,8 +46,10 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
   const fieldsRef = useRef(fields);
   const auditTrailRef = useRef<Types.AuditEvent[]>([]);
   const onFieldsDiscoveredRef = useRef(onFieldsDiscovered);
+  const onZoomChangeRef = useRef(onZoomChange);
   fieldsRef.current = fields;
   onFieldsDiscoveredRef.current = onFieldsDiscovered;
+  onZoomChangeRef.current = onZoomChange;
 
   useEffect(() => {
     auditTrailRef.current = auditTrail;
@@ -126,7 +129,10 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     (editor: Editor) => {
       if (!editor) return;
 
-      const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+      const structuredContentHelpers = (editor.helpers as any)?.structuredContentCommands;
+      if (!structuredContentHelpers?.getStructuredContentTags) return;
+
+      const tags = structuredContentHelpers.getStructuredContentTags(editor.state);
 
       const configValues = new Map<string, Types.FieldValue | Types.TableFieldValue>();
 
@@ -243,6 +249,10 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       });
 
       superdocRef.current = instance;
+
+      instance.on('zoomChange', (data: { zoom: number }) => {
+        onZoomChangeRef.current?.(data);
+      });
     };
 
     initSuperDoc();
@@ -472,6 +482,12 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
         setAuditTrail([]);
       },
       updateFieldInDocument,
+      setZoom: (percent: number) => {
+        superdocRef.current?.setZoom(percent);
+      },
+      getZoom: () => {
+        return superdocRef.current?.getZoom() ?? 100;
+      },
     }),
     [scrolled, fieldValues, isValid, isSubmitting, document.validation?.scroll?.required, updateFieldInDocument],
   );

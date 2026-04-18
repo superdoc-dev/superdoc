@@ -873,6 +873,13 @@ describe('mark application', () => {
         applyTextStyleMark(run, { vertAlign: 'superscript', position: '3pt' });
         expect(run.fontSize).toBe(16);
       });
+
+      it('treats zero position as an identity value for superscript scaling', () => {
+        const run: TextRun = { text: '1st', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'superscript', position: '0pt' });
+        expect(run.fontSize).toBeCloseTo(16 * 0.65);
+        expect(run.baselineShift).toBeUndefined();
+      });
     });
 
     describe('position / baselineShift', () => {
@@ -886,6 +893,12 @@ describe('mark application', () => {
         const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
         applyTextStyleMark(run, { position: '-1.5pt' });
         expect(run.baselineShift).toBe(-1.5);
+      });
+
+      it('treats zero position as no explicit baseline shift', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16, baselineShift: 2 };
+        applyTextStyleMark(run, { position: '0pt' });
+        expect(run.baselineShift).toBeUndefined();
       });
 
       it('ignores non-numeric position', () => {

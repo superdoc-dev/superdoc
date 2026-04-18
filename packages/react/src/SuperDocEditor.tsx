@@ -38,6 +38,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     id,
     renderLoading,
     hideToolbar = false,
+    contained = false,
     className,
     style,
     // Callbacks (stored in ref to avoid triggering rebuilds)
@@ -149,6 +150,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${CSS.escape(toolbarId)}` } : {}),
           documentMode,
           role,
+          contained,
           ...(documentProp != null ? { document: documentProp } : {}),
           ...(user ? { user } : {}),
           ...(users ? { users } : {}),
@@ -224,17 +226,26 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
-  }, [documentProp, user, users, modules, role, hideToolbar, containerId, toolbarId]);
+  }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
   const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;
 
+  const wrapperStyle: CSSProperties = {
+    ...style,
+    ...(contained && { display: 'flex', flexDirection: 'column' as const }),
+  };
+
   return (
-    <div className={wrapperClassName} style={style}>
+    <div className={wrapperClassName} style={wrapperStyle}>
       {!hideToolbar && (
         <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' style={hideWhenLoading} />
       )}
-      <div id={containerId} className='superdoc-editor-container' style={hideWhenLoading} />
+      <div
+        id={containerId}
+        className='superdoc-editor-container'
+        style={{ ...hideWhenLoading, ...(contained && { flex: 1, minHeight: 0 }) }}
+      />
       {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}
     </div>

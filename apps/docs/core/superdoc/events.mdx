@@ -143,7 +143,7 @@ superdoc.on('editorDestroy', () => {
 
 ### `editor-update`
 
-When editor content changes.
+When editor content changes. Use this to refresh live UI state like word counts or auto-save.
 
 <CodeGroup>
 ```javascript Usage
@@ -166,6 +166,17 @@ superdoc.on('editor-update', ({ editor }) => {
 });
 ```
 </CodeGroup>
+
+**Live counter example:** Read `editor.doc.info()` inside the handler to build a live document-stats panel without polling.
+
+```javascript
+superdoc.on('editor-update', ({ editor }) => {
+  const { counts } = editor.doc.info();
+  document.getElementById('stats').textContent =
+    `${counts.words} words, ${counts.characters} characters, ` +
+    `${counts.trackedChanges} tracked changes, ${counts.lists} lists`;
+});
+```
 
 ### `content-error`
 

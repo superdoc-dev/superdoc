@@ -1,0 +1,12 @@
+artifacts/
+results/
+.promptfoo/
+node_modules/
+.env
+.env.local
+__*
+fixtures/.state*
+fixtures/docs/.state*
+fixtures/tmp-*
+fixtures/docs/tmp-*
+.DS_Store

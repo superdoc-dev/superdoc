@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'bun:test';
 import { resolveSdtMetadata, clearSdtMetadataCache } from './index.js';
 
 describe('resolveSdtMetadata', () => {

@@ -1,0 +1,130 @@
+---
+title: Theming
+sidebarTitle: Theming
+keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, createTheme, styling"
+---
+
+Set your brand colors in JavaScript and every SuperDoc component updates — toolbar, comments, dropdowns, everything.
+
+```javascript
+import { createTheme } from 'superdoc';
+
+const theme = createTheme({
+  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b', border: '#e2e8f0' },
+  font: 'Inter, sans-serif',
+});
+
+document.documentElement.classList.add(theme);
+```
+
+Five properties theme the entire UI.
+
+## `createTheme()`
+
+Pass a config object, get back a CSS class name. Apply it to `<html>`.
+
+```javascript
+import { createTheme } from 'superdoc';
+
+const theme = createTheme({
+  name: 'my-brand',               // optional — generates sd-theme-my-brand
+  font: 'Inter, sans-serif',
+  radius: '8px',
+  colors: {
+    action: '#6366f1',             // buttons, links, active states
+    actionHover: '#4f46e5',
+    bg: '#ffffff',                 // panels, cards, dropdowns
+    text: '#1e293b',               // primary text
+    textMuted: '#64748b',          // secondary text
+    border: '#e2e8f0',             // all borders
+  },
+  // Escape hatch — any CSS variable
+  vars: {
+    '--sd-ui-toolbar-bg': '#f8fafc',
+    '--sd-ui-comments-card-bg': '#f0f0ff',
+  },
+});
+
+document.documentElement.classList.add(theme);
+```
+
+`colors` controls the semantic tier — every component inherits from it. The `vars` escape hatch lets you set any `--sd-*` CSS variable directly for fine-grained control.
+
+## SSR support
+
+Use `buildTheme()` to get the raw CSS string for server-side rendering:
+
+```javascript
+import { buildTheme } from 'superdoc';
+
+const { className, css } = buildTheme({
+  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b' },
+});
+
+const html = `
+  <html class="${className}">
+    <head><style>${css}</style></head>
+    <body><div id="editor"></div></body>
+  </html>
+`;
+```
+
+## Preset themes
+
+Three presets ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>`.
+
+<CardGroup cols={3}>
+  <Card title="Docs" icon="google">
+    Google Docs aesthetic. Clean blues, compact toolbar, subtle shadows.
+    ```html
+    <html class="sd-theme-docs">
+    ```
+  </Card>
+  <Card title="Word" icon="microsoft">
+    Microsoft Word aesthetic. Fluent-style borders and surfaces.
+    ```html
+    <html class="sd-theme-word">
+    ```
+  </Card>
+  <Card title="Blueprint" icon="compass-drafting">
+    High-contrast technical preset. Teal accents, structured layout.
+    ```html
+    <html class="sd-theme-blueprint">
+    ```
+  </Card>
+</CardGroup>
+
+## CSS variables (advanced)
+
+`createTheme()` generates CSS variables under the hood. You can also set them directly:
+
+```css
+:root {
+  --sd-ui-action: #6366f1;
+  --sd-ui-bg: #ffffff;
+  --sd-ui-text: #1e293b;
+  --sd-ui-border: #e2e8f0;
+  --sd-ui-font-family: Inter, sans-serif;
+}
+```
+
+See the [full variable reference](/guides/general/custom-themes#variable-reference) for every token.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Custom themes guide"
+    icon="palette"
+    href="/guides/general/custom-themes"
+  >
+    Full API reference, dark theme starter, all CSS variables by component.
+  </Card>
+  <Card
+    title="Migration guide"
+    icon="arrow-right-arrow-left"
+    href="/guides/migration/css-variables"
+  >
+    Old-to-new variable name mapping. Backward compatibility details.
+  </Card>
+</CardGroup>

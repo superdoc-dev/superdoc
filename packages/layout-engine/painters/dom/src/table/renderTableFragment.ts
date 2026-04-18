@@ -8,10 +8,9 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import { getCellSpacingPx } from '@superdoc/measuring-dom';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
-import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
+import type { FragmentRenderContext } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
@@ -22,7 +21,7 @@ type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => 
  * Dependencies required for rendering a table fragment.
  *
  * Encapsulates all external dependencies needed to render a table, including
- * document access, rendering context, block lookup, and helper functions.
+ * document access, rendering context, pre-resolved table data, and helper functions.
  */
 export type TableRenderDependencies = {
   /** Document object for creating DOM elements */
@@ -31,8 +30,14 @@ export type TableRenderDependencies = {
   fragment: TableFragment;
   /** Rendering context (section info, etc.) */
   context: FragmentRenderContext;
-  /** Lookup map for retrieving block data and measurements */
-  blockLookup: BlockLookup;
+  /** Pre-extracted TableBlock (replaces blockLookup.get()) */
+  block: TableBlock;
+  /** Pre-extracted TableMeasure (replaces blockLookup.get()) */
+  measure: TableMeasure;
+  /** Pre-computed cell spacing in pixels */
+  cellSpacingPx: number;
+  /** Pre-computed effective column widths (fragment.columnWidths ?? measure.columnWidths) */
+  effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
   /** Function to render a line of paragraph content */
@@ -72,12 +77,9 @@ export type TableRenderDependencies = {
  * - Metadata embedding for interactive table resizing
  *
  * **Error Handling:**
- * If the table block cannot be found or is invalid, returns an error placeholder
- * element instead of throwing. This maintains rendering stability when:
- * - Block is missing from blockLookup
- * - Block is wrong kind (not 'table')
- * - Measure is wrong kind (not 'table')
- * - Document object is not available
+ * If the document is unavailable, returns an error placeholder instead of
+ * throwing. Table block/measure validation is performed by the caller before
+ * invoking this helper.
  *
  * **SDT Container Styling:**
  * If the table block has SDT metadata (`block.attrs?.sdt`), applies appropriate
@@ -118,7 +120,10 @@ export type TableRenderDependencies = {
  *   doc: document,
  *   fragment: tableFragment,
  *   context: renderContext,
- *   blockLookup: blocks,
+ *   block: tableBlock,
+ *   measure: tableMeasure,
+ *   cellSpacingPx: 0,
+ *   effectiveColumnWidths: tableMeasure.columnWidths,
  *   renderLine,
  *   applyFragmentFrame,
  *   applySdtDataset,
@@ -131,7 +136,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const {
     doc,
     fragment,
-    blockLookup,
+    block,
+    measure,
+    cellSpacingPx,
+    effectiveColumnWidths,
     context,
     sdtBoundary,
     renderLine,
@@ -159,31 +167,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
     throw new Error('Document is required for table rendering');
   }
-
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
-    console.error(`DomPainter: missing table block for fragment ${fragment.blockId}`, {
-      blockId: fragment.blockId,
-      lookup: lookup ? { kind: lookup.block.kind } : null,
-    });
-
-    // Return placeholder element instead of crashing (doc is guaranteed to exist here)
-    const placeholder = doc.createElement('div');
-    placeholder.classList.add(CLASS_NAMES.fragment, 'superdoc-error-placeholder');
-    placeholder.textContent = '[Table rendering error]';
-    placeholder.style.border = '1px dashed red';
-    placeholder.style.padding = '8px';
-    return placeholder;
-  }
-
-  const block = lookup.block as TableBlock;
-  const measure = lookup.measure as TableMeasure;
-  // Use per-fragment rescaled column widths when available (SD-1859: mixed-orientation docs
-  // where measurement width differs from section width). Falls back to measured widths.
-  const effectiveColumnWidths = fragment.columnWidths ?? measure.columnWidths;
   const tableBorders = block.attrs?.borders;
   const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
   const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
+
+  // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
+  // table-level properties (borders, margins, indent) are mirrored.
+  const tableProperties = block.attrs?.tableProperties as Record<string, unknown> | undefined;
+  const isRtl = tableProperties?.rightToLeft === true;
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -210,8 +201,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
-  // Cell spacing in px (border-spacing). Use measure when present, else resolve from block attrs (e.g. stale/cached measure).
-  const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
+  // Cell spacing pre-computed by the resolver; no cross-stage import needed.
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
@@ -343,9 +333,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
   if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
     applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
-    applyBorder(container, 'Right', borderValueToSpec(tableBorders.right));
+    applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
     applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
-    applyBorder(container, 'Left', borderValueToSpec(tableBorders.left));
+    applyBorder(container, 'Left', borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left));
   }
 
   // Pre-calculate all row heights for rowspan calculations
@@ -382,6 +372,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         columnWidths: effectiveColumnWidths,
         allRowHeights,
         tableIndent,
+        isRtl,
         context,
         renderLine,
         captureLineSnapshot,
@@ -433,6 +424,21 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
           ghostWidth += effectiveColumnWidths[i];
         }
 
+        // RTL: mirror ghost cell x position.
+        // ghostX must include spacing to match the totalWidth formula.
+        if (isRtl && ghostWidth > 0) {
+          let totalWidth = cellSpacingPx;
+          for (let i = 0; i < effectiveColumnWidths.length; i++) {
+            totalWidth += effectiveColumnWidths[i] + cellSpacingPx;
+          }
+          // Recompute ghostX with spacing (matching calculateXPosition in renderTableRow)
+          let ghostXWithSpacing = cellSpacingPx;
+          for (let i = 0; i < gridCol && i < effectiveColumnWidths.length; i++) {
+            ghostXWithSpacing += effectiveColumnWidths[i] + cellSpacingPx;
+          }
+          ghostX = totalWidth - ghostXWithSpacing - ghostWidth;
+        }
+
         // Calculate height: from fromRow to min(spanEndRow, toRow)
         const effectiveEnd = Math.min(spanEndRow, fragment.toRow);
         let ghostHeight = 0;
@@ -467,32 +473,30 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         const cellEndsWithinFragment = effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow;
 
         if (tableBorders) {
-          // Explicit cell borders override table borders; otherwise fall through to table defaults
-          applyBorder(
-            ghostDiv,
-            'Top',
-            (explicit ? cellBordersAttr.top : undefined) ?? borderValueToSpec(tableBorders.top),
-          );
-          applyBorder(
-            ghostDiv,
-            'Left',
+          // Resolve borders using logical positions
+          const topB = (explicit ? cellBordersAttr.top : undefined) ?? borderValueToSpec(tableBorders.top);
+          let leftB =
             (explicit ? cellBordersAttr.left : undefined) ??
-              borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders.left : tableBorders.insideV),
-          );
-          applyBorder(
-            ghostDiv,
-            'Right',
+            borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders.left : tableBorders.insideV);
+          let rightB =
             (explicit ? cellBordersAttr.right : undefined) ??
-              borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders.right : tableBorders.insideV),
-          );
-          if (cellEndsWithinFragment) {
-            applyBorder(
-              ghostDiv,
-              'Bottom',
-              (explicit ? cellBordersAttr.bottom : undefined) ??
-                borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders.bottom : tableBorders.insideH),
-            );
+            borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders.right : tableBorders.insideV);
+          const bottomB = cellEndsWithinFragment
+            ? ((explicit ? cellBordersAttr.bottom : undefined) ??
+              borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders.bottom : tableBorders.insideH))
+            : undefined;
+
+          // RTL: swap resolved left↔right so CSS matches visual edges
+          if (isRtl) {
+            const tmp = leftB;
+            leftB = rightB;
+            rightB = tmp;
           }
+
+          applyBorder(ghostDiv, 'Top', topB);
+          applyBorder(ghostDiv, 'Left', leftB);
+          applyBorder(ghostDiv, 'Right', rightB);
+          if (bottomB) applyBorder(ghostDiv, 'Bottom', bottomB);
         }
 
         // Apply cell background if present
@@ -530,6 +534,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       columnWidths: effectiveColumnWidths,
       allRowHeights,
       tableIndent,
+      isRtl,
       context,
       renderLine,
       captureLineSnapshot,

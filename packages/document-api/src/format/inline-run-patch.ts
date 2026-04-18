@@ -566,117 +566,96 @@ function validateStylisticSets(value: unknown): void {
   });
 }
 
+const PROPERTY_VALIDATOR_MAP: Record<InlineRunPatchKey, (value: unknown, key: string) => void> = {
+  bold: assertBooleanOrNull,
+  italic: assertBooleanOrNull,
+  strike: assertBooleanOrNull,
+  dstrike: assertBooleanOrNull,
+  smallCaps: assertBooleanOrNull,
+  caps: assertBooleanOrNull,
+  outline: assertBooleanOrNull,
+  shadow: assertBooleanOrNull,
+  emboss: assertBooleanOrNull,
+  imprint: assertBooleanOrNull,
+  rtl: assertBooleanOrNull,
+  cs: assertBooleanOrNull,
+  bCs: assertBooleanOrNull,
+  iCs: assertBooleanOrNull,
+  vanish: assertBooleanOrNull,
+  webHidden: assertBooleanOrNull,
+  specVanish: assertBooleanOrNull,
+  snapToGrid: assertBooleanOrNull,
+  oMath: assertBooleanOrNull,
+  contextualAlternates: assertBooleanOrNull,
+  underline: (value) => validateUnderlinePatch(value),
+  highlight: assertStringOrNull,
+  color: assertStringOrNull,
+  fontFamily: assertStringOrNull,
+  rStyle: assertStringOrNull,
+  em: assertStringOrNull,
+  ligatures: assertStringOrNull,
+  numForm: assertStringOrNull,
+  numSpacing: assertStringOrNull,
+  fontSize: assertNumberOrNull,
+  fontSizeCs: assertNumberOrNull,
+  letterSpacing: assertNumberOrNull,
+  charScale: assertNumberOrNull,
+  kerning: assertNumberOrNull,
+  position: assertNumberOrNull,
+  vertAlign: assertVertAlignOrNull,
+  shading: (value) =>
+    validateObjectPatch(value, 'shading', SHADING_ALLOWED_KEYS, {
+      fill: assertStringOrNull,
+      color: assertStringOrNull,
+      val: assertStringOrNull,
+    }),
+  border: (value) =>
+    validateObjectPatch(value, 'border', BORDER_ALLOWED_KEYS, {
+      val: assertStringOrNull,
+      color: assertStringOrNull,
+      sz: assertNumberOrNull,
+      space: assertNumberOrNull,
+    }),
+  fitText: (value) =>
+    validateObjectPatch(value, 'fitText', FIT_TEXT_ALLOWED_KEYS, {
+      val: assertNumberOrNull,
+      id: assertStringOrNull,
+    }),
+  lang: (value) =>
+    validateObjectPatch(value, 'lang', LANG_ALLOWED_KEYS, {
+      val: assertStringOrNull,
+      eastAsia: assertStringOrNull,
+      bidi: assertStringOrNull,
+    }),
+  rFonts: (value) =>
+    validateObjectPatch(value, 'rFonts', RFONTS_ALLOWED_KEYS, {
+      ascii: assertStringOrNull,
+      hAnsi: assertStringOrNull,
+      eastAsia: assertStringOrNull,
+      cs: assertStringOrNull,
+      asciiTheme: assertStringOrNull,
+      hAnsiTheme: assertStringOrNull,
+      eastAsiaTheme: assertStringOrNull,
+      csTheme: assertStringOrNull,
+      hint: assertStringOrNull,
+    }),
+  eastAsianLayout: (value) =>
+    validateObjectPatch(value, 'eastAsianLayout', EAST_ASIAN_LAYOUT_ALLOWED_KEYS, {
+      id: assertStringOrNull,
+      combine: assertBooleanOrNull,
+      combineBrackets: assertStringOrNull,
+      vert: assertBooleanOrNull,
+      vertCompress: assertBooleanOrNull,
+    }),
+  stylisticSets: (value) => validateStylisticSets(value),
+};
+
 function validateInlineProperty(key: string, value: unknown): void {
-  switch (key as InlineRunPatchKey) {
-    case 'bold':
-    case 'italic':
-    case 'strike':
-    case 'dstrike':
-    case 'smallCaps':
-    case 'caps':
-    case 'outline':
-    case 'shadow':
-    case 'emboss':
-    case 'imprint':
-    case 'rtl':
-    case 'cs':
-    case 'bCs':
-    case 'iCs':
-    case 'vanish':
-    case 'webHidden':
-    case 'specVanish':
-    case 'snapToGrid':
-    case 'oMath':
-    case 'contextualAlternates':
-      assertBooleanOrNull(value, `inline.${key}`);
-      return;
-    case 'underline':
-      validateUnderlinePatch(value);
-      return;
-    case 'highlight':
-    case 'color':
-    case 'fontFamily':
-    case 'rStyle':
-    case 'em':
-    case 'ligatures':
-    case 'numForm':
-    case 'numSpacing':
-      assertStringOrNull(value, `inline.${key}`);
-      return;
-    case 'fontSize':
-    case 'fontSizeCs':
-    case 'letterSpacing':
-    case 'charScale':
-    case 'kerning':
-    case 'position':
-      assertNumberOrNull(value, `inline.${key}`);
-      return;
-    case 'vertAlign':
-      assertVertAlignOrNull(value, 'inline.vertAlign');
-      return;
-    case 'shading':
-      validateObjectPatch(value, 'shading', SHADING_ALLOWED_KEYS, {
-        fill: assertStringOrNull,
-        color: assertStringOrNull,
-        val: assertStringOrNull,
-      });
-      return;
-    case 'border':
-      validateObjectPatch(value, 'border', BORDER_ALLOWED_KEYS, {
-        val: assertStringOrNull,
-        color: assertStringOrNull,
-        sz: assertNumberOrNull,
-        space: assertNumberOrNull,
-      });
-      return;
-    case 'fitText':
-      validateObjectPatch(value, 'fitText', FIT_TEXT_ALLOWED_KEYS, {
-        val: assertNumberOrNull,
-        id: assertStringOrNull,
-      });
-      return;
-    case 'lang':
-      validateObjectPatch(value, 'lang', LANG_ALLOWED_KEYS, {
-        val: assertStringOrNull,
-        eastAsia: assertStringOrNull,
-        bidi: assertStringOrNull,
-      });
-      return;
-    case 'rFonts':
-      validateObjectPatch(value, 'rFonts', RFONTS_ALLOWED_KEYS, {
-        ascii: assertStringOrNull,
-        hAnsi: assertStringOrNull,
-        eastAsia: assertStringOrNull,
-        cs: assertStringOrNull,
-        asciiTheme: assertStringOrNull,
-        hAnsiTheme: assertStringOrNull,
-        eastAsiaTheme: assertStringOrNull,
-        csTheme: assertStringOrNull,
-        hint: assertStringOrNull,
-      });
-      return;
-    case 'eastAsianLayout':
-      validateObjectPatch(value, 'eastAsianLayout', EAST_ASIAN_LAYOUT_ALLOWED_KEYS, {
-        id: assertStringOrNull,
-        combine: assertBooleanOrNull,
-        combineBrackets: assertStringOrNull,
-        vert: assertBooleanOrNull,
-        vertCompress: assertBooleanOrNull,
-      });
-      return;
-    case 'stylisticSets':
-      validateStylisticSets(value);
-      return;
-    default:
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `Unknown inline style key "${key}". Known keys are defined by INLINE_PROPERTY_REGISTRY.`,
-        {
-          field: 'inline',
-          key,
-        },
-      );
+  if (!Object.prototype.hasOwnProperty.call(PROPERTY_VALIDATOR_MAP, key)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `Unknown inline property: "${key}".`, { field: key });
   }
+  const validator = PROPERTY_VALIDATOR_MAP[key as InlineRunPatchKey];
+  validator(value, `inline.${key}`);
 }
 
 export function validateInlineRunPatch(patch: unknown): asserts patch is InlineRunPatch {
@@ -693,12 +672,6 @@ export function validateInlineRunPatch(patch: unknown): asserts patch is InlineR
   }
 
   for (const key of keys) {
-    if (!INLINE_PROPERTY_KEY_SET.has(key)) {
-      throw new DocumentApiValidationError('INVALID_INPUT', `Unknown inline style key "${key}".`, {
-        field: 'inline',
-        key,
-      });
-    }
     validateInlineProperty(key, patch[key]);
   }
 }

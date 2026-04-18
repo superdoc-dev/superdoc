@@ -1,9 +1,13 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
-import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
-import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
+import {
+  Editor,
+  BLANK_DOCX_BASE64,
+  DocxEncryptionError,
+  getDocumentApiAdapters,
+  markdownToPmDoc,
+  initPartsRuntime,
+} from 'superdoc/super-editor';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
@@ -47,7 +51,9 @@ interface ContentOverrideOptions {
 }
 
 /** Options passed through to Editor.open() alongside content overrides. */
-type EditorPassThroughOptions = Record<string, unknown>;
+export interface EditorPassThroughOptions {
+  password?: string;
+}
 
 interface OpenDocumentOptions {
   documentId?: string;
@@ -66,14 +72,43 @@ export interface FileOutputMeta {
   byteLength: number;
 }
 
-function toUint8Array(data: unknown): Uint8Array {
+function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
+  const editorWithDoc = editor as EditorWithDoc;
+
+  // Shadow the lazy getter with an eagerly-created DocumentApi so the CLI and
+  // story harnesses always dispatch against the same source-backed adapter graph.
+  Object.defineProperty(editorWithDoc, 'doc', {
+    configurable: true,
+    value: createDocumentApi(getDocumentApiAdapters(editor)),
+  });
+
+  return editorWithDoc;
+}
+
+async function toUint8Array(data: unknown): Promise<Uint8Array> {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer());
+  }
+  if (typeof data === 'object' && data !== null && 'arrayBuffer' in data && typeof data.arrayBuffer === 'function') {
+    const arrayBuffer = await data.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  }
 
-  throw new CliError('DOCUMENT_EXPORT_FAILED', 'Exported document data is not binary.');
+  const constructorName =
+    typeof data === 'object' && data !== null && 'constructor' in data && typeof data.constructor === 'function'
+      ? data.constructor.name
+      : undefined;
+  const objectKeys = typeof data === 'object' && data !== null ? Object.keys(data).slice(0, 8) : [];
+
+  throw new CliError(
+    'DOCUMENT_EXPORT_FAILED',
+    `Exported document data is not binary (type=${typeof data}, constructor=${constructorName ?? 'unknown'}, keys=${objectKeys.join(',')}).`,
+  );
 }
 
 async function readDocumentSource(doc: string, io: CliIO): Promise<{ bytes: Uint8Array; meta: DocumentSourceMeta }> {
@@ -155,6 +190,7 @@ export async function openDocument(
     editor = await Editor.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
       document: domEnv.document,
+      isHeadless: true,
       user: options.user
         ? { name: options.user.name, email: options.user.email, image: null }
         : { id: 'cli', name: 'CLI' },
@@ -170,12 +206,21 @@ export async function openDocument(
   } catch (error) {
     commentBridge?.dispose();
     domEnv.dispose();
+    // Preserve DOCX encryption errors so callers get actionable codes
+    // (e.g. DOCX_PASSWORD_REQUIRED) instead of generic DOCUMENT_OPEN_FAILED.
+    if (error instanceof DocxEncryptionError) {
+      throw new CliError(error.code, error.message, { source: meta });
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
       message,
       source: meta,
     });
   }
+
+  // Parts/runtime registration is idempotent. Re-run it here so adapter-side
+  // afterCommit hooks are always wired, including in headless CLI sessions.
+  initPartsRuntime(editor as never);
 
   // Apply content override post-init.
   //   - markdown: DOM-free AST pipeline
@@ -184,8 +229,7 @@ export async function openDocument(
     try {
       const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
       const tr = editor.state.tr;
-      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
-      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content);
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();
@@ -218,10 +262,7 @@ export async function openDocument(
     }
   }
 
-  const adapters = getDocumentApiAdapters(editor);
-  const docApi = createDocumentApi(adapters);
-  Object.defineProperty(editor, 'doc', { value: docApi, configurable: true, writable: true });
-  const editorWithDoc = editor as EditorWithDoc;
+  const editorWithDoc = bindCurrentDocumentApi(editor);
 
   return {
     editor: editorWithDoc,
@@ -254,7 +295,7 @@ export async function openCollaborativeDocument(
   doc: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
-  options: { user?: UserIdentity } = {},
+  options: { editorOpenOptions?: EditorPassThroughOptions; user?: UserIdentity } = {},
 ): Promise<OpenedDocument & { bootstrap?: BootstrapResult }> {
   const runtime = createCollaborationRuntime(profile);
 
@@ -307,6 +348,7 @@ export async function openCollaborativeDocument(
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
       isNewFile: shouldSeed,
+      editorOpenOptions: options.editorOpenOptions,
       user: options.user,
     });
 
@@ -398,6 +440,48 @@ export async function getFileChecksum(path: string): Promise<string> {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+export type OptionalExportResult = {
+  output?: { path: string; byteLength: number };
+  warning?: {
+    code: string;
+    path: string;
+    message: string;
+  };
+};
+
+/**
+ * Attempts an optional session export, returning structured success/warning
+ * data instead of throwing on failure.
+ *
+ * @param editor - The editor instance to export from
+ * @param io - CLI I/O for diagnostic warnings
+ * @param outPath - Optional output path; returns `undefined` when absent
+ * @param force - Whether to overwrite an existing file
+ * @returns Export result with output or warning metadata, or `undefined` if no path
+ */
+export async function exportOptionalSessionOutput(
+  editor: EditorWithDoc,
+  io: CliIO,
+  outPath: string | undefined,
+  force: boolean,
+): Promise<OptionalExportResult | undefined> {
+  if (!outPath) return undefined;
+  try {
+    return { output: await exportToPath(editor, outPath, force) };
+  } catch (error) {
+    const code = error instanceof CliError ? error.code : 'FILE_WRITE_ERROR';
+    const message = error instanceof Error ? error.message : String(error);
+    io.warn?.(`[warn] optional export to ${outPath} failed: ${message}\n`);
+    return {
+      warning: {
+        code,
+        path: outPath,
+        message,
+      },
+    };
+  }
+}
+
 export async function exportToPath(editor: Editor, outputPath: string, force = false): Promise<FileOutputMeta> {
   const exists = await pathExists(outputPath);
   if (exists && !force) {
@@ -417,7 +501,7 @@ export async function exportToPath(editor: Editor, outputPath: string, force = f
     });
   }
 
-  const bytes = toUint8Array(exported);
+  const bytes = await toUint8Array(exported);
 
   try {
     await writeFile(outputPath, bytes);

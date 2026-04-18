@@ -1,0 +1,22 @@
+/*
+ * Backward-compatible aliases for renamed CSS variables.
+ *
+ * Most old names are honored via var() fallbacks in variables.css — if a
+ * customer sets --sd-comment-bg, the new --sd-ui-comments-card-bg picks it up
+ * automatically. This file only covers aliases where the old name maps to a
+ * different concept (no direct 1:1 fallback possible).
+ *
+ * These aliases will be removed in the next major version.
+ */
+
+:root {
+  /* Old semantic names that map to primitives (no new-token equivalent) */
+  --sd-surface-canvas: var(--sd-color-gray-50);
+  --sd-surface-selected: var(--sd-color-blue-100);
+  --sd-text-secondary: var(--sd-color-gray-700);
+
+  /* Old names that map to a different concept in the new system */
+  --sd-surface-page: var(--sd-ui-bg);
+  --sd-border-subtle: var(--sd-ui-comments-separator);
+  --sd-border-focus: var(--sd-ui-action);
+}

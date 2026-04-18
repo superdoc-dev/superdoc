@@ -8,6 +8,10 @@ Repo-level DOCX corpus tooling shared by `tests/visual` and `tests/layout`.
 # Download/sync corpus locally (default: <repo>/test-corpus)
 pnpm corpus:pull
 
+# Delete one or more corpus docs from R2, remove their registry entries, and delete local copies
+pnpm corpus:delete -- rendering/sd-1234-example.docx
+pnpm corpus:delete -- basic/advanced-tables.docx layout/advanced-tables.docx
+
 # Upload a doc, update registry.json in R2, then generate/upload Word baseline via superdoc-benchmark
 pnpm corpus:push -- --path rendering/sd-1234-example.docx /path/to/file.docx
 
@@ -19,6 +23,7 @@ pnpm corpus:update-registry
 ```
 
 `pnpm corpus:pull` now tolerates missing keys and prunes stale `registry.json` entries automatically.
+`pnpm corpus:pull` does not remove local files that no longer exist in R2; use `pnpm corpus:delete` when you want the shared corpus and local copy removed together.
 `pnpm corpus:push` runs `superdoc-benchmark baseline <uploaded-key> --force` by default after upload.
 Set `SUPERDOC_CORPUS_SKIP_WORD_BASELINE=1` (or pass `--no-word-baseline`) to disable this behavior.
 

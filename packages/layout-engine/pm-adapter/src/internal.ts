@@ -33,6 +33,7 @@ import {
   handleParagraphNode,
 } from './converters/index.js';
 import { chartNodeToDrawingBlock, handleChartNode } from './converters/chart.js';
+import { handleMathBlockNode } from './converters/math-block.js';
 import {
   handleTableOfContentsNode,
   handleIndexNode,
@@ -79,6 +80,7 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
   chart: handleChartNode,
+  mathBlock: handleMathBlockNode,
 };
 
 const converters: NestedConverters = {
@@ -203,6 +205,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     converters,
     themeColors,
     flowBlockCache,
+    trackedListMarkerOffsets: new Map<string, number>(),
+    trackedListLastOrdinals: new Map<string, number>(),
   };
 
   // Process nodes using handler dispatch pattern

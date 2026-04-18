@@ -1,4 +1,5 @@
 import type { ColumnLayout, SectionBreakBlock } from '@superdoc/contracts';
+import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 export type SectionState = {
   activeTopMargin: number;
@@ -29,10 +30,7 @@ export type BreakDecision = {
 };
 
 /** Default single-column configuration per OOXML spec (absence of w:cols element) */
-export const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = {
-  count: 1,
-  gap: 0,
-};
+export const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = { count: 1, gap: 0 };
 
 /**
  * Get the column configuration for a section break.
@@ -43,9 +41,7 @@ export const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = {
  * @returns Column configuration with count, gap, and separator presence
  */
 function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
-  return blockColumns
-    ? { count: blockColumns.count, gap: blockColumns.gap, withSeparator: blockColumns.withSeparator }
-    : { ...SINGLE_COLUMN_DEFAULT };
+  return blockColumns ? cloneColumnLayout(blockColumns) : { ...SINGLE_COLUMN_DEFAULT };
 }
 
 /**
@@ -58,19 +54,18 @@ function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
  * @param activeColumns - The current active column configuration
  * @returns True if column layout is changing
  */
-function isColumnConfigChanging(
-  blockColumns: { count: number; gap: number; withSeparator?: boolean } | undefined,
-  activeColumns: { count: number; gap: number; withSeparator?: boolean },
-): boolean {
+function isColumnConfigChanging(blockColumns: ColumnLayout | undefined, activeColumns: ColumnLayout): boolean {
   if (blockColumns) {
-    // Explicit column change: any of count, gap, or separator presence differs.
-    // withSeparator must be included because a sep-only toggle still needs a new
-    // column region so the renderer can draw (or stop drawing) the separator from
-    // the toggle point onward.
+    // Explicit column change: any of count, gap, separator presence, equalWidth,
+    // or widths differs. withSeparator must be included because a sep-only toggle
+    // still needs a new column region so the renderer can draw (or stop drawing)
+    // the separator from the toggle point onward.
     return (
       blockColumns.count !== activeColumns.count ||
       blockColumns.gap !== activeColumns.gap ||
-      Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator)
+      Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator) ||
+      blockColumns.equalWidth !== activeColumns.equalWidth ||
+      !widthsEqual(blockColumns.widths, activeColumns.widths)
     );
   }
   // No columns specified = reset to single column (OOXML default).

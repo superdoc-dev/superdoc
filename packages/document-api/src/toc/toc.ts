@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { isRecord } from '../validation-primitives.js';
 import type {
   TocAddress,
   TocGetInput,
@@ -98,6 +99,16 @@ function validateInsertionTarget(target: unknown, operationName: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Shared input guard
+// ---------------------------------------------------------------------------
+
+function validateTocInput(input: unknown, operationName: string): asserts input is Record<string, unknown> {
+  if (!isRecord(input)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} input must be a non-null object.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Execute wrappers — TOC lifecycle
 // ---------------------------------------------------------------------------
 
@@ -106,6 +117,7 @@ export function executeTocList(adapter: TocAdapter, query?: TocListQuery): TocLi
 }
 
 export function executeTocGet(adapter: TocAdapter, input: TocGetInput): TocInfo {
+  validateTocInput(input, 'toc.get');
   validateTocTarget(input.target, 'toc.get');
   return adapter.get(input);
 }
@@ -115,16 +127,27 @@ export function executeTocConfigure(
   input: TocConfigureInput,
   options?: MutationOptions,
 ): TocMutationResult {
+  validateTocInput(input, 'toc.configure');
   validateTocTarget(input.target, 'toc.configure');
   return adapter.configure(input, normalizeMutationOptions(options));
 }
+
+const VALID_TOC_UPDATE_MODES: ReadonlySet<string> = new Set(['all', 'pageNumbers']);
 
 export function executeTocUpdate(
   adapter: TocAdapter,
   input: TocUpdateInput,
   options?: MutationOptions,
 ): TocMutationResult {
+  validateTocInput(input, 'toc.update');
   validateTocTarget(input.target, 'toc.update');
+  if (input.mode !== undefined && !VALID_TOC_UPDATE_MODES.has(input.mode)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `toc.update mode must be "all" or "pageNumbers", got "${String(input.mode)}".`,
+      { field: 'mode', value: input.mode },
+    );
+  }
   return adapter.update(input, normalizeMutationOptions(options));
 }
 
@@ -133,6 +156,7 @@ export function executeTocRemove(
   input: TocRemoveInput,
   options?: MutationOptions,
 ): TocMutationResult {
+  validateTocInput(input, 'toc.remove');
   validateTocTarget(input.target, 'toc.remove');
   return adapter.remove(input, normalizeMutationOptions(options));
 }
@@ -146,6 +170,7 @@ export function executeTocMarkEntry(
   input: TocMarkEntryInput,
   options?: MutationOptions,
 ): TocEntryMutationResult {
+  validateTocInput(input, 'toc.markEntry');
   validateInsertionTarget(input.target, 'toc.markEntry');
   if (!input.text || typeof input.text !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'toc.markEntry requires a non-empty text string.');
@@ -158,6 +183,7 @@ export function executeTocUnmarkEntry(
   input: TocUnmarkEntryInput,
   options?: MutationOptions,
 ): TocEntryMutationResult {
+  validateTocInput(input, 'toc.unmarkEntry');
   validateTocEntryTarget(input.target, 'toc.unmarkEntry');
   return adapter.unmarkEntry(input, normalizeMutationOptions(options));
 }
@@ -167,8 +193,61 @@ export function executeTocListEntries(adapter: TocAdapter, query?: TocListEntrie
 }
 
 export function executeTocGetEntry(adapter: TocAdapter, input: TocGetEntryInput): TocEntryInfo {
+  validateTocInput(input, 'toc.getEntry');
   validateTocEntryTarget(input.target, 'toc.getEntry');
   return adapter.getEntry(input);
+}
+
+const EDIT_ENTRY_PATCH_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  'text',
+  'level',
+  'tableIdentifier',
+  'omitPageNumber',
+]);
+
+function validateTocEditEntryPatch(patch: unknown, operationName: string): void {
+  if (!isRecord(patch)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} patch must be a non-null object.`, {
+      field: 'patch',
+      value: patch,
+    });
+  }
+  for (const key of Object.keys(patch)) {
+    if (!EDIT_ENTRY_PATCH_ALLOWED_KEYS.has(key)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `Unknown field "${key}" on ${operationName} patch. Allowed fields: ${[...EDIT_ENTRY_PATCH_ALLOWED_KEYS].join(', ')}.`,
+        { field: `patch.${key}` },
+      );
+    }
+  }
+  if (patch.text !== undefined && typeof patch.text !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} patch.text must be a string.`, {
+      field: 'patch.text',
+      value: patch.text,
+    });
+  }
+  if (patch.level !== undefined) {
+    if (typeof patch.level !== 'number' || !Number.isInteger(patch.level) || (patch.level as number) < 1) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName} patch.level must be a positive integer.`,
+        { field: 'patch.level', value: patch.level },
+      );
+    }
+  }
+  if (patch.tableIdentifier !== undefined && typeof patch.tableIdentifier !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} patch.tableIdentifier must be a string.`, {
+      field: 'patch.tableIdentifier',
+      value: patch.tableIdentifier,
+    });
+  }
+  if (patch.omitPageNumber !== undefined && typeof patch.omitPageNumber !== 'boolean') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} patch.omitPageNumber must be a boolean.`, {
+      field: 'patch.omitPageNumber',
+      value: patch.omitPageNumber,
+    });
+  }
 }
 
 export function executeTocEditEntry(
@@ -176,6 +255,8 @@ export function executeTocEditEntry(
   input: TocEditEntryInput,
   options?: MutationOptions,
 ): TocEntryMutationResult {
+  validateTocInput(input, 'toc.editEntry');
   validateTocEntryTarget(input.target, 'toc.editEntry');
+  validateTocEditEntryPatch(input.patch, 'toc.editEntry');
   return adapter.editEntry(input, normalizeMutationOptions(options));
 }

@@ -375,9 +375,10 @@ export class ConformanceHarness {
   ): Promise<{ docPath: string; changeId: string; target: TextRangeAddress }> {
     const sourceDoc = await this.copyFixtureDoc(`${label}-source`);
     const target = await this.firstTextRange(sourceDoc, stateDir);
-    const collapsedTarget: TextRangeAddress = {
-      ...target,
-      range: { start: target.range.start, end: target.range.start },
+    const selectionTarget = {
+      kind: 'selection',
+      start: { kind: 'text', blockId: target.blockId, offset: target.range.start },
+      end: { kind: 'text', blockId: target.blockId, offset: target.range.start },
     };
     const outDoc = this.createOutputPath(`${label}-with-tracked-change`);
 
@@ -386,7 +387,7 @@ export class ConformanceHarness {
         'insert',
         sourceDoc,
         '--target-json',
-        JSON.stringify(collapsedTarget),
+        JSON.stringify(selectionTarget),
         '--value',
         'TRACKED_CONFORMANCE_TOKEN',
         '--change-mode',
@@ -412,7 +413,7 @@ export class ConformanceHarness {
       throw new Error(`Tracked-change fixture did not produce a tracked change id for ${label}`);
     }
 
-    return { docPath: outDoc, changeId, target: collapsedTarget };
+    return { docPath: outDoc, changeId, target };
   }
 
   async firstTwoBlockAddresses(

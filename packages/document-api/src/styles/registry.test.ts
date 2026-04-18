@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { PROPERTY_REGISTRY, EXCLUDED_KEYS } from './registry.js';
 
 // ---------------------------------------------------------------------------

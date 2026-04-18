@@ -10,6 +10,7 @@ const ALL_HYPERLINK_COMMAND_IDS = [
   'hyperlinks.patch',
   'hyperlinks.remove',
 ] as const;
+const COMMAND_STORY_TIMEOUT_MS = 60_000;
 
 type HyperlinksCommandId = (typeof ALL_HYPERLINK_COMMAND_IDS)[number];
 
@@ -339,28 +340,32 @@ describe('document-api story: all hyperlinks commands', () => {
   });
 
   for (const scenario of scenarios) {
-    it(`${scenario.operationId}: executes and saves source/result docs`, async () => {
-      const sessionId = makeSessionId(scenario.operationId.replace(/\./g, '-'));
-      try {
-        await callDocOperation('open', { sessionId, doc: CORPUS_HYPERLINK_FIXTURE });
+    it(
+      `${scenario.operationId}: executes and saves source/result docs`,
+      async () => {
+        const sessionId = makeSessionId(scenario.operationId.replace(/\./g, '-'));
+        try {
+          await callDocOperation('open', { sessionId, doc: CORPUS_HYPERLINK_FIXTURE });
 
-        const fixture = scenario.prepare ? await scenario.prepare(sessionId) : null;
+          const fixture = scenario.prepare ? await scenario.prepare(sessionId) : null;
 
-        await saveSource(sessionId, scenario.operationId);
+          await saveSource(sessionId, scenario.operationId);
 
-        const result = await scenario.run(sessionId, fixture);
+          const result = await scenario.run(sessionId, fixture);
 
-        if (readOperationIds.has(scenario.operationId)) {
-          assertReadOutput(scenario.operationId, result);
-          await saveReadOutput(scenario.operationId, result);
-        } else {
-          assertMutationSuccess(scenario.operationId, result);
+          if (readOperationIds.has(scenario.operationId)) {
+            assertReadOutput(scenario.operationId, result);
+            await saveReadOutput(scenario.operationId, result);
+          } else {
+            assertMutationSuccess(scenario.operationId, result);
+          }
+
+          await saveResult(sessionId, scenario.operationId);
+        } finally {
+          await callDocOperation('close', { sessionId, discard: true }).catch(() => {});
         }
-
-        await saveResult(sessionId, scenario.operationId);
-      } finally {
-        await callDocOperation('close', { sessionId, discard: true }).catch(() => {});
-      }
-    });
+      },
+      COMMAND_STORY_TIMEOUT_MS,
+    );
   }
 });

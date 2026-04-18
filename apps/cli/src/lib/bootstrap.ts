@@ -231,6 +231,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function nextTimerTurn(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap claim
 // ---------------------------------------------------------------------------
@@ -273,7 +277,16 @@ export async function claimBootstrap(
 
   const observer = observeCompetitor(ydoc);
   try {
-    if (settlingMs > 0) await sleep(settlingMs);
+    if (settlingMs > 0) {
+      await sleep(settlingMs);
+
+      // Give already-due timer callbacks one more turn to run before the
+      // final ownership check. This makes bootstrap claiming more
+      // conservative under event-loop jitter, where a competing marker can
+      // be queued before the settling window ends but execute immediately
+      // after our sleep resolves.
+      await nextTimerTurn();
+    }
 
     const competitor = observer.getCompetitor();
     if (competitor) return { granted: false, competitor };

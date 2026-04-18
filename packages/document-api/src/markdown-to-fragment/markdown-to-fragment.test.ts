@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { executeMarkdownToFragment } from './markdown-to-fragment.js';
 import type { MarkdownToFragmentAdapter, MarkdownToFragmentInput } from './markdown-to-fragment.js';
 import type { SDMarkdownToFragmentResult } from '../types/sd-contract.js';
@@ -11,7 +11,7 @@ describe('executeMarkdownToFragment', () => {
       diagnostics: [],
     };
     const adapter: MarkdownToFragmentAdapter = {
-      markdownToFragment: vi.fn(() => result),
+      markdownToFragment: mock(() => result),
     };
     const input: MarkdownToFragmentInput = { markdown: '# Hello' };
 
@@ -28,7 +28,7 @@ describe('executeMarkdownToFragment', () => {
       diagnostics: [{ code: 'MD_BLOCKQUOTE', severity: 'warning', message: 'Blockquotes have no direct equivalent.' }],
     };
     const adapter: MarkdownToFragmentAdapter = {
-      markdownToFragment: vi.fn(() => result),
+      markdownToFragment: mock(() => result),
     };
     const input: MarkdownToFragmentInput = { markdown: '> blockquote' };
 

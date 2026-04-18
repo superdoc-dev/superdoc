@@ -10,6 +10,7 @@ import type { ResolveRangeInput, ResolveRangeOutput, RangeResolverAdapter, Range
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 import { isSelectionPoint } from '../validation/selection-target-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 // ---------------------------------------------------------------------------
 // Anchor validation
@@ -76,7 +77,7 @@ function validateAnchor(value: unknown, fieldName: string): asserts value is Ran
 // Input validation
 // ---------------------------------------------------------------------------
 
-const RESOLVE_RANGE_ALLOWED_KEYS = new Set(['start', 'end', 'expectedRevision']);
+const RESOLVE_RANGE_ALLOWED_KEYS = new Set(['start', 'end', 'expectedRevision', 'in']);
 
 function validateResolveRangeInput(input: unknown): asserts input is ResolveRangeInput {
   if (!isRecord(input)) {
@@ -107,6 +108,8 @@ function validateResolveRangeInput(input: unknown): asserts input is ResolveRang
       { field: 'expectedRevision', value: input.expectedRevision },
     );
   }
+
+  validateStoryLocator(input.in, 'in');
 }
 
 // ---------------------------------------------------------------------------

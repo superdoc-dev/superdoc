@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import type { NodeAddress, NodeInfo } from '../types/index.js';
 import { executeGetNode, executeGetNodeById } from './get-node.js';
 import type { GetNodeAdapter } from './get-node.js';
@@ -13,8 +14,8 @@ const PARAGRAPH_INFO: NodeInfo = {
 describe('executeGetNode', () => {
   it('delegates to adapter.getNode with the address', () => {
     const adapter: GetNodeAdapter = {
-      getNode: vi.fn(() => PARAGRAPH_INFO),
-      getNodeById: vi.fn(() => PARAGRAPH_INFO),
+      getNode: mock(() => PARAGRAPH_INFO),
+      getNodeById: mock(() => PARAGRAPH_INFO),
     };
 
     const result = executeGetNode(adapter, PARAGRAPH_ADDRESS);
@@ -27,8 +28,8 @@ describe('executeGetNode', () => {
 describe('executeGetNodeById', () => {
   it('delegates to adapter.getNodeById with the input', () => {
     const adapter: GetNodeAdapter = {
-      getNode: vi.fn(() => PARAGRAPH_INFO),
-      getNodeById: vi.fn(() => PARAGRAPH_INFO),
+      getNode: mock(() => PARAGRAPH_INFO),
+      getNodeById: mock(() => PARAGRAPH_INFO),
     };
     const input = { nodeId: 'p1', nodeType: 'paragraph' as const };
 

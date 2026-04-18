@@ -188,6 +188,46 @@ function formatDocumentInfo(result: unknown, ctx: FormatContext): string {
 }
 
 // ---------------------------------------------------------------------------
+// Diff formatters
+// ---------------------------------------------------------------------------
+
+function formatDiffSnapshot(result: unknown, ctx: FormatContext): string {
+  const record = asRecord(result);
+  if (!record) return `Revision ${ctx.revision}: captured snapshot`;
+  const fingerprint = hasNonEmptyString(record.fingerprint) ? record.fingerprint : '<unknown>';
+  const coverage = asRecord(record.coverage);
+  const components = coverage
+    ? Object.entries(coverage)
+        .filter(([, v]) => v === true)
+        .map(([k]) => k)
+        .join(', ')
+    : 'body';
+  const payloadSize = record.payload ? JSON.stringify(record.payload).length : 0;
+  return `Revision ${ctx.revision}: captured snapshot\n  fingerprint: ${fingerprint}\n  coverage: ${components}\n  payload size: ${payloadSize} bytes`;
+}
+
+function formatDiffPayload(result: unknown, ctx: FormatContext): string {
+  const record = asRecord(result);
+  if (!record) return `Revision ${ctx.revision}: compared documents`;
+  const summary = asRecord(record.summary);
+  const changed = asArray(summary?.changedComponents).filter(hasNonEmptyString);
+  const baseFp = hasNonEmptyString(record.baseFingerprint) ? record.baseFingerprint : '<unknown>';
+  const targetFp = hasNonEmptyString(record.targetFingerprint) ? record.targetFingerprint : '<unknown>';
+  const changedStr = changed.length > 0 ? changed.join(', ') : 'none';
+  return `Revision ${ctx.revision}: compared documents\n  base: ${baseFp}\n  target: ${targetFp}\n  changed: ${changedStr}`;
+}
+
+function formatDiffApplyResult(result: unknown, ctx: FormatContext): string {
+  const record = asRecord(result);
+  if (!record) return `Revision ${ctx.revision}: applied diff`;
+  const ops = safeNumber(record.appliedOperations, 0);
+  const summary = asRecord(record.summary);
+  const changed = asArray(summary?.changedComponents).filter(hasNonEmptyString);
+  const changedStr = changed.length > 0 ? changed.join(', ') : 'none';
+  return `Revision ${ctx.revision}: applied diff (${ops} operations)\n  changed: ${changedStr}`;
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 
@@ -200,6 +240,9 @@ const FORMAT_DISPATCH: Partial<Record<OutputFormat, Formatter>> = {
   listResult: (result, ctx) => formatListResult(result, ctx),
   trackChangeList: (result, ctx) => formatTrackChangeList(result, ctx),
   documentInfo: (result, ctx) => formatDocumentInfo(result, ctx),
+  diffSnapshot: (result, ctx) => formatDiffSnapshot(result, ctx),
+  diffPayload: (result, ctx) => formatDiffPayload(result, ctx),
+  diffApplyResult: (result, ctx) => formatDiffApplyResult(result, ctx),
 };
 
 /**

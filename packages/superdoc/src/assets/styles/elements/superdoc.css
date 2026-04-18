@@ -17,3 +17,48 @@
 .superdoc--web-layout .superdoc__sub-document {
   width: 100%;
 }
+
+/* --- Upgrade transition (upgradeToCollaboration) --- */
+
+.sd-upgrade-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sd-upgrade-overlay [contenteditable] {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* visibility: hidden (not display: none) so layout engine can still measure */
+.sd-upgrade-hidden {
+  visibility: hidden !important;
+}
+
+/* --- Search highlights (transient, used in both editor and presentation mode) --- */
+
+.superdoc .ProseMirror-search-match {
+  background: var(--sd-ui-search-match-bg);
+}
+
+.superdoc .ProseMirror-active-search-match {
+  background: var(--sd-ui-search-match-active-bg);
+}
+
+/* Contained Mode - fixed-height container embedding with internal scrolling */
+.superdoc--contained,
+.superdoc--contained .superdoc__layers,
+.superdoc--contained .superdoc__document,
+.superdoc--contained .superdoc__sub-document {
+  height: 100%;
+}
+
+/* Sub-document scroll fallback for non-SuperEditor content (PDF, HTML).
+ * SuperEditor manages its own scroll container via .super-editor-container.contained,
+ * but PDF/HTML viewers don't — they need the sub-document to scroll. */
+.superdoc--contained .superdoc__sub-document {
+  overflow: auto;
+}

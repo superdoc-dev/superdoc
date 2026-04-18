@@ -2333,4 +2333,165 @@ describe('DomPainter hanging indent with tabs', () => {
       expect(lineEl.style.paddingLeft).toBe('200px');
     });
   });
+
+  /**
+   * SD-2415: Justified paragraphs with hanging indent.
+   *
+   * The customer bug was visible character overlap in docs like LOI-copy.docx.
+   * Mechanism: the painter was computing first-line `availableWidth` as the body-line
+   * width (`fragment.width - paraIndentLeft`) instead of the widened first-line width
+   * (`fragment.width`, since hanging extends the first line leftward). When
+   * `lineWidth > availableWidth`, `calculateJustifySpacing` returns a negative
+   * `spacingPerSpace`, which CSS `word-spacing` applies as visible character
+   * compression — letters from adjacent words visibly touch and overlap.
+   *
+   * These tests pin the painter's first-line availableWidth to the measurer's
+   * `line.maxWidth` so `wordSpacing` never goes negative for justified hanging
+   * paragraphs whose first line fits within the widened width.
+   */
+  describe('Justified paragraphs with hanging indent (SD-2415)', () => {
+    function createJustifiedHangingMeasure(opts: {
+      naturalWidth: number;
+      maxWidth: number;
+      spaceCount: number;
+      charCount: number;
+    }): Measure {
+      return {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: opts.charCount,
+            width: opts.naturalWidth,
+            maxWidth: opts.maxWidth,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+            spaceCount: opts.spaceCount,
+          } as Line,
+        ],
+        totalHeight: 20,
+      };
+    }
+
+    function paintJustifiedHanging(opts: {
+      text: string;
+      fragmentWidth: number;
+      left: number;
+      hanging: number;
+      naturalWidth: number;
+      maxWidth: number;
+      spaceCount: number;
+    }): HTMLElement {
+      const blockId = 'sd-2415';
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: blockId,
+        runs: [{ text: opts.text, fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: opts.text.length }],
+        attrs: {
+          alignment: 'both',
+          indent: { left: opts.left, hanging: opts.hanging },
+        },
+      };
+
+      const measure = createJustifiedHangingMeasure({
+        naturalWidth: opts.naturalWidth,
+        maxWidth: opts.maxWidth,
+        spaceCount: opts.spaceCount,
+        charCount: opts.text.length,
+      });
+
+      const layout: Layout = {
+        pageSize: { w: 600, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId,
+                fromLine: 0,
+                toLine: 1,
+                x: 50,
+                y: 40,
+                width: opts.fragmentWidth,
+                pmStart: 0,
+                pmEnd: opts.text.length,
+                // Not the last line of the paragraph — justify should apply
+                continuesOnNext: true,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      painter.paint(layout, container);
+      const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
+      expect(lineEl).toBeTruthy();
+      return lineEl;
+    }
+
+    it('does not produce negative word-spacing on the first line when text fits within column width but exceeds body-line width', () => {
+      // column = 300, left = 160, hanging = 160 → body-line content width = 140,
+      // first-line content width (widened) = 300. Natural text width = 250 (fits
+      // in 300 but would overflow 140). Pre-fix painter used 140 as availableWidth,
+      // producing spacingPerSpace = (140 - 250) / 5 = -22px per space — visible
+      // character overlap. Post-fix availableWidth is 300, spacingPerSpace = +10.
+      const lineEl = paintJustifiedHanging({
+        text: 'one two three four five six',
+        fragmentWidth: 300,
+        left: 160,
+        hanging: 160,
+        naturalWidth: 250,
+        maxWidth: 300,
+        spaceCount: 5,
+      });
+
+      const wordSpacingPx = lineEl.style.wordSpacing === '' ? 0 : parseFloat(lineEl.style.wordSpacing);
+      expect(Number.isNaN(wordSpacingPx)).toBe(false);
+      // Core assertion: never negative. Negative word-spacing = visible character overlap.
+      expect(wordSpacingPx).toBeGreaterThanOrEqual(0);
+    });
+
+    it('applies positive word-spacing to spread a short first line across the widened first-line width', () => {
+      // Natural width 200, first-line available 300 → slack 100 over 5 spaces = 20px each.
+      const lineEl = paintJustifiedHanging({
+        text: 'one two three four five six',
+        fragmentWidth: 300,
+        left: 160,
+        hanging: 160,
+        naturalWidth: 200,
+        maxWidth: 300,
+        spaceCount: 5,
+      });
+
+      const wordSpacingPx = parseFloat(lineEl.style.wordSpacing);
+      expect(wordSpacingPx).toBeGreaterThan(0);
+      // Post-fix: slack / spaceCount = (300 - 200) / 5 = 20.
+      // Pre-fix would have used body-line width 140: (140 - 200) / 5 = -12.
+      expect(wordSpacingPx).toBeCloseTo(20, 1);
+    });
+
+    it('leaves textIndent and paddingLeft intact for the hanging layout', () => {
+      const lineEl = paintJustifiedHanging({
+        text: 'one two three four five six',
+        fragmentWidth: 300,
+        left: 160,
+        hanging: 160,
+        naturalWidth: 250,
+        maxWidth: 300,
+        spaceCount: 5,
+      });
+
+      // text-indent shifts the first-line text leftward by the hanging amount
+      // so the visible extent covers the widened first-line width.
+      expect(lineEl.style.textIndent).toBe('-160px');
+      // padding-left matches the left indent; combined with text-indent it places
+      // the first-line text at the fragment's left edge.
+      expect(lineEl.style.paddingLeft).toBe('160px');
+    });
+  });
 });

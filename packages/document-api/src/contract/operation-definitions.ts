@@ -62,7 +62,10 @@ export type ReferenceGroupKey =
   | 'fields'
   | 'citations'
   | 'authorities'
-  | 'ranges';
+  | 'ranges'
+  | 'diff'
+  | 'protection'
+  | 'permissionRanges';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -77,9 +80,304 @@ export interface OperationDefinitionEntry {
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
   skipAsATool?: boolean;
-  /** When true, this tool is included in the default "essential" tool set. */
-  essential?: boolean;
+  /** Which intent tool this operation belongs to (e.g. 'edit' → superdoc_edit). */
+  intentGroup?: string;
+  /** Action enum value within the intent group (e.g. 'insert', 'replace'). */
+  intentAction?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Intent group metadata — tool-level names and descriptions
+// ---------------------------------------------------------------------------
+
+export interface IntentGroupMeta {
+  toolName: string;
+  description: string;
+  /**
+   * Concrete input examples for LLM tool calling (e.g. Anthropic's input_examples).
+   * Each example must be a valid input object for this tool.
+   * Kept here (source of truth) and propagated to provider formats during codegen.
+   */
+  inputExamples?: Record<string, unknown>[];
+}
+
+export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
+  search: {
+    toolName: 'superdoc_search',
+    description:
+      'Find text patterns or nodes in the document and get ref handles for targeting edits and formatting. ' +
+      'Refs expire after any mutation that changes the document. Re-search before the next edit when using individual tools (superdoc_edit, superdoc_format). ' +
+      'Within a superdoc_mutations batch, selectors in "where" clauses resolve automatically at compile time; no manual re-searching needed between steps. ' +
+      'Text search returns handle.ref covering only the matched substring. Node search finds blocks by type (paragraph, heading, table, listItem, etc.). ' +
+      'The "require" parameter controls match cardinality: "first" returns one match, "all" returns every match, "exactlyOne" fails if not exactly one match. ' +
+      'Supports scoping via "within" to search inside a single block. ' +
+      'Do NOT use regex or markdown formatting markers (#, **, etc.) in search patterns; patterns are plain text only. ' +
+      'Do NOT use this tool when you already have a ref from superdoc_get_content blocks or superdoc_create; use that ref directly.',
+    inputExamples: [
+      { select: { type: 'text', pattern: 'Introduction' }, require: 'first' },
+      { select: { type: 'text', pattern: 'total amount' }, require: 'all' },
+      { select: { type: 'node', nodeType: 'heading' }, require: 'all' },
+      {
+        select: { type: 'text', pattern: 'contract' },
+        within: { kind: 'block', nodeType: 'paragraph', nodeId: 'abc123' },
+        require: 'first',
+      },
+    ],
+  },
+  get_content: {
+    toolName: 'superdoc_get_content',
+    description:
+      'Read document content in various formats. Call this first in any workflow to understand document structure before making edits. ' +
+      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, optional full text when includeText:true, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'When you need to evaluate or rewrite existing paragraphs or clauses, prefer action "blocks" with includeText:true so you can identify the correct block and then target it by nodeId. ' +
+      'Action "text" and "markdown" return the full document as plain text or Markdown. Action "html" returns HTML. ' +
+      'Action "info" returns document metadata: word count, paragraph count, page count, outline, available styles, and capability flags. ' +
+      'The "blocks" action supports pagination via "offset" and "limit", and filtering via "nodeTypes". Other actions ignore these parameters. ' +
+      'This tool never modifies the document. ' +
+      'Do NOT call superdoc_edit or superdoc_format without first reading blocks to get valid refs and formatting reference values.',
+    inputExamples: [
+      { action: 'blocks' },
+      { action: 'blocks', includeText: true, offset: 0, limit: 20 },
+      { action: 'blocks', offset: 0, limit: 20, nodeTypes: ['heading', 'paragraph'] },
+      { action: 'text' },
+      { action: 'info' },
+    ],
+  },
+  edit: {
+    toolName: 'superdoc_edit',
+    description:
+      'The primary tool for inserting content into documents. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
+      'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
+      'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
+      'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
+      'Use scope: "block" so formatting covers the entire paragraph. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
+      'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
+      'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
+      'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
+      'Refs expire after any mutation; always re-search before the next edit. ' +
+      'For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
+      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). ' +
+      'Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
+    inputExamples: [
+      {
+        action: 'insert',
+        type: 'markdown',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        placement: 'before',
+        value: '# Executive Summary\n\nThis agreement sets forth the principal terms...',
+      },
+      {
+        action: 'insert',
+        type: 'markdown',
+        value:
+          '# Section Title\n\nParagraph content here.\n\n# Another Section\n\nMore content with **bold** and *italic*.',
+      },
+      { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
+      { action: 'delete', ref: '<handle.ref>' },
+      { action: 'undo' },
+    ],
+  },
+  create: {
+    toolName: 'superdoc_create',
+    description:
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'Only use superdoc_create for tables or when markdown cannot express the content. ' +
+      'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
+      'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
+      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. ' +
+      'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +
+      'When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. ' +
+      'Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
+    inputExamples: [
+      { action: 'paragraph', text: 'New paragraph content.', at: { kind: 'documentEnd' } },
+      {
+        action: 'heading',
+        text: 'Section Title',
+        level: 2,
+        at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' } },
+      },
+      {
+        action: 'paragraph',
+        text: 'Chained item.',
+        at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: '<previousNodeId>' } },
+      },
+      { action: 'table', rows: 3, columns: 4, at: { kind: 'documentEnd' } },
+    ],
+  },
+  format: {
+    toolName: 'superdoc_format',
+    description:
+      'Change text and paragraph formatting. ' +
+      'To format multiple items at once, use superdoc_mutations with format.apply steps instead of calling this tool repeatedly. Use require "all" with a node selector to format every heading or paragraph in one batch. ' +
+      'Use this tool for single-item formatting when you have a valid ref or nodeId. ' +
+      'Action "inline" applies character formatting (bold, italic, underline, color, fontSize, fontFamily, highlight, strike, vertAlign) to a text range via "ref". ' +
+      'Action "set_style" applies a named paragraph style by styleId (get available styles from superdoc_get_content info). ' +
+      'Actions "set_alignment", "set_indentation", "set_spacing", "set_direction", and "set_flow_options" change paragraph-level properties and require a block target: {kind:"block", nodeType:"paragraph", nodeId:"<nodeId>"}, NOT a ref. ' +
+      'Use "set_flow_options" with pageBreakBefore:true to start a paragraph on a new page. ' +
+      'Supports "dryRun" and "changeMode: tracked" for inline formatting. Paragraph-level actions do NOT support tracked changes. ' +
+      'Do NOT use a search ref for paragraph-level actions; they require a block target with nodeId. ' +
+      'Do NOT use {kind:"block", start:{kind:"nodeEdge",...}} or selection-like structures for paragraph actions. ONLY {kind:"block", nodeType, nodeId} is accepted. ' +
+      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls.',
+    inputExamples: [
+      { action: 'inline', ref: '<handle.ref>', inline: { bold: true } },
+      {
+        action: 'inline',
+        ref: '<create.ref>',
+        inline: { fontFamily: 'Calibri', fontSize: 11, color: '#000000', bold: false },
+      },
+      {
+        action: 'set_alignment',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        alignment: 'center',
+      },
+      {
+        action: 'set_flow_options',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        pageBreakBefore: true,
+      },
+      {
+        action: 'set_spacing',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        lineSpacing: { rule: 'auto', value: 1.5 },
+      },
+    ],
+  },
+  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
+  list: {
+    toolName: 'superdoc_list',
+    description:
+      'Create and manipulate bullet and numbered lists. ' +
+      'To create a list: first create all paragraphs at the SAME location using superdoc_create (chain each using the previous nodeId as the "at" target). ' +
+      'Then call action "create" with mode:"fromParagraphs", a preset ("disc" for bullet, "decimal" for numbered), and a range target: {from:{kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to:{kind:"block", nodeType:"paragraph", nodeId:"<last>"}}. ' +
+      'The range converts ALL paragraphs between from and to into list items. Make sure no other content exists between them. ' +
+      'Action "set_type" converts between bullet and ordered (target any item in the list, kind:"ordered" or "bullet"). ' +
+      'Action "insert" adds a new item before/after a target list item. ' +
+      'Actions "indent" and "outdent" change nesting level; "set_level" jumps to a specific level (0-8). ' +
+      'Action "detach" converts a list item back to a plain paragraph. ' +
+      'Do NOT target paragraphs with indent/outdent/set_type; these actions require a listItem target.',
+    inputExamples: [
+      {
+        action: 'create',
+        mode: 'fromParagraphs',
+        preset: 'disc',
+        target: {
+          from: { kind: 'block', nodeType: 'paragraph', nodeId: '<firstId>' },
+          to: { kind: 'block', nodeType: 'paragraph', nodeId: '<lastId>' },
+        },
+      },
+      { action: 'set_type', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, kind: 'ordered' },
+      {
+        action: 'insert',
+        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
+        position: 'after',
+        text: 'New list item',
+      },
+      { action: 'indent', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+    ],
+  },
+  comment: {
+    toolName: 'superdoc_comment',
+    description:
+      'Manage document comment threads: create, read, update, and delete. ' +
+      'To create a comment, first use superdoc_search to find the target text, then pass action "create" with the comment text and a target: {kind:"text", blockId:"<blockId>", range:{start:<N>, end:<N>}} using the blockId and highlightRange from the search result. ' +
+      'For threaded replies, pass "parentId" with the parent comment ID. ' +
+      'Action "list" returns all comments with optional pagination (limit, offset) and filtering (includeResolved:true to include resolved). ' +
+      'Action "get" retrieves a single comment by ID. Action "update" changes status to "resolved" or marks as internal. Action "delete" removes a comment or reply by ID. ' +
+      'Do NOT pass "ref", "id", or "parentId" when creating a new top-level comment; only "action", "text", and "target" are needed.',
+    inputExamples: [
+      {
+        action: 'create',
+        text: 'Please review this section.',
+        target: { kind: 'text', blockId: '<blockId>', range: { start: 5, end: 25 } },
+      },
+      { action: 'list', limit: 20, offset: 0 },
+      { action: 'update', id: '<commentId>', status: 'resolved' },
+      { action: 'delete', id: '<commentId>' },
+    ],
+  },
+  track_changes: {
+    toolName: 'superdoc_track_changes',
+    description:
+      'Review and resolve tracked changes (insertions, deletions, format changes) in the document. ' +
+      'Action "list" returns all tracked changes with optional filtering by type (insert, delete, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. ' +
+      'Action "decide" accepts or rejects changes. Pass decision:"accept" to apply the change permanently, or decision:"reject" to discard it. ' +
+      'Target a single change with {id:"<changeId>"} or all changes at once with {scope:"all"}. ' +
+      'Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.',
+    inputExamples: [
+      { action: 'list' },
+      { action: 'list', type: 'insert', limit: 10 },
+      { action: 'decide', decision: 'accept', target: { id: '<changeId>' } },
+      { action: 'decide', decision: 'reject', target: { scope: 'all' } },
+    ],
+  },
+  link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
+  image: { toolName: 'superdoc_image', description: 'Image placement and properties' },
+  section: { toolName: 'superdoc_section', description: 'Page layout, margins, columns' },
+  mutations: {
+    toolName: 'superdoc_mutations',
+    description:
+      'All steps succeed or all fail; no partial application. ' +
+      'Execute multiple operations atomically in one batch. Use this for any workflow needing 2+ changes. ' +
+      'Supported step types: text (text.rewrite, text.insert, text.delete), format (format.apply), create (create.heading, create.paragraph, create.table), assert. ' +
+      'Each step has an id, an op, a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."} or {by:"block", nodeType:"paragraph", nodeId:"..."}), and "args" with operation-specific parameters. ' +
+      'Use {by:"block", nodeType, nodeId} when you want to rewrite, delete, format, or anchor against a whole known block from superdoc_get_content action "blocks" without relying on text matching. ' +
+      'For full-paragraph or full-clause rewrites, first call superdoc_get_content with action:"blocks" and includeText:true, then rewrite the matching block by nodeId. ' +
+      'Use {by:"select"} only for substring edits, discovery, or insertion relative to a sentence fragment; do NOT use a shortened text selector to replace an entire known block. ' +
+      'For create steps, "where" targets an existing anchor block and args.position ("before" or "after") controls placement. Sequential creates targeting the same anchor maintain correct order via internal position mapping. ' +
+      'For format.apply with require "all", use a node selector to format every heading or paragraph at once: {by:"select", select:{type:"node", nodeType:"heading"}, require:"all"}. ' +
+      'Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by earlier create steps in the same batch. Split creates and formatting into separate batches: first a mutations call with creates, then a mutations call with format.apply. ' +
+      'Action "preview" dry-runs the plan. Action "apply" executes it. ' +
+      'If a selector matches nothing, the failure reports the step id plus selector details so you can retry with a shorter or more distinctive anchor. ' +
+      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step.',
+    inputExamples: [
+      {
+        action: 'apply',
+        atomic: true,
+        changeMode: 'direct',
+        steps: [
+          {
+            id: 's1',
+            op: 'text.rewrite',
+            where: { by: 'select', select: { type: 'text', pattern: 'old term' }, require: 'all' },
+            args: { replacement: { text: 'new term' } },
+          },
+          {
+            id: 's2',
+            op: 'text.delete',
+            where: { by: 'select', select: { type: 'text', pattern: ' (deprecated)' }, require: 'all' },
+            args: {},
+          },
+        ],
+      },
+      {
+        action: 'apply',
+        steps: [
+          {
+            id: 'r1',
+            op: 'text.rewrite',
+            where: { by: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+            args: { replacement: { text: 'Updated clause text.' } },
+          },
+          {
+            id: 'f1',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'node', nodeType: 'heading' }, require: 'all' },
+            args: { inline: { color: '#FF0000' } },
+          },
+          {
+            id: 'f2',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'text', pattern: 'Confidential Information' }, require: 'all' },
+            args: { inline: { bold: true } },
+          },
+        ],
+      },
+    ],
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Metadata helpers (moved from command-catalog.ts)
@@ -165,7 +463,6 @@ const T_PLAN_ENGINE = [
 // All mutation operations include CAPABILITY_UNAVAILABLE (contract invariant).
 // _TRACKED suffix signals the operation also supports tracked change mode.
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
-const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 // Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
 const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -212,11 +509,31 @@ const T_HEADER_FOOTER_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 
+// Story-scoped throw-code arrays
+const T_STORY = [
+  'STORY_NOT_FOUND',
+  'STORY_MISMATCH',
+  'STORY_NOT_SUPPORTED',
+  'CROSS_STORY_PLAN',
+  'MATERIALIZATION_FAILED',
+] as const;
+
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_MUTATION_REMOVE = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_INSERT = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+
+// Protection / permission-range throw-code arrays
+const T_PROTECTION_READ = ['CAPABILITY_UNAVAILABLE'] as const;
+const T_PROTECTION_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_PERM_RANGE_READ = ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_PERM_RANGE_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
 
 type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
 
@@ -225,7 +542,17 @@ function camelToKebab(value: string): string {
 }
 
 function formatInlineAliasDescription(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL.';
+  }
   return `Set or clear the \`${key}\` inline run property on the target text range.`;
+}
+
+function formatInlineAliasExpectedResult(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Returns a TextMutationReceipt confirming only the inline run property patch was applied to the target range; paragraph direction is unchanged.';
+  }
+  return 'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.';
 }
 
 const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
@@ -235,15 +562,14 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
       const definition: OperationDefinitionEntry = {
         memberPath: operationId,
         description: formatInlineAliasDescription(entry.key),
-        expectedResult:
-          'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.',
+        expectedResult: formatInlineAliasExpectedResult(entry.key),
         requiresDocumentContext: true,
         metadata: mutationOperation({
           idempotency: 'conditional',
           supportsDryRun: true,
           supportsTrackedMode: entry.tracked,
           possibleFailureCodes: ['INVALID_TARGET'],
-          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
@@ -278,7 +604,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE', ...T_STORY],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -308,35 +634,46 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-node-by-id.mdx',
     referenceGroup: 'core',
-    essential: true,
   },
   getText: {
     memberPath: 'getText',
     description: 'Extract the plain-text content of the document.',
     expectedResult: 'Returns the full plain-text content of the document as a string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
-    essential: true,
+
+    intentGroup: 'get_content',
+    intentAction: 'text',
   },
   getMarkdown: {
     memberPath: 'getMarkdown',
     description: 'Extract the document content as a Markdown string.',
     expectedResult: 'Returns the full document content as a Markdown-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'markdown',
   },
   getHtml: {
     memberPath: 'getHtml',
     description: 'Extract the document content as an HTML string.',
     expectedResult: 'Returns the full document content as an HTML-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'html',
   },
   markdownToFragment: {
     memberPath: 'markdownToFragment',
@@ -349,12 +686,29 @@ export const OPERATION_DEFINITIONS = {
   },
   info: {
     memberPath: 'info',
-    description: 'Return document metadata including revision, node count, and capabilities.',
-    expectedResult: 'Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.',
+    description:
+      'Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities.',
+    expectedResult:
+      'Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists, and optionally pages when pagination is active), document outline, capability flags, and revision.',
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'info',
+  },
+  extract: {
+    memberPath: 'extract',
+    description:
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+    expectedResult:
+      'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'extract.mdx',
+    referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'extract',
   },
 
   clearContent: {
@@ -376,13 +730,14 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. ' +
-      'This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. ' +
-      'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
-      'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
-      'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
+      'Insert content into the document. Two input shapes: ' +
+      'text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; ' +
+      'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
+      'When target/ref is omitted, content appends at the end of the document. ' +
+      'Text mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports the inserted TextAddress for text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -413,17 +768,20 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'insert',
   },
   replace: {
     memberPath: 'replace',
     description:
       'Replace content at a contiguous document selection. ' +
       'Text path accepts a SelectionTarget or ref plus replacement text. ' +
-      'Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.',
+      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
     expectedResult:
       'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,
@@ -454,10 +812,13 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'replace',
   },
   delete: {
     memberPath: 'delete',
@@ -471,25 +832,28 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'delete',
   },
 
   'blocks.list': {
     memberPath: 'blocks.list',
     description:
-      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.',
     expectedResult:
-      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, optional text, isEmpty), and the current document revision.',
     requiresDocumentContext: true,
     metadata: readOperation({
       throws: ['INVALID_INPUT'],
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
-    essential: true,
+    intentGroup: 'get_content',
+    intentAction: 'blocks',
   },
 
   'blocks.delete': {
@@ -551,10 +915,12 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
+    intentGroup: 'format',
+    intentAction: 'inline',
   },
   ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
 
@@ -586,10 +952,12 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'paragraph',
   },
   'create.heading': {
     memberPath: 'create.heading',
@@ -601,10 +969,12 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'heading',
   },
   'create.sectionBreak': {
     memberPath: 'create.sectionBreak',
@@ -782,7 +1152,8 @@ export const OPERATION_DEFINITIONS = {
   'sections.setOddEvenHeadersFooters': {
     memberPath: 'sections.setOddEvenHeadersFooters',
     description: 'Enable or disable odd/even header-footer mode in document settings.',
-    expectedResult: 'Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting already matches.',
+    expectedResult:
+      'Returns a DocumentMutationResult (not SectionMutationResult) because odd/even headers-footers is a document-level setting, not per-section. Reports NO_OP if the setting already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -917,8 +1288,10 @@ export const OPERATION_DEFINITIONS = {
 
   'styles.paragraph.setStyle': {
     memberPath: 'styles.paragraph.setStyle',
-    description: 'Set the paragraph style reference (w:pStyle) on a paragraph-like block.',
-    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the style already matches.',
+    description:
+      'Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references.',
+    expectedResult:
+      'Returns a ParagraphMutationResult; reports NO_OP if the style already matches. When the style changes, direct run formatting is cleared while character-style references are preserved.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -929,6 +1302,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'styles/paragraph/set-style.mdx',
     referenceGroup: 'styles.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_style',
   },
   'styles.paragraph.clearStyle': {
     memberPath: 'styles.paragraph.clearStyle',
@@ -978,6 +1353,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-alignment.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_alignment',
   },
   'format.paragraph.clearAlignment': {
     memberPath: 'format.paragraph.clearAlignment',
@@ -1008,6 +1385,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-indentation.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_indentation',
   },
   'format.paragraph.clearIndentation': {
     memberPath: 'format.paragraph.clearIndentation',
@@ -1038,6 +1417,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-spacing.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_spacing',
   },
   'format.paragraph.clearSpacing': {
     memberPath: 'format.paragraph.clearSpacing',
@@ -1098,6 +1479,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-flow-options.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_flow_options',
   },
   'format.paragraph.setTabStop': {
     memberPath: 'format.paragraph.setTabStop',
@@ -1204,6 +1587,38 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'format/paragraph/clear-shading.mdx',
     referenceGroup: 'format.paragraph',
   },
+  'format.paragraph.setDirection': {
+    memberPath: 'format.paragraph.setDirection',
+    description: 'Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the direction already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-direction.mdx',
+    referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_direction',
+  },
+  'format.paragraph.clearDirection': {
+    memberPath: 'format.paragraph.clearDirection',
+    description: 'Remove explicit paragraph direction, reverting to inherited or default (LTR).',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direction is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-direction.mdx',
+    referenceGroup: 'format.paragraph',
+  },
 
   'lists.list': {
     memberPath: 'lists.list',
@@ -1244,21 +1659,26 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/insert.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'insert',
   },
   'lists.create': {
     memberPath: 'lists.create',
-    description: 'Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.',
+    description:
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'INVALID_INPUT', 'NO_COMPATIBLE_PREVIOUS'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'lists/create.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'create',
   },
   'lists.attach': {
     memberPath: 'lists.attach',
@@ -1289,6 +1709,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/detach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'detach',
   },
   'lists.indent': {
     memberPath: 'lists.indent',
@@ -1305,6 +1727,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/indent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'indent',
   },
   'lists.outdent': {
     memberPath: 'lists.outdent',
@@ -1320,6 +1744,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/outdent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'outdent',
   },
   'lists.join': {
     memberPath: 'lists.join',
@@ -1382,6 +1808,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-level.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_level',
   },
   'lists.setValue': {
     memberPath: 'lists.setValue',
@@ -1460,7 +1888,8 @@ export const OPERATION_DEFINITIONS = {
   // SD-1973 — List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
-    description: 'Apply a captured ListTemplate to the target list, optionally filtered to specific levels.',
+    description:
+      'Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1504,10 +1933,13 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-type.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_type',
   },
   'lists.captureTemplate': {
     memberPath: 'lists.captureTemplate',
-    description: 'Capture the formatting of a list as a reusable ListTemplate.',
+    description:
+      'Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting).',
     expectedResult: 'Returns a ListsCaptureTemplateResult containing the captured template.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -1520,7 +1952,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.setLevelNumbering': {
     memberPath: 'lists.setLevelNumbering',
-    description: 'Set the numbering format, pattern, and optional start value for a specific list level.',
+    description:
+      'Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1646,6 +2079,118 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
+  // SD-2025 — User-facing list style operations
+  'lists.getStyle': {
+    memberPath: 'lists.getStyle',
+    description:
+      'Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle.',
+    expectedResult: 'Returns a ListsGetStyleResult containing the captured style.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+    }),
+    referenceDocPath: 'lists/get-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.applyStyle': {
+    memberPath: 'lists.applyStyle',
+    description:
+      'Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.restartAt': {
+    memberPath: 'lists.restartAt',
+    description:
+      'Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/restart-at.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelNumberStyle': {
+    memberPath: 'lists.setLevelNumberStyle',
+    description:
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-number-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelText': {
+    memberPath: 'lists.setLevelText',
+    description:
+      'Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-text.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelStart': {
+    memberPath: 'lists.setLevelStart',
+    description:
+      'Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-start.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelLayout': {
+    memberPath: 'lists.setLevelLayout',
+    description:
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-layout.mdx',
+    referenceGroup: 'lists',
+  },
+
   'comments.create': {
     memberPath: 'comments.create',
     description: 'Create a new comment thread (or reply when parentCommentId is given).',
@@ -1661,6 +2206,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'create',
   },
   'comments.patch': {
     memberPath: 'comments.patch',
@@ -1676,6 +2223,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'update',
   },
   'comments.delete': {
     memberPath: 'comments.delete',
@@ -1692,6 +2241,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'delete',
   },
   'comments.get': {
     memberPath: 'comments.get',
@@ -1704,6 +2255,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/get.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'get',
   },
   'comments.list': {
     memberPath: 'comments.list',
@@ -1716,12 +2269,15 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/list.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'list',
   },
 
   'trackChanges.list': {
     memberPath: 'trackChanges.list',
     description: 'List all tracked changes in the document.',
-    expectedResult: 'Returns a TrackChangesListResult with an array of tracked change entries and total count.',
+    expectedResult:
+      'Returns a TrackChangesListResult with tracked change entries, total count, and raw imported Word OOXML revision IDs (`w:id`) when available.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -1729,11 +2285,14 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/list.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'list',
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
     description: 'Retrieve a single tracked change by ID.',
-    expectedResult: 'Returns a TrackChangeInfo object with the change type, author, date, and affected content.',
+    expectedResult:
+      'Returns a TrackChangeInfo object with the change type, author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -1757,6 +2316,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/decide.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'decide',
   },
 
   'query.match': {
@@ -1767,12 +2328,14 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_QUERY_MATCH,
+      throws: [...T_QUERY_MATCH, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
-    essential: true,
+
+    intentGroup: 'search',
+    intentAction: 'match',
   },
 
   'ranges.resolve': {
@@ -1789,7 +2352,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
-    essential: true,
   },
 
   'mutations.preview': {
@@ -1799,11 +2361,13 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_PLAN_ENGINE,
+      throws: [...T_PLAN_ENGINE, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/preview.mdx',
     referenceGroup: 'mutations',
+    intentGroup: 'mutations',
+    intentAction: 'preview',
   },
 
   'mutations.apply': {
@@ -1822,12 +2386,14 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/apply.mdx',
     referenceGroup: 'mutations',
-    essential: true,
+    intentGroup: 'mutations',
+    intentAction: 'apply',
   },
 
   'capabilities.get': {
@@ -1857,10 +2423,12 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/table.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'table',
   },
 
   // -------------------------------------------------------------------------
@@ -1892,7 +2460,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete.mdx',
     referenceGroup: 'tables',
@@ -1994,7 +2562,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-row.mdx',
     referenceGroup: 'tables',
@@ -2009,7 +2577,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-row.mdx',
     referenceGroup: 'tables',
@@ -2074,7 +2642,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-column.mdx',
     referenceGroup: 'tables',
@@ -2089,7 +2657,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-column.mdx',
     referenceGroup: 'tables',
@@ -2442,6 +3010,58 @@ export const OPERATION_DEFINITIONS = {
   },
 
   // -------------------------------------------------------------------------
+  // Tables: convenience operations (SD-2129)
+  // -------------------------------------------------------------------------
+
+  'tables.applyStyle': {
+    memberPath: 'tables.applyStyle',
+    description: 'Apply a table style and/or style options in one call.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setBorders': {
+    memberPath: 'tables.setBorders',
+    description: 'Set borders on a table using a target set or per-edge patch.',
+    expectedResult: 'Returns a TableMutationResult receipt. Does not perform NO_OP detection.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-borders.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setTableOptions': {
+    memberPath: 'tables.setTableOptions',
+    description: 'Set table-level default cell margins and/or cell spacing.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the provided values already match current direct formatting.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-table-options.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
   // Tables: read operations (B4 ref handoff)
   // -------------------------------------------------------------------------
 
@@ -2472,7 +3092,8 @@ export const OPERATION_DEFINITIONS = {
   'tables.getProperties': {
     memberPath: 'tables.getProperties',
     description: 'Retrieve layout and style properties of a table.',
-    expectedResult: 'Returns a TablesGetPropertiesOutput with the table layout, style, border, and shading properties.',
+    expectedResult:
+      'Returns a TablesGetPropertiesOutput with direct table layout and style state, including style options, borders, default cell margins, and cell spacing when explicitly set.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2722,7 +3343,9 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
-    essential: true,
+
+    intentGroup: 'edit',
+    intentAction: 'undo',
   },
 
   'history.redo': {
@@ -2740,6 +3363,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/redo.mdx',
     referenceGroup: 'history',
+    intentGroup: 'edit',
+    intentAction: 'redo',
   },
 
   // -------------------------------------------------------------------------
@@ -2756,7 +3381,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'create/image.mdx',
     referenceGroup: 'create',
@@ -4272,7 +4897,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4288,7 +4913,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4303,7 +4928,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4346,7 +4971,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4362,7 +4987,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4377,7 +5002,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4392,7 +5017,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4437,7 +5062,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4452,7 +5077,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4467,7 +5092,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4510,7 +5135,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4525,7 +5150,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4540,7 +5165,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4555,7 +5180,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4598,7 +5223,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4613,7 +5238,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4628,7 +5253,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4671,7 +5296,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4686,7 +5311,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4701,7 +5326,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4716,7 +5341,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4759,7 +5384,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4774,7 +5399,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4789,7 +5414,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4832,7 +5457,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4847,7 +5472,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4862,7 +5487,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4905,7 +5530,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4920,7 +5545,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4935,7 +5560,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4967,7 +5592,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4982,7 +5607,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4997,7 +5622,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5012,7 +5637,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5055,7 +5680,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5070,7 +5695,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5085,7 +5710,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5100,7 +5725,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5143,7 +5768,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5158,7 +5783,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5173,13 +5798,194 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
     }),
     referenceDocPath: 'authorities/entries-remove.mdx',
     referenceGroup: 'authorities',
+  },
+
+  // ---------------------------------------------------------------------------
+  // diff.*
+  // ---------------------------------------------------------------------------
+
+  'diff.capture': {
+    memberPath: 'diff.capture',
+    description:
+      "Capture the current document's diffable state as a versioned snapshot. " +
+      'v1 covers body, comments, styles, and numbering. Header/footer content is not included.',
+    expectedResult: 'Returns a DiffSnapshot with a fingerprint and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'diff/capture.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.compare': {
+    memberPath: 'diff.compare',
+    description:
+      'Compare the current document (base) against a previously captured target snapshot. ' +
+      'Returns a versioned diff payload describing the changes from base to target.',
+    expectedResult: 'Returns a DiffPayload with a summary and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED'],
+    }),
+    referenceDocPath: 'diff/compare.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.apply': {
+    memberPath: 'diff.apply',
+    description:
+      'Apply a previously computed diff payload to the current document. ' +
+      'The document fingerprint must match the diff base fingerprint. ' +
+      'Tracked mode governs body content only; styles, numbering, and comments are always applied directly.',
+    expectedResult: 'Returns a DiffApplyResult with applied operation count and diagnostics.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED', 'PRECONDITION_FAILED', 'CAPABILITY_UNAVAILABLE'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'diff/apply.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  // =========================================================================
+  // protection.*
+  // =========================================================================
+
+  'protection.get': {
+    memberPath: 'protection.get',
+    description:
+      'Read the current document protection state including editing restrictions, write protection, and read-only recommendation.',
+    expectedResult:
+      'Returns a DocumentProtectionState with editingRestriction, writeProtection, and readOnlyRecommended fields.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PROTECTION_READ }),
+    referenceDocPath: 'protection/get.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+  'protection.setEditingRestriction': {
+    memberPath: 'protection.setEditingRestriction',
+    description: 'Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1.',
+    expectedResult: 'Returns a ProtectionMutationResult with the updated protection state on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PROTECTION_MUTATION,
+    }),
+    referenceDocPath: 'protection/set-editing-restriction.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+  'protection.clearEditingRestriction': {
+    memberPath: 'protection.clearEditingRestriction',
+    description:
+      'Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity.',
+    expectedResult: 'Returns a ProtectionMutationResult with the updated protection state on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PROTECTION_MUTATION,
+    }),
+    referenceDocPath: 'protection/clear-editing-restriction.mdx',
+    referenceGroup: 'protection',
+    skipAsATool: true,
+  },
+
+  // =========================================================================
+  // permissionRanges.*
+  // =========================================================================
+
+  'permissionRanges.list': {
+    memberPath: 'permissionRanges.list',
+    description:
+      'List all permission ranges in the document. Returns only complete paired ranges (both start and end markers present).',
+    expectedResult:
+      'Returns a PermissionRangesListResult containing discovered permission ranges with principal and position data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PERM_RANGE_READ }),
+    referenceDocPath: 'permission-ranges/list.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.get': {
+    memberPath: 'permissionRanges.get',
+    description: 'Get detailed information about a specific permission range by ID.',
+    expectedResult: 'Returns a PermissionRangeInfo object with the range principal, kind, and positions.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_PERM_RANGE_READ }),
+    referenceDocPath: 'permission-ranges/get.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.create': {
+    memberPath: 'permissionRanges.create',
+    description:
+      'Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target.',
+    expectedResult: 'Returns a PermissionRangeMutationResult with the created range info on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/create.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.remove': {
+    memberPath: 'permissionRanges.remove',
+    description:
+      'Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both).',
+    expectedResult: 'Returns a PermissionRangeRemoveResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/remove.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
+  },
+  'permissionRanges.updatePrincipal': {
+    memberPath: 'permissionRanges.updatePrincipal',
+    description:
+      'Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker.',
+    expectedResult: 'Returns a PermissionRangeMutationResult with the updated range info on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PERM_RANGE_MUTATION,
+    }),
+    referenceDocPath: 'permission-ranges/update-principal.mdx',
+    referenceGroup: 'permissionRanges',
+    skipAsATool: true,
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

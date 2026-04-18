@@ -50,6 +50,7 @@ jobs:
         run: pnpm --filter superdoc-esign-demo build
         env:
           VITE_BASE_PATH: /esign/
+          VITE_API_BASE_URL: https://esign-demo-proxy-server-191591660773.us-central1.run.app
 
       - name: Prepare combined publish directory
         run: |

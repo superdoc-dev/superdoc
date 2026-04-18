@@ -8,21 +8,21 @@
     "noImplicitAny": true
   },
   "include": [
-    "src/types/**/*.d.ts",
-    "src/schema/**/*.d.ts",
-    "src/core/Attribute.ts",
-    "src/core/EventEmitter.ts",
-    "src/core/Extension.ts",
-    "src/core/Mark.ts",
-    "src/core/Node.ts",
-    "src/core/OxmlNode.ts",
-    "src/core/PresentationEditor.ts",
-    "src/core/commands/core-command-map.d.ts",
-    "src/core/helpers/getExtensionConfigField.ts",
-    "src/core/header-footer/HeaderFooterRegistry.ts",
-    "src/core/types/**/*.ts",
-    "src/core/utilities/callOrGet.ts",
-    "src/extensions/types/**/*.ts"
+    "src/editors/v1/types/**/*.d.ts",
+    "src/editors/v1/schema/**/*.d.ts",
+    "src/editors/v1/core/Attribute.ts",
+    "src/editors/v1/core/EventEmitter.ts",
+    "src/editors/v1/core/Extension.ts",
+    "src/editors/v1/core/Mark.ts",
+    "src/editors/v1/core/Node.ts",
+    "src/editors/v1/core/OxmlNode.ts",
+    "src/editors/v1/core/PresentationEditor.ts",
+    "src/editors/v1/core/commands/core-command-map.d.ts",
+    "src/editors/v1/core/helpers/getExtensionConfigField.ts",
+    "src/editors/v1/core/header-footer/HeaderFooterRegistry.ts",
+    "src/editors/v1/core/types/**/*.ts",
+    "src/editors/v1/core/utilities/callOrGet.ts",
+    "src/editors/v1/extensions/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -30,9 +30,9 @@
     "**/*.js",
     "**/*.test.ts",
     "**/*.test.js",
-    "src/core/super-converter",
-    "src/core/index.ts",
-    "src/core/Editor.ts",
-    "src/tests"
+    "src/editors/v1/core/super-converter",
+    "src/editors/v1/core/index.ts",
+    "src/editors/v1/core/Editor.ts",
+    "src/editors/v1/tests"
   ]
 }

@@ -3936,3 +3936,75 @@ describe('segment count sync: renderer vs layout engine', () => {
     expect(getCellSegmentCount(cell)).toBe(2);
   });
 });
+
+describe('RTL cell padding swap', () => {
+  let doc: Document;
+
+  beforeEach(() => {
+    doc = document.implementation.createHTMLDocument('table-cell-rtl');
+  });
+
+  const createBaseDeps = () => ({
+    doc,
+    x: 0,
+    y: 0,
+    rowHeight: 40,
+    borders: undefined,
+    useDefaultBorder: false,
+    context: { sectionIndex: 0, pageIndex: 0, columnIndex: 0 },
+    renderLine: () => doc.createElement('div'),
+    applySdtDataset: () => {},
+  });
+
+  const cellMeasure: TableCellMeasure = {
+    blocks: [
+      {
+        kind: 'paragraph' as const,
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 10, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      },
+    ],
+    width: 100,
+    height: 20,
+    gridColumnStart: 0,
+    colSpan: 1,
+    rowSpan: 1,
+  };
+
+  it('swaps asymmetric padding left↔right when isRtl is true', () => {
+    const cell: TableCell = {
+      id: 'rtl-cell' as unknown as import('@superdoc/contracts').BlockId,
+      blocks: [{ kind: 'paragraph', id: 'p1', runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 12 }] }],
+      attrs: { padding: { top: 2, left: 3, right: 8, bottom: 2 } },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      isRtl: true,
+    });
+
+    expect(cellElement.style.paddingLeft).toBe('8px');
+    expect(cellElement.style.paddingRight).toBe('3px');
+    expect(cellElement.style.paddingTop).toBe('2px');
+    expect(cellElement.style.paddingBottom).toBe('2px');
+  });
+
+  it('does not swap padding when isRtl is false', () => {
+    const cell: TableCell = {
+      id: 'ltr-cell' as unknown as import('@superdoc/contracts').BlockId,
+      blocks: [{ kind: 'paragraph', id: 'p1', runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 12 }] }],
+      attrs: { padding: { top: 2, left: 3, right: 8, bottom: 2 } },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+    });
+
+    expect(cellElement.style.paddingLeft).toBe('3px');
+    expect(cellElement.style.paddingRight).toBe('8px');
+  });
+});

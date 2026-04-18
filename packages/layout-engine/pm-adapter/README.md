@@ -5,7 +5,7 @@
 Use the shared Vite configuration from Super Editor to extract ProseMirror JSON directly from DOCX files:
 
 ```bash
-pnpm run extract:docx --workspace=@superdoc/pm-adapter -- --input ../../super-editor/src/tests/data/restart-numbering-sub-list.docx --output lists-docx.json
+pnpm run extract:docx --workspace=@superdoc/pm-adapter -- --input ../../super-editor/src/editors/v1/tests/data/restart-numbering-sub-list.docx --output lists-docx.json
 ```
 
 Pass `--input` and `--output` to control which DOCX file is converted and where the fixture is written.

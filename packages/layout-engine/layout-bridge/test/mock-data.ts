@@ -608,6 +608,103 @@ export const tableSpacingAfterLayout: Layout = {
   ],
 };
 
+// Table cell mixed blocks — selectionToRects should advance past inline images
+// between paragraphs when positioning later paragraph rects.
+export const TABLE_INLINE_IMAGE_HEIGHT = 24;
+export const TABLE_MIXED_BLOCK_FRAGMENT_Y = 60;
+
+export const tableMixedBlockSelectionBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-mixed-blocks',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: 0, bottom: 0, left: 4, right: 4 } },
+          blocks: [
+            {
+              ...tableParagraph,
+              id: 'mixed-p1',
+              runs: [{ ...tableParagraph.runs[0], text: 'Top', pmStart: 1, pmEnd: 4 }],
+            },
+            {
+              kind: 'image',
+              id: 'mixed-img',
+              src: 'test.png',
+              width: 24,
+              height: TABLE_INLINE_IMAGE_HEIGHT,
+            },
+            {
+              ...tableParagraph,
+              id: 'mixed-p2',
+              runs: [{ ...tableParagraph.runs[0], text: 'Bottom', pmStart: 5, pmEnd: 11 }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const tableMixedBlockTotalHeight = TABLE_CELL_LINE_HEIGHT * 2 + TABLE_INLINE_IMAGE_HEIGHT;
+
+export const tableMixedBlockSelectionMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: tableMixedBlockTotalHeight,
+      cells: [
+        {
+          width: 100,
+          height: tableMixedBlockTotalHeight,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 3, width: 32, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+            {
+              kind: 'image',
+              width: 24,
+              height: TABLE_INLINE_IMAGE_HEIGHT,
+            },
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 6, width: 52, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: tableMixedBlockTotalHeight,
+};
+
+export const tableMixedBlockSelectionLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-mixed-blocks',
+          x: 20,
+          y: TABLE_MIXED_BLOCK_FRAGMENT_Y,
+          width: 100,
+          height: tableMixedBlockTotalHeight,
+        },
+      ],
+    },
+  ],
+};
+
 // Mock data for table with rowspan (SD-1626 / IT-22)
 // Table structure:
 // Row 0: [Cell A (rowspan=2)] [Cell B] [Cell C]

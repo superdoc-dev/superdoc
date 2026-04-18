@@ -1,0 +1,279 @@
+/**
+ * Citation resolver — handles three address types:
+ * - CitationAddress (inline citation field)
+ * - CitationSourceAddress (entity from converter bibliography state)
+ * - BibliographyAddress (block bibliography node)
+ */
+
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import type { Editor } from '../../core/Editor.js';
+import type {
+  CitationAddress,
+  CitationSourceAddress,
+  BibliographyAddress,
+  CitationDomain,
+  CitationSourceDomain,
+  CitationInfo,
+  CitationSourceInfo,
+  BibliographyInfo,
+  DiscoveryItem,
+} from '@superdoc/document-api';
+import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
+import { DocumentApiAdapterError } from '../errors.js';
+import { resolvePublicReferenceBlockNodeId } from './reference-block-node-id.js';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ResolvedCitation {
+  node: ProseMirrorNode;
+  pos: number;
+  sourceIds: string[];
+  locale: string | null;
+  resolvedText: string;
+  blockId: string;
+}
+
+export interface ResolvedBibliography {
+  node: ProseMirrorNode;
+  pos: number;
+  nodeId: string;
+  commandNodeId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Citation (inline) resolution
+// ---------------------------------------------------------------------------
+
+export function findAllCitations(doc: ProseMirrorNode): ResolvedCitation[] {
+  const results: ResolvedCitation[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'citation') {
+      results.push({
+        node,
+        pos,
+        sourceIds: (node.attrs?.sourceIds as string[]) ?? [],
+        locale: (node.attrs?.locale as string) ?? null,
+        resolvedText: (node.attrs?.resolvedText as string) ?? '',
+        blockId: resolveParentBlockId(doc, pos),
+      });
+    }
+    return true;
+  });
+  return results;
+}
+
+export function resolveCitationTarget(doc: ProseMirrorNode, target: CitationAddress): ResolvedCitation {
+  const all = findAllCitations(doc);
+  const found = all.find((c) => {
+    if (target.anchor?.start?.blockId && c.blockId !== target.anchor.start.blockId) return false;
+    if (target.anchor?.start?.offset !== undefined) {
+      const resolved = doc.resolve(c.pos);
+      const offset = c.pos - resolved.start(resolved.depth);
+      if (offset !== target.anchor.start.offset) return false;
+    }
+    return true;
+  });
+
+  if (!found) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Citation not found at the specified anchor.');
+  }
+  return found;
+}
+
+export function extractCitationInfo(doc: ProseMirrorNode, resolved: ResolvedCitation): CitationInfo {
+  const instruction = (resolved.node.attrs?.instruction as string) ?? '';
+  return {
+    address: buildCitationAddress(doc, resolved),
+    sourceIds: resolved.sourceIds,
+    displayText: resolved.resolvedText,
+    instruction,
+  };
+}
+
+export function buildCitationDiscoveryItem(
+  doc: ProseMirrorNode,
+  resolved: ResolvedCitation,
+  evaluatedRevision: string,
+): DiscoveryItem<CitationDomain> {
+  const address = buildCitationAddress(doc, resolved);
+  const instruction = (resolved.node.attrs?.instruction as string) ?? '';
+  const domain: CitationDomain = {
+    address,
+    sourceIds: resolved.sourceIds,
+    displayText: resolved.resolvedText,
+    instruction,
+  };
+
+  const ref = `${resolved.blockId}:${resolved.pos}`;
+  const handle = buildResolvedHandle(ref, 'ephemeral', 'node');
+  const id = `citation:${ref}:${evaluatedRevision}`;
+  return buildDiscoveryItem(id, handle, domain);
+}
+
+// ---------------------------------------------------------------------------
+// Bibliography (block) resolution
+// ---------------------------------------------------------------------------
+
+export function findAllBibliographies(doc: ProseMirrorNode): ResolvedBibliography[] {
+  const results: ResolvedBibliography[] = [];
+  let occurrenceIndex = 0;
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'bibliography') {
+      const rawBlockId = node.attrs?.sdBlockId;
+      const commandNodeId = rawBlockId != null ? String(rawBlockId) : undefined;
+      const nodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+      occurrenceIndex += 1;
+      results.push({ node, pos, nodeId, commandNodeId });
+      return false;
+    }
+    return true;
+  });
+  return results;
+}
+
+export function resolveBibliographyTarget(doc: ProseMirrorNode, target: BibliographyAddress): ResolvedBibliography {
+  const all = findAllBibliographies(doc);
+  const found = all.find((b) => b.nodeId === target.nodeId || b.commandNodeId === target.nodeId);
+  if (!found) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bibliography with nodeId "${target.nodeId}" not found.`);
+  }
+  return found;
+}
+
+export function resolvePostMutationBibliographyId(doc: ProseMirrorNode, sdBlockId: string): string {
+  const all = findAllBibliographies(doc);
+  const found = all.find((b) => b.commandNodeId === sdBlockId);
+  return found?.nodeId ?? sdBlockId;
+}
+
+export function extractBibliographyInfo(resolved: ResolvedBibliography): BibliographyInfo {
+  const instruction = (resolved.node.attrs?.instruction as string) ?? '';
+  const style = (resolved.node.attrs?.style as string) ?? '';
+  return {
+    address: { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId },
+    style,
+    sourceCount: resolved.node.childCount,
+    instruction,
+  };
+}
+
+export function buildBibliographyDiscoveryItem(
+  resolved: ResolvedBibliography,
+  evaluatedRevision: string,
+): DiscoveryItem<BibliographyInfo> {
+  const address: BibliographyAddress = {
+    kind: 'block',
+    nodeType: 'bibliography',
+    nodeId: resolved.nodeId,
+  };
+  const instruction = (resolved.node.attrs?.instruction as string) ?? '';
+  const style = (resolved.node.attrs?.style as string) ?? '';
+  const domain: BibliographyInfo = {
+    address,
+    style,
+    sourceCount: resolved.node.childCount,
+    instruction,
+  };
+
+  const handle = buildResolvedHandle(resolved.nodeId, 'stable', 'node');
+  const id = `bibliography:${resolved.nodeId}:${evaluatedRevision}`;
+  return buildDiscoveryItem(id, handle, domain);
+}
+
+// ---------------------------------------------------------------------------
+// Source resolution (from converter state)
+// ---------------------------------------------------------------------------
+
+export interface CitationSourceRecord {
+  tag: string;
+  type: string;
+  fields: Record<string, unknown>;
+}
+
+interface BibliographyPartState {
+  sources?: CitationSourceRecord[];
+  selectedStyle?: string | null;
+  styleName?: string | null;
+}
+
+type ConverterWithBibliography = { converter?: { bibliographyPart?: BibliographyPartState } };
+
+function getBibliographyPart(editor: Editor): BibliographyPartState | undefined {
+  const converter = (editor as unknown as ConverterWithBibliography).converter;
+  if (!converter) return undefined;
+  converter.bibliographyPart ??= {};
+  return converter.bibliographyPart;
+}
+
+export function getSourcesFromConverter(editor: Editor): CitationSourceRecord[] {
+  const part = getBibliographyPart(editor);
+  if (!part) return [];
+  part.sources ??= [];
+  return part.sources;
+}
+
+/**
+ * Converts a human-readable style name (e.g. `"MLA"`) into the OOXML
+ * `SelectedStyle` path format (e.g. `"/MLA.XSL"`).
+ *
+ * If the value already looks like a path (starts with `/` or contains `.XSL`),
+ * it is returned as-is.
+ */
+function toSelectedStylePath(styleName: string): string {
+  if (styleName.startsWith('/') || styleName.toUpperCase().includes('.XSL')) {
+    return styleName;
+  }
+  return `/${styleName}.XSL`;
+}
+
+/**
+ * Persists the bibliography style to the converter so DOCX export writes
+ * the correct `SelectedStyle` / `StyleName` attributes on the sources root.
+ *
+ * `SelectedStyle` is an XSL path (e.g. `"/APA.XSL"`); `StyleName` is the
+ * human-readable label (e.g. `"APA"`).
+ */
+export function syncBibliographyStyleToConverter(editor: Editor, style: string): void {
+  const part = getBibliographyPart(editor);
+  if (!part) return;
+  part.selectedStyle = toSelectedStylePath(style);
+  part.styleName = style;
+}
+
+export function resolveSourceTarget(editor: Editor, target: CitationSourceAddress): CitationSourceRecord {
+  const sources = getSourcesFromConverter(editor);
+  const found = sources.find((s) => s.tag === target.sourceId);
+  if (!found) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Citation source with tag "${target.sourceId}" not found.`);
+  }
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function resolveParentBlockId(doc: ProseMirrorNode, pos: number): string {
+  const resolved = doc.resolve(pos);
+  for (let depth = resolved.depth; depth >= 0; depth--) {
+    const node = resolved.node(depth);
+    const rawBlockId = node.attrs?.sdBlockId;
+    if (rawBlockId != null) return String(rawBlockId);
+  }
+  return '';
+}
+
+function buildCitationAddress(doc: ProseMirrorNode, resolved: ResolvedCitation): CitationAddress {
+  const r = doc.resolve(resolved.pos);
+  const offset = resolved.pos - r.start(r.depth);
+  return {
+    kind: 'inline',
+    nodeType: 'citation',
+    anchor: {
+      start: { blockId: resolved.blockId, offset },
+      end: { blockId: resolved.blockId, offset: offset + resolved.node.nodeSize },
+    },
+  };
+}

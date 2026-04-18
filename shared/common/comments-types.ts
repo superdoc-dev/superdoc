@@ -22,6 +22,7 @@ export type Comment = {
   trackedChange: boolean;
   trackedChangeText: string | null;
   trackedChangeType: 'trackInsert' | 'trackDelete' | 'both' | 'trackFormat';
+  trackedChangeDisplayType?: 'hyperlinkAdded' | 'hyperlinkModified' | null;
   deletedText: string | null;
   resolvedTime: number | null;
   resolvedByEmail: string | null;

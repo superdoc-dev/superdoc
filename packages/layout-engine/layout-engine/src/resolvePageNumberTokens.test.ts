@@ -5,7 +5,7 @@
  * section-aware numbering context support.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { resolvePageNumberTokens } from './resolvePageTokens';
 import type { Layout, FlowBlock, ParagraphBlock, Measure, TextRun } from '@superdoc/contracts';
 import type { NumberingContext } from './resolvePageTokens';

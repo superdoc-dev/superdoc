@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { assertOperationId, isOperationId, isValidOperationIdFormat, OPERATION_IDS } from './types.js';
 import type { DocumentApiMemberPath } from './operation-map.js';
 

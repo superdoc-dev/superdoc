@@ -5,6 +5,7 @@
  */
 
 import type { SectionBreakBlock, FlowBlock } from '@superdoc/contracts';
+import { widthsEqual } from '@superdoc/contracts';
 import type { PMNode } from '../types.js';
 import type { SectionRange, SectionSignature, SectPrElement } from './types.js';
 
@@ -83,7 +84,14 @@ export function signaturesEqual(a: SectionSignature, b: SectionSignature): boole
 
   const columnsEq =
     (!a.columnsPx && !b.columnsPx) ||
-    !!(a.columnsPx && b.columnsPx && a.columnsPx.count === b.columnsPx.count && a.columnsPx.gap === b.columnsPx.gap);
+    !!(
+      a.columnsPx &&
+      b.columnsPx &&
+      a.columnsPx.count === b.columnsPx.count &&
+      a.columnsPx.gap === b.columnsPx.gap &&
+      a.columnsPx.equalWidth === b.columnsPx.equalWidth &&
+      widthsEqual(a.columnsPx.widths, b.columnsPx.widths)
+    );
 
   const numberingEq =
     (!a?.numbering && !b?.numbering) ||

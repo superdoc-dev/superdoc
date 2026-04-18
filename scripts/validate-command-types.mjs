@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const commandsDir = path.join(repoRoot, 'packages/super-editor/src/core/commands');
+const commandsDir = path.join(repoRoot, 'packages/super-editor/src/editors/v1/core/commands');
 
 async function loadCoreExports() {
   const indexPath = path.join(commandsDir, 'index.js');

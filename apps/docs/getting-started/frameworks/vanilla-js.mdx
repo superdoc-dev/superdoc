@@ -96,6 +96,7 @@ new SuperDoc({
 <head>
   <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
         rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
 </head>
 <body>
   <div class="controls">
@@ -107,9 +108,7 @@ new SuperDoc({
 
   <div id="editor" style="height: 700px"></div>
 
-  <script type="module">
-    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
-    
+  <script>
     let superdoc = null;
     
     document.getElementById('file-input').addEventListener('change', (e) => {

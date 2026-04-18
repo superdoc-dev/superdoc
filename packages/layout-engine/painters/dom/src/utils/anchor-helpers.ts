@@ -1,4 +1,5 @@
-import type { WrapExclusion, RenderedLineInfo } from '@superdoc/contracts';
+import type { WrapExclusion } from '@superdoc/contracts';
+import type { RenderedLineInfo } from '../renderer.js';
 
 const clampNumber = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 

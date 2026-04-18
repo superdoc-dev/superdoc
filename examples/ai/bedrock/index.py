@@ -66,7 +66,7 @@ def main():
     shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open({"doc": output_path})
+    doc = client.open({"doc": output_path})
 
     # 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
     sd_tools = choose_tools({"provider": "anthropic"})
@@ -119,7 +119,7 @@ def main():
                         tool_config["tools"].extend(to_bedrock_tools([t]))
                     result = discovered
                 else:
-                    result = dispatch_superdoc_tool(client, name, tool_use.get("input", {}))
+                    result = dispatch_superdoc_tool(doc, name, tool_use.get("input", {}))
 
                 tool_results.append(bedrock_tool_result(tool_use["toolUseId"], result))
             except Exception as e:
@@ -128,7 +128,7 @@ def main():
         messages.append({"role": "user", "content": tool_results})
 
     # 4. Save (in-place to the copy)
-    client.doc.save()
+    doc.save()
     client.dispose()
     print(f"\nSaved to {output_path}")
 

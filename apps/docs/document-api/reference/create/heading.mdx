@@ -6,8 +6,6 @@ description: Create a new heading at the target position.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Create a new heading at the target position.
@@ -29,6 +27,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator | no | StoryLocator |
 | `level` | integer | yes |  |
 | `text` | string | no |  |
 
@@ -39,14 +38,17 @@ Returns a CreateHeadingResult with the new heading block ID and address.
   "at": {
     "kind": "documentStart"
   },
-  "level": 1,
-  "text": "Hello, world."
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
+  "level": 1
 }
 ```
 
 ## Output fields
 
-### Variant 1 (heading.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -60,6 +62,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | `insertionPoint.range` | Range | yes | Range |
 | `insertionPoint.range.end` | integer | yes |  |
 | `insertionPoint.range.start` | integer | yes |  |
+| `ref` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
 
@@ -90,6 +93,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
       "start": 0
     }
   },
+  "ref": "handle:abc123",
   "success": true,
   "trackedChangeRefs": [
     {
@@ -107,6 +111,11 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `AMBIGUOUS_TARGET`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -120,6 +129,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
   "additionalProperties": false,
   "properties": {
     "at": {
+      "description": "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -179,12 +189,17 @@ Returns a CreateHeadingResult with the new heading block ID and address.
         }
       ]
     },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "level": {
+      "description": "Heading level (1-6).",
       "maximum": 6,
       "minimum": 1,
       "type": "integer"
     },
     "text": {
+      "description": "Heading text content.",
       "type": "string"
     }
   },
@@ -208,6 +223,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
         },
         "insertionPoint": {
           "$ref": "#/$defs/TextAddress"
+        },
+        "ref": {
+          "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+          "type": "string"
         },
         "success": {
           "const": true
@@ -273,6 +292,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
     },
     "insertionPoint": {
       "$ref": "#/$defs/TextAddress"
+    },
+    "ref": {
+      "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+      "type": "string"
     },
     "success": {
       "const": true

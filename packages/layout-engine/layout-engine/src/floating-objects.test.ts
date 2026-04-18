@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { createFloatingObjectManager } from './floating-objects.js';
 import type { ImageBlock, ImageMeasure } from '@superdoc/contracts';
 

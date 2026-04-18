@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   executeAuthoritiesList,
@@ -17,18 +17,18 @@ import {
 
 function makeAdapter(): AuthoritiesAdapter {
   return {
-    list: vi.fn().mockReturnValue({ items: [], total: 0 }),
-    get: vi.fn().mockReturnValue({}),
-    insert: vi.fn().mockReturnValue({ success: true }),
-    configure: vi.fn().mockReturnValue({ success: true }),
-    rebuild: vi.fn().mockReturnValue({ success: true }),
-    remove: vi.fn().mockReturnValue({ success: true }),
+    list: mock().mockReturnValue({ items: [], total: 0 }),
+    get: mock().mockReturnValue({}),
+    insert: mock().mockReturnValue({ success: true }),
+    configure: mock().mockReturnValue({ success: true }),
+    rebuild: mock().mockReturnValue({ success: true }),
+    remove: mock().mockReturnValue({ success: true }),
     entries: {
-      list: vi.fn().mockReturnValue({ items: [], total: 0 }),
-      get: vi.fn().mockReturnValue({}),
-      insert: vi.fn().mockReturnValue({ success: true }),
-      update: vi.fn().mockReturnValue({ success: true }),
-      remove: vi.fn().mockReturnValue({ success: true }),
+      list: mock().mockReturnValue({ items: [], total: 0 }),
+      get: mock().mockReturnValue({}),
+      insert: mock().mockReturnValue({ success: true }),
+      update: mock().mockReturnValue({ success: true }),
+      remove: mock().mockReturnValue({ success: true }),
     },
   };
 }
@@ -182,9 +182,33 @@ describe('authorities validation', () => {
   });
 
   describe('executeAuthoritiesInsert', () => {
-    it('delegates to adapter.insert (no target validation)', () => {
+    it('throws INVALID_INPUT when at is missing or malformed', () => {
       const adapter = makeAdapter();
-      const input = { position: 'end' };
+      expect(() => executeAuthoritiesInsert(adapter, {} as any)).toThrow(DocumentApiValidationError);
+      expect(() => executeAuthoritiesInsert(adapter, { at: null } as any)).toThrow(DocumentApiValidationError);
+      expect(() => executeAuthoritiesInsert(adapter, { at: 'bad' } as any)).toThrow(DocumentApiValidationError);
+    });
+
+    it('throws INVALID_INPUT when at.kind is not a valid create-location kind', () => {
+      const adapter = makeAdapter();
+      expect(() => executeAuthoritiesInsert(adapter, { at: { kind: 'bogus' } } as any)).toThrow(
+        DocumentApiValidationError,
+      );
+      expect(() => executeAuthoritiesInsert(adapter, { at: { kind: 'cursor' } } as any)).toThrow(
+        DocumentApiValidationError,
+      );
+    });
+
+    it('throws INVALID_TARGET when before/after positioning omits at.target', () => {
+      const adapter = makeAdapter();
+      expect(() => executeAuthoritiesInsert(adapter, { at: { kind: 'before' } } as any)).toThrow(
+        DocumentApiValidationError,
+      );
+    });
+
+    it('delegates to adapter.insert for valid input', () => {
+      const adapter = makeAdapter();
+      const input = { at: { kind: 'documentEnd' } };
       executeAuthoritiesInsert(adapter, input as any);
       expect(adapter.insert).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
     });

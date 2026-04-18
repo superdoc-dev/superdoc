@@ -3,28 +3,18 @@
 
 import superdocCss from 'superdoc/style.css';
 
-let vscode = null;
+const vscode = acquireVsCodeApi();
 
 function debug(message) {
-  if (!vscode) {
-    return;
-  }
   vscode.postMessage({ type: 'debug', message: `[Webview] - ${message}` });
 }
 
 debug('Webview main.js loading...');
 
-// Test if DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeWebview);
-} else {
-  initializeWebview();
-}
-
+// Inject SuperDoc CSS
 function initializeWebview() {
   debug('DOM ready, initializing webview...');
 
-  // Inject SuperDoc CSS
   if (superdocCss) {
     const style = document.createElement('style');
     style.textContent = superdocCss;
@@ -34,7 +24,12 @@ function initializeWebview() {
   debug('Done initializing webview');
 }
 
-vscode = acquireVsCodeApi();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeWebview);
+} else {
+  initializeWebview();
+}
+
 debug('VS Code API acquired');
 
 // Import SuperDoc - will be bundled by esbuild
@@ -42,7 +37,6 @@ import { SuperDoc } from 'superdoc';
 debug('SuperDoc imported');
 
 let editor = null;
-let currentFileData = null;
 let saveTimeout = null;
 let isInitialLoad = true;
 
@@ -104,6 +98,7 @@ function initializeEditor(fileArrayBuffer) {
         documentMode: 'editing',
         pagination: true,
         rulers: true,
+        comments: { visible: true },
         onReady: () => {
           debug('SuperDoc is ready');
           isInitialLoad = false;
@@ -112,7 +107,7 @@ function initializeEditor(fileArrayBuffer) {
         onEditorCreate: () => {
           debug('Editor created');
         },
-        onError: (error) => {
+        onException: (error) => {
           debug(`SuperDoc error: ${error.message || error}`);
         },
       });
@@ -203,18 +198,18 @@ window.addEventListener('message', async (event) => {
   switch (message.type) {
     case 'update':
       if (message.content?.data) {
-        currentFileData = new Uint8Array(message.content.data).buffer;
-        debug(`Initial file data received: ${currentFileData.byteLength} bytes`);
-        initializeEditor(currentFileData);
+        const fileData = new Uint8Array(message.content.data).buffer;
+        debug(`Initial file data received: ${fileData.byteLength} bytes`);
+        initializeEditor(fileData);
       }
       break;
 
     case 'reload':
       if (message.content?.data) {
         debug('External file change detected - reloading editor');
-        currentFileData = new Uint8Array(message.content.data).buffer;
-        debug(`Reload data received: ${currentFileData.byteLength} bytes`);
-        initializeEditor(currentFileData);
+        const reloadData = new Uint8Array(message.content.data).buffer;
+        debug(`Reload data received: ${reloadData.byteLength} bytes`);
+        initializeEditor(reloadData);
         debug('Editor re-initialized from external change');
       }
       break;
@@ -231,6 +226,5 @@ document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 's') {
     event.preventDefault();
     saveDocument();
-    vscode.postMessage({ type: 'save' });
   }
 });

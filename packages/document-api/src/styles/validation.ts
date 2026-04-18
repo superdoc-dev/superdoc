@@ -8,7 +8,7 @@
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord } from '../validation-primitives.js';
 import type { ValueSchema, StylesChannel } from './registry.js';
-import { PROPERTY_REGISTRY, ALLOWED_KEYS_BY_CHANNEL, EXCLUDED_KEYS, getPropertyDefinition } from './registry.js';
+import { ALLOWED_KEYS_BY_CHANNEL, EXCLUDED_KEYS, getPropertyDefinition } from './registry.js';
 
 // ---------------------------------------------------------------------------
 // Recursive ValueSchema validation
@@ -198,46 +198,34 @@ export function validateStylesApplyInput(input: unknown): asserts input is Style
   }
 
   const allowedKeys = ALLOWED_KEYS_BY_CHANNEL[channel];
-  const otherChannel: StylesChannel = channel === 'run' ? 'paragraph' : 'run';
 
   for (const key of patchKeys) {
-    // 1. Check excluded keys first
-    const excludedEntry = EXCLUDED_KEYS[channel].get(key);
-    if (excludedEntry !== undefined) {
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `patch key '${key}' is not valid in Word docDefaults (${excludedEntry}). This is an intentional restriction per MS-OI29500.`,
-        { field: 'patch', key, reason: 'excluded_docdefaults_key' },
-      );
-    }
+    const classification = classifyPatchKey(key, channel);
 
-    // 2. Check cross-channel
-    if (!allowedKeys.has(key)) {
-      const belongsToOther = ALLOWED_KEYS_BY_CHANNEL[otherChannel].has(key);
-      if (belongsToOther) {
+    switch (classification.status) {
+      case 'valid':
+        break;
+
+      case 'excluded':
         throw new DocumentApiValidationError(
           'INVALID_INPUT',
-          `Unknown patch key "${key}" for channel "${channel}". "${key}" is a ${otherChannel}-channel property. Allowed keys: ${[...allowedKeys].join(', ')}.`,
-          { field: 'patch', key },
-        );
-      }
-
-      // 3. Check excluded on other channel
-      const otherExcluded = EXCLUDED_KEYS[otherChannel].get(key);
-      if (otherExcluded !== undefined) {
-        throw new DocumentApiValidationError(
-          'INVALID_INPUT',
-          `patch key '${key}' is not valid in Word docDefaults (${otherExcluded}). This is an intentional restriction per MS-OI29500.`,
+          `patch key '${key}' is not valid in Word docDefaults (${classification.reason}). This is an intentional restriction per MS-OI29500.`,
           { field: 'patch', key, reason: 'excluded_docdefaults_key' },
         );
-      }
 
-      // 4. Completely unknown
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `Unknown patch key "${key}" for channel "${channel}". Allowed keys: ${[...allowedKeys].join(', ')}.`,
-        { field: 'patch', key },
-      );
+      case 'cross_channel':
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `Unknown patch key "${key}" for channel "${channel}". "${key}" is a ${classification.ownerChannel}-channel property. Allowed keys: ${[...allowedKeys].join(', ')}.`,
+          { field: 'patch', key },
+        );
+
+      case 'unknown':
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `Unknown patch key "${key}" for channel "${channel}". Allowed keys: ${[...allowedKeys].join(', ')}.`,
+          { field: 'patch', key },
+        );
     }
 
     // Validate the value against the registry schema
@@ -276,6 +264,52 @@ export function validateStylesApplyOptions(options: unknown): void {
       value: options.expectedRevision,
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Patch key classification
+// ---------------------------------------------------------------------------
+
+/** Discriminated union returned by `classifyPatchKey`. */
+export type PatchKeyClassification =
+  | { status: 'valid' }
+  | { status: 'excluded'; reason: string }
+  | { status: 'cross_channel'; ownerChannel: StylesChannel }
+  | { status: 'unknown' };
+
+/**
+ * Classifies a patch key relative to a given channel.
+ *
+ * Returns a discriminated union so callers can switch on `status` instead of
+ * nesting conditionals across excluded-key maps, allowed-key sets, and
+ * cross-channel lookups.
+ */
+export function classifyPatchKey(key: string, channel: StylesChannel): PatchKeyClassification {
+  // 1. Excluded on the requested channel
+  const excludedReason = EXCLUDED_KEYS[channel].get(key);
+  if (excludedReason !== undefined) {
+    return { status: 'excluded', reason: excludedReason };
+  }
+
+  // 2. Valid for the requested channel
+  if (ALLOWED_KEYS_BY_CHANNEL[channel].has(key)) {
+    return { status: 'valid' };
+  }
+
+  // 3. Belongs to the other channel
+  const otherChannel: StylesChannel = channel === 'run' ? 'paragraph' : 'run';
+  if (ALLOWED_KEYS_BY_CHANNEL[otherChannel].has(key)) {
+    return { status: 'cross_channel', ownerChannel: otherChannel };
+  }
+
+  // 4. Excluded on the other channel (still an exclusion, not "unknown")
+  const otherExcludedReason = EXCLUDED_KEYS[otherChannel].get(key);
+  if (otherExcludedReason !== undefined) {
+    return { status: 'excluded', reason: otherExcludedReason };
+  }
+
+  // 5. Not in any registry
+  return { status: 'unknown' };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import {
   executeStylesApply,
   PROPERTY_REGISTRY,
@@ -15,7 +15,7 @@ import { DocumentApiValidationError } from '../errors.js';
 
 function makeAdapter(): StylesAdapter {
   return {
-    apply: vi.fn(
+    apply: mock(
       (): StylesApplyReceipt => ({
         success: true,
         changed: true,

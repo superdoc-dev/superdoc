@@ -140,5 +140,6 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
       };
     },
     context.sessionId,
+    context.executionMode,
   );
 }

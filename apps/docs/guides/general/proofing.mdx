@@ -1,0 +1,110 @@
+---
+title: Spell Check & Proofing
+sidebarTitle: Proofing
+keywords: "spell check, spellcheck, proofing, spelling suggestions, custom proofing provider"
+---
+
+SuperDoc supports proofing on the layout-engine editor surface. Because SuperDoc renders DOCX content through its own document model and layout engine, browser-native spellcheck is not used. Instead, you provide a proofing provider and SuperDoc handles the UI: inline spelling markers, direct right-click replacement suggestions, and local ignore flows.
+
+## Quick start
+
+```javascript
+const provider = {
+  id: 'my-proofing',
+  async check({ segments, maxSuggestions, signal }) {
+    const response = await fetch('/api/proofing/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments, maxSuggestions }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Proofing request failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
+};
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  proofing: {
+    enabled: true,
+    provider,
+    defaultLanguage: 'en-US',
+    maxSuggestions: 3,
+    allowIgnoreWord: true,
+  },
+});
+```
+
+## What SuperDoc handles
+
+- Extracting proofable text from the document model
+- Checking visible content first, then continuing in the background
+- Rendering spelling markers on the layout-engine surface
+- Showing provider replacement suggestions as direct context-menu actions
+- Supporting `Ignore` for local suppression
+
+## What you provide
+
+- A provider object with an `id` and `check()` function
+- Any backend API, on-device dictionary engine, or proxy service you want to use
+- Optional persistence for ignored words if you want them to survive reloads
+
+<Note>
+`Ignore` is a SuperDoc-side suppression in v1. It only persists if your app stores ignored words and passes them back through `proofing.ignoredWords`.
+</Note>
+
+<Note>
+SuperDoc does not bundle a proofing engine or send document content anywhere by default. Your provider decides where proofing runs.
+</Note>
+
+## Where proofing works
+
+Proofing is available when the layout engine is active.
+
+- In standard print layout, that works out of the box
+- In web layout, use `layoutEngineOptions.flowMode: 'semantic'` so the layout engine stays active on a continuous surface
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  viewOptions: { layout: 'web' },
+  layoutEngineOptions: { flowMode: 'semantic' },
+  proofing: {
+    enabled: true,
+    provider,
+  },
+});
+```
+
+## Current scope
+
+- Spelling issues are rendered in the UI in v1
+- Grammar and style issue kinds are accepted by the provider contract but are not rendered yet
+- Proofing state is runtime UI state and is not written into the DOCX
+- Proofing is not part of the Document API in v1
+
+## Provider options
+
+SuperDoc does not include a spell-check engine. You bring your own provider.
+
+- [Typo.js](https://github.com/cfinke/Typo.js) - Simple local browser-based spell check. Good for lightweight demos, privacy-sensitive flows, and no-backend setups. See the [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/typo-js).
+- [LanguageTool](https://languagetool.org/) - API or self-hosted proofing with broader language support and a path to grammar checking later. See the [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/language-tool-self-hosted).
+- [hunspell-asm](https://www.npmjs.com/package/hunspell-asm) - A stronger local/offline WebAssembly Hunspell option if you want a more serious on-device spell-check provider than pure JavaScript dictionaries.
+
+## Examples
+
+See the working repo examples for two complete provider integrations:
+
+- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/typo-js) - Local, browser-only spell check with no backend
+- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/spell-check/language-tool-self-hosted) - Self-hosted HTTP spell check with Docker
+
+## Next steps
+
+- See [Configuration](/core/superdoc/configuration#proofing) for all options
+- See [Custom proofing provider](/guides/general/custom-proofing-provider) to connect your own service

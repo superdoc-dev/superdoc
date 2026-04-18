@@ -11,15 +11,15 @@ const CRITICAL_PATHS = [
   'packages/layout-engine/layout-bridge/',
   'packages/layout-engine/measuring/',
   'packages/layout-engine/painters/',
-  'packages/super-editor/src/core/super-converter/',
-  'packages/super-editor/src/core/presentation-editor/',
+  'packages/super-editor/src/editors/v1/core/super-converter/',
+  'packages/super-editor/src/editors/v1/core/presentation-editor/',
   'packages/superdoc/src/core/',
   'packages/word-layout/',
 ];
 
 const SENSITIVE_PATHS = [
-  'packages/super-editor/src/extensions/',
-  'packages/super-editor/src/core/',
+  'packages/super-editor/src/editors/v1/extensions/',
+  'packages/super-editor/src/editors/v1/core/',
   'packages/superdoc/src/',
   'packages/layout-engine/contracts/',
   'packages/esign/',

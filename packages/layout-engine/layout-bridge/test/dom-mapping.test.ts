@@ -546,6 +546,68 @@ describe('DOM-based click-to-position mapping', () => {
   });
 
   // -------------------------------------------------------------------------
+  // RTL line handling
+  // -------------------------------------------------------------------------
+
+  describe('RTL line handling', () => {
+    it('returns line end when clicking to visual left of RTL spans', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" dir="rtl" data-pm-start="10" data-pm-end="20">
+              <span data-pm-start="10" data-pm-end="20">نص عربي</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const spanRect = container.querySelector('span')!.getBoundingClientRect();
+
+      // In RTL, clicking to the visual left means the *end* of the logical text
+      const result = clickToPositionDom(container, spanRect.left - 10, lineRect.top + 5);
+      expect(result).toBe(20);
+    });
+
+    it('returns line start when clicking to visual right of RTL spans', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" dir="rtl" data-pm-start="10" data-pm-end="20">
+              <span data-pm-start="10" data-pm-end="20">نص عربي</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const spanRect = container.querySelector('span')!.getBoundingClientRect();
+
+      const result = clickToPositionDom(container, spanRect.right + 10, lineRect.top + 5);
+      expect(result).toBe(10);
+    });
+
+    it('snaps empty RTL element to the opposite edge compared to LTR', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" dir="rtl" data-pm-start="5" data-pm-end="10">
+              <span data-pm-start="5" data-pm-end="10"></span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // In JSDOM all rects are zero-sized, so viewX (1) >= visualRight (0) triggers
+      // the right-boundary snap which returns lineStart (5) for RTL.
+      // The LTR counterpart ('handles empty text nodes gracefully') returns lineEnd (10).
+      const spanRect = container.querySelector('span')!.getBoundingClientRect();
+      const result = clickToPositionDom(container, spanRect.left + 1, spanRect.top + 1);
+      expect(result).toBe(5);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Table cells with list markers (PR 0 safety rails)
   // -------------------------------------------------------------------------
 

@@ -37,6 +37,11 @@ import {
   TABLE_SPACING_AFTER,
   TABLE_SPACING_AFTER_PADDING_BOTTOM,
   TABLE_CELL_LINE_HEIGHT,
+  tableMixedBlockSelectionBlock,
+  tableMixedBlockSelectionMeasure,
+  tableMixedBlockSelectionLayout,
+  TABLE_INLINE_IMAGE_HEIGHT,
+  TABLE_MIXED_BLOCK_FRAGMENT_Y,
 } from './mock-data';
 import { PageGeometryHelper } from '../src/page-geometry-helper';
 
@@ -123,6 +128,21 @@ describe('selectionToRects', () => {
       const expectedY =
         tableSpacingAfterLayout.pages[0].fragments[0].y + (TABLE_CELL_LINE_HEIGHT + TABLE_SPACING_AFTER);
       expect(rects[0].y).toBe(expectedY);
+    });
+  });
+
+  describe('table cell mixed blocks', () => {
+    it('offsets later paragraph rects by visible non-paragraph blocks between paragraphs', () => {
+      const rects = selectionToRects(
+        tableMixedBlockSelectionLayout,
+        [tableMixedBlockSelectionBlock],
+        [tableMixedBlockSelectionMeasure],
+        5,
+        11,
+      );
+
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_MIXED_BLOCK_FRAGMENT_Y + TABLE_CELL_LINE_HEIGHT + TABLE_INLINE_IMAGE_HEIGHT);
     });
   });
 

@@ -1,11 +1,11 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import { configs as tseslintConfigs } from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 import { importX } from 'eslint-plugin-import-x';
 
 export default [
   js.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...tseslintConfigs.recommended,
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
   prettierConfig,
@@ -49,6 +49,22 @@ export default [
       // SDK scripts — ESM parsed incorrectly by typescript-eslint
       'packages/sdk/scripts/**',
     ],
+  },
+  {
+    settings: {
+      'import-x/resolver': {
+        // Prefer repo source entrypoints during lint so workspace packages do
+        // not depend on generated dist artifacts before the build step runs.
+        node: {
+          conditionNames: ['source', 'import', 'require', 'node', 'default'],
+          mainFields: ['source', 'module', 'main'],
+        },
+        typescript: {
+          conditionNames: ['source', 'types', 'import', 'require', 'node', 'default'],
+          mainFields: ['source', 'module', 'main'],
+        },
+      },
+    },
   },
   {
     languageOptions: {
@@ -144,8 +160,8 @@ export default [
             '^@.*$',
             '^bun:.*$', // Bun built-in modules
             '^superdoc$',
-            '^superdoc/style\\.css$',
-            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
+            '^superdoc/.*$',
+            '^\\..*/generated/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]
@@ -183,17 +199,17 @@ export default [
   // Parts boundary enforcement: prevent direct writes to convertedXml outside part-store.ts
   {
     files: [
-      'packages/super-editor/src/**/*.ts',
-      'packages/super-editor/src/**/*.js',
+      'packages/super-editor/src/editors/v1/**/*.ts',
+      'packages/super-editor/src/editors/v1/**/*.js',
     ],
     ignores: [
-      'packages/super-editor/src/core/parts/store/part-store.ts',
+      'packages/super-editor/src/editors/v1/core/parts/store/part-store.ts',
       // Test helpers set up mock convertedXml for part tests
-      'packages/super-editor/src/core/parts/testing/**',
+      'packages/super-editor/src/editors/v1/core/parts/testing/**',
       // Import/export phases are exempt (initial document load and final export)
-      'packages/super-editor/src/core/super-converter/**',
+      'packages/super-editor/src/editors/v1/core/super-converter/**',
       // Validator normalizes rels key paths during document load
-      'packages/super-editor/src/core/super-validator/**',
+      'packages/super-editor/src/editors/v1/core/super-validator/**',
     ],
     rules: {
       'no-restricted-syntax': [
@@ -212,7 +228,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/extensions/**/*.js'],
+    files: ['packages/super-editor/src/editors/v1/extensions/**/*.js'],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
       'no-unused-vars': [
@@ -226,7 +242,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/extensions/types/**/*.ts'],
+    files: ['packages/super-editor/src/editors/v1/extensions/types/**/*.ts'],
     rules: {
       '@typescript-eslint/no-empty-object-type': [
         'off',
@@ -237,7 +253,7 @@ export default [
     },
   },
   {
-    files: ['packages/super-editor/src/core/types/ChainedCommands.ts'],
+    files: ['packages/super-editor/src/editors/v1/core/types/ChainedCommands.ts'],
     rules: {
       // These empty interfaces are intentionally used for declaration merging
       // Extensions augment them via module augmentation to add typed commands

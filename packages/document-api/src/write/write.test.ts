@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { normalizeMutationOptions } from './write.js';
 
 describe('normalizeMutationOptions', () => {

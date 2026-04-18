@@ -67,6 +67,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     getHtml: (input) => api.getHtml(input),
     markdownToFragment: (input) => api.markdownToFragment(input),
     info: (input) => api.info(input),
+    extract: (input) => api.extract(input),
 
     // --- Singleton mutations ---
     clearContent: (input, options) => api.clearContent(input, options),
@@ -105,6 +106,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.clearBorder': (input, options) => api.format.paragraph.clearBorder(input, options),
     'format.paragraph.setShading': (input, options) => api.format.paragraph.setShading(input, options),
     'format.paragraph.clearShading': (input, options) => api.format.paragraph.clearShading(input, options),
+    'format.paragraph.setDirection': (input, options) => api.format.paragraph.setDirection(input, options),
+    'format.paragraph.clearDirection': (input, options) => api.format.paragraph.clearDirection(input, options),
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
@@ -146,6 +149,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.setLevelTrailingCharacter': (input, options) => api.lists.setLevelTrailingCharacter(input, options),
     'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
     'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
+
+    // --- lists.* (SD-2025 user-facing) ---
+    'lists.getStyle': (input) => api.lists.getStyle(input),
+    'lists.applyStyle': (input, options) => api.lists.applyStyle(input, options),
+    'lists.restartAt': (input, options) => api.lists.restartAt(input, options),
+    'lists.setLevelNumberStyle': (input, options) => api.lists.setLevelNumberStyle(input, options),
+    'lists.setLevelText': (input, options) => api.lists.setLevelText(input, options),
+    'lists.setLevelStart': (input, options) => api.lists.setLevelStart(input, options),
+    'lists.setLevelLayout': (input, options) => api.lists.setLevelLayout(input, options),
 
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
@@ -237,6 +249,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
     'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
     'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+    'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
+    'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
+    'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),
@@ -267,7 +282,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'create.image': (input, options) => api.create.image(input, options),
 
     // --- images.* ---
-    'images.list': (input) => api.images.list(input ?? {}),
+    'images.list': (input) => api.images.list(input),
     'images.get': (input) => api.images.get(input),
     'images.delete': (input, options) => api.images.delete(input, options),
     'images.move': (input, options) => api.images.move(input, options),
@@ -490,5 +505,22 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
     'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
     'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
+
+    // --- diff.* ---
+    'diff.capture': () => api.diff.capture(),
+    'diff.compare': (input) => api.diff.compare(input),
+    'diff.apply': (input, options) => api.diff.apply(input, options),
+
+    // --- protection.* ---
+    'protection.get': (input) => api.protection.get(input),
+    'protection.setEditingRestriction': (input, options) => api.protection.setEditingRestriction(input, options),
+    'protection.clearEditingRestriction': (input, options) => api.protection.clearEditingRestriction(input, options),
+
+    // --- permissionRanges.* ---
+    'permissionRanges.list': (input) => api.permissionRanges.list(input),
+    'permissionRanges.get': (input) => api.permissionRanges.get(input),
+    'permissionRanges.create': (input, options) => api.permissionRanges.create(input, options),
+    'permissionRanges.remove': (input, options) => api.permissionRanges.remove(input, options),
+    'permissionRanges.updatePrincipal': (input, options) => api.permissionRanges.updatePrincipal(input, options),
   };
 }

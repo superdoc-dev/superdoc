@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import { executeClearContent } from './clear-content.js';
 import type { ClearContentAdapter } from './clear-content.js';
 import type { Receipt } from '../types/receipt.js';
@@ -8,7 +9,7 @@ const NOOP_RECEIPT: Receipt = { success: false, failure: { code: 'NO_OP', messag
 describe('executeClearContent', () => {
   it('delegates to adapter.clearContent with input and options', () => {
     const adapter: ClearContentAdapter = {
-      clearContent: vi.fn(() => SUCCESS_RECEIPT),
+      clearContent: mock(() => SUCCESS_RECEIPT),
     };
 
     const result = executeClearContent(adapter, {}, { expectedRevision: 'r1' });
@@ -19,7 +20,7 @@ describe('executeClearContent', () => {
 
   it('returns adapter result when NO_OP', () => {
     const adapter: ClearContentAdapter = {
-      clearContent: vi.fn(() => NOOP_RECEIPT),
+      clearContent: mock(() => NOOP_RECEIPT),
     };
 
     const result = executeClearContent(adapter, {});

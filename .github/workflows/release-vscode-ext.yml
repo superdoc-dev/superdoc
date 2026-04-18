@@ -1,13 +1,21 @@
-# Auto-releases on push to main (@next channel)
-# For stable (@latest): cherry-pick commits to stable branch, then manually dispatch this workflow
+# Auto-releases on push to main (@next) or stable (@latest)
 name: 📦 Release vscode-ext
 
 on:
   push:
-    branches: main
+    branches:
+      - main
+      - stable
     paths:
       - 'apps/vscode-ext/**'
-      - '!apps/vscode-ext/*.md'
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'pnpm-workspace.yaml'
+      - '!**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -44,6 +52,10 @@ jobs:
       - name: Build superdoc
         run: pnpm run build
 
+      - name: Test vscode-ext
+        run: pnpm run test
+        working-directory: apps/vscode-ext
+
       - name: Build vscode-ext
         run: pnpm run build
         working-directory: apps/vscode-ext
@@ -55,3 +67,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

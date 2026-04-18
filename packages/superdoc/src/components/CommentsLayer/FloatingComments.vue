@@ -66,18 +66,39 @@ const props = defineProps({
 
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
-const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry } = commentsStore;
+const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry, clearInstantSidebarAlignment } =
+  commentsStore;
 
-const { getFloatingComments, activeComment, editorCommentPositions, pendingComment } = storeToRefs(commentsStore);
+const {
+  getFloatingComments,
+  activeComment,
+  editorCommentPositions,
+  pendingComment,
+  editingCommentId,
+  instantSidebarAlignmentTargetY,
+  instantSidebarAlignmentThreadId,
+} = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
 const commentsRenderKey = ref(0);
+const sidebarOffsetY = ref(0);
+const disableInstantLayoutTransitions = ref(false);
+
+const isPendingThread = (commentOrId) => {
+  const pendingId = pendingComment.value?.commentId;
+  if (!pendingId) return false;
+  if (typeof commentOrId === 'object') return commentOrId?.commentId === pendingId;
+  return commentOrId === pendingId || commentOrId === 'pending';
+};
 
 // Resolve activeComment (which stores commentId) to the position key used by allPositions
 // (which prefers importedId). Without this, imported Word comments where importedId !== commentId
 // would fail the template guard and could unmount when scrolled out of the observer viewport.
 const resolveLayoutKey = (commentOrId, preferredId) => {
+  if (preferredId === 'pending' || isPendingThread(preferredId) || isPendingThread(commentOrId)) {
+    return 'pending';
+  }
   const { key } = resolveCommentPositionEntry(commentOrId, preferredId);
   if (key) return key;
   return getCommentAliasIds(commentOrId)[0] ?? getCommentPositionKey(commentOrId);
@@ -118,14 +139,14 @@ const getAnchorTop = (comment) => {
 // For editor docs, uses the 'pending' mark position from editorCommentPositions.
 // For PDF docs, falls back to selection bounds (same as getAnchorTop).
 const getPendingAnchorTop = () => {
-  if (props.currentDocument.type === 'application/pdf') {
-    const zoom = (activeZoom.value ?? 100) / 100;
-    const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
-    return isNaN(top) ? null : top * zoom;
+  const positionEntry = editorCommentPositions.value['pending'];
+  if (typeof positionEntry?.bounds?.top === 'number' && !isNaN(positionEntry.bounds.top)) {
+    return positionEntry.bounds.top;
   }
 
-  const positionEntry = editorCommentPositions.value['pending'];
-  return positionEntry?.bounds?.top ?? null;
+  const zoom = props.currentDocument.type === 'application/pdf' ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
+  return isNaN(top) ? null : top * zoom;
 };
 
 // Pre-compute all positions with collision avoidance
@@ -182,6 +203,13 @@ const totalHeight = computed(() => {
     if (bottom > max) max = bottom;
   }
   return max + 50;
+});
+
+// The inner sidebar is translated by sidebarOffsetY. When shifted down, the
+// rendered bottom edge can exceed totalHeight and get clipped by parent scroll
+// containers. Expand wrapper height to include positive translate offset.
+const wrapperMinHeight = computed(() => {
+  return totalHeight.value + Math.max(0, sidebarOffsetY.value);
 });
 
 // Set up IntersectionObserver to track which placeholders are near the viewport
@@ -266,7 +294,38 @@ const handleResize = (comment) => {
     const dialog = el.querySelector('.comments-dialog');
     if (!dialog) return;
     storeHeight(key, dialog.getBoundingClientRect().height);
+
+    const isActiveThread = key === activeCommentKey.value;
+    const isPending = key === 'pending';
+    const isEditingThread = !!editingCommentId.value && editingCommentId.value === comment?.commentId;
+    if (!isActiveThread && !isPending && !isEditingThread) return;
+
+    // Reflow nearby cards after size changes of the active/pending/editing thread.
+    // Avoid force-snapping to anchor here because it can over-shift the whole lane
+    // near viewport boundaries and make bottom clipping more frequent.
+    remeasureCommentKeys(allPositions.value.map((pos) => pos.id));
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
   });
+};
+
+const setInstantLayoutTransitionsDisabled = (disabled) => {
+  disableInstantLayoutTransitions.value = disabled;
+};
+
+const alignCommentKeyToClientY = (key, targetY, onComplete) => {
+  if (!Number.isFinite(targetY)) {
+    onComplete?.(false);
+    return;
+  }
+  const el = placeholderRefs.value[key];
+  if (!el) {
+    onComplete?.(false);
+    return;
+  }
+
+  const currentTop = el.getBoundingClientRect().top;
+  sidebarOffsetY.value += targetY - currentTop;
+  onComplete?.(true);
 };
 
 // Store placeholder ref by comment ID
@@ -291,60 +350,142 @@ const setPlaceholderRef = (id, el) => {
 let remeasureTimers = [];
 let scrollTimer = null;
 
+const instantAlignmentKey = computed(() => {
+  if (!instantSidebarAlignmentThreadId.value) {
+    return null;
+  }
+
+  return resolveLayoutKey(instantSidebarAlignmentThreadId.value, instantSidebarAlignmentThreadId.value);
+});
+
+const clearDeferredRemeasureTimers = () => {
+  remeasureTimers.forEach(clearTimeout);
+  remeasureTimers = [];
+};
+
+const remeasureCommentKeys = (keys) => {
+  for (const key of keys.filter(Boolean)) {
+    const el = placeholderRefs.value[key];
+    if (!el) continue;
+    const dialog = el.querySelector('.comments-dialog');
+    if (!dialog) continue;
+    storeHeight(key, dialog.getBoundingClientRect().height);
+  }
+};
+
+// 50ms: after Vue nextTick + browser rAF settle the initial DOM change.
+// 350ms: after .comment-placeholder transition (300ms ease) completes.
+const REMEASURE_AFTER_DOM_SETTLE_MS = 50;
+const REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS = 350;
+
+/**
+ * Cancels any pending delayed remeasure passes, then schedules two remeasure runs.
+ * Pass an array of keys, or a getter so keys are resolved when each timeout fires
+ * (e.g. when `allPositions` may have changed).
+ */
+const scheduleDeferredRemeasure = (keysOrGetter) => {
+  clearDeferredRemeasureTimers();
+  const resolveKeys = typeof keysOrGetter === 'function' ? keysOrGetter : () => keysOrGetter;
+  remeasureTimers.push(setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_DOM_SETTLE_MS));
+  remeasureTimers.push(
+    setTimeout(() => remeasureCommentKeys(resolveKeys()), REMEASURE_AFTER_PLACEHOLDER_TRANSITION_MS),
+  );
+};
+
+const finishInstantSidebarAlignment = () => {
+  clearInstantSidebarAlignment();
+  requestAnimationFrame(() => {
+    setInstantLayoutTransitionsDisabled(false);
+  });
+};
+
+const applyInstantSidebarAlignment = (key, targetY) => {
+  if (!key || !Number.isFinite(targetY)) return;
+
+  setInstantLayoutTransitionsDisabled(true);
+  nextTick(() => {
+    remeasureCommentKeys([key]);
+    alignCommentKeyToClientY(key, targetY, () => {
+      finishInstantSidebarAlignment();
+    });
+  });
+};
+
 // Re-measure when active comment changes. The active dialog expands (reply input, thread)
 // and the previously active one collapses — both change height.
 watch(activeCommentKey, (newKey, oldKey) => {
-  // Cancel stale timers from previous activation
-  remeasureTimers.forEach(clearTimeout);
-  remeasureTimers = [];
+  clearDeferredRemeasureTimers();
+  const keysToRemeasure = [newKey, oldKey];
+  const hasPendingInstantAlignment =
+    newKey && newKey === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
 
-  const remeasure = () => {
-    for (const key of [newKey, oldKey].filter(Boolean)) {
-      const el = placeholderRefs.value[key];
-      if (!el) continue;
-      const dialog = el.querySelector('.comments-dialog');
-      if (!dialog) continue;
-      storeHeight(key, dialog.getBoundingClientRect().height);
-    }
-  };
-
-  // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
-  // 350ms: after .comment-placeholder transition (300ms ease) completes
   nextTick(() => {
-    remeasureTimers.push(setTimeout(remeasure, 50));
-    remeasureTimers.push(setTimeout(remeasure, 350));
+    if (hasPendingInstantAlignment) {
+      remeasureCommentKeys(keysToRemeasure);
+      return;
+    }
+
+    scheduleDeferredRemeasure(keysToRemeasure);
   });
 });
 
-// Scroll to the active comment ONLY when its anchor is off-screen.
-// getBoundingClientRect() is viewport-relative (accounts for scroll + zoom).
+watch([activeCommentKey, instantAlignmentKey, instantSidebarAlignmentTargetY], ([activeKey, requestKey, targetY]) => {
+  if (!activeKey || !requestKey || activeKey !== requestKey || !Number.isFinite(targetY)) return;
+  applyInstantSidebarAlignment(activeKey, targetY);
+});
+
+// Re-measure when editing state changes. Entering/exiting edit mode changes
+// the dialog height (CommentInput + action buttons vs static text).
+// We remeasure all visible dialogs because the editing comment's parent dialog
+// might not be the activeComment (e.g., dropdown interaction deactivated it).
+watch(editingCommentId, () => {
+  clearDeferredRemeasureTimers();
+
+  nextTick(() => {
+    scheduleDeferredRemeasure(() => allPositions.value.map((pos) => pos.id));
+  });
+});
+
+// Align the active comment bubble with the same on-screen Y position as its
+// document anchor by translating the inner sidebar layer.
 watch(activeComment, () => {
   if (scrollTimer) clearTimeout(scrollTimer);
 
-  if (!activeComment.value) return;
-  const comment = commentsStore.getComment(activeComment.value);
+  if (!activeComment.value) {
+    clearInstantSidebarAlignment();
+    setInstantLayoutTransitionsDisabled(false);
+    sidebarOffsetY.value = 0;
+    return;
+  }
+  const comment = isPendingThread(activeComment.value)
+    ? pendingComment.value
+    : commentsStore.getComment(activeComment.value);
   if (!comment) return;
   const key = resolveLayoutKey(comment);
   if (!key) return;
+  const instantAlignment = key === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
+  if (instantAlignment) {
+    setInstantLayoutTransitionsDisabled(true);
+    return;
+  }
 
   nextTick(() => {
-    // 400ms: wait for .comment-placeholder CSS transition (300ms) + buffer
-    scrollTimer = setTimeout(() => {
+    const applyAlignment = () => {
       const el = placeholderRefs.value[key];
       if (!el) return;
+      const parentRect = props.parent?.getBoundingClientRect?.();
+      if (!parentRect) return;
 
-      const rect = el.getBoundingClientRect();
-      const margin = 80;
-      const availableHeight = window.innerHeight - 2 * margin;
-      const isVisible =
-        rect.height > availableHeight
-          ? rect.top >= margin
-          : rect.top >= margin && rect.bottom <= window.innerHeight - margin;
+      const anchorTop = key === 'pending' ? getPendingAnchorTop() : getAnchorTop(comment);
+      if (typeof anchorTop !== 'number' || isNaN(anchorTop)) return;
 
-      if (!isVisible) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }, 400);
+      const currentTop = el.getBoundingClientRect().top;
+      const desiredTop = parentRect.top + anchorTop;
+      sidebarOffsetY.value += desiredTop - currentTop;
+    };
+
+    // 400ms: wait for .comment-placeholder CSS transition (300ms) + buffer
+    scrollTimer = setTimeout(applyAlignment, 400);
   });
 });
 
@@ -455,17 +596,32 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="section-wrapper" ref="floatingCommentsContainer" :style="{ minHeight: totalHeight + 'px' }">
-    <!-- sidebar-container stays at top: 0 — the layout algorithm pins the active
-         comment at its anchor position directly, no offset needed -->
-    <div class="sidebar-container">
+  <div
+    class="section-wrapper"
+    ref="floatingCommentsContainer"
+    :style="{
+      minHeight: wrapperMinHeight + 'px',
+      transition: disableInstantLayoutTransitions ? 'none' : undefined,
+    }"
+  >
+    <div
+      class="sidebar-container"
+      :style="{
+        transform: `translateY(${sidebarOffsetY}px)`,
+        transition: disableInstantLayoutTransitions ? 'none' : undefined,
+      }"
+    >
       <!-- Lightweight placeholders for ALL comments (observed for viewport proximity) -->
       <div
         v-for="pos in allPositions"
         :key="pos.id"
         :ref="(el) => setPlaceholderRef(pos.id, el)"
         :data-comment-id="pos.id"
-        :style="{ top: pos.top + 'px', height: pos.height + 'px' }"
+        :style="{
+          top: pos.top + 'px',
+          height: pos.height + 'px',
+          transition: disableInstantLayoutTransitions ? 'none' : undefined,
+        }"
         class="comment-placeholder"
       >
         <!-- Only mount the heavy CommentDialog when near the viewport -->
@@ -500,6 +656,8 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 300px;
   min-height: 300px;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .section-wrapper {

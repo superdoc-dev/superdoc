@@ -27,7 +27,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // The comment should now be in edit mode
-  const editInput = dialog.locator('.comment-editing .superdoc-field');
+  const editInput = dialog.locator('.reply-expanded .superdoc-field');
   await expect(editInput).toBeVisible({ timeout: 5_000 });
 
   // Select all text in the edit input, then type the replacement
@@ -37,7 +37,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Click Update
-  await dialog.locator('.comment-editing .sd-button.primary', { hasText: 'Update' }).click();
+  await dialog.locator('.reply-expanded .sd-button.primary', { hasText: 'Update' }).click();
   await superdoc.waitForStable();
 
   // After update the dialog loses is-active; verify the text changed via the visible sidebar dialog

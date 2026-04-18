@@ -119,6 +119,7 @@ export interface SuperDocESignProps {
   onStateChange?: (state: SigningState) => void;
   onFieldChange?: (field: FieldChange) => void;
   onFieldsDiscovered?: (fields: FieldInfo[]) => void;
+  onZoomChange?: (data: { zoom: number }) => void;
 
   pdf?: PdfModuleConfig;
 
@@ -145,6 +146,8 @@ export interface SuperDocESignHandle {
   getAuditTrail: () => AuditEvent[];
   reset: () => void;
   updateFieldInDocument: (field: FieldUpdate) => void;
+  setZoom: (percent: number) => void;
+  getZoom: () => number;
 }
 
 export interface DownloadData {

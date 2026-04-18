@@ -4,11 +4,11 @@ import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, unlink, wri
 import { createHash } from 'node:crypto';
 import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
+import { ENV_VAR_NAME_PATTERN, type CollaborationProfile } from './collaboration';
 import { CliError } from './errors';
-import { asRecord, pathExists } from './guards';
-import type { CollaborationProfile } from './collaboration';
+import { asRecord, isRecord, pathExists } from './guards';
 import { validateSessionId } from './session';
-import type { CliIO, UserIdentity } from './types';
+import type { CliIO, ExecutionMode, UserIdentity } from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
@@ -145,47 +145,117 @@ function normalizeUser(value: unknown): UserIdentity | undefined {
   return { name: record.name, email: record.email };
 }
 
+function isOptionalNonEmptyString(value: unknown): value is string | undefined {
+  return value == null || (typeof value === 'string' && value.length > 0);
+}
+
+function isOptionalPositiveNumber(value: unknown): value is number | undefined {
+  return value == null || (typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
+function isValidOnMissing(value: unknown): value is CollaborationProfile['onMissing'] {
+  return value == null || value === 'seedFromDoc' || value === 'blank' || value === 'error';
+}
+
+type SharedProfileFields = {
+  syncTimeoutMs: number | undefined;
+  onMissing: CollaborationProfile['onMissing'];
+  bootstrapSettlingMs: number | undefined;
+};
+
+function normalizeSharedFields(record: Record<string, unknown>): SharedProfileFields | null {
+  if (!isOptionalPositiveNumber(record.syncTimeoutMs)) return null;
+  if (!isValidOnMissing(record.onMissing)) return null;
+  if (!isOptionalPositiveNumber(record.bootstrapSettlingMs)) return null;
+  return {
+    syncTimeoutMs: typeof record.syncTimeoutMs === 'number' ? record.syncTimeoutMs : undefined,
+    onMissing: record.onMissing as CollaborationProfile['onMissing'],
+    bootstrapSettlingMs: typeof record.bootstrapSettlingMs === 'number' ? record.bootstrapSettlingMs : undefined,
+  };
+}
+
+function normalizeWebSocketParams(value: unknown): Record<string, string> | null | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) return null;
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (typeof key !== 'string' || key.length === 0) return null;
+    if (typeof val !== 'string') return null;
+    result[key] = val;
+  }
+  return result;
+}
+
+function normalizeWebSocketProfile(record: Record<string, unknown>): CollaborationProfile | undefined {
+  const { providerType, url, documentId, tokenEnv } = record;
+  if (typeof url !== 'string' || url.length === 0) return undefined;
+  if (typeof documentId !== 'string' || documentId.length === 0) return undefined;
+  if (!isOptionalNonEmptyString(tokenEnv)) return undefined;
+
+  const shared = normalizeSharedFields(record);
+  if (!shared) return undefined;
+
+  const params = normalizeWebSocketParams(record.params);
+  if (params === null) return undefined;
+
+  return {
+    providerType: providerType as 'hocuspocus' | 'y-websocket',
+    url,
+    documentId,
+    tokenEnv: typeof tokenEnv === 'string' ? tokenEnv : undefined,
+    params,
+    ...shared,
+  };
+}
+
+function isValidEnvVarName(value: unknown): value is string {
+  return typeof value === 'string' && ENV_VAR_NAME_PATTERN.test(value);
+}
+
+function normalizeLiveblocksProfile(record: Record<string, unknown>): CollaborationProfile | undefined {
+  const { documentId, publicApiKey, authEndpoint, authHeadersEnv } = record;
+  if (typeof documentId !== 'string' || documentId.length === 0) return undefined;
+  if (!isOptionalNonEmptyString(publicApiKey)) return undefined;
+  if (!isOptionalNonEmptyString(authEndpoint)) return undefined;
+
+  // Must have exactly one auth mode
+  const hasPublicKey = typeof publicApiKey === 'string';
+  const hasEndpoint = typeof authEndpoint === 'string';
+  if (hasPublicKey === hasEndpoint) return undefined; // both or neither
+
+  // authEndpoint must be absolute (matches parser contract)
+  if (hasEndpoint && !authEndpoint!.startsWith('http://') && !authEndpoint!.startsWith('https://')) {
+    return undefined;
+  }
+
+  // authHeadersEnv must be a valid env var name and only present with authEndpoint
+  const hasHeadersEnv = authHeadersEnv != null;
+  if (hasHeadersEnv) {
+    if (!isValidEnvVarName(authHeadersEnv)) return undefined;
+    if (!hasEndpoint) return undefined; // authHeadersEnv without authEndpoint is invalid
+  }
+
+  const shared = normalizeSharedFields(record);
+  if (!shared) return undefined;
+
+  return {
+    providerType: 'liveblocks',
+    documentId,
+    publicApiKey: hasPublicKey ? publicApiKey : undefined,
+    authEndpoint: hasEndpoint ? authEndpoint : undefined,
+    authHeadersEnv: isValidEnvVarName(authHeadersEnv) ? authHeadersEnv : undefined,
+    ...shared,
+  };
+}
+
 function normalizeCollaborationProfile(value: unknown): CollaborationProfile | undefined {
   const record = asRecord(value);
   if (!record) return undefined;
 
-  const providerType = record.providerType;
-  const url = record.url;
-  const documentId = record.documentId;
-  const tokenEnv = record.tokenEnv;
-  const syncTimeoutMs = record.syncTimeoutMs;
-  const onMissing = record.onMissing;
-  const bootstrapSettlingMs = record.bootstrapSettlingMs;
-
-  if (providerType !== 'hocuspocus' && providerType !== 'y-websocket') return undefined;
-  if (typeof url !== 'string' || url.length === 0) return undefined;
-  if (typeof documentId !== 'string' || documentId.length === 0) return undefined;
-  if (tokenEnv != null && (typeof tokenEnv !== 'string' || tokenEnv.length === 0)) return undefined;
-  if (
-    syncTimeoutMs != null &&
-    (typeof syncTimeoutMs !== 'number' || !Number.isFinite(syncTimeoutMs) || syncTimeoutMs <= 0)
-  ) {
-    return undefined;
-  }
-  if (onMissing != null && onMissing !== 'seedFromDoc' && onMissing !== 'blank' && onMissing !== 'error') {
-    return undefined;
-  }
-  if (
-    bootstrapSettlingMs != null &&
-    (typeof bootstrapSettlingMs !== 'number' || !Number.isFinite(bootstrapSettlingMs) || bootstrapSettlingMs <= 0)
-  ) {
-    return undefined;
-  }
-
-  return {
-    providerType,
-    url,
-    documentId,
-    tokenEnv: typeof tokenEnv === 'string' ? tokenEnv : undefined,
-    syncTimeoutMs: typeof syncTimeoutMs === 'number' ? syncTimeoutMs : undefined,
-    onMissing: onMissing as CollaborationProfile['onMissing'],
-    bootstrapSettlingMs: typeof bootstrapSettlingMs === 'number' ? bootstrapSettlingMs : undefined,
-  };
+  const { providerType } = record;
+  if (providerType === 'liveblocks') return normalizeLiveblocksProfile(record);
+  if (providerType === 'hocuspocus' || providerType === 'y-websocket') return normalizeWebSocketProfile(record);
+  return undefined;
 }
 
 export function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
@@ -538,16 +608,44 @@ export async function clearContext(paths: ContextPaths): Promise<void> {
   await rm(paths.contextDir, { recursive: true, force: true });
 }
 
+/**
+ * Resolve the target session id for an operation, respecting execution mode.
+ *
+ * - If an explicit session id is provided, return it immediately.
+ * - In host mode, an explicit session id is **required** — never fall back to
+ *   the project-global active-session file. This prevents cross-document
+ *   contamination between SDK clients sharing the same project root.
+ * - In oneshot (CLI) mode, fall back to the active-session file as a
+ *   convenience for single-terminal workflows.
+ */
+export async function resolveSessionId(
+  sessionId: string | undefined,
+  executionMode: ExecutionMode | undefined,
+): Promise<string> {
+  if (sessionId) return sessionId;
+
+  if (executionMode === 'host') {
+    throw new CliError(
+      'SESSION_REQUIRED',
+      'Host-mode operations require an explicit session id. Use the SDK document handle or pass --session.',
+    );
+  }
+
+  const activeSessionId = await getActiveSessionId();
+  if (!activeSessionId) {
+    throw new CliError('NO_ACTIVE_DOCUMENT', 'No active document. Run "superdoc open <doc>" first.');
+  }
+  return activeSessionId;
+}
+
 export async function withActiveContext<T>(
   io: CliIO,
   command: string,
   action: (state: { metadata: ContextMetadata; paths: ContextPaths }) => Promise<T>,
   contextId?: string,
+  executionMode?: ExecutionMode,
 ): Promise<T> {
-  const resolvedContextId = contextId ?? (await getActiveSessionId());
-  if (!resolvedContextId) {
-    throw new CliError('NO_ACTIVE_DOCUMENT', 'No active document. Run "superdoc open <doc>" first.');
-  }
+  const resolvedContextId = await resolveSessionId(contextId, executionMode);
 
   return withContextLock(
     io,

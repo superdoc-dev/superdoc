@@ -117,9 +117,9 @@ jobs:
             console.log(`AI reclassified: ${filePathLevel} → ${aiLevel}`);
 
             const LABELS = {
-              critical: 'risk: critical',
-              sensitive: 'risk: sensitive',
-              low: 'risk: low',
+              critical: 'review: thorough',
+              sensitive: 'review: careful',
+              low: 'review: quick',
             };
 
             const owner = context.repo.owner;
@@ -129,7 +129,7 @@ jobs:
             const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
               owner, repo, issue_number: prNumber,
             });
-            for (const label of currentLabels.filter(l => l.name.startsWith('risk: '))) {
+            for (const label of currentLabels.filter(l => l.name.startsWith('review: '))) {
               await github.rest.issues.removeLabel({
                 owner, repo, issue_number: prNumber, name: label.name,
               });

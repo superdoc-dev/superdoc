@@ -9,10 +9,28 @@ export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
+// Table column rescaling (moved from layout-engine for cross-stage use)
+export { rescaleColumnWidths } from './table-column-rescale.js';
+
+// Cell spacing resolution (moved from measuring-dom for cross-stage use)
+export { getCellSpacingPx } from './cell-spacing.js';
+
+// OOXML z-index normalization (moved from pm-adapter for cross-stage use)
+export {
+  normalizeZIndex,
+  coerceRelativeHeight,
+  isPlainObject,
+  OOXML_Z_INDEX_BASE,
+  resolveFloatingZIndex,
+  getFragmentZIndex,
+} from './ooxml-z-index.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,
   calculateJustifySpacing,
+  getFirstLineIndentOffset,
+  adjustAvailableWidthForTextIndent,
   SPACE_CHARS,
   type ShouldApplyJustifyParams,
   type CalculateJustifySpacingParams,
@@ -23,8 +41,20 @@ export {
   formatInsetClipPathTransform,
   type InsetClipPathScale,
 } from './clip-path-inset.js';
+export {
+  SUBSCRIPT_SUPERSCRIPT_SCALE,
+  normalizeBaselineShift,
+  hasExplicitBaselineShift,
+  isSuperscriptOrSubscript,
+  usesDefaultScriptLayout,
+  scaleFontSizeForVerticalText,
+  resolveBaseFontSizeForVerticalText,
+  type VerticalTextAlign,
+} from './vertical-text.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
+export type { NormalizedColumnLayout } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -182,7 +212,10 @@ export type RunMarks = {
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
   /** Vertical alignment for superscript/subscript text. */
   vertAlign?: 'superscript' | 'subscript' | 'baseline';
-  /** Custom baseline shift in points (positive = raise, negative = lower). Takes precedence over vertAlign for positioning. */
+  /**
+   * Explicit baseline shift in points (positive = raise, negative = lower).
+   * Rendering normalizes a shift of zero to "no explicit shift".
+   */
   baselineShift?: number;
 };
 
@@ -255,6 +288,9 @@ export type ImageLuminanceAdjustment = {
   /** OOXML a:lum/@contrast in raw units (-100000..100000). */
   contrast?: number;
 };
+
+/** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
+export type ImageHyperlink = { url: string; tooltip?: string };
 
 /**
  * Inline image run for images that flow with text on the same line.
@@ -330,6 +366,8 @@ export type ImageRun = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
+  hyperlink?: ImageHyperlink;
 };
 
 export type BreakRun = {
@@ -418,7 +456,25 @@ export type FieldAnnotationRun = {
   sdt?: SdtMetadata;
 };
 
-export type Run = TextRun | TabRun | ImageRun | LineBreakRun | BreakRun | FieldAnnotationRun;
+export type MathRun = {
+  kind: 'math';
+  /** OMML XML as JSON (xml2json format) for the renderer to convert to MathML. */
+  ommlJson: unknown;
+  /** Plain text content for measurement fallback and accessibility. */
+  textContent: string;
+  /** Estimated width in pixels. */
+  width: number;
+  /** Estimated height in pixels. */
+  height: number;
+  /** Absolute ProseMirror position (inclusive) of this math run. */
+  pmStart?: number;
+  /** Absolute ProseMirror position (exclusive) after this math run. */
+  pmEnd?: number;
+  /** SDT metadata if math is wrapped in a structured document tag. */
+  sdt?: SdtMetadata;
+};
+
+export type Run = TextRun | TabRun | ImageRun | LineBreakRun | BreakRun | FieldAnnotationRun | MathRun;
 
 export type ParagraphBlock = {
   kind: 'paragraph';
@@ -586,6 +642,8 @@ export type ImageBlock = {
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
   flipV?: boolean; // Vertical flip
+  /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
+  hyperlink?: ImageHyperlink;
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
@@ -1418,6 +1476,8 @@ export type ColumnLayout = {
   count: number;
   gap: number;
   withSeparator?: boolean;
+  widths?: number[];
+  equalWidth?: boolean;
 };
 
 /**
@@ -1844,9 +1904,14 @@ export type HeaderFooterPage = {
 };
 
 export type HeaderFooterLayout = {
+  /** Measurement height for pagination — excludes out-of-band fragments. */
   height: number;
+  /** Minimum y of all rendered fragments (including out-of-band). */
   minY?: number;
+  /** Maximum y + fragmentHeight of all rendered fragments. */
   maxY?: number;
+  /** Full visual extent of all rendered fragments (renderMaxY - renderMinY). */
+  renderHeight?: number;
   pages: HeaderFooterPage[];
 };
 
@@ -1882,86 +1947,12 @@ export type WrapExclusion = {
   wrapText: WrapTextMode;
 };
 
-export type RenderedLineInfo = {
-  el: HTMLElement;
-  top: number;
-  height: number;
-};
-
-/**
- * Interface for position mapping from ProseMirror transactions.
- * Used to efficiently update DOM position attributes without full re-render.
- */
-export interface PositionMapping {
-  /** Transform a position from old to new document coordinates */
-  map(pos: number, bias?: number): number;
-  /** Array of step maps - length indicates transaction complexity */
-  readonly maps: readonly unknown[];
-}
-
 /**
  * Rendering flow mode.
  * - `paginated`: discrete page surfaces
  * - `semantic`: continuous flow surface
  */
 export type FlowMode = 'paginated' | 'semantic';
-
-export interface PainterDOM {
-  paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void;
-  /**
-   * Updates the painter's internal block and measure data without reinstantiating.
-   *
-   * This method is an optimization for incremental rendering pipelines that need to
-   * refresh the underlying data (e.g., after content edits) without creating a new
-   * painter instance. It updates the painter's internal lookup tables to reflect
-   * the new blocks and measures.
-   *
-   * Header and footer blocks should be provided when the layout includes header/footer
-   * content that needs to be rendered. These are typically generated by the layout
-   * engine's header/footer adapter and should be passed through to the painter.
-   *
-   * @param blocks - Main document blocks to be rendered in the page body
-   * @param measures - Measurements corresponding to the main document blocks (must match blocks array length)
-   * @param headerBlocks - Optional array of blocks for header content. When provided, headerMeasures must also be provided.
-   * @param headerMeasures - Optional measurements for header blocks (must match headerBlocks array length when provided)
-   * @param footerBlocks - Optional array of blocks for footer content. When provided, footerMeasures must also be provided.
-   * @param footerMeasures - Optional measurements for footer blocks (must match footerBlocks array length when provided)
-   *
-   * @throws {Error} When blocks and measures array lengths don't match
-   * @throws {Error} When headerBlocks is provided without headerMeasures or vice versa
-   * @throws {Error} When headerBlocks and headerMeasures lengths don't match
-   * @throws {Error} When footerBlocks is provided without footerMeasures or vice versa
-   * @throws {Error} When footerBlocks and footerMeasures lengths don't match
-   *
-   * @example
-   * ```typescript
-   * // Basic usage with main document only
-   * painter.setData(blocks, measures);
-   *
-   * // With headers and footers
-   * painter.setData(
-   *   mainBlocks,
-   *   mainMeasures,
-   *   headerBlocks,
-   *   headerMeasures,
-   *   footerBlocks,
-   *   footerMeasures
-   * );
-   * ```
-   */
-  setData?(
-    blocks: FlowBlock[],
-    measures: Measure[],
-    headerBlocks?: FlowBlock[],
-    headerMeasures?: Measure[],
-    footerBlocks?: FlowBlock[],
-    footerMeasures?: Measure[],
-  ): void;
-}
-
-export interface PainterPDF {
-  render(layout: Layout): Promise<Blob>;
-}
 
 export const extractHeaderFooterSpace = (
   margins?: PageMargins | null,
@@ -1974,5 +1965,22 @@ export const extractHeaderFooterSpace = (
     footerSpace: margins?.footer ?? 0,
   };
 };
+
+// Resolved layout types for the next-generation paint pipeline
+export type {
+  ResolvedLayout,
+  ResolvedPage,
+  ResolvedPaintItem,
+  ResolvedGroupItem,
+  ResolvedFragmentItem,
+  ResolvedParagraphContent,
+  ResolvedTextLineItem,
+  ResolvedDropCapItem,
+  ResolvedListMarkerItem,
+  ResolvedTableItem,
+  ResolvedImageItem,
+  ResolvedDrawingItem,
+} from './resolved-layout.js';
+export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
 
 export * as Engines from './engines/index.js';

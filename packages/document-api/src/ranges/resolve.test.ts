@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { executeResolveRange } from './resolve.js';
 import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges.types.js';
 import type { SelectionTarget } from '../types/address.js';
@@ -21,7 +21,7 @@ const STUB_OUTPUT: ResolveRangeOutput = {
 };
 
 function createStubAdapter(output: ResolveRangeOutput = STUB_OUTPUT): RangeResolverAdapter {
-  return { resolve: vi.fn(() => output) };
+  return { resolve: mock(() => output) };
 }
 
 // ---------------------------------------------------------------------------

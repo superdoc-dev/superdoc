@@ -4,7 +4,7 @@
  *
  * Run via Vite's Node runner so Super Editor's path aliases resolve:
  *   npx vite-node --config ../../super-editor/vite.config.js --mode test \
- *     scripts/extract-pm-json.mjs --input ../../super-editor/src/tests/data/your.docx
+ *     scripts/extract-pm-json.mjs --input ../../super-editor/src/editors/v1/tests/data/your.docx
  *
  * The script loads the DOCX file using the Super Editor import machinery
  * and writes a ProseMirror JSON fixture file.
@@ -13,9 +13,9 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname, resolve, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { createDocumentJson } from "@superdoc/super-editor/src/core/super-converter/v2/importer/docxImporter.js";
-import DocxZipper from "@superdoc/super-editor/src/core/DocxZipper.js";
-import { parseXmlToJson } from "@superdoc/super-editor/src/core/super-converter/v2/docxHelper.js";
+import { createDocumentJson } from "@superdoc/super-editor/src/editors/v1/core/super-converter/v2/importer/docxImporter.js";
+import DocxZipper from "@superdoc/super-editor/src/editors/v1/core/DocxZipper.js";
+import { parseXmlToJson } from "@superdoc/super-editor/src/editors/v1/core/super-converter/v2/docxHelper.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +65,7 @@ async function extractPMJson() {
 
   const defaultDocxPath = join(
     __dirname,
-    '../../../super-editor/src/tests/data/basic-paragraph.docx'
+    '../../../super-editor/src/editors/v1/tests/data/basic-paragraph.docx'
   );
   const docxPath = resolve(input ?? defaultDocxPath);
   const fixtureName =

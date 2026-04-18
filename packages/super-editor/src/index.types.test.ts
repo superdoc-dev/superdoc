@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PresentationEditor } from './core/presentation-editor/PresentationEditor.js';
+import { PresentationEditor } from './editors/v1/core/presentation-editor/PresentationEditor.js';
 
 // ============================================
 // EXACT SHAPE VERIFICATION HELPERS
@@ -502,7 +502,11 @@ const {
       setLayoutMode: vi.fn(),
       setProviders: vi.fn(),
       setData: vi.fn(),
-      getSnapshot: vi.fn(() => null),
+      setResolvedLayout: vi.fn(),
+      setVirtualizationPins: vi.fn(),
+      getMountedPageIndices: vi.fn(() => []),
+      onScroll: vi.fn(),
+      setScrollContainer: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
@@ -561,7 +565,7 @@ const {
   };
 });
 
-vi.mock('./core/Editor', () => ({
+vi.mock('./editors/v1/core/Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     setDocumentMode: vi.fn(),
     setOptions: vi.fn(),
@@ -604,10 +608,16 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   return { ...actual, toFlowBlocks: mockToFlowBlocks };
 });
 
+// Mock PositionHitResolver
+vi.mock('./editors/v1/core/presentation-editor/input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: (...args: unknown[]) => mockClickToPosition(...args),
+}));
+
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
   selectionToRects: mockSelectionToRects,
   clickToPosition: mockClickToPosition,
+  clickToPositionGeometry: vi.fn(() => null),
   createDragHandler: vi.fn(() => () => {}),
   getFragmentAtPosition: vi.fn(() => null),
   computeLinePmRange: vi.fn(() => ({ from: 0, to: 0 })),
@@ -653,8 +663,12 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('./core/header-footer/EditorOverlayManager', () => ({
+vi.mock('./editors/v1/core/header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
+}));
+
+vi.mock('@superdoc/layout-resolved', () => ({
+  resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
 }));
 
 // ============================================

@@ -1,6 +1,8 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { assertTargetPresent } from '../validation-primitives.js';
+import { validateTargetOnlyTocCreateLocation } from '../validation/create-location-validator.js';
 import type {
   AuthoritiesAddress,
   AuthorityEntryAddress,
@@ -51,9 +53,7 @@ export type AuthoritiesAdapter = AuthoritiesApi;
 // ---------------------------------------------------------------------------
 
 function validateAuthoritiesTarget(target: unknown, operationName: string): asserts target is AuthoritiesAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
   const t = target as Record<string, unknown>;
   if (t.kind !== 'block' || t.nodeType !== 'tableOfAuthorities' || typeof t.nodeId !== 'string') {
     throw new DocumentApiValidationError(
@@ -65,9 +65,7 @@ function validateAuthoritiesTarget(target: unknown, operationName: string): asse
 }
 
 function validateAuthorityEntryTarget(target: unknown, operationName: string): asserts target is AuthorityEntryAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
   const t = target as Record<string, unknown>;
   if (t.kind !== 'inline' || t.nodeType !== 'authorityEntry') {
     throw new DocumentApiValidationError(
@@ -99,6 +97,7 @@ export function executeAuthoritiesInsert(
   input: AuthoritiesInsertInput,
   options?: MutationOptions,
 ): AuthoritiesMutationResult {
+  validateTargetOnlyTocCreateLocation(input.at, 'authorities.insert');
   return adapter.insert(input, normalizeMutationOptions(options));
 }
 

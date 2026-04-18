@@ -29,6 +29,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
   const isDebugging = false;
   const debounceTimers = {};
+  const trackedChangeResolutionSnapshots = new WeakMap();
 
   const COMMENT_EVENTS = comments_module_events;
   const hasInitializedComments = ref(false);
@@ -55,6 +56,8 @@ export const useCommentsStore = defineStore('comments', () => {
   const skipSelectionUpdate = ref(false);
   const isFloatingCommentsReady = ref(false);
   const generalCommentIds = ref([]);
+  const instantSidebarAlignmentTargetY = ref(null);
+  const instantSidebarAlignmentThreadId = ref(null);
 
   const pendingComment = ref(null);
   const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
@@ -111,17 +114,38 @@ export const useCommentsStore = defineStore('comments', () => {
 
   /**
    * Extract the position lookup key from a comment or comment ID.
-   * Prefers importedId for imported comments since editor marks retain the original ID.
+   * Prefers whichever key currently exists in editorCommentPositions.
    *
    * @param {Object | string | null | undefined} commentOrId The comment object or comment ID
-   * @returns {string | null} The position key (importedId or commentId)
+   * @returns {string | null} The position key
    */
   const getCommentPositionKey = (commentOrId) => {
     if (!commentOrId) return null;
-    if (typeof commentOrId === 'object') {
-      return commentOrId.importedId ?? commentOrId.commentId ?? null;
+
+    const positions = editorCommentPositions.value || {};
+
+    if (typeof commentOrId === 'string') {
+      if (positions[commentOrId]) {
+        return commentOrId;
+      }
+
+      const resolvedComment = getComment(commentOrId);
+      if (!resolvedComment) {
+        return commentOrId;
+      }
+
+      const commentId = resolvedComment.commentId ?? null;
+      const importedId = resolvedComment.importedId ?? null;
+      if (commentId && positions[commentId]) return commentId;
+      if (importedId && positions[importedId]) return importedId;
+      return commentId ?? importedId ?? null;
     }
-    return commentOrId;
+
+    const commentId = commentOrId.commentId ?? null;
+    const importedId = commentOrId.importedId ?? null;
+    if (commentId && positions[commentId]) return commentId;
+    if (importedId && positions[importedId]) return importedId;
+    return commentId ?? importedId ?? null;
   };
 
   const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));
@@ -166,11 +190,25 @@ export const useCommentsStore = defineStore('comments', () => {
 
   const clearResolvedMetadata = (comment) => {
     if (!comment) return;
+    if (
+      comment.resolvedTime !== undefined ||
+      comment.resolvedByEmail !== undefined ||
+      comment.resolvedByName !== undefined
+    ) {
+      trackedChangeResolutionSnapshots.set(comment, {
+        resolvedTime: comment.resolvedTime ?? null,
+        resolvedByEmail: comment.resolvedByEmail ?? null,
+        resolvedByName: comment.resolvedByName ?? null,
+      });
+    }
     // Sets the resolved state to null so it can be restored in the comments sidebar
     comment.resolvedTime = null;
     comment.resolvedByEmail = null;
     comment.resolvedByName = null;
   };
+
+  const getCommentEventPayload = (comment) =>
+    typeof comment?.getValues === 'function' ? comment.getValues() : { ...comment };
 
   /**
    * Check if a comment originated from the super-editor (or has no explicit source).
@@ -431,12 +469,13 @@ export const useCommentsStore = defineStore('comments', () => {
    * @param {Object} param0.params The tracked change params
    * @returns {void}
    */
-  const handleTrackedChangeUpdate = ({ superdoc, params }) => {
+  const handleTrackedChangeUpdate = ({ superdoc, params, broadcastChanges = true }) => {
     const {
       event,
       changeId,
       trackedChangeText,
       trackedChangeType,
+      trackedChangeDisplayType,
       deletedText,
       authorEmail,
       authorImage,
@@ -446,6 +485,7 @@ export const useCommentsStore = defineStore('comments', () => {
       documentId,
       coords,
     } = params;
+    const normalizedDocumentId = documentId != null ? String(documentId) : null;
 
     const comment = getPendingComment({
       documentId,
@@ -453,6 +493,7 @@ export const useCommentsStore = defineStore('comments', () => {
       trackedChange: true,
       trackedChangeText,
       trackedChangeType,
+      trackedChangeDisplayType,
       deletedText,
       createdTime: date,
       creatorName: authorName,
@@ -466,46 +507,78 @@ export const useCommentsStore = defineStore('comments', () => {
       },
     });
 
+    const findTrackedChangeById = () => {
+      const normalizedChangeId = changeId != null ? String(changeId) : null;
+      if (!normalizedChangeId) return null;
+
+      const matchesId = (trackedComment) => {
+        if (!trackedComment) return false;
+        const commentId = trackedComment.commentId != null ? String(trackedComment.commentId) : null;
+        const importedId = trackedComment.importedId != null ? String(trackedComment.importedId) : null;
+        return commentId === normalizedChangeId || importedId === normalizedChangeId;
+      };
+
+      if (normalizedDocumentId) {
+        return commentsList.value.find(
+          (trackedComment) =>
+            matchesId(trackedComment) && belongsToTrackedChangeSyncDocument(trackedComment, normalizedDocumentId),
+        );
+      }
+
+      return commentsList.value.find(matchesId);
+    };
+
+    const emitTrackedChangeEvent = (event) => {
+      if (!broadcastChanges) return;
+      syncCommentsToClients(superdoc, event);
+      debounceEmit(changeId, event, superdoc);
+    };
+
     if (event === 'add') {
-      const existing = commentsList.value.find((c) => c.commentId === changeId);
+      const existing = findTrackedChangeById();
       if (existing) {
+        // Undo/redo after accept/reject can rematerialize a previously resolved
+        // tracked change. Reopen the thread so the bubble is actionable again.
+        if (existing.resolvedTime) clearResolvedMetadata(existing);
+
         // Already exists (e.g. created during batch import) — update instead of duplicating
         // Partial resolution can turn a replacement into insert-only/delete-only, so
         // clear fields explicitly when the updated payload no longer includes them.
         existing.trackedChangeText = trackedChangeText ?? null;
         existing.trackedChangeType = trackedChangeType ?? null;
+        existing.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
         existing.deletedText = deletedText ?? null;
 
         const emitData = {
           type: COMMENT_EVENTS.UPDATE,
-          comment: existing.getValues(),
+          comment: getCommentEventPayload(existing),
         };
 
-        syncCommentsToClients(superdoc, emitData);
-        debounceEmit(changeId, emitData, superdoc);
+        emitTrackedChangeEvent(emitData);
         return;
       }
-      addComment({ superdoc, comment });
+      addComment({ superdoc, comment, broadcastChanges });
     } else if (event === 'update') {
       // If we have an update event, simply update the composable comment
-      const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
+      const existingTrackedChange = findTrackedChangeById();
       if (!existingTrackedChange) return;
+      if (existingTrackedChange.resolvedTime) clearResolvedMetadata(existingTrackedChange);
 
       // Partial resolution can turn a replacement into insert-only/delete-only, so
       // clear fields explicitly when the updated payload no longer includes them.
       existingTrackedChange.trackedChangeText = trackedChangeText ?? null;
       existingTrackedChange.trackedChangeType = trackedChangeType ?? null;
+      existingTrackedChange.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
       existingTrackedChange.deletedText = deletedText ?? null;
 
       const emitData = {
         type: COMMENT_EVENTS.UPDATE,
-        comment: existingTrackedChange.getValues(),
+        comment: getCommentEventPayload(existingTrackedChange),
       };
 
-      syncCommentsToClients(superdoc, emitData);
-      debounceEmit(changeId, emitData, superdoc);
+      emitTrackedChangeEvent(emitData);
     } else if (event === 'resolve') {
-      const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
+      const existingTrackedChange = findTrackedChangeById();
       if (!existingTrackedChange || existingTrackedChange.resolvedTime) return;
 
       // Selection/toolbar reject emits tracked-change resolve events. Use the same
@@ -516,6 +589,22 @@ export const useCommentsStore = defineStore('comments', () => {
         superdoc,
       });
     }
+  };
+
+  const requestInstantSidebarAlignment = (targetY = null, threadId = null) => {
+    const hasTargetY = Number.isFinite(targetY);
+    instantSidebarAlignmentTargetY.value = hasTargetY ? targetY : null;
+    instantSidebarAlignmentThreadId.value = hasTargetY && threadId != null ? String(threadId) : null;
+  };
+
+  const peekInstantSidebarAlignment = () => {
+    const targetY = instantSidebarAlignmentTargetY.value;
+    return Number.isFinite(targetY) ? targetY : null;
+  };
+
+  const clearInstantSidebarAlignment = () => {
+    instantSidebarAlignmentTargetY.value = null;
+    instantSidebarAlignmentThreadId.value = null;
   };
 
   const debounceEmit = (commentId, event, superdoc, delay = 1000) => {
@@ -531,7 +620,7 @@ export const useCommentsStore = defineStore('comments', () => {
     }, delay);
   };
 
-  const showAddComment = (superdoc) => {
+  const showAddComment = (superdoc, targetClientY = null) => {
     const event = { type: COMMENT_EVENTS.PENDING };
     superdoc.emit('comments-update', event);
 
@@ -557,6 +646,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
+    requestInstantSidebarAlignment(targetClientY, 'pending');
     activeComment.value = pendingComment.value.commentId;
   };
 
@@ -728,12 +818,19 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const removePendingComment = (superdoc) => {
+    const hadPending = !!pendingComment.value;
     currentCommentText.value = '';
     pendingComment.value = null;
-    activeComment.value = null;
     superdocStore.selectionPosition = null;
 
-    superdoc.activeEditor?.commands.removeComment({ commentId: 'pending' });
+    // Only clear active comment when removing an actual pending comment.
+    // Replies and edits also call this to reset currentCommentText, but
+    // clearing activeComment would deactivate the thread (SD-2035).
+    if (hadPending) {
+      activeComment.value = null;
+    }
+
+    superdoc?.activeEditor?.commands?.removeComment({ commentId: 'pending' });
   };
 
   /**
@@ -743,7 +840,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * @param {Object} param0.superdoc The SuperDoc instance
    * @returns {void}
    */
-  const addComment = ({ superdoc, comment, skipEditorUpdate = false }) => {
+  const addComment = ({ superdoc, comment, skipEditorUpdate = false, broadcastChanges = true }) => {
     let parentComment = commentsList.value.find((c) => c.commentId === activeComment.value);
     if (!parentComment) parentComment = comment;
 
@@ -777,11 +874,13 @@ export const useCommentsStore = defineStore('comments', () => {
 
     const event = { type: COMMENT_EVENTS.ADD, comment: newComment.getValues() };
 
-    // If collaboration is enabled, sync the comments to all clients
-    syncCommentsToClients(superdoc, event);
+    if (broadcastChanges) {
+      // If collaboration is enabled, sync the comments to all clients
+      syncCommentsToClients(superdoc, event);
 
-    // Emit event for end users
-    superdoc.emit('comments-update', event);
+      // Emit event for end users
+      superdoc.emit('comments-update', event);
+    }
   };
 
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
@@ -829,6 +928,22 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
+   * Imported DOCX comments can omit the normalized author string.
+   * Strip the exporter suffix when present and tolerate missing metadata.
+   *
+   * @param {string | null | undefined} creatorName
+   * @returns {string | null}
+   */
+  const normalizeImportedCreatorName = (creatorName) => {
+    if (typeof creatorName !== 'string') {
+      return null;
+    }
+
+    const normalizedName = creatorName.replace(/\s*\(imported\)\s*$/u, '').trim();
+    return normalizedName || null;
+  };
+
+  /**
    * Initialize loaded comments into SuperDoc by mapping the imported
    * comment data to SuperDoc useComment objects.
    *
@@ -853,8 +968,8 @@ export const useCommentsStore = defineStore('comments', () => {
         return;
       }
 
-      const creatorName = comment.creatorName.replace('(imported)', '');
-      const importedName = `${creatorName} (imported)`;
+      const creatorName = normalizeImportedCreatorName(comment.creatorName);
+      const importedName = creatorName ? `${creatorName} (imported)` : null;
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
@@ -867,16 +982,17 @@ export const useCommentsStore = defineStore('comments', () => {
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,
         importedAuthor: {
-          name: importedName,
+          ...(importedName ? { name: importedName } : {}),
           email: comment.creatorEmail,
         },
         commentText: htmlContent,
         resolvedTime: comment.isDone ? Date.now() : null,
         resolvedByEmail: comment.isDone ? comment.creatorEmail : null,
-        resolvedByName: comment.isDone ? importedName : null,
+        resolvedByName: comment.isDone ? importedName || '(Imported)' : null,
         trackedChange: comment.trackedChange || false,
         trackedChangeText: comment.trackedChangeText,
         trackedChangeType: comment.trackedChangeType,
+        trackedChangeDisplayType: comment.trackedChangeDisplayType,
         deletedText: comment.trackedDeletedText,
         // Preserve origin metadata for export
         origin: comment.origin || 'word', // Default to 'word' for backward compatibility
@@ -896,12 +1012,41 @@ export const useCommentsStore = defineStore('comments', () => {
     }, 0);
   };
 
-  const createCommentForTrackChanges = (editor, superdoc) => {
-    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
+  const createCommentForTrackChanges = (editor, superdoc, trackedChangesOverride = null, options = {}) => {
+    const { reopenResolved = false, refreshExisting = false, broadcastChanges = true } = options;
+    const trackedChanges = trackedChangesOverride ?? trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
+    const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+    if (!activeDocumentId) return;
 
-    // Build a Set of existing comment IDs for O(1) lookup
-    const existingIds = new Set(commentsList.value.map((c) => c.commentId));
+    // Build a Set of existing unresolved tracked-change IDs for O(1) lookup
+    // and a map of id -> comment so we can refresh existing text when needed.
+    // History replay can opt in to excluding resolved tracked-change threads so
+    // undo/redo reopens them when their marks reappear. Initial import rebuilds
+    // keep resolved DOCX threads in the set so resolved threads do not reopen.
+    const skipIds = new Set();
+    const existingTrackedChangeById = new Map();
+    commentsList.value.forEach((comment) => {
+      if (!comment?.trackedChange) return;
+      if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return;
+      const commentIds = [comment.commentId, comment.importedId]
+        .map((id) => (id != null ? String(id) : null))
+        .filter(Boolean);
+
+      if (comment.resolvedTime) {
+        if (!reopenResolved) {
+          commentIds.forEach((id) => skipIds.add(id));
+        }
+        return;
+      }
+
+      commentIds.forEach((id) => {
+        existingTrackedChangeById.set(id, comment);
+        if (!refreshExisting) {
+          skipIds.add(id);
+        }
+      });
+    });
 
     // Build a Map of change ID → tracked change entries for O(1) lookup per group.
     // This avoids re-scanning the entire document for each tracked change.
@@ -912,12 +1057,19 @@ export const useCommentsStore = defineStore('comments', () => {
       changesByIdMap.get(id).push(change);
     }
 
-    const documentId = editor.options.documentId;
+    const documentId = activeDocumentId;
 
     // Build comment params directly from grouped changes — no PM dispatch needed
+    const processedIds = new Set();
     groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
       const id = insertedMark?.mark.attrs.id || deletionMark?.mark.attrs.id || formatMark?.mark.attrs.id;
-      if (!id || existingIds.has(id)) return;
+      if (id == null) return;
+      const normalizedId = String(id);
+      if (processedIds.has(normalizedId)) return;
+      processedIds.add(normalizedId);
+
+      if (!refreshExisting && skipIds.has(normalizedId)) return;
+      const existingTrackedChange = existingTrackedChangeById.get(normalizedId);
 
       const marks = {
         ...(insertedMark && { insertedMark: insertedMark.mark }),
@@ -928,7 +1080,7 @@ export const useCommentsStore = defineStore('comments', () => {
       // nodes/deletionNodes are unused here — the function resolves them from
       // trackedChangesForId which already contains all document positions for this ID.
       const params = createOrUpdateTrackedChangeComment({
-        event: 'add',
+        event: existingTrackedChange ? 'update' : 'add',
         marks,
         nodes: [],
         newEditorState: editor.state,
@@ -937,8 +1089,12 @@ export const useCommentsStore = defineStore('comments', () => {
       });
 
       if (params) {
-        handleTrackedChangeUpdate({ superdoc, params });
-        existingIds.add(id);
+        handleTrackedChangeUpdate({ superdoc, params, broadcastChanges });
+        if (!existingTrackedChange) {
+          skipIds.add(normalizedId);
+          if (params.changeId != null) skipIds.add(String(params.changeId));
+          if (params.importedId != null) skipIds.add(String(params.importedId));
+        }
       }
     });
 
@@ -946,6 +1102,202 @@ export const useCommentsStore = defineStore('comments', () => {
     const { tr } = editor.view.state;
     tr.setMeta(CommentsPluginKey, { type: 'force' });
     editor.view.dispatch(tr);
+  };
+
+  const getCommentDocumentId = (comment) => {
+    if (!comment) return null;
+    if (comment.fileId != null) return String(comment.fileId);
+    if (comment.documentId != null) return String(comment.documentId);
+    if (comment.selection?.documentId != null) return String(comment.selection.documentId);
+    return null;
+  };
+
+  const getOpenDocuments = () => {
+    const docs = Array.isArray(superdocStore.documents) ? superdocStore.documents : superdocStore.documents?.value;
+    return Array.isArray(docs) ? docs : [];
+  };
+
+  const getSingleOpenDocumentId = () => {
+    const docs = getOpenDocuments();
+    if (docs.length !== 1) return null;
+    return docs[0]?.id != null ? String(docs[0].id) : null;
+  };
+
+  const belongsToDocument = (comment, activeDocumentId, options = {}) => {
+    const { allowSingleDocumentMismatch = false } = options;
+    if (!activeDocumentId) return false;
+
+    const commentDocumentId = getCommentDocumentId(comment);
+    if (commentDocumentId) {
+      if (commentDocumentId === activeDocumentId) return true;
+
+      const singleOpenDocumentId = getSingleOpenDocumentId();
+      return allowSingleDocumentMismatch && singleOpenDocumentId === activeDocumentId;
+    }
+
+    // Legacy fallback: in single-document sessions, comments may not carry explicit
+    // document metadata yet. Treat them as belonging to the only open document.
+    return getSingleOpenDocumentId() === activeDocumentId;
+  };
+
+  const belongsToTrackedChangeSyncDocument = (comment, activeDocumentId) => {
+    // Collaboration replay can surface the same logical tracked-change thread with
+    // a peer's equivalent single-document id. During tracked-change reconciliation
+    // there is only one valid target document, so treat that mismatch as in-scope.
+    return belongsToDocument(comment, activeDocumentId, { allowSingleDocumentMismatch: true });
+  };
+
+  /**
+   * Remove tracked-change comments that no longer have a corresponding mark in the editor.
+   * Also removes any replies linked to those removed tracked-change threads.
+   *
+   * Pruning is scoped to the active editor document so replay in one document does not
+   * delete tracked-change comments from other open documents.
+   *
+   * @param {Set<string>} liveTrackedChangeIds IDs currently present in editor marks.
+   * @param {string | null} activeDocumentId Document currently being synced.
+   * @returns {void}
+   */
+  const pruneStaleTrackedChangeComments = (
+    liveTrackedChangeIds,
+    activeDocumentId,
+    superdoc = null,
+    { broadcastChanges = true } = {},
+  ) => {
+    if (!(liveTrackedChangeIds instanceof Set) || !activeDocumentId) return;
+
+    const removedIds = new Set();
+    const restoredComments = [];
+    const previousComments = [...commentsList.value];
+
+    commentsList.value = commentsList.value.filter((comment) => {
+      if (!comment?.trackedChange) return true;
+      if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return true;
+
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      const hasLiveCommentId = Boolean(commentId && liveTrackedChangeIds.has(commentId));
+      const hasLiveImportedId = Boolean(importedId && liveTrackedChangeIds.has(importedId));
+
+      if ((!commentId && !importedId) || hasLiveCommentId || hasLiveImportedId) return true;
+      if (comment.resolvedTime) return true;
+
+      const resolutionSnapshot = trackedChangeResolutionSnapshots.get(comment);
+      if (resolutionSnapshot) {
+        comment.resolvedTime = resolutionSnapshot.resolvedTime ?? Date.now();
+        comment.resolvedByEmail = resolutionSnapshot.resolvedByEmail ?? null;
+        comment.resolvedByName = resolutionSnapshot.resolvedByName ?? null;
+        restoredComments.push(comment);
+        return true;
+      }
+
+      if (commentId) removedIds.add(commentId);
+      if (importedId) removedIds.add(importedId);
+      return false;
+    });
+
+    restoredComments.forEach((comment) => {
+      const payload = getCommentEventPayload(comment);
+      const event = {
+        type: COMMENT_EVENTS.UPDATE,
+        comment: payload,
+      };
+      if (broadcastChanges) {
+        syncCommentsToClients(superdoc, event);
+        superdoc?.emit?.('comments-update', event);
+      }
+    });
+
+    if (!removedIds.size) return;
+
+    let didRemoveDescendants = true;
+    while (didRemoveDescendants) {
+      didRemoveDescendants = false;
+      commentsList.value = commentsList.value.filter((comment) => {
+        if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return true;
+
+        const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+        const trackedChangeParentId =
+          comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+        const isLinkedToRemovedParent =
+          (parentCommentId && removedIds.has(parentCommentId)) ||
+          (trackedChangeParentId && removedIds.has(trackedChangeParentId));
+
+        if (!isLinkedToRemovedParent) return true;
+
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        if (commentId) removedIds.add(commentId);
+        if (importedId) removedIds.add(importedId);
+        didRemoveDescendants = true;
+        return false;
+      });
+    }
+
+    const removedComments = previousComments.filter((comment) => {
+      if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return false;
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      return (commentId && removedIds.has(commentId)) || (importedId && removedIds.has(importedId));
+    });
+
+    removedComments.forEach((comment) => {
+      const payload = getCommentEventPayload(comment);
+      const event = {
+        type: COMMENT_EVENTS.DELETED,
+        comment: payload,
+        changes: [{ key: 'deleted', commentId: payload.commentId, fileId: payload.fileId }],
+      };
+      if (broadcastChanges) {
+        syncCommentsToClients(superdoc, event);
+        superdoc?.emit?.('comments-update', event);
+      }
+    });
+
+    const activeCommentId = activeComment.value != null ? String(activeComment.value) : null;
+    const activeCommentBelongsToActiveDocument = previousComments.some((comment) => {
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      return (
+        belongsToTrackedChangeSyncDocument(comment, activeDocumentId) &&
+        ((commentId && commentId === activeCommentId) || (importedId && importedId === activeCommentId))
+      );
+    });
+    if (activeCommentId && removedIds.has(activeCommentId) && activeCommentBelongsToActiveDocument) {
+      activeComment.value = null;
+    }
+  };
+
+  /**
+   * Rebuild tracked-change comments from the current editor state.
+   *
+   * Useful after bulk document transforms (like diff replay) where tracked-change
+   * marks may be remapped and incremental tracked-change events are not emitted.
+   *
+   * @param {Object} param0
+   * @param {Object} param0.superdoc The SuperDoc instance.
+   * @param {Object} param0.editor The active Super Editor instance.
+   * @returns {void}
+   */
+  const syncTrackedChangeComments = ({ superdoc, editor, broadcastChanges = true }) => {
+    if (!superdoc || !editor) return;
+    const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+    if (!activeDocumentId) return;
+
+    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
+    const liveTrackedChangeIds = new Set();
+    trackedChanges.forEach((change) => {
+      const id = change?.mark?.attrs?.id;
+      if (id == null) return;
+      liveTrackedChangeIds.add(String(id));
+    });
+
+    pruneStaleTrackedChangeComments(liveTrackedChangeIds, activeDocumentId, superdoc, { broadcastChanges });
+    createCommentForTrackChanges(editor, superdoc, trackedChanges, {
+      reopenResolved: true,
+      refreshExisting: true,
+      broadcastChanges,
+    });
   };
 
   const normalizeDocxSchemaForExport = (value) => {
@@ -1160,7 +1512,8 @@ export const useCommentsStore = defineStore('comments', () => {
     visibleConversations,
     skipSelectionUpdate,
     isFloatingCommentsReady,
-
+    instantSidebarAlignmentTargetY,
+    instantSidebarAlignmentThreadId,
     // Getters
     getConfig,
     documentsWithConverations,
@@ -1173,6 +1526,8 @@ export const useCommentsStore = defineStore('comments', () => {
     getCommentAnchoredText,
     getCommentAnchorData,
     resolveCommentPositionEntry,
+    getCommentDocumentId,
+    belongsToDocument,
 
     // Actions
     init,
@@ -1193,5 +1548,9 @@ export const useCommentsStore = defineStore('comments', () => {
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
     syncTrackedChangePositionsWithDocument,
+    requestInstantSidebarAlignment,
+    peekInstantSidebarAlignment,
+    clearInstantSidebarAlignment,
+    syncTrackedChangeComments,
   };
 });

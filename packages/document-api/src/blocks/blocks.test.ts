@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
-import { executeBlocksDelete, type BlocksAdapter } from './blocks.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
+import { describe, expect, it, mock } from 'bun:test';
+import { executeBlocksDelete, executeBlocksList, type BlocksAdapter } from './blocks.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+} from '../types/blocks.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 
 function makeAdapter(result?: BlocksDeleteResult): BlocksAdapter {
@@ -9,8 +14,23 @@ function makeAdapter(result?: BlocksDeleteResult): BlocksAdapter {
     deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
   };
   return {
-    delete: vi.fn(() => result ?? defaultResult),
+    delete: mock(() => result ?? defaultResult),
+    list: mock(() => ({ total: 0, blocks: [], revision: '1' })),
+    deleteRange: mock(() => ({ success: true, deleted: [] })),
   };
+}
+
+function makeListAdapter(): BlocksAdapter & { list: ReturnType<typeof mock> } {
+  const defaultResult: BlocksListResult = {
+    total: 0,
+    blocks: [],
+    revision: '1',
+  };
+  return {
+    delete: mock(() => ({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } })),
+    list: mock(() => defaultResult),
+    deleteRange: mock(() => ({ success: true, deleted: [] })),
+  } as BlocksAdapter & { list: ReturnType<typeof mock> };
 }
 
 function makeInput(nodeType: string, nodeId: string): BlocksDeleteInput {
@@ -140,6 +160,75 @@ describe('executeBlocksDelete', () => {
       expect(adapter.delete).toHaveBeenCalledWith(
         makeInput('paragraph', 'p1'),
         expect.objectContaining({ changeMode: 'direct' }),
+      );
+    });
+  });
+});
+
+describe('executeBlocksList', () => {
+  describe('normalizeBlocksListInput', () => {
+    it('passes undefined through unchanged', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, undefined);
+      expect(adapter.list).toHaveBeenCalledWith(undefined);
+    });
+
+    it('normalizes limit=0 to undefined when no other fields', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, { limit: 0 });
+      expect(adapter.list).toHaveBeenCalledWith(undefined);
+    });
+
+    it('removes limit=0 but keeps other fields', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, { limit: 0, offset: 5 });
+      expect(adapter.list).toHaveBeenCalledWith({ offset: 5 });
+    });
+
+    it('normalizes empty nodeTypes to undefined when no other fields', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, { nodeTypes: [] });
+      expect(adapter.list).toHaveBeenCalledWith(undefined);
+    });
+
+    it('removes empty nodeTypes but keeps other fields', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, { nodeTypes: [], offset: 2 });
+      expect(adapter.list).toHaveBeenCalledWith({ offset: 2 });
+    });
+
+    it('normalizes both limit=0 and empty nodeTypes to undefined', () => {
+      const adapter = makeListAdapter();
+      executeBlocksList(adapter, { limit: 0, nodeTypes: [] });
+      expect(adapter.list).toHaveBeenCalledWith(undefined);
+    });
+
+    it('passes through valid limit and nodeTypes unchanged', () => {
+      const adapter = makeListAdapter();
+      const input: BlocksListInput = { limit: 5, nodeTypes: ['paragraph'] };
+      executeBlocksList(adapter, input);
+      expect(adapter.list).toHaveBeenCalledWith(input);
+    });
+
+    it('passes through valid limit unchanged', () => {
+      const adapter = makeListAdapter();
+      const input: BlocksListInput = { limit: 10 };
+      executeBlocksList(adapter, input);
+      expect(adapter.list).toHaveBeenCalledWith(input);
+    });
+
+    it('passes through includeText unchanged', () => {
+      const adapter = makeListAdapter();
+      const input: BlocksListInput = { includeText: true, offset: 1 };
+      executeBlocksList(adapter, input);
+      expect(adapter.list).toHaveBeenCalledWith(input);
+    });
+  });
+
+  describe('input validation', () => {
+    it('rejects non-boolean includeText', () => {
+      expect(() => executeBlocksList(makeListAdapter(), { includeText: 'yes' as any })).toThrow(
+        DocumentApiValidationError,
       );
     });
   });

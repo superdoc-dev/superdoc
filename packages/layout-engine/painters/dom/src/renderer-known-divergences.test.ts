@@ -9,9 +9,8 @@
  * here with a resolution target — not fixed in production code.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createDomPainter } from './index.js';
-import { DomPainter } from './renderer.js';
 import type { FlowBlock, Measure, Layout, Line } from '@superdoc/contracts';
 import { normalizeLines } from './test-utils/normalize-line.js';
 
@@ -246,10 +245,6 @@ function renderAndNormalize(fixtures: { blocks: FlowBlock[]; measures: Measure[]
 // ---------------------------------------------------------------------------
 
 describe('known divergences (frozen — delete when resolved)', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   // -----------------------------------------------------------------------
   // Resolution target: PR 7 (collapse list-item parallel paint model)
   // -----------------------------------------------------------------------
@@ -317,145 +312,6 @@ describe('known divergences (frozen — delete when resolved)', () => {
 
       // Divergence: list-item line 0 wordSpacing is empty (no justify)
       expect(listLines[0]!.wordSpacing).toBe('');
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Resolution target: PR 6 (migrate table-cell to shared flow)
-  // -----------------------------------------------------------------------
-
-  describe('table render errors propagate uncaught — Resolution target: PR 6 (migrate table-cell to shared flow)', () => {
-    // The divergence: renderParagraphFragment has try/catch INSIDE its body,
-    // but the table rendering chain (renderer.ts:renderTableFragment → renderTableFragmentElement
-    // → renderTableCell → renderLine callback) does NOT have a catch wrapper.
-    //
-    // To test this properly, we spy on renderLine (called by both paths) and
-    // force it to throw. The paragraph path's try/catch catches it; the table
-    // path lets it propagate.
-
-    const renderLineError = new Error('renderLine forced error');
-
-    it('table path: renderLine error propagates as thrown exception', () => {
-      vi.spyOn(DomPainter.prototype as any, 'renderLine').mockImplementation(() => {
-        throw renderLineError;
-      });
-
-      const block: FlowBlock = {
-        kind: 'table',
-        id: 'table-err',
-        rows: [
-          {
-            id: 'row-0',
-            cells: [
-              {
-                id: 'cell-0',
-                blocks: [
-                  {
-                    kind: 'paragraph',
-                    id: 'p-err',
-                    runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 10 }],
-                  },
-                ],
-                attrs: {},
-              },
-            ],
-          },
-        ],
-      };
-      const measure: Measure = {
-        kind: 'table',
-        rows: [
-          {
-            height: 24,
-            cells: [
-              {
-                width: 120,
-                height: 24,
-                gridColumnStart: 0,
-                blocks: [
-                  {
-                    kind: 'paragraph',
-                    lines: [
-                      {
-                        fromRun: 0,
-                        fromChar: 0,
-                        toRun: 0,
-                        toChar: 9,
-                        width: 60,
-                        ascent: 10,
-                        descent: 4,
-                        lineHeight: 16,
-                      },
-                    ],
-                    totalHeight: 16,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-        columnWidths: [120],
-        totalWidth: 120,
-        totalHeight: 24,
-      };
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [
-          {
-            number: 1,
-            fragments: [
-              { kind: 'table', blockId: 'table-err', fromRow: 0, toRow: 1, x: 0, y: 0, width: 120, height: 24 },
-            ],
-          },
-        ],
-      };
-
-      const container = document.createElement('div');
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
-      expect(() => painter.paint(layout, container)).toThrow('renderLine forced error');
-    });
-
-    it('body paragraph path: renderLine error is caught and does not propagate', () => {
-      vi.spyOn(DomPainter.prototype as any, 'renderLine').mockImplementation(() => {
-        throw renderLineError;
-      });
-
-      const block: FlowBlock = {
-        kind: 'paragraph',
-        id: 'para-err',
-        runs: [{ text: 'Test text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 10 }],
-      };
-      const measure: Measure = {
-        kind: 'paragraph',
-        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 9, width: 60, ascent: 10, descent: 4, lineHeight: 16 }],
-        totalHeight: 16,
-      };
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [
-          {
-            number: 1,
-            fragments: [
-              {
-                kind: 'para',
-                blockId: 'para-err',
-                fromLine: 0,
-                toLine: 1,
-                x: 0,
-                y: 0,
-                width: 300,
-                pmStart: 1,
-                pmEnd: 10,
-              },
-            ],
-          },
-        ],
-      };
-
-      const container = document.createElement('div');
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
-      // Body path: try/catch in renderParagraphFragment catches the error
-      expect(() => painter.paint(layout, container)).not.toThrow();
     });
   });
 });

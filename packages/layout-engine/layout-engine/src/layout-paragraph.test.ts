@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import type { ParagraphBlock, ParagraphMeasure, Line } from '@superdoc/contracts';
 import { layoutParagraphBlock, type ParagraphLayoutContext } from './layout-paragraph.js';
 import type { PageState } from './paginator.js';
@@ -59,28 +59,29 @@ const makePageState = (): PageState => ({
   activeConstraintIndex: -1,
   trailingSpacing: 0,
   lastParagraphStyleId: undefined,
+  lastParagraphContextualSpacing: false,
 });
 
 /**
  * Helper to create a minimal floating object manager for testing.
  */
 const makeFloatManager = (): FloatingObjectManager => ({
-  registerDrawing: vi.fn(),
-  registerTable: vi.fn(),
-  getExclusionsForLine: vi.fn(() => []),
-  computeAvailableWidth: vi.fn((lineY, lineHeight, columnWidth) => ({
+  registerDrawing: mock(),
+  registerTable: mock(),
+  getExclusionsForLine: mock(() => []),
+  computeAvailableWidth: mock((lineY, lineHeight, columnWidth) => ({
     width: columnWidth,
     offsetX: 0,
   })),
-  getAllFloatsForPage: vi.fn(() => []),
-  clear: vi.fn(),
-  setLayoutContext: vi.fn(),
+  getAllFloatsForPage: mock(() => []),
+  clear: mock(),
+  setLayoutContext: mock(),
 });
 
 describe('layoutParagraphBlock - remeasurement with list markers', () => {
   describe('standard hanging indent mode', () => {
     it('remeasures with firstLineIndent=0 when firstLineIndentMode is not set', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Verify that firstLineIndent is 0 for standard hanging indent
         expect(firstLineIndent).toBe(0);
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -109,9 +110,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150, // Narrower than measurement width
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -122,7 +123,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('remeasures with firstLineIndent=0 when marker is missing in measure', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         expect(firstLineIndent).toBe(0);
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
       });
@@ -150,9 +151,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -165,7 +166,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
   describe('firstLineIndentMode', () => {
     it('remeasures with correct firstLineIndent when marker is inline', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Verify that firstLineIndent is markerWidth + gutterWidth
         expect(firstLineIndent).toBe(24); // 18 + 6
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -191,9 +192,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -204,7 +205,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('uses markerWidth=0 fallback when markerWidth is missing', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // markerWidth defaults to 0 when the measure marker is present
         expect(firstLineIndent).toBe(6);
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -233,9 +234,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -246,7 +247,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('uses fallback to 0 when both markerWidth and markerBoxWidthPx are missing', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Should use 0 + gutterWidth (6)
         expect(firstLineIndent).toBe(6);
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -275,9 +276,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -290,7 +291,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
   describe('input validation', () => {
     it('handles NaN marker width gracefully', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // NaN should be treated as 0
         expect(firstLineIndent).toBe(6); // 0 + 6
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -319,9 +320,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -332,7 +333,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('handles Infinity marker width gracefully', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Infinity should be treated as 0
         expect(firstLineIndent).toBe(6); // 0 + 6
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -361,9 +362,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -374,7 +375,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('handles negative marker width gracefully', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Negative values should be treated as 0
         expect(firstLineIndent).toBe(6); // 0 + 6
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -403,9 +404,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -416,7 +417,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('handles NaN gutter width gracefully', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // NaN gutter should be treated as 0
         expect(firstLineIndent).toBe(18); // 18 + 0
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -445,9 +446,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -458,7 +459,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
     });
 
     it('handles negative gutter width gracefully', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         // Negative gutter should be treated as 0
         expect(firstLineIndent).toBe(18); // 18 + 0
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
@@ -487,9 +488,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
         remeasureParagraph,
       };
@@ -502,7 +503,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
   describe('float remeasurement', () => {
     it('remeasures with correct firstLineIndent when narrower width is found due to floats', () => {
-      const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
         if (maxWidth === 120) {
           // This is the float remeasurement - should include marker indent
           expect(firstLineIndent).toBe(24); // 18 + 6
@@ -512,7 +513,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
       const floatManager = makeFloatManager();
       // Mock float manager to return narrower width
-      floatManager.computeAvailableWidth = vi.fn(() => ({
+      floatManager.computeAvailableWidth = mock(() => ({
         width: 120, // Narrower than column width
         offsetX: 10,
       }));
@@ -537,9 +538,9 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
         block,
         measure,
         columnWidth: 150,
-        ensurePage: vi.fn(() => makePageState()),
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        ensurePage: mock(() => makePageState()),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager,
         remeasureParagraph,
       };
@@ -553,13 +554,14 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
 describe('layoutParagraphBlock - contextualSpacing', () => {
   describe('same-style paragraphs', () => {
-    it('suppresses spacingBefore when same-style paragraphs are adjacent', () => {
+    it('suppresses spacingBefore when both same-style paragraphs opt in', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Heading1';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -582,8 +584,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -601,10 +603,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('undoes previous paragraph trailing spacing when contextualSpacing is active', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = 15;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -627,8 +630,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -647,10 +650,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles contextualSpacing when trailingSpacing is 0', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = 0;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -673,8 +677,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -693,11 +697,12 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles contextualSpacing when trailingSpacing is null', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (pageState.trailingSpacing as any) = null;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -720,8 +725,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -735,10 +740,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles contextualSpacing when trailingSpacing is undefined', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = 0;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -761,8 +767,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -781,7 +787,7 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -804,8 +810,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -827,7 +833,7 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -850,8 +856,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -869,7 +875,7 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -892,8 +898,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -913,7 +919,7 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -936,8 +942,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -954,7 +960,7 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       pageState.trailingSpacing = 20;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -977,8 +983,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -994,10 +1000,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles NaN trailingSpacing gracefully', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = NaN;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -1020,8 +1027,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -1035,10 +1042,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles Infinity trailingSpacing gracefully', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = Infinity;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -1061,8 +1069,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -1076,10 +1084,11 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     it('handles negative trailingSpacing gracefully', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
       pageState.trailingSpacing = -10;
       pageState.cursorY = 100;
 
-      const ensurePage = vi.fn(() => pageState);
+      const ensurePage = mock(() => pageState);
 
       const block: ParagraphBlock = {
         kind: 'paragraph',
@@ -1102,8 +1111,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
         measure,
         columnWidth: 150,
         ensurePage,
-        advanceColumn: vi.fn((state) => state),
-        columnX: vi.fn(() => 50),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
         floatManager: makeFloatManager(),
       };
 
@@ -1112,6 +1121,123 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       // Negative should be treated as 0
       // Result: 100 + 20 + 10 = 130
       expect(pageState.cursorY).toBe(130);
+    });
+  });
+
+  describe('per-paragraph contextual spacing', () => {
+    it('suppresses only previous after when previous has contextualSpacing but current does not', () => {
+      const pageState = makePageState();
+      pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = true;
+      pageState.trailingSpacing = 20;
+      pageState.cursorY = 100;
+
+      const ensurePage = mock(() => pageState);
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'test-block',
+        runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'Normal',
+          contextualSpacing: false,
+          spacing: { before: 30, after: 10 },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+
+      const ctx: ParagraphLayoutContext = {
+        block,
+        measure,
+        columnWidth: 150,
+        ensurePage,
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager: makeFloatManager(),
+      };
+
+      layoutParagraphBlock(ctx);
+
+      // Previous suppresses its own after → rewind trailing (100 - 20 = 80), trailingSpacing = 0.
+      // Current does NOT suppress its own before → spacingBefore (30) stays.
+      // Collapse: max(30 - 0, 0) = 30. cursorY = 80 + 30 + 20 + 10 = 140
+      expect(pageState.cursorY).toBe(140);
+    });
+
+    it('suppresses only current before when current has contextualSpacing but previous does not', () => {
+      const pageState = makePageState();
+      pageState.lastParagraphStyleId = 'Normal';
+      pageState.lastParagraphContextualSpacing = false;
+      pageState.trailingSpacing = 20;
+      pageState.cursorY = 100;
+
+      const ensurePage = mock(() => pageState);
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'test-block',
+        runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'Normal',
+          contextualSpacing: true,
+          spacing: { before: 30, after: 10 },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+
+      const ctx: ParagraphLayoutContext = {
+        block,
+        measure,
+        columnWidth: 150,
+        ensurePage,
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager: makeFloatManager(),
+      };
+
+      layoutParagraphBlock(ctx);
+
+      // Previous does NOT suppress its own after → no rewind (trailingSpacing stays 20).
+      // Current suppresses its own before → spacingBefore = 0.
+      // Collapse: max(0 - 20, 0) = 0. cursorY = 100 + 0 + 20 + 10 = 130
+      expect(pageState.cursorY).toBe(130);
+    });
+
+    it('persists contextualSpacing from positioned-frame early return', () => {
+      const pageState = makePageState();
+      pageState.cursorY = 100;
+
+      const ensurePage = mock(() => pageState);
+
+      // A positioned-frame paragraph with contextualSpacing=true
+      const frameBlock: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'frame-block',
+        runs: [{ text: 'Frame', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'Normal',
+          contextualSpacing: true,
+          frame: { wrap: 'none' },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+
+      layoutParagraphBlock({
+        block: frameBlock,
+        measure,
+        columnWidth: 150,
+        ensurePage,
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager: makeFloatManager(),
+      });
+
+      // After the positioned-frame early return, page state should carry the flag
+      expect(pageState.lastParagraphStyleId).toBe('Normal');
+      expect(pageState.lastParagraphContextualSpacing).toBe(true);
     });
   });
 });
@@ -1141,7 +1267,7 @@ describe('layoutParagraphBlock - keepLines', () => {
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
     let currentState = pageState;
-    const advanceColumn = vi.fn((state: PageState) => {
+    const advanceColumn = mock((state: PageState) => {
       currentState = {
         ...state,
         cursorY: 50, // Reset to top of new page
@@ -1155,9 +1281,9 @@ describe('layoutParagraphBlock - keepLines', () => {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => currentState),
+      ensurePage: mock(() => currentState),
       advanceColumn,
-      columnX: vi.fn(() => 50),
+      columnX: mock(() => 50),
       floatManager: makeFloatManager(),
     };
 
@@ -1189,15 +1315,15 @@ describe('layoutParagraphBlock - keepLines', () => {
     // cursorY=50, contentBottom=750, available = 700px - enough for 150px
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
-    const advanceColumn = vi.fn((state: PageState) => state);
+    const advanceColumn = mock((state: PageState) => state);
 
     const ctx: ParagraphLayoutContext = {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => pageState),
+      ensurePage: mock(() => pageState),
       advanceColumn,
-      columnX: vi.fn(() => 50),
+      columnX: mock(() => 50),
       floatManager: makeFloatManager(),
     };
 
@@ -1231,7 +1357,7 @@ describe('layoutParagraphBlock - keepLines', () => {
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
     let currentState = pageState;
-    const advanceColumn = vi.fn((state: PageState) => {
+    const advanceColumn = mock((state: PageState) => {
       currentState = {
         ...state,
         page: { number: state.page.number + 1, fragments: [] },
@@ -1245,9 +1371,9 @@ describe('layoutParagraphBlock - keepLines', () => {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => currentState),
+      ensurePage: mock(() => currentState),
       advanceColumn,
-      columnX: vi.fn(() => 50),
+      columnX: mock(() => 50),
       floatManager: makeFloatManager(),
     };
 
@@ -1291,7 +1417,7 @@ describe('layoutParagraphBlock - keepLines', () => {
     pageState.cursorY = 100; // 650px remaining on current page
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
-    const advanceColumn = vi.fn((state: PageState) => ({
+    const advanceColumn = mock((state: PageState) => ({
       ...state,
       cursorY: 50,
       trailingSpacing: 0,
@@ -1302,9 +1428,9 @@ describe('layoutParagraphBlock - keepLines', () => {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => pageState),
+      ensurePage: mock(() => pageState),
       advanceColumn,
-      columnX: vi.fn(() => 50),
+      columnX: mock(() => 50),
       floatManager: makeFloatManager(),
     };
 

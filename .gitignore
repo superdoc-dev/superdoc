@@ -35,7 +35,7 @@ lerna-debug.log*
 .vitepress/.cache
 .vitepress/dist
 
-packages/super-editor/src/tests/data/*/
+packages/super-editor/src/editors/v1/tests/data/*/
 
 packages/word-layout/tests/**/*.js
 packages/word-layout/tests/**/*.d.ts
@@ -71,9 +71,11 @@ perf-baseline-results.json
 .claude
 plans/
 
+tests/layout-snapshots
 tests/layout/candidate/
 tests/layout/reference/
 tests/layout/reports/
+tmp/layout-compare/
 test-corpus/
 .pnpm-store
 devtools/visual-testing/pnpm-lock.yaml
@@ -89,6 +91,8 @@ venv/
 packages/sdk/langs/python/platforms/**/*.egg-info/
 # Generated python packaging metadata (do not commit)
 packages/sdk/langs/python/**/*.egg-info/
+# Generated Node SDK platform binaries staged during release/publish
+packages/sdk/langs/node/platforms/sdk-*/bin/
 
 # Local runtime state for collaboration examples
 examples/collaboration/fastapi/.superdoc-state/
@@ -102,3 +106,6 @@ packages/sdk/langs/python/superdoc/generated/
 packages/sdk/tools/*.json
 # Note: apps/docs/document-api/reference/ stays committed because Mintlify
 # deploys directly from git with no pre-build hook support.
+
+.playwright-cli/
+.prqrc.json

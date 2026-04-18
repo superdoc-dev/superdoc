@@ -78,6 +78,23 @@ All props are passed directly to the `<SuperDocEditor>` component. Only `documen
   Hide the toolbar.
 </ParamField>
 
+<ParamField path="contained" type="boolean" default="false">
+  Enable contained mode for fixed-height container embedding. When `true`, SuperDoc fits within its parent's height and scrolls internally.
+
+  Your wrapper must have a definite height (e.g., `height: 400px`, `flex: 1`, or a CSS class with a fixed height). Pass `style={{ height: '100%' }}` to propagate the height.
+
+  ```jsx
+  <div style={{ height: 500 }}>
+    <SuperDocEditor
+      document={file}
+      documentMode="viewing"
+      contained
+      style={{ height: '100%' }}
+    />
+  </div>
+  ```
+</ParamField>
+
 <ParamField path="rulers" type="boolean">
   Show or hide rulers. Uses SuperDoc default if not set.
 </ParamField>

@@ -1,24 +1,64 @@
 /* eslint-env node */
+/*
+ * Commit filter: react wraps superdoc, so git log must include
+ * commits touching superdoc's sub-packages. This shared helper patches
+ * git-log-parser to expand path coverage. It REPLACES
+ * semantic-release-commit-filter — do not use both (the filter restricts
+ * to CWD, which undoes the expansion).
+ *
+ * Keep in sync with .github/workflows/release-react.yml paths: trigger.
+ */
+require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+  'packages/react',
+  'packages/superdoc',
+  'packages/super-editor',
+  'packages/layout-engine',
+  'packages/ai',
+  'packages/word-layout',
+  'packages/preset-geometry',
+  'pnpm-workspace.yaml',
+]);
+
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
+const branches = [
+  { name: 'stable', channel: 'latest' },
+  { name: 'main', prerelease: 'next', channel: 'next' },
+];
+
+const isPrerelease = branches.some(
+  (b) => typeof b === 'object' && b.name === branch && b.prerelease
+);
+
+// Use AI-powered notes for stable releases, conventional generator for prereleases
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }];
+
 const config = {
-  branches: [
-    { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
-  ],
+  branches,
   tagFormat: 'react-v${version}',
   plugins: [
-    'semantic-release-commit-filter',
-    '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
+    [
+      '@semantic-release/commit-analyzer',
+      {
+        // Cap at minor — react wraps superdoc, so upstream breaking
+        // changes don't break react's own public API.
+        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
+        releaseRules: [
+          { breaking: true, release: 'minor' },
+          { type: 'feat', release: 'minor' },
+          { type: 'fix', release: 'patch' },
+          { type: 'perf', release: 'patch' },
+          { type: 'revert', release: 'patch' },
+        ],
+      },
+    ],
+    notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }],
     '../../scripts/publish-react.cjs',
   ],
 };
-
-const isPrerelease = config.branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease
-);
 
 if (!isPrerelease) {
   config.plugins.push([

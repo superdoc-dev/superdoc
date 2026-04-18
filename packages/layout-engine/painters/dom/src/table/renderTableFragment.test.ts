@@ -13,7 +13,7 @@ import type {
   TableRowBoundary,
   ParagraphBlock,
 } from '@superdoc/contracts';
-import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../renderer.js';
 
 /**
  * Create a minimal table block for testing
@@ -92,12 +92,10 @@ function createTestTableFragment(
 
 describe('renderTableFragment', () => {
   let doc: Document;
-  let blockLookup: BlockLookup;
   let context: FragmentRenderContext;
 
   beforeEach(() => {
     doc = document.implementation.createHTMLDocument('test');
-    blockLookup = new Map();
     context = {
       sectionIndex: 0,
       pageIndex: 0,
@@ -213,13 +211,14 @@ describe('renderTableFragment', () => {
         height: 40,
       };
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -245,13 +244,14 @@ describe('renderTableFragment', () => {
       const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 0, width: 100, minWidth: 25, resizable: true }];
       const fragment = createTestTableFragment(columnBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -286,13 +286,14 @@ describe('renderTableFragment', () => {
       const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 0, height: 20, minHeight: 10, resizable: true }];
       const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -338,13 +339,14 @@ describe('renderTableFragment', () => {
       const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 3, height: 20, minHeight: 10, resizable: false }];
       const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -380,13 +382,14 @@ describe('renderTableFragment', () => {
       ];
       const fragment = createTestTableFragment(columnBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -414,13 +417,14 @@ describe('renderTableFragment', () => {
       const measure = createTestTableMeasure();
       const fragment = createTestTableFragment(); // No metadata
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -444,13 +448,14 @@ describe('renderTableFragment', () => {
       const measure = createTestTableMeasure();
       const fragment = createTestTableFragment([]);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -479,13 +484,14 @@ describe('renderTableFragment', () => {
       ];
       const fragment = createTestTableFragment(columnBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -512,13 +518,14 @@ describe('renderTableFragment', () => {
       const measure = createTestTableMeasure();
       const fragment = createTestTableFragment();
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -539,13 +546,14 @@ describe('renderTableFragment', () => {
       const measure = createTestTableMeasure();
       const fragment = createTestTableFragment();
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -563,91 +571,10 @@ describe('renderTableFragment', () => {
   });
 
   describe('error handling', () => {
-    it('should return placeholder when block not found', () => {
-      const fragment = createTestTableFragment();
-      // Don't add block to lookup
-
-      // Spy on console.error to verify logging
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-        // Intentionally empty - suppress console output during tests
-      });
-
-      const element = renderTableFragment({
-        doc,
-        fragment,
-        context,
-        blockLookup,
-        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
-        applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
-        applyStyles: () => {
-          // Intentionally empty for test mock
-        },
-      });
-
-      expect(element.classList.contains('superdoc-error-placeholder')).toBe(true);
-      expect(element.textContent).toContain('Table rendering error');
-
-      // Verify error was logged
-      expect(consoleErrorSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('DomPainter: missing table block'),
-        expect.objectContaining({
-          blockId: 'test-table-1',
-        }),
-      );
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should return placeholder when block is wrong kind', () => {
-      const fragment = createTestTableFragment();
-      const wrongBlock: ParagraphBlock = {
-        kind: 'paragraph',
-        id: 'test-table-1' as BlockId,
-        runs: [],
-      };
-      const wrongMeasure = {
-        kind: 'paragraph' as const,
-        lines: [],
-        totalHeight: 0,
-      };
-
-      blockLookup.set(fragment.blockId, {
-        block: wrongBlock as unknown as TableBlock,
-        measure: wrongMeasure as unknown as TableMeasure,
-      });
-
-      const element = renderTableFragment({
-        doc,
-        fragment,
-        context,
-        blockLookup,
-        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
-        applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
-        applyStyles: () => {
-          // Intentionally empty for test mock
-        },
-      });
-
-      expect(element.classList.contains('superdoc-error-placeholder')).toBe(true);
-    });
-
     it('should return placeholder when doc is not available', () => {
       const block = createTestTableBlock();
       const measure = createTestTableMeasure();
       const fragment = createTestTableFragment();
-
-      blockLookup.set(fragment.blockId, { block, measure });
 
       // Spy on console.error to verify logging
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
@@ -658,7 +585,10 @@ describe('renderTableFragment', () => {
         doc: null as unknown as Document, // Simulate missing doc
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -679,48 +609,6 @@ describe('renderTableFragment', () => {
 
       consoleErrorSpy.mockRestore();
     });
-
-    it('should return placeholder element when measure is wrong kind', () => {
-      const fragment = createTestTableFragment();
-      const block = createTestTableBlock();
-      const wrongMeasure = {
-        kind: 'paragraph' as const,
-        lines: [],
-        totalHeight: 0,
-      };
-
-      blockLookup.set(fragment.blockId, {
-        block,
-        measure: wrongMeasure as unknown as TableMeasure,
-      });
-
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-        // Intentionally empty - suppress console output during tests
-      });
-
-      const element = renderTableFragment({
-        doc,
-        fragment,
-        context,
-        blockLookup,
-        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
-        applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
-        applyStyles: () => {
-          // Intentionally empty for test mock
-        },
-      });
-
-      expect(element.classList.contains('superdoc-error-placeholder')).toBe(true);
-      expect(element.textContent).toContain('Table rendering error');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
   });
 
   describe('metadata format', () => {
@@ -730,13 +618,14 @@ describe('renderTableFragment', () => {
       const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 50, width: 100, minWidth: 25, resizable: true }];
       const fragment = createTestTableFragment(columnBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -774,13 +663,14 @@ describe('renderTableFragment', () => {
       ];
       const fragment = createTestTableFragment(columnBoundaries);
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -875,13 +765,14 @@ describe('renderTableFragment', () => {
         columnWidths: [312, 312], // rescaled from [432, 432]
       };
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {},
         applySdtDataset: () => {},
@@ -919,13 +810,14 @@ describe('renderTableFragment', () => {
         // no columnWidths
       };
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {},
         applySdtDataset: () => {},
@@ -1041,13 +933,14 @@ describe('renderTableFragment', () => {
       fragment.fromRow = 0;
       fragment.toRow = 2;
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -1196,13 +1089,14 @@ describe('renderTableFragment', () => {
       fragment.fromRow = 0;
       fragment.toRow = 3;
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -1311,13 +1205,14 @@ describe('renderTableFragment', () => {
       fragment.fromRow = 0;
       fragment.toRow = 3;
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -1489,13 +1384,14 @@ describe('renderTableFragment', () => {
       fragment.fromRow = 0;
       fragment.toRow = 3;
 
-      blockLookup.set(fragment.blockId, { block, measure });
-
       const element = renderTableFragment({
         doc,
         fragment,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
@@ -1641,7 +1537,10 @@ describe('renderTableFragment', () => {
       const renderDeps = {
         doc,
         context,
-        blockLookup,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block: ParagraphBlock, _line: unknown, _ctx: unknown, _lineIndex: number, _isLastLine: boolean) =>
           doc.createElement('div'),
         applyFragmentFrame: () => {},
@@ -1663,7 +1562,6 @@ describe('renderTableFragment', () => {
         metadata: { columnBoundaries, coordinateSystem: 'fragment' },
       };
 
-      blockLookup.set(fragment1.blockId, { block, measure });
       const el1 = renderTableFragment({ ...renderDeps, fragment: fragment1 });
       const parsed1 = JSON.parse(el1.getAttribute('data-table-boundaries')!);
 
@@ -1693,6 +1591,166 @@ describe('renderTableFragment', () => {
       expect(parsed2.segments[1]).toHaveLength(1);
       expect(parsed2.segments[1][0].h).toBe(30);
       expect(parsed2.segments[1][0].y).toBe(0);
+    });
+  });
+
+  describe('RTL table (bidiVisual)', () => {
+    it('mirrors ghost cell x positions for RTL tables with rowspan continuations', () => {
+      // 2-column RTL table where col 0 has rowSpan=2.
+      // Fragment 2 continues from fragment 1, so col 0 becomes a ghost cell.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-ghost-table' as BlockId,
+        attrs: {
+          tableProperties: { rightToLeft: true },
+          borders: {
+            top: { style: 'single', width: 1, color: '#000' },
+            bottom: { style: 'single', width: 1, color: '#000' },
+            insideH: { style: 'single', width: 1, color: '#000' },
+            insideV: { style: 'single', width: 1, color: '#000' },
+          },
+        },
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              { id: 'c-1-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-1' as BlockId, runs: [] } },
+              { id: 'c-1-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-2' as BlockId, runs: [] } },
+            ],
+          },
+          {
+            id: 'row-2' as BlockId,
+            cells: [
+              { id: 'c-2-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-1' as BlockId, runs: [] } },
+              { id: 'c-2-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-2' as BlockId, runs: [] } },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 2 },
+              { width: 200, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+            ],
+            height: 20,
+          },
+          {
+            cells: [{ width: 200, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 }],
+            height: 20,
+          },
+        ],
+        columnWidths: [100, 200],
+        totalWidth: 300,
+        totalHeight: 40,
+      };
+
+      // Fragment 2: continuation from row 1 (only row 1 body, ghost for col 0)
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'rtl-ghost-table' as BlockId,
+        fromRow: 1,
+        toRow: 2,
+        continuesFromPrev: true,
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 20,
+      };
+
+      const el = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyStyles: (e, s) => Object.assign(e.style, s),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+      });
+
+      // Ghost cell for col 0 (rowSpan=2, width=100) should be mirrored.
+      // In LTR: ghostX=0. In RTL: ghostX = 300 - 0 - 100 = 200.
+      const ghostCells = Array.from(el.querySelectorAll('div')).filter(
+        (d) => d.style.position === 'absolute' && d.style.overflow === 'hidden' && d.childElementCount === 0,
+      );
+
+      expect(ghostCells.length).toBeGreaterThanOrEqual(1);
+      const ghostLeft = parseFloat(ghostCells[0].style.left);
+      // Ghost should be on the right side (x=200), not left (x=0)
+      expect(ghostLeft).toBe(200);
+    });
+
+    it('passes isRtl to renderTableRow for body rows', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-pass-table' as BlockId,
+        attrs: { tableProperties: { rightToLeft: true } },
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              { id: 'c-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1' as BlockId, runs: [] } },
+              { id: 'c-2' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2' as BlockId, runs: [] } },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+              { width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+            ],
+            height: 20,
+          },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 20,
+      };
+
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'rtl-pass-table' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 20,
+      };
+
+      const el = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyStyles: (e, s) => Object.assign(e.style, s),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+      });
+
+      // Cells should be mirrored: col 0 at x=100, col 1 at x=0
+      const cells = Array.from(el.querySelectorAll('div')).filter(
+        (d) => d.style.position === 'absolute' && d.style.width === '100px',
+      );
+
+      const positions = cells.map((c) => parseFloat(c.style.left)).sort((a, b) => a - b);
+      expect(positions).toEqual([0, 100]);
     });
   });
 });

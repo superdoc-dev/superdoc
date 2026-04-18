@@ -1,0 +1,42 @@
+import { Mark } from '@core/Mark.js';
+import { Attribute } from '@core/Attribute.js';
+import { CommentMarkName } from './comments-constants.js';
+
+export const CommentsMark = Mark.create({
+  name: CommentMarkName,
+
+  group: 'comments',
+
+  excludes: '',
+
+  inclusive: false,
+
+  addOptions() {
+    return {
+      htmlAttributes: { class: 'sd-editor-comment' },
+    };
+  },
+
+  addAttributes() {
+    return {
+      commentId: {},
+      importedId: {},
+      internal: {
+        default: true,
+        rendered: false,
+      },
+      trackedChange: {
+        default: false,
+        rendered: false,
+      },
+    };
+  },
+
+  parseDOM() {
+    return [{ tag: CommentMarkName }];
+  },
+
+  renderDOM({ htmlAttributes }) {
+    return [CommentMarkName, Attribute.mergeAttributes(this.options.htmlAttributes, htmlAttributes)];
+  },
+});

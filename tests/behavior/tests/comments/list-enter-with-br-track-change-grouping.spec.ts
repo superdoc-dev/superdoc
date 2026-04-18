@@ -6,7 +6,7 @@ import { assertDocumentApiReady, getDocumentText, listTrackChanges } from '../..
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(
   __dirname,
-  '../../../../packages/super-editor/src/tests/data/sd-1707-list-enter-track-changes-with-br.docx',
+  '../../../../packages/super-editor/src/editors/v1/tests/data/sd-1707-list-enter-track-changes-with-br.docx',
 );
 
 test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });

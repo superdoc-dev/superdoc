@@ -6,3 +6,4 @@ export * from './reference-doc-map.js';
 export * from './reference-aliases.js';
 export * from './operation-registry.js';
 export * from './step-op-catalog.js';
+export { INTENT_GROUP_META, type IntentGroupMeta } from './operation-definitions.js';

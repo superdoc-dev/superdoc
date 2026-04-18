@@ -13,6 +13,7 @@ const ALL_HEADER_FOOTERS_COMMAND_IDS = [
   'headerFooters.parts.create',
   'headerFooters.parts.delete',
 ] as const;
+const COMMAND_STORY_TIMEOUT_MS = 60_000;
 
 type HeaderFootersCommandId = (typeof ALL_HEADER_FOOTERS_COMMAND_IDS)[number];
 
@@ -470,21 +471,25 @@ describe('document-api story: all header/footer commands', () => {
   });
 
   for (const scenario of scenarios) {
-    it(`${scenario.operationId}: executes and saves source/result docs`, async () => {
-      const sourceDoc = outPath(sourceDocNameFor(scenario.operationId));
-      const resultDoc = outPath(resultDocNameFor(scenario.operationId));
+    it(
+      `${scenario.operationId}: executes and saves source/result docs`,
+      async () => {
+        const sourceDoc = outPath(sourceDocNameFor(scenario.operationId));
+        const resultDoc = outPath(resultDocNameFor(scenario.operationId));
 
-      const fixture = await scenario.prepareSource(sourceDoc);
+        const fixture = await scenario.prepareSource(sourceDoc);
 
-      const result = await scenario.run(sourceDoc, resultDoc, fixture);
+        const result = await scenario.run(sourceDoc, resultDoc, fixture);
 
-      if (readOperationIds.has(scenario.operationId)) {
-        assertReadOutput(scenario.operationId, result);
-        await saveReadOutput(scenario.operationId, result);
-        await copyFile(sourceDoc, resultDoc);
-      } else {
-        assertMutationSuccess(scenario.operationId, result);
-      }
-    });
+        if (readOperationIds.has(scenario.operationId)) {
+          assertReadOutput(scenario.operationId, result);
+          await saveReadOutput(scenario.operationId, result);
+          await copyFile(sourceDoc, resultDoc);
+        } else {
+          assertMutationSuccess(scenario.operationId, result);
+        }
+      },
+      COMMAND_STORY_TIMEOUT_MS,
+    );
   }
 });

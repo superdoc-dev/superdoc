@@ -26,24 +26,26 @@ def main() -> None:
             result.pop('tools', None)
             print(json.dumps({'ok': True, 'result': result}))
 
-        elif action == 'validateDispatchArgs':
-            from superdoc.tools_api import _validate_dispatch_args
-            try:
-                _validate_dispatch_args(command['operationId'], command['args'])
-                print(json.dumps({'ok': True, 'result': 'passed'}))
-            except Exception as exc:
-                code = getattr(exc, 'code', None) or 'UNKNOWN'
-                print(json.dumps({'ok': True, 'result': {'rejected': True, 'code': code, 'message': str(exc)}}))
+        elif action == 'resolveIntentDispatch':
+            from superdoc.tools.intent_dispatch_generated import dispatch_intent_tool
+            tool_name = command['toolName']
+            args = command.get('args', {})
 
-        elif action == 'resolveToolOperation':
-            from superdoc.tools_api import resolve_tool_operation
-            result = resolve_tool_operation(command['toolName'])
-            print(json.dumps({'ok': True, 'result': result}))
+            # Use a mock execute that captures the operationId
+            captured = {}
+            def mock_execute(operation_id, input_args):
+                captured['operationId'] = operation_id
+                return None
+
+            try:
+                dispatch_intent_tool(tool_name, args, mock_execute)
+                print(json.dumps({'ok': True, 'result': captured}))
+            except Exception as exc:
+                print(json.dumps({'ok': True, 'result': {'error': str(exc)}}))
 
         elif action == 'assertCollabAccepted':
             # Verify collab params pass through to the runtime without
-            # SDK-level rejection. We build the argv from the operation spec
-            # to confirm nothing throws.
+            # SDK-level rejection.
             from superdoc.protocol import build_operation_argv
             from superdoc.generated.contract import OPERATION_INDEX
 
@@ -52,8 +54,6 @@ def main() -> None:
             operation = OPERATION_INDEX[operation_id]
             try:
                 argv = build_operation_argv(operation, params)
-                # Verify collab param values survived into argv.
-                # Flag names are kebab-case (--collab-url), so check values.
                 argv_str = ' '.join(argv)
                 collab_params_present = any(
                     str(params[key]) in argv_str

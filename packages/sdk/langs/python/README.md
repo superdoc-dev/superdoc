@@ -29,10 +29,10 @@ from superdoc import AsyncSuperDocClient
 async def main():
     async with AsyncSuperDocClient(default_change_mode="tracked") as client:
         # Open a document
-        await client.doc.open({"doc": "./contract.docx"})
+        doc = await client.open({"doc": "./contract.docx"})
 
         # Find and replace text with query + mutation plan
-        match = await client.doc.query.match(
+        match = await doc.query.match(
             {
                 "select": {"type": "text", "pattern": "ACME Corp"},
                 "require": "first",
@@ -43,7 +43,7 @@ async def main():
         first_item = items[0] if items else {}
         ref = first_item.get("handle", {}).get("ref")
         if ref:
-            await client.doc.mutations.apply(
+            await doc.mutations.apply(
                 {
                     "expectedRevision": match["evaluatedRevision"],
                     "atomic": True,
@@ -59,8 +59,8 @@ async def main():
             )
 
         # Save and close
-        await client.doc.save({"inPlace": True})
-        await client.doc.close({})
+        await doc.save({"inPlace": True})
+        await doc.close({})
 
 
 asyncio.run(main())
@@ -68,7 +68,17 @@ asyncio.run(main())
 
 Set `default_change_mode="tracked"` to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
-The SDK also exposes a synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+The SDK also exposes a synchronous `SuperDocClient` with the same document-handle methods when you prefer non-async code paths.
+
+### Encrypted documents
+
+Pass `password` when opening a password-protected `.docx`:
+
+```python
+doc = await client.open({"doc": "./secret.docx", "password": "mypassword"})
+```
+
+The password is forwarded only for the initial open and is not persisted. If the password is missing or wrong, the error includes a machine-readable code (`DOCX_PASSWORD_REQUIRED`, `DOCX_PASSWORD_INVALID`).
 
 ### Sync
 
@@ -76,13 +86,13 @@ The SDK also exposes a synchronous `SuperDocClient` with the same `doc.*` operat
 from superdoc import SuperDocClient
 
 with SuperDocClient() as client:
-    client.doc.open({"doc": "./contract.docx"})
+    doc = client.open({"doc": "./contract.docx"})
 
-    info = client.doc.info({})
+    info = doc.info({})
     print(info["counts"])
 
-    client.doc.save({"inPlace": True})
-    client.doc.close({})
+    doc.save({"inPlace": True})
+    doc.close({})
 ```
 
 ## User identity
@@ -93,7 +103,7 @@ By default the SDK attributes edits to a generic "CLI" user. Set `user` on the c
 client = AsyncSuperDocClient(user={"name": "Review Bot", "email": "bot@example.com"})
 ```
 
-The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
+The `user` is injected into every `client.open` call. If you pass `userName` or `userEmail` on a specific `client.open`, those per-call values take precedence.
 
 ## Client lifecycle
 
@@ -104,11 +114,13 @@ The SDK uses a persistent host process for all operations. The host is started o
 ```python
 # Sync
 with SuperDocClient() as client:
-    client.doc.find({"query": "test"})
+    doc = client.open({"doc": "./test.docx"})
+    doc.find({"query": "test"})
 
 # Async
 async with AsyncSuperDocClient() as client:
-    await client.doc.find({"query": "test"})
+    doc = await client.open({"doc": "./test.docx"})
+    await doc.find({"query": "test"})
 ```
 
 The context manager calls `connect()` on entry and `dispose()` on exit (including on exception).
@@ -118,7 +130,8 @@ The context manager calls `connect()` on entry and `dispose()` on exit (includin
 ```python
 client = SuperDocClient()
 client.connect()      # Optional — first invoke() auto-connects
-result = client.doc.find({"query": "test"})
+doc = client.open({"doc": "./test.docx"})
+result = doc.find({"query": "test"})
 client.dispose()      # Shuts down the host process
 ```
 
@@ -144,11 +157,11 @@ Client instances are serialized: one operation at a time per client. For paralle
 
 ## Collaboration sessions
 
-Use this when your app already has a live collaboration room (Liveblocks, Hocuspocus, or SuperDoc Yjs).
+Use this when your app already has a live collaboration room. The SDK supports `y-websocket`, `hocuspocus`, and `liveblocks` providers. See the [full collaboration docs](https://docs.superdoc.dev/document-engine/sdks#collaboration-sessions) for provider choice guidance and all configuration options.
 
-### Join an existing room
+### Join an existing room (y-websocket shorthand)
 
-Pass `collabUrl` and `collabDocumentId` to `doc.open`:
+> The `collabUrl` + `collabDocumentId` shorthand defaults to the `y-websocket` provider. For Hocuspocus or Liveblocks, pass an explicit `collaboration` object.
 
 ```python
 import asyncio
@@ -158,12 +171,12 @@ from superdoc import AsyncSuperDocClient
 
 async def main():
     async with AsyncSuperDocClient() as client:
-        await client.doc.open({
+        doc = await client.open({
             "collabUrl": "ws://localhost:4000",
             "collabDocumentId": "my-doc-room",
         })
 
-        await client.doc.insert({
+        await doc.insert({
             "target": {"type": "end"},
             "content": "Added by the SDK",
         })
@@ -172,31 +185,57 @@ async def main():
 asyncio.run(main())
 ```
 
-### Start an empty room from a local `.docx`
-
-If the room is empty, pass `doc` together with collaboration params:
+### Connect to Hocuspocus explicitly
 
 ```python
-await client.doc.open({
+doc = await client.open({
+    "collaboration": {
+        "providerType": "hocuspocus",
+        "url": "ws://localhost:1234",
+        "documentId": "my-doc-room",
+    }
+})
+```
+
+### Connect to Liveblocks
+
+```python
+# Public API key
+doc = await client.open({
+    "collaboration": {
+        "providerType": "liveblocks",
+        "roomId": "my-room",
+        "publicApiKey": "pk_live_xxx",
+    }
+})
+
+# Auth endpoint (production)
+doc = await client.open({
+    "collaboration": {
+        "providerType": "liveblocks",
+        "roomId": "my-room",
+        "authEndpoint": "https://app.example.com/api/liveblocks-auth",
+    }
+})
+```
+
+> SDK `authEndpoint` values must be absolute URLs. Relative paths like `/api/liveblocks-auth` are not supported because the CLI host has no browser origin.
+
+### Start an empty room from a local `.docx`
+
+```python
+doc = await client.open({
     "doc": "./starting-template.docx",
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
 })
 ```
 
-What happens when you pass `doc`:
-
-| Room state | Result |
-| --- | --- |
-| Room already has content | SDK joins the room. `doc` is ignored. |
-| Room is empty and `doc` is provided | SDK seeds the room from `doc`, then joins. |
-| Room is empty and no `doc` is provided | SDK starts a blank document. |
-
 ### Control empty-room behavior
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabUrl` | `string` | — | WebSocket URL. Shorthand for `y-websocket` only. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
 | `doc` | `string` | — | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
@@ -205,7 +244,7 @@ What happens when you pass `doc`:
 If you only want to join rooms that already exist, use `onMissing: 'error'`:
 
 ```python
-await client.doc.open({
+doc = await client.open({
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
     "onMissing": "error",
@@ -214,30 +253,28 @@ await client.doc.open({
 
 ### Check if the SDK seeded or joined
 
-`doc.open` returns bootstrap details in collaboration mode:
-
 ```python
-result = await client.doc.open({
+doc = await client.open({
     "doc": "./starting-template.docx",
     "collabUrl": "ws://localhost:4000",
     "collabDocumentId": "my-doc-room",
 })
 
-print(result.get("bootstrap"))
+print(doc.open_result.get("bootstrap"))
 # { roomState, bootstrapApplied, bootstrapSource }
 ```
 
 ## Available operations
 
-The SDK exposes all operations from the [Document API](https://docs.superdoc.dev/document-api/overview) plus lifecycle and session commands.
+The SDK exposes all document-handle operations from the [Document API](https://docs.superdoc.dev/document-api/overview) plus client lifecycle and introspection methods.
 
 ### Lifecycle
 
 | Operation | Description |
 | --- | --- |
-| `doc.open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `client.open` | Open a document and return a bound document handle. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
 | `doc.save` | Save the current session to the original file or a new path. |
-| `doc.close` | Close the active editing session and clean up resources. |
+| `doc.close` | Close the bound editing session and clean up resources. |
 
 ### Query
 
@@ -341,22 +378,12 @@ And 30+ additional formatting operations (letter spacing, vertical alignment, sm
 | `doc.history.undo` | Undo the most recent history-safe mutation in the active editor. |
 | `doc.history.redo` | Redo the most recently undone action in the active editor. |
 
-### Session
+### Client methods
 
 | Operation | Description |
 | --- | --- |
-| `doc.session.list` | List all active editing sessions. |
-| `doc.session.save` | Persist the current session state. |
-| `doc.session.close` | Close a specific editing session by ID. |
-| `doc.session.set_default` | Set the default session for subsequent commands. |
-
-### Introspection
-
-| Operation | Description |
-| --- | --- |
-| `doc.status` | Show the current session status and document metadata. |
-| `doc.describe` | List all available CLI operations and contract metadata. |
-| `doc.describe_command` | Show detailed metadata for a single CLI operation. |
+| `client.describe` | List all available CLI operations and contract metadata. |
+| `client.describe_command` | Show detailed metadata for a single CLI operation. |
 
 ## Troubleshooting
 
@@ -393,7 +420,7 @@ pip download superdoc-sdk superdoc-sdk-cli-darwin-arm64
 
 ## Part of SuperDoc
 
-This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — an open source document editor bringing Microsoft Word to the web.
+This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

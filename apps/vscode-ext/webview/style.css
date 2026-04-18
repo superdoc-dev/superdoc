@@ -28,8 +28,6 @@ body {
   right: 0;
   bottom: 0;
   overflow: auto;
-  display: flex;
-  justify-content: center;
 }
 
 /* Override SuperDoc theme */

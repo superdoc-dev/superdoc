@@ -38,7 +38,14 @@ export function computeHeaderFooterContentHash(blocks: FlowBlock[]): string {
     if (block.kind === 'paragraph') {
       for (const run of block.runs) {
         // Only TextRun and TabRun have text property; ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun do not
-        if (!('src' in run) && run.kind !== 'lineBreak' && run.kind !== 'break' && run.kind !== 'fieldAnnotation') {
+        if (run.kind === 'math') {
+          parts.push(`math:${run.textContent}`);
+        } else if (
+          !('src' in run) &&
+          run.kind !== 'lineBreak' &&
+          run.kind !== 'break' &&
+          run.kind !== 'fieldAnnotation'
+        ) {
           parts.push(run.text ?? '');
         }
         if ('bold' in run && run.bold) parts.push('b');
@@ -102,12 +109,16 @@ export function computeSectionMetadataHash(sections: SectionMetadata[]): string 
  * @returns Constraints hash string
  */
 export function computeConstraintsHash(constraints: HeaderFooterConstraints): string {
-  const { width, height, pageWidth, margins, overflowBaseHeight } = constraints;
+  const { width, height, pageWidth, pageHeight, margins, overflowBaseHeight } = constraints;
 
   const parts = [`w:${width}`, `h:${height}`];
 
   if (pageWidth !== undefined) {
     parts.push(`pw:${pageWidth}`);
+  }
+
+  if (pageHeight !== undefined) {
+    parts.push(`ph:${pageHeight}`);
   }
 
   if (overflowBaseHeight !== undefined) {
@@ -116,6 +127,15 @@ export function computeConstraintsHash(constraints: HeaderFooterConstraints): st
 
   if (margins) {
     parts.push(`ml:${margins.left}`, `mr:${margins.right}`);
+    if (margins.top !== undefined) {
+      parts.push(`mt:${margins.top}`);
+    }
+    if (margins.bottom !== undefined) {
+      parts.push(`mb:${margins.bottom}`);
+    }
+    if (margins.header !== undefined) {
+      parts.push(`mh:${margins.header}`);
+    }
   }
 
   return parts.join('|');

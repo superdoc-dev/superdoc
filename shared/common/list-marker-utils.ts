@@ -361,3 +361,109 @@ export function resolveListTextStartPx(
 
   return undefined;
 }
+
+/**
+ * Type guard to check if a value is a valid MinimalWordLayout object.
+ *
+ * Validates that the object has the expected structure for MinimalWordLayout
+ * without unsafe type assertions. Shared across resolver and painter.
+ */
+export function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  if (obj.marker !== undefined) {
+    if (typeof obj.marker !== 'object' || obj.marker === null) {
+      return false;
+    }
+    const marker = obj.marker as Record<string, unknown>;
+
+    if (marker.markerText !== undefined && typeof marker.markerText !== 'string') {
+      return false;
+    }
+    if (marker.markerX !== undefined && typeof marker.markerX !== 'number') {
+      return false;
+    }
+    if (marker.textStartX !== undefined && typeof marker.textStartX !== 'number') {
+      return false;
+    }
+  }
+
+  if (obj.indentLeftPx !== undefined) {
+    if (typeof obj.indentLeftPx !== 'number') {
+      return false;
+    }
+  }
+  if (obj.firstLineIndentMode !== undefined) {
+    if (typeof obj.firstLineIndentMode !== 'boolean') {
+      return false;
+    }
+  }
+  if (obj.textStartPx !== undefined) {
+    if (typeof obj.textStartPx !== 'number') {
+      return false;
+    }
+  }
+  if (obj.tabsPx !== undefined) {
+    if (!Array.isArray(obj.tabsPx)) {
+      return false;
+    }
+    for (const tab of obj.tabsPx) {
+      if (typeof tab !== 'number') {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Compute the width of the tab separator between a list marker and its text content.
+ *
+ * Used for marker modes whose rendering contract differs from the shared geometry
+ * helper, such as right/center-justified markers and firstLineIndentMode paragraphs.
+ */
+export function computeTabWidth(
+  currentPos: number,
+  justification: string,
+  tabs: number[] | undefined,
+  hangingIndent: number | undefined,
+  firstLineIndent: number | undefined,
+  leftIndent: number,
+): number {
+  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
+  let tabWidth: number;
+  if (justification === 'left') {
+    const explicitTabs = [...(tabs ?? [])];
+    if (hangingIndent && hangingIndent > 0) {
+      explicitTabs.push(leftIndent);
+      explicitTabs.sort((a, b) => a - b);
+    }
+    let targetTabStop: number | undefined;
+
+    for (const tab of explicitTabs) {
+      if (tab > currentPos) {
+        targetTabStop = tab;
+        break;
+      }
+    }
+
+    if (targetTabStop === undefined) {
+      targetTabStop = nextDefaultTabStop;
+    }
+    tabWidth = targetTabStop - currentPos;
+  } else if (justification === 'right') {
+    if (firstLineIndent != null && firstLineIndent > 0) {
+      tabWidth = nextDefaultTabStop - currentPos;
+    } else {
+      tabWidth = hangingIndent ?? 0;
+    }
+  } else {
+    tabWidth = nextDefaultTabStop - currentPos;
+  }
+  return tabWidth;
+}

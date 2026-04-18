@@ -3,7 +3,8 @@
  *
  * All CLI metadata derives from this file. The doc-backed operation set is
  * derived from document-api's OPERATION_IDS via an explicit denylist.
- * 10 CLI-only operations are added for lifecycle/session/introspection.
+ * CLI-only operations are added for lifecycle/session/introspection and
+ * command-surface helpers that are not part of the document-api contract.
  */
 
 import {
@@ -105,6 +106,7 @@ const REFERENCE_GROUP_TO_CATEGORY: Record<string, CliCategory> = {
   toc: 'toc',
   images: 'images',
   history: 'history',
+  diff: 'core',
 };
 
 function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {

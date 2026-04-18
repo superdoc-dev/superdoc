@@ -11,7 +11,7 @@
  *   sd-nodes.ts      — all concrete node interfaces + SDContentNode/SDInlineNode unions
  *   sd-styles.ts     — style dictionaries, theme, document defaults
  *   sd-sections.ts   — sections, numbering, annotations, reference catalogs
- *   sd-envelope.ts   — SDAddress, SDNodeResult, SDFindResult, SDReadOptions
+ *   sd-envelope.ts   — SDNodeResult, SDFindResult, SDReadOptions
  *   sd-contract.ts   — SDErrorCode, SDError, SDMutationReceipt, SDDiagnostic
  *   fragment.ts      — (this file) SDFragment, SDDocument, kind constants, barrel re-exports
  */

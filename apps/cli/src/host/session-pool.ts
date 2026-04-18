@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CollaborationProfile } from '../lib/collaboration';
 import { exportToPath, openCollaborativeDocument, openDocument, type OpenedDocument } from '../lib/document';
 import type { CliIO, UserIdentity } from '../lib/types';
@@ -73,19 +74,24 @@ export interface SessionPool {
 }
 
 // ---------------------------------------------------------------------------
-// Collab fingerprint (preserved from old pool)
+// Collab fingerprint
 // ---------------------------------------------------------------------------
 
+// Stable stringify that sorts keys at every depth so nested objects (e.g.
+// `params`) contribute to the hash. JSON.stringify's array replacer is a
+// single global allow-list applied at all depths, which silently strips
+// unlisted nested keys.
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const entries = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
 function profileToFingerprint(profile: CollaborationProfile): string {
-  return JSON.stringify({
-    providerType: profile.providerType,
-    url: profile.url,
-    documentId: profile.documentId,
-    tokenEnv: profile.tokenEnv ?? null,
-    syncTimeoutMs: profile.syncTimeoutMs ?? null,
-    onMissing: profile.onMissing ?? null,
-    bootstrapSettlingMs: profile.bootstrapSettlingMs ?? null,
-  });
+  return createHash('sha256').update(stableStringify(profile)).digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +210,16 @@ export class InMemorySessionPool implements SessionPool {
       dirty: false,
       leased: false,
       workingDocPath: metadata.workingDocPath,
-      io: { stdout() {}, stderr() {}, readStdinBytes: async () => new Uint8Array(), now: this.now },
+      io: {
+        stdout() {
+          /* noop – pool sessions have no output */
+        },
+        stderr() {
+          /* noop – pool sessions have no output */
+        },
+        readStdinBytes: async () => new Uint8Array(),
+        now: this.now,
+      },
       metadataRevision: metadata.metadataRevision,
       lastUsedAtMs: this.now(),
       autosaveTimer: null,

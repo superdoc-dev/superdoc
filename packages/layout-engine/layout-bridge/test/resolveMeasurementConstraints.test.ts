@@ -124,6 +124,27 @@ describe('resolveMeasurementConstraints', () => {
       expect(result.measurementHeight).toBe(648);
     });
 
+    it('treats a section break without columns as a reset to single-column layout', () => {
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 2, gap: 48 },
+      };
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'section-1',
+          // No columns on the section break means OOXML default: single column.
+        } as SectionBreakBlock,
+      ];
+
+      const result = resolveMeasurementConstraints(options, blocks);
+
+      expect(result.measurementWidth).toBe(468);
+      expect(result.measurementHeight).toBe(648);
+    });
+
     it('handles multiple section breaks and returns max dimensions', () => {
       const options: LayoutOptions = {
         pageSize: { w: 612, h: 792 },
@@ -152,6 +173,26 @@ describe('resolveMeasurementConstraints', () => {
       // Section 1: 468 (widest)
       // Section 2: (468 - 48) / 3 = 140
       expect(result.measurementWidth).toBe(468);
+      expect(result.measurementHeight).toBe(648);
+    });
+
+    it('keeps the widest section width for measurement constraints when a custom column section is narrower', () => {
+      const options: LayoutOptions = {
+        pageSize: { w: 800, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'section-custom',
+          columns: { count: 2, gap: 50, widths: [100, 550], equalWidth: false },
+        } as SectionBreakBlock,
+      ];
+
+      const result = resolveMeasurementConstraints(options, blocks);
+
+      expect(result.measurementWidth).toBe(700);
       expect(result.measurementHeight).toBe(648);
     });
 

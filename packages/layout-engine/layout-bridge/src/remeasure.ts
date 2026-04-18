@@ -7,6 +7,7 @@ import type {
   TextRun,
   TabStop,
   ParagraphIndent,
+  LeaderDecoration,
 } from '@superdoc/contracts';
 import { Engines } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
@@ -28,6 +29,8 @@ type ParagraphBlockAttrs = {
   decimalSeparator?: string;
   wordLayout?: WordParagraphLayoutOutput;
   numberingProperties?: unknown;
+  /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */
+  suppressFirstLineIndent?: boolean;
 };
 
 let canvas: HTMLCanvasElement | null = null;
@@ -122,7 +125,11 @@ function fontString(run: Run): string {
  * @returns Text content of the run, or empty string for non-text runs
  */
 function runText(run: Run): string {
-  return 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+  return 'src' in run ||
+    run.kind === 'lineBreak' ||
+    run.kind === 'break' ||
+    run.kind === 'fieldAnnotation' ||
+    run.kind === 'math'
     ? ''
     : (run.text ?? '');
 }
@@ -291,8 +298,8 @@ const TAB_EPSILON = 0.1;
  * - Conservative value that prevents premature line breaks without allowing significant overflow
  *
  * Usage:
- * - When checking if word fits: `width + wordWidth > effectiveMaxWidth - WIDTH_FUDGE_PX`
- * - Gives layout a 0.5px safety margin before triggering a line break
+ * - When checking if another glyph still fits: `width + glyphWidth > effectiveMaxWidth - WIDTH_FUDGE_PX`
+ * - Gives layout a 0.5px safety margin before triggering a normal line break
  * - Prevents edge cases where measured text at 199.7px breaks on a 200px line
  */
 const WIDTH_FUDGE_PX = 0.5;
@@ -798,12 +805,14 @@ const applyTabLayoutToLines = (
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
+      let currentLeader: LeaderDecoration | null = null;
 
       // Add leader if specified
       if (stop?.leader && stop.leader !== 'none') {
-        const from = Math.min(originX, relativeTarget);
-        const to = Math.max(originX, relativeTarget);
-        leaders.push({ from, to, style: stop.leader });
+        const from = Math.min(originX + effectiveIndent, clampedTarget);
+        const to = Math.max(originX + effectiveIndent, clampedTarget);
+        currentLeader = { from, to, style: stop.leader };
+        leaders.push(currentLeader);
       }
 
       // Handle alignment types
@@ -820,6 +829,12 @@ const applyTabLayoutToLines = (
             const beforeDecimal = groupMeasure.beforeDecimalWidth ?? groupMeasure.totalWidth;
             groupStartX = Math.max(0, relativeTarget - beforeDecimal);
           }
+
+          // Update current leader "to" ensuring leaders end where right-aligned content begins
+          if (currentLeader) {
+            currentLeader.to = groupStartX + effectiveIndent;
+          }
+
           pendingTabAlignStartX = groupStartX;
         } else {
           cursorX = Math.max(cursorX, relativeTarget);
@@ -1068,12 +1083,25 @@ export function remeasureParagraph(
   const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
-  const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
-  const rawFirstLineOffset = baseFirstLineOffset;
+  // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where
+  // justified paragraphs ignore their first-line indent. Without honoring it here, the
+  // initial measure and remeasure (triggered by live editing, resize, etc.) produce
+  // different first-line offsets and the first line jumps on redraw.
+  const suppressFirstLine = attrs?.suppressFirstLineIndent === true;
+  const baseFirstLineOffset = suppressFirstLine ? 0 : firstLineIndent || indentFirstLine - indentHanging;
+  // When wordLayout is present, the hanging region is occupied by the list marker/tab,
+  // so keep the same available width as body lines. For normal paragraphs we must honor
+  // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, baseFirstLineOffset);
-  const hasNegativeIndent = rawIndentLeft < 0 || rawIndentRight < 0;
-  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
-  const effectiveFirstLineOffset = allowNegativeFirstLineOffset ? baseFirstLineOffset : clampedFirstLineOffset;
+  // Avoid widening the first line when a negative LEFT indent already expands the content area.
+  // Negative right indent doesn't cause this problem — it only extends rightward.
+  const hasNegativeLeftIndent = rawIndentLeft < 0;
+  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeLeftIndent && baseFirstLineOffset < 0;
+  const effectiveFirstLineOffset = wordLayout?.marker
+    ? 0
+    : allowNegativeFirstLineOffset
+      ? baseFirstLineOffset
+      : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
   // Shared helper is the canonical source for list text-start geometry.
   // Keep an explicit top-level fallback for producers that only provide textStartPx.
@@ -1114,7 +1142,7 @@ export function remeasureParagraph(
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
     const effectiveMaxWidth = Math.max(1, isFirstLine ? firstLineWidth : contentWidth);
-    const effectiveIndent = isFirstLine ? indentLeft + rawFirstLineOffset : indentLeft;
+    const effectiveIndent = isFirstLine ? indentLeft + baseFirstLineOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -1242,6 +1270,13 @@ export function remeasureParagraph(
         }
         const w = measureRunSliceWidth(run, c, c + 1);
         if (width + w > effectiveMaxWidth - WIDTH_FUDGE_PX && width > 0) {
+          const canKeepBorderlineUnbreakableText = lastBreakRun < 0 && width + w <= effectiveMaxWidth + WIDTH_FUDGE_PX;
+          if (canKeepBorderlineUnbreakableText) {
+            width += w;
+            endRun = r;
+            endChar = c + 1;
+            continue;
+          }
           // Break line
           if (lastBreakRun >= 0) {
             endRun = lastBreakRun;
@@ -1302,7 +1337,7 @@ export function remeasureParagraph(
     (run) => run?.kind === 'text' && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\t'),
   );
   if (hasTabRun || hasTextTab) {
-    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, rawFirstLineOffset);
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, baseFirstLineOffset);
   }
 
   const totalHeight = lines.reduce((s, l) => s + l.lineHeight, 0);

@@ -47,6 +47,7 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
   let prettyFlag = false;
   let timeoutMs: number | undefined;
   let sessionId: string | undefined;
+  let quiet = false;
   let help = false;
   let version = false;
   const rest: string[] = [];
@@ -71,6 +72,11 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
 
     if (token === '--help' || token === '-h') {
       help = true;
+      continue;
+    }
+
+    if (token === '--quiet') {
+      quiet = true;
       continue;
     }
 
@@ -142,6 +148,7 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
       output,
       timeoutMs,
       sessionId,
+      quiet,
       help,
       version,
     },

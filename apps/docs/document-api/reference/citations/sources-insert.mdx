@@ -6,8 +6,6 @@ description: Register a new citation source in the document store.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Register a new citation source in the document store.
@@ -17,7 +15,7 @@ Register a new citation source in the document store.
 - Mutates document: `yes`
 - Idempotency: `non-idempotent`
 - Supports tracked mode: `no`
-- Supports dry run: `no`
+- Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
@@ -68,7 +66,7 @@ Returns a CitationSourceMutationResult indicating success with the source addres
 
 ## Output fields
 
-### Variant 1 (source.kind="entity")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { assertTargetPresent } from '../validation-primitives.js';
 import type {
   FootnoteAddress,
   FootnoteGetInput,
@@ -35,9 +36,7 @@ export type FootnotesAdapter = FootnotesApi;
 // ---------------------------------------------------------------------------
 
 function validateFootnoteTarget(target: unknown, operationName: string): asserts target is FootnoteAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'entity' || t.entityType !== 'footnote' || typeof t.noteId !== 'string') {

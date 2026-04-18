@@ -21,6 +21,9 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   'superdoc/converter',
   'superdoc/docx-zipper',
   'superdoc/file-zipper',
+  'superdoc/headless-toolbar',
+  'superdoc/headless-toolbar/react',
+  'superdoc/headless-toolbar/vue',
   'superdoc/style.css',
   '@superdoc-dev/ai',
   '@superdoc-dev/esign',
@@ -54,6 +57,7 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'ioredis',
   'ai',
   'zod',
+  '@anthropic-ai/sdk',
 ]);
 
 const PREFIX_EXTERNAL_IMPORTS = [
@@ -70,6 +74,7 @@ const PREFIX_EXTERNAL_IMPORTS = [
   '@google-cloud/',
   '@langchain/',
   'next/',
+  'openai/',
 ];
 
 const IMPORT_REGEX = /import\s+(?:(?:[\s\S]*?)\s+from\s+)?['"]([^'"]+)['"]/g;

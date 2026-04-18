@@ -1,0 +1,583 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Schema } from 'prosemirror-model';
+import { EditorState, TextSelection } from 'prosemirror-state';
+import { EditorView } from 'prosemirror-view';
+import { wrapTextInRunsPlugin } from './wrapTextInRunsPlugin.js';
+
+const makeSchema = ({ includeStructuredContent = false } = {}) => {
+  const nodes = {
+    doc: { content: 'block+' },
+    paragraph: {
+      group: 'block',
+      content: 'inline*',
+      toDOM: () => ['p', 0],
+      attrs: {
+        paragraphProperties: { default: null },
+      },
+    },
+    run: {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      toDOM: () => ['span', { 'data-run': '1' }, 0],
+      attrs: {
+        runProperties: { default: null },
+      },
+    },
+    text: { group: 'inline' },
+  };
+
+  if (includeStructuredContent) {
+    nodes.structuredContent = {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      isolating: true,
+      toDOM: () => ['span', { 'data-structured-content': '' }, 0],
+      attrs: {
+        id: { default: null },
+        tag: { default: null },
+        alias: { default: null },
+      },
+    };
+  }
+
+  return new Schema({
+    nodes,
+    marks: {
+      bold: {
+        toDOM: () => ['strong', 0],
+        parseDOM: [{ tag: 'strong' }],
+      },
+      italic: {
+        toDOM: () => ['em', 0],
+        parseDOM: [{ tag: 'em' }],
+      },
+      textStyle: {
+        attrs: {
+          fontFamily: { default: null },
+          fontSize: { default: null },
+        },
+        toDOM: (mark) => [
+          'span',
+          { style: `font-family: ${mark.attrs.fontFamily}; font-size: ${mark.attrs.fontSize}` },
+          0,
+        ],
+        parseDOM: [
+          { tag: 'span', getAttrs: (dom) => ({ fontFamily: dom.style.fontFamily, fontSize: dom.style.fontSize }) },
+        ],
+      },
+    },
+  });
+};
+
+const paragraphDoc = (schema) => schema.node('doc', null, [schema.node('paragraph')]);
+
+describe('wrapTextInRunsPlugin', () => {
+  let container;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  const createView = (schema, doc, editor) =>
+    new EditorView(container, {
+      state: EditorState.create({
+        schema,
+        doc,
+        plugins: [wrapTextInRunsPlugin(editor)],
+      }),
+      dispatchTransaction(tr) {
+        const state = this.state.apply(tr);
+        this.updateState(state);
+      },
+    });
+
+  const mockEditor = {};
+
+  it('wraps text inserted via transactions (e.g. composition) inside runs', () => {
+    const schema = makeSchema();
+    const view = createView(schema, paragraphDoc(schema), mockEditor);
+
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('こんにちは');
+    view.dispatch(tr);
+
+    const paragraph = view.state.doc.firstChild;
+    expect(paragraph.firstChild.type.name).toBe('run');
+    expect(paragraph.textContent).toBe('こんにちは');
+  });
+
+  it('wraps composition text as soon as composition ends without extra typing', async () => {
+    const schema = makeSchema();
+    const view = createView(schema, paragraphDoc(schema), mockEditor);
+
+    // Simulate composition insert while composing
+    const composingSpy = vi.spyOn(view, 'composing', 'get').mockReturnValue(true);
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('あ');
+    view.dispatch(tr);
+
+    // Text is still bare while composing
+    expect(view.state.doc.firstChild.firstChild.type.name).toBe('text');
+
+    // Finish composition; plugin flushes on compositionend
+    composingSpy.mockReturnValue(false);
+    const event = new CompositionEvent('compositionend', { data: 'あ', bubbles: true });
+    view.dom.dispatchEvent(event);
+
+    await Promise.resolve();
+
+    composingSpy.mockRestore();
+
+    const paragraph = view.state.doc.firstChild;
+    expect(paragraph.firstChild.type.name).toBe('run');
+    expect(paragraph.textContent).toBe('あ');
+  });
+
+  it('copies run properties from current paragraph paragraphProperties and applies marks to wrapped text', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }),
+    ]);
+    const view = createView(schema, doc, mockEditor);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos)).insertText('Next');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({ bold: true });
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
+  it('merges current paragraph inherited run properties with existing text marks', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }),
+    ]);
+    const view = createView(schema, doc, mockEditor);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+    tr.addStoredMark(schema.marks.italic.create());
+    tr.insertText('X');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    const markNames = run.firstChild.marks.map((mark) => mark.type.name);
+    expect(markNames).toContain('bold');
+    expect(markNames).toContain('italic');
+  });
+
+  it('does not copy inherited run properties when the current paragraph has an explicit style override', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { styleId: 'Heading2' } }),
+    ]);
+    const view = createView(schema, doc, mockEditor);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos)).insertText('Next');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({});
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+  });
+
+  it('does not serialize style-derived marks into new run properties', () => {
+    const schema = makeSchema();
+    const mockEditor = {
+      converter: {
+        convertedXml: {},
+        numbering: {},
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {
+            runProperties: {},
+            paragraphProperties: {},
+          },
+          latentStyles: {},
+          styles: {
+            Normal: {
+              styleId: 'Normal',
+              type: 'paragraph',
+              default: true,
+              name: 'Normal',
+              runProperties: {},
+              paragraphProperties: {},
+            },
+            Heading1: {
+              styleId: 'Heading1',
+              type: 'paragraph',
+              name: 'Heading 1',
+              runProperties: { bold: true },
+              paragraphProperties: {},
+            },
+          },
+        },
+      },
+    };
+    const doc = schema.node('doc', null, [schema.node('paragraph', { paragraphProperties: { styleId: 'Heading1' } })]);
+    const view = createView(schema, doc, mockEditor);
+
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('A');
+    view.dispatch(tr);
+
+    const paragraph = view.state.doc.firstChild;
+    const run = paragraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({});
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
+  describe('resolveRunPropertiesFromParagraphStyle', () => {
+    it('resolves run properties from paragraph styleId', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: {
+            'w:styles': {
+              'w:style': [
+                {
+                  '@w:styleId': 'Heading1',
+                  '@w:type': 'paragraph',
+                  'w:rPr': {
+                    'w:b': {},
+                    'w:sz': { '@w:val': '28' },
+                  },
+                },
+              ],
+            },
+          },
+          numbering: {},
+        },
+      };
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'Heading1' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles missing converter gracefully', () => {
+      const schema = makeSchema();
+      const mockEditor = {}; // No converter
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'Heading1' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles missing styleId gracefully', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+        },
+      };
+
+      const paragraphWithoutStyle = schema.node('paragraph', {
+        paragraphProperties: {},
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithoutStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('extracts ascii property from complex font family object', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: {
+            'w:styles': {
+              'w:style': [
+                {
+                  '@w:styleId': 'TestStyle',
+                  '@w:type': 'paragraph',
+                  'w:rPr': {
+                    'w:rFonts': {
+                      '@w:ascii': 'Arial',
+                      '@w:hAnsi': 'Arial',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          numbering: {},
+        },
+      };
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles fontFamily as plain string', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: {
+            'w:styles': {
+              'w:style': [
+                {
+                  '@w:styleId': 'TestStyle',
+                  '@w:type': 'paragraph',
+                  'w:rPr': {
+                    'w:rFonts': 'Times New Roman',
+                  },
+                },
+              ],
+            },
+          },
+          numbering: {},
+        },
+      };
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('falls back when fontFamily object has no ascii property', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: {
+            'w:styles': {
+              'w:style': [
+                {
+                  '@w:styleId': 'TestStyle',
+                  '@w:type': 'paragraph',
+                  'w:rPr': {
+                    'w:rFonts': {
+                      '@w:hAnsi': 'Calibri',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          numbering: {},
+        },
+      };
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles malformed converter context without crashing', () => {
+      const schema = makeSchema();
+      const mockEditor = {
+        converter: {
+          convertedXml: null, // Malformed
+          numbering: undefined, // Malformed
+        },
+      };
+
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles converter getters that throw without crashing', () => {
+      const schema = makeSchema();
+      const converter = {
+        numbering: {},
+      };
+      Object.defineProperty(converter, 'convertedXml', {
+        get() {
+          throw new Error('converter not ready');
+        },
+      });
+
+      const mockEditor = { converter };
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+  });
+
+  describe('structuredContent wrapping (SD-2011)', () => {
+    it('wraps text when inserting SDT with bare text content via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const doc = schema.node('doc', null, [schema.node('paragraph')]);
+      const view = createView(schema, doc, mockEditor);
+
+      // Insert SDT with bare text content (simulates template builder insertion)
+      const sdtNode = schema.nodes.structuredContent.create({ id: '123', alias: 'Field' }, schema.text('John Doe'));
+      const tr = view.state.tr.insert(1, sdtNode);
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      // Find the structuredContent node (may be wrapped in a run by the plugin)
+      let sdt = null;
+      paragraph.descendants((node) => {
+        if (node.type.name === 'structuredContent') sdt = node;
+      });
+      expect(sdt).not.toBeNull();
+      // The text inside SDT should be wrapped in a run
+      expect(sdt.firstChild.type.name).toBe('run');
+      expect(sdt.textContent).toBe('John Doe');
+    });
+
+    it('wraps text replaced inside structuredContent via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const sdtNode = schema.nodes.structuredContent.create(
+        { id: '456', alias: 'Name' },
+        schema.nodes.run.create(null, schema.text('Old')),
+      );
+      const runNode = schema.nodes.run.create(null, sdtNode);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [runNode])]);
+      const view = createView(schema, doc, mockEditor);
+
+      // Structure: paragraph(0) > run(1) > sdt(2) > run(3) > text(4..6="Old")
+      // Replace "Old" with bare text — simulates typing inside the SDT
+      const tr = view.state.tr.replaceWith(4, 7, schema.text('New Value'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+      expect(updatedSdt).not.toBeNull();
+      // Text should still be inside a run within the SDT
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New Value');
+    });
+
+    it('does not inherit trailing paragraph run styles when replacing first SDT inner text node', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+
+      const leadingRun = schema.nodes.run.create({ runProperties: {} }, schema.text('Lead '));
+      const sdtNode = schema.nodes.structuredContent.create({ id: '789', alias: 'Field' }, schema.text('Old'));
+      const trailingRun = schema.nodes.run.create({ runProperties: { bold: true } }, schema.text(' Tail'));
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [leadingRun, sdtNode, trailingRun])]);
+      const view = createView(schema, doc, mockEditor);
+
+      let oldTextFrom = null;
+      view.state.doc.descendants((node, pos) => {
+        if (oldTextFrom !== null) return false;
+        if (node.isText && node.text === 'Old') {
+          oldTextFrom = pos;
+          return false;
+        }
+        return true;
+      });
+
+      expect(oldTextFrom).not.toBeNull();
+      const oldTextTo = oldTextFrom + 'Old'.length;
+
+      // Replace SDT inner text with bare text (simulates transactional replacement in inline SDT).
+      const tr = view.state.tr.replaceWith(oldTextFrom, oldTextTo, schema.text('New'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+
+      expect(updatedSdt).not.toBeNull();
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New');
+
+      const innerRun = updatedSdt.firstChild;
+      const innerText = innerRun.firstChild;
+
+      // Regression guard: replacing text inside inline SDT must not pull styles
+      // from the paragraph's last run.
+      expect(innerRun.attrs.runProperties?.bold).not.toBe(true);
+      expect(innerText.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+    });
+  });
+});

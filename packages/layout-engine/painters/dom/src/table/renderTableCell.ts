@@ -10,7 +10,6 @@ import type {
   ParagraphIndent,
   ParagraphMeasure,
   PartialRowInfo,
-  RenderedLineInfo,
   SdtMetadata,
   TableBlock,
   TableFragment,
@@ -18,16 +17,10 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { effectiveTableCellSpacing } from '@superdoc/contracts';
+import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
-import { rescaleColumnWidths } from '@superdoc/layout-engine';
-import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
-import type { FragmentRenderContext } from '../renderer.js';
-import {
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-  type BlockLookup,
-} from '../features/paragraph-borders/index.js';
+import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
+import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {
@@ -575,7 +568,6 @@ type EmbeddedTableRenderParams = {
  * Version identifier for embedded table block lookups.
  * Used to distinguish nested tables from top-level tables in the block lookup map.
  */
-const EMBEDDED_TABLE_VERSION = 'embedded-table';
 
 /**
  * Renders a nested table that appears inside a table cell.
@@ -639,16 +631,9 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     columnWidths,
     partialRow: paramPartialRow,
   };
-  const blockLookup: BlockLookup = new Map([
-    [
-      table.id,
-      {
-        block: table,
-        measure,
-        version: EMBEDDED_TABLE_VERSION,
-      },
-    ],
-  ]);
+  const effectiveColumnWidths = columnWidths ?? measure.columnWidths;
+  const embeddedCellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(table.attrs?.cellSpacing);
+
   const applyFragmentFrame = (el: HTMLElement, frag: Fragment): void => {
     el.style.left = `${frag.x}px`;
     el.style.top = `${frag.y}px`;
@@ -660,7 +645,10 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     doc,
     fragment,
     context,
-    blockLookup,
+    block: table,
+    measure,
+    cellSpacingPx: embeddedCellSpacingPx,
+    effectiveColumnWidths,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -904,6 +892,8 @@ type TableCellRenderDependencies = {
   tableSdt?: SdtMetadata | null;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
+  /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
+  isRtl?: boolean;
   /** Computed cell width from rescaled columnWidths (overrides cellMeasure.width when present) */
   cellWidth?: number;
   /** Starting line index for partial row rendering (inclusive) */
@@ -992,6 +982,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     applySdtDataset,
     tableSdt,
     tableIndent,
+    isRtl,
     cellWidth,
     fromLine,
     toLine,
@@ -999,9 +990,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
   const attrs = cell?.attrs;
   const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
-  const paddingLeft = padding.left ?? 4;
+  // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
+  const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
   const paddingTop = padding.top ?? 0;
-  const paddingRight = padding.right ?? 4;
+  const paddingRight = isRtl ? (padding.left ?? 4) : (padding.right ?? 4);
   const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');

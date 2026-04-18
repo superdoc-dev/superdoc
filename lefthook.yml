@@ -12,10 +12,6 @@ pre-commit:
     cli-build:
       glob: "apps/cli/**/*.{ts,js}"
       run: pnpm --prefix apps/cli run build
-    vscode-build:
-      root: "apps/vscode-ext/"
-      glob: "apps/vscode-ext/**/*.{ts,js}"
-      run: pnpm run build
     vscode-lint:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"
@@ -28,6 +24,10 @@ pre-commit:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"
       run: pnpm run test:examples
+    react-type-check:
+      root: "packages/react/"
+      glob: "packages/react/**/*.{ts,tsx}"
+      run: pnpm run type-check
     generate-all:
       glob: "packages/document-api/src/contract/**/*.ts"
       run: pnpm run generate:all && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx apps/docs/document-engine/sdks.mdx

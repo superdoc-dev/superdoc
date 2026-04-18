@@ -1,0 +1,473 @@
+import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import type { Node as PmNode } from 'prosemirror-model';
+import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { imageBase64 as largePngDataUri } from '@tests/editor/data/imageBase64.js';
+import type { Editor } from '../../core/Editor.js';
+import { insertStructuredWrapper } from './plan-wrappers.js';
+import { registerBuiltInExecutors } from './register-executors.js';
+import { clearExecutorRegistry } from './executor-registry.js';
+import { resolveTextTarget } from '../helpers/adapter-utils.js';
+import { nodeAllowsSdBlockIdAttr } from '../../extensions/block-node/block-node.js';
+import { getRevision } from './revision-tracker.js';
+
+let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
+
+beforeAll(async () => {
+  docData = await loadTestDataForEditorTests('blank-doc.docx');
+  clearExecutorRegistry();
+  registerBuiltInExecutors();
+});
+
+let editor: Editor;
+
+beforeEach(() => {
+  ({ editor } = initTestEditor({
+    content: docData.docx,
+    media: docData.media,
+    mediaFiles: docData.mediaFiles,
+    fonts: docData.fonts,
+  }));
+});
+
+afterEach(() => {
+  editor?.destroy();
+  // @ts-expect-error cleanup
+  editor = null;
+});
+
+function getDocTextContent(ed: Editor): string {
+  return ed.state.doc.textContent;
+}
+
+function getFirstImageNode(ed: Editor): PmNode | null {
+  let found: PmNode | null = null;
+  ed.state.doc.descendants((node) => {
+    if (node.type.name === 'image') {
+      found = node;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+/** Requires prior seeded content — a blank doc has no text offsets to span. */
+function findResolvableNonCollapsedTarget(ed: Editor): { blockId: string; range: { start: number; end: number } } {
+  const candidateIds = new Set<string>();
+  const identityKeys = ['sdBlockId', 'blockId', 'paraId', 'id', 'uuid'] as const;
+
+  ed.state.doc.descendants((node) => {
+    const attrs = node.attrs as Record<string, unknown> | undefined;
+    if (!attrs) return true;
+
+    for (const key of identityKeys) {
+      const value = attrs[key];
+      if (typeof value === 'string' && value.length > 0) candidateIds.add(value);
+    }
+    return true;
+  });
+
+  for (const blockId of candidateIds) {
+    const target = {
+      kind: 'text' as const,
+      blockId,
+      range: { start: 0, end: 1 },
+    };
+    const resolved = resolveTextTarget(ed, target);
+    if (resolved && resolved.from !== resolved.to) {
+      return { blockId, range: { start: 0, end: 1 } };
+    }
+  }
+
+  throw new Error('Expected at least one resolvable non-collapsed text target.');
+}
+
+describe('insertStructuredWrapper — markdown', () => {
+  const oneByOnePngDataUri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z5kYAAAAASUVORK5CYII=';
+
+  it('inserts markdown paragraph content into the document', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: 'Hello from markdown',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('Hello from markdown');
+  });
+
+  it('inserts markdown heading as a styled paragraph', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '# My Heading',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('My Heading');
+
+    // Verify heading is represented as a paragraph with Heading1 style
+    let foundHeading = false;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph' && node.attrs?.paragraphProperties?.styleId === 'Heading1') {
+        foundHeading = true;
+      }
+      return true;
+    });
+    expect(foundHeading).toBe(true);
+  });
+
+  it('inserts markdown with multiple blocks', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '# Title\n\nFirst paragraph.\n\nSecond paragraph.',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('Title');
+    expect(getDocTextContent(editor)).toContain('First paragraph.');
+    expect(getDocTextContent(editor)).toContain('Second paragraph.');
+  });
+
+  it('inserts markdown list content', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '- Item one\n- Item two\n- Item three',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('Item one');
+    expect(getDocTextContent(editor)).toContain('Item two');
+    expect(getDocTextContent(editor)).toContain('Item three');
+  });
+
+  it('returns NO_OP for empty markdown', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failure?.code).toBe('NO_OP');
+  });
+
+  it('returns INVALID_TARGET for non-collapsed targets instead of replacing selected text', () => {
+    const seed = insertStructuredWrapper(editor, {
+      value: 'abcdef',
+      type: 'markdown',
+    });
+    expect(seed.success).toBe(true);
+
+    const textBefore = getDocTextContent(editor);
+    const target = findResolvableNonCollapsedTarget(editor);
+
+    const result = insertStructuredWrapper(editor, {
+      value: 'X',
+      type: 'markdown',
+      target: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: target.blockId, offset: target.range.start },
+        end: { kind: 'text', blockId: target.blockId, offset: target.range.end },
+      },
+    } as any);
+
+    expect(result.success).toBe(false);
+    expect(result.failure?.code).toBe('INVALID_TARGET');
+    expect(getDocTextContent(editor)).toBe(textBefore);
+  });
+
+  it('inserts markdown images with stable image metadata', () => {
+    (editor as any).options.isHeadless = true;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![pixel](${oneByOnePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const imageNode = getFirstImageNode(editor);
+    expect(imageNode).not.toBeNull();
+    if (!imageNode) return; // narrow for TS
+
+    expect(String(imageNode.attrs.src)).toMatch(/^word\/media\//);
+    expect(imageNode.attrs.rId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId.length).toBeGreaterThan(0);
+    expect(imageNode.attrs.id).toEqual(expect.any(String));
+    expect(imageNode.attrs.size).toEqual({ width: 1, height: 1 });
+    expect((editor as any).storage?.image?.media?.[imageNode.attrs.src]).toBe(oneByOnePngDataUri);
+  });
+
+  it('inserts markdown with a large base64 png in browser mode without dispatch errors', () => {
+    (editor as any).options.isHeadless = false;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![custom](${largePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('retries once when CommandService throws a mismatched transaction dispatch error', () => {
+    const commands = {
+      ...editor.commands,
+      insertContentAt: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('[CommandService] Dispatch failed: Applying a mismatched transaction');
+        })
+        .mockReturnValue(true),
+    };
+
+    Object.defineProperty(editor, 'commands', {
+      value: commands,
+      configurable: true,
+    });
+
+    const result = insertStructuredWrapper(editor, {
+      value: 'retry me',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(commands.insertContentAt).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('insertStructuredWrapper — table separators', () => {
+  it('inserts a trailing separator paragraph after a markdown table', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const doc = editor.state.doc;
+    let foundTable = false;
+    let nodeAfterTable: import('prosemirror-model').Node | null = null;
+    for (let i = 0; i < doc.childCount; i++) {
+      if (doc.child(i).type.name === 'table') {
+        foundTable = true;
+        if (i + 1 < doc.childCount) {
+          nodeAfterTable = doc.child(i + 1);
+        }
+        break;
+      }
+    }
+
+    expect(foundTable).toBe(true);
+    expect(nodeAfterTable).not.toBeNull();
+    expect(nodeAfterTable!.type.name).toBe('paragraph');
+  });
+
+  it('two consecutive markdown table inserts produce non-adjacent tables', () => {
+    insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| 1 | 2 |',
+      type: 'markdown',
+    });
+    insertStructuredWrapper(editor, {
+      value: '| C | D |\n| --- | --- |\n| 3 | 4 |',
+      type: 'markdown',
+    });
+
+    const doc = editor.state.doc;
+    for (let i = 0; i < doc.childCount - 1; i++) {
+      if (doc.child(i).type.name === 'table' && doc.child(i + 1).type.name === 'table') {
+        throw new Error(`Adjacent tables at children ${i} and ${i + 1}`);
+      }
+    }
+  });
+
+  it('assigns sdBlockId to all block nodes that support it after markdown table insert', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+    expect(result.success).toBe(true);
+
+    const missing: Array<{ type: string; pos: number; id: unknown }> = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!nodeAllowsSdBlockIdAttr(node)) return true;
+      const id = node.attrs?.sdBlockId;
+      if (typeof id !== 'string' || id.length === 0) {
+        missing.push({ type: node.type.name, pos, id });
+      }
+      return true;
+    });
+
+    expect(missing).toEqual([]);
+  });
+});
+
+describe('insertStructuredWrapper — list numbering rollback', () => {
+  it('rolls back numbering allocations when insertContentAt fails after markdown parsing', () => {
+    // This test exercises the actual rollback branch: markdown with list
+    // syntax is parsed (allocating numbering IDs on editor.converter), then
+    // insertContentAt is forced to fail, and we verify the snapshot/restore
+    // reverts numbering state to its pre-insert value.
+    const converter = (editor as any).converter;
+
+    // Capture numbering state before the insert attempt.
+    const numberingBefore = JSON.stringify(converter?.numbering ?? {});
+    const translatedBefore = JSON.stringify(converter?.translatedNumbering ?? {});
+    const numberingXmlBefore = JSON.stringify(converter?.convertedXml?.['word/numbering.xml'] ?? {});
+    const revisionBefore = getRevision(editor);
+    const documentModifiedBefore = converter?.documentModified;
+
+    // Shadow both view.dispatch and editor.dispatch with undefined so that
+    // CommandService's #dispatchWithFallback returns false (no dispatch
+    // method available). This causes insertContentAt to return false AFTER
+    // markdown parsing has already allocated numbering IDs on the converter.
+    const view = (editor as any).view;
+    if (view) {
+      Object.defineProperty(view, 'dispatch', { value: undefined, configurable: true });
+    }
+    Object.defineProperty(editor, 'dispatch', { value: undefined, configurable: true });
+
+    try {
+      const result = insertStructuredWrapper(editor, {
+        value: '- List item that allocates numbering',
+        type: 'markdown',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.failure?.code).toBe('INVALID_TARGET');
+
+      // The markdown parsing allocated numbering IDs, but rollback should
+      // have restored converter state to the pre-insert snapshot.
+      expect(JSON.stringify(converter?.numbering ?? {})).toBe(numberingBefore);
+      expect(JSON.stringify(converter?.translatedNumbering ?? {})).toBe(translatedBefore);
+      expect(JSON.stringify(converter?.convertedXml?.['word/numbering.xml'] ?? {})).toBe(numberingXmlBefore);
+
+      // Revision and dirty flags must also be restored — mutatePart commits
+      // during markdown parsing advance these, but the overall insert failed.
+      expect(getRevision(editor)).toBe(revisionBefore);
+      expect(converter?.documentModified).toBe(documentModifiedBefore);
+    } finally {
+      // Remove own-property shadows to restore prototype methods.
+      if (view) delete view.dispatch;
+      delete (editor as any).dispatch;
+    }
+  });
+
+  it('does not roll back numbering on successful list insert', () => {
+    const converter = (editor as any).converter;
+
+    const numberingBefore = JSON.stringify(converter?.numbering ?? {});
+
+    const result = insertStructuredWrapper(editor, {
+      value: '- Successfully inserted list item',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    // Numbering state should have changed (new list ID allocated).
+    expect(JSON.stringify(converter?.numbering ?? {})).not.toBe(numberingBefore);
+  });
+});
+
+describe('insertStructuredWrapper — html', () => {
+  it('inserts HTML content into the document', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '<p>Hello from HTML</p>',
+      type: 'html',
+    });
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('Hello from HTML');
+  });
+});
+
+describe('insertStructuredWrapper — dry-run', () => {
+  it('does not mutate document on dry-run markdown insert', () => {
+    const textBefore = getDocTextContent(editor);
+
+    const result = insertStructuredWrapper(
+      editor,
+      { value: '# Should Not Appear', type: 'markdown' },
+      { dryRun: true },
+    );
+
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toBe(textBefore);
+  });
+
+  it('mirrors runtime failure for empty markdown in dry-run mode', () => {
+    const runtime = insertStructuredWrapper(editor, {
+      value: '',
+      type: 'markdown',
+    });
+    expect(runtime.success).toBe(false);
+    expect(runtime.failure?.code).toBe('NO_OP');
+
+    const dryRun = insertStructuredWrapper(
+      editor,
+      {
+        value: '',
+        type: 'markdown',
+      },
+      { dryRun: true },
+    );
+
+    expect(dryRun.success).toBe(false);
+    expect(dryRun.failure?.code).toBe('NO_OP');
+  });
+
+  it('does not mutate numbering state on dry-run html list insert', () => {
+    const converter = (editor as any).converter;
+    expect(converter).toBeDefined();
+
+    const numberingBefore = JSON.stringify(converter?.numbering ?? {});
+    const translatedBefore = JSON.stringify(converter?.translatedNumbering ?? {});
+
+    const dryRun = insertStructuredWrapper(
+      editor,
+      {
+        value: '<ol><li>Dry run list item</li></ol>',
+        type: 'html',
+      },
+      { dryRun: true },
+    );
+
+    expect(dryRun.success).toBe(true);
+    expect(JSON.stringify(converter?.numbering ?? {})).toBe(numberingBefore);
+    expect(JSON.stringify(converter?.translatedNumbering ?? {})).toBe(translatedBefore);
+  });
+
+  it('mirrors runtime environment failure for html in dry-run mode', () => {
+    const opts = (editor as any).options ?? ((editor as any).options = {});
+    const prevDocument = opts.document;
+    const prevMockDocument = opts.mockDocument;
+
+    opts.document = undefined;
+    opts.mockDocument = undefined;
+    vi.stubGlobal('document', undefined as any);
+
+    try {
+      const runtime = insertStructuredWrapper(editor, {
+        value: '<p>Hello from HTML</p>',
+        type: 'html',
+      });
+      expect(runtime.success).toBe(false);
+      expect(runtime.failure?.code).toBe('UNSUPPORTED_ENVIRONMENT');
+
+      const dryRun = insertStructuredWrapper(
+        editor,
+        {
+          value: '<p>Hello from HTML</p>',
+          type: 'html',
+        },
+        { dryRun: true },
+      );
+
+      expect(dryRun.success).toBe(false);
+      expect(dryRun.failure?.code).toBe('UNSUPPORTED_ENVIRONMENT');
+    } finally {
+      vi.unstubAllGlobals();
+      opts.document = prevDocument;
+      opts.mockDocument = prevMockDocument;
+    }
+  });
+});

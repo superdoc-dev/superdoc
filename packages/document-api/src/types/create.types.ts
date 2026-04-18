@@ -1,6 +1,7 @@
 import type { TextAddress } from './address.js';
 import type { BlockNodeAddress } from './base.js';
 import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
+import type { StoryLocator } from './story.types.js';
 
 export type ParagraphCreateLocation =
   | { kind: 'documentStart' }
@@ -9,6 +10,8 @@ export type ParagraphCreateLocation =
   | { kind: 'after'; target: BlockNodeAddress };
 
 export interface CreateParagraphInput {
+  /** Target story for the new paragraph. Omit for body (backward compatible). */
+  in?: StoryLocator;
   at?: ParagraphCreateLocation;
   text?: string;
 }
@@ -18,6 +21,8 @@ export interface CreateParagraphSuccessResult {
   paragraph: BlockNodeAddress;
   insertionPoint: TextAddress;
   trackedChangeRefs?: ReceiptInsert[];
+  /** Stable ref handle for the created block. Pass directly to superdoc_format or superdoc_edit without searching. */
+  ref?: string;
 }
 
 export interface CreateParagraphFailureResult {
@@ -32,6 +37,8 @@ export type HeadingCreateLocation = ParagraphCreateLocation;
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface CreateHeadingInput {
+  /** Target story for the new heading. Omit for body (backward compatible). */
+  in?: StoryLocator;
   level: HeadingLevel;
   at?: HeadingCreateLocation;
   text?: string;
@@ -42,6 +49,8 @@ export interface CreateHeadingSuccessResult {
   heading: BlockNodeAddress;
   insertionPoint: TextAddress;
   trackedChangeRefs?: ReceiptInsert[];
+  /** Stable ref handle for the created block. Pass directly to superdoc_format or superdoc_edit without searching. */
+  ref?: string;
 }
 
 export interface CreateHeadingFailureResult {

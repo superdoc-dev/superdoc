@@ -41,6 +41,27 @@ superdoc save --in-place
 superdoc close
 ```
 
+## Encrypted Documents
+
+Open password-protected `.docx` files with `--password` or the `SUPERDOC_DOC_PASSWORD` env var:
+
+```bash
+# Explicit flag
+superdoc open ./secret.docx --password 'mypassword'
+
+# Env var (preferred — avoids password in process listings)
+SUPERDOC_DOC_PASSWORD='mypassword' superdoc open ./secret.docx
+
+# Via call
+superdoc call doc.open --input-json '{"doc":"./secret.docx","password":"mypassword"}'
+```
+
+If the password is missing or incorrect, the CLI returns a structured error with one of these codes:
+- `DOCX_PASSWORD_REQUIRED` — encrypted file, no password supplied
+- `DOCX_PASSWORD_INVALID` — wrong password
+- `DOCX_ENCRYPTION_UNSUPPORTED` — recognized but unsupported encryption method
+- `DOCX_DECRYPTION_FAILED` — crypto failure or corrupt data
+
 ## Choosing the Right Command
 
 ### Which command should I use?
@@ -311,10 +332,11 @@ superdoc info ./contract.docx --pretty
 
 ## Input payload flags
 
-- `--query-json`, `--query-file`
-- `--address-json`, `--address-file`
-- `--target-json`, `--target-file`
-- `--at-json`, `--at-file` (for `create paragraph`)
+- `--query-json`, `--query-file` (`find`, `lists list`)
+- `--address-json`, `--address-file` (`get-node`, `lists get`)
+- `--target-json` (mutation commands — no `--target-file` counterpart; use flat flags `--block-id`/`--start`/`--end` as alternative)
+- `--input-json`, `--input-file` (`call`, `create paragraph`)
+- `--at-json`, `--at-file` (`create paragraph`)
 
 ## Stdin support
 
@@ -367,7 +389,7 @@ Error:
 
 ## Part of SuperDoc
 
-This CLI is part of the [SuperDoc](https://github.com/superdoc-dev/superdoc) project — an open source document editor bringing Microsoft Word to the web. Use it alongside the editor, or standalone for document automation.
+This CLI is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

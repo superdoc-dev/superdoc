@@ -42,9 +42,9 @@ jobs:
             const level = '${{ steps.risk.outputs.level }}';
 
             const LABELS = {
-              critical: { name: 'risk: critical', color: 'd73a4a' },
-              sensitive: { name: 'risk: sensitive', color: 'fbca04' },
-              low: { name: 'risk: low', color: '0e8a16' },
+              critical: { name: 'review: thorough', color: 'd73a4a' },
+              sensitive: { name: 'review: careful', color: 'fbca04' },
+              low: { name: 'review: quick', color: '0e8a16' },
             };
 
             const prNumber = context.issue.number;
@@ -76,7 +76,7 @@ jobs:
               issue_number: prNumber,
             });
 
-            const riskLabels = currentLabels.filter((l) => l.name.startsWith('risk: '));
+            const riskLabels = currentLabels.filter((l) => l.name.startsWith('review: '));
             for (const label of riskLabels) {
               if (label.name !== LABELS[level].name) {
                 await github.rest.issues.removeLabel({

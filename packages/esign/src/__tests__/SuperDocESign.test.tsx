@@ -98,6 +98,11 @@ type SuperDocMockType = typeof SuperDoc & {
   mockAppendRowsToStructuredContentTable: MockFn;
   mockGetStructuredContentTablesById: MockFn;
   mockDestroy: MockFn;
+  mockSetZoom: MockFn;
+  mockGetZoom: MockFn;
+  mockOn: MockFn;
+  emitMockEvent: (event: string, data: any) => void;
+  mockEventListeners: Map<string, ((...args: unknown[]) => void)[]>;
   mockEditor: MockEditor;
 };
 
@@ -148,6 +153,10 @@ beforeEach(() => {
   superDocMock.mockGetStructuredContentTablesById.mockReset();
   superDocMock.mockGetStructuredContentTablesById.mockReturnValue([]);
   superDocMock.mockDestroy.mockReset();
+  superDocMock.mockSetZoom.mockReset();
+  superDocMock.mockGetZoom.mockReset();
+  superDocMock.mockGetZoom.mockReturnValue(100);
+  superDocMock.mockEventListeners.clear();
   resetAuditEvents();
   resetLastConstructorOptions();
 });
@@ -1389,6 +1398,65 @@ describe('SuperDocESign component', () => {
 
       const options = getLastConstructorOptions();
       expect(options.viewOptions).toEqual({ layout: 'web' });
+    });
+  });
+
+  describe('zoom controls', () => {
+    it('setZoom proxies to SuperDoc instance', async () => {
+      const ref = createRef<SuperDocESignHandle>();
+      renderComponent({}, { ref });
+
+      await waitForSuperDocReady();
+      await waitFor(() => expect(ref.current).toBeTruthy());
+
+      ref.current!.setZoom(150);
+
+      expect(superDocMock.mockSetZoom).toHaveBeenCalledWith(150);
+    });
+
+    it('getZoom returns value from SuperDoc instance', async () => {
+      const ref = createRef<SuperDocESignHandle>();
+      renderComponent({}, { ref });
+
+      await waitForSuperDocReady();
+      await waitFor(() => expect(ref.current).toBeTruthy());
+
+      superDocMock.mockGetZoom.mockReturnValue(175);
+
+      expect(ref.current!.getZoom()).toBe(175);
+    });
+
+    it('getZoom returns 100 as default', async () => {
+      const ref = createRef<SuperDocESignHandle>();
+      renderComponent({}, { ref });
+
+      await waitForSuperDocReady();
+      await waitFor(() => expect(ref.current).toBeTruthy());
+
+      expect(ref.current!.getZoom()).toBe(100);
+    });
+
+    it('onZoomChange callback fires on zoomChange event', async () => {
+      const onZoomChange = vi.fn();
+      renderComponent({ onZoomChange });
+
+      await waitForSuperDocReady();
+
+      act(() => {
+        superDocMock.emitMockEvent('zoomChange', { zoom: 150 });
+      });
+
+      expect(onZoomChange).toHaveBeenCalledWith({ zoom: 150 });
+    });
+
+    it('setZoom is a no-op when SuperDoc is not initialized', async () => {
+      const ref = createRef<SuperDocESignHandle>();
+      renderComponent({}, { ref });
+
+      // Don't wait for ready — call immediately
+      await waitFor(() => expect(ref.current).toBeTruthy());
+
+      expect(() => ref.current!.setZoom(200)).not.toThrow();
     });
   });
 });

@@ -1,13 +1,29 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import type {
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
+  TableBorderSpec,
+  TableStyleOptionsPatch,
+} from '../types/table-operations.types.js';
 
 // ---------------------------------------------------------------------------
 // Locator validation
 // ---------------------------------------------------------------------------
 
+type RowLocatorInput = { target?: unknown; nodeId?: unknown; rowIndex?: unknown };
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Validates that a table locator has exactly one of `target` or `nodeId`.
+ *
+ * This is the single validation function for all table operations.
+ * Every table operation uses the same `target`/`nodeId` locator vocabulary.
  */
 function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, operationName: string): void {
   const hasTarget = input.target !== undefined;
@@ -36,163 +52,469 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
   }
 }
 
-/**
- * Validates a table-scoped locator has exactly one of `tableTarget` or `tableNodeId`.
- */
-function validateTableScopedLocator(
-  input: { tableTarget?: unknown; tableNodeId?: unknown },
-  operationName: string,
-): void {
-  const hasTarget = input.tableTarget !== undefined;
-  const hasNodeId = input.tableNodeId !== undefined;
+function validateRowLocator(input: RowLocatorInput, operationName: string): void {
+  validateTableLocator(input, operationName);
 
-  if (hasTarget && hasNodeId) {
+  if (input.nodeId != null) {
+    if (input.rowIndex == null) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex is required when using nodeId for row operations. ` +
+          `Use target to address a row directly, or pass nodeId + rowIndex to address a row within a table.`,
+      );
+    }
+    return;
+  }
+
+  if (!isObjectRecord(input.target) || input.target.kind !== 'block') return;
+
+  if (input.target.nodeType === 'table' && input.rowIndex == null) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      `Cannot combine tableTarget with tableNodeId on ${operationName} request. Use exactly one locator mode.`,
-      { fields: ['tableTarget', 'tableNodeId'] },
+      `${operationName}: rowIndex is required when target is a table.`,
     );
   }
 
-  if (!hasTarget && !hasNodeId) {
+  if (input.target.nodeType === 'tableRow' && input.rowIndex != null) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      `${operationName} requires a table target. Provide either tableTarget or tableNodeId.`,
-    );
-  }
-
-  if (hasNodeId && typeof input.tableNodeId !== 'string') {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `tableNodeId must be a string, got ${typeof input.tableNodeId}.`,
-      { field: 'tableNodeId', value: input.tableNodeId },
-    );
-  }
-}
-
-/**
- * Validates a mixed row locator: exactly one of direct (target/nodeId) OR
- * table-scoped (tableTarget/tableNodeId + rowIndex) modes.
- */
-function validateRowLocator(
-  input: { target?: unknown; nodeId?: unknown; tableTarget?: unknown; tableNodeId?: unknown; rowIndex?: unknown },
-  operationName: string,
-): void {
-  const hasDirect = input.target !== undefined || input.nodeId !== undefined;
-  const hasTableScoped = input.tableTarget !== undefined || input.tableNodeId !== undefined;
-
-  if (hasDirect && hasTableScoped) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `Cannot combine direct row locator (target/nodeId) with table-scoped locator (tableTarget/tableNodeId) on ${operationName} request.`,
-    );
-  }
-
-  if (hasDirect) {
-    validateTableLocator(input, operationName);
-  } else if (hasTableScoped) {
-    validateTableScopedLocator(input, operationName);
-  } else {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${operationName} requires a row target. Provide target, nodeId, or tableTarget/tableNodeId + rowIndex.`,
+      `${operationName}: rowIndex must not be provided when target is a row node. ` +
+        `Either pass a table target with rowIndex, or pass a row target without rowIndex.`,
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Locator category helpers — determine which validation to apply per operation
-// ---------------------------------------------------------------------------
-
-type TableLocatorInput = { target?: unknown; nodeId?: unknown };
-type TableScopedInput = { tableTarget?: unknown; tableNodeId?: unknown };
-type RowLocatorInput = TableLocatorInput & TableScopedInput & { rowIndex?: unknown };
-
-/**
- * Operations using the simple table locator (target/nodeId).
- */
-const TABLE_LOCATOR_OPS = new Set([
-  'tables.delete',
-  'tables.clearContents',
-  'tables.move',
-  'tables.split',
-  'tables.convertFromText',
-  'tables.convertToText',
-  'tables.setLayout',
-  'tables.distributeRows',
-  'tables.distributeColumns',
-  'tables.sort',
-  'tables.setAltText',
-  'tables.setStyle',
-  'tables.clearStyle',
-  'tables.setStyleOption',
-  'tables.setBorder',
-  'tables.clearBorder',
-  'tables.applyBorderPreset',
-  'tables.setShading',
-  'tables.clearShading',
-  'tables.setTablePadding',
-  'tables.setCellPadding',
-  'tables.setCellSpacing',
-  'tables.clearCellSpacing',
-  'tables.unmergeCells',
-  'tables.insertCell',
-  'tables.deleteCell',
-  'tables.splitCell',
-  'tables.setCellProperties',
-  'tables.get',
-  'tables.getCells',
-  'tables.getProperties',
-]);
+type CellOrTableScopedCellLocatorInput = {
+  target?: unknown;
+  nodeId?: unknown;
+  rowIndex?: unknown;
+  columnIndex?: unknown;
+};
 
 /**
- * Operations using the mixed row locator (direct OR table-scoped).
- */
-const ROW_LOCATOR_OPS = new Set([
-  'tables.insertRow',
-  'tables.deleteRow',
-  'tables.setRowHeight',
-  'tables.setRowOptions',
-]);
-
-/**
- * Operations using a table-scoped column locator (tableTarget/tableNodeId).
- */
-const COLUMN_LOCATOR_OPS = new Set(['tables.insertColumn', 'tables.deleteColumn', 'tables.setColumnWidth']);
-
-/**
- * Operations using a merge range locator (tableTarget/tableNodeId).
- */
-const MERGE_RANGE_LOCATOR_OPS = new Set(['tables.mergeCells']);
-
-// ---------------------------------------------------------------------------
-// Generic execute wrapper
-// ---------------------------------------------------------------------------
-
-/**
- * Validates the input locator for a table operation and normalizes MutationOptions.
+ * Returns `true` when the input carries non-`undefined` row + column coordinates,
+ * meaning it can participate in table-scoped cell targeting.
  *
- * @param operationName - The operation ID (e.g. 'tables.delete')
- * @param adapter - The adapter method to call
- * @param input - The raw input from the caller
- * @param options - Optional mutation options to normalize
- * @returns The adapter return value
+ * This is the validation-time check for coordinate presence. Adapter-level
+ * resolution may still refine ambiguous `nodeId` handoffs by resolved node
+ * type so payloads like `TableCellInfo` from `tables.getCells()` continue to
+ * work as direct cell locators.
  */
-export function executeTableOperation<TInput, TResult>(
+export function hasTableScopedCellCoordinates(input: CellOrTableScopedCellLocatorInput): boolean {
+  return input.rowIndex != null && input.columnIndex != null;
+}
+
+/**
+ * Validates a mixed cell locator: either a direct cell locator (target/nodeId
+ * pointing at a cell, no coordinates) or a table-scoped cell locator
+ * (target/nodeId pointing at a table + rowIndex + columnIndex).
+ *
+ * Rejects:
+ * - table target without both coordinates
+ * - only one of rowIndex / columnIndex
+ * - cell target plus coordinates
+ */
+function validateCellOrTableScopedCellLocator(input: CellOrTableScopedCellLocatorInput, operationName: string): void {
+  validateTableLocator(input, operationName);
+
+  const hasRowIndex = input.rowIndex != null;
+  const hasColumnIndex = input.columnIndex != null;
+
+  if (hasRowIndex !== hasColumnIndex) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName}: both rowIndex and columnIndex are required when using table-scoped cell targeting. ` +
+        `Provide both or neither.`,
+      { fields: ['rowIndex', 'columnIndex'] },
+    );
+  }
+
+  const hasCoordinates = hasTableScopedCellCoordinates(input);
+
+  // When target is a block address, check that coordinates match the node type.
+  if (isObjectRecord(input.target) && input.target.kind === 'block') {
+    if (input.target.nodeType === 'tableCell' && hasCoordinates) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex/columnIndex must not be provided when target is a cell node. ` +
+          `Either pass a table target with coordinates, or pass a cell target without coordinates.`,
+        { fields: ['rowIndex', 'columnIndex'] },
+      );
+    }
+
+    if (input.target.nodeType === 'table' && !hasCoordinates) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex and columnIndex are required when target is a table.`,
+        { fields: ['rowIndex', 'columnIndex'] },
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// tables.split input normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes legacy `atRowIndex` to canonical `rowIndex` for tables.split.
+ *
+ * Accepts either name, prefers `rowIndex` when both match, and rejects
+ * conflicting dual-name input. Returns the input unchanged when only
+ * `rowIndex` is present.
+ */
+export function normalizeTablesSplitInput<T extends { rowIndex?: number }>(input: T): T {
+  const legacy = (input as Record<string, unknown>).atRowIndex;
+  if (legacy === undefined) return input;
+
+  if (input.rowIndex !== undefined && input.rowIndex !== legacy) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'tables.split: cannot provide both rowIndex and atRowIndex with different values.',
+      { fields: ['rowIndex', 'atRowIndex'] },
+    );
+  }
+
+  const { atRowIndex: _legacy, ...rest } = input as Record<string, unknown>;
+  return { ...rest, rowIndex: legacy } as T;
+}
+
+// ---------------------------------------------------------------------------
+// Typed execute helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a table operation that uses the standard locator (target/nodeId).
+ * Validates the locator and normalizes MutationOptions.
+ */
+export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?: unknown }, TResult>(
   operationName: string,
   adapter: (input: TInput, options?: MutationOptions) => TResult,
   input: TInput,
   options?: MutationOptions,
 ): TResult {
-  // Validate locator based on operation category
-  if (TABLE_LOCATOR_OPS.has(operationName)) {
-    validateTableLocator(input as TableLocatorInput, operationName);
-  } else if (ROW_LOCATOR_OPS.has(operationName)) {
-    validateRowLocator(input as RowLocatorInput, operationName);
-  } else if (COLUMN_LOCATOR_OPS.has(operationName)) {
-    validateTableScopedLocator(input as TableScopedInput, operationName);
-  } else if (MERGE_RANGE_LOCATOR_OPS.has(operationName)) {
-    validateTableScopedLocator(input as TableScopedInput, operationName);
+  validateTableLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+export function executeRowLocatorOp<TInput extends RowLocatorInput, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateRowLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+export function executeCellOrTableScopedCellLocatorOp<TInput extends CellOrTableScopedCellLocatorInput, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateCellOrTableScopedCellLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Execute a document-level table mutation (no locator validation needed).
+ * Only normalizes MutationOptions.
+ */
+export function executeDocumentLevelTableOp<TInput, TResult>(
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// Convenience operation validation helpers
+// ---------------------------------------------------------------------------
+
+const VALID_STYLE_OPTION_FLAGS = new Set([
+  'headerRow',
+  'lastRow',
+  'totalRow',
+  'firstColumn',
+  'lastColumn',
+  'bandedRows',
+  'bandedColumns',
+]);
+
+function validateStyleOptionsPatch(options: TableStyleOptionsPatch, operationName: string): void {
+  const keys = Object.keys(options);
+  for (const key of keys) {
+    if (!VALID_STYLE_OPTION_FLAGS.has(key)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: unrecognized style option flag "${key}".`,
+        { field: 'styleOptions', value: key },
+      );
+    }
+    if (typeof options[key as keyof TableStyleOptionsPatch] !== 'boolean') {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: style option "${key}" must be a boolean.`,
+        { field: `styleOptions.${key}` },
+      );
+    }
+  }
+}
+
+function validateBorderSpec(spec: TableBorderSpec, fieldPath: string, operationName: string): void {
+  if (typeof spec !== 'object' || spec === null) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath} must be a border spec object.`,
+    );
+  }
+  if (typeof spec.lineStyle !== 'string' || spec.lineStyle.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.lineStyle must be a non-empty string.`,
+      {
+        field: `${fieldPath}.lineStyle`,
+      },
+    );
+  }
+  if (typeof spec.lineWeightPt !== 'number' || !Number.isFinite(spec.lineWeightPt) || spec.lineWeightPt <= 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.lineWeightPt must be a positive number.`,
+      { field: `${fieldPath}.lineWeightPt` },
+    );
+  }
+  if (typeof spec.color !== 'string' || spec.color.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.color must be a non-empty string.`,
+      {
+        field: `${fieldPath}.color`,
+      },
+    );
+  }
+  if (!TABLE_BORDER_COLOR_PATTERN.test(spec.color)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.color must be a 6-digit hex color without "#" or "auto".`,
+      {
+        field: `${fieldPath}.color`,
+      },
+    );
+  }
+}
+
+function validateBorderPatchEdge(
+  value: TableBorderSpec | null | undefined,
+  edgeName: string,
+  operationName: string,
+): void {
+  if (value === undefined || value === null) return;
+  validateBorderSpec(value, `edges.${edgeName}`, operationName);
+}
+
+const TABLE_BORDER_COLOR_PATTERN = /^([0-9A-Fa-f]{6}|auto)$/u;
+
+const VALID_APPLY_TO_VALUES = new Set([
+  'all',
+  'outside',
+  'inside',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'insideH',
+  'insideV',
+]);
+
+const VALID_BORDER_EDGE_KEYS = new Set(['top', 'bottom', 'left', 'right', 'insideH', 'insideV']);
+
+// ---------------------------------------------------------------------------
+// Convenience operation execute wrappers
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate and execute `tables.applyStyle`.
+ */
+export function executeTablesApplyStyle<TResult>(
+  operationName: string,
+  adapter: (input: TablesApplyStyleInput, options?: MutationOptions) => TResult,
+  input: TablesApplyStyleInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  const hasStyleId = input.styleId !== undefined;
+  const hasOptions = input.styleOptions !== undefined;
+
+  if (!hasStyleId && !hasOptions) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} requires at least one of styleId or styleOptions.`,
+    );
+  }
+
+  if (hasStyleId && typeof input.styleId !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: styleId must be a string.`, {
+      field: 'styleId',
+    });
+  }
+
+  if (hasStyleId && input.styleId === '') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: styleId must be a non-empty string. Use tables.clearStyle to remove a style.`,
+      { field: 'styleId' },
+    );
+  }
+
+  if (hasOptions) {
+    if (typeof input.styleOptions !== 'object' || input.styleOptions === null || Array.isArray(input.styleOptions)) {
+      throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: styleOptions must be a plain object.`, {
+        field: 'styleOptions',
+      });
+    }
+    const optionKeys = Object.keys(input.styleOptions);
+    if (!hasStyleId && optionKeys.length === 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: styleOptions must contain at least one flag when styleId is absent.`,
+        { field: 'styleOptions' },
+      );
+    }
+    if (optionKeys.length > 0) {
+      validateStyleOptionsPatch(input.styleOptions!, operationName);
+    }
+  }
+
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Validate and execute `tables.setBorders`.
+ */
+export function executeTablesSetBorders<TResult>(
+  operationName: string,
+  adapter: (input: TablesSetBordersInput, options?: MutationOptions) => TResult,
+  input: TablesSetBordersInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  if (!('mode' in input) || (input.mode !== 'applyTo' && input.mode !== 'edges')) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: mode must be "applyTo" or "edges".`, {
+      field: 'mode',
+    });
+  }
+
+  if (input.mode === 'applyTo') {
+    if (!VALID_APPLY_TO_VALUES.has(input.applyTo)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: applyTo must be one of: ${[...VALID_APPLY_TO_VALUES].join(', ')}.`,
+        { field: 'applyTo' },
+      );
+    }
+    if (input.border === undefined) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: border is required when mode is "applyTo".`,
+        { field: 'border' },
+      );
+    }
+    if (input.border !== null) {
+      validateBorderSpec(input.border, 'border', operationName);
+    }
+  }
+
+  if (input.mode === 'edges') {
+    if (!input.edges || typeof input.edges !== 'object') {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: edges is required when mode is "edges".`,
+        { field: 'edges' },
+      );
+    }
+    const edgeKeys = Object.keys(input.edges);
+    const definedKeys = edgeKeys.filter(
+      (k) => VALID_BORDER_EDGE_KEYS.has(k) && input.edges[k as keyof typeof input.edges] !== undefined,
+    );
+    if (definedKeys.length === 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: edges must contain at least one defined edge.`,
+        { field: 'edges' },
+      );
+    }
+    for (const key of edgeKeys) {
+      if (!VALID_BORDER_EDGE_KEYS.has(key)) {
+        throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: unrecognized edge "${key}".`, {
+          field: `edges.${key}`,
+        });
+      }
+      validateBorderPatchEdge(input.edges[key as keyof typeof input.edges], key, operationName);
+    }
+  }
+
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Validate and execute `tables.setTableOptions`.
+ */
+export function executeTablesSetTableOptions<TResult>(
+  operationName: string,
+  adapter: (input: TablesSetTableOptionsInput, options?: MutationOptions) => TResult,
+  input: TablesSetTableOptionsInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  const hasMargins = input.defaultCellMargins !== undefined;
+  const hasSpacing = input.cellSpacingPt !== undefined;
+
+  if (!hasMargins && !hasSpacing) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} requires at least one of defaultCellMargins or cellSpacingPt.`,
+    );
+  }
+
+  if (hasMargins) {
+    if (
+      typeof input.defaultCellMargins !== 'object' ||
+      input.defaultCellMargins === null ||
+      Array.isArray(input.defaultCellMargins)
+    ) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: defaultCellMargins must be a plain object with topPt, rightPt, bottomPt, leftPt.`,
+        { field: 'defaultCellMargins' },
+      );
+    }
+    const m = input.defaultCellMargins;
+    const sides = ['topPt', 'rightPt', 'bottomPt', 'leftPt'] as const;
+    for (const side of sides) {
+      if (typeof m[side] !== 'number' || !Number.isFinite(m[side]) || m[side] < 0) {
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `${operationName}: defaultCellMargins.${side} must be a non-negative number.`,
+          { field: `defaultCellMargins.${side}` },
+        );
+      }
+    }
+  }
+
+  if (hasSpacing && input.cellSpacingPt !== null) {
+    if (typeof input.cellSpacingPt !== 'number' || !Number.isFinite(input.cellSpacingPt) || input.cellSpacingPt < 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: cellSpacingPt must be a non-negative number or null.`,
+        { field: 'cellSpacingPt' },
+      );
+    }
   }
 
   return adapter(input, normalizeMutationOptions(options));

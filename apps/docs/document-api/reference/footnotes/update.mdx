@@ -6,8 +6,6 @@ description: Update the content of an existing footnote or endnote.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Update the content of an existing footnote or endnote.
@@ -17,7 +15,7 @@ Update the content of an existing footnote or endnote.
 - Mutates document: `yes`
 - Idempotency: `idempotent`
 - Supports tracked mode: `no`
-- Supports dry run: `no`
+- Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
@@ -52,7 +50,7 @@ Returns a FootnoteMutationResult indicating success with the updated footnote ad
 
 ## Output fields
 
-### Variant 1 (footnote.kind="entity")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

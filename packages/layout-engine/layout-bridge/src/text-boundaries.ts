@@ -105,7 +105,11 @@ function extractBlockText(block: FlowBlock): {
 
   for (const run of block.runs) {
     text +=
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : run.text;
     if (run.pmStart !== undefined) {

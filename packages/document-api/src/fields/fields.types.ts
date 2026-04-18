@@ -1,5 +1,5 @@
 import type { TextTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
 // ---------------------------------------------------------------------------
@@ -72,11 +72,6 @@ export interface FieldMutationSuccess {
   field: FieldAddress;
 }
 
-export interface FieldMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type FieldMutationResult = FieldMutationSuccess | FieldMutationFailure;
+export type FieldMutationResult = FieldMutationSuccess | AdapterMutationFailure;
 
 export type FieldsListResult = DiscoveryOutput<FieldDomain>;

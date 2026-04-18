@@ -27,6 +27,7 @@ export type StylesArrayState = unknown[] | 'inherit';
 // Patch Types
 // ---------------------------------------------------------------------------
 
+// SYNC: StylesRunPatch must match PROPERTY_REGISTRY run keys in registry.ts
 /** Patch for run-channel properties (docDefaults/w:rPrDefault/w:rPr). */
 export interface StylesRunPatch {
   // Booleans
@@ -70,6 +71,7 @@ export interface StylesRunPatch {
   fitText?: Record<string, unknown>;
 }
 
+// SYNC: StylesParagraphPatch must match PROPERTY_REGISTRY paragraph keys in registry.ts
 /** Patch for paragraph-channel properties (docDefaults/w:pPrDefault/w:pPr). */
 export interface StylesParagraphPatch {
   // Booleans

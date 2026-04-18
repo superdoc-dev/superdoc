@@ -5,7 +5,7 @@
  * that changes document state is a step dispatched by the plan engine.
  */
 
-import type { NodeAddress } from './base.js';
+import type { BlockNodeAddress, BlockNodeType } from './base.js';
 import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
@@ -20,14 +20,14 @@ import type { Placement, NestingPolicy } from './placement.js';
 export type SelectWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   require: 'first' | 'exactlyOne' | 'all';
 };
 
 export type RefWhere = {
   by: 'ref';
   ref: string;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 export type TargetWhere = {
@@ -35,12 +35,18 @@ export type TargetWhere = {
   target: SelectionTarget;
 };
 
-export type StepWhere = SelectWhere | RefWhere | TargetWhere;
+export type BlockWhere = {
+  by: 'block';
+  nodeType: BlockNodeType;
+  nodeId: string;
+};
+
+export type StepWhere = SelectWhere | RefWhere | TargetWhere | BlockWhere;
 
 export type AssertWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 // ---------------------------------------------------------------------------
@@ -94,12 +100,7 @@ export type TextRewriteStep = {
 export type TextInsertStep = {
   id: string;
   op: 'text.insert';
-  where: {
-    by: 'select';
-    select: TextSelector | NodeSelector;
-    within?: NodeAddress;
-    require: 'first' | 'exactlyOne';
-  };
+  where: StepWhere;
   args: {
     position: 'before' | 'after';
     content: { text: string };
@@ -122,7 +123,10 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: InlineRunPatch;
+    inline?: InlineRunPatch;
+    alignment?: 'left' | 'center' | 'right' | 'justify';
+    /** When "block", inline formatting expands to cover the entire parent textblock(s), not just the matched range. Default: "match". */
+    scope?: 'match' | 'block';
   };
 };
 
@@ -177,9 +181,13 @@ export type MutationStep =
 // Plan input
 // ---------------------------------------------------------------------------
 
-export type ChangeMode = 'direct' | 'tracked';
+import type { ChangeMode } from '../write/write.js';
+import type { StoryLocator } from './story.types.js';
+export type { ChangeMode } from '../write/write.js';
 
 export type MutationsApplyInput = {
+  /** Target story for the mutation plan. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
@@ -187,6 +195,8 @@ export type MutationsApplyInput = {
 };
 
 export type MutationsPreviewInput = {
+  /** Target story for the mutation preview. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
@@ -328,14 +338,7 @@ export type PlanExecutionError = {
 };
 
 // ---------------------------------------------------------------------------
-// Revision guard options
+// Revision guard options — canonical definitions in write/write.ts
 // ---------------------------------------------------------------------------
 
-export type RevisionGuardOptions = {
-  expectedRevision?: string;
-};
-
-export type MutationOptions = RevisionGuardOptions & {
-  changeMode?: ChangeMode;
-  dryRun?: boolean;
-};
+export type { RevisionGuardOptions, MutationOptions } from '../write/write.js';

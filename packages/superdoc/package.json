@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.18.0",
+  "version": "1.26.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -14,7 +14,8 @@
   },
   "readme": "../../README.md",
   "files": [
-    "dist"
+    "dist",
+    "AGENTS.md"
   ],
   "exports": {
     ".": {
@@ -36,9 +37,25 @@
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
-      "types": "./dist/super-editor/src/index.d.ts",
+      "source": "./src/super-editor.js",
+      "types": "./dist/superdoc/src/super-editor.d.ts",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
+    },
+    "./headless-toolbar": {
+      "types": "./dist/superdoc/src/headless-toolbar.d.ts",
+      "source": "./src/headless-toolbar.js",
+      "import": "./dist/headless-toolbar.es.js"
+    },
+    "./headless-toolbar/react": {
+      "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
+      "source": "./src/headless-toolbar-react.js",
+      "import": "./dist/headless-toolbar-react.es.js"
+    },
+    "./headless-toolbar/vue": {
+      "types": "./dist/superdoc/src/headless-toolbar-vue.d.ts",
+      "source": "./src/headless-toolbar-vue.js",
+      "import": "./dist/headless-toolbar-vue.es.js"
     },
     "./file-zipper": {
       "import": "./dist/super-editor/file-zipper.es.js"
@@ -48,28 +65,39 @@
   "types": "./dist/superdoc/src/index.d.ts",
   "typesVersions": {
     "*": {
+      "headless-toolbar": [
+        "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
+      "headless-toolbar/react": [
+        "./dist/superdoc/src/headless-toolbar-react.d.ts"
+      ],
+      "headless-toolbar/vue": [
+        "./dist/superdoc/src/headless-toolbar-vue.d.ts"
+      ],
       "super-editor": [
-        "./dist/super-editor/src/index.d.ts"
+        "./dist/superdoc/src/super-editor.d.ts"
       ],
       "types": [
         "./dist/super-editor/src/types.d.ts"
       ]
     }
   },
-  "main": "./dist/superdoc.umd.js",
+  "main": "./dist/superdoc.cjs",
   "module": "./dist/superdoc.es.js",
+  "unpkg": "./dist/superdoc.min.js",
+  "jsdelivr": "./dist/superdoc.min.js",
   "scripts": {
     "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "collab-server": "pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build && tsx src/dev/collab-server.ts",
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
-    "build": "vite build && pnpm run build:umd",
+    "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
-    "build:umd": "vite build --config vite.config.umd.js",
-    "watch:umd": "vite build --watch --config vite.config.umd.js",
+    "build:cdn": "vite build --config vite.config.cdn.js",
+    "watch:cdn": "vite build --watch --config vite.config.cdn.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
@@ -90,14 +118,39 @@
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
     "pdfjs-dist": "^5.4.296",
+    "prosemirror-model": "^1.25.0",
+    "prosemirror-state": "^1.4.0",
+    "prosemirror-transform": "^1.9.0",
+    "prosemirror-view": "^1.33.0",
+    "react": ">=16.8.0",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pdfjs-dist": {
+      "optional": true
+    },
+    "prosemirror-model": {
+      "optional": true
+    },
+    "prosemirror-state": {
+      "optional": true
+    },
+    "prosemirror-transform": {
+      "optional": true
+    },
+    "prosemirror-view": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
-    "@superdoc/common": "workspace:*",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

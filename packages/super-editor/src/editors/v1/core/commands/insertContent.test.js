@@ -1,0 +1,427 @@
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
+import { insertContent } from './insertContent.js';
+import * as contentProcessor from '../helpers/contentProcessor.js';
+
+vi.mock('../helpers/contentProcessor.js');
+
+describe('insertContent', () => {
+  let mockCommands, mockState, mockEditor, mockTr;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockTr = {
+      selection: { from: 0, to: 10 },
+    };
+
+    mockCommands = {
+      insertContentAt: vi.fn(() => true),
+    };
+
+    mockState = {
+      schema: { nodes: {} },
+    };
+
+    mockEditor = {
+      schema: mockState.schema,
+      migrateListsToV2: vi.fn(),
+    };
+  });
+
+  it('uses original behavior when contentType is not specified', () => {
+    const command = insertContent('test content', {});
+
+    command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
+
+    expect(mockCommands.insertContentAt).toHaveBeenCalledWith({ from: 0, to: 10 }, 'test content', {});
+    expect(contentProcessor.processContent).not.toHaveBeenCalled();
+  });
+
+  it('uses content processor when contentType is specified', async () => {
+    const mockDoc = {
+      toJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+    };
+
+    contentProcessor.processContent.mockReturnValue(mockDoc);
+
+    const command = insertContent('<p>HTML</p>', { contentType: 'html' });
+
+    command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
+    await Promise.resolve(); // flush microtasks
+
+    expect(contentProcessor.processContent).toHaveBeenCalledWith({
+      content: '<p>HTML</p>',
+      type: 'html',
+      editor: mockEditor,
+    });
+
+    expect(mockCommands.insertContentAt).toHaveBeenCalledWith({ from: 0, to: 10 }, [], { contentType: 'html' });
+
+    // Should trigger list migration for HTML (microtask)
+    expect(mockEditor.migrateListsToV2).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates contentType and returns false for invalid types', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const command = insertContent('test', { contentType: 'invalid' });
+    const result = command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
+
+    expect(result).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid contentType'));
+    expect(mockCommands.insertContentAt).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles processing errors gracefully', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    contentProcessor.processContent.mockImplementation(() => {
+      throw new Error('Processing failed');
+    });
+
+    const command = insertContent('test', { contentType: 'html' });
+    const result = command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
+
+    expect(result).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to process html'), expect.any(Error));
+
+    consoleSpy.mockRestore();
+  });
+
+  it('processes all valid content types', () => {
+    const mockDoc = { toJSON: () => ({}) };
+    contentProcessor.processContent.mockReturnValue(mockDoc);
+
+    const validTypes = ['html', 'markdown', 'text', 'schema'];
+
+    validTypes.forEach((type) => {
+      const command = insertContent('content', { contentType: type });
+      command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
+
+      expect(contentProcessor.processContent).toHaveBeenCalledWith(expect.objectContaining({ type }));
+    });
+
+    expect(contentProcessor.processContent).toHaveBeenCalledTimes(4);
+  });
+
+  it('calls migrateListsToV2 only for html/markdown when insert succeeds', async () => {
+    const mockDoc = { toJSON: () => ({}) };
+    contentProcessor.processContent.mockReturnValue(mockDoc);
+
+    // html
+    insertContent('c', { contentType: 'html' })({
+      tr: mockTr,
+      state: mockState,
+      commands: mockCommands,
+      editor: mockEditor,
+    });
+    // markdown
+    insertContent('c', { contentType: 'markdown' })({
+      tr: mockTr,
+      state: mockState,
+      commands: mockCommands,
+      editor: mockEditor,
+    });
+    // text
+    insertContent('c', { contentType: 'text' })({
+      tr: mockTr,
+      state: mockState,
+      commands: mockCommands,
+      editor: mockEditor,
+    });
+    // schema
+    insertContent('c', { contentType: 'schema' })({
+      tr: mockTr,
+      state: mockState,
+      commands: mockCommands,
+      editor: mockEditor,
+    });
+
+    await Promise.resolve(); // flush microtasks
+    expect(mockEditor.migrateListsToV2).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not call migrateListsToV2 when insert fails', async () => {
+    mockCommands.insertContentAt.mockReturnValueOnce(false);
+    const mockDoc = { toJSON: () => ({}) };
+    contentProcessor.processContent.mockReturnValue(mockDoc);
+
+    insertContent('c', { contentType: 'html' })({
+      tr: mockTr,
+      state: mockState,
+      commands: mockCommands,
+      editor: mockEditor,
+    });
+    await Promise.resolve();
+    expect(mockEditor.migrateListsToV2).not.toHaveBeenCalled();
+  });
+});
+
+// Integration-style tests that use a real Editor instance to
+// insert markdown/HTML lists and verify exported OOXML has list numbering.
+//
+// These tests need the REAL contentProcessor (not the mock from the unit tests
+// above). We use a separate vi.mock-free import path by dynamically importing
+// the real insertContent function.
+describe('insertContent (integration) list export', () => {
+  let helpers = null;
+  let exportHelpers = null;
+  let cachedDocxData = null;
+  let activeEditor = null;
+
+  const getListParagraphs = (result) => {
+    const body = result.elements?.find((el) => el.name === 'w:body');
+    const paragraphs = (body?.elements || []).filter((el) => el.name === 'w:p');
+    return paragraphs.filter((p) => {
+      const pPr = p.elements?.find((e) => e.name === 'w:pPr');
+      const numPr = pPr?.elements?.find((e) => e.name === 'w:numPr');
+      return Boolean(numPr);
+    });
+  };
+
+  const getNumPrVals = (p) => {
+    const pPr = p.elements?.find((e) => e.name === 'w:pPr');
+    const numPr = pPr?.elements?.find((e) => e.name === 'w:numPr');
+    const numId = numPr?.elements?.find((e) => e.name === 'w:numId')?.attributes?.['w:val'];
+    const ilvl = numPr?.elements?.find((e) => e.name === 'w:ilvl')?.attributes?.['w:val'];
+    return { numId, ilvl };
+  };
+
+  // Load helpers and DOCX data once for all integration tests
+  beforeAll(async () => {
+    vi.resetModules();
+    vi.doUnmock('../helpers/contentProcessor.js');
+    helpers = await import('../../tests/helpers/helpers.js');
+    cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    exportHelpers = await import('../../tests/export/export-helpers/index.js');
+  }, 30000);
+
+  const setupEditor = () => {
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    activeEditor = editor;
+    return editor;
+  };
+
+  afterEach(() => {
+    activeEditor?.destroy();
+    activeEditor = null;
+  });
+
+  const exportFromEditorContent = async (editor) => {
+    const content = editor.getJSON().content || [];
+    return await exportHelpers.getExportedResultWithDocContent(content);
+  };
+
+  it('exports ordered list from markdown with numId/ilvl', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent('1. One\n2. Two', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const result = await exportFromEditorContent(editor);
+    const listParas = getListParagraphs(result);
+    expect(listParas.length).toBeGreaterThanOrEqual(2);
+
+    const first = getNumPrVals(listParas[0]);
+    expect(first.numId).toBeDefined();
+    expect(first.ilvl).toBe('0');
+
+    const second = getNumPrVals(listParas[1]);
+    expect(second.numId).toBe(first.numId); // same list
+    expect(second.ilvl).toBe('0');
+  });
+
+  it('exports unordered list from markdown with numId/ilvl', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent('- Alpha\n- Beta', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const result = await exportFromEditorContent(editor);
+    const listParas = getListParagraphs(result);
+    expect(listParas.length).toBeGreaterThanOrEqual(2);
+
+    const first = getNumPrVals(listParas[0]);
+    expect(first.numId).toBeDefined();
+    expect(first.ilvl).toBe('0');
+
+    const second = getNumPrVals(listParas[1]);
+    expect(second.numId).toBe(first.numId);
+    expect(second.ilvl).toBe('0');
+  });
+
+  it('exports ordered list from HTML with numId/ilvl', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent('<ol><li>First</li><li>Second</li></ol>', { contentType: 'html' });
+    await Promise.resolve();
+
+    const result = await exportFromEditorContent(editor);
+    const listParas = getListParagraphs(result);
+    expect(listParas.length).toBeGreaterThanOrEqual(2);
+
+    const first = getNumPrVals(listParas[0]);
+    expect(first.numId).toBeDefined();
+    expect(first.ilvl).toBe('0');
+  });
+
+  it('inserts markdown heading + bold text without creating a table', async () => {
+    const editor = setupEditor();
+
+    editor.commands.insertContent('# Hello\n\nSome **bold** text', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const doc = editor.getJSON();
+    const tableNode = (doc.content || []).find((node) => node?.type === 'table');
+
+    expect(tableNode).toBeUndefined();
+    expect(
+      doc.content?.some(
+        (node) => node?.type === 'paragraph' && node?.attrs?.paragraphProperties?.styleId === 'Heading1',
+      ),
+    ).toBe(true);
+    expect(doc.content?.some((node) => node?.type === 'paragraph')).toBe(true);
+  });
+
+  it('exports unordered list from HTML with numId/ilvl', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent('<ul><li>Apple</li><li>Banana</li></ul>', { contentType: 'html' });
+    await Promise.resolve();
+
+    const result = await exportFromEditorContent(editor);
+    const listParas = getListParagraphs(result);
+    expect(listParas.length).toBeGreaterThanOrEqual(2);
+
+    const first = getNumPrVals(listParas[0]);
+    expect(first.numId).toBeDefined();
+    expect(first.ilvl).toBe('0');
+  });
+
+  it('defaults imported HTML tables to 100% width', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent(
+      '<table><tbody><tr><td>Query</td><td>Assessment</td></tr><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('defaults imported markdown tables to 100% width', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent('| Query | Assessment |\n| --- | --- |\n| A | B |', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('does not inject inline cell borders on imported HTML table headers', async () => {
+    const editor = setupEditor();
+    editor.commands.insertContent(
+      '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    const headerCell = tableNode?.content?.[0]?.content?.[0];
+    expect(headerCell?.type).toBe('tableHeader');
+    // Headers should NOT have inline borders — style cascade owns them
+    expect(headerCell?.attrs?.borders).toBeNull();
+
+    const result = await exportFromEditorContent(editor);
+    const body = result.elements?.find((el) => el.name === 'w:body');
+    const table = body?.elements?.find((el) => el.name === 'w:tbl');
+    const firstRow = table?.elements?.find((el) => el.name === 'w:tr');
+    const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
+    const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
+    const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
+
+    // No inline cell borders should be emitted — table-level fallback borders handle this
+    expect(firstCellBorders).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CI-only: horizontal rule insertion (requires real Editor which depends on
+// @superdoc/document-api — unresolvable in local workspace, works in CI).
+// ---------------------------------------------------------------------------
+describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', () => {
+  let helpers = null;
+  let cachedDocxData = null;
+  let activeEditor = null;
+
+  beforeAll(async () => {
+    vi.resetModules();
+    vi.doUnmock('../helpers/contentProcessor.js');
+    helpers = await import('../../tests/helpers/helpers.js');
+    cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+  }, 30000);
+
+  const setupEditor = () => {
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    activeEditor = editor;
+    return editor;
+  };
+
+  afterEach(() => {
+    activeEditor?.destroy();
+    activeEditor = null;
+  });
+
+  const countHorizontalRules = (editor) => {
+    let count = 0;
+    const content = editor.getJSON().content || [];
+    for (const block of content) {
+      if (block.type === 'contentBlock' && block.attrs?.horizontalRule) count++;
+      // contentBlock is inline — check inside paragraph > run or paragraph directly
+      for (const inline of block.content || []) {
+        if (inline.type === 'contentBlock' && inline.attrs?.horizontalRule) count++;
+        for (const child of inline.content || []) {
+          if (child.type === 'contentBlock' && child.attrs?.horizontalRule) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  it('insertContent with contentType html creates a horizontal rule', async () => {
+    const editor = setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>', { contentType: 'html' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with contentType markdown creates a horizontal rule', async () => {
+    const editor = setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('---', { contentType: 'markdown' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with bare <hr> (no contentType) creates a horizontal rule', async () => {
+    const editor = setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>');
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+});

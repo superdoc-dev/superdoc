@@ -1,4 +1,5 @@
 import type { BlockNodeType } from './base.js';
+import type { StoryLocator } from './story.types.js';
 
 export type Range = {
   /** Inclusive start offset (0-based, UTF-16 code units). */
@@ -11,6 +12,8 @@ export type TextAddress = {
   kind: 'text';
   blockId: string;
   range: Range;
+  /** Story containing this text. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /**
@@ -40,10 +43,12 @@ export type TextSegment = {
 export type TextTarget = {
   kind: 'text';
   segments: [TextSegment, ...TextSegment[]];
+  /** Story containing this text target. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 // ---------------------------------------------------------------------------
-// Selection-based mutation targeting (v1)
+// Selection-based mutation targeting
 // ---------------------------------------------------------------------------
 
 /**
@@ -69,6 +74,8 @@ export type SelectionEdgeNodeAddress = {
   kind: 'block';
   nodeType: SelectionEdgeNodeType;
   nodeId: string;
+  /** Story containing this node. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /**
@@ -78,7 +85,12 @@ export type SelectionEdgeNodeAddress = {
  * - `nodeEdge`: The boundary of a block-level node (before or after).
  */
 export type SelectionPoint =
-  | { kind: 'text'; blockId: string; offset: number }
+  | {
+      kind: 'text';
+      blockId: string;
+      offset: number;
+      /** Story containing this point. Omit for body (backward compatible). */ story?: StoryLocator;
+    }
   | { kind: 'nodeEdge'; node: SelectionEdgeNodeAddress; edge: 'before' | 'after' };
 
 /**
@@ -91,6 +103,8 @@ export type SelectionTarget = {
   kind: 'selection';
   start: SelectionPoint;
   end: SelectionPoint;
+  /** Story containing this selection. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /** Discriminated input for direct operations: either an explicit target or a ref string. */
@@ -114,3 +128,32 @@ export type TrackedChangeAddress = {
 };
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;
+
+// ---------------------------------------------------------------------------
+// Navigation addressing
+// ---------------------------------------------------------------------------
+
+/**
+ * Address for navigating to a block-level element by its node ID.
+ *
+ * The `nodeId` maps to `paraId` (from OOXML) when available, with fallback
+ * to `sdBlockId` (session-scoped). Use the value returned by Document API
+ * queries (e.g. `query.match`, `find`, `getNode`) as the `nodeId`.
+ *
+ * When `nodeType` is omitted, the lookup searches across all block types.
+ */
+export type BlockNavigationAddress = {
+  kind: 'block';
+  nodeId: string;
+  nodeType?: SelectionEdgeNodeType;
+};
+
+/**
+ * Union of all address types accepted by `navigateTo()`.
+ *
+ * Supports navigation to:
+ * - Blocks by `nodeId` (paragraphs, headings, tables, images, SDTs)
+ * - Comments by `entityId`
+ * - Tracked changes by `entityId`
+ */
+export type NavigableAddress = BlockNavigationAddress | CommentAddress | TrackedChangeAddress;

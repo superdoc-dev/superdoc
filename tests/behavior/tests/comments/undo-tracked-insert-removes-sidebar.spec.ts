@@ -1,8 +1,16 @@
-import { test, expect } from '../../fixtures/superdoc.js';
+import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 import { getDocumentText, listTrackChanges } from '../../helpers/document-api.js';
 import { activateCommentDialog } from '../../helpers/comments.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
+
+async function historyUndo(superdoc: Pick<SuperDocFixture, 'page'>) {
+  return superdoc.page.evaluate(() => (window as any).editor.doc.history.undo());
+}
+
+async function historyRedo(superdoc: Pick<SuperDocFixture, 'page'>) {
+  return superdoc.page.evaluate(() => (window as any).editor.doc.history.redo());
+}
 
 test('undo tracked insertion removes suggestion bubble and sidebar entry', async ({ superdoc }) => {
   const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
@@ -18,9 +26,10 @@ test('undo tracked insertion removes suggestion bubble and sidebar entry', async
   await expect(sidebar).toBeVisible();
   await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
 
-  await superdoc.undo();
+  const result = await historyUndo(superdoc);
   await superdoc.waitForStable();
 
+  expect(result.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBe(0);
   await expect(sidebarTrackedChange).toHaveCount(0);
   await expect(
@@ -44,9 +53,10 @@ test('redo restores tracked insertion bubble and sidebar entry after undo', asyn
   await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();
 
-  await superdoc.undo();
+  const undoResult = await historyUndo(superdoc);
   await superdoc.waitForStable();
 
+  expect(undoResult.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBe(0);
   await expect(sidebarTrackedChange).toHaveCount(0);
   await expect(
@@ -55,9 +65,10 @@ test('redo restores tracked insertion bubble and sidebar entry after undo', asyn
     }),
   ).toHaveCount(0);
 
-  await superdoc.redo();
+  const redoResult = await historyRedo(superdoc);
   await superdoc.waitForStable();
 
+  expect(redoResult.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
   await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();

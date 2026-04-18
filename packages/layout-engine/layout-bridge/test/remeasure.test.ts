@@ -381,6 +381,36 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].leaders).toBeDefined();
       expect(measure.lines[0].leaders?.length).toBeGreaterThan(0);
       expect(measure.lines[0].leaders?.[0].style).toBe('dot');
+
+      const leader = measure.lines[0].leaders?.[0];
+
+      if (leader) {
+        expect(leader.from).toBeGreaterThanOrEqual(0);
+        expect(leader.to).toBeGreaterThan(leader.from);
+      }
+    });
+
+    it.each([
+      { label: 'without indent', indentLeft: 0 },
+      { label: 'with indent', indentLeft: 36 },
+    ])('leader from/to use absolute coordinates for right-aligned tab $label', ({ indentLeft }) => {
+      const tabStop: TabStop = { pos: pxToTwips(300), val: 'end', leader: 'dot' };
+      const block = createBlock([textRun('Chapter 1'), tabRun(), textRun('42')], {
+        tabs: [tabStop],
+        ...(indentLeft > 0 && { indent: { left: indentLeft } }),
+      });
+      const measure = remeasureParagraph(block, 1000);
+
+      expect(measure.lines).toHaveLength(1);
+      const leaders = measure.lines[0].leaders;
+      expect(leaders).toHaveLength(1);
+      const leader = leaders![0];
+
+      const textWidth = 'Chapter 1'.length * CHAR_WIDTH;
+      const pageNumWidth = '42'.length * CHAR_WIDTH;
+
+      expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
+      expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
     it('handles tab with hyphen leader', () => {
@@ -578,6 +608,63 @@ describe('remeasureParagraph', () => {
 
       expect(measure.lines.length).toBeGreaterThan(1);
       expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    // SD-2415: the guard was relaxed from `hasNegativeIndent` to `hasNegativeLeftIndent`.
+    // These tests pin the new behavior so a revert is caught.
+    it('widens first line with hanging when only right indent is negative', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: -30, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      // First line widens by hanging amount; body lines use plain content width.
+      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    it('does NOT widen first line when left indent is negative (SD-1401 regression guard)', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: -20, right: 0, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    // SD-2415: remeasure must match the initial measurer on `suppressFirstLineIndent`.
+    // Without this, remeasure (triggered by typing, resize, style change) produces a
+    // different first-line offset than the initial measure and text jumps on redraw.
+    it('honors suppressFirstLineIndent by not widening the first line', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: 0, hanging: 20 },
+        suppressFirstLineIndent: true,
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      // With suppressFirstLineIndent=true, firstLineOffset is forced to 0,
+      // so the first line uses the same width as body lines.
+      expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    it('widens first line when suppressFirstLineIndent is false (default)', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: 0, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
       expect(measure.lines[1].maxWidth).toBe(maxWidth);
     });
 
@@ -814,6 +901,61 @@ describe('remeasureParagraph', () => {
       // Verify the text is measured without errors
       expect(measure.lines.length).toBeGreaterThanOrEqual(1);
       expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('does not split a borderline narrow list word during remeasure', () => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      expect(ctx).not.toBeNull();
+      const originalMeasureText = ctx!.measureText.bind(ctx);
+      const widthMap = new Map<string, number>([
+        ['Terms', 48.9],
+        ['Term', 39.125],
+        ['Ter', 30],
+        ['Te', 20],
+        ['T', 10],
+        ['e', 8.5],
+        ['r', 5.8],
+        ['m', 14.825],
+        ['s', 8.8984375],
+        ['1.', 13.34375],
+      ]);
+
+      ctx!.measureText = ((text: string) => {
+        const mappedWidth = widthMap.get(text);
+        if (mappedWidth != null) {
+          return { width: mappedWidth } as TextMetrics;
+        }
+        return originalMeasureText(text);
+      }) as typeof ctx.measureText;
+
+      const block = createBlock([textRun('Terms', { bold: true, fontFamily: 'Arial, sans-serif', fontSize: 16 })], {
+        indent: { left: 24, hanging: 23.933333333333334 },
+        wordLayout: {
+          indentLeftPx: 24,
+          hangingPx: 23.933333333333334,
+          textStartPx: 24,
+          marker: {
+            markerText: '1.',
+            markerBoxWidthPx: 23.933333333333334,
+            textStartX: 24,
+            gutterWidthPx: 8,
+            suffix: 'tab',
+            run: {
+              fontFamily: 'Arial, sans-serif',
+              fontSize: 16,
+              bold: true,
+            },
+          },
+        },
+      } as ParagraphBlock['attrs']);
+
+      try {
+        const measure = remeasureParagraph(block, 72.26666666666667);
+        expect(measure.lines).toHaveLength(1);
+        expect(measure.lines[0]?.toChar).toBe(5);
+      } finally {
+        ctx!.measureText = originalMeasureText as typeof ctx.measureText;
+      }
     });
   });
 

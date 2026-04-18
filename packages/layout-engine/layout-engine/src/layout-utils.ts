@@ -157,6 +157,24 @@ export const computeFragmentPmRange = (
 export const computeLinePmRange = (block: ParagraphBlock, line: Line): LinePmRange =>
   computeLinePmRangeUnified(block, line);
 
+/**
+ * Per-paragraph contextual spacing (OOXML w:contextualSpacing).
+ *
+ * A paragraph suppresses its own before/after spacing when it has
+ * contextualSpacing enabled and the adjacent paragraph shares the same styleId.
+ * The adjacent paragraph's contextualSpacing flag is NOT consulted — each
+ * paragraph independently decides whether to suppress its own spacing.
+ *
+ * @see https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.contextualspacing
+ */
+export function shouldSuppressOwnSpacing(
+  ownStyleId: string | undefined,
+  ownContextualSpacing: boolean,
+  adjacentStyleId: string | undefined,
+): boolean {
+  return ownContextualSpacing && !!ownStyleId && !!adjacentStyleId && ownStyleId === adjacentStyleId;
+}
+
 export const extractBlockPmRange = (block: { attrs?: Record<string, unknown> } | null | undefined): LinePmRange => {
   if (!block || !block.attrs) {
     return {};

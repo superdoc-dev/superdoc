@@ -1,6 +1,6 @@
 import type { InlineAnchor } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { TocCreateLocation } from '../toc/toc.types.js';
 
@@ -163,21 +163,13 @@ export interface AuthoritiesMutationSuccess {
   success: true;
   authorities: AuthoritiesAddress;
 }
-export interface AuthoritiesMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-export type AuthoritiesMutationResult = AuthoritiesMutationSuccess | AuthoritiesMutationFailure;
+export type AuthoritiesMutationResult = AuthoritiesMutationSuccess | AdapterMutationFailure;
 
 export interface AuthorityEntryMutationSuccess {
   success: true;
   entry: AuthorityEntryAddress;
 }
-export interface AuthorityEntryMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-export type AuthorityEntryMutationResult = AuthorityEntryMutationSuccess | AuthorityEntryMutationFailure;
+export type AuthorityEntryMutationResult = AuthorityEntryMutationSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List results

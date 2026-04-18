@@ -108,8 +108,12 @@ const isBetweenBorderNone = (borders: ParagraphAttrs['borders']): boolean => {
  * 1. Both are para or list-item (not table/image/drawing)
  * 2. Neither is a page-split continuation
  * 3. They represent different logical paragraphs
- * 4. Both have a `between` border defined (not nil/none)
+ * 4. Both have border definitions
  * 5. Their full border definitions match (same border group)
+ *
+ * Per ECMA-376 §17.3.1.5: grouping occurs when all border properties are
+ * identical. A `between` border is NOT required — when absent, the group
+ * is rendered as a single box without a separator line.
  *
  * For each pair, the first fragment gets:
  * - showBetweenBorder: true — bottom border replaced with between definition
@@ -134,9 +138,7 @@ export const computeBetweenBorderFlags = (
     if (frag.continuesOnNext) continue;
 
     const borders = getFragmentParagraphBorders(frag, blockLookup);
-    // Skip if no between element at all (no grouping intent).
-    // between: {style: 'none'} (nil/none) IS allowed — it signals grouping without a separator.
-    if (!borders?.between) continue;
+    if (!borders) continue;
 
     const next = fragments[i + 1];
     if (next.kind !== 'para' && next.kind !== 'list-item') continue;
@@ -151,15 +153,17 @@ export const computeBetweenBorderFlags = (
       continue;
 
     const nextBorders = getFragmentParagraphBorders(next, blockLookup);
-    if (!nextBorders?.between) continue;
-    if (hashParagraphBorders(borders!) !== hashParagraphBorders(nextBorders!)) continue;
+    if (!nextBorders) continue;
+    if (hashParagraphBorders(borders) !== hashParagraphBorders(nextBorders)) continue;
 
     // Skip fragments in different columns (different x positions)
     if (frag.x !== next.x) continue;
 
     pairFlags.add(i);
 
-    // Track nil/none between pairs — these get suppressBottomBorder instead of showBetweenBorder
+    // Track nil/none/absent between pairs — these get suppressBottomBorder instead of showBetweenBorder.
+    // Per ECMA-376 §17.3.1.5: grouping happens when ALL borders are identical.
+    // When no between border is defined, the group has no separator line.
     if (isBetweenBorderNone(borders) && isBetweenBorderNone(nextBorders)) {
       noBetweenPairs.add(i);
     }

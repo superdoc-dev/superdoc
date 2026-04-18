@@ -1,4 +1,5 @@
 import type { BlockNodeAddress } from '../types/index.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type {
   ImageProperties,
   ImageWrapType,
@@ -187,6 +188,8 @@ export interface RemoveCaptionInput {
 // ---------------------------------------------------------------------------
 
 export interface CreateImageInput {
+  /** Target story for the new image. Omit for body (backward compatible). */
+  in?: StoryLocator;
   src: string;
   alt?: string;
   title?: string;

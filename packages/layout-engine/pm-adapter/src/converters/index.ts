@@ -11,7 +11,7 @@
  */
 
 // Paragraphs (converter + handler)
-export { paragraphToFlowBlocks, mergeAdjacentRuns, handleParagraphNode } from './paragraph.js';
+export { paragraphToFlowBlocks, mergeAdjacentRuns, handleParagraphNode, getLastParagraphFont } from './paragraph.js';
 
 // Content blocks (converter)
 export { contentBlockNodeToDrawingBlock } from './content-block.js';

@@ -104,13 +104,13 @@ function buildHaikuPrompt(files, diff) {
 
 ## Critical paths (rendering/layout can break):
 - packages/layout-engine/ (style-engine, layout-engine, pm-adapter, layout-bridge, measuring, painters)
-- packages/super-editor/src/core/super-converter/ (DOCX import/export)
-- packages/super-editor/src/core/presentation-editor/ (editor↔layout bridge)
+- packages/super-editor/src/editors/v1/core/super-converter/ (DOCX import/export)
+- packages/super-editor/src/editors/v1/core/presentation-editor/ (editor↔layout bridge)
 - packages/superdoc/src/core/ (main entry core)
 - packages/word-layout/
 
 ## Sensitive paths (editing behavior):
-- packages/super-editor/src/extensions/ and src/core/
+- packages/super-editor/src/editors/v1/extensions/ and src/editors/v1/core/
 - packages/superdoc/src/
 - packages/layout-engine/contracts/
 - packages/esign/, shared/
@@ -181,8 +181,8 @@ function buildSonnetPrompt(pr, title, diff, haikuResult) {
 ## Project Context
 Critical subsystems:
 - **Layout Engine** (packages/layout-engine/): style resolution, pagination, DOM painting, PM adapter
-- **Super Converter** (packages/super-editor/src/core/super-converter/): DOCX import/export
-- **Presentation Editor** (packages/super-editor/src/core/presentation-editor/): bridges editor ↔ layout
+- **Super Converter** (packages/super-editor/src/editors/v1/core/super-converter/): DOCX import/export
+- **Presentation Editor** (packages/super-editor/src/editors/v1/core/presentation-editor/): bridges editor ↔ layout
 - **Word Layout** (packages/word-layout/): Word document layout algorithms
 
 Sensitive: editor extensions, editor core, superdoc package, shared utilities, esign.

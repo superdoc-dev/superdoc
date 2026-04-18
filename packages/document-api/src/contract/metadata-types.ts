@@ -40,6 +40,12 @@ export const PRE_APPLY_THROW_CODES = [
   // SD-2070 content controls throw codes
   'LOCK_VIOLATION',
   'TYPE_MISMATCH',
+  // Story-scoped throw codes
+  'STORY_NOT_FOUND',
+  'STORY_MISMATCH',
+  'STORY_NOT_SUPPORTED',
+  'CROSS_STORY_PLAN',
+  'MATERIALIZATION_FAILED',
 ] as const;
 
 export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];

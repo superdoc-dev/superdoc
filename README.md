@@ -11,14 +11,15 @@
 <div align="center">
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/v/superdoc.svg?color=1355ff" height="22px"></a>
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/dm/superdoc.svg?color=1355ff" height="22px"></a>
+  <a href="https://codecov.io/gh/superdoc-dev/superdoc" target="_blank"><img src="https://codecov.io/gh/superdoc-dev/superdoc/branch/main/graph/badge.svg" height="22px"></a>
   <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg?color=1355ff" height="22px"></a>
   <a href="https://github.com/superdoc-dev/superdoc" target="_blank"><img src="https://img.shields.io/github/stars/superdoc-dev/superdoc?style=flat&color=1355ff" height="22px"></a>
   <a href="https://discord.com/invite/b9UuaZRyaB" target="_blank"><img src="https://img.shields.io/badge/discord-join-1355ff" height="22px"></a>
 </div>
 
 <p align="center">
-  <strong>A JavaScript library that renders and edits DOCX files in the browser, headless on the server, and within agentic workflows.</strong><br>
-  Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
+  <strong>The document engine for DOCX files.</strong><br>
+  Renders, edits, and automates .docx files in the browser, headless on the server, and within AI agent workflows.<br>
   Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 
@@ -80,6 +81,15 @@ Or use the CDN:
 
 For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
+### Using an AI coding agent?
+
+Set up your project for AI agents and configure the MCP server:
+
+```bash
+npx @superdoc-dev/create              # generates AGENTS.md for your framework
+claude mcp add superdoc -- npx @superdoc-dev/mcp   # connect agent to DOCX files
+```
+
 ## Features
 
 - **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers. Not a contenteditable wrapper with export bolted on.
@@ -87,7 +97,6 @@ For all available options and events, see the [documentation](https://docs.super
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
 - **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
-- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Examples
@@ -147,6 +156,15 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/roncallyt"><img src="https://github.com/roncallyt.png" width="50" height="50" alt="roncallyt" title="Thomerson Roncally" /></a>
 <a href="https://github.com/gpardhivvarma"><img src="https://github.com/gpardhivvarma.png" width="50" height="50" alt="gpardhivvarma" title="G Pardhiv Varma" /></a>
 <a href="https://github.com/lucbic"><img src="https://github.com/lucbic.png" width="50" height="50" alt="lucbic" title="Lucas Bicudo" /></a>
+<a href="https://github.com/claudiu-ior"><img src="https://github.com/claudiu-ior.png" width="50" height="50" alt="claudiu-ior" title="Claudiu Iorgulescu" /></a>
+<a href="https://github.com/Branc0"><img src="https://github.com/Branc0.png" width="50" height="50" alt="Branc0" title="Rafael Rocha de Azevedo" /></a>
+<a href="https://github.com/Muhammad-Nur-Alamsyah-Anwar"><img src="https://github.com/Muhammad-Nur-Alamsyah-Anwar.png" width="50" height="50" alt="Muhammad-Nur-Alamsyah-Anwar" title="Alam" /></a>
+<a href="https://github.com/andrewsrigom"><img src="https://github.com/andrewsrigom.png" width="50" height="50" alt="andrewsrigom" title="Andrews Rigom" /></a>
+<a href="https://github.com/iguit0"><img src="https://github.com/iguit0.png" width="50" height="50" alt="iguit0" title="Igor Alves" /></a>
+<a href="https://github.com/PeterHollens"><img src="https://github.com/PeterHollens.png" width="50" height="50" alt="PeterHollens" title="Peter Hollens" /></a>
+<a href="https://github.com/baristaGeek"><img src="https://github.com/baristaGeek.png" width="50" height="50" alt="baristaGeek" title="Esteban Vargas" /></a>
+<a href="https://github.com/Anuj52"><img src="https://github.com/Anuj52.png" width="50" height="50" alt="Anuj52" title="Anuj Chaudhary" /></a>
+<a href="https://github.com/Abdeltoto"><img src="https://github.com/Abdeltoto.png" width="50" height="50" alt="Abdeltoto" title="Abdel ATIA" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

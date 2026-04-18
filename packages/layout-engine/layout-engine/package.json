@@ -10,11 +10,10 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "bun test"
   },
   "dependencies": {
     "@superdoc/common": "workspace:*",
-    "@superdoc/contracts": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*"
+    "@superdoc/contracts": "workspace:*"
   }
 }

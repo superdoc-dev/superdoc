@@ -25,6 +25,8 @@ const PORT = Number(process.env.PORT ?? 8001);
 
 /** @type {SuperDocClient | null} */
 let client = null;
+/** @type {import('@superdoc-dev/sdk').SuperDocDocument | null} */
+let doc = null;
 let openResult = null;
 let initialized = false;
 let shuttingDown = false;
@@ -47,7 +49,7 @@ async function ensureInitialized() {
   client = new SuperDocClient({ watchdogTimeoutMs: WATCHDOG_TIMEOUT_MS });
   await client.connect();
 
-  openResult = await client.doc.open(
+  doc = await client.open(
     {
       doc: DOC_PATH,
       collaboration: {
@@ -60,9 +62,10 @@ async function ensureInitialized() {
     },
     { timeoutMs: OPEN_TIMEOUT_MS },
   );
+  openResult = doc.openResult;
 
   const markdownContent = await readFile(MARKDOWN_PATH, 'utf8');
-  await client.doc.insert({ value: markdownContent, type: 'markdown' });
+  await doc.insert({ value: markdownContent, type: 'markdown' });
   initialized = true;
 }
 
@@ -70,9 +73,9 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
 
-  if (!client) return;
+  if (!doc) return;
   try {
-    await client.doc.close({});
+    await doc.close({});
   } catch (error) {
     console.error('[node-sdk] doc.close failed:', error);
   }
@@ -120,7 +123,7 @@ async function handleRequest(req, res) {
   }
 
   if (url.pathname === '/status') {
-    sendJson(res, 200, await client.doc.status({}));
+    sendJson(res, 200, { ok: true, sessionId: doc.sessionId });
     return;
   }
 
@@ -130,12 +133,12 @@ async function handleRequest(req, res) {
       sendJson(res, 400, { ok: false, error: 'Missing query param: text' });
       return;
     }
-    sendJson(res, 200, await client.doc.insert({ value: text }));
+    sendJson(res, 200, await doc.insert({ value: text }));
     return;
   }
 
   if (url.pathname === '/markdown') {
-    const markdown = await client.doc.getMarkdown({});
+    const markdown = await doc.getMarkdown({});
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -158,7 +161,7 @@ async function handleRequest(req, res) {
 
   if (url.pathname === '/download') {
     await mkdir(dirname(DOWNLOAD_PATH), { recursive: true });
-    await client.doc.save({ out: DOWNLOAD_PATH, force: true });
+    await doc.save({ out: DOWNLOAD_PATH, force: true });
 
     res.writeHead(200, {
       'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

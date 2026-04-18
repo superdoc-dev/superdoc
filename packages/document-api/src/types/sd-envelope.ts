@@ -1,14 +1,16 @@
 /**
- * SDM/1 envelope types — addressing, read options, query/find, and results.
+ * SDM/1 envelope types — read options, query/find, and results.
  *
  * These types wrap the core node model for API operations:
- *   SDAddress     — universal node locator
  *   SDNodeResult  — single-node read/find result
  *   SDFindResult  — paginated find result set
  *   SDReadOptions — projection options for reads
  */
 
+import type { BlockNodeAddress, NodeAddress } from './base.js';
+import type { TextSelector, NodeSelector } from './query.js';
 import type { SDContentNode, SDInlineNode } from './sd-nodes.js';
+import type { StoryLocator } from './story.types.js';
 
 // ---------------------------------------------------------------------------
 // Address model
@@ -18,15 +20,6 @@ export interface SDPoint {
   blockId: string;
   /** UTF-16 code units. */
   offset: number;
-}
-
-export interface SDAddress {
-  kind: 'content' | 'inline' | 'annotation' | 'section';
-  stability: 'stable' | 'ephemeral';
-  nodeId?: string;
-  anchor?: { start: SDPoint; end: SDPoint };
-  evaluatedRevision?: string;
-  path?: Array<string | number>;
 }
 
 export interface SDNodeContext {
@@ -54,36 +47,20 @@ export interface SDReadOptions {
 // ---------------------------------------------------------------------------
 
 export interface SDGetInput {
-  options?: SDReadOptions;
-}
-
-export interface SDGetNodeInput {
-  target: SDAddress;
+  /** Restrict the read to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   options?: SDReadOptions;
 }
 
 // ---------------------------------------------------------------------------
-// Selectors
+// Find input
 // ---------------------------------------------------------------------------
-
-export interface SDTextSelector {
-  type: 'text';
-  pattern: string;
-  mode?: 'contains' | 'regex';
-  caseSensitive?: boolean;
-}
-
-export interface SDNodeSelector {
-  type: 'node';
-  kind?: 'content' | 'inline';
-  nodeKind?: string;
-}
-
-export type SDSelector = SDTextSelector | SDNodeSelector;
 
 export interface SDFindInput {
-  select: SDSelector;
-  within?: SDAddress;
+  select: TextSelector | NodeSelector;
+  within?: BlockNodeAddress;
+  /** Restrict the search to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   limit?: number;
   offset?: number;
   options?: SDReadOptions;
@@ -95,7 +72,7 @@ export interface SDFindInput {
 
 export interface SDNodeResult {
   node: SDContentNode | SDInlineNode;
-  address: SDAddress;
+  address: NodeAddress;
   context?: SDNodeContext;
 }
 

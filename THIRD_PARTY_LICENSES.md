@@ -6,7 +6,7 @@ This project includes code from third-party libraries. Their licenses are listed
 
 ## rtf.js (EMF/WMF Rendering)
 
-**Location:** `packages/super-editor/src/core/super-converter/v3/handlers/wp/helpers/rtfjs/`
+**Location:** `packages/super-editor/src/editors/v1/core/super-converter/v3/handlers/wp/helpers/rtfjs/`
 
 **Source:** https://github.com/nicktf/rtf.js
 

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { loadContract, REPO_ROOT } from './shared.mjs';
 import { generateNodeSdk } from './generate-node.mjs';
 import { generatePythonSdk } from './generate-python.mjs';
-import { generateToolCatalogs } from './generate-tool-catalogs.mjs';
+import { generateIntentTools } from './generate-intent-tools.mjs';
 
 /**
  * When SDK_CODEGEN_OUTPUT_ROOT is set (for --check mode), redirect outputs
@@ -21,6 +21,9 @@ function redirectedWriteGeneratedFile(filePath, content) {
   } else if (relToRepo.startsWith(path.join('packages', 'sdk', 'langs', 'python', 'superdoc', 'generated'))) {
     const relPart = path.relative(path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/generated'), filePath);
     destPath = path.join(outputRoot, 'python-generated', relPart);
+  } else if (relToRepo.startsWith(path.join('packages', 'sdk', 'langs', 'python', 'superdoc', 'tools'))) {
+    const relPart = path.relative(path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/tools'), filePath);
+    destPath = path.join(outputRoot, 'python-tools', relPart);
   } else if (relToRepo.startsWith(path.join('packages', 'sdk', 'tools'))) {
     const relPart = path.relative(path.join(REPO_ROOT, 'packages/sdk/tools'), filePath);
     destPath = path.join(outputRoot, 'tools', relPart);
@@ -43,10 +46,10 @@ async function main() {
   await Promise.all([
     generateNodeSdk(contract),
     generatePythonSdk(contract),
-    generateToolCatalogs(contract),
+    generateIntentTools(contract),
   ]);
 
-  console.log('Generated Node + Python SDKs + tool catalogs from contract.');
+  console.log('Generated Node + Python SDKs + tools from contract.');
 }
 
 main().catch((error) => {

@@ -1,6 +1,6 @@
 import type { InlineAnchor, BlockNodeAddress } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { TocCreateLocation } from '../toc/toc.types.js';
 
@@ -163,24 +163,14 @@ export interface IndexMutationSuccess {
   index: IndexAddress;
 }
 
-export interface IndexMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type IndexMutationResult = IndexMutationSuccess | IndexMutationFailure;
+export type IndexMutationResult = IndexMutationSuccess | AdapterMutationFailure;
 
 export interface IndexEntryMutationSuccess {
   success: true;
   entry: IndexEntryAddress;
 }
 
-export interface IndexEntryMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type IndexEntryMutationResult = IndexEntryMutationSuccess | IndexEntryMutationFailure;
+export type IndexEntryMutationResult = IndexEntryMutationSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List results

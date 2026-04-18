@@ -60,6 +60,7 @@ type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' 
 interface SectionElement {
   name: string;
   attributes?: Record<string, unknown>;
+  elements?: SectionElement[];
 }
 
 /**
@@ -223,14 +224,33 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   if (!cols?.attributes) return undefined;
 
   const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
-  const gapInches = parseColumnGap(cols.attributes['w:space'] as string | number | undefined);
   const withSeparator = parseColumnSeparator(cols.attributes['w:sep'] as string | number | undefined);
+  const equalWidthRaw = cols.attributes['w:equalWidth'];
+  const equalWidth =
+    equalWidthRaw === '0' || equalWidthRaw === 0 || equalWidthRaw === false
+      ? false
+      : equalWidthRaw === '1' || equalWidthRaw === 1 || equalWidthRaw === true
+        ? true
+        : undefined;
+  const columnChildren = Array.isArray(cols.elements) ? cols.elements.filter((child) => child?.name === 'w:col') : [];
+  const gapTwips =
+    cols.attributes['w:space'] ??
+    columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.['w:space'];
+  const gapInches = parseColumnGap(gapTwips as string | number | undefined);
+  const widths = columnChildren
+    .map((child) => Number(child.attributes?.['w:w']))
+    .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
+    .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
 
-  return {
+  const result: ColumnLayout = {
     count,
     gap: gapInches * PX_PER_INCH,
     withSeparator,
+    ...(widths.length > 0 ? { widths } : {}),
+    ...(equalWidth !== undefined ? { equalWidth } : {}),
   };
+
+  return result;
 }
 
 /**

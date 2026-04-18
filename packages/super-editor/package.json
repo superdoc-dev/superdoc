@@ -8,7 +8,7 @@
   ],
   "exports": {
     ".": {
-      "source": "./src/index.js",
+      "source": "./src/index.ts",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/super-editor.es.js"
     },
@@ -17,38 +17,64 @@
       "types": "./dist/src/types.d.ts",
       "import": "./dist/types.js"
     },
+    "./blank-docx": {
+      "source": "./src/editors/v1/core/blank-docx.ts",
+      "types": "./dist/src/editors/v1/core/blank-docx.d.ts"
+    },
+    "./document-api-adapters": {
+      "source": "./src/editors/v1/document-api-adapters/index.ts",
+      "types": "./dist/src/editors/v1/document-api-adapters/index.d.ts"
+    },
+    "./markdown": {
+      "source": "./src/editors/v1/core/helpers/markdown/index.ts",
+      "types": "./dist/src/editors/v1/core/helpers/markdown/index.d.ts"
+    },
+    "./parts-runtime": {
+      "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",
+      "types": "./dist/src/editors/v1/core/parts/init-parts-runtime.d.ts"
+    },
     "./*": {
       "source": "./src/*"
     },
     "./converter": {
-      "source": "./src/core/super-converter/SuperConverter.js",
+      "source": "./src/editors/v1/core/super-converter/SuperConverter.js",
       "import": "./dist/converter.es.js"
     },
     "./converter/internal/*": {
-      "default": "./src/core/super-converter/*"
+      "default": "./src/editors/v1/core/super-converter/*"
     },
     "./docx-zipper": {
-      "source": "./src/core/DocxZipper.js",
+      "source": "./src/editors/v1/core/DocxZipper.js",
       "import": "./dist/docx-zipper.es.js"
     },
     "./toolbar": {
-      "source": "./src/components/toolbar/Toolbar.vue",
+      "source": "./src/editors/v1/components/toolbar/Toolbar.vue",
       "import": "./dist/toolbar.es.js"
     },
+    "./headless-toolbar/react": {
+      "source": "./src/headless-toolbar/react.ts",
+      "types": "./dist/src/headless-toolbar/react.d.ts",
+      "import": "./dist/headless-toolbar-react.es.js"
+    },
+    "./headless-toolbar/vue": {
+      "source": "./src/headless-toolbar/vue.ts",
+      "types": "./dist/src/headless-toolbar/vue.d.ts",
+      "import": "./dist/headless-toolbar-vue.es.js"
+    },
     "./super-input": {
-      "source": "./src/components/SuperInput.vue",
+      "source": "./src/editors/v1/components/SuperInput.vue",
       "import": "./dist/super-input.es.js"
     },
     "./editor": {
-      "source": "./src/core/Editor.ts",
+      "source": "./src/editors/v1/core/Editor.ts",
       "import": "./dist/super-editor.es.js"
     },
     "./file-zipper": {
-      "source": "./src/core/super-converter/zipper.js",
+      "source": "./src/editors/v1/core/super-converter/zipper.js",
       "import": "./dist/file-zipper.es.js"
     },
     "./ai-writer": {
-      "source": "./src/core/components/AIWriter.vue",
+      "source": "./src/editors/v1/components/toolbar/AIWriter.vue",
       "import": "./dist/ai-writer.es.js"
     },
     "./style.css": {
@@ -56,7 +82,7 @@
       "import": "./dist/style.css"
     },
     "./presentation-editor": {
-      "source": "./src/index.js",
+      "source": "./src/index.ts",
       "import": "./dist/super-editor.es.js",
       "types": "./dist/index.d.ts"
     }
@@ -76,6 +102,19 @@
     "pack": "rm *.tgz 2>/dev/null || true && pnpm run build && pnpm pack && mv harbour-enterprises-super-editor-0.0.1-alpha.0.tgz ./super-editor.tgz"
   },
   "dependencies": {
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
+    "@superdoc/layout-bridge": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
+    "@superdoc/pm-adapter": "workspace:*",
+    "@superdoc/preset-geometry": "workspace:*",
+    "@superdoc/style-engine": "workspace:*",
+    "@superdoc/url-validation": "workspace:*",
+    "@superdoc/word-layout": "workspace:*",
     "buffer-crc32": "catalog:",
     "color2k": "catalog:",
     "eventemitter3": "catalog:",
@@ -108,24 +147,20 @@
   },
   "peerDependencies": {
     "@floating-ui/dom": "^1.7.0",
+    "react": ">=16.8.0",
     "tippy.js": "^6.3.7",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
     "@types/mdast": "catalog:",
-    "@superdoc/common": "workspace:*",
-    "@superdoc/document-api": "workspace:*",
-    "@superdoc/contracts": "workspace:*",
-    "@superdoc/layout-bridge": "workspace:*",
-    "@superdoc/measuring-dom": "workspace:*",
-    "@superdoc/painter-dom": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
-    "@superdoc/preset-geometry": "workspace:*",
-    "@superdoc/style-engine": "workspace:*",
-    "@superdoc/url-validation": "workspace:*",
-    "@superdoc/word-layout": "workspace:*",
+    "@types/react": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",
@@ -133,6 +168,7 @@
     "postcss-nested": "catalog:",
     "postcss-nested-import": "catalog:",
     "prosemirror-test-builder": "catalog:",
+    "react": "catalog:",
     "tippy.js": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

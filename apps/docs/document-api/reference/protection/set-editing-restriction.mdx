@@ -1,0 +1,107 @@
+---
+title: protection.setEditingRestriction
+sidebarTitle: protection.setEditingRestriction
+description: Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Enable Word-style editing restriction on the document. Only readOnly mode is supported in v1.
+
+- Operation ID: `protection.setEditingRestriction`
+- API member path: `editor.doc.protection.setEditingRestriction(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ProtectionMutationResult with the updated protection state on success.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `formattingRestricted` | boolean | no |  |
+| `mode` | enum | yes | `"readOnly"` |
+
+### Example request
+
+```json
+{
+  "formattingRestricted": true,
+  "mode": "readOnly"
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "formattingRestricted": {
+      "type": "boolean"
+    },
+    "mode": {
+      "enum": [
+        "readOnly"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "mode"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

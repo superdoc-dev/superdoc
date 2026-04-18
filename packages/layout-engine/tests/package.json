@@ -18,6 +18,7 @@
     "@superdoc/common": "workspace:*"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue": "catalog:",
     "tsx": "catalog:",
     "jsdom": "catalog:"
   }

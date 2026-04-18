@@ -248,6 +248,74 @@ describe('buildOperationArgv', () => {
   });
 });
 
+describe('legacy atRowIndex normalization for tables.split', () => {
+  test('maps legacy atRowIndex to canonical rowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', atRowIndex: 2 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('2');
+  });
+
+  test('does not overwrite explicit rowIndex with legacy atRowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('1');
+  });
+
+  test('accepts both when values match', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1, atRowIndex: 1 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('1');
+  });
+
+  test('rejects conflicting rowIndex and atRowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    expect(() => buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1, atRowIndex: 2 }, {}, undefined)).toThrow(
+      'tables.split: cannot provide both rowIndex and atRowIndex with different values.',
+    );
+  });
+
+  test('does not apply normalization to other operations', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.delete',
+      commandTokens: ['doc', 'tables', 'delete'],
+      params: [{ name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' }],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', atRowIndex: 2 } as any, {}, undefined);
+    expect(argv).not.toContain('--row-index');
+  });
+});
+
 describe('buildOperationArgv with real generated contract', () => {
   const realOpenOp = CONTRACT.operations['doc.open'] as OperationSpec;
 
@@ -266,5 +334,20 @@ describe('buildOperationArgv with real generated contract', () => {
     expect(argv[argv.indexOf('--user-name') + 1]).toBe('Bot');
     expect(argv).toContain('--user-email');
     expect(argv[argv.indexOf('--user-email') + 1]).toBe('bot@co.com');
+  });
+
+  test('generated doc.open spec includes password param', () => {
+    expect(realOpenOp.params.some((p) => p.name === 'password')).toBe(true);
+  });
+
+  test('password emits --password with real doc.open spec', () => {
+    const argv = buildOperationArgv(realOpenOp, { doc: 'secret.docx', password: 'test123' }, {}, undefined);
+    expect(argv).toContain('--password');
+    expect(argv[argv.indexOf('--password') + 1]).toBe('test123');
+  });
+
+  test('password is omitted from argv when not provided', () => {
+    const argv = buildOperationArgv(realOpenOp, { doc: 'plain.docx' }, {}, undefined);
+    expect(argv).not.toContain('--password');
   });
 });

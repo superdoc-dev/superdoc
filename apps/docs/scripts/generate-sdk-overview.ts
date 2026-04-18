@@ -4,6 +4,14 @@
  * Reads the SDK contract JSON and injects a categorized operations table
  * into the marker block in `apps/docs/document-engine/sdks.mdx`.
  *
+ * Key behaviors:
+ *   - Filters out internal operations (sdkSurface === 'internal').
+ *   - Remaps contract `doc.*` operationIds to SDK-accurate paths using the
+ *     `sdkSurface` field: client-surface ops render as `client.*`, document-
+ *     surface ops render as `doc.*`.
+ *   - Splits the flat `session` category into two rendered sections —
+ *     Lifecycle (open, save, close) and Client (describe, describeCommand).
+ *
  * Requires: `apps/cli/generated/sdk-contract.json` to exist on disk.
  * Run `pnpm run cli:export-sdk-contract` first if it doesn't.
  */
@@ -46,6 +54,7 @@ function replaceMarkerBlock(content: string, replacement: string): string {
 
 interface ContractOperation {
   operationId: string;
+  sdkSurface: 'client' | 'document' | 'internal';
   command: string;
   category: string;
   description: string;
@@ -56,6 +65,63 @@ interface ContractOperation {
 
 interface SdkContract {
   operations: Record<string, ContractOperation>;
+}
+
+// ---------------------------------------------------------------------------
+// SDK surface mapping
+//
+// The contract uses `doc.*` operationIds for everything, but the SDK exposes
+// operations on two distinct handles:
+//
+//   sdkSurface 'client'   → client.open(), client.describe(), ...
+//   sdkSurface 'document' → doc.save(), doc.format.bold(), ...
+//   sdkSurface 'internal' → not exposed in the SDK (filtered out)
+//
+// Session-category operations are split into two rendered sections:
+//
+//   lifecycle — session management: open, save, close
+//   client    — introspection:      describe, describeCommand
+// ---------------------------------------------------------------------------
+
+const SURFACE_HANDLE_PREFIX: Record<string, string> = {
+  client: 'client',
+  document: 'doc',
+};
+
+/** Session operations that manage the document lifecycle (open, save, close). */
+const LIFECYCLE_OPERATION_IDS = new Set(['doc.open', 'doc.save', 'doc.close']);
+
+// ---------------------------------------------------------------------------
+// Contract → renderable transformation
+// ---------------------------------------------------------------------------
+
+interface RenderableOperation {
+  sdkPath: string;
+  command: string;
+  category: string;
+  description: string;
+}
+
+function sdkMethodPath(operationId: string, sdkSurface: string): string {
+  const prefix = SURFACE_HANDLE_PREFIX[sdkSurface] ?? 'doc';
+  const memberPath = operationId.replace(/^doc\./, '');
+  return `${prefix}.${memberPath}`;
+}
+
+function resolveRenderCategory(op: ContractOperation): string {
+  if (op.category !== 'session') return op.category;
+  return LIFECYCLE_OPERATION_IDS.has(op.operationId) ? 'lifecycle' : 'client';
+}
+
+function prepareOperations(raw: ContractOperation[]): RenderableOperation[] {
+  return raw
+    .filter((op) => op.sdkSurface !== 'internal')
+    .map((op) => ({
+      sdkPath: sdkMethodPath(op.operationId, op.sdkSurface),
+      command: op.command,
+      category: resolveRenderCategory(op),
+      description: op.description,
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +152,8 @@ const CATEGORY_DISPLAY_ORDER = [
   'comments',
   'trackChanges',
   'history',
-  'session',
+  'lifecycle',
+  'client',
 ] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -101,15 +168,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   comments: 'Comments',
   trackChanges: 'Track changes',
   history: 'History',
-  session: 'Session',
+  lifecycle: 'Lifecycle',
+  client: 'Client',
 };
 
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
-function groupByCategory(operations: ContractOperation[]): Map<string, ContractOperation[]> {
-  const groups = new Map<string, ContractOperation[]>();
+function groupByCategory(operations: RenderableOperation[]): Map<string, RenderableOperation[]> {
+  const groups = new Map<string, RenderableOperation[]>();
 
   for (const op of operations) {
     const list = groups.get(op.category) ?? [];
@@ -129,18 +197,16 @@ function toSnakeCase(value: string): string {
     .toLowerCase();
 }
 
-function operationPathForLanguage(operationId: string, language: SdkLanguage): string {
-  if (language === 'node') {
-    return operationId;
-  }
+function formatPathForLanguage(sdkPath: string, language: SdkLanguage): string {
+  if (language === 'node') return sdkPath;
 
-  return operationId
+  return sdkPath
     .split('.')
     .map((token, index) => (index === 0 ? token : toSnakeCase(token)))
     .join('.');
 }
 
-function resolveCategoryOrder(operations: ContractOperation[]): string[] {
+function resolveCategoryOrder(operations: RenderableOperation[]): string[] {
   const availableCategories = Array.from(new Set(operations.map((op) => op.category)));
 
   const preferredCategories = CATEGORY_DISPLAY_ORDER.filter((category) => availableCategories.includes(category));
@@ -171,7 +237,7 @@ function escapeTableCell(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
-function renderOperationsTable(operations: ContractOperation[], language: SdkLanguage): string {
+function renderOperationsTable(operations: RenderableOperation[], language: SdkLanguage): string {
   const grouped = groupByCategory(operations);
   const categoryOrder = resolveCategoryOrder(operations);
 
@@ -184,8 +250,8 @@ function renderOperationsTable(operations: ContractOperation[], language: SdkLan
     const label = humanizeCategoryName(category);
     const rows = ops
       .map((op) => {
-        const operationPath = operationPathForLanguage(op.operationId, language);
-        return `| \`${operationPath}\` | \`${op.command}\` | ${escapeTableCell(op.description)} |`;
+        const path = formatPathForLanguage(op.sdkPath, language);
+        return `| \`${path}\` | \`${op.command}\` | ${escapeTableCell(op.description)} |`;
       })
       .join('\n');
 
@@ -195,7 +261,7 @@ function renderOperationsTable(operations: ContractOperation[], language: SdkLan
   return sections.join('\n\n');
 }
 
-function renderLanguageTab(operations: ContractOperation[], languageTab: SdkLanguageTab): string {
+function renderLanguageTab(operations: RenderableOperation[], languageTab: SdkLanguageTab): string {
   const table = renderOperationsTable(operations, languageTab.id);
 
   return `  <Tab title="${languageTab.title}">
@@ -205,13 +271,13 @@ ${table}
   </Tab>`;
 }
 
-function renderMarkerBlock(operations: ContractOperation[]): string {
+function renderMarkerBlock(operations: RenderableOperation[]): string {
   const tabs = SDK_LANGUAGE_TABS.map((languageTab) => renderLanguageTab(operations, languageTab)).join('\n');
 
   return `${MARKER_START}
 ## Available operations
 
-The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. \`client.open()\` returns a bound document handle — all document operations run on that handle.
 
 <Tabs>
 ${tabs}
@@ -226,7 +292,7 @@ ${MARKER_END}`;
 async function main(): Promise<void> {
   const contractRaw = await readFile(CONTRACT_PATH, 'utf8');
   const contract: SdkContract = JSON.parse(contractRaw);
-  const operations = Object.values(contract.operations);
+  const operations = prepareOperations(Object.values(contract.operations));
 
   const overviewContent = await readFile(SDK_OVERVIEW_PATH, 'utf8');
   const block = renderMarkerBlock(operations);

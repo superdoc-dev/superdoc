@@ -121,9 +121,9 @@ async function main() {
     ]);
   });
 
-  // 2. Regenerate SDK artifacts from current contract
-  await check('SDK/codegen artifacts are current', async () => {
-    await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
+  // 2. Regenerate SDK artifacts from source-backed contract export
+  await check('SDK/codegen artifacts regenerate cleanly from source', async () => {
+    await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/sdk-generate.mjs')]);
   });
 
   // 3. Load contract and verify structure
@@ -156,39 +156,28 @@ async function main() {
   await check('Python SDK imports successfully', async () => {
     await run('python3', [
       '-c',
-      'from superdoc import SuperDocClient, AsyncSuperDocClient, SuperDocError, get_tool_catalog, list_tools, resolve_tool_operation, choose_tools, dispatch_superdoc_tool, dispatch_superdoc_tool_async, get_available_groups',
+      'from superdoc import SuperDocClient, AsyncSuperDocClient, SuperDocError, get_tool_catalog, list_tools, choose_tools, dispatch_superdoc_tool, dispatch_superdoc_tool_async, get_system_prompt',
     ], {
       cwd: path.join(REPO_ROOT, 'packages/sdk/langs/python'),
     });
   });
 
-  // 7. Tool catalog integrity
-  await check('Tool catalog operation count matches contract', async () => {
+  // 7. Intent tool catalog integrity
+  await check('Intent tool catalog has correct tool count', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
-    // Count non-skipped operations in the contract
-    const nonSkippedOps = Object.entries(contract.operations).filter(([, op]) => !op.skipAsATool);
-    const expectedCount = nonSkippedOps.length;
-    const toolCount = catalog.tools.length;
-
-    if (toolCount !== expectedCount) {
-      throw new Error(`Catalog tools (${toolCount}) != non-skipped contract ops (${expectedCount})`);
-    }
-  });
-
-  // 8. Tool name map covers all non-skipped operations
-  await check('Tool name map covers all operations', async () => {
-    const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
-    const mappedOps = new Set(Object.values(nameMap));
-
-    for (const [opId, op] of Object.entries(contract.operations)) {
+    // Count unique intentGroups in the contract
+    const intentGroups = new Set();
+    for (const [, op] of Object.entries(contract.operations)) {
       if (op.skipAsATool) continue;
-      if (!mappedOps.has(opId)) {
-        throw new Error(`Operation ${opId} not covered by any tool name`);
-      }
+      if (op.intentGroup) intentGroups.add(op.intentGroup);
+    }
+    const toolCount = catalog.tools.length;
+    if (toolCount !== intentGroups.size) {
+      throw new Error(`Catalog intent tools (${toolCount}) != unique intent groups (${intentGroups.size})`);
     }
   });
 
-  // 9. Provider bundles exist and have correct tool counts
+  // 8. Provider bundles exist and have correct tool counts
   await check('Provider bundles are consistent', async () => {
     const providers = ['openai', 'anthropic', 'vercel', 'generic'];
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
@@ -197,9 +186,8 @@ async function main() {
     for (const provider of providers) {
       const bundle = await readJson(path.join(REPO_ROOT, `packages/sdk/tools/tools.${provider}.json`));
       if (!Array.isArray(bundle.tools)) throw new Error(`${provider} bundle missing tools array`);
-      // Provider bundles include catalog tools + synthetic tools (e.g. discover_tools)
-      if (bundle.tools.length < expectedCount) {
-        throw new Error(`${provider} tool count (${bundle.tools.length}) < catalog (${expectedCount})`);
+      if (bundle.tools.length !== expectedCount) {
+        throw new Error(`${provider} tool count (${bundle.tools.length}) != catalog (${expectedCount})`);
       }
     }
   });
@@ -228,33 +216,16 @@ async function main() {
     }
   });
 
-  // 11. All catalog tools have input schemas and required params match contract
-  await check('Catalog input schemas present and required params match contract', async () => {
+  // 11. All catalog tools have input schemas
+  await check('Catalog input schemas present', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
 
     for (const tool of catalog.tools) {
       if (!tool.inputSchema || typeof tool.inputSchema !== 'object') {
-        throw new Error(`${tool.operationId} missing inputSchema`);
+        throw new Error(`${tool.toolName} missing inputSchema`);
       }
-
-      // Verify required params from contract appear as required in inputSchema
-      const contractOp = contract.operations[tool.operationId];
-      if (!contractOp) continue;
-
-      const contractRequired = (contractOp.params ?? [])
-        .filter((p) => p.required === true)
-        .map((p) => p.name)
-        // Exclude transport-envelope params that are intentionally omitted from tool schemas
-        .filter((name) => !['out', 'json', 'expectedRevision', 'changeMode', 'dryRun'].includes(name));
-
-      const schemaRequired = new Set(tool.inputSchema.required ?? []);
-      for (const name of contractRequired) {
-        // Only check if the param is in the schema properties (some params are omitted by design)
-        if (tool.inputSchema.properties && name in tool.inputSchema.properties && !schemaRequired.has(name)) {
-          throw new Error(
-            `${tool.operationId}: param "${name}" is required in contract but not in inputSchema`,
-          );
-        }
+      if (tool.inputSchema.type !== 'object') {
+        throw new Error(`${tool.toolName} inputSchema is not an object type`);
       }
     }
   });
@@ -300,19 +271,14 @@ async function main() {
   // 13. Provider tool name extraction smoke test
   await check('OpenAI/Vercel tools have extractable names', async () => {
     const openaiBundle = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tools.openai.json'));
-    const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
-
-    // Synthetic meta-tools (e.g. discover_tools) are not in the name map
-    const syntheticTools = new Set(['discover_tools']);
 
     for (const tool of openaiBundle.tools) {
       const name = tool?.function?.name ?? tool?.name;
       if (typeof name !== 'string' || !name) {
         throw new Error('OpenAI tool missing extractable name');
       }
-      if (syntheticTools.has(name)) continue;
-      if (!(name in nameMap)) {
-        throw new Error(`OpenAI tool name "${name}" not in tool-name-map`);
+      if (!name.startsWith('superdoc_')) {
+        throw new Error(`OpenAI tool name "${name}" does not match superdoc_* pattern`);
       }
     }
   });
@@ -329,12 +295,13 @@ async function main() {
 
     const requiredTools = [
       'catalog.json',
-      'tool-name-map.json',
       'tools-policy.json',
       'tools.openai.json',
       'tools.anthropic.json',
       'tools.vercel.json',
       'tools.generic.json',
+      'system-prompt.md',
+      'system-prompt-mcp.md',
     ];
     const missingTools = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
     if (missingTools.length > 0) {
@@ -362,6 +329,11 @@ async function main() {
   // 16. Run SDK codegen test suite (contract-integrity + cross-lang parity)
   await check('SDK test suite passes (bun test)', async () => {
     await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/codegen/src/__tests__/')]);
+  });
+
+  // 16b. Run Node SDK helper tests (bun test)
+  await check('Node SDK helper tests pass (bun test)', async () => {
+    await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/langs/node/src/helpers/__tests__/')]);
   });
 
   // 17. Node SDK platform package manifests exist and are well-formed
@@ -405,7 +377,7 @@ async function main() {
   // 19. Host-platform compiled CLI smoke test
   await check('CLI compiled binary can open a document on host platform', async () => {
     const cliBinaryPath = resolveHostCliBinaryPath();
-    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-paragraph.docx');
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-cli-validate-'));
 
     try {
@@ -436,7 +408,7 @@ async function main() {
   // 20. Python SDK + compiled CLI integration smoke test
   await check('Python SDK can open a document via host compiled CLI binary', async () => {
     const cliBinaryPath = resolveHostCliBinaryPath();
-    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-paragraph.docx');
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-python-sdk-validate-'));
 
     try {
@@ -449,10 +421,10 @@ async function main() {
         `state_dir = ${JSON.stringify(stateDir)}`,
         'client = SuperDocClient(env={"SUPERDOC_CLI_BIN": cli_bin, "SUPERDOC_CLI_STATE_DIR": state_dir}, watchdog_timeout_ms=120_000)',
         'try:',
-        '    result = client.doc.open({"doc": doc_path}, timeout_ms=90_000)',
-        '    if result.get("active") is not True:',
-        '        raise RuntimeError(f"doc.open did not report an active session: {result!r}")',
-        '    client.doc.close({})',
+        '    doc = client.open({"doc": doc_path})',
+        '    if doc.open_result.get("active") is not True:',
+        '        raise RuntimeError(f"doc.open did not report an active session: {doc.open_result!r}")',
+        '    doc.close({})',
         'finally:',
         '    client.dispose()',
       ].join('\n');

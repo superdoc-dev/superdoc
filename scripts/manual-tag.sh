@@ -4,6 +4,7 @@ set -euo pipefail
 # Usage: ./scripts/manual-tag.sh <version> <commit>
 # Example: ./scripts/manual-tag.sh v1.2.0-next.1 b4903188
 #          ./scripts/manual-tag.sh v1.2.0 HEAD
+#          ./scripts/manual-tag.sh cli-v0.3.0 HEAD
 
 VERSION="${1:-}"
 COMMIT="${2:-HEAD}"
@@ -17,13 +18,21 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-# Ensure version starts with 'v'
-if [[ ! "$VERSION" =~ ^v ]]; then
+# Prepend 'v' only for bare numeric versions (e.g. 1.2.0 → v1.2.0).
+# Prefixed tags like cli-v0.3.0 are left as-is.
+if [[ "$VERSION" =~ ^[0-9] ]]; then
   VERSION="v$VERSION"
 fi
 
-# Extract version without 'v' prefix for semver parsing
-VERSION_NUM="${VERSION#v}"
+# Extract the numeric version after the tag-format 'v' for semver/channel parsing.
+# Anchors on 'v' followed by a digit to skip prefixes like 'vscode-'.
+# e.g. 'v1.2.0' → '1.2.0', 'cli-v0.3.0-next.1' → '0.3.0-next.1',
+#      'vscode-v1.0.0' → '1.0.0' (not 'scode-v1.0.0').
+if [[ "$VERSION" =~ v([0-9].*)$ ]]; then
+  VERSION_NUM="${BASH_REMATCH[1]}"
+else
+  VERSION_NUM="$VERSION"
+fi
 
 # Determine channel from version
 if [[ "$VERSION_NUM" =~ -next\. ]]; then

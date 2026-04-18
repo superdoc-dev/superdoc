@@ -6,8 +6,6 @@ description: Retrieve cell information for a table, optionally filtered by row o
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Retrieve cell information for a table, optionally filtered by row or column.
@@ -26,24 +24,35 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="table")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | no |  |
+| `rowIndex` | integer | no |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2
+### Variant 2 (required: nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | no |  |
+| `nodeId` | string | yes |  |
+| `rowIndex` | integer | no |  |
 
 ### Example request
 
 ```json
 {
-  "nodeId": "node-def456",
+  "columnIndex": 1,
   "rowIndex": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   }
 }
 ```
@@ -52,15 +61,29 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `address` | TableAddress | yes | TableAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | `"table"` | yes | Constant: `"table"` |
 | `cells` | object[] | yes |  |
-| `tableNodeId` | string | yes |  |
+| `nodeId` | string | yes |  |
 
 ### Example response
 
 ```json
 {
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
   "cells": [
     {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "tableCell"
+      },
       "colspan": 1,
       "columnIndex": 1,
       "nodeId": "node-def456",
@@ -68,7 +91,7 @@ _No fields._
       "rowspan": 1
     }
   ],
-  "tableNodeId": "example"
+  "nodeId": "node-def456"
 }
 ```
 
@@ -111,7 +134,7 @@ _No fields._
       "type": "integer"
     },
     "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     }
   },
   "type": "object"
@@ -124,10 +147,16 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "address": {
+      "$ref": "#/$defs/TableAddress"
+    },
     "cells": {
       "items": {
         "additionalProperties": false,
         "properties": {
+          "address": {
+            "$ref": "#/$defs/TableCellAddress"
+          },
           "colspan": {
             "minimum": 1,
             "type": "integer"
@@ -150,6 +179,7 @@ _No fields._
         },
         "required": [
           "nodeId",
+          "address",
           "rowIndex",
           "columnIndex",
           "colspan",
@@ -159,12 +189,13 @@ _No fields._
       },
       "type": "array"
     },
-    "tableNodeId": {
+    "nodeId": {
       "type": "string"
     }
   },
   "required": [
-    "tableNodeId",
+    "nodeId",
+    "address",
     "cells"
   ],
   "type": "object"

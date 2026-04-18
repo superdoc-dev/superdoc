@@ -1,0 +1,96 @@
+.super-editor .sd-structured-content,
+.super-editor .sd-structured-content-block {
+  padding: 1px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.super-editor .sd-structured-content:has(img),
+.super-editor .sd-structured-content:has(img) .sd-structured-content__content {
+  display: inline-block;
+}
+
+/* Hover (not selected): light grey background, no handle */
+.super-editor .sd-structured-content:not(.ProseMirror-selectednode):hover {
+  background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
+}
+
+.super-editor .sd-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+/* Selected: border + handle visible */
+.super-editor .sd-structured-content.ProseMirror-selectednode {
+  border-color: var(--sd-content-controls-inline-border, #629be7);
+}
+
+.super-editor .sd-structured-content-block.ProseMirror-selectednode {
+  border-color: var(--sd-content-controls-block-border, #629be7);
+}
+
+.super-editor .sd-structured-content-draggable {
+  font-size: 10px;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 2px;
+  bottom: 100%;
+  width: calc(100% - 4px);
+  max-width: 110px;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--sd-content-controls-label-border, #629be7);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
+  color: var(--sd-content-controls-label-text, #ffffff);
+  box-sizing: border-box;
+  z-index: 10;
+  cursor: grab;
+  display: none;
+}
+
+.super-editor .sd-structured-content-draggable span {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Handle only visible when selected */
+.super-editor .sd-structured-content.ProseMirror-selectednode .sd-structured-content-draggable,
+.super-editor .sd-structured-content-block.ProseMirror-selectednode .sd-structured-content-draggable {
+  display: inline-flex;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content,
+.super-editor .ProseMirror.view-mode .sd-structured-content-block {
+  padding: 0;
+  border: none;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content:hover,
+.super-editor .ProseMirror.view-mode .sd-structured-content-block:hover {
+  background: none;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content-draggable {
+  display: none;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content-block.ProseMirror-selectednode {
+  outline: none;
+}
+
+.presentation-editor--viewing .sd-structured-content,
+.presentation-editor--viewing .sd-structured-content-block {
+  padding: 0;
+  border: none;
+}
+
+.presentation-editor--viewing .sd-structured-content-draggable {
+  display: none;
+}

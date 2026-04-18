@@ -57,12 +57,6 @@ describe('CLI-only operation definitions', () => {
     }
   });
 
-  test('all CLI-only ops have non-empty intentName', () => {
-    for (const [, def] of Object.entries(CLI_ONLY_OPERATION_DEFINITIONS)) {
-      expect(def.intentName).toBeTruthy();
-    }
-  });
-
   test('sdkMetadata fields present and correctly typed', () => {
     const validIdempotency = new Set(['idempotent', 'non-idempotent', 'conditional']);
 
@@ -109,26 +103,6 @@ describe('CLI-only outputSchema validity', () => {
   test('all outputSchemas have valid JSON Schema structure', () => {
     for (const [op, def] of Object.entries(CLI_ONLY_OPERATION_DEFINITIONS)) {
       validateSchemaNode(def.outputSchema, op);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Intent name naming policy
-// ---------------------------------------------------------------------------
-
-describe('CLI-only intent name naming policy', () => {
-  test('all intentNames match snake_case naming policy', () => {
-    for (const [, def] of Object.entries(CLI_ONLY_OPERATION_DEFINITIONS)) {
-      expect(def.intentName).toMatch(/^[a-z][a-z0-9_]*$/);
-    }
-  });
-
-  test('all intentNames are unique', () => {
-    const seen = new Set<string>();
-    for (const [, def] of Object.entries(CLI_ONLY_OPERATION_DEFINITIONS)) {
-      expect(seen.has(def.intentName)).toBe(false);
-      seen.add(def.intentName);
     }
   });
 });

@@ -51,9 +51,10 @@ export interface SuperDocEditorCreateEvent {
 }
 
 /** Event passed to onEditorUpdate callback */
-export interface SuperDocEditorUpdateEvent {
-  editor: Editor;
-}
+export type SuperDocEditorUpdateEvent = Parameters<NonNullable<SuperDocConstructorConfig['onEditorUpdate']>>[0];
+
+/** Event passed to onTransaction callback */
+export type SuperDocTransactionEvent = Parameters<NonNullable<SuperDocConstructorConfig['onTransaction']>>[0];
 
 /** Event passed to onContentError callback */
 export interface SuperDocContentErrorEvent {
@@ -66,6 +67,8 @@ export interface SuperDocContentErrorEvent {
 /** Event passed to onException callback */
 export interface SuperDocExceptionEvent {
   error: Error;
+  editor?: Editor | null;
+  code?: string;
 }
 
 // =============================================================================
@@ -132,6 +135,10 @@ interface ReactProps {
 
   /** Hide the toolbar container. When true, no toolbar is rendered. @default false */
   hideToolbar?: boolean;
+
+  /** Enable contained mode for fixed-height container embedding. When true, SuperDoc
+   *  fits within its parent's height and scrolls internally. @default false */
+  contained?: boolean;
 
   /** Additional CSS class name for the wrapper element */
   className?: string;

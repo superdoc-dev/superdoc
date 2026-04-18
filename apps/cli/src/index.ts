@@ -7,6 +7,7 @@ import { normalizeJsonValue } from './lib/input-readers';
 import type { CliIO, CommandContext, CommandExecution, ExecutionMode, GlobalOptions, OutputMode } from './lib/types';
 import { runCall } from './commands/call';
 import { runClose } from './commands/close';
+import { runInsertLineBreak, runInsertTab } from './commands/insert-inline-special';
 import { runOpen } from './commands/open';
 import { runSessionClose } from './commands/session-close';
 import { runSessionList } from './commands/session-list';
@@ -47,6 +48,7 @@ const HELP = [
   '  --pretty',
   '  --session <id>',
   '  --timeout-ms <n>',
+  '  --quiet',
   '  --help, -h',
   '  --version, -v',
 ].join('\n');
@@ -84,6 +86,8 @@ export type InvokeCommandOptions = {
 const MANUAL_COMMANDS = {
   call: runCall,
   close: runClose,
+  'insert line-break': runInsertLineBreak,
+  'insert tab': runInsertTab,
   open: runOpen,
   save: runSave,
   'session list': runSessionList,
@@ -113,6 +117,9 @@ function defaultIo(): CliIO {
       process.stdout.write(message);
     },
     stderr(message: string) {
+      process.stderr.write(message);
+    },
+    warn(message: string) {
       process.stderr.write(message);
     },
     readStdinBytes() {
@@ -150,8 +157,20 @@ function mergeIo(overrides?: Partial<CliIO>): CliIO {
   return {
     stdout: overrides.stdout ?? base.stdout,
     stderr: overrides.stderr ?? base.stderr,
+    warn: overrides.warn ?? base.warn,
     readStdinBytes: overrides.readStdinBytes ?? base.readStdinBytes,
     now: overrides.now ?? base.now,
+  };
+}
+
+function applyDiagnosticPolicy(io: CliIO, globals: GlobalOptions): CliIO {
+  if (globals.output === 'pretty' && !globals.quiet) {
+    return io;
+  }
+
+  return {
+    ...io,
+    warn() {},
   };
 }
 
@@ -293,9 +312,10 @@ export async function invokeCommand(argv: string[], options: InvokeCommandOption
   const startedAt = io.now();
   const { parsed, output } = await withStateDirOverride(options.stateDir, async () => {
     const parsedInvocation = parseInvocation(argv);
+    const runtimeIo = applyDiagnosticPolicy(io, parsedInvocation.globals);
     const commandOutput = await executeParsedInvocation(
       parsedInvocation,
-      io,
+      runtimeIo,
       options.executionMode ?? 'oneshot',
       options.sessionPool,
     );
@@ -338,6 +358,7 @@ export async function run(
     try {
       const parsed = parseInvocation(argv);
       outputMode = parsed.globals.output;
+      const runtimeIo = applyDiagnosticPolicy(io, parsed.globals);
 
       if (parsed.globals.version && !parsed.globals.help) {
         io.stdout(`${resolveCliPackageVersion()}\n`);
@@ -369,7 +390,7 @@ export async function run(
         }
       }
 
-      const output = await executeParsedInvocation(parsed, io, 'oneshot');
+      const output = await executeParsedInvocation(parsed, runtimeIo, 'oneshot');
       if (output.helpText) {
         io.stdout(output.helpText);
         return 0;

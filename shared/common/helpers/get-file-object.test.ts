@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, mock, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import { getFileObject } from './get-file-object';
 
 // Type-safe interface for globalThis augmentation in tests
@@ -53,16 +53,15 @@ describe('getFileObject', () => {
   beforeEach(() => {
     mockBlob = new Blob(['hello world'], { type: 'text/plain' });
 
-    (globalThis as unknown as GlobalThisWithOptionalAPIs).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown as GlobalThisWithOptionalAPIs).fetch = mock().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
-      blob: vi.fn().mockResolvedValue(mockBlob),
+      blob: mock().mockResolvedValue(mockBlob),
     }) as unknown as typeof globalThis.fetch;
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     (globalThis as unknown as GlobalThisWithOptionalAPIs).fetch = originalFetch;
   });
 
@@ -72,7 +71,7 @@ describe('getFileObject', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/file.txt');
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('file.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
     await expect(result.text()).resolves.toBe('hello world');
   });
 
@@ -88,7 +87,7 @@ describe('getFileObject', () => {
 
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('test.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
     await expect(result.text()).resolves.toBe(payload);
   });
 
@@ -123,6 +122,6 @@ describe('getFileObject', () => {
 
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('test.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
   });
 });

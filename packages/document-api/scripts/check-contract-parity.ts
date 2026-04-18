@@ -58,9 +58,21 @@ function createNoopAdapters(): DocumentApiAdapters {
     },
     info: {
       info: () => ({
-        counts: { words: 0, paragraphs: 0, headings: 0, tables: 0, images: 0, comments: 0 },
+        counts: {
+          words: 0,
+          characters: 0,
+          paragraphs: 0,
+          headings: 0,
+          tables: 0,
+          images: 0,
+          comments: 0,
+          trackedChanges: 0,
+          sdtFields: 0,
+          lists: 0,
+        },
         outline: [],
         capabilities: { canFind: true, canGetNode: true, canComment: true, canReplace: true },
+        revision: '0',
       }),
     },
     capabilities: {
@@ -109,16 +121,6 @@ function createNoopAdapters(): DocumentApiAdapters {
           target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
           range: { from: 1, to: 1 },
           text: '',
-        },
-      }),
-    },
-    format: {
-      apply: () => ({
-        success: true,
-        resolution: {
-          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
-          range: { from: 1, to: 2 },
-          text: 'x',
         },
       }),
     },

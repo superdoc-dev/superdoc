@@ -114,3 +114,47 @@ test('resize the table by dragging the right edge', async ({ superdoc }) => {
   const grid = await getTableGrid(superdoc.page);
   expect(grid).toHaveLength(3);
 });
+
+test('row handles are hidden during column resize drag (SD-2094)', async ({ superdoc }) => {
+  await superdoc.executeCommand('insertTable', { rows: 3, cols: 3, withHeaderRow: false });
+  await superdoc.waitForStable();
+
+  await superdoc.type('Hello');
+  await superdoc.waitForStable();
+
+  // Hover the first column boundary to make the resize overlay appear
+  await hoverColumnBoundary(superdoc.page, 0);
+  await superdoc.waitForStable();
+
+  const handle = superdoc.page.locator('.resize-handle[data-boundary-type="inner"]').first();
+  await expect(handle).toBeAttached({ timeout: 5000 });
+
+  // Start dragging — hold mouse down and move incrementally
+  const box = await handle.boundingBox();
+  if (!box) throw new Error('Resize handle not visible');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  await superdoc.page.mouse.move(x, y);
+  await superdoc.page.mouse.down();
+  // Move a small amount to activate drag state
+  await superdoc.page.mouse.move(x + 10, y);
+  await superdoc.page.waitForTimeout(50);
+
+  await superdoc.snapshot('during column drag — row handles should be hidden');
+
+  // Verify drag is active by checking for the guideline
+  const guideline = superdoc.page.locator('.resize-guideline');
+  await expect(guideline).toBeAttached({ timeout: 5000 });
+
+  // Row handles should be hidden (v-show) during column drag
+  const rowHandles = superdoc.page.locator('.resize-handle--row');
+  const rowCount = await rowHandles.count();
+  expect(rowCount).toBeGreaterThan(0);
+  for (let i = 0; i < rowCount; i++) {
+    await expect(rowHandles.nth(i)).toBeHidden();
+  }
+
+  await superdoc.page.mouse.up();
+  await superdoc.waitForStable();
+});

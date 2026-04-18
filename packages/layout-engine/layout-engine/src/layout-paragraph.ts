@@ -12,6 +12,7 @@ import type {
   DrawingBlock,
   DrawingMeasure,
   DrawingFragment,
+  ParagraphBorders,
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -19,9 +20,13 @@ import {
   sliceLines,
   extractBlockPmRange,
   isEmptyTextParagraph,
+  shouldSuppressOwnSpacing,
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
-import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { getFragmentZIndex } from '@superdoc/contracts';
+
+/** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
+const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
 /**
@@ -88,6 +93,8 @@ type ParagraphBlockAttrs = {
   floatAlignment?: unknown;
   /** Keep all lines of the paragraph on the same page */
   keepLines?: boolean;
+  /** Border attributes for the paragraph */
+  borders?: ParagraphBorders;
 };
 
 const spacingDebugLog = (..._args: unknown[]): void => {
@@ -159,6 +166,39 @@ const asSafeNumber = (value: unknown): number => {
     return 0;
   }
   return value;
+};
+
+/**
+ * Simple hash of paragraph borders for between-border group detection.
+ * Two paragraphs form a group when their border hashes match (ECMA-376 §17.3.1.5).
+ */
+const hashBorders = (borders?: ParagraphBorders): string | undefined => {
+  if (!borders) return undefined;
+  const side = (b?: { style?: string; width?: number; color?: string; space?: number }) =>
+    b ? `${b.style ?? ''},${b.width ?? 0},${b.color ?? ''},${b.space ?? 0}` : '';
+  return `${side(borders.top)}|${side(borders.right)}|${side(borders.bottom)}|${side(borders.left)}|${side(borders.between)}`;
+};
+
+/**
+ * Computes the vertical border expansion for a paragraph fragment.
+ * The border's `space` attribute (in points) plus the border width extends
+ * the visual box beyond the content area. This ensures cursorY accounts
+ * for the full visual height when paragraphs have borders with space.
+ */
+const computeBorderVerticalExpansion = (borders?: ParagraphBorders): { top: number; bottom: number } => {
+  if (!borders) return { top: 0, bottom: 0 };
+
+  // Top border: space (pts) + width (px)
+  const topSpace = (borders.top?.space ?? 0) * PX_PER_PT;
+  const topWidth = borders.top?.width ?? 0;
+  const top = topSpace + topWidth;
+
+  // Bottom border: space (pts) + width (px)
+  const bottomSpace = (borders.bottom?.space ?? 0) * PX_PER_PT;
+  const bottomWidth = borders.bottom?.width ?? 0;
+  const bottom = bottomSpace + bottomWidth;
+
+  return { top, bottom };
 };
 
 /**
@@ -529,6 +569,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     state.page.fragments.push(fragment);
     state.trailingSpacing = 0;
     state.lastParagraphStyleId = styleId;
+    state.lastParagraphContextualSpacing = contextualSpacing;
     return;
   }
 
@@ -587,34 +628,56 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
   }
 
+  // Compute border expansion once per paragraph (constant across fragments).
+  // Border space overlaps with paragraph spacing per ECMA-376 §17.3.1.42:
+  // "the space above the text (ignoring any spacing above)"
+  const rawBorderExpansion = computeBorderVerticalExpansion(attrs?.borders);
+
+  // Between-border group detection (ECMA-376 §17.3.1.5): when adjacent paragraphs
+  // have identical borders, they form a group — top/bottom borders are suppressed
+  // between group members, so the layout engine should not reserve space for them.
+  const currentBorderHash = hashBorders(attrs?.borders);
+  const inBorderGroup = currentBorderHash != null && currentBorderHash === ensurePage().lastParagraphBorderHash;
+  const borderExpansion = {
+    top: inBorderGroup ? 0 : rawBorderExpansion.top,
+    bottom: rawBorderExpansion.bottom, // bottom suppression is handled when the NEXT paragraph joins the group
+  };
+
   // PHASE 2: Layout the paragraph with the remeasured lines
   while (fromLine < lines.length) {
     let state = ensurePage();
     if (state.trailingSpacing == null) state.trailingSpacing = 0;
 
+    // Reclaim the previous paragraph's bottom border expansion when joining a group.
+    // The previous paragraph already reserved space for its bottom border, but in a
+    // group that border is suppressed — so we move cursorY back to close the gap.
+    if (inBorderGroup && fromLine === 0) {
+      state.cursorY -= rawBorderExpansion.bottom;
+    }
+
     /**
      * Contextual Spacing Logic (OOXML w:contextualSpacing)
      *
-     * When contextualSpacing is enabled on a paragraph, spacing before and after is
-     * suppressed when the paragraph is adjacent to another paragraph with the same style.
+     * Each paragraph independently decides whether to suppress its own spacing.
+     * A paragraph suppresses its before/after spacing when it has contextualSpacing
+     * enabled and the adjacent paragraph shares the same style. The adjacent
+     * paragraph's contextualSpacing flag is NOT consulted.
      *
-     * This implements Microsoft Word's contextual spacing behavior:
-     * 1. Check if contextualSpacing is enabled on the current paragraph
-     * 2. Check if both paragraphs have style IDs (required for comparison)
-     * 3. Check if the style IDs match (same style = suppress spacing)
-     *
-     * When all conditions are met:
-     * - spacingBefore is zeroed (prevents adding space before this paragraph)
-     * - Previous paragraph's spacingAfter (trailingSpacing) is undone by subtracting
-     *   it from cursorY, effectively removing the space already added
+     * Two independent checks:
+     * 1. Current paragraph suppresses its own before-spacing (based on current's flag)
+     * 2. Previous paragraph suppresses its own after-spacing (based on previous's flag,
+     *    carried in state.lastParagraphContextualSpacing)
      *
      * Input Validation:
      * - trailingSpacing is validated to be a finite, non-negative number
      * - Invalid values (NaN, Infinity, negative, null, undefined) are treated as 0
-     * - This prevents layout corruption from malformed input data
      */
-    if (contextualSpacing && state.lastParagraphStyleId && styleId && state.lastParagraphStyleId === styleId) {
+    // Current paragraph suppresses its own before-spacing
+    if (shouldSuppressOwnSpacing(styleId, contextualSpacing, state.lastParagraphStyleId)) {
       spacingBefore = 0;
+    }
+    // Previous paragraph suppresses its own after-spacing (rewind trailing)
+    if (shouldSuppressOwnSpacing(state.lastParagraphStyleId, state.lastParagraphContextualSpacing, styleId)) {
       const prevTrailing = asSafeNumber(state.trailingSpacing);
       if (prevTrailing > 0) {
         state.cursorY -= prevTrailing;
@@ -633,12 +696,14 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * We use baseSpacingBefore for the blank page check because on a new page there's no
      * previous trailing spacing to collapse with.
      */
+
     const keepLines = attrs?.keepLines === true;
     if (keepLines && fromLine === 0) {
       const prevTrailing = state.trailingSpacing ?? 0;
       const neededSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
       const pageContentHeight = state.contentBottom - state.topMargin;
-      const fullHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
+      const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
+      const fullHeight = linesHeight + borderExpansion.top + borderExpansion.bottom;
       const fitsOnBlankPage = fullHeight + baseSpacingBefore <= pageContentHeight;
       const remainingHeightAfterSpacing = state.contentBottom - (state.cursorY + neededSpacingBefore);
       if (fitsOnBlankPage && state.page.fragments.length > 0 && fullHeight > remainingHeightAfterSpacing) {
@@ -772,7 +837,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       offsetX = narrowestOffsetX;
     }
 
-    const slice = sliceLines(lines, fromLine, state.contentBottom - state.cursorY);
+    // Reserve border expansion from available height so sliceLines doesn't accept
+    // lines that would overflow the page once border space is added.
+    const borderVertical = borderExpansion.top + borderExpansion.bottom;
+    const availableForSlice = Math.max(0, state.contentBottom - state.cursorY - borderVertical);
+    const slice = sliceLines(lines, fromLine, availableForSlice);
     const fragmentHeight = slice.height;
 
     // Apply negative indent adjustment to fragment position and width (similar to table indent handling).
@@ -783,14 +852,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Expand width: negative indents on both sides expand the fragment width
     // (e.g., -48px left + -72px right = 120px wider)
     const adjustedWidth = effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
-
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
       fromLine,
       toLine: slice.toLine,
       x: adjustedX,
-      y: state.cursorY,
+      y: state.cursorY + borderExpansion.top,
       width: adjustedWidth,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
@@ -836,9 +904,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         fragment.x = columnX(state.columnIndex) + offsetX + (effectiveColumnWidth - maxLineWidth) / 2;
       }
     }
-
     state.page.fragments.push(fragment);
-    state.cursorY += fragmentHeight;
+
+    state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
     lastState = state;
     fromLine = slice.toLine;
   }
@@ -876,5 +944,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       lastState.trailingSpacing = 0;
     }
     lastState.lastParagraphStyleId = styleId;
+    lastState.lastParagraphContextualSpacing = contextualSpacing;
+    lastState.lastParagraphBorderHash = currentBorderHash;
   }
 }

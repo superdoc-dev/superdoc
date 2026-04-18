@@ -39,8 +39,7 @@ const EXPECTED_EXPORTS = [
   'chooseTools',
   'dispatchSuperDocTool',
   'getToolCatalog',
-  'getAvailableGroups',
-  'resolveToolOperation',
+  'getSystemPrompt',
   'SuperDocCliError',
 ];
 

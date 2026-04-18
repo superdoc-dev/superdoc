@@ -6,8 +6,6 @@ description: Set contextual spacing, page-break-before, and suppress-auto-hyphen
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set contextual spacing, page-break-before, and suppress-auto-hyphens flags.
@@ -26,25 +24,32 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (required: contextualSpacing)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contextualSpacing` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (required: pageBreakBefore)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pageBreakBefore` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (required: suppressAutoHyphens)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `suppressAutoHyphens` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
   "contextualSpacing": true,
-  "pageBreakBefore": true,
-  "suppressAutoHyphens": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",

@@ -60,7 +60,7 @@ async function main() {
   copyFileSync(inputPath, outputPath);
   const client = createSuperDocClient();
   await client.connect();
-  await client.doc.open({ doc: outputPath });
+  const doc = await client.open({ doc: outputPath });
 
   // 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
   const { tools: sdTools } = await chooseTools({ provider: 'anthropic' });
@@ -116,7 +116,7 @@ async function main() {
           }
           result = discovered;
         } else {
-          result = await dispatchSuperDocTool(client, name!, (input ?? {}) as Record<string, unknown>);
+          result = await dispatchSuperDocTool(doc, name!, (input ?? {}) as Record<string, unknown>);
         }
 
         results.push(bedrockToolResult(toolUseId!, result));
@@ -128,7 +128,7 @@ async function main() {
   }
 
   // 4. Save (in-place to the copy)
-  await client.doc.save();
+  await doc.save();
   await client.dispose();
   console.log(`\nSaved to ${outputPath}`);
 }

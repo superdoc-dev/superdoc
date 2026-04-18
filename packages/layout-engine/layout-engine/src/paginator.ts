@@ -17,6 +17,9 @@ export type PageState = {
   activeConstraintIndex: number;
   trailingSpacing: number;
   lastParagraphStyleId?: string;
+  lastParagraphContextualSpacing: boolean;
+  /** Border hash of the last paragraph for between-border group detection. */
+  lastParagraphBorderHash?: string;
 };
 
 export type PaginatorOptions = {
@@ -37,6 +40,13 @@ export function createPaginator(opts: PaginatorOptions) {
   const states: PageState[] = [];
   const pages: Page[] = [];
 
+  const pruneTrailingEmptyPages = (): void => {
+    while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
+      pages.pop();
+      states.pop();
+    }
+  };
+
   const getActiveColumnsForState = (state: PageState): ColumnLayout => {
     if (state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
@@ -46,7 +56,15 @@ export function createPaginator(opts: PaginatorOptions) {
 
   const columnX = (columnIndex: number): number => {
     const cols = opts.getCurrentColumns();
-    return opts.margins.left + columnIndex * (cols.width + cols.gap);
+    const widths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
+    if (!widths) {
+      return opts.margins.left + columnIndex * (cols.width + cols.gap);
+    }
+    let x = opts.margins.left;
+    for (let index = 0; index < columnIndex; index += 1) {
+      x += (widths[index] ?? cols.width) + cols.gap;
+    }
+    return x;
   };
 
   const startNewPage = (): PageState => {
@@ -88,6 +106,7 @@ export function createPaginator(opts: PaginatorOptions) {
       activeConstraintIndex: -1,
       trailingSpacing: 0,
       lastParagraphStyleId: undefined,
+      lastParagraphContextualSpacing: false,
     };
     states.push(state);
     pages.push(state.page);
@@ -112,6 +131,7 @@ export function createPaginator(opts: PaginatorOptions) {
       }
       state.trailingSpacing = 0;
       state.lastParagraphStyleId = undefined;
+      state.lastParagraphContextualSpacing = false;
       return state;
     }
     return startNewPage();
@@ -130,5 +150,6 @@ export function createPaginator(opts: PaginatorOptions) {
     columnX,
     getActiveColumnsForState,
     getPageByNumber,
+    pruneTrailingEmptyPages,
   } as const;
 }

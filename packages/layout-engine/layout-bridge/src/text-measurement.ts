@@ -41,6 +41,22 @@ const isWordChar = (char: string): boolean => {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "'";
 };
 
+const lineContainsManualTabWithoutSegments = (block: FlowBlock, line: Line): boolean => {
+  if (block.kind !== 'paragraph') return false;
+  if (line.segments?.some((seg) => seg.x !== undefined)) {
+    return false;
+  }
+  const fromRun = line.fromRun ?? 0;
+  const toRun = line.toRun ?? fromRun;
+  for (let runIndex = fromRun; runIndex <= toRun; runIndex += 1) {
+    const run = block.runs[runIndex];
+    if (run && isTabRun(run)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const capitalizeText = (text: string): string => {
   if (!text) return text;
   let result = '';
@@ -233,7 +249,8 @@ const getJustifyAdjustment = (
         'src' in run ||
         run.kind === 'lineBreak' ||
         run.kind === 'break' ||
-        run.kind === 'fieldAnnotation'
+        run.kind === 'fieldAnnotation' ||
+        run.kind === 'math'
       ) {
         return sum;
       }
@@ -268,12 +285,13 @@ const getJustifyAdjustment = (
  * @returns CSS font string (e.g., "italic bold 16px Arial")
  */
 export function getRunFontString(run: Run): string {
-  // TabRun, ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun don't have full styling properties, use defaults
+  // TabRun, ImageRun, LineBreakRun, BreakRun, FieldAnnotationRun, and MathRun don't have full styling properties, use defaults
   if (
     run.kind === 'tab' ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||
     run.kind === 'fieldAnnotation' ||
+    run.kind === 'math' ||
     'src' in run
   ) {
     return 'normal normal 16px Arial';
@@ -331,6 +349,12 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
       continue;
     }
 
+    // MathRun handling - math runs are atomic units, no slicing needed
+    if (run.kind === 'math') {
+      result.push(run);
+      continue;
+    }
+
     const text = run.text ?? '';
     const isFirstRun = runIndex === line.fromRun;
     const isLastRun = runIndex === line.toRun;
@@ -382,8 +406,17 @@ export function measureCharacterX(
     line.maxWidth ??
     // Fallback: if no maxWidth, approximate available width as line width (no slack)
     line.width;
+  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const justify = getJustifyAdjustment(block, line, availableWidth, alignmentOverride);
+  const justify = getJustifyAdjustment(
+    block,
+    line,
+    availableWidth,
+    alignmentOverride,
+    undefined,
+    undefined,
+    manualTabWithoutSegments,
+  );
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space
@@ -410,7 +443,13 @@ export function measureCharacterX(
       1,
       runs.reduce((sum, run) => {
         if (isTabRun(run)) return sum + TAB_CHAR_LENGTH;
-        if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation')
+        if (
+          'src' in run ||
+          run.kind === 'lineBreak' ||
+          run.kind === 'break' ||
+          run.kind === 'fieldAnnotation' ||
+          run.kind === 'math'
+        )
           return sum;
         return sum + (run.text ?? '').length;
       }, 0),
@@ -437,7 +476,11 @@ export function measureCharacterX(
     }
 
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = text.length;
@@ -447,7 +490,8 @@ export function measureCharacterX(
       'src' in run ||
       run.kind === 'lineBreak' ||
       run.kind === 'break' ||
-      run.kind === 'fieldAnnotation'
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? undefined
         : run.textTransform;
     const displayText = applyTextTransform(text, transform);
@@ -549,7 +593,13 @@ function measureCharacterXSegmentBased(
       }
 
       // Handle ImageRun, LineBreakRun, BreakRun, and FieldAnnotationRun - these are atomic, use segment width
-      if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation') {
+      if (
+        'src' in run ||
+        run.kind === 'lineBreak' ||
+        run.kind === 'break' ||
+        run.kind === 'fieldAnnotation' ||
+        run.kind === 'math'
+      ) {
         return segmentBaseX + (offsetInSegment >= segmentChars ? (segment.width ?? 0) : 0);
       }
 
@@ -639,7 +689,11 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
   for (const run of runs) {
     const isTab = isTabRun(run);
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = isTab ? TAB_CHAR_LENGTH : text.length;
@@ -693,7 +747,16 @@ export function findCharacterAtX(
     // Fallback: approximate with line width when no maxWidth is present
     line.width;
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const justify = getJustifyAdjustment(block, line, availableWidth, alignmentOverride);
+  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
+  const justify = getJustifyAdjustment(
+    block,
+    line,
+    availableWidth,
+    alignmentOverride,
+    undefined,
+    undefined,
+    manualTabWithoutSegments,
+  );
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space
@@ -714,7 +777,13 @@ export function findCharacterAtX(
       1,
       runs.reduce((sum, run) => {
         if (isTabRun(run)) return sum + TAB_CHAR_LENGTH;
-        if ('src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation')
+        if (
+          'src' in run ||
+          run.kind === 'lineBreak' ||
+          run.kind === 'break' ||
+          run.kind === 'fieldAnnotation' ||
+          run.kind === 'math'
+        )
           return sum;
         return sum + (run.text ?? '').length;
       }, 0),
@@ -756,7 +825,11 @@ export function findCharacterAtX(
     }
 
     const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? ''
         : (run.text ?? '');
     const runLength = text.length;
@@ -766,7 +839,8 @@ export function findCharacterAtX(
       'src' in run ||
       run.kind === 'lineBreak' ||
       run.kind === 'break' ||
-      run.kind === 'fieldAnnotation'
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
         ? undefined
         : run.textTransform;
     const displayText = applyTextTransform(text, transform);

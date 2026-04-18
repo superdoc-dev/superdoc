@@ -18,6 +18,7 @@ export type {
 
 // List numbering helpers
 export * from './list-numbering';
+export * from './list-rendering';
 
 // File helpers
 export * from './helpers/get-file-object';

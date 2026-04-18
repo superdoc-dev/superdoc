@@ -16,6 +16,10 @@ export interface ClearContentAdapter {
 /**
  * Execute a clearContent operation through the provided adapter.
  *
+ * clearContent is a destructive reset — tracked mode and dry run are not
+ * meaningful, so this accepts {@link RevisionGuardOptions} rather than
+ * `MutationOptions`.
+ *
  * @param adapter - Engine-specific clear-content adapter.
  * @param input - Canonical clear-content input (empty object).
  * @param options - Optional revision guard options.

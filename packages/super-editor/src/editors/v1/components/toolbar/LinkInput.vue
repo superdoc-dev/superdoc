@@ -1,0 +1,511 @@
+<script setup>
+import { ref, computed, watch, onMounted } from 'vue';
+import { sanitizeHref } from '@superdoc/url-validation';
+import { toolbarIcons } from './toolbarIcons.js';
+import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
+import { TextSelection } from 'prosemirror-state';
+import { getMarkRange } from '@core/helpers/getMarkRange.js';
+
+const props = defineProps({
+  showInput: {
+    type: Boolean,
+    default: true,
+  },
+  showLink: {
+    type: Boolean,
+    default: true,
+  },
+  goToAnchor: {
+    type: Function,
+    default: () => {},
+  },
+  editor: {
+    type: Object,
+    required: true,
+  },
+  closePopover: {
+    type: Function,
+    default: () => {},
+  },
+});
+const { isHighContrastMode } = useHighContrastMode();
+
+const urlError = ref(false);
+
+// --- Derive selected text and link href from editor ---
+// Three cases:
+// 1. Empty selection: return text between link marks (if any - likely empty)
+// 2. Non-empty selection: return text between link marks
+// 3. No link boundaries involved → return selected text as-is.
+const getSelectedText = () => {
+  if (!props.editor || !props.editor.state) return '';
+  const { state } = props.editor;
+  const { selection } = state;
+
+  const linkMark = state.schema.marks.link;
+
+  // 1. If the selection is empty, try to expand to link mark text.
+  if (selection.empty) {
+    const range = getMarkRange(selection.$from, linkMark);
+    return range ? state.doc.textBetween(range.from, range.to, ' ') : '';
+  }
+
+  // 2. Non-empty selection: check if either boundary lies inside a link mark. If so, return that full link text.
+  const rangeFrom = getMarkRange(selection.$from, linkMark);
+  const rangeTo = getMarkRange(selection.$to, linkMark);
+
+  if (rangeFrom || rangeTo) {
+    const linkRange = rangeFrom || rangeTo;
+    return state.doc.textBetween(linkRange.from, linkRange.to, ' ');
+  }
+
+  // 3. No link boundaries involved → return selected text as-is.
+  return state.doc.textBetween(selection.from, selection.to, ' ');
+};
+
+/**
+ * Retrieves the link href attribute at the current editor selection.
+ * Handles both empty (cursor) and non-empty selections.
+ *
+ * For empty selections (cursor position), this function first checks marks at the cursor,
+ * then examines adjacent nodes. This is necessary because link marks are non-inclusive:
+ * when the cursor is positioned immediately before or after a link, $from.marks() returns
+ * an empty array, but the link mark still exists on the adjacent text node accessible via
+ * nodeAfter or nodeBefore.
+ *
+ * @returns {string} The href attribute of the link mark at the selection, or empty string if none found.
+ */
+const getLinkHrefAtSelection = () => {
+  if (!props.editor || !props.editor.state) return '';
+  const { state } = props.editor;
+  const { schema, selection } = state;
+  const linkMark = schema.marks.link;
+  if (!linkMark) return '';
+  let href = '';
+  // Check marks at selection
+  const { $from, empty } = selection;
+  if (empty) {
+    // First check storedMarks and marks at cursor position
+    const marks = state.storedMarks || $from.marks();
+    let link = marks.find((mark) => mark.type === linkMark);
+
+    // If not found, check adjacent nodes (for non-inclusive marks at boundaries)
+    // Link marks are non-inclusive, so $from.marks() returns empty at link boundaries.
+    // The mark exists on the adjacent text node, accessible via nodeAfter/nodeBefore.
+    if (!link) {
+      const nodeAfter = $from.nodeAfter;
+      const nodeBefore = $from.nodeBefore;
+      const marksOnNodeAfter = nodeAfter && Array.isArray(nodeAfter.marks) ? nodeAfter.marks : [];
+      const marksOnNodeBefore = nodeBefore && Array.isArray(nodeBefore.marks) ? nodeBefore.marks : [];
+
+      link =
+        marksOnNodeAfter.find((mark) => mark.type === linkMark) ||
+        marksOnNodeBefore.find((mark) => mark.type === linkMark);
+    }
+
+    if (link && link.attrs && link.attrs.href) href = link.attrs.href;
+  } else {
+    state.doc.nodesBetween(selection.from, selection.to, (node) => {
+      if (node.marks) {
+        const link = node.marks.find((mark) => mark.type === linkMark);
+        if (link && link.attrs && link.attrs.href) href = link.attrs.href;
+      }
+    });
+  }
+  return href || '';
+};
+
+const text = ref('');
+const rawUrl = ref('');
+const isAnchor = ref(false);
+
+const HAS_PROTOCOL = /^[a-z][a-z0-9+.-]*:/i;
+
+// Default to https:// when no scheme is specified. Validation stays centralized in sanitizeHref.
+const url = computed(() => {
+  if (!rawUrl.value) return '';
+  if (rawUrl.value.startsWith('#') || HAS_PROTOCOL.test(rawUrl.value)) return rawUrl.value;
+  return 'https://' + rawUrl.value;
+});
+
+const sanitizedUrl = computed(() => {
+  if (!url.value) return null;
+  return sanitizeHref(url.value);
+});
+
+const validUrl = computed(() => sanitizedUrl.value !== null);
+
+// --- CASE LOGIC ---
+const isEditing = computed(() => !isAnchor.value && !!getLinkHrefAtSelection());
+
+const isDisabled = computed(() => !validUrl.value);
+
+const isViewingMode = computed(() => props.editor?.options?.documentMode === 'viewing');
+
+const openLink = () => {
+  const href = sanitizedUrl.value?.href;
+  if (!href) return;
+  window.open(href, '_blank');
+};
+
+const updateFromEditor = () => {
+  text.value = getSelectedText();
+  rawUrl.value = getLinkHrefAtSelection();
+};
+
+watch(
+  () => props.editor?.state?.selection,
+  () => {
+    updateFromEditor();
+  },
+  { immediate: true },
+);
+
+const focusInput = () => {
+  const input = document.querySelector('.link-input-ctn input');
+  if (!input) return;
+  input.focus();
+};
+
+onMounted(() => {
+  updateFromEditor();
+  isAnchor.value = rawUrl.value.startsWith('#');
+  if (props.showInput) focusInput();
+});
+
+// --- Link logic moved here ---
+const handleSubmit = () => {
+  // Prevent form submission in viewing mode
+  if (isViewingMode.value) return;
+
+  const editor = props.editor;
+  if (!editor) return;
+
+  // If the URL is cleared, simply remove the link.
+  if (!rawUrl.value) {
+    if (editor.commands?.unsetLink) editor.commands.unsetLink();
+    props.closePopover();
+    return;
+  }
+
+  if (!validUrl.value) {
+    urlError.value = true;
+    return;
+  }
+
+  const href = sanitizedUrl.value?.href;
+  if (!href) {
+    urlError.value = true;
+    return;
+  }
+
+  const finalText = text.value || href;
+
+  if (editor.commands?.toggleLink) {
+    editor.commands.toggleLink({ href, text: finalText });
+  }
+
+  // Move cursor to end of link and refocus editor.
+  const endPos = editor.view.state.selection.$to.pos;
+  editor.view.dispatch(editor.view.state.tr.setSelection(new TextSelection(editor.view.state.doc.resolve(endPos))));
+  setTimeout(() => editor.view.focus(), 100);
+
+  props.closePopover();
+};
+
+const handleRemove = () => {
+  if (props.editor && props.editor.commands && props.editor.commands.unsetLink) {
+    props.editor.commands.unsetLink();
+    props.closePopover();
+  }
+};
+
+const navigateToAnchor = (url) => {
+  const presentationEditor = props.editor?.presentationEditor ?? null;
+  if (presentationEditor) {
+    presentationEditor.goToAnchor(url);
+  } else if (props.goToAnchor) {
+    props.goToAnchor(url);
+  }
+};
+</script>
+
+<template>
+  <div class="link-input-ctn" :class="{ 'high-contrast': isHighContrastMode }">
+    <div class="link-title" v-if="isAnchor">Page anchor</div>
+    <div class="link-title" v-else-if="isViewingMode">Link details</div>
+    <div class="link-title" v-else-if="isEditing">Edit link</div>
+    <div class="link-title" v-else>Add link</div>
+
+    <div v-if="showInput && !isAnchor" class="link-input-wrapper">
+      <!-- Text input -->
+      <div class="input-row text-input-row">
+        <div class="input-icon text-input-icon">T</div>
+        <input
+          type="text"
+          name="text"
+          placeholder="Text"
+          v-model="text"
+          :readonly="isViewingMode"
+          @keydown.enter.stop.prevent="!isViewingMode && handleSubmit"
+        />
+      </div>
+
+      <!-- URL input -->
+      <div class="input-row url-input-row">
+        <div class="input-icon" v-html="toolbarIcons.linkInput"></div>
+        <input
+          type="text"
+          name="link"
+          placeholder="Type or paste a link"
+          :class="{ error: urlError }"
+          v-model="rawUrl"
+          :readonly="isViewingMode"
+          @keydown.enter.stop.prevent="handleSubmit"
+          @keydown="urlError = false"
+        />
+
+        <div
+          class="open-link-icon"
+          :class="{ disabled: !validUrl }"
+          v-html="toolbarIcons.openLink"
+          @click="openLink"
+          data-item="btn-link-open"
+        ></div>
+      </div>
+      <div class="input-row link-buttons" v-if="!isViewingMode">
+        <button class="remove-btn" @click="handleRemove" v-if="isEditing" data-item="btn-link-remove">
+          <div class="remove-btn__icon" v-html="toolbarIcons.removeLink"></div>
+          Remove
+        </button>
+        <button
+          class="submit-btn"
+          @click="handleSubmit"
+          :class="{ 'disable-btn': isDisabled }"
+          data-item="btn-link-apply"
+        >
+          Apply
+        </button>
+      </div>
+    </div>
+
+    <div v-else-if="isAnchor" class="input-row go-to-anchor clickable">
+      <a @click.stop.prevent="navigateToAnchor(rawUrl)"
+        >Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a
+      >
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.link-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-input-ctn {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  padding: 1em;
+  border-radius: var(--sd-ui-radius, 6px);
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
+  box-sizing: border-box;
+
+  :deep(svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    fill: currentColor;
+  }
+
+  .input-row {
+    align-content: baseline;
+    display: flex;
+    align-items: center;
+    font-size: var(--sd-ui-font-size-600, 16px);
+
+    input {
+      font-size: var(--sd-ui-font-size-300, 13px);
+      flex-grow: 1;
+      padding: 10px;
+      border-radius: var(--sd-ui-radius, 6px);
+      padding-left: 32px;
+      box-shadow: var(--sd-ui-shadow, 0 4px 12px rgba(0, 0, 0, 0.12));
+      color: var(--sd-ui-text-muted, #666666);
+      border: 1px solid var(--sd-ui-border, #dbdbdb);
+      box-sizing: border-box;
+
+      &:active,
+      &:focus {
+        outline: none;
+        border: 1px solid var(--sd-ui-action, #1355ff);
+      }
+
+      &[readonly] {
+        background-color: var(--sd-ui-disabled-bg, #f5f5f5);
+        cursor: default;
+        color: var(--sd-ui-text-disabled, #888);
+        border-color: var(--sd-ui-border, #e0e0e0);
+
+        &:active,
+        &:focus {
+          border-color: var(--sd-ui-border, #e0e0e0);
+        }
+      }
+    }
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 25px;
+    width: auto;
+    color: var(--sd-ui-text-disabled, #ababab);
+    pointer-events: none;
+  }
+
+  .input-icon:not(.text-input-icon) {
+    transform: rotate(45deg);
+    height: 12px;
+  }
+
+  &.high-contrast {
+    .input-icon {
+      color: var(--sd-ui-text, #47484a);
+    }
+
+    .input-row input {
+      color: var(--sd-ui-text, #47484a);
+      border-color: var(--sd-ui-text, #47484a);
+    }
+  }
+}
+.open-link-icon {
+  margin-left: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.open-link-icon:hover {
+  color: var(--sd-ui-action, #1355ff);
+  background-color: var(--sd-ui-bg, #ffffff);
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
+}
+
+.open-link-icon :deep(svg) {
+  width: 15px;
+  height: 15px;
+}
+
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.link-buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.remove-btn__icon {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.link-buttons button {
+  margin-left: 5px;
+}
+
+.disable-btn {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.go-to-anchor a {
+  font-size: var(--sd-ui-font-size-400, 14px);
+  text-decoration: underline;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.link-title {
+  font-size: var(--sd-ui-font-size-400, 14px);
+  font-weight: 600;
+  color: var(--sd-ui-text, #47484a);
+  margin-bottom: 10px;
+}
+
+.hasBottomMargin {
+  margin-bottom: 1em;
+}
+
+.remove-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--sd-ui-radius, 6px);
+  outline: none;
+  background-color: var(--sd-ui-bg, #ffffff);
+  color: var(--sd-ui-text, #47484a);
+  font-weight: 400;
+  font-size: var(--sd-ui-font-size-300, 13px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
+  box-sizing: border-box;
+}
+
+.remove-btn:hover {
+  background-color: var(--sd-ui-hover-bg, #dbdbdb);
+}
+
+.submit-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--sd-ui-radius, 6px);
+  outline: none;
+  border: none;
+  background-color: var(--sd-ui-action, #1355ff);
+  color: var(--sd-ui-action-text, #ffffff);
+  font-weight: 400;
+  font-size: var(--sd-ui-font-size-300, 13px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  /* &.high-contrast {
+    background-color: black;
+  } */
+  &:hover {
+    background-color: var(--sd-ui-action-hover, #0f44cc);
+  }
+}
+
+.error {
+  border-color: red !important;
+  background-color: #ff00001a;
+}
+
+.submit {
+  cursor: pointer;
+}
+</style>

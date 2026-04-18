@@ -6,8 +6,6 @@ description: Create a new table at the target position.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Create a new table at the target position.
@@ -46,15 +44,15 @@ Returns a CreateTableResult with the new table block ID and address.
 
 ## Output fields
 
-### Variant 1 (table.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | yes | BlockNodeAddress |
+| `table` | TableAddress | yes | TableAddress |
 | `table.kind` | `"block"` | yes | Constant: `"block"` |
 | `table.nodeId` | string | yes |  |
-| `table.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | yes | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -67,6 +65,10 @@ Returns a CreateTableResult with the new table block ID and address.
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+On success, `result.table` is the created table address. Reuse `result.table.nodeId` for follow-up table operations in the same session.
+</Tip>
+
 ### Example response
 
 ```json
@@ -75,7 +77,7 @@ Returns a CreateTableResult with the new table block ID and address.
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -227,7 +229,7 @@ Returns a CreateTableResult with the new table block ID and address.
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -291,7 +293,7 @@ Returns a CreateTableResult with the new table block ID and address.
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

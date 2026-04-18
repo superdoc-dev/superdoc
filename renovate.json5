@@ -26,6 +26,11 @@
       "description": "Don't touch vite — overridden with rolldown-vite",
       "matchPackageNames": ["vite"],
       "enabled": false
+    },
+    {
+      "description": "Use version tags for GitHub Actions, not pinned commit hashes",
+      "matchManagers": ["github-actions"],
+      "pinDigests": false
     }
   ],
   "platformAutomerge": true

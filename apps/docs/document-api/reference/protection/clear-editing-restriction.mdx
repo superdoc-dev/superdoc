@@ -1,0 +1,88 @@
+---
+title: protection.clearEditingRestriction
+sidebarTitle: protection.clearEditingRestriction
+description: Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Disable document-level editing restriction by setting enforcement to off. Preserves the protection element and its metadata for round-trip fidelity.
+
+- Operation ID: `protection.clearEditingRestriction`
+- API member path: `editor.doc.protection.clearEditingRestriction(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ProtectionMutationResult with the updated protection state on success.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

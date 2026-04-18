@@ -37,11 +37,25 @@ export type LayoutOptions = {
 export declare const SEMANTIC_PAGE_HEIGHT_PX = 1000000;
 export type HeaderFooterConstraints = {
   width: number;
+  /** Body content height used as the measurement canvas (pagination boundary). */
   height: number;
-  /** Actual page width for page-relative anchor positioning */
+  /** Actual page width for page-relative anchor positioning. */
   pageWidth?: number;
-  /** Page margins for page-relative anchor positioning */
-  margins?: { left: number; right: number };
+  /** Physical page height for vertical page-relative anchor conversion. */
+  pageHeight?: number;
+  /**
+   * Page margins for anchor positioning.
+   * `left`/`right`: horizontal page-relative conversion.
+   * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
+   * `header`: header distance from page top edge (header band origin).
+   */
+  margins?: {
+    left: number;
+    right: number;
+    top?: number;
+    bottom?: number;
+    header?: number;
+  };
   /**
    * Optional base height used to bound behindDoc overflow handling.
    * When provided, decorative assets far outside the header/footer band
@@ -61,7 +75,9 @@ export declare function layoutHeaderFooter(
   blocks: FlowBlock[],
   measures: Measure[],
   constraints: HeaderFooterConstraints,
+  kind?: 'header' | 'footer',
 ): HeaderFooterLayout;
+export { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 export { buildAnchorMap, resolvePageRefTokens, getTocBlocksForRemeasurement } from './resolvePageRefs.js';
 export { formatPageNumber, computeDisplayPageNumber } from './pageNumbering.js';
 export type { PageNumberFormat, DisplayPageInfo } from './pageNumbering.js';

@@ -35,6 +35,8 @@ import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
 import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
+import type { ExtractInput } from '../extract/extract.js';
+import type { ExtractResult } from '../types/extract.types.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
@@ -54,6 +56,32 @@ import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } f
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
+import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from '../diff/diff.types.js';
+import type {
+  DocumentProtectionState,
+  ProtectionGetInput,
+  SetEditingRestrictionInput,
+  ClearEditingRestrictionInput,
+  ProtectionMutationResult,
+} from '../protection/protection.types.js';
+import type {
+  PermissionRangesListInput,
+  PermissionRangesListResult,
+  PermissionRangesGetInput,
+  PermissionRangeInfo,
+  PermissionRangesCreateInput,
+  PermissionRangesRemoveInput,
+  PermissionRangesUpdatePrincipalInput,
+  PermissionRangeMutationResult,
+  PermissionRangeRemoveResult,
+} from '../permission-ranges/permission-ranges.types.js';
 import type {
   ListsListQuery,
   ListsListResult,
@@ -95,6 +123,14 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -117,6 +153,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -362,6 +400,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -488,6 +529,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   getHtml: { input: GetHtmlInput; options: never; output: string };
   markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
+  extract: { input: ExtractInput; options: never; output: ExtractResult };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
@@ -600,6 +642,16 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ParagraphMutationResult;
   };
+  'format.paragraph.setDirection': {
+    input: ParagraphsSetDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearDirection': {
+    input: ParagraphsClearDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
 
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
@@ -682,6 +734,19 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: ListsMutateItemResult;
   };
 
+  // --- lists.* (SD-2025 user-facing) ---
+  'lists.getStyle': { input: ListsGetStyleInput; options: never; output: ListsGetStyleResult };
+  'lists.applyStyle': { input: ListsApplyStyleInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.restartAt': { input: ListsRestartAtInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelNumberStyle': {
+    input: ListsSetLevelNumberStyleInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelText': { input: ListsSetLevelTextInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelStart': { input: ListsSetLevelStartInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelLayout': { input: ListsSetLevelLayoutInput; options: MutationOptions; output: ListsMutateItemResult };
+
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
   'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
@@ -721,6 +786,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
+  // Returns DocumentMutationResult (not SectionMutationResult) — document-level setting, not per-section.
   'sections.setOddEvenHeadersFooters': {
     input: SectionsSetOddEvenHeadersFootersInput;
     options: MutationOptions;
@@ -853,6 +919,13 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
   'tables.clearCellSpacing': {
     input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.applyStyle': { input: TablesApplyStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorders': { input: TablesSetBordersInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTableOptions': {
+    input: TablesSetTableOptionsInput;
     options: MutationOptions;
     output: TableMutationResult;
   };
@@ -1412,6 +1485,47 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     input: AuthorityEntryRemoveInput;
     options: MutationOptions;
     output: AuthorityEntryMutationResult;
+  };
+
+  // --- diff.* ---
+  'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
+  'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
+  'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
+
+  // --- protection.* ---
+  'protection.get': { input: ProtectionGetInput; options: never; output: DocumentProtectionState };
+  'protection.setEditingRestriction': {
+    input: SetEditingRestrictionInput;
+    options: MutationOptions;
+    output: ProtectionMutationResult;
+  };
+  'protection.clearEditingRestriction': {
+    input: ClearEditingRestrictionInput;
+    options: MutationOptions;
+    output: ProtectionMutationResult;
+  };
+
+  // --- permissionRanges.* ---
+  'permissionRanges.list': {
+    input: PermissionRangesListInput | undefined;
+    options: never;
+    output: PermissionRangesListResult;
+  };
+  'permissionRanges.get': { input: PermissionRangesGetInput; options: never; output: PermissionRangeInfo };
+  'permissionRanges.create': {
+    input: PermissionRangesCreateInput;
+    options: MutationOptions;
+    output: PermissionRangeMutationResult;
+  };
+  'permissionRanges.remove': {
+    input: PermissionRangesRemoveInput;
+    options: MutationOptions;
+    output: PermissionRangeRemoveResult;
+  };
+  'permissionRanges.updatePrincipal': {
+    input: PermissionRangesUpdatePrincipalInput;
+    options: MutationOptions;
+    output: PermissionRangeMutationResult;
   };
 }
 

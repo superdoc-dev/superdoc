@@ -6,8 +6,6 @@ description: Set options on a table row such as header repeat or page break.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set options on a table row such as header repeat or page break.
@@ -26,51 +24,63 @@ Returns a TableMutationResult receipt; reports NO_OP if row options already matc
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="tableRow")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowBreakAcrossPages` | boolean | no |  |
+| `repeatHeader` | boolean | no |  |
+| `target` | TableRowAddress | yes | TableRowAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
 
-### Variant 2
+### Variant 2 (target.nodeType="table")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowBreakAcrossPages` | boolean | no |  |
+| `repeatHeader` | boolean | no |  |
+| `rowIndex` | integer | yes |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 3
+### Variant 3 (required: nodeId, rowIndex)
 
-_No fields._
-
-### Variant 4
-
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowBreakAcrossPages` | boolean | no |  |
+| `nodeId` | string | yes |  |
+| `repeatHeader` | boolean | no |  |
+| `rowIndex` | integer | yes |  |
 
 ### Example request
 
 ```json
 {
-  "nodeId": "node-def456",
-  "tableTarget": {
-    "kind": "block",
-    "nodeId": "node-def456",
-    "nodeType": "paragraph"
-  },
+  "allowBreakAcrossPages": true,
+  "repeatHeader": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "tableRow"
   }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (table.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table` | TableAddress | no | TableAddress |
 | `table.kind` | `"block"` | no | Constant: `"block"` |
 | `table.nodeId` | string | no |  |
-| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -83,6 +93,10 @@ _No fields._
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
 ### Example response
 
 ```json
@@ -91,7 +105,7 @@ _No fields._
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -119,56 +133,72 @@ _No fields._
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/TableRowAddress"
+        }
+      },
       "required": [
         "target"
-      ]
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
-    },
-    {
-      "required": [
-        "tableTarget",
+        "target",
         "rowIndex"
-      ]
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "required": [
-        "tableNodeId",
+        "nodeId",
         "rowIndex"
-      ]
+      ],
+      "type": "object"
     }
-  ],
-  "properties": {
-    "allowBreakAcrossPages": {
-      "type": "boolean"
-    },
-    "nodeId": {
-      "type": "string"
-    },
-    "repeatHeader": {
-      "type": "boolean"
-    },
-    "rowIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "tableNodeId": {
-      "type": "string"
-    },
-    "tableTarget": {
-      "$ref": "#/$defs/BlockNodeAddress"
-    },
-    "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
-    }
-  },
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -184,7 +214,7 @@ _No fields._
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -247,7 +277,7 @@ _No fields._
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

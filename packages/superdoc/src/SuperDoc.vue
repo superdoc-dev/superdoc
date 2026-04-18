@@ -6,6 +6,7 @@ import { superdocIcons } from './icons.js';
 //prettier-ignore
 import {
   getCurrentInstance,
+  inject,
   ref,
   onMounted,
   onBeforeUnmount,
@@ -30,15 +31,21 @@ import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
 import { SuperEditor, AIWriter, PresentationEditor } from '@superdoc/super-editor';
+import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
 import AiLayer from './components/AiLayer/AiLayer.vue';
 import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
+import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
+import { usePasswordPrompt } from './composables/use-password-prompt.js';
+import { useFindReplace } from './composables/use-find-replace.js';
+import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
+const getDocumentLoadPassword = (doc) => doc.password ?? proxy.$superdoc.config.password;
 
 // Stores
 const superdocStore = useSuperdocStore();
@@ -55,6 +62,24 @@ const {
   activeZoom,
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
+
+// Password prompt coordinator — uses surfaces to show a dialog for encrypted DOCX files.
+const surfaceManager = inject('surfaceManager', null);
+const passwordPrompt = usePasswordPrompt({
+  getSurfaceManager: () => surfaceManager,
+  getPasswordPromptConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.passwordPrompt,
+  onUnhandled: (doc, errorCode, originalException) => {
+    // The password prompt initially claimed this error but could not show a dialog
+    // (resolver returned { type: 'none' }, config was invalid, or resolver threw).
+    // Re-emit the original exception event so the app can handle it.
+    proxy.$superdoc?.emit('exception', {
+      error: originalException?.error ?? new Error(`Password prompt unhandled: ${errorCode}`),
+      editor: originalException?.editor ?? null,
+      code: errorCode,
+      documentId: doc?.id,
+    });
+  },
+});
 
 /*
 NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
@@ -90,9 +115,15 @@ const {
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
   syncTrackedChangePositionsWithDocument,
+  syncTrackedChangeComments,
   addComment,
   getComment,
+  resolveCommentPositionEntry,
+  belongsToDocument,
   COMMENT_EVENTS,
+  requestInstantSidebarAlignment,
+  peekInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
 } = commentsStore;
 const { proxy } = getCurrentInstance();
 commentsStore.proxy = proxy;
@@ -105,12 +136,23 @@ const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectio
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
+const isFindReplaceEnabled = computed(() => {
+  const val = proxy?.$superdoc?.config?.modules?.surfaces?.findReplace;
+  return val === true || (typeof val === 'object' && val !== null);
+});
 const isViewingTrackChangesVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.trackChanges?.visible === true,
 );
 const shouldRenderCommentsInViewing = computed(() => {
   if (!isViewingMode()) return true;
   return isViewingCommentsVisible.value || isViewingTrackChangesVisible.value;
+});
+
+const resolvedProofingConfig = computed(() => {
+  if (proxy.$superdoc.config.proofing !== undefined) {
+    return proxy.$superdoc.config.proofing;
+  }
+  return proxy.$superdoc.config.layoutEngineOptions?.proofing;
 });
 
 const commentsModuleConfig = computed(() => {
@@ -128,7 +170,7 @@ const superdocStyleVars = computed(() => {
   if (!commentsConfig || commentsConfig === false) return vars;
 
   if (commentsConfig.highlightHoverColor) {
-    vars['--sd-comment-highlight-hover'] = commentsConfig.highlightHoverColor;
+    vars['--sd-comments-highlight-hover'] = commentsConfig.highlightHoverColor;
   }
 
   const trackChangeColors = commentsConfig.trackChangeHighlightColors || {};
@@ -136,18 +178,25 @@ const superdocStyleVars = computed(() => {
     ...trackChangeColors,
     ...(commentsConfig.trackChangeActiveHighlightColors || {}),
   };
-  if (activeTrackChangeColors.insertBorder) vars['--sd-track-insert-border'] = activeTrackChangeColors.insertBorder;
-  if (activeTrackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = activeTrackChangeColors.insertBackground;
-  if (activeTrackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = activeTrackChangeColors.deleteBorder;
-  if (activeTrackChangeColors.deleteBackground) vars['--sd-track-delete-bg'] = activeTrackChangeColors.deleteBackground;
-  if (activeTrackChangeColors.formatBorder) vars['--sd-track-format-border'] = activeTrackChangeColors.formatBorder;
+  if (activeTrackChangeColors.insertBorder)
+    vars['--sd-tracked-changes-insert-border'] = activeTrackChangeColors.insertBorder;
+  if (activeTrackChangeColors.insertBackground)
+    vars['--sd-tracked-changes-insert-background'] = activeTrackChangeColors.insertBackground;
+  if (activeTrackChangeColors.deleteBorder)
+    vars['--sd-tracked-changes-delete-border'] = activeTrackChangeColors.deleteBorder;
+  if (activeTrackChangeColors.deleteBackground)
+    vars['--sd-tracked-changes-delete-background'] = activeTrackChangeColors.deleteBackground;
+  if (activeTrackChangeColors.formatBorder)
+    vars['--sd-tracked-changes-format-border'] = activeTrackChangeColors.formatBorder;
 
   return vars;
 });
 
 // Refs
+const superdocRoot = ref(null);
 const layers = ref(null);
 const pdfViewerRef = ref(null);
+const pendingReplayTrackedChangeSync = ref(false);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -155,6 +204,14 @@ const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
 
 // Create a ref to pass to the composable
 const activeEditorRef = computed(() => proxy.$superdoc.activeEditor);
+
+// Find/replace controller — uses surfaces to show a floating find/replace popover.
+const findReplace = useFindReplace({
+  getSurfaceManager: () => surfaceManager,
+  getActiveEditor: () => proxy.$superdoc?.activeEditor,
+  activeEditorRef,
+  getFindReplaceConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.findReplace,
+});
 
 // Use the composable to get the selected text
 const { selectedText } = useSelectedText(activeEditorRef);
@@ -178,6 +235,30 @@ const hrbrFieldsLayer = ref(null);
 
 const pdfConfig = proxy.$superdoc.config.modules?.pdf || {};
 
+const flushPendingReplayTrackedChangeSync = () => {
+  if (!pendingReplayTrackedChangeSync.value) return;
+  pendingReplayTrackedChangeSync.value = false;
+  syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+const scheduleReplayTrackedChangeSync = () => {
+  pendingReplayTrackedChangeSync.value = true;
+
+  const activeDocId = proxy.$superdoc?.activeEditor?.options?.documentId;
+  const hasPresentationBridge = Boolean(activeDocId && PresentationEditor.getInstance(activeDocId) && layers.value);
+
+  // Always schedule a fallback flush. In layout mode, replay can remove the last
+  // comment/tracked-change anchor, which means no commentPositions event is emitted.
+  // Without this fallback, pending replay sync can stay stuck forever.
+  nextTick(() => {
+    flushPendingReplayTrackedChangeSync();
+  });
+
+  // In layout mode we still flush on comment-position updates when they arrive.
+  // For non-layout/viewing-hidden cases, the nextTick fallback above is the primary path.
+  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) return;
+};
+
 const handleDocumentReady = (documentId, container) => {
   const doc = getDocument(documentId);
   doc.isReady = true;
@@ -191,9 +272,20 @@ const handleDocumentReady = (documentId, container) => {
   proxy.$superdoc.broadcastPdfDocumentReady();
 };
 
+const getPendingCommentTargetClientY = () => {
+  if (!selectionPosition.value || !layers.value) return null;
+
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = Number(selectionPosition.value.top);
+  if (!Number.isFinite(top)) return null;
+
+  return layers.value.getBoundingClientRect().top + top * zoom;
+};
+
 const handleToolClick = (tool) => {
   const toolOptions = {
-    comments: () => showAddComment(proxy.$superdoc),
+    comments: () => showAddComment(proxy.$superdoc, getPendingCommentTargetClientY()),
     ai: () => handleAiToolClick(),
   };
 
@@ -255,7 +347,14 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   if (doc) {
+    // Notify the password prompt coordinator so a pending retry resolves.
+    passwordPrompt.handleEditorReady(doc);
+
     doc.setPresentationEditor(presentationEditor);
+    // Passwords are only needed during the initial encrypted-file load.
+    // Clear the per-document copy once the editor is ready so the value does
+    // not linger on the reactive document model.
+    if (doc.password) doc.password = undefined;
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
 
@@ -273,6 +372,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+    flushPendingReplayTrackedChangeSync();
 
     // Ensure floating comments can render once the layout engine starts emitting positions.
     // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
@@ -285,6 +385,14 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   presentationEditor.on('paginationUpdate', ({ layout }) => {
     const totalPages = layout.pages.length;
     proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
+  });
+
+  presentationEditor.on('headerFooterUpdate', (payload = {}) => {
+    proxy.$superdoc.emit('editor-update', buildEditorUpdatePayload(payload));
+  });
+
+  presentationEditor.on('headerFooterTransaction', (payload = {}) => {
+    emitEditorTransaction(buildEditorTransactionPayload(payload));
   });
 };
 
@@ -300,8 +408,43 @@ const onEditorDocumentLocked = ({ editor, isLocked, lockedBy }) => {
   proxy.$superdoc.lockSuperdoc(isLocked, lockedBy);
 };
 
-const onEditorUpdate = ({ editor }) => {
-  proxy.$superdoc.emit('editor-update', { editor });
+const buildEditorPayloadBase = ({
+  editor,
+  sourceEditor,
+  surface = 'body',
+  headerId = null,
+  sectionType = null,
+} = {}) => {
+  const effectiveEditor = editor ?? sourceEditor;
+  return {
+    editor: effectiveEditor,
+    sourceEditor: sourceEditor ?? effectiveEditor,
+    surface,
+    headerId,
+    sectionType,
+  };
+};
+
+const buildEditorUpdatePayload = (payload = {}) => {
+  return buildEditorPayloadBase(payload);
+};
+
+const onEditorUpdate = (payload = {}) => {
+  proxy.$superdoc.emit('editor-update', buildEditorUpdatePayload(payload));
+};
+
+const buildEditorTransactionPayload = ({ transaction, duration, ...payload } = {}) => {
+  return {
+    ...buildEditorPayloadBase(payload),
+    transaction,
+    duration,
+  };
+};
+
+const emitEditorTransaction = (payload = {}) => {
+  if (typeof proxy.$superdoc.config.onTransaction === 'function') {
+    proxy.$superdoc.config.onTransaction(payload);
+  }
 };
 
 let selectionUpdateRafId = null;
@@ -490,8 +633,11 @@ const onEditorContentError = ({ error, editor }) => {
   proxy.$superdoc.emit('content-error', { error, editor });
 };
 
-const onEditorException = ({ error, editor }) => {
-  proxy.$superdoc.emit('exception', { error, editor });
+const onEditorException = (doc, { error, editor, code }) => {
+  const handled = passwordPrompt.handleEncryptionError(doc, code, { error, editor });
+  if (handled) return true;
+  proxy.$superdoc.emit('exception', { error, editor, code, documentId: doc?.id });
+  return false;
 };
 
 const onEditorListdefinitionsChange = (params) => {
@@ -553,7 +699,7 @@ const editorOptions = (doc) => {
     onSelectionUpdate: onEditorSelectionChange,
     onCollaborationReady: onEditorCollaborationReady,
     onContentError: onEditorContentError,
-    onException: onEditorException,
+    onException: (payload) => onEditorException(doc, payload),
     onCommentsLoaded,
     onCommentsUpdate: onEditorCommentsUpdate,
     onCommentLocationsUpdate: (payload) => onEditorCommentLocationsUpdate(doc, payload),
@@ -563,16 +709,19 @@ const editorOptions = (doc) => {
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
     isNewFile,
+    password: getDocumentLoadPassword(doc),
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
+    contained: proxy.$superdoc.config.contained,
     linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),
+          proofing: resolvedProofingConfig.value,
           debugLabel: proxy.$superdoc.config.layoutEngineOptions?.debugLabel ?? doc.name ?? doc.id,
           zoom: (activeZoom.value ?? 100) / 100,
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
@@ -621,6 +770,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   if (!presentation) {
     // Non-layout-engine mode: pass through raw positions
     handleEditorLocationsUpdate(allCommentPositions, activeThreadId);
+    flushPendingReplayTrackedChangeSync();
     return;
   }
 
@@ -629,16 +779,159 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
+  flushPendingReplayTrackedChangeSync();
+};
+
+// Replay updates should only patch mutable comment state.
+// Identity and construction-time metadata are intentionally excluded.
+const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
+  'commentText',
+  'isInternal',
+  'parentCommentId',
+  'trackedChangeParentId',
+  'threadingParentCommentId',
+  'trackedChange',
+  'trackedChangeType',
+  'trackedChangeText',
+  'trackedChangeDisplayType',
+  'deletedText',
+  'resolvedTime',
+  'resolvedByEmail',
+  'resolvedByName',
+  'importedAuthor',
+  'docxCommentJSON',
+]);
+
+const applyReplayIsDoneResolutionFallback = (target, payload = {}) => {
+  if (!target || payload.isDone === undefined) return;
+  if (payload.resolvedTime != null || payload.resolvedByEmail != null || payload.resolvedByName != null) return;
+
+  // Imported replay payloads often use `isDone` while resolved fields remain null.
+  // When resolved fields are not explicitly populated, derive sidebar/export state from `isDone`.
+  if (payload.isDone) {
+    target.resolvedTime = target.resolvedTime || Date.now();
+    target.resolvedByEmail = target.resolvedByEmail || payload.creatorEmail || null;
+    target.resolvedByName = target.resolvedByName || payload.creatorName || null;
+    return;
+  }
+
+  target.resolvedTime = null;
+  target.resolvedByEmail = null;
+  target.resolvedByName = null;
+};
+
+const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
+  if (!commentModel || !payload) return;
+
+  if (Array.isArray(payload.elements)) {
+    commentModel.docxCommentJSON = payload.elements;
+  }
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (key === 'text') return;
+    if (key === 'elements') return;
+    if (!REPLAY_MUTABLE_COMMENT_FIELDS.has(key)) return;
+    commentModel[key] = value;
+  });
+
+  if (resolvedText !== undefined) {
+    commentModel.commentText = resolvedText;
+  }
+
+  applyReplayIsDoneResolutionFallback(commentModel, payload);
+};
+
+const normalizeReplayCommentModelPayload = (payload = {}) => {
+  const normalizedPayload = { ...payload };
+  if (!normalizedPayload.commentText && normalizedPayload.text) {
+    normalizedPayload.commentText = normalizedPayload.text;
+  }
+  if (!normalizedPayload.docxCommentJSON && Array.isArray(normalizedPayload.elements)) {
+    normalizedPayload.docxCommentJSON = normalizedPayload.elements;
+  }
+  applyReplayIsDoneResolutionFallback(normalizedPayload, normalizedPayload);
+  return normalizedPayload;
+};
+
+const syncInstantSidebarAlignmentFromEditorSelection = (commentId) => {
+  if (Number.isFinite(peekInstantSidebarAlignment())) {
+    return;
+  }
+
+  if (commentId == null) {
+    clearInstantSidebarAlignment();
+    return;
+  }
+
+  const layersElement = layers.value;
+  const { entry } = resolveCommentPositionEntry(commentId);
+  const targetClientY = getVisibleThreadAnchorClientY(layersElement, entry);
+
+  if (Number.isFinite(targetClientY)) {
+    requestInstantSidebarAlignment(targetClientY, commentId);
+    return;
+  }
+
+  clearInstantSidebarAlignment();
+};
+
+const isSameActiveCommentSelection = (commentId) => {
+  if (commentId == null || activeComment.value == null) {
+    return false;
+  }
+
+  return String(activeComment.value) === String(commentId);
 };
 
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
+  // Only sync active state when the event explicitly requests it.
+  // Replay add/update events often omit activeCommentId; inferring it here can
+  // cause repeated focus toggles while replay emits batched updates.
+  let shouldSyncActiveComment = Object.prototype.hasOwnProperty.call(params, 'activeCommentId');
+  const resolveCommentEventIds = (payload) => {
+    const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    return [...new Set(ids)];
+  };
+  const resolveDocumentScopedCommentMatch = (payload) => {
+    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    const activeDocumentId =
+      proxy.$superdoc?.activeEditor?.options?.documentId != null
+        ? String(proxy.$superdoc.activeEditor.options.documentId)
+        : null;
+
+    for (const candidateId of candidateIds) {
+      const existingComment = commentsList.value.find((comment) => {
+        const commentId = comment?.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment?.importedId != null ? String(comment.importedId) : null;
+        const isIdMatch = commentId === candidateId || importedId === candidateId;
+        if (!isIdMatch) return false;
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      });
+
+      if (existingComment) {
+        const matchedCommentId = existingComment?.commentId ?? existingComment?.importedId ?? candidateId;
+        return {
+          id: matchedCommentId != null ? String(matchedCommentId) : null,
+          existingComment,
+        };
+      }
+    }
+    return {
+      id: candidateIds[0] || null,
+      existingComment: null,
+    };
+  };
+
+  if (type === 'replayCompleted') {
+    scheduleReplayTrackedChangeSync();
+  }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
-    if (!commentPayload.commentText && commentPayload.text) {
-      commentPayload.commentText = commentPayload.text;
-    }
+    commentPayload = normalizeReplayCommentModelPayload(commentPayload);
 
     const currentUser = proxy.$superdoc?.user;
     if (currentUser) {
@@ -657,14 +950,107 @@ const onEditorCommentsUpdate = (params = {}) => {
       commentPayload.fileId = primaryDocumentId;
     }
 
-    const id = commentPayload.commentId || commentPayload.importedId;
-    if (id && !getComment(id)) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id && !existingComment) {
       const commentModel = useComment(commentPayload);
       addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
     }
+  }
 
-    if (!activeCommentId && id) {
-      activeCommentId = id;
+  if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id) {
+      const resolvedText = commentPayload.commentText || commentPayload.text;
+
+      if (existingComment) {
+        applyReplayUpdateToComment(existingComment, commentPayload, resolvedText);
+      } else {
+        const normalizedPayload = normalizeReplayCommentModelPayload(commentPayload);
+        const commentModel = useComment(normalizedPayload);
+        addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
+      }
+    }
+  }
+
+  if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
+    const targetIds = resolveCommentEventIds(commentPayload);
+    if (targetIds.length) {
+      const activeDocumentId =
+        proxy.$superdoc?.activeEditor?.options?.documentId != null
+          ? String(proxy.$superdoc.activeEditor.options.documentId)
+          : null;
+      const isInActiveDocument = (comment) => {
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      };
+
+      // Remove the entire thread subtree (parent + all descendants), not only direct replies.
+      const removedCommentIds = new Set();
+      commentsList.value.forEach((comment) => {
+        if (!isInActiveDocument(comment)) return;
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        const matchesTarget =
+          (commentId && targetIds.includes(commentId)) || (importedId && targetIds.includes(importedId));
+        if (!matchesTarget) return;
+        if (commentId) removedCommentIds.add(commentId);
+        if (importedId) removedCommentIds.add(importedId);
+      });
+
+      if (removedCommentIds.size) {
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          commentsList.value.forEach((comment) => {
+            if (!isInActiveDocument(comment)) return;
+            const commentId = comment.commentId != null ? String(comment.commentId) : null;
+            const importedId = comment.importedId != null ? String(comment.importedId) : null;
+            const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+            const trackedChangeParentId =
+              comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+
+            const isRemovedComment =
+              (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
+            const isDescendantOfRemovedComment =
+              (parentCommentId && removedCommentIds.has(parentCommentId)) ||
+              (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
+            if (!isRemovedComment && !isDescendantOfRemovedComment) return;
+
+            const sizeBefore = removedCommentIds.size;
+            if (commentId) removedCommentIds.add(commentId);
+            if (importedId) removedCommentIds.add(importedId);
+            if (removedCommentIds.size > sizeBefore) {
+              expanded = true;
+            }
+          });
+        }
+
+        const previousComments = [...commentsList.value];
+        commentsList.value = commentsList.value.filter((comment) => {
+          if (!isInActiveDocument(comment)) return true;
+          const commentId = comment.commentId != null ? String(comment.commentId) : null;
+          const importedId = comment.importedId != null ? String(comment.importedId) : null;
+          return !(
+            (commentId && removedCommentIds.has(commentId)) ||
+            (importedId && removedCommentIds.has(importedId))
+          );
+        });
+
+        const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
+        const activeCommentModel =
+          activeCommentKey != null
+            ? previousComments.find((comment) => {
+                const commentId = comment.commentId != null ? String(comment.commentId) : null;
+                const importedId = comment.importedId != null ? String(comment.importedId) : null;
+                return commentId === activeCommentKey || importedId === activeCommentKey;
+              })
+            : null;
+        const activeCommentInActiveDocument = activeCommentModel ? isInActiveDocument(activeCommentModel) : false;
+        if (activeCommentKey && removedCommentIds.has(activeCommentKey) && activeCommentInActiveDocument) {
+          activeCommentId = null;
+          shouldSyncActiveComment = true;
+        }
+      }
     }
   }
 
@@ -672,16 +1058,24 @@ const onEditorCommentsUpdate = (params = {}) => {
     handleTrackedChangeUpdate({ superdoc: proxy.$superdoc, params });
   }
 
+  if (shouldSyncActiveComment && (activeCommentId == null || !isSameActiveCommentSelection(activeCommentId))) {
+    syncInstantSidebarAlignmentFromEditorSelection(activeCommentId);
+  }
+
   nextTick(() => {
     if (pendingComment.value) return;
-    commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    if (shouldSyncActiveComment) {
+      commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    }
     // Briefly suppress click-outside so the same click that selected the comment
     // highlight in the editor doesn't immediately deactivate it via the sidebar.
     // Reset after the event loop settles so subsequent outside clicks work normally.
-    isCommentHighlighted.value = true;
-    setTimeout(() => {
-      isCommentHighlighted.value = false;
-    }, 0);
+    if (shouldSyncActiveComment) {
+      isCommentHighlighted.value = true;
+      setTimeout(() => {
+        isCommentHighlighted.value = false;
+      }, 0);
+    }
   });
 
   // Bubble up the event to the user, if handled
@@ -690,19 +1084,51 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 };
 
-const onEditorTransaction = ({ editor, transaction, duration }) => {
-  const inputType = transaction?.getMeta?.('inputType');
+const isHistoryUndoRedoInput = (inputType) => inputType === 'historyUndo' || inputType === 'historyRedo';
 
-  // Call sync on editor transaction but only if it's undo or redo
-  // This could be extended to other listeners in the future
-  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+const isCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  return Boolean(transaction?.docChanged && ySyncMeta?.isChangeOrigin);
+};
+
+const isPeerCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  return (
+    isCollaborationReplayTransaction(transaction, ySyncMeta) &&
+    !isHistoryUndoRedoInput(inputType) &&
+    !Boolean(ySyncMeta?.isUndoRedoOperation)
+  );
+};
+
+const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.getMeta?.(ySyncPluginKey)) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  const isLocalHistoryUndoRedo = isHistoryUndoRedoInput(inputType);
+  const isLocalCollabUndoRedo = Boolean(ySyncMeta?.isUndoRedoOperation);
+
+  // Peer editors do not retain the local UndoManager flag. A collaborator's
+  // undo/redo arrives as a generic Yjs-origin document replay, so treat those
+  // replays as tracked-change resync points and keep the resync path idempotent.
+  return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
+};
+
+const onEditorTransaction = (payload = {}) => {
+  const { editor, transaction } = payload;
+  const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
+
+  // Call sync on editor transaction for undo/redo in both local history
+  // and collaboration replay modes.
+  if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
     syncTrackedChangePositionsWithDocument({ documentId, editor });
+    syncTrackedChangeComments({
+      superdoc: proxy.$superdoc,
+      editor,
+      // Remote replay should rebuild only local sidebar state. The authoritative
+      // collaboration comment update is already shared through the comments ydoc.
+      broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
+    });
   }
 
-  if (typeof proxy.$superdoc.config.onTransaction === 'function') {
-    proxy.$superdoc.config.onTransaction({ editor, transaction, duration });
-  }
+  emitEditorTransaction(buildEditorTransactionPayload(payload));
 };
 
 const isCommentsEnabled = computed(() => Boolean(commentsModuleConfig.value));
@@ -737,14 +1163,7 @@ watch(showCommentsSidebar, (value) => {
  * @param {String} commentId The commentId to scroll to
  */
 const scrollToComment = (commentId) => {
-  const commentsConfig = proxy.$superdoc.config?.modules?.comments;
-  if (!commentsConfig || commentsConfig === false) return;
-
-  const element = document.querySelector(`[data-thread-id=${commentId}]`);
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    commentsStore.setActiveComment(proxy.$superdoc, commentId);
-  }
+  proxy.$superdoc.scrollToComment(commentId);
 };
 
 onMounted(() => {
@@ -752,10 +1171,57 @@ onMounted(() => {
   if (config && !config.readOnly) {
     document.addEventListener('mousedown', handleDocumentMouseDown);
   }
+  document.addEventListener('keydown', handleFindShortcut, true);
 });
 
+/**
+ * Handle Cmd+F / Ctrl+F to open find/replace instead of browser find.
+ * Use a document-level capture listener because the dev shell and
+ * presentation-mode bridge do not always leave keyboard focus on a node
+ * that bubbles through the .superdoc root.
+ */
+function isFindShortcutEvent(e) {
+  return (e.metaKey || e.ctrlKey) && !e.altKey && e.key?.toLowerCase?.() === 'f';
+}
+
+function isFocusInsideSuperDoc() {
+  const root = superdocRoot.value;
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof Node)) return false;
+
+  if (root?.contains(activeElement)) {
+    return true;
+  }
+
+  const activeEditorDom = proxy.$superdoc?.activeEditor?.view?.dom;
+  return (
+    activeEditorDom instanceof Node && (activeElement === activeEditorDom || activeEditorDom.contains?.(activeElement))
+  );
+}
+
+function handleFindShortcut(e) {
+  if (!isFindShortcutEvent(e)) return;
+  if (!isFindReplaceEnabled.value) return;
+  if (!isFocusInsideSuperDoc()) return;
+
+  // Only steal the shortcut if the composable will actually open a surface.
+  // If the resolver returns { type: 'none' }, we must let the browser handle Cmd+F.
+  if (!findReplace.wouldOpen()) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  findReplace.open();
+}
+
+function handleContainerKeydown(e) {
+  handleFindShortcut(e);
+}
+
 onBeforeUnmount(() => {
+  passwordPrompt.destroy();
+  findReplace.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  document.removeEventListener('keydown', handleFindShortcut, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;
@@ -975,12 +1441,32 @@ const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
 watch(
   () => activeZoom.value,
   (zoom) => {
+    const zoomFactor = (zoom ?? 100) / 100;
+
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
-      PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
+      PresentationEditor.setGlobalZoom(zoomFactor);
+    } else {
+      // Web layout without layout engine — apply CSS transform directly
+      // to non-PDF sub-document containers so zoom works for PM fallback rendering.
+      // PDF documents are excluded because pdfViewer.updateScale() handles their zoom
+      // separately below; applying both would result in double-zoom.
+      const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
+      subDocs?.forEach((el) => {
+        if (el.querySelector('.sd-pdf-viewer')) return;
+        if (zoomFactor === 1) {
+          el.style.transformOrigin = '';
+          el.style.transform = '';
+          el.style.width = '';
+        } else {
+          el.style.transformOrigin = 'top left';
+          el.style.transform = `scale(${zoomFactor})`;
+          el.style.width = `${100 / zoomFactor}%`;
+        }
+      });
     }
 
     const pdfViewer = getPDFViewer();
-    pdfViewer?.updateScale((zoom ?? 100) / 100);
+    pdfViewer?.updateScale(zoomFactor);
 
     nextTick(() => {
       updateWhiteboardPageSizes();
@@ -1023,13 +1509,16 @@ const getPDFViewer = () => {
 
 <template>
   <div
+    ref="superdocRoot"
     class="superdoc"
     :class="{
       'superdoc--with-sidebar': showCommentsSidebar,
       'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+      'superdoc--contained': proxy.$superdoc.config.contained,
       'high-contrast': isHighContrastMode,
     }"
     :style="superdocStyleVars"
+    @keydown="handleContainerKeydown"
   >
     <div class="superdoc__layers layers" ref="layers" role="group">
       <!-- Floating tools menu (shows up when user has text selection)-->
@@ -1104,7 +1593,11 @@ const getPDFViewer = () => {
           :opacity="whiteboardOpacity"
         />
 
-        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+        <div
+          class="superdoc__sub-document sub-document"
+          v-for="doc in documents"
+          :key="`${doc.id}:${doc.editorMountNonce}`"
+        >
           <!-- PDF renderer -->
           <PdfViewer
             v-if="doc.type === PDF"
@@ -1161,21 +1654,28 @@ const getPDFViewer = () => {
         :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
       />
     </div>
+
+    <!-- Surface host — generic dialog/floating overlay system -->
+    <SurfaceHost :geometry-target="layers" />
   </div>
 </template>
 
 <style scoped>
 .superdoc {
   display: flex;
+  position: relative;
 }
 
 .right-sidebar {
   min-width: 320px;
+  height: 100%;
 }
 
 .floating-comments {
   min-width: 300px;
   width: 300px;
+  height: 100%;
+  overflow: visible;
 }
 
 .superdoc__layers {
@@ -1213,6 +1713,21 @@ const getPDFViewer = () => {
   position: relative;
 }
 
+/* In contained mode, overlay layers must not take flow space.
+ * With height:100% resolved on .superdoc__document, this element's
+ * position:relative + height:100% takes the full container height,
+ * pushing .superdoc__sub-document out of view. */
+.superdoc--contained .superdoc__comments-layer {
+  position: absolute;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Re-enable pointer events on comment anchors so highlights remain clickable */
+.superdoc--contained .sd-comment-anchor {
+  pointer-events: auto;
+}
+
 .superdoc__right-sidebar {
   width: 320px;
   min-width: 320px;
@@ -1228,26 +1743,17 @@ const getPDFViewer = () => {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.tools .tool-icon {
-  font-size: 20px;
-  border-radius: 12px;
-  border: none;
-  outline: none;
-  background-color: #dbdbdb;
-  cursor: pointer;
+  gap: var(--sd-ui-tools-gap, 6px);
 }
 
 .tools-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50px;
-  height: 50px;
-  background-color: rgba(219, 219, 219, 0.6);
-  border-radius: 12px;
+  width: var(--sd-ui-tools-item-size, 50px);
+  height: var(--sd-ui-tools-item-size, 50px);
+  background-color: var(--sd-ui-tools-item-bg, rgba(219, 219, 219, 0.6));
+  border-radius: var(--sd-ui-tools-item-radius, 12px);
   cursor: pointer;
   position: relative;
 }
@@ -1257,8 +1763,8 @@ const getPDFViewer = () => {
 }
 
 .superdoc__tools-icon {
-  width: 20px;
-  height: 20px;
+  width: var(--sd-ui-tools-icon-size, 20px);
+  height: var(--sd-ui-tools-icon-size, 20px);
   flex-shrink: 0;
 }
 
@@ -1305,45 +1811,6 @@ const getPDFViewer = () => {
   transform: translateY(-50%);
   z-index: 50;
 } */
-
-/* Tools styles */
-.tools {
-  position: absolute;
-  z-index: 3;
-  display: flex;
-  gap: 6px;
-}
-
-.tools .tool-icon {
-  font-size: 20px;
-  border-radius: 12px;
-  border: none;
-  outline: none;
-  background-color: #dbdbdb;
-  cursor: pointer;
-}
-
-.tools-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 50px;
-  height: 50px;
-  background-color: rgba(219, 219, 219, 0.6);
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.tools-item i {
-  cursor: pointer;
-}
-
-.superdoc__tools-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
 
 .ai-tool > svg {
   fill: transparent;

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { FONT_FAMILY_FALLBACKS, DEFAULT_GENERIC_FALLBACK, mapWordFamilyFallback, toCssFontFamily } from './index.js';
 
 describe('FONT_FAMILY_FALLBACKS', () => {

@@ -15,6 +15,7 @@
     "./helpers/*": "./helpers/*.ts",
     "./list-numbering": "./list-numbering/index.ts",
     "./list-numbering/*": "./list-numbering/*.ts",
+    "./list-rendering": "./list-rendering.ts",
     "./layout-constants": "./layout-constants.ts",
     "./list-marker-utils": "./list-marker-utils.ts",
     "./*.ts": "./*.ts",
@@ -34,7 +35,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json --emitDeclarationOnly",
-    "test": "vitest run",
+    "test": "bun test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

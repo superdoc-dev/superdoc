@@ -1,0 +1,157 @@
+---
+title: protection.get
+sidebarTitle: protection.get
+description: Read the current document protection state including editing restrictions, write protection, and read-only recommendation.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Read the current document protection state including editing restrictions, write protection, and read-only recommendation.
+
+- Operation ID: `protection.get`
+- API member path: `editor.doc.protection.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DocumentProtectionState with editingRestriction, writeProtection, and readOnlyRecommended fields.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `editingRestriction` | object | yes |  |
+| `editingRestriction.enforced` | boolean | yes |  |
+| `editingRestriction.formattingRestricted` | boolean | yes |  |
+| `editingRestriction.mode` | enum | yes | `"none"`, `"readOnly"`, `"comments"`, `"trackedChanges"`, `"forms"` |
+| `editingRestriction.passwordProtected` | boolean | yes |  |
+| `editingRestriction.runtimeEnforced` | boolean | yes |  |
+| `readOnlyRecommended` | boolean | yes |  |
+| `writeProtection` | object | yes |  |
+| `writeProtection.enabled` | boolean | yes |  |
+| `writeProtection.passwordProtected` | boolean | yes |  |
+
+### Example response
+
+```json
+{
+  "editingRestriction": {
+    "enforced": true,
+    "formattingRestricted": true,
+    "mode": "none",
+    "passwordProtected": true,
+    "runtimeEnforced": true
+  },
+  "readOnlyRecommended": true,
+  "writeProtection": {
+    "enabled": true,
+    "passwordProtected": true
+  }
+}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "editingRestriction": {
+      "additionalProperties": false,
+      "properties": {
+        "enforced": {
+          "type": "boolean"
+        },
+        "formattingRestricted": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "none",
+            "readOnly",
+            "comments",
+            "trackedChanges",
+            "forms"
+          ],
+          "type": "string"
+        },
+        "passwordProtected": {
+          "type": "boolean"
+        },
+        "runtimeEnforced": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "enforced",
+        "runtimeEnforced",
+        "passwordProtected",
+        "formattingRestricted"
+      ],
+      "type": "object"
+    },
+    "readOnlyRecommended": {
+      "type": "boolean"
+    },
+    "writeProtection": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "passwordProtected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "passwordProtected"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "editingRestriction",
+    "writeProtection",
+    "readOnlyRecommended"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

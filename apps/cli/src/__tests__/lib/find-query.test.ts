@@ -34,4 +34,26 @@ describe('resolveFindQuery', () => {
   test('treats null --select-json as provided and validates the payload shape', async () => {
     await expect(resolveFindQuery(makeParsed({ 'select-json': 'null' }))).rejects.toThrow(CliError);
   });
+
+  test('normalizes shorthand node selector from --select-json', async () => {
+    const query = await resolveFindQuery(makeParsed({ 'select-json': JSON.stringify({ type: 'paragraph' }) }));
+    expect(query).toEqual({
+      select: { type: 'node', nodeType: 'paragraph' },
+    });
+  });
+
+  test('passes through canonical node selector from --select-json', async () => {
+    const query = await resolveFindQuery(
+      makeParsed({ 'select-json': JSON.stringify({ type: 'node', nodeType: 'heading' }) }),
+    );
+    expect(query).toEqual({
+      select: { type: 'node', nodeType: 'heading' },
+    });
+  });
+
+  test('rejects invalid shorthand node type from --select-json', async () => {
+    await expect(resolveFindQuery(makeParsed({ 'select-json': JSON.stringify({ type: 'magic' }) }))).rejects.toThrow(
+      CliError,
+    );
+  });
 });

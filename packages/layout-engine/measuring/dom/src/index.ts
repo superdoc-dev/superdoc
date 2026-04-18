@@ -64,6 +64,8 @@ import {
   type TableBorders,
   type TableBorderValue,
   effectiveTableCellSpacing,
+  LeaderDecoration,
+  resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -150,22 +152,9 @@ const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
-/**
- * Resolves table cell spacing to pixels (for border-spacing).
- * Handles number (px) or { type, value }. The editor/DOCX decoder often stores value
- * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
- * type is 'dxa' and we convert; otherwise value is treated as px.
- */
-export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
-  if (cellSpacing == null) return 0;
-  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
-  const v = cellSpacing.value;
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  const t = (cellSpacing.type ?? '').toLowerCase();
-  // Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips (large).
-  const asPx = t === 'dxa' && v >= 20 ? twipsToPx(v) : v;
-  return Math.max(0, asPx);
-}
+// Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
+export { getCellSpacingPx } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/contracts';
 
 /**
  * Returns the border width in pixels for a table border value (matches painter border-utils logic).
@@ -529,20 +518,26 @@ function calculateEmptyParagraphMetrics(
   };
 }
 
+function lineHeightFontSize(run: TextRun): number {
+  return resolveBaseFontSizeForVerticalText(run.fontSize, run);
+}
+
 /**
  * Extract FontInfo from a TextRun for typography metrics calculation.
+ * Uses the line-height font size so that superscript/subscript runs
+ * produce metrics based on their original (un-scaled) base font.
  */
 function getFontInfoFromRun(run: TextRun): FontInfo {
   return {
     fontFamily: normalizeFontFamily(run.fontFamily),
-    fontSize: normalizeFontSize(run.fontSize),
+    fontSize: normalizeFontSize(lineHeightFontSize(run)),
     bold: run.bold,
     italic: run.italic,
   };
 }
 
 /**
- * Update maxFontInfo when a new run has a larger font size.
+ * Update maxFontInfo when a new run has a larger effective font size for line height.
  * Returns the updated FontInfo if this run has the max font size, otherwise returns the existing info.
  */
 function updateMaxFontInfo(
@@ -550,7 +545,7 @@ function updateMaxFontInfo(
   currentMaxInfo: FontInfo | undefined,
   newRun: TextRun,
 ): FontInfo | undefined {
-  if (newRun.fontSize >= currentMaxSize) {
+  if (lineHeightFontSize(newRun) >= currentMaxSize) {
     return getFontInfoFromRun(newRun);
   }
   return currentMaxInfo;
@@ -735,6 +730,14 @@ function measureTabAlignmentGroup(
       continue;
     }
 
+    // Measure math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathWidth = (run as { width: number }).width ?? 20;
+      result.runs.push({ runIndex: i, width: mathWidth });
+      result.totalWidth += mathWidth;
+      continue;
+    }
+
     // Measure field annotation runs
     if (isFieldAnnotationRun(run)) {
       const fontSize = (run as { fontSize?: number }).fontSize ?? DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
@@ -909,9 +912,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   // so keep the same available width as body lines. For normal paragraphs we must honor
   // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, rawFirstLineOffset);
-  const hasNegativeIndent = indentLeft < 0 || indentRight < 0;
-  // Avoid widening the first line when negative indents already expand fragment width.
-  const allowNegativeFirstLineOffset = !isWordLayoutList && !hasNegativeIndent && rawFirstLineOffset < 0;
+  // Avoid widening the first line when a negative LEFT indent already expands the content area.
+  // Negative right indent doesn't cause this problem — it only extends rightward.
+  const hasNegativeLeftIndent = indentLeft < 0;
+  const allowNegativeFirstLineOffset = !isWordLayoutList && !hasNegativeLeftIndent && rawFirstLineOffset < 0;
   const firstLineOffset = isWordLayoutList
     ? 0
     : allowNegativeFirstLineOffset
@@ -1093,6 +1097,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   let hasSeenTextRun = false;
   let tabStopCursor = 0;
   let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
+  let pendingLeader: LeaderDecoration | null = null;
   let pendingRunSpacing = 0;
   // Remember the last applied tab alignment so we can clamp end-aligned
   // segments to the exact target after measuring to avoid 1px drift.
@@ -1168,10 +1173,18 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       startX = Math.max(0, target);
     }
 
+    // Update pending leader to end where aligned content begins
+    if (pendingLeader) {
+      const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+      pendingLeader.to = startX + effectiveIndent;
+    }
+
     currentLine.width = roundValue(startX);
     // Track alignment used for post-segment clamping
     lastAppliedTabAlign = { target, val };
     pendingTabAlignment = null;
+    pendingLeader = null;
+
     return startX;
   };
 
@@ -1321,6 +1334,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       }
       tabStopCursor = 0;
       pendingTabAlignment = null;
+      pendingLeader = null;
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
@@ -1377,6 +1391,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       };
       tabStopCursor = 0;
       pendingTabAlignment = null;
+      pendingLeader = null;
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
@@ -1386,6 +1401,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     if (isTabRun(run)) {
       // Clear any previous tab group when we encounter a new tab
       activeTabGroup = null;
+      pendingLeader = null;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1419,15 +1435,16 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       currentLine.maxFontSize = Math.max(currentLine.maxFontSize, 12);
       currentLine.toRun = runIndex;
       currentLine.toChar = 1; // tab is a single character
+      let currentLeader: LeaderDecoration | null = null;
 
       // Emit leader decoration if requested
       if (stop && stop.leader && stop.leader !== 'none') {
         const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' | 'middleDot' = stop.leader;
-        const relativeTarget = clampedTarget - effectiveIndent;
-        const from = Math.min(originX, relativeTarget);
-        const to = Math.max(originX, relativeTarget);
+        const from = Math.min(originX + effectiveIndent, clampedTarget);
+        const to = Math.max(originX + effectiveIndent, clampedTarget);
         if (!currentLine.leaders) currentLine.leaders = [];
-        currentLine.leaders.push({ from, to, style: leaderStyle });
+        currentLeader = { from, to, style: leaderStyle };
+        currentLine.leaders.push(currentLeader);
       }
 
       if (stop) {
@@ -1455,6 +1472,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               groupStartX = Math.max(0, relativeTarget - beforeDecimal);
             }
 
+            // Update current leader "to" ensuring leaders end where right-aligned content begins
+            if (currentLeader) {
+              currentLeader.to = groupStartX + effectiveIndent;
+            }
+
             // Set up active tab group for subsequent run processing
             activeTabGroup = {
               measure: groupMeasure,
@@ -1471,12 +1493,14 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
           // Don't set pendingTabAlignment - we're using activeTabGroup instead
           pendingTabAlignment = null;
+          pendingLeader = null;
         } else {
           // For start-aligned tabs, use the existing pendingTabAlignment mechanism
           pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
         }
       } else {
         pendingTabAlignment = null;
+        pendingLeader = null;
       }
       pendingRunSpacing = 0;
       continue;
@@ -1553,6 +1577,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         tabStopCursor = 0;
         pendingTabAlignment = null;
+        pendingLeader = null;
         lastAppliedTabAlign = null;
         activeTabGroup = null;
 
@@ -1607,6 +1632,37 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
 
+      continue;
+    }
+
+    // Handle math runs (atomic, pre-computed dimensions like images)
+    if (run.kind === 'math') {
+      const mathRun = run as { width: number; height: number };
+      const mathWidth = mathRun.width ?? 20;
+      const mathHeight = mathRun.height ?? 24;
+
+      if (!currentLine) {
+        currentLine = {
+          fromRun: runIndex,
+          fromChar: 0,
+          toRun: runIndex,
+          toChar: 1,
+          width: mathWidth,
+          maxFontSize: lastFontSize,
+          maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
+          segments: [{ runIndex, fromChar: 0, toChar: 1, width: mathWidth }],
+          spaceCount: 0,
+          maxImageHeight: mathHeight,
+        };
+      } else {
+        currentLine.toRun = runIndex;
+        currentLine.toChar = 1;
+        currentLine.width = roundValue(currentLine.width + mathWidth);
+        currentLine.maxImageHeight = Math.max(currentLine.maxImageHeight ?? 0, mathHeight);
+        if (!currentLine.segments) currentLine.segments = [];
+        currentLine.segments.push({ runIndex, fromChar: 0, toChar: 1, width: mathWidth });
+      }
+      pendingRunSpacing = 0;
       continue;
     }
 
@@ -1704,6 +1760,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         tabStopCursor = 0;
         pendingTabAlignment = null;
+        pendingLeader = null;
         lastAppliedTabAlign = null;
 
         // Start new line with the annotation (body line, so use bodyContentWidth for hanging indent)
@@ -1785,7 +1842,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: spacesEndChar,
             width: spacesWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
@@ -1808,6 +1865,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             lastAppliedTabAlign = null;
 
             // Body line, so use bodyContentWidth for hanging indent
@@ -1817,7 +1875,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toRun: runIndex,
               toChar: spacesEndChar,
               width: spacesWidth,
-              maxFontSize: run.fontSize,
+              maxFontSize: lineHeightFontSize(run),
               maxFontInfo: getFontInfoFromRun(run),
               maxWidth: getEffectiveWidth(bodyContentWidth),
               segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
@@ -1828,7 +1886,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.toChar = spacesEndChar;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + spacesWidth);
             currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             appendSegment(currentLine.segments, runIndex, spacesStartChar, spacesEndChar, spacesWidth);
             currentLine.spaceCount += spacesLength;
           }
@@ -1896,7 +1954,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toRun: runIndex,
               toChar: spaceEndChar,
               width: singleSpaceWidth,
-              maxFontSize: run.fontSize,
+              maxFontSize: lineHeightFontSize(run),
               maxFontInfo: getFontInfoFromRun(run),
               maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
               segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
@@ -1922,6 +1980,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               lines.push(completedLine);
               tabStopCursor = 0;
               pendingTabAlignment = null;
+              pendingLeader = null;
               lastAppliedTabAlign = null;
               activeTabGroup = null;
 
@@ -1932,7 +1991,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toRun: runIndex,
                 toChar: spaceEndChar,
                 width: singleSpaceWidth,
-                maxFontSize: run.fontSize,
+                maxFontSize: lineHeightFontSize(run),
                 maxFontInfo: getFontInfoFromRun(run),
                 maxWidth: getEffectiveWidth(bodyContentWidth),
                 segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
@@ -1944,7 +2003,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toChar = spaceEndChar;
               currentLine.width = roundValue(currentLine.width + boundarySpacing + singleSpaceWidth);
               currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               // If in an active tab alignment group, use explicit X positioning
               let spaceExplicitX: number | undefined;
               if (inActiveTabGroup && activeTabGroup) {
@@ -1988,7 +2047,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // - WIDTH_FUDGE_PX is meant to give leeway for fitting text that's very close
         // - We only want to break mid-word when the word truly exceeds available width
         // - Breaking words that exactly fit would cause unnecessary fragmentation
-        if (wordOnlyWidth > effectiveMaxWidth && word.length > 1) {
+        if (wordOnlyWidth > effectiveMaxWidth + WIDTH_FUDGE_PX && word.length > 1) {
           // First, finish any existing currentLine before processing the long word
           // Only push the line if it has actual text content (segments), not just tab positioning.
           // If the line only has width from tab advances but no text, we should keep it so the
@@ -2005,6 +2064,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             currentLine = null;
           }
 
@@ -2019,7 +2079,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
           // Use remaining width for chunking if we have a tab-only line, otherwise use full line width
           const chunkWidth = hasTabOnlyLine ? Math.max(remainingWidthAfterTab, lineMaxWidth * 0.25) : lineMaxWidth;
-          const chunks = breakWordIntoChunks(word, chunkWidth - WIDTH_FUDGE_PX, font, ctx, run, wordStartChar);
+          const chunks = breakWordIntoChunks(word, chunkWidth, font, ctx, run, wordStartChar);
 
           // Process all chunks except the last one as complete lines
           let chunkCharOffset = wordStartChar;
@@ -2036,7 +2096,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toRun = runIndex;
               currentLine.toChar = chunkEndChar;
               currentLine.width = roundValue(currentLine.width + chunk.width);
-              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+              currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               currentLine.maxFontInfo = getFontInfoFromRun(run);
               currentLine.segments.push({
                 runIndex,
@@ -2072,6 +2132,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 lines.push(completedLine);
                 tabStopCursor = 0;
                 pendingTabAlignment = null;
+                pendingLeader = null;
                 currentLine = null;
               }
             } else if (isLastChunk) {
@@ -2082,7 +2143,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toRun: runIndex,
                 toChar: chunkEndChar,
                 width: chunk.width,
-                maxFontSize: run.fontSize,
+                maxFontSize: lineHeightFontSize(run),
                 maxFontInfo: getFontInfoFromRun(run),
                 maxWidth: getEffectiveWidth(contentWidth),
                 segments: [{ runIndex, fromChar: chunkStartChar, toChar: chunkEndChar, width: chunk.width }],
@@ -2130,7 +2191,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
@@ -2218,6 +2279,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           lines.push(completedLine);
           tabStopCursor = 0;
           pendingTabAlignment = null;
+          pendingLeader = null;
 
           // Body line, so use bodyContentWidth for hanging indent
           currentLine = {
@@ -2226,7 +2288,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
@@ -2259,7 +2321,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.toChar = wordEndNoSpace;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + wordOnlyWidth);
             currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+            currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             // Determine explicit X position:
             // - If in active tab group, use currentX from the group (for ALL words in group)
             // - Otherwise, only use segmentStartX for first word after a tab
@@ -2280,6 +2342,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             currentLine = null;
             // advance past space
             charPosInRun = wordEndNoSpace + 1;
@@ -2310,7 +2373,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           }
           currentLine.width = roundValue(targetWidth);
           currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
           appendSegment(currentLine.segments, runIndex, wordStartChar, newToChar, wordCommitWidth, explicitX);
           if (shouldIncludeDelimiterSpace) {
             currentLine.spaceCount += 1;
@@ -2341,6 +2404,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
       if (!isLastSegment) {
         pendingTabAlignment = null;
+        pendingLeader = null;
+
         if (!currentLine) {
           currentLine = {
             fromRun: runIndex,
@@ -2348,7 +2413,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toRun: runIndex,
             toChar: charPosInRun,
             width: 0,
-            maxFontSize: run.fontSize,
+            maxFontSize: lineHeightFontSize(run),
             maxFontInfo: getFontInfoFromRun(run),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [],
@@ -2367,7 +2432,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         currentLine.width = roundValue(currentLine.width + tabAdvance);
 
         currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
-        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
+        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
         currentLine.toRun = runIndex;
         currentLine.toChar = charPosInRun;
         charPosInRun += 1;
@@ -2376,16 +2441,18 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
         } else {
           pendingTabAlignment = null;
+          pendingLeader = null;
         }
 
         // Emit leader decoration if requested
         if (stop && stop.leader && stop.leader !== 'none' && stop.leader !== 'middleDot') {
           const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' = stop.leader;
-          const relativeTarget = clampedTarget - effectiveIndent;
-          const from = Math.min(originX, relativeTarget);
-          const to = Math.max(originX, relativeTarget);
+          const from = Math.min(originX + effectiveIndent, clampedTarget);
+          const to = Math.max(originX + effectiveIndent, clampedTarget);
           if (!currentLine.leaders) currentLine.leaders = [];
-          currentLine.leaders.push({ from, to, style: leaderStyle });
+          const leader: LeaderDecoration = { from, to, style: leaderStyle };
+          currentLine.leaders.push(leader);
+          pendingLeader = leader;
         }
       }
     }

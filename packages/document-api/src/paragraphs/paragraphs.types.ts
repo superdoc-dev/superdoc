@@ -188,3 +188,25 @@ export interface ParagraphsSetShadingInput {
 export interface ParagraphsClearShadingInput {
   target: ParagraphTarget;
 }
+
+// ---------------------------------------------------------------------------
+// Direction
+// ---------------------------------------------------------------------------
+
+export const PARAGRAPH_DIRECTIONS = ['ltr', 'rtl'] as const;
+export type ParagraphDirection = (typeof PARAGRAPH_DIRECTIONS)[number];
+
+export const ALIGNMENT_POLICIES = ['preserve', 'matchDirection'] as const;
+export type AlignmentPolicy = (typeof ALIGNMENT_POLICIES)[number];
+
+/** paragraphs.setDirection */
+export interface ParagraphsSetDirectionInput {
+  target: ParagraphTarget;
+  direction: ParagraphDirection;
+  alignmentPolicy?: AlignmentPolicy;
+}
+
+/** paragraphs.clearDirection */
+export interface ParagraphsClearDirectionInput {
+  target: ParagraphTarget;
+}

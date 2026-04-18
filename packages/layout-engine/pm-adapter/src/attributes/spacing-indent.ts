@@ -28,25 +28,19 @@ const AUTO_SPACING_LINE_DEFAULT = 240; // Default OOXML auto line spacing in twi
  * Normalizes paragraph alignment values from OOXML format.
  *
  * Maps OOXML alignment values to standard alignment format. Case-sensitive.
- * Converts 'start'/'end' to 'left'/'right'. Unknown values return undefined.
+ * Converts 'start'/'end' to physical directions based on paragraph direction:
+ * - LTR: start→left, end→right
+ * - RTL: start→right, end→left
  *
  * IMPORTANT: 'left' must return 'left' (not undefined) so that explicit left alignment
  * from paragraph properties can override style-based center/right alignment.
  *
  * @param value - OOXML alignment value ('center', 'right', 'justify', 'start', 'end', 'left')
+ * @param isRtl - Whether the paragraph is right-to-left
  * @returns Normalized alignment value, or undefined if invalid
- *
- * @example
- * ```typescript
- * normalizeAlignment('center'); // 'center'
- * normalizeAlignment('left'); // 'left'
- * normalizeAlignment('start'); // 'left'
- * normalizeAlignment('end'); // 'right'
- * normalizeAlignment('CENTER'); // undefined (case-sensitive)
- * ```
  */
 
-export const normalizeAlignment = (value: unknown): ParagraphAttrs['alignment'] => {
+export const normalizeAlignment = (value: unknown, isRtl = false): ParagraphAttrs['alignment'] => {
   switch (value) {
     case 'center':
     case 'right':
@@ -57,11 +51,14 @@ export const normalizeAlignment = (value: unknown): ParagraphAttrs['alignment'] 
     case 'distribute':
     case 'numTab':
     case 'thaiDistribute':
+    case 'lowKashida':
+    case 'mediumKashida':
+    case 'highKashida':
       return 'justify';
     case 'end':
-      return 'right';
+      return isRtl ? 'left' : 'right';
     case 'start':
-      return 'left';
+      return isRtl ? 'right' : 'left';
     default:
       return undefined;
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { isPageRelativeAnchor, collectPreRegisteredAnchors, collectAnchoredDrawings } from './anchors.js';
 import type { FlowBlock, ImageBlock, DrawingBlock, Measure, ImageMeasure, DrawingMeasure } from '@superdoc/contracts';
 

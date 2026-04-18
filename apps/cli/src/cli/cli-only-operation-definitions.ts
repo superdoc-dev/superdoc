@@ -1,12 +1,12 @@
 /**
  * Canonical CLI-only operation definitions — single source of truth.
  *
- * This module consolidates metadata for the 10 CLI-only operations that
+ * This module consolidates metadata for the CLI-only operations that
  * are not backed by document-api. All downstream consumers project the
  * views they need from this canonical object:
  *
  *   - operation-set.ts      → category, description, tokens, requiresDoc
- *   - export-sdk-contract.ts → intentName, sdkMetadata, outputSchema
+ *   - export-sdk-contract.ts → sdkMetadata, outputSchema
  *   - response-schemas.ts   → CLI-only response schema entries
  */
 
@@ -28,7 +28,6 @@ export interface CliOnlyOperationDefinition {
   description: string;
   requiresDocumentContext: boolean;
   tokenOverride?: readonly string[];
-  intentName: string;
   sdkMetadata: CliOnlySdkMetadata;
   outputSchema: Record<string, unknown>;
   /** When true, this operation is excluded from generated LLM tool catalogs. */
@@ -45,7 +44,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     description:
       'Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).',
     requiresDocumentContext: false,
-    intentName: 'open_document',
     sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -65,10 +63,13 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         dirty: { type: 'boolean' },
         collaboration: {
           type: 'object',
+          description: 'Collaboration summary (auth config redacted).',
           properties: {
+            providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
             documentId: { type: 'string' },
-            url: { type: 'string' },
+            url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
           },
+          required: ['providerType', 'documentId'],
         },
         bootstrap: {
           type: 'object',
@@ -88,7 +89,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'Save the current session to the original file or a new path.',
     requiresDocumentContext: false,
-    intentName: 'save_document',
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -127,7 +127,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'Close the active editing session and clean up resources.',
     requiresDocumentContext: false,
-    intentName: 'close_document',
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -150,11 +149,48 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       required: ['contextId', 'closed'],
     },
   },
+  insertTab: {
+    category: 'core',
+    description:
+      'Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts.',
+    requiresDocumentContext: false,
+    tokenOverride: ['insert', 'tab'],
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        document: { type: 'object' },
+        receipt: { type: 'object' },
+        inserted: { type: 'object' },
+        context: { type: 'object' },
+        output: { type: 'object' },
+      },
+      required: ['receipt', 'inserted'],
+    },
+  },
+  insertLineBreak: {
+    category: 'core',
+    description:
+      'Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts.',
+    requiresDocumentContext: false,
+    tokenOverride: ['insert', 'line-break'],
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        document: { type: 'object' },
+        receipt: { type: 'object' },
+        inserted: { type: 'object' },
+        context: { type: 'object' },
+        output: { type: 'object' },
+      },
+      required: ['receipt', 'inserted'],
+    },
+  },
   status: {
     category: 'session',
     description: 'Show the current session status and document metadata.',
     requiresDocumentContext: false,
-    intentName: 'get_status',
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -178,10 +214,13 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         },
         collaboration: {
           type: 'object',
+          description: 'Collaboration summary (auth config redacted).',
           properties: {
+            providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
             documentId: { type: 'string' },
-            url: { type: 'string' },
+            url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
           },
+          required: ['providerType', 'documentId'],
         },
         openedAt: { type: 'string' },
         updatedAt: { type: 'string' },
@@ -194,7 +233,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'List all available CLI operations and contract metadata.',
     requiresDocumentContext: false,
-    intentName: 'describe_commands',
     skipAsATool: true,
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
@@ -222,7 +260,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     description: 'Show detailed metadata for a single CLI operation.',
     requiresDocumentContext: false,
     tokenOverride: ['describe', 'command'],
-    intentName: 'describe_command',
     skipAsATool: true,
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
@@ -242,7 +279,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'List all active editing sessions.',
     requiresDocumentContext: false,
-    intentName: 'list_sessions',
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -257,6 +293,16 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
               sessionType: { type: 'string' },
               dirty: { type: 'boolean' },
               revision: { type: 'number' },
+              collaboration: {
+                type: 'object',
+                description: 'Collaboration summary (auth config redacted).',
+                properties: {
+                  providerType: { type: 'string', enum: ['y-websocket', 'hocuspocus', 'liveblocks'] },
+                  documentId: { type: 'string' },
+                  url: { type: 'string', description: 'WebSocket URL (websocket providers only).' },
+                },
+                required: ['providerType', 'documentId'],
+              },
             },
           },
         },
@@ -268,7 +314,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'Persist the current session state.',
     requiresDocumentContext: false,
-    intentName: 'save_session',
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -300,7 +345,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'Close a specific editing session by ID.',
     requiresDocumentContext: false,
-    intentName: 'close_session',
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -328,7 +372,6 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     category: 'session',
     description: 'Set the default session for subsequent commands.',
     requiresDocumentContext: false,
-    intentName: 'set_default_session',
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',

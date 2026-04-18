@@ -40,6 +40,7 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
     'superdoc insert --value "Hello, world!"',
     'superdoc insert --block-id abc123 --value "Appended text"',
     'superdoc insert --type markdown --value "## New Section"',
+    'superdoc insert --block-id abc123 --offset 5 --type html --value "<br/>"',
   ],
   replace: [
     'superdoc replace --block-id abc123 --start 0 --end 5 --text "Updated"',
@@ -105,7 +106,10 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
   ],
 
   // ── Format ──────────────────────────────────────────────────────────
-  'format.apply': ['superdoc format apply --block-id abc123 --start 0 --end 10 --inline-json \'{"bold":true}\''],
+  'format.apply': [
+    'superdoc format apply --block-id abc123 --start 0 --end 10 --inline-json \'{"bold":true}\'',
+    'superdoc format apply --block-id abc123 --start 7 --end 14 --inline-json \'{"fontSize":16,"fontFamily":"Times New Roman"}\'',
+  ],
 
   // ── Comments ────────────────────────────────────────────────────────
   'comments.create': ['superdoc comments create --block-id abc123 --start 0 --end 5 --text "Review this section"'],
@@ -127,6 +131,7 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
   // ── Mutations (batch) ───────────────────────────────────────────────
   'mutations.apply': [
     'superdoc mutations apply --atomic true --change-mode direct --steps-json \'[{"id":"s1","op":"text.rewrite","where":{"by":"select","select":{"type":"text","pattern":"old"},"require":"first"},"args":{"replacement":{"text":"new"}}}]\'',
+    'superdoc mutations apply --atomic true --change-mode direct --steps-json \'[{"id":"s1","op":"text.insert","where":{"by":"target","target":{"kind":"selection","start":{"kind":"text","blockId":"abc123","offset":0},"end":{"kind":"text","blockId":"abc123","offset":0}}},"args":{"position":"before","content":{"text":"ALPHA01 "}}},{"id":"s2","op":"format.apply","where":{"by":"target","target":{"kind":"selection","start":{"kind":"text","blockId":"abc123","offset":8},"end":{"kind":"text","blockId":"abc123","offset":15}}},"args":{"inline":{"fontSize":16,"fontFamily":"Times New Roman"}}}]\'',
   ],
   'mutations.preview': [
     'superdoc mutations preview --atomic true --change-mode direct --steps-json \'[{"id":"s1","op":"text.rewrite","where":{"by":"select","select":{"type":"text","pattern":"old"},"require":"first"},"args":{"replacement":{"text":"new"}}}]\'',

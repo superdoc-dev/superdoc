@@ -1,0 +1,25 @@
+{
+  "name": "ai-example-agent-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n AGENT,COLLAB -c magenta,cyan \"tsx watch src/index.ts\" \"HOST=0.0.0.0 PORT=8081 npx y-websocket\"",
+    "start": "concurrently -k \"tsx src/index.ts\" \"HOST=0.0.0.0 PORT=8081 npx y-websocket\""
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "@superdoc-dev/sdk": "latest",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.3.3",
+    "openai": "^4.0.0",
+    "y-websocket": "^2.0.0",
+    "yjs": "13.6.19",
+    "concurrently": "^9.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "~5.5.0"
+  }
+}

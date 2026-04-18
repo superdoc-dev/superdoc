@@ -250,7 +250,7 @@ def main():
         print(f"  unzip -p {output_file} word/document.xml | xmllint --format - | grep -A5 -B5 comment")
         print()
         print("  # Compare with a working test fixture:")
-        print("  unzip -p packages/super-editor/src/tests/data/basic-comment.docx word/comments.xml | xmllint --format -")
+        print("  unzip -p packages/super-editor/src/editors/v1/tests/data/basic-comment.docx word/comments.xml | xmllint --format -")
 
     except Exception as e:
         print(f"Error: {e}")

@@ -1,0 +1,43 @@
+/**
+ * Proofing underline styles.
+ *
+ * Layout-invariant: these decorations must not change line height,
+ * text metrics, padding, margins, or any property that affects layout.
+ */
+
+.sd-proofing-spelling {
+  text-decoration-line: spelling-error;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--sd-proofing-spelling-color, #e53e3e);
+  text-decoration-thickness: var(--sd-proofing-underline-thickness, 1.5px);
+  text-underline-offset: var(--sd-proofing-underline-offset, 2px);
+}
+
+/* Fallback for browsers that don't support spelling-error */
+@supports not (text-decoration-line: spelling-error) {
+  .sd-proofing-spelling {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: var(--sd-proofing-spelling-color, #e53e3e);
+    text-decoration-thickness: var(--sd-proofing-underline-thickness, 1.5px);
+    text-underline-offset: var(--sd-proofing-underline-offset, 2px);
+  }
+}
+
+/* Grammar underline (future — stored but not rendered in v1) */
+.sd-proofing-grammar {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--sd-proofing-grammar-color, #3182ce);
+  text-decoration-thickness: var(--sd-proofing-underline-thickness, 1.5px);
+  text-underline-offset: var(--sd-proofing-underline-offset, 2px);
+}
+
+/* Style issue underline (future) */
+.sd-proofing-style {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--sd-proofing-style-color, #805ad5);
+  text-decoration-thickness: var(--sd-proofing-underline-thickness, 1.5px);
+  text-underline-offset: var(--sd-proofing-underline-offset, 2px);
+}

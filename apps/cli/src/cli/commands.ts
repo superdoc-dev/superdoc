@@ -53,9 +53,30 @@ type CliOnlySpecOverride = {
 };
 
 const CLI_ONLY_OVERRIDES: Record<string, CliOnlySpecOverride> = {
-  open: { mutates: true, examples: ['superdoc open my-doc.docx', 'superdoc open my-doc.docx --session my-session'] },
+  open: {
+    mutates: true,
+    examples: [
+      'superdoc open my-doc.docx',
+      'superdoc open --content-override "# Title\\n\\nBody text" --override-type markdown',
+      "superdoc open template.docx --content-override '<p>ALPHA01</p><p>BRAVO02</p>' --override-type html",
+    ],
+  },
   save: { mutates: true, examples: ['superdoc save', 'superdoc save --out copy.docx'] },
   close: { mutates: true, examples: ['superdoc close'] },
+  insertTab: {
+    mutates: true,
+    examples: [
+      'superdoc insert tab --block-id abc123 --offset 5',
+      'superdoc insert tab --target-json \'{"kind":"selection","start":{"kind":"text","blockId":"abc123","offset":5},"end":{"kind":"text","blockId":"abc123","offset":5}}\'',
+    ],
+  },
+  insertLineBreak: {
+    mutates: true,
+    examples: [
+      'superdoc insert line-break --block-id abc123 --offset 5',
+      'superdoc insert line-break --target-json \'{"kind":"selection","start":{"kind":"text","blockId":"abc123","offset":5},"end":{"kind":"text","blockId":"abc123","offset":5}}\'',
+    ],
+  },
   status: { mutates: false, examples: ['superdoc status'] },
   describe: { mutates: false, examples: ['superdoc describe'] },
   describeCommand: { mutates: false, examples: ['superdoc describe command find'] },
@@ -153,9 +174,11 @@ function buildHelpText(): string {
   // Common tasks section — surface the most useful commands upfront
   lines.push('Common tasks:');
   lines.push('  Find mutation target    →  query match');
+  lines.push('  Seed a synthetic doc    →  open --content-override ...');
   lines.push('  Insert between list items  →  lists insert');
   lines.push('  Create a paragraph     →  create paragraph');
   lines.push('  Insert inline text     →  insert');
+  lines.push('  Insert a real tab      →  insert tab');
   lines.push('  Batch formatting changes  →  mutations apply');
   lines.push('');
 

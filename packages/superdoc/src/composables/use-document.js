@@ -13,6 +13,10 @@ export default function useDocument(params, superdocConfig) {
   const role = params.role;
   const html = params.html;
   const markdown = params.markdown;
+  const password = params.password;
+
+  // Password retry — incrementing this forces SuperEditor to remount and re-run loadXmlData.
+  const editorMountNonce = ref(0);
 
   // Placement
   const container = ref(null);
@@ -29,10 +33,20 @@ export default function useDocument(params, superdocConfig) {
   // For docx
   const editorRef = shallowRef(null);
   const setEditor = (ref) => (editorRef.value = ref);
+
+  /**
+   * @deprecated Direct editor access will be removed in a future version. Use the Document API (`editor.doc`) instead.
+   * See https://docs.superdoc.dev/document-api/overview
+   */
   const getEditor = () => editorRef.value;
 
   const presentationEditorRef = shallowRef(null);
   const setPresentationEditor = (ref) => (presentationEditorRef.value = ref);
+
+  /**
+   * @deprecated Direct editor access will be removed in a future version. Use the Document API (`editor.doc`) instead.
+   * See https://docs.superdoc.dev/document-api/overview
+   */
   const getPresentationEditor = () => presentationEditorRef.value;
 
   /**
@@ -87,12 +101,14 @@ export default function useDocument(params, superdocConfig) {
     data,
     html,
     markdown,
+    password,
     type,
     config,
     state,
     role,
 
     core,
+    editorMountNonce,
     ydoc,
     provider,
     socket,

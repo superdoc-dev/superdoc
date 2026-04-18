@@ -27,7 +27,9 @@ import type {
   DrawingFragment,
   SectionNumbering,
   FlowMode,
+  NormalizedColumnLayout,
 } from '@superdoc/contracts';
+import { normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -40,12 +42,18 @@ import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
 import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
-import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
+import {
+  collectAnchoredDrawings,
+  collectAnchoredTables,
+  collectPreRegisteredAnchors,
+  isPageRelativeAnchor,
+} from './anchors.js';
+import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
-import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
+import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import { balancePageColumns } from './column-balancing.js';
-import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -57,7 +65,14 @@ type Margins = {
   footer?: number;
 };
 
-type NormalizedColumns = ColumnLayout & { width: number };
+type NormalizedColumns = NormalizedColumnLayout;
+
+const getColumnWidthAt = (columns: NormalizedColumns, columnIndex: number): number => {
+  if (Array.isArray(columns.widths) && columns.widths.length > 0) {
+    return columns.widths[Math.max(0, Math.min(columnIndex, columns.widths.length - 1))] ?? columns.width;
+  }
+  return columns.width;
+};
 
 /**
  * Default paragraph line height in pixels used for vertical alignment calculations
@@ -348,23 +363,31 @@ function calculateChainHeight(
       // (which is tracked in PageState from the previous layout operation)
       const prevTrailing =
         Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
-      const sameAsLastOnPage = styleId && state.lastParagraphStyleId === styleId;
-
-      // Apply contextual spacing suppression if this paragraph has it AND matches previous style
-      const effectiveSpacingBefore =
-        contextualSpacing && sameAsLastOnPage ? 0 : Math.max(spacingBefore - prevTrailing, 0);
+      // Per-paragraph contextual spacing: each side independently suppresses its own spacing
+      const prevSuppressAfter = shouldSuppressOwnSpacing(
+        state.lastParagraphStyleId,
+        state.lastParagraphContextualSpacing,
+        styleId,
+      );
+      const currSuppressBefore = shouldSuppressOwnSpacing(styleId, contextualSpacing, state.lastParagraphStyleId);
+      let effectiveSpacingBefore: number;
+      if (prevSuppressAfter && currSuppressBefore) {
+        effectiveSpacingBefore = 0;
+      } else if (prevSuppressAfter) {
+        effectiveSpacingBefore = spacingBefore;
+      } else if (currSuppressBefore) {
+        effectiveSpacingBefore = 0;
+      } else {
+        effectiveSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+      }
       totalHeight += effectiveSpacingBefore;
       isFirstMember = false;
     } else {
-      // Subsequent chain members: calculate inter-paragraph spacing within the chain
-      const sameStyle = styleId && prevStyleId && styleId === prevStyleId;
-
-      // OOXML spacing rules:
-      // 1. If previous paragraph has contextualSpacing AND styles match → suppress its spacingAfter
-      // 2. If current paragraph has contextualSpacing AND styles match → suppress its spacingBefore
-      // 3. Resulting gap = max(effective spacingAfter, effective spacingBefore)
-      const effectiveSpacingAfterPrev = prevContextualSpacing && sameStyle ? 0 : prevSpacingAfter;
-      const effectiveSpacingBefore = contextualSpacing && sameStyle ? 0 : spacingBefore;
+      // Subsequent chain members: per-paragraph contextual spacing
+      const prevSuppressAfter = shouldSuppressOwnSpacing(prevStyleId, prevContextualSpacing, styleId);
+      const currSuppressBefore = shouldSuppressOwnSpacing(styleId, contextualSpacing, prevStyleId);
+      const effectiveSpacingAfterPrev = prevSuppressAfter ? 0 : prevSpacingAfter;
+      const effectiveSpacingBefore = currSuppressBefore ? 0 : spacingBefore;
       const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveSpacingBefore);
       totalHeight += interParagraphSpacing;
     }
@@ -395,9 +418,10 @@ function calculateChainHeight(
             : undefined;
         const anchorContextualSpacing = (anchorBlock as ParagraphBlock).attrs?.contextualSpacing === true;
 
-        const sameStyle = anchorStyleId && prevStyleId && anchorStyleId === prevStyleId;
-        const effectiveSpacingAfterPrev = prevContextualSpacing && sameStyle ? 0 : prevSpacingAfter;
-        const effectiveAnchorSpacingBefore = anchorContextualSpacing && sameStyle ? 0 : anchorSpacingBefore;
+        const prevSuppressAfter = shouldSuppressOwnSpacing(prevStyleId, prevContextualSpacing, anchorStyleId);
+        const anchorSuppressBefore = shouldSuppressOwnSpacing(anchorStyleId, anchorContextualSpacing, prevStyleId);
+        const effectiveSpacingAfterPrev = prevSuppressAfter ? 0 : prevSpacingAfter;
+        const effectiveAnchorSpacingBefore = anchorSuppressBefore ? 0 : anchorSpacingBefore;
         const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveAnchorSpacingBefore);
 
         // Optimization (SD-1282): Only require space for anchor's first line, not full height.
@@ -488,15 +512,45 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Allow body layout to synthesize page 1 for anchored tables when a document has
+   * no anchor paragraphs and would otherwise render zero pages.
+   *
+   * Header/footer layout keeps this disabled to avoid changing long-standing
+   * overlay behavior in paragraph-free header/footer regions.
+   */
+  allowParagraphlessAnchoredTableFallback?: boolean;
+  /**
+   * Allow body layout to synthesize page 1 when section metadata exists but no
+   * renderable body blocks survive conversion.
+   *
+   * Header/footer layout keeps this disabled to preserve existing empty-region
+   * behavior for paragraph-free overlays.
+   */
+  allowSectionBreakOnlyPageFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
   width: number;
+  /** Body content height used as the measurement canvas (pagination boundary). */
   height: number;
-  /** Actual page width for page-relative anchor positioning */
+  /** Actual page width for page-relative anchor positioning. */
   pageWidth?: number;
-  /** Page margins for page-relative anchor positioning */
-  margins?: { left: number; right: number };
+  /** Physical page height for vertical page-relative anchor conversion. */
+  pageHeight?: number;
+  /**
+   * Page margins for anchor positioning.
+   * `left`/`right`: horizontal page-relative conversion.
+   * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
+   * `header`: header distance from page top edge (header band origin).
+   */
+  margins?: {
+    left: number;
+    right: number;
+    top?: number;
+    bottom?: number;
+    header?: number;
+  };
   /**
    * Optional base height used to bound behindDoc overflow handling.
    * When provided, decorative assets far outside the header/footer band
@@ -545,6 +599,10 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
+  return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
 // List constants sourced from shared/common
@@ -766,8 +824,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let pendingPageSize: { w: number; h: number } | null = null;
 
   // Track active and pending columns
-  let activeColumns = options.columns ?? { ...SINGLE_COLUMN_DEFAULT };
+  let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
+  const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -864,15 +924,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Update columns - if section has columns, use them; if undefined, reset to single column.
       // In OOXML, absence of <w:cols> means single column (default).
       if (block.columns) {
-        next.activeColumns = {
-          count: block.columns.count,
-          gap: block.columns.gap,
-          withSeparator: block.columns.withSeparator,
-        };
+        next.activeColumns = cloneColumnLayout(block.columns);
         next.pendingColumns = null;
       } else {
         // No columns specified = reset to single column (OOXML default)
-        next.activeColumns = { ...SINGLE_COLUMN_DEFAULT };
+        next.activeColumns = cloneColumnLayout(undefined);
         next.pendingColumns = null;
       }
       // Schedule section refs for first section (will be applied on first page creation)
@@ -955,7 +1011,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       (block.columns &&
         (block.columns.count !== next.activeColumns.count ||
           block.columns.gap !== next.activeColumns.gap ||
-          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator))) ||
+          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
+          block.columns.equalWidth !== next.activeColumns.equalWidth ||
+          !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
       (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
@@ -982,10 +1040,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
     // Helper to get column config: use block.columns if defined, otherwise reset to single column (OOXML default)
-    const getColumnConfig = () =>
-      block.columns
-        ? { count: block.columns.count, gap: block.columns.gap, withSeparator: block.columns.withSeparator }
-        : { ...SINGLE_COLUMN_DEFAULT };
+    const getColumnConfig = () => cloneColumnLayout(block.columns);
 
     if (block.attrs?.requirePageBoundary) {
       next.pendingColumns = getColumnConfig();
@@ -1051,6 +1106,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
     'decimal';
   let activePageCounter = 1;
+  let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;
   // Section header/footer ref tracking state
   type SectionRefs = {
@@ -1078,6 +1134,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
   if (typeof initialSectionMetadata?.numbering?.start === 'number') {
     activePageCounter = initialSectionMetadata.numbering.start;
+    activeSectionPageCounterStart = activePageCounter;
   }
   let activeSectionRefs: SectionRefs | null = null;
   let pendingSectionRefs: SectionRefs | null = null;
@@ -1121,6 +1178,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
+        const isApplyingPendingSection =
+          pendingTopMargin !== null ||
+          pendingBottomMargin !== null ||
+          pendingLeftMargin !== null ||
+          pendingRightMargin !== null ||
+          pendingHeaderDistance !== null ||
+          pendingFooterDistance !== null ||
+          pendingPageSize !== null ||
+          pendingColumns !== null ||
+          pendingOrientation !== null ||
+          pendingNumbering !== null ||
+          pendingSectionRefs !== null ||
+          pendingSectionIndex !== null ||
+          pendingVAlign !== undefined ||
+          pendingSectionBaseTopMargin !== null ||
+          pendingSectionBaseBottomMargin !== null;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1201,6 +1274,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pendingSectionBaseBottomMargin !== null) {
           activeSectionBaseBottomMargin = pendingSectionBaseBottomMargin;
           pendingSectionBaseBottomMargin = null;
+        }
+        if (isApplyingPendingSection) {
+          activeSectionPageCounterStart = activePageCounter;
         }
         pageCount += 1;
 
@@ -1327,7 +1403,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     state: PageState | null;
     constraintIndex: number;
     contentWidth: number;
-    colsConfig: { count: number; gap: number } | null;
+    colsConfig: ColumnLayout | null;
     normalized: NormalizedColumns | null;
   } = { state: null, constraintIndex: -2, contentWidth: -1, colsConfig: null, normalized: null };
 
@@ -1343,6 +1419,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       cachedColumnsState.contentWidth === currentContentWidth &&
       cachedColumnsState.colsConfig?.count === colsConfig.count &&
       cachedColumnsState.colsConfig?.gap === colsConfig.gap &&
+      cachedColumnsState.colsConfig?.equalWidth === colsConfig.equalWidth &&
+      widthsEqual(cachedColumnsState.colsConfig?.widths, colsConfig.widths) &&
       cachedColumnsState.normalized
     ) {
       return cachedColumnsState.normalized;
@@ -1353,10 +1431,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       state,
       constraintIndex,
       contentWidth: currentContentWidth,
-      colsConfig: { count: colsConfig.count, gap: colsConfig.gap },
+      colsConfig: cloneColumnLayout(colsConfig),
       normalized,
     };
     return normalized;
+  };
+
+  const getCurrentColumnWidth = (): number => {
+    const cols = getCurrentColumns();
+    const state = states[states.length - 1] ?? null;
+    const columnIndex = state?.columnIndex ?? 0;
+    return getColumnWidthAt(cols, columnIndex);
   };
 
   // Helper to get column X position
@@ -1383,7 +1468,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
-    activeColumns = newColumns;
+    activeColumns = cloneColumnLayout(newColumns);
 
     // Invalidate columns cache to ensure recalculation with new region
     cachedColumnsState.state = null;
@@ -1401,8 +1486,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Collect anchored drawings mapped to their anchor paragraphs
   const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
-  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs
-  const anchoredTablesByParagraph = collectAnchoredTables(blocks, measures);
+  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
+  // Tables without any anchor paragraph need explicit fallback placement so
+  // floating-only documents still produce a page and render their content.
+  const anchoredTables = collectAnchoredTables(blocks, measures);
+  const anchoredTablesByParagraph = anchoredTables.byParagraph;
+  const paragraphlessAnchoredTables = anchoredTables.withoutParagraph;
   const placedAnchoredIds = new Set<string>();
   const placedAnchoredTableIds = new Set<string>();
 
@@ -1414,6 +1503,44 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
   const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+
+  const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
+    const contentTop = state.topMargin;
+    const contentBottom = state.contentBottom;
+    const contentHeight = Math.max(0, contentBottom - contentTop);
+    const tableHeight = measure.totalHeight ?? 0;
+    const anchor = block.anchor;
+    const offsetV = anchor?.offsetV ?? 0;
+    const vRelativeFrom = anchor?.vRelativeFrom;
+    const alignV = anchor?.alignV;
+
+    if (vRelativeFrom === 'margin') {
+      if (alignV === 'bottom') {
+        return contentBottom - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        return contentTop + (contentHeight - tableHeight) / 2 + offsetV;
+      }
+      return contentTop + offsetV;
+    }
+
+    if (vRelativeFrom === 'page') {
+      if (alignV === 'bottom') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return pageHeight - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return (pageHeight - tableHeight) / 2 + offsetV;
+      }
+      return offsetV;
+    }
+
+    // Paragraph-relative floating tables normally anchor to a body paragraph.
+    // When a document has no body paragraphs at all, fall back to the top of the
+    // content area so the table can still render on page 1.
+    return contentTop + offsetV;
+  };
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -1668,6 +1795,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (sectionMetadata.numbering.format) activeNumberFormat = sectionMetadata.numbering.format;
           if (typeof sectionMetadata.numbering.start === 'number') {
             activePageCounter = sectionMetadata.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           // Non-first section: schedule for next page
@@ -1678,6 +1806,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (effectiveBlock.numbering.format) activeNumberFormat = effectiveBlock.numbering.format;
           if (typeof effectiveBlock.numbering.start === 'number') {
             activePageCounter = effectiveBlock.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           pendingNumbering = { ...effectiveBlock.numbering };
@@ -1807,12 +1936,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const firstMemberBlock = blocks[chain.startIndex] as ParagraphBlock;
         const firstMemberStyleId =
           typeof firstMemberBlock.attrs?.styleId === 'string' ? firstMemberBlock.attrs?.styleId : undefined;
-        const firstMemberContextualSpacing = firstMemberBlock.attrs?.contextualSpacing === true;
-        const contextualSpacingApplies =
-          firstMemberContextualSpacing && firstMemberStyleId && state.lastParagraphStyleId === firstMemberStyleId;
+        // Reclaim depends on whether the previous paragraph suppresses its own after-spacing
+        const prevSuppressAfter = shouldSuppressOwnSpacing(
+          state.lastParagraphStyleId,
+          state.lastParagraphContextualSpacing,
+          firstMemberStyleId,
+        );
         const prevTrailing =
           Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
-        const effectiveAvailableHeight = contextualSpacingApplies ? availableHeight + prevTrailing : availableHeight;
+        const effectiveAvailableHeight = prevSuppressAfter ? availableHeight + prevTrailing : availableHeight;
 
         const chainHeight = calculateChainHeight(chain, blocks, measures, state);
 
@@ -1849,9 +1981,27 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
             const currentStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs?.styleId : undefined;
             const currentContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
-            const contextualSpacingApplies =
-              currentContextualSpacing && currentStyleId && state.lastParagraphStyleId === currentStyleId;
-            const effectiveSpacingBefore = contextualSpacingApplies ? 0 : Math.max(spacingBefore - prevTrailing, 0);
+            // Per-paragraph: each side independently suppresses its own spacing
+            const prevSuppressAfter = shouldSuppressOwnSpacing(
+              state.lastParagraphStyleId,
+              state.lastParagraphContextualSpacing,
+              currentStyleId,
+            );
+            const currSuppressBefore = shouldSuppressOwnSpacing(
+              currentStyleId,
+              currentContextualSpacing,
+              state.lastParagraphStyleId,
+            );
+            let effectiveSpacingBefore: number;
+            if (prevSuppressAfter && currSuppressBefore) {
+              effectiveSpacingBefore = 0;
+            } else if (prevSuppressAfter) {
+              effectiveSpacingBefore = spacingBefore;
+            } else if (currSuppressBefore) {
+              effectiveSpacingBefore = 0;
+            } else {
+              effectiveSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+            }
             const currentHeight = getMeasureHeight(paraBlock, measure);
             const nextHeight = getMeasureHeight(nextBlock, nextMeasure);
 
@@ -1861,9 +2011,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               nextIsParagraph && typeof nextBlock.attrs?.styleId === 'string' ? nextBlock.attrs?.styleId : undefined;
             const nextContextualSpacing = nextIsParagraph && asBoolean(nextBlock.attrs?.contextualSpacing);
 
-            const sameStyleAsNext = currentStyleId && nextStyleId && nextStyleId === currentStyleId;
-            const effectiveSpacingAfter = currentContextualSpacing && sameStyleAsNext ? 0 : spacingAfter;
-            const effectiveNextSpacingBefore = nextContextualSpacing && sameStyleAsNext ? 0 : nextSpacingBefore;
+            const currSuppressAfter = shouldSuppressOwnSpacing(currentStyleId, currentContextualSpacing, nextStyleId);
+            const nextSuppressBefore =
+              nextIsParagraph && shouldSuppressOwnSpacing(nextStyleId, nextContextualSpacing, currentStyleId);
+            const effectiveSpacingAfter = currSuppressAfter ? 0 : spacingAfter;
+            const effectiveNextSpacingBefore = nextSuppressBefore ? 0 : nextSpacingBefore;
             const interParagraphSpacing = nextIsParagraph
               ? Math.max(effectiveSpacingAfter, effectiveNextSpacingBefore)
               : effectiveSpacingAfter;
@@ -1883,9 +2035,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               ? effectiveSpacingBefore + currentHeight + interParagraphSpacing + nextFirstLineHeight
               : effectiveSpacingBefore + currentHeight + spacingAfter + nextHeight;
 
-            const effectiveAvailableHeight = contextualSpacingApplies
-              ? availableHeight + prevTrailing
-              : availableHeight;
+            const effectiveAvailableHeight = prevSuppressAfter ? availableHeight + prevTrailing : availableHeight;
             if (combinedHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
               state = paginator.advanceColumn(state);
             }
@@ -1895,8 +2045,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       /**
        * Contextual spacing suppression for spacingAfter.
-       * Per OOXML spec: when current paragraph has contextualSpacing=true and
-       * the next paragraph has the same styleId, suppress current's spacingAfter.
+       * Per-paragraph: current paragraph suppresses its own after-spacing when
+       * it has contextualSpacing and the next paragraph shares the same styleId.
        */
       let overrideSpacingAfter: number | undefined;
       const curStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs.styleId : undefined;
@@ -1904,11 +2054,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (curContextualSpacing && curStyleId) {
         const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
         if (nextBlock?.kind === 'paragraph') {
-          const nextStyleId =
-            typeof (nextBlock as ParagraphBlock).attrs?.styleId === 'string'
-              ? (nextBlock as ParagraphBlock).attrs?.styleId
-              : undefined;
-          if (nextStyleId === curStyleId) {
+          const nextPara = nextBlock as ParagraphBlock;
+          const nextStyleId = typeof nextPara.attrs?.styleId === 'string' ? nextPara.attrs?.styleId : undefined;
+          if (shouldSuppressOwnSpacing(curStyleId, curContextualSpacing, nextStyleId)) {
             overrideSpacingAfter = 0;
           }
         }
@@ -1922,7 +2070,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         {
           block,
           measure,
-          columnWidth: getCurrentColumns().width,
+          columnWidth: getCurrentColumnWidth(),
           ensurePage: paginator.ensurePage,
           advanceColumn: paginator.advanceColumn,
           columnX,
@@ -1952,7 +2100,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Only vRelativeFrom=paragraph is supported.
       if (tablesForPara) {
         const state = paginator.ensurePage();
-        const columnWidthForTable = getCurrentColumns().width;
+        const columnWidthForTable = getCurrentColumnWidth();
         let tableBottomY = state.cursorY;
         for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
           if (placedAnchoredTableIds.has(tableBlock.id)) continue;
@@ -2006,7 +2154,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         } else if (relativeFrom === 'margin') {
           maxWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
         } else {
-          maxWidth = cols.width;
+          maxWidth = getColumnWidthAt(cols, state.columnIndex);
         }
 
         const aspectRatio = imgMeasure.width > 0 && imgMeasure.height > 0 ? imgMeasure.width / imgMeasure.height : 1.0;
@@ -2110,7 +2258,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       layoutTableBlock({
         block: block as TableBlock,
         measure: measure as TableMeasure,
-        columnWidth: getCurrentColumns().width,
+        columnWidth: getCurrentColumnWidth(),
         ensurePage: paginator.ensurePage,
         advanceColumn: paginator.advanceColumn,
         columnX,
@@ -2159,8 +2307,46 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Prune trailing empty page(s) that can be created by page-boundary rules
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
-  while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
-    pages.pop();
+  paginator.pruneTrailingEmptyPages();
+
+  const resetPaginationStateForBlankPageFallback = (): void => {
+    pageCount = 0;
+    activePageCounter = activeSectionPageCounterStart;
+    sectionFirstPageNumbers.clear();
+  };
+
+  if (
+    pages.length === 0 &&
+    ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
+  ) {
+    resetPaginationStateForBlankPageFallback();
+  }
+
+  if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
+    const state = paginator.ensurePage();
+
+    for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
+      const columnWidthForTable = getCurrentColumnWidth();
+      const totalWidth = tableMeasure.totalWidth ?? 0;
+      const shouldFlowInline =
+        columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+
+      if (shouldFlowInline) {
+        continue;
+      }
+
+      const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
+      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+
+      floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      placedAnchoredTableIds.add(tableBlock.id);
+    }
+  }
+
+  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+    paginator.ensurePage();
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -2257,6 +2443,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     const measureMap = new Map<string, { kind: string; lines?: Array<{ lineHeight: number }>; height?: number }>();
     // Build blockId -> sectionIndex map to filter fragments by section
     const blockSectionMap = new Map<string, number>();
+    const sectionColumnsMap = new Map<number, ColumnLayout>();
     blocks.forEach((block, idx) => {
       const measure = measures[idx];
       if (measure) {
@@ -2268,6 +2455,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const sectionIdx = blockWithAttrs.attrs?.sectionIndex;
       if (typeof sectionIdx === 'number') {
         blockSectionMap.set(block.id, sectionIdx);
+        if (block.kind === 'sectionBreak' && block.columns) {
+          sectionColumnsMap.set(sectionIdx, cloneColumnLayout(block.columns));
+        }
       }
     });
 
@@ -2275,6 +2465,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Balance the last page (section ends at document end).
       // TODO: Track section boundaries and balance at each continuous section break.
       if (page === pages[pages.length - 1] && page.fragments.length > 0) {
+        const finalSectionColumns = sectionColumnsMap.get(activeSectionIndex) ?? activeColumns;
+        // Word does not rebalance the final page for sections that use explicit
+        // per-column widths. Preserve the natural left-to-right fill order there.
+        const hasExplicitColumnWidths =
+          finalSectionColumns?.equalWidth === false &&
+          Array.isArray(finalSectionColumns.widths) &&
+          finalSectionColumns.widths.length > 0;
+
+        if (hasExplicitColumnWidths) {
+          continue;
+        }
+
         // Skip balancing if fragments are already in multiple columns (e.g., explicit column breaks).
         // Balancing should only apply when all content flows naturally in column 0.
         const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
@@ -2313,6 +2515,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : page.fragments;
 
         if (fragmentsToBalance.length > 0) {
+          const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
           balancePageColumns(
             fragmentsToBalance as {
               x: number;
@@ -2327,6 +2530,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             normalizedCols,
             { left: activeLeftMargin },
             activeTopMargin,
+            availableHeight,
             measureMap,
           );
         }
@@ -2382,35 +2586,147 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 }
 
 /**
+ * Compute the bottom edge (y + height) of a fragment for bounds tracking.
+ */
+function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Measure): number {
+  let bottom = fragment.y;
+
+  if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
+    let sum = 0;
+    for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
+      sum += measure.lines[li]?.lineHeight ?? 0;
+    }
+    bottom += sum;
+    const spacingAfter = (block as ParagraphBlock)?.attrs?.spacing?.after;
+    if (spacingAfter && fragment.toLine === measure.lines.length) {
+      bottom += Math.max(0, Number(spacingAfter));
+    }
+  } else if (fragment.kind === 'image') {
+    bottom +=
+      typeof fragment.height === 'number' ? fragment.height : ((measure as ImageMeasure | undefined)?.height ?? 0);
+  } else if (fragment.kind === 'drawing') {
+    bottom +=
+      typeof fragment.height === 'number' ? fragment.height : ((measure as DrawingMeasure | undefined)?.height ?? 0);
+  } else if (fragment.kind === 'list-item') {
+    const listMeasure = measure as ListMeasure | undefined;
+    if (listMeasure) {
+      const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
+      if (item?.paragraph) {
+        let sum = 0;
+        for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
+          sum += item.paragraph.lines[li]?.lineHeight ?? 0;
+        }
+        bottom += sum;
+      }
+    }
+  }
+
+  return bottom;
+}
+
+type VerticalBand = {
+  start: number;
+  end: number;
+};
+
+function rangesIntersect(startA: number, endA: number, startB: number, endB: number): boolean {
+  return endA > startB && startA < endB;
+}
+
+function getPageRelativeMeasurementBand(
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): VerticalBand | null {
+  if (!kind || !constraints.margins) {
+    return null;
+  }
+
+  const bandSize = kind === 'header' ? constraints.margins.top : constraints.margins.bottom;
+  if (!Number.isFinite(bandSize) || bandSize == null || bandSize <= 0) {
+    return null;
+  }
+
+  return {
+    start: 0,
+    end: bandSize,
+  };
+}
+
+/**
+ * Determine whether a fragment should be excluded from measurement (pagination) bounds.
+ *
+ * Excluded fragments:
+ * 1. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
+ * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
+ *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
+ *    the measurement used by body pagination.
+ * 3. Page-relative header/footer overlays that do not intersect the region's
+ *    reserved margin band — they should still render, but must not reserve
+ *    body space like true header/footer content.
+ */
+function shouldExcludeFromMeasurement(
+  fragment: Fragment,
+  block: FlowBlock,
+  fragmentBottom: number,
+  canvasHeight: number,
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): boolean {
+  const isAnchoredFragment =
+    (fragment.kind === 'image' || fragment.kind === 'drawing') &&
+    (fragment as { isAnchored?: boolean }).isAnchored === true;
+
+  if (!isAnchoredFragment) return false;
+
+  if (block.kind !== 'image' && block.kind !== 'drawing') {
+    throw new Error(
+      `Type mismatch: fragment kind is ${fragment.kind} but block kind is ${block.kind} for block ${block.id}`,
+    );
+  }
+
+  const anchoredBlock = block as ImageBlock | DrawingBlock;
+
+  // behindDoc fragments never affect measurement
+  if (anchoredBlock.anchor?.behindDoc) return true;
+
+  // Page-relative anchored fragments that sit entirely outside the measurement band
+  // should not inflate pagination height.
+  if (isPageRelativeAnchor(anchoredBlock)) {
+    const fragmentTop = fragment.y;
+    // Exclude if the fragment range [top, bottom] does not intersect [0, canvasHeight]
+    if (fragmentBottom <= 0 || fragmentTop >= canvasHeight) {
+      return true;
+    }
+  }
+
+  if (anchoredBlock.anchor?.vRelativeFrom === 'page') {
+    const measurementBand = getPageRelativeMeasurementBand(kind, constraints);
+    if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Lays out header or footer content within specified dimensional constraints.
  *
- * This function positions blocks (paragraphs, images, drawings) within a header or footer region,
- * handling page-relative anchor transformations and computing the actual height required by
- * visible content. Headers and footers are rendered within the content box but may contain
- * page-relative anchored objects that need coordinate transformation.
+ * Positions blocks within a header/footer region, handling page-relative anchor
+ * transformations and computing the actual height required by visible content.
  *
- * @param blocks - The flow blocks to layout (paragraphs, images, drawings, etc.)
- * @param measures - Corresponding measurements for each block (must match blocks.length)
- * @param constraints - Dimensional constraints including width, height, and optional margins
+ * When `kind` and `constraints.pageHeight` are provided, page-relative and
+ * margin-relative anchored drawings are post-normalized from the synthetic
+ * measurement canvas to header/footer-local coordinates.
  *
- * @returns A HeaderFooterLayout containing:
- *   - pages: Array of laid-out pages with positioned fragments
- *   - height: The actual height consumed by visible content
- *
- * @throws {Error} If blocks and measures arrays have different lengths
- * @throws {Error} If width or height constraints are not positive finite numbers
- *
- * Special handling for behindDoc anchored fragments:
- * - Anchored images/drawings with behindDoc=true are decorative background elements
- * - Per OOXML spec, behindDoc is purely a z-ordering directive that should NOT affect layout
- * - These fragments are ALWAYS excluded from height calculations, regardless of position
- * - This matches Word behavior where behindDoc images never inflate header/footer margins
- * - All behindDoc fragments are still rendered in the layout; they're only excluded from height
+ * Returns separate measurement bounds (for pagination) and render bounds
+ * (for overlay shift). See the Coordinate Contract in the fix plan for details.
  */
 export function layoutHeaderFooter(
   blocks: FlowBlock[],
   measures: Measure[],
   constraints: HeaderFooterConstraints,
+  kind?: 'header' | 'footer',
 ): HeaderFooterLayout {
   if (blocks.length !== measures.length) {
     throw new Error(
@@ -2429,36 +2745,26 @@ export function layoutHeaderFooter(
     return { pages: [], height: 0 };
   }
 
-  // Transform page-relative anchor offsets to content-relative for correct positioning
-  // Headers/footers are rendered within the content box, but page-relative anchors
-  // specify offsets from the physical page edge. We need to adjust by subtracting
-  // the left margin so the image appears at the correct position within the header/footer.
-  const marginLeft = constraints.margins?.left ?? 0;
-  const transformedBlocks =
-    marginLeft > 0
-      ? blocks.map((block) => {
-          // Handle both image blocks and drawing blocks (vectorShape, shapeGroup)
-          const hasPageRelativeAnchor =
-            (block.kind === 'image' || block.kind === 'drawing') &&
-            block.anchor?.hRelativeFrom === 'page' &&
-            block.anchor.offsetH != null;
-          if (hasPageRelativeAnchor) {
-            return {
-              ...block,
-              anchor: {
-                ...block.anchor,
-                offsetH: block.anchor!.offsetH! - marginLeft,
-              },
-            };
-          }
-          return block;
-        })
-      : blocks;
-
-  const layout = layoutDocument(transformedBlocks, measures, {
+  const layout = layoutDocument(blocks, measures, {
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    allowParagraphlessAnchoredTableFallback: false,
+    allowSectionBreakOnlyPageFallback: false,
   });
+
+  // Post-normalize page-relative anchored fragment Y positions for footers.
+  //
+  // The inner layoutDocument() uses the body content height as its page height,
+  // but page-relative anchors need the REAL physical page height to resolve
+  // bottom/center alignment correctly. This post-correction rewrites their Y
+  // to footer-band-local coordinates using the real page geometry.
+  //
+  // Headers don't need this: the inner layout's page-relative Y is already
+  // correct relative to the header container, and the painter handles the
+  // container-to-page offset via effectiveOffset subtraction.
+  if (kind === 'footer' && constraints.pageHeight != null) {
+    normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
+  }
 
   // Compute bounds using an index map to avoid building multiple Maps
   const idToIndex = new Map<string, number>();
@@ -2466,8 +2772,13 @@ export function layoutHeaderFooter(
     idToIndex.set(blocks[i].id, i);
   }
 
-  let minY = 0;
-  let maxY = 0;
+  // Track separate bounds for measurement (pagination) and rendering (overlay shift).
+  // Measurement bounds exclude behindDoc and out-of-band page-relative anchored fragments.
+  // Render bounds include all visible fragments.
+  let measureMinY = 0;
+  let measureMaxY = 0;
+  let renderMinY = 0;
+  let renderMaxY = 0;
 
   for (const page of layout.pages) {
     for (const fragment of page.fragments) {
@@ -2476,71 +2787,25 @@ export function layoutHeaderFooter(
       const block = blocks[idx];
       const measure = measures[idx];
 
-      // Exclude ALL behindDoc anchored fragments from height calculations.
-      // Per OOXML spec, behindDoc is purely a z-ordering directive that should NOT affect layout.
-      // These decorative background images/drawings render behind text but never inflate margins.
-      // Fragments are still rendered in the layout; we only skip them when computing total height.
-      const isAnchoredFragment =
-        (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
-      if (isAnchoredFragment) {
-        // Runtime validation: ensure block.kind matches fragment.kind before type assertion
-        if (block.kind !== 'image' && block.kind !== 'drawing') {
-          throw new Error(
-            `Type mismatch: fragment kind is ${fragment.kind} but block kind is ${block.kind} for block ${block.id}`,
-          );
-        }
-        const anchoredBlock = block as ImageBlock | DrawingBlock;
-        // behindDoc images never affect layout - skip entirely from height calculation
-        if (anchoredBlock.anchor?.behindDoc) {
-          continue;
-        }
-      }
+      const bottom = computeFragmentBottom(fragment, block, measure);
 
-      if (fragment.y < minY) minY = fragment.y;
-      let bottom = fragment.y;
+      // Track render bounds for all fragments (used by overlay shift in SessionManager)
+      if (fragment.y < renderMinY) renderMinY = fragment.y;
+      if (bottom > renderMaxY) renderMaxY = bottom;
 
-      if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
-        let sum = 0;
-        for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
-          sum += measure.lines[li]?.lineHeight ?? 0;
-        }
-        bottom += sum;
-        const spacingAfter = (block as ParagraphBlock)?.attrs?.spacing?.after;
-        if (spacingAfter && fragment.toLine === measure.lines.length) {
-          bottom += Math.max(0, Number(spacingAfter));
-        }
-      } else if (fragment.kind === 'image') {
-        const h =
-          typeof fragment.height === 'number' ? fragment.height : ((measure as ImageMeasure | undefined)?.height ?? 0);
-        bottom += h;
-      } else if (fragment.kind === 'drawing') {
-        const drawingHeight =
-          typeof fragment.height === 'number'
-            ? fragment.height
-            : ((measure as DrawingMeasure | undefined)?.height ?? 0);
-        bottom += drawingHeight;
-      } else if (fragment.kind === 'list-item') {
-        const listMeasure = measure as ListMeasure | undefined;
-        if (listMeasure) {
-          const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
-          if (item?.paragraph) {
-            let sum = 0;
-            for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
-              sum += item.paragraph.lines[li]?.lineHeight ?? 0;
-            }
-            bottom += sum;
-          }
-        }
-      }
+      // Determine whether this fragment should be excluded from measurement (pagination) bounds
+      if (shouldExcludeFromMeasurement(fragment, block, bottom, height, kind, constraints)) continue;
 
-      if (bottom > maxY) maxY = bottom;
+      if (fragment.y < measureMinY) measureMinY = fragment.y;
+      if (bottom > measureMaxY) measureMaxY = bottom;
     }
   }
 
   return {
-    height: maxY - minY,
-    minY,
-    maxY,
+    height: measureMaxY - measureMinY,
+    minY: renderMinY,
+    maxY: renderMaxY,
+    renderHeight: renderMaxY - renderMinY,
     pages: layout.pages.map((page) => ({ number: page.number, fragments: page.fragments })),
   };
 }
@@ -2582,28 +2847,7 @@ export function layoutHeaderFooter(
  * // Returns { count: 1, gap: 0, width: 600 }
  */
 function normalizeColumns(input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns {
-  const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
-  const count = Math.max(1, rawCount || 1);
-  const gap = Math.max(0, input?.gap ?? 0);
-  const totalGap = gap * (count - 1);
-  const width = (contentWidth - totalGap) / count;
-  const withSeparator = input?.withSeparator ?? false;
-
-  if (width <= COLUMN_EPSILON) {
-    return {
-      count: 1,
-      gap: 0,
-      width: contentWidth,
-      withSeparator,
-    };
-  }
-
-  return {
-    count,
-    gap,
-    width,
-    withSeparator,
-  };
+  return normalizeColumnLayout(input, contentWidth, COLUMN_EPSILON);
 }
 
 const _buildMeasureMap = (blocks: FlowBlock[], measures: Measure[]): Map<string, Measure> => {
@@ -2761,7 +3005,8 @@ export type { PageNumberFormat, DisplayPageInfo } from './pageNumbering.js';
 export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
-// Export table utilities for reuse by painter-dom
-export { rescaleColumnWidths, getCellLines } from './layout-table.js';
+// Table utilities consumed by layout-bridge and cross-package sync tests
+export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

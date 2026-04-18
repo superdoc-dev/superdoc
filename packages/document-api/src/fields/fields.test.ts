@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   executeFieldsList,
@@ -11,11 +11,11 @@ import {
 
 function makeAdapter(): FieldsAdapter {
   return {
-    list: vi.fn().mockReturnValue({ items: [], total: 0 }),
-    get: vi.fn().mockReturnValue({}),
-    insert: vi.fn().mockReturnValue({ success: true }),
-    rebuild: vi.fn().mockReturnValue({ success: true }),
-    remove: vi.fn().mockReturnValue({ success: true }),
+    list: mock().mockReturnValue({ items: [], total: 0 }),
+    get: mock().mockReturnValue({}),
+    insert: mock().mockReturnValue({ success: true }),
+    rebuild: mock().mockReturnValue({ success: true }),
+    remove: mock().mockReturnValue({ success: true }),
   };
 }
 

@@ -1,16 +1,14 @@
 ---
 title: lists.setLevelNumbering
 sidebarTitle: lists.setLevelNumbering
-description: Set the numbering format, pattern, and optional start value for a specific list level.
+description: Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
-Set the numbering format, pattern, and optional start value for a specific list level.
+Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
 
 - Operation ID: `lists.setLevelNumbering`
 - API member path: `editor.doc.lists.setLevelNumbering(...)`
@@ -55,7 +53,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 
 ## Output fields
 
-### Variant 1 (item.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

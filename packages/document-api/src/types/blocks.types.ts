@@ -9,13 +9,35 @@ export interface BlockListEntry {
   nodeId: string;
   nodeType: BlockNodeType;
   textPreview: string | null;
+  /** Full flattened block text when requested via BlocksListInput.includeText. */
+  text?: string | null;
   isEmpty: boolean;
+  /** Named paragraph style ID (e.g. 'Normal', 'Heading1'). */
+  styleId?: string | null;
+  /** Font family from the block's first text run. */
+  fontFamily?: string;
+  /** Font size from the block's first text run. */
+  fontSize?: number;
+  /** True if the block's text is bold. */
+  bold?: boolean;
+  /** True if the block's text is underlined. */
+  underline?: boolean;
+  /** Text color when explicitly set in the document. */
+  color?: string;
+  /** Paragraph alignment. */
+  alignment?: string;
+  /** Heading level (1-6). Only for headings. */
+  headingLevel?: number;
+  /** Ref handle targeting the block's full text. Pass to superdoc_format or superdoc_edit. */
+  ref?: string;
 }
 
 export interface BlocksListInput {
   offset?: number;
   limit?: number;
   nodeTypes?: BlockNodeType[];
+  /** Include full flattened text for each block. Omit to return textPreview only. */
+  includeText?: boolean;
 }
 
 export interface BlocksListResult {

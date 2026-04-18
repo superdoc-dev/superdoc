@@ -264,6 +264,15 @@ def build_operation_argv(
     """Build the CLI argument vector for an operation invocation."""
     payload = apply_default_change_mode(operation, params, default_change_mode)
     payload = apply_default_user(operation, payload, user)
+    # Legacy alias: tables.split renamed atRowIndex → rowIndex (SD-2132).
+    if operation.get('operationId') == 'doc.tables.split' and 'atRowIndex' in payload:
+        if 'rowIndex' in payload and payload['rowIndex'] != payload['atRowIndex']:
+            raise SuperDocError(
+                'tables.split: cannot provide both rowIndex and atRowIndex with different values.',
+                code='INVALID_ARGUMENT',
+            )
+        payload = {k: v for k, v in payload.items() if k != 'atRowIndex'}
+        payload['rowIndex'] = params['atRowIndex']
     argv: List[str] = list(operation['commandTokens'])
     for spec in operation['params']:
         _encode_param(argv, spec, payload.get(spec['name']))

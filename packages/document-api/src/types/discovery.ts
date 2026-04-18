@@ -155,10 +155,10 @@ export function buildDiscoveryResult<TItem, TMeta = undefined>(params: {
 }
 
 /**
- * Derives a mutation target from a discovery item, suitable for passing to
+ * Derives an apply-ready target from a discovery item, suitable for passing to
  * `mutations.apply` step `where` clauses.
  */
-export function toMutationTarget(
+export function toApplyTarget(
   item: DiscoveryItem<unknown>,
   evaluatedRevision: string,
 ): { where: { by: 'ref'; ref: string }; expectedRevision: string } {

@@ -11,13 +11,13 @@ const testPool = process.env.VITEST_POOL ?? 'threads';
 const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
 const maxWorkers = process.env.VITEST_MAX_WORKERS ?? '75%';
 const manualChunkRules = [
-  ['converter', ['/src/core/super-converter/SuperConverter', '@core/super-converter/SuperConverter']],
-  ['editor', ['/src/core/Editor', '@core/Editor']],
-  ['docx-zipper', ['/src/core/DocxZipper', '@core/DocxZipper']],
-  ['toolbar', ['/src/components/toolbar/Toolbar.vue', '@components/toolbar/Toolbar.vue']],
-  ['super-input', ['/src/components/SuperInput.vue', '@components/SuperInput.vue']],
-  ['file-zipper', ['/src/core/super-converter/zipper', '@core/super-converter/zipper']],
-  ['ai-writer', ['/src/components/toolbar/AIWriter.vue', '@components/toolbar/AIWriter.vue']],
+  ['converter', ['/src/editors/v1/core/super-converter/SuperConverter', '@core/super-converter/SuperConverter']],
+  ['editor', ['/src/editors/v1/core/Editor', '@core/Editor']],
+  ['docx-zipper', ['/src/editors/v1/core/DocxZipper', '@core/DocxZipper']],
+  ['toolbar', ['/src/editors/v1/components/toolbar/Toolbar.vue', '@components/toolbar/Toolbar.vue']],
+  ['super-input', ['/src/editors/v1/components/SuperInput.vue', '@components/SuperInput.vue']],
+  ['file-zipper', ['/src/editors/v1/core/super-converter/zipper', '@core/super-converter/zipper']],
+  ['ai-writer', ['/src/editors/v1/components/toolbar/AIWriter.vue', '@components/toolbar/AIWriter.vue']],
 ];
 
 function resolveManualChunk(id) {
@@ -42,6 +42,34 @@ export default defineConfig(({ mode }) => {
       globals: true,
       // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
       environment: process.env.VITEST_DOM || 'happy-dom',
+      // Override environment to 'node' for directories that don't need DOM.
+      // This avoids the cost of setting up happy-dom for pure logic tests.
+      // Override to 'node' for directories that don't need DOM, with
+      // explicit happy-dom exceptions for files that do (first match wins).
+      environmentMatchGlobs: [
+        // super-converter: all pure logic except tiff-converter (uses document.createElement)
+        ['src/editors/v1/core/super-converter/**/tiff-converter.test.*', 'happy-dom'],
+        ['src/editors/v1/core/super-converter/**', 'node'],
+        // commands: mostly pure, except deleteSelection (document.getSelection)
+        // and insertContent integration tests (Editor with DOM view)
+        ['src/editors/v1/core/commands/deleteSelection.test.*', 'happy-dom'],
+        ['src/editors/v1/core/commands/insertContent.test.*', 'happy-dom'],
+        ['src/editors/v1/core/commands/**', 'node'],
+        // helpers: several need DOM (HTML parsing, sanitizer, content processor)
+        ['src/editors/v1/core/helpers/updateDOMAttributes.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/catchAllSchema.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/contentProcessor.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/createNodeFromContent.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/getHTMLFromFragment.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/htmlSanitizer.test.*', 'happy-dom'],
+        ['src/editors/v1/core/helpers/**', 'node'],
+        ['src/editors/v1/core/parts/**', 'node'],
+        // document-api-adapters: insert-structured-wrapper needs DOM for HTML insert
+        ['src/editors/v1/document-api-adapters/**/insert-structured-wrapper.test.*', 'happy-dom'],
+        ['src/editors/v1/document-api-adapters/**', 'node'],
+        ['src/editors/v1/core/ooxml-encryption/**', 'node'],
+        ['src/editors/v1/utils/**', 'node'],
+      ],
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,
@@ -77,19 +105,22 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2020',
       lib: {
-        entry: "src/index.js",
+        entry: "src/index.ts",
         formats: ['es'],
         name: "super-editor",
         cssFileName: 'style',
       },
       rollupOptions: {
         external: [
+          'react',
           'vue',
           'yjs',
           'y-protocols',
         ],
         input: {
-          'super-editor': 'src/index.js',
+          'headless-toolbar-react': 'src/headless-toolbar/react.ts',
+          'headless-toolbar-vue': 'src/headless-toolbar/vue.ts',
+          'super-editor': 'src/index.ts',
           'types': 'src/types.ts',
           'editor': '@core/Editor',
           'converter': '@core/super-converter/SuperConverter',

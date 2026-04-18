@@ -1,0 +1,163 @@
+---
+title: CSS variable migration
+sidebarTitle: CSS variables
+keywords: "migration, css variables, renamed variables, breaking changes, backward compatibility, tokens"
+---
+
+SuperDoc's CSS variables were restructured into a three-tier token system. This page maps every old name to its new equivalent.
+
+<Info>
+**Old names still work.** New tokens fall back to old names automatically. You don't need to change your code immediately.
+</Info>
+
+## What changed
+
+The old system used flat names (`--sd-comment-bg`, `--sd-track-insert-border`). The new system uses a structured pattern:
+
+```
+--sd-{scope}-{component}-{element?}-{state?}-{property}
+
+Old:  --sd-comment-bg
+New:  --sd-ui-comments-card-bg
+```
+
+The JavaScript config API is unchanged. Only CSS variable names moved.
+
+## Full mapping
+
+### Surfaces
+
+| Old | New |
+|-----|-----|
+| `--sd-surface-page` | `--sd-ui-bg` |
+| `--sd-surface-canvas` | `--sd-color-gray-50` |
+| `--sd-surface-card` | `--sd-ui-bg` |
+| `--sd-surface-muted` | `--sd-ui-disabled-bg` |
+| `--sd-surface-hover` | `--sd-ui-hover-bg` |
+| `--sd-surface-selected` | `--sd-color-blue-100` |
+
+### Text
+
+| Old | New |
+|-----|-----|
+| `--sd-text-primary` | `--sd-ui-text` |
+| `--sd-text-secondary` | `--sd-color-gray-700` |
+| `--sd-text-muted` | `--sd-ui-text-muted` |
+| `--sd-text-placeholder` | `--sd-ui-text-disabled` |
+
+### Borders
+
+| Old | New |
+|-----|-----|
+| `--sd-border-default` | `--sd-ui-border` |
+| `--sd-border-subtle` | `--sd-ui-comments-separator` |
+| `--sd-border-focus` | `--sd-ui-action` |
+
+### Actions
+
+| Old | New |
+|-----|-----|
+| `--sd-action-primary` | `--sd-ui-action` |
+| `--sd-action-primary-hover` | `--sd-ui-action-hover` |
+
+### Typography and radius
+
+| Old | New |
+|-----|-----|
+| `--sd-font-family` | `--sd-ui-font-family` |
+| `--sd-radius-sm` | `--sd-radius-50` |
+| `--sd-radius-md` | `--sd-radius-200` |
+| `--sd-radius-lg` | `--sd-radius-300` |
+
+### Comment card
+
+| Old | New |
+|-----|-----|
+| `--sd-comment-bg` | `--sd-ui-comments-card-bg` |
+| `--sd-comment-bg-hover` | `--sd-ui-comments-card-hover-bg` |
+| `--sd-comment-bg-active` | `--sd-ui-comments-card-active-bg` |
+| `--sd-comment-bg-resolved` | `--sd-ui-comments-card-resolved-bg` |
+| `--sd-comment-border-active` | `--sd-ui-comments-card-active-border` |
+| `--sd-comment-radius` | `--sd-ui-comments-card-radius` |
+| `--sd-comment-padding` | `--sd-ui-comments-card-padding` |
+| `--sd-comment-shadow` | `--sd-ui-comments-card-shadow` |
+| `--sd-comment-separator` | `--sd-ui-comments-separator` |
+| `--sd-comment-transition` | `--sd-ui-comments-transition` |
+
+### Comment text
+
+| Old | New |
+|-----|-----|
+| `--sd-comment-author-color` | `--sd-ui-comments-author-text` |
+| `--sd-comment-author-size` | `--sd-ui-comments-author-size` |
+| `--sd-comment-author-weight` | `--sd-ui-comments-author-weight` |
+| `--sd-comment-time-color` | `--sd-ui-comments-timestamp-text` |
+| `--sd-comment-time-size` | `--sd-ui-comments-timestamp-size` |
+| `--sd-comment-body-size` | `--sd-ui-comments-body-size` |
+| `--sd-comment-tc-insert-color` | `--sd-ui-comments-insert-text` |
+| `--sd-comment-tc-delete-color` | `--sd-ui-comments-delete-text` |
+
+### Comment highlights
+
+| Old | New |
+|-----|-----|
+| `--sd-comment-highlight-internal` | `--sd-comments-highlight-internal` |
+| `--sd-comment-highlight-external` | `--sd-comments-highlight-external` |
+| `--sd-comment-internal-bg` | `--sd-ui-comments-internal-bg` |
+| `--sd-comment-external-bg` | `--sd-ui-comments-external-bg` |
+
+<Warning>
+`--sd-comment-highlight-opacity` and `--sd-comment-highlight-opacity-active` were removed. The new system uses pre-computed RGBA colors (`--sd-comments-highlight-external: #b1124b40`). Override the full value directly.
+</Warning>
+
+### Tracked changes
+
+| Old | New |
+|-----|-----|
+| `--sd-track-insert-border` | `--sd-tracked-changes-insert-border` |
+| `--sd-track-insert-bg` | `--sd-tracked-changes-insert-background` |
+| `--sd-track-delete-border` | `--sd-tracked-changes-delete-border` |
+| `--sd-track-delete-bg` | `--sd-tracked-changes-delete-background` |
+| `--sd-track-format-border` | `--sd-tracked-changes-format-border` |
+
+### Removed
+
+These have no replacement:
+
+| Variable | Why |
+|----------|-----|
+| `--sd-comment-highlight-opacity` | Replaced by pre-computed RGBA values |
+| `--sd-comment-highlight-opacity-active` | Replaced by pre-computed RGBA values |
+| `--sd-comment-max-width` | Managed internally |
+| `--sd-comment-min-width` | Managed internally |
+| `--sd-comment-group-bg` | Group bubble styling removed |
+| `--sd-comment-group-color` | Group bubble styling removed |
+| `--sd-comment-group-size` | Group bubble styling removed |
+| `--sd-comment-group-expanded-size` | Group bubble styling removed |
+| `--sd-font-mono` | No longer exposed |
+
+## How backward compatibility works
+
+New tokens in `variables.css` fall back to old names via `var()`:
+
+```css
+/* Inside variables.css */
+:root {
+  --sd-ui-comments-card-bg: var(--sd-comment-bg, #f3f6fd);
+  --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
+}
+```
+
+CSS resolves `var()` at computed-value time. If you set `--sd-comment-bg` on any element, the new token picks it up in that scope:
+
+```css
+.my-overrides {
+  --sd-comment-bg: #f0f0f0; /* works — --sd-ui-comments-card-bg resolves to #f0f0f0 */
+}
+```
+
+Setting the new name directly works too — it overrides the whole fallback expression.
+
+<Warning>
+Old-name fallbacks will be removed in the next major version. Migrate to the new names when convenient.
+</Warning>

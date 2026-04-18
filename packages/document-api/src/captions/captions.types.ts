@@ -1,5 +1,5 @@
 import type { BlockNodeAddress } from '../types/base.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
 // ---------------------------------------------------------------------------
@@ -78,23 +78,13 @@ export interface CaptionMutationSuccess {
   caption: CaptionAddress;
 }
 
-export interface CaptionMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type CaptionMutationResult = CaptionMutationSuccess | CaptionMutationFailure;
+export type CaptionMutationResult = CaptionMutationSuccess | AdapterMutationFailure;
 
 export interface CaptionConfigSuccess {
   success: true;
 }
 
-export interface CaptionConfigFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type CaptionConfigResult = CaptionConfigSuccess | CaptionConfigFailure;
+export type CaptionConfigResult = CaptionConfigSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List result

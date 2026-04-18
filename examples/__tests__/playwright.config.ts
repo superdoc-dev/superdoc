@@ -16,12 +16,11 @@ const examplePath = isGettingStarted
   ? `../getting-started/${example}`
   : `../${example}`;
 
-// Collaboration examples that use concurrently (server + client).
+// Examples that use concurrently (server + client).
 // These run `npm run dev` which starts both processes — don't append --port.
 const useConcurrently = [
   'collaboration/hocuspocus',
   'collaboration/superdoc-yjs',
-  'laravel',
 ];
 
 // Port mapping — must match vite.config or server defaults
@@ -30,6 +29,7 @@ const portMap: Record<string, number> = {
   nuxt: 3000,
   laravel: 8000,
   'collaboration/hocuspocus': 3000,
+  'advanced/headless-toolbar/svelte-shadcn': 5190,
 };
 const port = portMap[example] ?? 5173;
 
@@ -39,13 +39,19 @@ const exampleAbsPath = resolve(__dirname, examplePath);
 const hasLocalNodeModules = existsSync(resolve(exampleAbsPath, 'node_modules', '.bin'));
 const run = hasLocalNodeModules ? `npm run --prefix ${examplePath}` : `pnpm --dir ${examplePath} run`;
 
+// Laravel: build Vite assets first, then serve with PHP only (via `start` script).
+// The concurrently approach (php + vite dev) is unreliable in CI.
+const isLaravel = example === 'laravel';
+
 // Start command
 const isCdn = example === 'cdn';
 const command = isCdn
-  ? `npx serve ${examplePath} -l ${port}`
-  : useConcurrently.includes(example)
-    ? `${run} dev`
-    : `${run} dev -- --port ${port}`;
+  ? `node ${examplePath}/setup.mjs && npx serve ${examplePath} -l ${port}`
+  : isLaravel
+    ? `${run} start`
+    : useConcurrently.includes(example)
+      ? `${run} dev`
+      : `${run} dev -- --port ${port}`;
 
 export default defineConfig({
   testDir: '.',
@@ -54,7 +60,7 @@ export default defineConfig({
   webServer: {
     command,
     url: `http://localhost:${port}`,
-    timeout: 60_000,
+    timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },
   use: {

@@ -14,6 +14,7 @@ import type {
   ImageBlock,
   ImageDrawing,
   ImageFragment,
+  ImageHyperlink,
   ImageRun,
   Layout,
   Line,
@@ -30,7 +31,6 @@ import type {
   ParagraphBorder,
   ParagraphMeasure,
   PositionedDrawingGeometry,
-  PositionMapping,
   Run,
   SdtMetadata,
   ShapeGroupChild,
@@ -41,13 +41,31 @@ import type {
   TableBlock,
   TableCellAttrs,
   TableFragment,
+  TableMeasure,
+  MathRun,
   TextRun,
   TrackedChangeKind,
   TrackedChangesMode,
   VectorShapeDrawing,
   VectorShapeStyle,
+  ResolvedLayout,
+  ResolvedFragmentItem,
+  ResolvedPage,
+  ResolvedPaintItem,
+  ResolvedTableItem,
+  ResolvedImageItem,
+  ResolvedDrawingItem,
 } from '@superdoc/contracts';
-import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  calculateJustifySpacing,
+  computeLinePmRange,
+  getCellSpacingPx,
+  normalizeBaselineShift,
+  resolveBaseFontSizeForVerticalText,
+  shouldApplyJustify,
+  SPACE_CHARS,
+} from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
@@ -72,7 +90,6 @@ import {
   ensureFieldAnnotationStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
-  ensureNativeSelectionStyles,
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -85,6 +102,7 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
+import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
   resolvePainterListMarkerGeometry,
@@ -96,7 +114,6 @@ import {
   shouldRebuildForSdtBoundary,
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
-import { SdtGroupedHover } from './utils/sdt-hover.js';
 import {
   computeBetweenBorderFlags,
   getFragmentParagraphBorders,
@@ -108,6 +125,8 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
+import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
+import { convertOmmlToMathml } from './features/math/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -188,90 +207,11 @@ type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
 };
 
 /**
- * Type guard to check if a value is a valid MinimalWordLayout object.
- *
- * This guard validates that the object has the expected structure for MinimalWordLayout
- * without unsafe type assertions. It checks for the presence of valid properties and
- * ensures type safety when accessing wordLayout from block attributes.
- *
- * @param value - The value to check (typically from block.attrs?.wordLayout)
- * @returns True if the value is a valid MinimalWordLayout object, false otherwise
- *
- * @example
- * ```typescript
- * const wordLayout = block.attrs?.wordLayout;
- * if (isMinimalWordLayout(wordLayout)) {
- *   // TypeScript now knows wordLayout is MinimalWordLayout
- *   const marker = wordLayout.marker;
- *   const isFirstLineMode = wordLayout.firstLineIndentMode === true;
- * }
- * ```
+ * Type guard narrowing to the renderer-local MinimalWordLayout type.
+ * Delegates structural validation to the shared isMinimalWordLayout guard.
  */
 function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const obj = value as Record<string, unknown>;
-
-  // Check marker property if present
-  if (obj.marker !== undefined) {
-    if (typeof obj.marker !== 'object' || obj.marker === null) {
-      return false;
-    }
-    const marker = obj.marker as Record<string, unknown>;
-
-    // Validate marker.markerText if present (must be a string)
-    if (marker.markerText !== undefined && typeof marker.markerText !== 'string') {
-      return false;
-    }
-
-    // Validate marker.markerX if present
-    if (marker.markerX !== undefined && typeof marker.markerX !== 'number') {
-      return false;
-    }
-
-    // Validate marker.textStartX if present
-    if (marker.textStartX !== undefined && typeof marker.textStartX !== 'number') {
-      return false;
-    }
-  }
-
-  // Check indentLeftPx property if present
-  if (obj.indentLeftPx !== undefined) {
-    if (typeof obj.indentLeftPx !== 'number') {
-      return false;
-    }
-  }
-
-  // Check firstLineIndentMode property if present
-  if (obj.firstLineIndentMode !== undefined) {
-    if (typeof obj.firstLineIndentMode !== 'boolean') {
-      return false;
-    }
-  }
-
-  // Check textStartPx property if present
-  if (obj.textStartPx !== undefined) {
-    if (typeof obj.textStartPx !== 'number') {
-      return false;
-    }
-  }
-
-  // Check tabsPx property if present and validate all array elements are numbers
-  if (obj.tabsPx !== undefined) {
-    if (!Array.isArray(obj.tabsPx)) {
-      return false;
-    }
-    // Validate that all elements are numbers
-    for (const tab of obj.tabsPx) {
-      if (typeof tab !== 'number') {
-        return false;
-      }
-    }
-  }
-
-  return true;
+  return isMinimalWordLayoutShared(value);
 }
 
 /**
@@ -285,6 +225,47 @@ export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 // FlowMode is re-exported from @superdoc/contracts
 export type { FlowMode } from '@superdoc/contracts';
 
+/**
+ * Interface for position mapping from ProseMirror transactions.
+ * Used to efficiently update DOM position attributes without full re-render.
+ */
+export interface PositionMapping {
+  /** Transform a position from old to new document coordinates */
+  map(pos: number, bias?: number): number;
+  /** Array of step maps - length indicates transaction complexity */
+  readonly maps: readonly unknown[];
+}
+
+export type RenderedLineInfo = {
+  el: HTMLElement;
+  top: number;
+  height: number;
+};
+
+/**
+ * Input to `DomPainter.paint()`.
+ *
+ * `resolvedLayout` is the canonical resolved data. The remaining fields are
+ * bridge data carried for internal rendering of non-paragraph fragments
+ * (tables, images, drawings) that have not yet been migrated to resolved items.
+ */
+export type DomPainterInput = {
+  resolvedLayout: ResolvedLayout;
+  /** Raw Layout for internal fragment access (bridge — will be removed once all fragment types are resolved). */
+  sourceLayout: Layout;
+  blocks: FlowBlock[];
+  measures: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
+};
+
+type OptionalBlockMeasurePair = {
+  blocks: FlowBlock[];
+  measures: Measure[];
+};
+
 type PageDecorationPayload = {
   fragments: Fragment[];
   height: number;
@@ -294,7 +275,7 @@ type PageDecorationPayload = {
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
-  headerId?: string;
+  headerFooterRefId?: string;
   sectionType?: string;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };
@@ -345,6 +326,8 @@ type PainterOptions = {
   };
   /** Per-page ruler options */
   ruler?: RulerOptions;
+  /** Called with the paint snapshot after each paint cycle completes. */
+  onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
 
 // BlockLookup lives in the shared types module (single source of truth)
@@ -418,6 +401,48 @@ export type PaintSnapshotTabStyle = {
   borderBottom?: string;
 };
 
+export type PaintSnapshotAnnotationEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  pmStart?: number;
+  pmEnd?: number;
+  fieldId?: string;
+  fieldType?: string;
+  type?: string;
+};
+
+export type PaintSnapshotStructuredContentBlockEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotStructuredContentInlineEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  sdtId: string;
+  pmStart?: number;
+  pmEnd?: number;
+};
+
+export type PaintSnapshotImageEntity = {
+  element: HTMLElement;
+  pageIndex: number;
+  kind: 'inline' | 'fragment';
+  pmStart?: number;
+  pmEnd?: number;
+  blockId?: string;
+};
+
+export type PaintSnapshotEntities = {
+  annotations: PaintSnapshotAnnotationEntity[];
+  structuredContentBlocks: PaintSnapshotStructuredContentBlockEntity[];
+  structuredContentInlines: PaintSnapshotStructuredContentInlineEntity[];
+  images: PaintSnapshotImageEntity[];
+};
+
 export type PaintSnapshotLine = {
   index: number;
   inTableFragment: boolean;
@@ -441,6 +466,7 @@ export type PaintSnapshot = {
   markerCount: number;
   tabCount: number;
   pages: PaintSnapshotPage[];
+  entities: PaintSnapshotEntities;
 };
 
 type PaintSnapshotPageBuilder = {
@@ -480,6 +506,27 @@ function readSnapshotStyleValue(styleValue: string | null | undefined): string |
   return styleValue;
 }
 
+function createEmptyPaintSnapshotEntities(): PaintSnapshotEntities {
+  return {
+    annotations: [],
+    structuredContentBlocks: [],
+    structuredContentInlines: [],
+    images: [],
+  };
+}
+
+function readSnapshotDatasetNumber(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSnapshotPageIndex(element: HTMLElement): number | null {
+  const pageEl = element.closest(`.${DOM_CLASS_NAMES.PAGE}`) as HTMLElement | null;
+  if (!pageEl) return null;
+  return readSnapshotDatasetNumber(pageEl.dataset.pageIndex);
+}
+
 function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   const out = {} as T;
   for (const [key, value] of Object.entries(input)) {
@@ -488,6 +535,123 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
     (out as Record<string, unknown>)[key] = value;
   }
   return out;
+}
+
+function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
+  if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
+    return true;
+  }
+
+  if (!element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE)) {
+    return false;
+  }
+
+  return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
+  const entities = createEmptyPaintSnapshotEntities();
+
+  const annotationElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.ANNOTATION}[data-pm-start]`),
+  );
+  for (const element of annotationElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.annotations.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        fieldId: element.dataset.fieldId || null,
+        fieldType: element.dataset.fieldType || null,
+        type: element.dataset.type || null,
+      }) as PaintSnapshotAnnotationEntity,
+    );
+  }
+
+  const blockSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id]`),
+  );
+  for (const element of blockSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentBlocks.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentBlockEntity,
+    );
+  }
+
+  const inlineSdtElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}[data-sdt-id]`),
+  );
+  for (const element of inlineSdtElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    const sdtId = element.dataset.sdtId;
+    if (pageIndex == null || !sdtId) continue;
+
+    entities.structuredContentInlines.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        sdtId,
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotStructuredContentInlineEntity,
+    );
+  }
+
+  const inlineImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(
+      `.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}[data-pm-start], .${DOM_CLASS_NAMES.INLINE_IMAGE}[data-pm-start]`,
+    ),
+  );
+  for (const element of inlineImageElements) {
+    if (!shouldIncludeInlineImageSnapshotElement(element)) continue;
+
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'inline',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  const fragmentImageElements = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start]`),
+  );
+  for (const element of fragmentImageElements) {
+    const pageIndex = resolveSnapshotPageIndex(element);
+    if (pageIndex == null) continue;
+
+    entities.images.push(
+      compactSnapshotObject({
+        element,
+        pageIndex,
+        kind: 'fragment',
+        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
+        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        blockId: element.getAttribute('data-sd-block-id'),
+      }) as PaintSnapshotImageEntity,
+    );
+  }
+
+  return entities;
 }
 
 function snapshotLineStyleFromElement(lineEl: HTMLElement): PaintSnapshotLineStyle {
@@ -591,11 +755,7 @@ const LIST_MARKER_GAP = 8;
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-const COMMENT_EXTERNAL_COLOR = '#B1124B';
-const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
-const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
-const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
+// Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
 
 type LinkRenderData = {
   href?: string;
@@ -630,6 +790,8 @@ const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
  * Prevents XSS and malformed data URL attacks.
  */
 const VALID_IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|svg\+xml|webp|bmp|ico|tiff?);base64,/i;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const WORDART_LINE_FILL_RATIO = 0.9;
 
 /**
  * Maximum resize multiplier for image metadata.
@@ -690,7 +852,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
-const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
+// TRACK_CHANGE_FOCUSED_CLASS moved to CommentHighlightDecorator (super-editor).
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -1128,17 +1290,18 @@ export class DomPainter {
    * Invalidated when the mount, scroll container, or zoom changes.
    */
   private scrollContainerMountOffset: number | null = null;
-  private sdtHover = new SdtGroupedHover();
-  /** The currently active/selected comment ID for highlighting */
-  private activeCommentId: string | null = null;
   private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
   private lastPaintSnapshot: PaintSnapshot | null = null;
+  private onPaintSnapshotCallback: ((snapshot: PaintSnapshot) => void) | null = null;
+  private mountedPageIndices: number[] = [];
+  /** Resolved layout for the next-gen paint pipeline. */
+  private resolvedLayout: ResolvedLayout | null = null;
 
-  constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
+  constructor(options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
-    this.blockLookup = this.buildBlockLookup(blocks, measures);
+    this.blockLookup = new Map();
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
 
@@ -1166,6 +1329,8 @@ export class DomPainter {
         this.virtualPaddingTop = Math.max(0, options.virtualization.paddingTop);
       }
     }
+
+    this.onPaintSnapshotCallback = options.onPaintSnapshot ?? null;
   }
 
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
@@ -1232,35 +1397,17 @@ export class DomPainter {
     }
   }
 
-  /**
-   * Sets the active comment ID for highlighting.
-   * When set, only the active comment's range is highlighted.
-   * When null, all comments show depth-based highlighting.
-   */
-  public setActiveComment(commentId: string | null): void {
-    if (this.activeCommentId !== commentId) {
-      this.activeCommentId = commentId;
-      // Force re-render of all pages by incrementing layout version
-      // This bypasses the virtualization cache check
-      this.layoutVersion += 1;
-      // Clear page states to force full re-render (activeCommentId affects run rendering)
-      // For virtualized mode: remove existing page elements before clearing state
-      // to prevent duplicate pages in the DOM
-      for (const state of this.pageIndexToState.values()) {
-        state.element.remove();
-      }
-      this.pageIndexToState.clear();
-      this.virtualMountedKey = '';
-      // For non-virtualized mode:
-      this.pageStates = [];
-    }
+  /** Returns the resolved page for a given index, or null if resolved data is unavailable. */
+  private getResolvedPage(pageIndex: number): ResolvedPage | null {
+    return this.resolvedLayout?.pages[pageIndex] ?? null;
   }
 
-  /**
-   * Gets the currently active comment ID.
-   */
-  public getActiveComment(): string | null {
-    return this.activeCommentId;
+  /** Returns the resolved fragment item for a given page/fragment index, or undefined. */
+  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedPaintItem | undefined {
+    const page = this.getResolvedPage(pageIndex);
+    if (!page) return undefined;
+    const item = page.items[fragmentIndex];
+    return item?.kind === 'fragment' ? item : undefined;
   }
 
   /**
@@ -1268,6 +1415,29 @@ export class DomPainter {
    */
   public getPaintSnapshot(): PaintSnapshot | null {
     return this.lastPaintSnapshot;
+  }
+
+  /**
+   * Returns the page indices that are currently mounted in the DOM.
+   *
+   * Unlike paint snapshots, this reflects virtualization remounts that happen
+   * during scroll without waiting for a full paint cycle.
+   */
+  public getMountedPageIndices(): number[] {
+    return [...this.mountedPageIndices];
+  }
+
+  private createAllPageIndices(pageCount: number): number[] {
+    return Array.from({ length: pageCount }, (_, pageIndex) => pageIndex);
+  }
+
+  private setMountedPageIndices(pageIndices: number[]): void {
+    this.mountedPageIndices = [...pageIndices];
+  }
+
+  private emitPaintSnapshot(snapshot: PaintSnapshot): void {
+    this.lastPaintSnapshot = snapshot;
+    this.onPaintSnapshotCallback?.(snapshot);
   }
 
   private beginPaintSnapshot(layout: Layout): void {
@@ -1285,7 +1455,7 @@ export class DomPainter {
     };
   }
 
-  private finalizePaintSnapshotFromBuilder(): void {
+  private finalizePaintSnapshotFromBuilder(rootEl?: HTMLElement): void {
     const builder = this.paintSnapshotBuilder;
     if (!builder) {
       this.lastPaintSnapshot = null;
@@ -1301,14 +1471,15 @@ export class DomPainter {
       }),
     ) as PaintSnapshotPage[];
 
-    this.lastPaintSnapshot = {
+    this.emitPaintSnapshot({
       formatVersion: builder.formatVersion,
       pageCount: pages.length,
       lineCount: builder.lineCount,
       markerCount: builder.markerCount,
       tabCount: builder.tabCount,
       pages,
-    };
+      entities: rootEl ? collectPaintSnapshotEntitiesFromDomRoot(rootEl) : createEmptyPaintSnapshotEntities(),
+    });
     this.paintSnapshotBuilder = null;
   }
 
@@ -1405,83 +1576,52 @@ export class DomPainter {
       markerCount,
       tabCount,
       pages,
+      entities: collectPaintSnapshotEntitiesFromDomRoot(rootEl),
     };
   }
 
   /**
-   * Updates the painter's block and measure data.
-   *
-   * @param blocks - Main document blocks
-   * @param measures - Measures corresponding to main document blocks
-   * @param headerBlocks - Optional header blocks from header/footer layout results
-   * @param headerMeasures - Optional measures corresponding to header blocks
-   * @param footerBlocks - Optional footer blocks from header/footer layout results
-   * @param footerMeasures - Optional measures corresponding to footer blocks
+   * Builds a new block lookup from the input data, merging header/footer blocks,
+   * and tracks which blocks changed since the last paint cycle.
    */
-  public setData(
-    blocks: FlowBlock[],
-    measures: Measure[],
-    headerBlocks?: FlowBlock[],
-    headerMeasures?: Measure[],
-    footerBlocks?: FlowBlock[],
-    footerMeasures?: Measure[],
-  ): void {
-    // Validate main blocks and measures arrays
-    if (blocks.length !== measures.length) {
+  private normalizeOptionalBlockMeasurePair(
+    label: 'header' | 'footer',
+    blocks: FlowBlock[] | undefined,
+    measures: Measure[] | undefined,
+  ): OptionalBlockMeasurePair | undefined {
+    const hasBlocks = blocks !== undefined;
+    const hasMeasures = measures !== undefined;
+
+    if (hasBlocks !== hasMeasures) {
       throw new Error(
-        `setData: blocks and measures arrays must have the same length. ` +
-          `Got blocks.length=${blocks.length}, measures.length=${measures.length}`,
+        `DomPainter.paint requires ${label}Blocks and ${label}Measures to both be provided or both be omitted`,
       );
     }
 
-    // Validate header blocks and measures
-    const hasHeaderBlocks = headerBlocks !== undefined;
-    const hasHeaderMeasures = headerMeasures !== undefined;
-    if (hasHeaderBlocks !== hasHeaderMeasures) {
-      throw new Error(
-        `setData: headerBlocks and headerMeasures must both be provided or both be omitted. ` +
-          `Got headerBlocks=${hasHeaderBlocks ? 'provided' : 'omitted'}, ` +
-          `headerMeasures=${hasHeaderMeasures ? 'provided' : 'omitted'}`,
-      );
-    }
-    if (hasHeaderBlocks && hasHeaderMeasures && headerBlocks!.length !== headerMeasures!.length) {
-      throw new Error(
-        `setData: headerBlocks and headerMeasures arrays must have the same length. ` +
-          `Got headerBlocks.length=${headerBlocks!.length}, headerMeasures.length=${headerMeasures!.length}`,
-      );
+    if (!hasBlocks || !hasMeasures) {
+      return undefined;
     }
 
-    // Validate footer blocks and measures
-    const hasFooterBlocks = footerBlocks !== undefined;
-    const hasFooterMeasures = footerMeasures !== undefined;
-    if (hasFooterBlocks !== hasFooterMeasures) {
-      throw new Error(
-        `setData: footerBlocks and footerMeasures must both be provided or both be omitted. ` +
-          `Got footerBlocks=${hasFooterBlocks ? 'provided' : 'omitted'}, ` +
-          `footerMeasures=${hasFooterMeasures ? 'provided' : 'omitted'}`,
-      );
-    }
-    if (hasFooterBlocks && hasFooterMeasures && footerBlocks!.length !== footerMeasures!.length) {
-      throw new Error(
-        `setData: footerBlocks and footerMeasures arrays must have the same length. ` +
-          `Got footerBlocks.length=${footerBlocks!.length}, footerMeasures.length=${footerMeasures!.length}`,
-      );
-    }
+    return { blocks, measures };
+  }
+
+  private updateBlockLookup(input: DomPainterInput): void {
+    const { blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
 
     // Build lookup for main document blocks
     const nextLookup = this.buildBlockLookup(blocks, measures);
 
-    // Merge header blocks into the lookup if provided
-    if (headerBlocks && headerMeasures) {
-      const headerLookup = this.buildBlockLookup(headerBlocks, headerMeasures);
+    const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
+    if (normalizedHeader) {
+      const headerLookup = this.buildBlockLookup(normalizedHeader.blocks, normalizedHeader.measures);
       headerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
     }
 
-    // Merge footer blocks into the lookup if provided
-    if (footerBlocks && footerMeasures) {
-      const footerLookup = this.buildBlockLookup(footerBlocks, footerMeasures);
+    const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
+    if (normalizedFooter) {
+      const footerLookup = this.buildBlockLookup(normalizedFooter.blocks, normalizedFooter.measures);
       footerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
@@ -1499,7 +1639,13 @@ export class DomPainter {
     this.changedBlocks = changed;
   }
 
-  public paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void {
+  public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
+    const layout = input.sourceLayout;
+    this.resolvedLayout = input.resolvedLayout;
+
+    // Update block lookup and change tracking (absorbs former setData logic)
+    this.updateBlockLookup(input);
+
     if (!(mount instanceof HTMLElement)) {
       throw new Error('DomPainter.paint requires a valid HTMLElement mount');
     }
@@ -1528,7 +1674,6 @@ export class DomPainter {
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
-    ensureNativeSelectionStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -1538,6 +1683,7 @@ export class DomPainter {
       this.resetState();
     }
     this.layoutVersion += 1;
+
     this.layoutEpoch = layout.layoutEpoch ?? 0;
     this.mount = mount;
     this.beginPaintSnapshot(layout);
@@ -1553,6 +1699,7 @@ export class DomPainter {
       } else {
         this.patchLayout(layout);
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1566,7 +1713,8 @@ export class DomPainter {
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1576,7 +1724,8 @@ export class DomPainter {
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1604,13 +1753,14 @@ export class DomPainter {
         this.patchLayout(layout);
         useDomSnapshotFallback = true;
       }
+      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
     }
 
     if (useDomSnapshotFallback) {
-      this.lastPaintSnapshot = this.collectPaintSnapshotFromDomRoot(mount);
+      this.emitPaintSnapshot(this.collectPaintSnapshotFromDomRoot(mount));
       this.paintSnapshotBuilder = null;
     } else {
-      this.finalizePaintSnapshotFromBuilder();
+      this.finalizePaintSnapshotFromBuilder(mount);
     }
 
     this.currentLayout = layout;
@@ -1724,15 +1874,16 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
-
-    this.sdtHover.bind(mount);
   }
 
   private computeVirtualMetrics(): void {
     if (!this.currentLayout) return;
     const N = this.currentLayout.pages.length;
     if (N !== this.virtualHeights.length) {
-      this.virtualHeights = this.currentLayout.pages.map((p) => p.size?.h ?? this.currentLayout!.pageSize.h);
+      this.virtualHeights = this.currentLayout.pages.map((p, i) => {
+        const resolved = this.getResolvedPage(i);
+        return resolved?.height ?? p.size?.h ?? this.currentLayout!.pageSize.h;
+      });
     }
     // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
     // Use virtualGap to match CSS gap on virtualPagesEl.
@@ -1787,6 +1938,7 @@ export class DomPainter {
 
     if (N === 0) {
       this.mount.innerHTML = '';
+      this.setMountedPageIndices([]);
       this.processedLayoutVersion = this.layoutVersion;
       return;
     }
@@ -1870,6 +2022,7 @@ export class DomPainter {
     this.virtualMountedKey = mountedKey;
     this.virtualStart = start;
     this.virtualEnd = end;
+    this.setMountedPageIndices(mounted);
 
     // Update spacers + rebuild gap spacers
     this.updateSpacersForMountedPages(mounted);
@@ -1889,7 +2042,8 @@ export class DomPainter {
     // Insert or patch needed pages
     for (const i of mounted) {
       const page = layout.pages[i];
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(i);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
         const newState = this.createPageState(page, pageSize, i);
@@ -1949,8 +2103,6 @@ export class DomPainter {
     // Clear changed blocks now that current visible pages are patched
     this.changedBlocks.clear();
     this.processedLayoutVersion = this.layoutVersion;
-
-    this.sdtHover.reapply();
   }
 
   private updateSpacers(start: number, end: number): void {
@@ -1992,7 +2144,8 @@ export class DomPainter {
     if (!this.doc) return;
     mount.innerHTML = '';
     layout.pages.forEach((page, pageIndex) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(pageIndex);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const pageEl = this.renderPage(pageSize.w, pageSize.h, page, pageIndex);
       mount.appendChild(pageEl);
     });
@@ -2004,7 +2157,10 @@ export class DomPainter {
     const pages = layout.pages;
     if (pages.length === 0) return;
 
-    const firstPageSize = pages[0].size ?? layout.pageSize;
+    const firstResolved = this.getResolvedPage(0);
+    const firstPageSize = firstResolved
+      ? { w: firstResolved.width, h: firstResolved.height }
+      : (pages[0].size ?? layout.pageSize);
     const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0], 0);
     mount.appendChild(firstPageEl);
 
@@ -2014,13 +2170,19 @@ export class DomPainter {
       applyStyles(spreadEl, spreadStyles);
 
       const leftPage = pages[i];
-      const leftPageSize = leftPage.size ?? layout.pageSize;
+      const leftResolved = this.getResolvedPage(i);
+      const leftPageSize = leftResolved
+        ? { w: leftResolved.width, h: leftResolved.height }
+        : (leftPage.size ?? layout.pageSize);
       const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage, i);
       spreadEl.appendChild(leftPageEl);
 
       if (i + 1 < pages.length) {
         const rightPage = pages[i + 1];
-        const rightPageSize = rightPage.size ?? layout.pageSize;
+        const rightResolved = this.getResolvedPage(i + 1);
+        const rightPageSize = rightResolved
+          ? { w: rightResolved.width, h: rightResolved.height }
+          : (rightPage.size ?? layout.pageSize);
         const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage, i + 1);
         spreadEl.appendChild(rightPageEl);
       }
@@ -2062,7 +2224,10 @@ export class DomPainter {
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index)));
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      el.appendChild(
+        this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
+      );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
     this.renderColumnSeparators(el, page, width, height);
@@ -2207,7 +2372,12 @@ export class DomPainter {
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
 
-  private isPageRelativeVerticalAnchorFragment(fragment: Fragment): boolean {
+  /**
+   * Check if an anchored fragment has vRelativeFrom === 'page'.
+   * Used to determine special Y positioning for page-relative anchored media
+   * in header/footer decoration sections.
+   */
+  private isPageRelativeAnchoredFragment(fragment: Fragment): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
@@ -2220,6 +2390,42 @@ export class DomPainter {
       return false;
     }
     return block.anchor?.vRelativeFrom === 'page';
+  }
+
+  /**
+   * Header/footer layout emits normalized anchor Y coordinates:
+   * - headers: local to the header container origin
+   * - footers: local to the top of the footer band (pageHeight - bottomMargin)
+   *
+   * Footer containers can grow upward when content overflows the reserved footer
+   * band, so their top edge is not always the same as the footer band origin.
+   * This helper returns the page-space origin that normalized anchor Y values
+   * are measured from.
+   */
+  private getDecorationAnchorPageOriginY(
+    pageEl: HTMLElement,
+    page: Page,
+    kind: 'header' | 'footer',
+    effectiveOffset: number,
+  ): number {
+    if (kind === 'header') {
+      return effectiveOffset;
+    }
+
+    const bottomMargin = page.margins?.bottom;
+    if (bottomMargin == null) {
+      return effectiveOffset;
+    }
+
+    const footnoteReserve = page.footnoteReserved ?? 0;
+    const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
+    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
+    const pageHeight =
+      page.size?.h ??
+      this.currentLayout?.pageSize?.h ??
+      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+
+    return Math.max(0, pageHeight - adjustedBottomMargin);
   }
 
   private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
@@ -2273,6 +2479,15 @@ export class DomPainter {
     // into the body region, similar to how body content can have negative indents.
     container.style.overflow = 'visible';
 
+    // Footer page-relative anchors carry normalized Y coordinates (band-local,
+    // computed from real page geometry). Compute the page-space origin so the
+    // painter can convert them back to absolute page / container-local positions.
+    // Header page-relative anchors use raw inner-layout Y and are handled with
+    // the simpler effectiveOffset subtraction (unchanged from the baseline).
+    const footerAnchorPageOriginY =
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+    const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
+
     // For footers, calculate offset to push content to bottom of container
     // Fragments are absolutely positioned, so we need to adjust their y values
     // Use effectiveHeight (which accounts for overflow) rather than reserved height
@@ -2314,7 +2529,9 @@ export class DomPainter {
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         isBehindDoc =
-          fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
+          fragment.behindDoc === true ||
+          (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
+          this.shouldRenderBehindPageContent(fragment, kind);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
@@ -2336,12 +2553,19 @@ export class DomPainter {
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
       const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
-      // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
-      // container offsets would shift them twice and can push header art into body content.
-      const pageY = isPageRelativeVertical
-        ? fragment.y
-        : effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+
+      let pageY: number;
+      if (isPageRelative && kind === 'footer') {
+        // Footer page-relative: fragment.y is normalized to band-local coords
+        pageY = footerAnchorPageOriginY + fragment.y;
+      } else if (isPageRelative) {
+        // Header page-relative: fragment.y is raw inner-layout absolute Y
+        pageY = fragment.y;
+      } else {
+        pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      }
+
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
@@ -2353,17 +2577,20 @@ export class DomPainter {
     // Render normal fragments in the header/footer container
     normalFragments.forEach(({ fragment, originalIndex }) => {
       const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
-      if (isPageRelativeVertical) {
-        // Convert absolute page Y back to decoration-container local coordinates.
-        // Container top is applied separately, so we subtract it here to avoid a second offset.
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+
+      if (isPageRelative && kind === 'footer') {
+        // Footer page-relative: fragment.y is normalized to band-local coords
+        fragEl.style.top = `${fragment.y + footerAnchorContainerOffsetY}px`;
+      } else if (isPageRelative) {
+        // Header page-relative: convert raw inner-layout Y to container-local
         fragEl.style.top = `${fragment.y - effectiveOffset}px`;
-      }
-      // Apply footer offset to push content to bottom
-      if (footerYOffset > 0 && !isPageRelativeVertical) {
+      } else if (footerYOffset > 0) {
+        // Non-anchored footer content: push to bottom of container
         const currentTop = parseFloat(fragEl.style.top) || fragment.y;
         fragEl.style.top = `${currentTop + footerYOffset}px`;
       }
+
       container.appendChild(fragEl);
     });
 
@@ -2401,11 +2628,11 @@ export class DomPainter {
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
     this.scrollContainerMountOffset = null;
-    this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
     this.lastPaintSnapshot = null;
+    this.mountedPageIndices = [];
   }
 
   private fullRender(layout: Layout): void {
@@ -2414,7 +2641,8 @@ export class DomPainter {
     this.pageStates = [];
 
     layout.pages.forEach((page, pageIndex) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(pageIndex);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const pageState = this.createPageState(page, pageSize, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
@@ -2429,7 +2657,8 @@ export class DomPainter {
     const nextStates: PageDomState[] = [];
 
     layout.pages.forEach((page, index) => {
-      const pageSize = page.size ?? layout.pageSize;
+      const resolved = this.getResolvedPage(index);
+      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const prevState = this.pageStates[index];
       if (!prevState) {
         const newState = this.createPageState(page, pageSize, index);
@@ -2478,6 +2707,7 @@ export class DomPainter {
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
 
       if (current) {
         existing.delete(key);
@@ -2504,7 +2734,7 @@ export class DomPainter {
           mappingUnreliable;
 
         if (needsRebuild) {
-          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
+          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = fragmentSignature(fragment, this.blockLookup);
@@ -2513,7 +2743,7 @@ export class DomPainter {
           this.updatePositionAttributes(current.element, this.currentMapping);
         }
 
-        this.updateFragmentElement(current.element, fragment, contextBase.section);
+        this.updateFragmentElement(current.element, fragment, contextBase.section, resolvedItem);
         if (sdtBoundary?.widthOverride != null) {
           current.element.style.width = `${sdtBoundary.widthOverride}px`;
         }
@@ -2525,7 +2755,7 @@ export class DomPainter {
         return;
       }
 
-      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
+      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
       nextFragments.push({
         key,
@@ -2623,7 +2853,14 @@ export class DomPainter {
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index));
+      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      const fragmentEl = this.renderFragment(
+        fragment,
+        contextBase,
+        sdtBoundary,
+        betweenBorderFlags.get(index),
+        resolvedItem,
+      );
       el.appendChild(fragmentEl);
       return {
         key: fragmentKey(fragment),
@@ -2653,7 +2890,7 @@ export class DomPainter {
       const base = this.options.pageStyles ?? {};
       return {
         ...base,
-        background: base.background ?? '#fff',
+        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',
@@ -2672,21 +2909,34 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedPaintItem,
   ): HTMLElement {
     if (fragment.kind === 'para') {
-      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo);
+      return this.renderParagraphFragment(
+        fragment,
+        context,
+        sdtBoundary,
+        betweenInfo,
+        resolvedItem as ResolvedFragmentItem | undefined,
+      );
     }
     if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo);
+      return this.renderListItemFragment(
+        fragment,
+        context,
+        sdtBoundary,
+        betweenInfo,
+        resolvedItem as ResolvedFragmentItem | undefined,
+      );
     }
     if (fragment.kind === 'image') {
-      return this.renderImageFragment(fragment, context);
+      return this.renderImageFragment(fragment, context, resolvedItem as ResolvedImageItem | undefined);
     }
     if (fragment.kind === 'drawing') {
-      return this.renderDrawingFragment(fragment, context);
+      return this.renderDrawingFragment(fragment, context, resolvedItem as ResolvedDrawingItem | undefined);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context, sdtBoundary);
+      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem as ResolvedTableItem | undefined);
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -2705,6 +2955,7 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -2719,6 +2970,7 @@ export class DomPainter {
       const block = lookup.block as ParagraphBlock;
       const measure = lookup.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
+      const content = resolvedItem?.content;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -2742,7 +2994,11 @@ export class DomPainter {
           ? { ...fragmentStyles, overflow: 'visible' }
           : fragmentStyles;
       applyStyles(fragmentEl, styles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+      }
 
       // Add TOC-specific styling class
       if (isTocEntry) {
@@ -2784,11 +3040,34 @@ export class DomPainter {
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
       // Render drop cap if present (only on the first fragment, not continuation)
-      const dropCapDescriptor = block.attrs?.dropCapDescriptor;
-      const dropCapMeasure = measure.dropCap;
-      if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
-        const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
+      if (content?.dropCap) {
+        const dc = content.dropCap;
+        const dropCapEl = this.renderDropCap(
+          {
+            mode: dc.mode,
+            run: {
+              text: dc.text,
+              fontFamily: dc.fontFamily,
+              fontSize: dc.fontSize,
+              bold: dc.bold,
+              italic: dc.italic,
+              color: dc.color,
+              position: dc.position,
+            },
+            lines: 0,
+          },
+          dc.width != null && dc.height != null
+            ? { width: dc.width, height: dc.height, lines: 0, mode: dc.mode }
+            : undefined,
+        );
         fragmentEl.appendChild(dropCapEl);
+      } else {
+        const dropCapDescriptor = block.attrs?.dropCapDescriptor;
+        const dropCapMeasure = measure.dropCap;
+        if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
+          const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
+          fragmentEl.appendChild(dropCapEl);
+        }
       }
 
       // Remove fragment-level indent so line-level indent handling doesn't double-apply.
@@ -2799,24 +3078,138 @@ export class DomPainter {
       if (fragmentEl.style.marginRight) fragmentEl.style.removeProperty('margin-right');
       if (fragmentEl.style.textIndent) fragmentEl.style.removeProperty('text-indent');
 
-      const paraIndent = block.attrs?.indent;
-      const paraIndentLeft = paraIndent?.left ?? 0;
-      const paraIndentRight = paraIndent?.right ?? 0;
-      // Word quirk: justified paragraphs ignore first-line indent. The pm-adapter sets // => This is not true
-      // suppressFirstLineIndent=true for these cases.
-      const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-      const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+      if (content) {
+        // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
+        const resolvedMarker = content.marker;
 
-      // Check if the paragraph ends with a lineBreak run.
-      // In Word, justified text stretches all lines EXCEPT the true last line of a paragraph.
-      // However, if the paragraph ends with a <w:br/> (lineBreak), the visible text before
-      // the break should still be justified because the "last line" is the empty line after the break.
-      const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-      const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+        content.lines.forEach((resolvedLine) => {
+          const lineEl = this.renderLine(
+            block,
+            resolvedLine.line,
+            context,
+            resolvedLine.availableWidth,
+            resolvedLine.lineIndex,
+            resolvedLine.skipJustify,
+            resolvedLine.resolvedListTextStartPx,
+            resolvedLine.indentOffset,
+          );
 
-      const listFirstLineTextStartPx =
-        !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
-          ? resolvePainterListTextStartPx({
+          // Apply pre-computed indent values
+          if (!resolvedLine.isListFirstLine) {
+            if (resolvedLine.paddingLeftPx > 0) {
+              lineEl.style.paddingLeft = `${resolvedLine.paddingLeftPx}px`;
+            }
+            if (resolvedLine.textIndentPx !== 0) {
+              lineEl.style.textIndent = `${resolvedLine.textIndentPx}px`;
+            } else if (resolvedLine.lineIndex > 0 || content.continuesFromPrev) {
+              // Body lines: reset textIndent to 0 if firstLineOffset would have been set
+              // (mirrors the legacy `else if (firstLineOffset && !isListFirstLine)` branch)
+              const paraIndent = block.attrs?.indent;
+              const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+              const flo = suppressFLI ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+              if (flo && !resolvedLine.isListFirstLine) {
+                lineEl.style.textIndent = '0px';
+              }
+            }
+          }
+          if (resolvedLine.paddingRightPx > 0) {
+            lineEl.style.paddingRight = `${resolvedLine.paddingRightPx}px`;
+          }
+
+          // Render marker on list first line
+          if (resolvedLine.isListFirstLine && resolvedMarker) {
+            lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+
+            if (!resolvedMarker.vanish) {
+              const markerContainer = this.doc!.createElement('span');
+              markerContainer.style.display = 'inline-block';
+              markerContainer.style.wordSpacing = '0px';
+
+              const markerEl = this.doc!.createElement('span');
+              markerEl.classList.add('superdoc-paragraph-marker');
+              markerEl.textContent = resolvedMarker.text;
+              markerEl.style.pointerEvents = 'none';
+
+              markerContainer.style.position = 'relative';
+              if (resolvedMarker.justification === 'right') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+              } else if (resolvedMarker.justification === 'center') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                lineEl.style.paddingLeft =
+                  parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+              }
+
+              markerEl.style.fontFamily =
+                toCssFontFamily(resolvedMarker.run.fontFamily) ?? resolvedMarker.run.fontFamily;
+              markerEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
+              markerEl.style.fontWeight = resolvedMarker.run.bold ? 'bold' : '';
+              markerEl.style.fontStyle = resolvedMarker.run.italic ? 'italic' : '';
+              if (resolvedMarker.run.color) {
+                markerEl.style.color = resolvedMarker.run.color;
+              }
+              if (resolvedMarker.run.letterSpacing != null) {
+                markerEl.style.letterSpacing = `${resolvedMarker.run.letterSpacing}px`;
+              }
+              markerContainer.appendChild(markerEl);
+
+              if (resolvedMarker.suffix === 'tab') {
+                const tabEl = this.doc!.createElement('span');
+                tabEl.className = 'superdoc-tab';
+                tabEl.innerHTML = '&nbsp;';
+                tabEl.style.display = 'inline-block';
+                tabEl.style.wordSpacing = '0px';
+                tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
+                lineEl.prepend(tabEl);
+              } else if (resolvedMarker.suffix === 'space') {
+                const spaceEl = this.doc!.createElement('span');
+                spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.wordSpacing = '0px';
+                spaceEl.textContent = '\u00A0';
+                lineEl.prepend(spaceEl);
+              }
+              lineEl.prepend(markerContainer);
+            }
+          }
+          this.capturePaintSnapshotLine(lineEl, context, {
+            inTableFragment: false,
+            inTableParagraph: false,
+          });
+          fragmentEl.appendChild(lineEl);
+        });
+      } else {
+        // ── Legacy path: compute everything from block attrs and measure ──
+        const paraIndent = block.attrs?.indent;
+        const paraIndentLeft = paraIndent?.left ?? 0;
+        const paraIndentRight = paraIndent?.right ?? 0;
+        const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+
+        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+
+        const listFirstLineTextStartPx =
+          !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+            ? resolvePainterListTextStartPx({
+                wordLayout,
+                indentLeftPx: paraIndentLeft,
+                hangingIndentPx: paraIndent?.hanging ?? 0,
+                firstLineIndentPx: paraIndent?.firstLine ?? 0,
+                markerTextWidthPx: fragment.markerTextWidth,
+              })
+            : undefined;
+
+        const shouldUseSharedInlinePrefixGeometry =
+          !fragment.continuesFromPrev &&
+          fragment.markerWidth &&
+          wordLayout?.marker?.justification === 'left' &&
+          wordLayout.firstLineIndentMode !== true &&
+          typeof fragment.markerTextWidth === 'number' &&
+          Number.isFinite(fragment.markerTextWidth) &&
+          fragment.markerTextWidth >= 0;
+        const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
+          ? resolvePainterListMarkerGeometry({
               wordLayout,
               indentLeftPx: paraIndentLeft,
               hangingIndentPx: paraIndent?.hanging ?? 0,
@@ -2825,270 +3218,180 @@ export class DomPainter {
             })
           : undefined;
 
-      const shouldUseSharedInlinePrefixGeometry =
-        !fragment.continuesFromPrev &&
-        fragment.markerWidth &&
-        wordLayout?.marker?.justification === 'left' &&
-        wordLayout.firstLineIndentMode !== true &&
-        typeof fragment.markerTextWidth === 'number' &&
-        Number.isFinite(fragment.markerTextWidth) &&
-        fragment.markerTextWidth >= 0;
-      const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
-        ? resolvePainterListMarkerGeometry({
-            wordLayout,
-            indentLeftPx: paraIndentLeft,
-            hangingIndentPx: paraIndent?.hanging ?? 0,
-            firstLineIndentPx: paraIndent?.firstLine ?? 0,
-            markerTextWidthPx: fragment.markerTextWidth,
-          })
-        : undefined;
+        let listTabWidth = 0;
+        let markerStartPos = 0;
+        if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
+          const markerTextWidth = fragment.markerTextWidth!;
+          const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+          const markerJustification = wordLayout.marker.justification ?? 'left';
+          let currentPos: number;
+          if (markerJustification === 'left') {
+            markerStartPos = anchorPoint;
+            currentPos = markerStartPos + markerTextWidth;
+          } else if (markerJustification === 'right') {
+            markerStartPos = anchorPoint - markerTextWidth;
+            currentPos = anchorPoint;
+          } else {
+            markerStartPos = anchorPoint - markerTextWidth / 2;
+            currentPos = markerStartPos + markerTextWidth;
+          }
 
-      // Pre-calculate marker geometry used later when painting the inline prefix.
-      let listTabWidth = 0;
-      let markerStartPos = 0;
-      if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
-        const markerTextWidth = fragment.markerTextWidth!;
-        const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
-        const markerJustification = wordLayout.marker.justification ?? 'left';
-        let currentPos: number;
-        if (markerJustification === 'left') {
-          markerStartPos = anchorPoint;
-          currentPos = markerStartPos + markerTextWidth;
-        } else if (markerJustification === 'right') {
-          markerStartPos = anchorPoint - markerTextWidth;
-          currentPos = anchorPoint;
-        } else {
-          markerStartPos = anchorPoint - markerTextWidth / 2;
-          currentPos = markerStartPos + markerTextWidth;
+          const suffix = wordLayout.marker.suffix ?? 'tab';
+          if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
+            listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
+          } else if (suffix === 'tab') {
+            listTabWidth = computeTabWidth(
+              currentPos,
+              markerJustification,
+              wordLayout.tabsPx,
+              paraIndent?.hanging,
+              paraIndent?.firstLine,
+              paraIndentLeft,
+            );
+          } else if (suffix === 'space') {
+            listTabWidth = 4;
+          }
         }
 
-        const suffix = wordLayout.marker.suffix ?? 'tab';
-        if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
-          listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
-        } else if (suffix === 'tab') {
-          listTabWidth = computeTabWidth(
-            currentPos,
-            markerJustification,
-            wordLayout.tabsPx,
-            paraIndent?.hanging,
-            paraIndent?.firstLine,
-            paraIndentLeft,
+        lines.forEach((line, index) => {
+          const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+          const hasListFirstLineMarker =
+            index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+          const shouldUseResolvedListTextStart =
+            hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+
+          const positiveIndentReduction = Math.max(0, paraIndentLeft) + Math.max(0, paraIndentRight);
+          const fallbackAvailableWidth = Math.max(0, fragment.width - positiveIndentReduction);
+          let availableWidthOverride =
+            line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
+
+          if (shouldUseResolvedListTextStart) {
+            availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
+          }
+
+          // Adjust availableWidth for first-line text indent (hanging indent).
+          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
+          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+            availableWidthOverride = adjustAvailableWidthForTextIndent(
+              availableWidthOverride,
+              firstLineOffset,
+              line.maxWidth,
+            );
+          }
+
+          const isLastLineOfFragment = index === lines.length - 1;
+          const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
+          const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
+
+          const lineEl = this.renderLine(
+            block,
+            line,
+            context,
+            availableWidthOverride,
+            fragment.fromLine + index,
+            shouldSkipJustifyForLastLine,
+            shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
-        } else if (suffix === 'space') {
-          listTabWidth = 4;
-        }
-      }
 
-      lines.forEach((line, index) => {
-        const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
-        const hasListFirstLineMarker =
-          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
-        const shouldUseResolvedListTextStart =
-          hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
-
-        // Calculate available width from fragment dimensions (the actual rendered width).
-        // This is the ground truth for justify calculations since it matches what's visible.
-        // Only subtract positive indents - negative indents already expand fragment.width in layout
-        const positiveIndentReduction = Math.max(0, paraIndentLeft) + Math.max(0, paraIndentRight);
-        const fallbackAvailableWidth = Math.max(0, fragment.width - positiveIndentReduction);
-        // Use line.maxWidth if available (accounts for drop caps, exclusion zones), but cap it at
-        // fallbackAvailableWidth to handle cases where measurement used a different width than layout
-        // (e.g., paragraph measured at full page width but laid out in narrower column).
-        let availableWidthOverride =
-          line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
-
-        // Only explicit-positioned list first lines need a painter-side width override.
-        // Inline list first lines already have the correct measured width in `line.maxWidth`,
-        // and second-guessing that width causes justified spacing regressions.
-        if (shouldUseResolvedListTextStart) {
-          availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
-        }
-
-        // Determine if this is the true last line of the paragraph that should skip justification.
-        // Skip justify if: this is the last line of the last fragment AND no trailing lineBreak.
-        //
-        // IMPORTANT: List paragraphs (paragraphs with fragment.markerWidth and wordLayout.marker)
-        // SHOULD be justified per MS Word specification when alignment is 'justify'. Do NOT add
-        // an isListParagraph check here - the last line rule applies equally to list and non-list
-        // paragraphs (both skip justification on the final line unless it ends with lineBreak).
-        const isLastLineOfFragment = index === lines.length - 1;
-        const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
-        const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
-
-        const lineEl = this.renderLine(
-          block,
-          line,
-          context,
-          availableWidthOverride,
-          fragment.fromLine + index,
-          shouldSkipJustifyForLastLine,
-          shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
-        );
-
-        // List first lines handle indentation via marker positioning and tab stops,
-        // not CSS padding/text-indent. This matches Word's rendering model.
-        const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-
-        /**
-         * Identifies first lines that require special indent handling.
-         * This includes both hanging indents (negative firstLineOffset) and positive firstLine indents.
-         * When combined with explicit segment positioning, we must adjust paddingLeft instead of
-         * using textIndent, since absolutely positioned segments are not affected by textIndent.
-         */
-        const isFirstLine = index === 0 && !fragment.continuesFromPrev;
-
-        // Apply paragraph indent via padding (skip for list first lines)
-        if (!isListFirstLine) {
-          /**
-           * Special handling for first lines with explicit segment positioning.
-           *
-           * Normally we implement first-line/hanging indents with:
-           * - paddingLeft = leftIndent
-           * - textIndent = firstLine - hanging (positive for firstLine, negative for hanging)
-           *
-           * However, when tabs are present, segments have explicit X positions calculated
-           * during layout that are relative to the content area start. Since these segments
-           * use absolute positioning, CSS textIndent doesn't affect them.
-           *
-           * Therefore, we must incorporate the firstLineOffset into paddingLeft to match
-           * where the absolutely positioned segments expect to start.
-           *
-           * Examples:
-           * - leftIndent=360, hanging=360 (firstLineOffset=-360)
-           *   Normal: paddingLeft=360px, textIndent=-360px → first line content at 0px
-           *   With tabs: paddingLeft=0px, no textIndent → segments positioned correctly
-           *
-           * - leftIndent=360, firstLine=720 (firstLineOffset=+720)
-           *   Normal: paddingLeft=360px, textIndent=720px → first line content at 1080px
-           *   With tabs: paddingLeft=1080px, no textIndent → segments positioned correctly
-           */
-          if (hasExplicitSegmentPositioning) {
-            // When segments have explicit X positions (from tabs), they are absolutely positioned.
-            // Absolutely positioned elements ignore padding, so we must NOT set paddingLeft.
-            // The segment X positions already include the paragraph indent from layout calculation.
-            // For first lines with firstLineOffset, adjust the starting position.
-            if (isFirstLine && firstLineOffset !== 0) {
-              // For negative left indent, fragment position is already adjusted in layout engine.
-              // Only apply padding for the firstLineOffset (relative to the paragraph indent).
-              const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
-              const adjustedPadding = effectiveLeftIndent + firstLineOffset;
-              if (adjustedPadding > 0) {
-                lineEl.style.paddingLeft = `${adjustedPadding}px`;
+          if (!isListFirstLine) {
+            if (hasExplicitSegmentPositioning) {
+              if (isFirstLine && firstLineOffset !== 0) {
+                const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
+                const adjustedPadding = effectiveLeftIndent + firstLineOffset;
+                if (adjustedPadding > 0) {
+                  lineEl.style.paddingLeft = `${adjustedPadding}px`;
+                }
               }
-              // Note: negative adjustedPadding (from hanging indent) is handled by textIndent below
+            } else if (paraIndentLeft && paraIndentLeft > 0) {
+              lineEl.style.paddingLeft = `${paraIndentLeft}px`;
+            } else if (
+              !isFirstLine &&
+              paraIndent?.hanging &&
+              paraIndent.hanging > 0 &&
+              !(paraIndentLeft != null && paraIndentLeft < 0)
+            ) {
+              lineEl.style.paddingLeft = `${paraIndent.hanging}px`;
             }
-            // Otherwise, don't set paddingLeft - segment positions handle indentation
-          } else if (paraIndentLeft && paraIndentLeft > 0) {
-            // Only apply positive left indent as padding.
-            // Negative left indent is handled by fragment positioning in layout engine.
-            lineEl.style.paddingLeft = `${paraIndentLeft}px`;
-          } else if (
-            !isFirstLine &&
-            paraIndent?.hanging &&
-            paraIndent.hanging > 0 &&
-            // Only apply hanging padding when left indent is NOT negative.
-            // When left indent is negative, the fragment position already accounts for it.
-            // Adding padding here would shift body lines right, causing right-side overflow.
-            !(paraIndentLeft != null && paraIndentLeft < 0)
-          ) {
-            // Body lines with hanging indent need paddingLeft = hanging when left indent is non-negative.
-            // First line doesn't get this padding because it "hangs" (starts further left).
-            lineEl.style.paddingLeft = `${paraIndent.hanging}px`;
           }
-        }
-        if (paraIndentRight && paraIndentRight > 0) {
-          // Only apply positive right indent as padding.
-          // Negative right indent is handled by fragment positioning in layout engine.
-          lineEl.style.paddingRight = `${paraIndentRight}px`;
-        }
-        // Apply first-line/hanging text-indent (skip for list first lines and lines with explicit positioning)
-        // When using explicit segment positioning, segments are absolutely positioned and textIndent
-        // has no effect, so we skip it to avoid confusion.
-        if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
-          if (!hasExplicitSegmentPositioning) {
-            lineEl.style.textIndent = `${firstLineOffset}px`;
+          if (paraIndentRight && paraIndentRight > 0) {
+            lineEl.style.paddingRight = `${paraIndentRight}px`;
           }
-        } else if (firstLineOffset && !isListFirstLine) {
-          lineEl.style.textIndent = '0px';
-        }
-
-        if (isListFirstLine) {
-          const marker = wordLayout?.marker;
-          if (!marker) {
-            return;
+          if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
+            if (!hasExplicitSegmentPositioning) {
+              lineEl.style.textIndent = `${firstLineOffset}px`;
+            }
+          } else if (firstLineOffset && !isListFirstLine) {
+            lineEl.style.textIndent = '0px';
           }
-          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
-          // Skip marker rendering when hidden by vanish property (preserves list indentation)
-          if (!marker.run.vanish) {
-            const markerContainer = this.doc!.createElement('span');
-            markerContainer.style.display = 'inline-block';
-            // Justification is implemented via `word-spacing` on the line element. The list marker (and its
-            // tab/space suffix) must not inherit this spacing or it will shift the text start and can
-            // cause overflow for justified list paragraphs.
-            markerContainer.style.wordSpacing = '0px';
-
-            const markerEl = this.doc!.createElement('span');
-            markerEl.classList.add('superdoc-paragraph-marker');
-            markerEl.textContent = marker.markerText ?? '';
-            markerEl.style.pointerEvents = 'none';
-
-            // Left-justified markers stay inline to share flow with the tab spacer.
-            // Other justifications use absolute positioning.
-            const markerJustification = marker.justification ?? 'left';
-
-            markerContainer.style.position = 'relative';
-            if (markerJustification === 'right') {
-              markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos}px`;
-            } else if (markerJustification === 'center') {
-              markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-              lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+          if (isListFirstLine) {
+            const marker = wordLayout?.marker;
+            if (!marker) {
+              return;
             }
+            lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
-            // Apply marker run styling with font fallback chain
-            markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-            markerEl.style.fontSize = `${marker.run.fontSize}px`;
-            markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-            markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-            if (marker.run.color) {
-              markerEl.style.color = marker.run.color;
+            if (!marker.run.vanish) {
+              const markerContainer = this.doc!.createElement('span');
+              markerContainer.style.display = 'inline-block';
+              markerContainer.style.wordSpacing = '0px';
+
+              const markerEl = this.doc!.createElement('span');
+              markerEl.classList.add('superdoc-paragraph-marker');
+              markerEl.textContent = marker.markerText ?? '';
+              markerEl.style.pointerEvents = 'none';
+
+              const markerJustification = marker.justification ?? 'left';
+
+              markerContainer.style.position = 'relative';
+              if (markerJustification === 'right') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${markerStartPos}px`;
+              } else if (markerJustification === 'center') {
+                markerContainer.style.position = 'absolute';
+                markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+              }
+
+              markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+              markerEl.style.fontSize = `${marker.run.fontSize}px`;
+              markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+              markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+              if (marker.run.color) {
+                markerEl.style.color = marker.run.color;
+              }
+              if (marker.run.letterSpacing != null) {
+                markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+              }
+              markerContainer.appendChild(markerEl);
+
+              const suffix = marker.suffix ?? 'tab';
+              if (suffix === 'tab') {
+                const tabEl = this.doc!.createElement('span');
+                tabEl.className = 'superdoc-tab';
+                tabEl.innerHTML = '&nbsp;';
+                tabEl.style.display = 'inline-block';
+                tabEl.style.wordSpacing = '0px';
+                tabEl.style.width = `${listTabWidth}px`;
+                lineEl.prepend(tabEl);
+              } else if (suffix === 'space') {
+                const spaceEl = this.doc!.createElement('span');
+                spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.wordSpacing = '0px';
+                spaceEl.textContent = '\u00A0';
+                lineEl.prepend(spaceEl);
+              }
+              lineEl.prepend(markerContainer);
             }
-            if (marker.run.letterSpacing != null) {
-              markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-            }
-            markerContainer.appendChild(markerEl);
-
-            const suffix = marker.suffix ?? 'tab';
-            if (suffix === 'tab') {
-              const tabEl = this.doc!.createElement('span');
-              tabEl.className = 'superdoc-tab';
-              tabEl.innerHTML = '&nbsp;';
-              tabEl.style.display = 'inline-block';
-              tabEl.style.wordSpacing = '0px';
-              tabEl.style.width = `${listTabWidth}px`;
-
-              lineEl.prepend(tabEl);
-            } else if (suffix === 'space') {
-              // Insert a non-breaking space in the inline flow to separate marker and text.
-              // Wrap it so it can opt out of inherited `word-spacing` used for justification.
-              const spaceEl = this.doc!.createElement('span');
-              spaceEl.classList.add('superdoc-marker-suffix-space');
-              spaceEl.style.wordSpacing = '0px';
-              spaceEl.textContent = '\u00A0';
-
-              lineEl.prepend(spaceEl);
-            }
-            lineEl.prepend(markerContainer);
           }
-        }
-        this.capturePaintSnapshotLine(lineEl, context, {
-          inTableFragment: false,
-          inTableParagraph: false,
+          this.capturePaintSnapshotLine(lineEl, context, {
+            inTableFragment: false,
+            inTableParagraph: false,
+          });
+          fragmentEl.appendChild(lineEl);
         });
-        fragmentEl.appendChild(lineEl);
-      });
+      }
 
       return fragmentEl;
     } catch (error) {
@@ -3190,6 +3493,7 @@ export class DomPainter {
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
     betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -3212,10 +3516,14 @@ export class DomPainter {
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
       applyStyles(fragmentEl, fragmentStyles);
-      fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
-      fragmentEl.style.top = `${fragment.y}px`;
-      fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
-      fragmentEl.dataset.blockId = fragment.blockId;
+      if (resolvedItem) {
+        this.applyResolvedListItemWrapperFrame(fragmentEl, fragment, resolvedItem, context.section);
+      } else {
+        fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
+        fragmentEl.style.top = `${fragment.y}px`;
+        fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
+        fragmentEl.dataset.blockId = fragment.blockId;
+      }
       fragmentEl.dataset.itemId = fragment.itemId;
 
       const paragraphMetadata = item.paragraph.attrs?.sdt;
@@ -3322,31 +3630,40 @@ export class DomPainter {
     }
   }
 
-  private renderImageFragment(fragment: ImageFragment, context: FragmentRenderContext): HTMLElement {
+  private renderImageFragment(
+    fragment: ImageFragment,
+    context: FragmentRenderContext,
+    resolvedItem?: ResolvedImageItem,
+  ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
-        throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
-      }
+      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
+      // is a legacy ResolvedFragmentItem without the block field.
+      const block: ImageBlock =
+        resolvedItem?.block ??
+        (() => {
+          const lookup = this.blockLookup.get(fragment.blockId);
+          if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
+            throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
+          }
+          return lookup.block as ImageBlock;
+        })();
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
 
-      const block = lookup.block as ImageBlock;
-
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
       applyStyles(fragmentEl, fragmentStyles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
-      fragmentEl.style.height = `${fragment.height}px`;
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        fragmentEl.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
+      }
       this.applySdtDataset(fragmentEl, block.attrs?.sdt);
       this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
-
-      // Apply z-index for anchored images
-      if (fragment.isAnchored && fragment.zIndex != null) {
-        fragmentEl.style.zIndex = String(fragment.zIndex);
-      }
 
       // Add block ID for PM transaction targeting
       if (block.id) {
@@ -3384,46 +3701,24 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
-      // Apply rotation and flip transforms from OOXML a:xfrm
-      const transforms: string[] = [];
-
-      // Calculate translation offset to keep top-left corner fixed when rotating
-      if (block.rotation != null && block.rotation !== 0) {
-        const angleRad = (block.rotation * Math.PI) / 180;
-        const w = block.width ?? fragment.width;
-        const h = block.height ?? fragment.height;
-
-        // Calculate how much the top-left corner moves when rotating around center
-        // Top-left corner starts at (0, 0) in element space
-        // Center is at (w/2, h/2)
-        // After rotation, we need to translate to keep top-left at (0, 0)
-        const cosA = Math.cos(angleRad);
-        const sinA = Math.sin(angleRad);
-
-        // Position of top-left corner after rotation (relative to original top-left)
-        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
-        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
-
-        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
-        transforms.push(`rotate(${block.rotation}deg)`);
-      }
-      if (block.flipH) {
-        transforms.push('scaleX(-1)');
-      }
-      if (block.flipV) {
-        transforms.push('scaleY(-1)');
-      }
-
-      if (transforms.length > 0) {
-        img.style.transform = transforms.join(' ');
-        img.style.transformOrigin = 'center';
-      }
+      // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
+      // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
+      this.applyImageGeometryTransform(fragmentEl, {
+        width: block.width ?? fragment.width,
+        height: block.height ?? fragment.height,
+        rotation: block.rotation,
+        flipH: block.flipH,
+        flipV: block.flipV,
+      });
 
       const filters = buildImageFilters(block);
       if (filters.length > 0) {
         img.style.filter = filters.join(' ');
       }
-      fragmentEl.appendChild(img);
+
+      // Wrap in anchor when block has a DrawingML hyperlink (a:hlinkClick)
+      const imageChild = this.buildImageHyperlinkAnchor(img, block.hyperlink, 'block');
+      fragmentEl.appendChild(imageChild);
 
       return fragmentEl;
     } catch (error) {
@@ -3432,30 +3727,146 @@ export class DomPainter {
     }
   }
 
-  private renderDrawingFragment(fragment: DrawingFragment, context: FragmentRenderContext): HTMLElement {
+  private buildImageGeometryTransform(attrs: {
+    width: number;
+    height: number;
+    rotation?: number;
+    flipH?: boolean;
+    flipV?: boolean;
+  }): string {
+    const transforms: string[] = [];
+    if (attrs.rotation != null && attrs.rotation !== 0) {
+      const angleRad = (attrs.rotation * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      const newTopLeftX = (attrs.width / 2) * (1 - cosA) + (attrs.height / 2) * sinA;
+      const newTopLeftY = (attrs.width / 2) * sinA + (attrs.height / 2) * (1 - cosA);
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${attrs.rotation}deg)`);
+    }
+    if (attrs.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (attrs.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    return transforms.join(' ');
+  }
+
+  private applyImageGeometryTransform(
+    target: HTMLElement,
+    attrs: {
+      width: number;
+      height: number;
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    },
+  ): void {
+    const transform = this.buildImageGeometryTransform(attrs);
+    if (!transform) {
+      return;
+    }
+    target.style.transform = transform;
+    target.style.transformOrigin = 'center';
+  }
+
+  /**
+   * Optionally wrap an image element in an anchor for DrawingML hyperlinks (a:hlinkClick).
+   *
+   * When `hyperlink` is present and its URL passes sanitization, returns an
+   * `<a class="superdoc-link">` wrapping `imageEl`. The existing EditorInputManager
+   * click-delegation on `a.superdoc-link` handles both viewing-mode navigation and
+   * editing-mode event dispatch automatically, with no extra wiring needed here.
+   *
+   * When `hyperlink` is absent or the URL fails sanitization the original element
+   * is returned unchanged.
+   *
+   * @param imageEl   - The image element (img or span wrapper) to potentially wrap.
+   * @param hyperlink - Hyperlink metadata from the ImageBlock/ImageRun, or undefined.
+   * @param display   - CSS display value for the anchor: 'block' for fragment images,
+   *                    'inline-block' for inline runs.
+   */
+  private buildImageHyperlinkAnchor(
+    imageEl: HTMLElement,
+    hyperlink: ImageHyperlink | undefined,
+    display: 'block' | 'inline-block',
+  ): HTMLElement {
+    if (!hyperlink?.url || !this.doc) return imageEl;
+
+    const sanitized = sanitizeHref(hyperlink.url);
+    if (!sanitized?.href) return imageEl;
+
+    const anchor = this.doc.createElement('a');
+    anchor.href = sanitized.href;
+    anchor.classList.add('superdoc-link');
+
+    if (sanitized.protocol === 'http' || sanitized.protocol === 'https') {
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+    }
+
+    const tooltipSource =
+      typeof hyperlink.tooltip === 'string' && hyperlink.tooltip.trim().length > 0 ? hyperlink.tooltip : hyperlink.url;
+    const tooltipResult = encodeTooltip(tooltipSource);
+    if (tooltipResult?.text) {
+      anchor.title = tooltipResult.text;
+    }
+
+    for (const titledElement of [imageEl, ...Array.from(imageEl.querySelectorAll('[title]'))]) {
+      titledElement.removeAttribute('title');
+    }
+
+    // Accessibility: explicit role and keyboard focus (mirrors applyLinkAttributes for text links)
+    anchor.setAttribute('role', 'link');
+    anchor.setAttribute('tabindex', '0');
+
+    if (display === 'block') {
+      anchor.style.cssText = 'display: block; width: 100%; height: 100%; cursor: pointer;';
+    } else {
+      // inline-block preserves the image's layout box inside a paragraph line
+      anchor.style.display = 'inline-block';
+      anchor.style.lineHeight = '0';
+      anchor.style.cursor = 'pointer';
+      anchor.style.verticalAlign = imageEl.style.verticalAlign || 'bottom';
+    }
+
+    anchor.appendChild(imageEl);
+    return anchor;
+  }
+
+  private renderDrawingFragment(
+    fragment: DrawingFragment,
+    context: FragmentRenderContext,
+    resolvedItem?: ResolvedDrawingItem,
+  ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
-        throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
-      }
+      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
+      // is a legacy ResolvedFragmentItem without the block field.
+      const block: DrawingBlock =
+        resolvedItem?.block ??
+        (() => {
+          const lookup = this.blockLookup.get(fragment.blockId);
+          if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
+            throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
+          }
+          return lookup.block as DrawingBlock;
+        })();
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
-
-      const block = lookup.block as DrawingBlock;
-      const isVectorShapeBlock = block.kind === 'drawing' && block.drawingKind === 'vectorShape';
-
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-drawing-fragment');
       applyStyles(fragmentEl, fragmentStyles);
-      this.applyFragmentFrame(fragmentEl, fragment, context.section);
-      fragmentEl.style.height = `${fragment.height}px`;
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+      } else {
+        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        fragmentEl.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
+      }
       fragmentEl.style.position = 'absolute';
       fragmentEl.style.overflow = 'hidden';
-
-      if (fragment.isAnchored && fragment.zIndex != null) {
-        fragmentEl.style.zIndex = String(fragment.zIndex);
-      }
 
       const innerWrapper = this.doc.createElement('div');
       innerWrapper.classList.add('superdoc-drawing-inner');
@@ -3468,11 +3879,9 @@ export class DomPainter {
 
       const scale = fragment.scale ?? 1;
       const transforms: string[] = ['translate(-50%, -50%)'];
-      if (!isVectorShapeBlock) {
-        transforms.push(`rotate(${fragment.geometry.rotation ?? 0}deg)`);
-        transforms.push(`scaleX(${fragment.geometry.flipH ? -1 : 1})`);
-        transforms.push(`scaleY(${fragment.geometry.flipV ? -1 : 1})`);
-      }
+      transforms.push(`rotate(${fragment.geometry.rotation ?? 0}deg)`);
+      transforms.push(`scaleX(${fragment.geometry.flipH ? -1 : 1})`);
+      transforms.push(`scaleY(${fragment.geometry.flipV ? -1 : 1})`);
       transforms.push(`scale(${scale})`);
       innerWrapper.style.transform = transforms.join(' ');
 
@@ -3498,7 +3907,7 @@ export class DomPainter {
       return this.createDrawingImageElement(block);
     }
     if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, true, 1, 1, context);
+      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
@@ -3552,6 +3961,9 @@ export class DomPainter {
     contentContainer.style.top = `${offsetY}px`;
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
+    if (applyTransforms && geometry) {
+      this.applyVectorShapeTransforms(contentContainer, geometry);
+    }
 
     // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
     // even when the source shape only had a:custGeom and no a:prstGeom.
@@ -3577,23 +3989,18 @@ export class DomPainter {
         }
 
         this.applyLineEnds(svgElement, block);
-        if (applyTransforms && geometry) {
-          this.applyVectorShapeTransforms(svgElement, geometry);
-        }
         contentContainer.appendChild(svgElement);
 
-        // Apply text content as an overlay div (not inside SVG to avoid viewBox scaling)
-        if (block.textContent && block.textContent.parts.length > 0) {
-          const textDiv = this.createFallbackTextElement(
-            block.textContent,
-            block.textAlign ?? 'center',
-            block.textVerticalAlign,
-            block.textInsets,
+        if (this.hasShapeTextContent(block.textContent)) {
+          const textElement = this.createShapeTextElement(
+            block,
+            innerWidth,
+            innerHeight,
             groupScaleX,
             groupScaleY,
             context,
           );
-          contentContainer.appendChild(textDiv);
+          contentContainer.appendChild(textElement);
         }
 
         container.appendChild(contentContainer);
@@ -3604,23 +4011,18 @@ export class DomPainter {
     // Fallback rendering when no preset shape SVG is available
     this.applyFallbackShapeStyle(contentContainer, block);
 
-    // Apply text content to fallback rendering
-    if (block.textContent && block.textContent.parts.length > 0) {
-      const textDiv = this.createFallbackTextElement(
-        block.textContent,
-        block.textAlign ?? 'center',
-        block.textVerticalAlign,
-        block.textInsets,
+    if (this.hasShapeTextContent(block.textContent)) {
+      const textElement = this.createShapeTextElement(
+        block,
+        innerWidth,
+        innerHeight,
         groupScaleX,
         groupScaleY,
         context,
       );
-      contentContainer.appendChild(textDiv);
+      contentContainer.appendChild(textElement);
     }
 
-    if (applyTransforms && geometry) {
-      this.applyVectorShapeTransforms(contentContainer, geometry);
-    }
     container.appendChild(contentContainer);
     return container;
   }
@@ -3657,6 +4059,193 @@ export class DomPainter {
       container.style.border = `${strokeWidth}px solid ${block.strokeColor}`;
     } else {
       container.style.border = '1px solid rgba(15, 23, 42, 0.3)';
+    }
+  }
+
+  private hasShapeTextContent(textContent?: ShapeTextContent): textContent is ShapeTextContent {
+    return Array.isArray(textContent?.parts) && textContent.parts.length > 0;
+  }
+
+  private createShapeTextElement(
+    block: VectorShapeDrawing,
+    width: number,
+    height: number,
+    groupScaleX = 1,
+    groupScaleY = 1,
+    context?: FragmentRenderContext,
+  ): Element {
+    const textContent = block.textContent;
+    if (!this.hasShapeTextContent(textContent)) {
+      return this.doc!.createElement('div');
+    }
+
+    if (this.shouldUseWordArtTextRenderer(block)) {
+      return this.createWordArtTextElement(
+        textContent,
+        block.textAlign ?? 'center',
+        block.textInsets,
+        width,
+        height,
+        context,
+      );
+    }
+
+    return this.createFallbackTextElement(
+      textContent,
+      block.textAlign ?? 'center',
+      block.textVerticalAlign,
+      block.textInsets,
+      groupScaleX,
+      groupScaleY,
+      context,
+    );
+  }
+
+  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
+    return block.attrs?.isWordArt === true && this.hasShapeTextContent(block.textContent);
+  }
+
+  private createWordArtTextElement(
+    textContent: ShapeTextContent,
+    textAlign: string,
+    textInsets: { top: number; right: number; bottom: number; left: number } | undefined,
+    width: number,
+    height: number,
+    context?: FragmentRenderContext,
+  ): SVGSVGElement {
+    const svg = this.doc!.createElementNS(SVG_NS, 'svg');
+    svg.classList.add('superdoc-wordart-text');
+    svg.setAttribute('xmlns', SVG_NS);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.position = 'absolute';
+    svg.style.left = '0';
+    svg.style.top = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.overflow = 'visible';
+    svg.style.pointerEvents = 'none';
+
+    const insets = textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const availableWidth = Math.max(1, width - insets.left - insets.right);
+    const availableHeight = Math.max(1, height - insets.top - insets.bottom);
+    const lines = this.buildWordArtLines(textContent, context);
+    const lineCount = Math.max(lines.length, 1);
+    const lineHeight = availableHeight / lineCount;
+    const fontSize = Math.max(1, lineHeight * WORDART_LINE_FILL_RATIO);
+    const textAnchor = this.getWordArtTextAnchor(textAlign);
+    const textX = this.getWordArtTextX(textAlign, insets.left, availableWidth);
+
+    lines.forEach((parts, lineIndex) => {
+      if (parts.length === 0) {
+        return;
+      }
+
+      const textEl = this.doc!.createElementNS(SVG_NS, 'text');
+      textEl.setAttribute('xml:space', 'preserve');
+      textEl.setAttribute('x', String(textX));
+      textEl.setAttribute('y', String(insets.top + lineHeight * (lineIndex + 0.5)));
+      textEl.setAttribute('text-anchor', textAnchor);
+      textEl.setAttribute('dominant-baseline', 'middle');
+      textEl.setAttribute('font-size', String(fontSize));
+      textEl.setAttribute('textLength', String(availableWidth));
+      textEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+
+      parts.forEach((part) => {
+        const tspan = this.doc!.createElementNS(SVG_NS, 'tspan');
+        tspan.setAttribute('xml:space', 'preserve');
+        tspan.textContent = part.text;
+        this.applyWordArtTextFormatting(tspan, part.formatting);
+        textEl.appendChild(tspan);
+      });
+
+      svg.appendChild(textEl);
+    });
+
+    return svg;
+  }
+
+  private buildWordArtLines(
+    textContent: ShapeTextContent,
+    context?: FragmentRenderContext,
+  ): Array<Array<{ text: string; formatting?: ShapeTextContent['parts'][number]['formatting'] }>> {
+    const lines: Array<Array<{ text: string; formatting?: ShapeTextContent['parts'][number]['formatting'] }>> = [[]];
+
+    textContent.parts.forEach((part) => {
+      if (part.isLineBreak) {
+        lines.push([]);
+        return;
+      }
+
+      const resolvedText = this.resolveShapeTextPartText(part, context);
+      if (!resolvedText) {
+        return;
+      }
+
+      lines[lines.length - 1].push({
+        text: resolvedText,
+        formatting: part.formatting,
+      });
+    });
+
+    const nonEmptyLines = lines.filter((line) => line.length > 0);
+    return nonEmptyLines.length > 0 ? nonEmptyLines : [[]];
+  }
+
+  private resolveShapeTextPartText(part: ShapeTextContent['parts'][number], context?: FragmentRenderContext): string {
+    if (part.fieldType === 'PAGE') {
+      return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
+    }
+    if (part.fieldType === 'NUMPAGES') {
+      return String(context?.totalPages ?? 1);
+    }
+    return part.text;
+  }
+
+  private getWordArtTextAnchor(textAlign: string): 'start' | 'middle' | 'end' {
+    if (textAlign === 'right' || textAlign === 'r') {
+      return 'end';
+    }
+    if (textAlign === 'center') {
+      return 'middle';
+    }
+    return 'start';
+  }
+
+  private getWordArtTextX(textAlign: string, leftInset: number, availableWidth: number): number {
+    if (textAlign === 'right' || textAlign === 'r') {
+      return leftInset + availableWidth;
+    }
+    if (textAlign === 'center') {
+      return leftInset + availableWidth / 2;
+    }
+    return leftInset;
+  }
+
+  private applyWordArtTextFormatting(
+    element: SVGTextElement | SVGTSpanElement,
+    formatting?: ShapeTextContent['parts'][number]['formatting'],
+  ): void {
+    if (!formatting) {
+      return;
+    }
+    if (formatting.bold) {
+      element.setAttribute('font-weight', 'bold');
+    }
+    if (formatting.italic) {
+      element.setAttribute('font-style', 'italic');
+    }
+    if (formatting.fontFamily) {
+      element.setAttribute('font-family', formatting.fontFamily);
+    }
+    if (formatting.color) {
+      const validatedColor = validateHexColor(formatting.color);
+      if (validatedColor) {
+        element.setAttribute('fill', validatedColor);
+      }
+    }
+    if (formatting.letterSpacing != null) {
+      element.setAttribute('letter-spacing', String(formatting.letterSpacing));
     }
   }
 
@@ -3735,16 +4324,6 @@ export class DomPainter {
     // Override inherited white-space: pre from parent fragment to allow text wrapping
     currentParagraph.style.whiteSpace = 'normal';
 
-    const resolvePartText = (part: ShapeTextContent['parts'][number]) => {
-      if (part.fieldType === 'PAGE') {
-        return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
-      }
-      if (part.fieldType === 'NUMPAGES') {
-        return String(context?.totalPages ?? 1);
-      }
-      return part.text;
-    };
-
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
         // Finish current paragraph and start a new one
@@ -3759,7 +4338,7 @@ export class DomPainter {
         }
       } else {
         const span = this.doc!.createElement('span');
-        span.textContent = resolvePartText(part);
+        span.textContent = this.resolveShapeTextPartText(part, context);
         if (part.formatting) {
           if (part.formatting.bold) {
             span.style.fontWeight = 'bold';
@@ -4264,97 +4843,131 @@ export class DomPainter {
     return renderChartToElement(this.doc!, block.chartData, block.geometry);
   }
 
+  private resolveTableRenderData(
+    fragment: TableFragment,
+    resolvedItem?: ResolvedTableItem,
+  ): {
+    block: TableBlock;
+    measure: TableMeasure;
+    cellSpacingPx: number;
+    effectiveColumnWidths: number[];
+  } {
+    if (resolvedItem) {
+      return {
+        block: resolvedItem.block,
+        measure: resolvedItem.measure,
+        cellSpacingPx: resolvedItem.cellSpacingPx,
+        effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
+      };
+    }
+
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
+      throw new Error(`DomPainter: missing table block for fragment ${fragment.blockId}`);
+    }
+
+    const block = lookup.block as TableBlock;
+    const measure = lookup.measure as TableMeasure;
+
+    return {
+      block,
+      measure,
+      cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
+      effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+    };
+  }
+
   private renderTableFragment(
     fragment: TableFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
+    resolvedItem?: ResolvedTableItem,
   ): HTMLElement {
-    if (!this.doc) {
-      throw new Error('DomPainter: document is not available');
+    try {
+      if (!this.doc) {
+        throw new Error('DomPainter: document is not available');
+      }
+
+      // Wrap applyFragmentFrame to capture section from context.
+      // Table cell inner fragments always stay on the legacy frame path for now.
+      const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
+        this.applyFragmentFrame(el, frag, context.section);
+      };
+
+      // Word justifies text inside table cells, but not the final line unless the
+      // paragraph ends with an explicit line break.
+      const renderLineForTableCell = (
+        block: ParagraphBlock,
+        line: Line,
+        ctx: FragmentRenderContext,
+        lineIndex: number,
+        isLastLine: boolean,
+        resolvedListTextStartPx?: number,
+      ): HTMLElement => {
+        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+        const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
+
+        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+      };
+
+      /**
+       * Renders drawing content that lives inside a table cell.
+       * Table-cell vector shapes intentionally skip outer geometry transforms.
+       */
+      const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
+        if (block.drawingKind === 'image') {
+          return this.createDrawingImageElement(block);
+        }
+        if (block.drawingKind === 'shapeGroup') {
+          return this.createShapeGroupElement(block, context);
+        }
+        if (block.drawingKind === 'vectorShape') {
+          return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
+        }
+        if (block.drawingKind === 'chart') {
+          return this.createChartElement(block);
+        }
+        return this.createDrawingPlaceholder();
+      };
+
+      const tableRenderData = this.resolveTableRenderData(fragment, resolvedItem);
+
+      const el = renderTableFragmentElement({
+        doc: this.doc,
+        fragment,
+        context,
+        block: tableRenderData.block,
+        measure: tableRenderData.measure,
+        cellSpacingPx: tableRenderData.cellSpacingPx,
+        effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
+        sdtBoundary,
+        renderLine: renderLineForTableCell,
+        captureLineSnapshot: (lineEl, lineContext, options) => {
+          this.capturePaintSnapshotLine(lineEl, lineContext, {
+            inTableFragment: true,
+            inTableParagraph: options?.inTableParagraph ?? false,
+            wrapperEl: options?.wrapperEl,
+          });
+        },
+        renderDrawingContent: renderDrawingContentForTableCell,
+        applyFragmentFrame: applyFragmentFrameWithSection,
+        applySdtDataset: this.applySdtDataset.bind(this),
+        applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+        applyStyles,
+      });
+
+      // Override outer wrapper positioning with resolved data when available.
+      // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
+      if (resolvedItem) {
+        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+      }
+
+      return el;
+    } catch (error) {
+      console.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
+      return this.createErrorPlaceholder(fragment.blockId, error);
     }
-
-    // Wrap applyFragmentFrame to capture section from context
-    // This ensures table cell fragments receive proper section context for PM position validation
-    const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
-      this.applyFragmentFrame(el, frag, context.section);
-    };
-
-    // Create a wrapper for renderLine that applies Word's justification rules for table cells.
-    // Word DOES justify text inside table cells, but skips justification on the last line
-    // (unless the paragraph ends with a line break, which shifts the "last line" down).
-    const renderLineForTableCell = (
-      block: ParagraphBlock,
-      line: Line,
-      ctx: FragmentRenderContext,
-      lineIndex: number,
-      isLastLine: boolean,
-      resolvedListTextStartPx?: number,
-    ): HTMLElement => {
-      // Check if paragraph ends with a line break
-      const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-      const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
-
-      // Skip justify only on the last line, unless the paragraph ends with a line break
-      const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
-
-      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
-    };
-
-    /**
-     * Wrapper function for rendering drawing content inside table cells.
-     *
-     * This function delegates to the appropriate DomPainter methods based on the drawing kind:
-     * - 'image': Creates a standard image element with src and object-fit
-     * - 'shapeGroup': Creates a group container with positioned child shapes (images and vectors)
-     * - 'vectorShape': Creates an SVG element for the vector shape (without geometry transforms in table cells)
-     *
-     * For unsupported or unrecognized drawing kinds, returns a placeholder element with diagonal stripes.
-     *
-     * @param block - The DrawingBlock to render
-     * @returns HTMLElement representing the rendered drawing content
-     *
-     * @remarks
-     * This wrapper is specifically designed for table cell rendering where:
-     * - Vector shapes are rendered without geometry transforms (to avoid layout conflicts)
-     * - The returned element will have width: 100% and height: 100% applied by the table cell renderer
-     */
-    const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
-      if (block.drawingKind === 'image') {
-        return this.createDrawingImageElement(block);
-      }
-      if (block.drawingKind === 'shapeGroup') {
-        return this.createShapeGroupElement(block, context);
-      }
-      if (block.drawingKind === 'vectorShape') {
-        // For vectorShapes in table cells, render without geometry transforms
-        return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
-      }
-      if (block.drawingKind === 'chart') {
-        return this.createChartElement(block);
-      }
-      return this.createDrawingPlaceholder();
-    };
-
-    return renderTableFragmentElement({
-      doc: this.doc,
-      fragment,
-      context,
-      blockLookup: this.blockLookup,
-      sdtBoundary,
-      renderLine: renderLineForTableCell,
-      captureLineSnapshot: (lineEl, lineContext, options) => {
-        this.capturePaintSnapshotLine(lineEl, lineContext, {
-          inTableFragment: true,
-          inTableParagraph: options?.inTableParagraph ?? false,
-          wrapperEl: options?.wrapperEl,
-        });
-      },
-      renderDrawingContent: renderDrawingContentForTableCell,
-      applyFragmentFrame: applyFragmentFrameWithSection,
-      applySdtDataset: this.applySdtDataset.bind(this),
-      applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
-      applyStyles,
-    });
   }
 
   /**
@@ -4362,7 +4975,7 @@ export class DomPainter {
    * @returns Sanitized link data or null if invalid/missing
    */
   private extractLinkData(run: Run): LinkRenderData | null {
-    if (run.kind === 'tab' || run.kind === 'image' || run.kind === 'lineBreak') {
+    if (run.kind === 'tab' || run.kind === 'image' || run.kind === 'lineBreak' || run.kind === 'math') {
       return null;
     }
     const link = (run as TextRun).link as FlowRunLink | undefined;
@@ -4595,6 +5208,42 @@ export class DomPainter {
     return run.kind === 'fieldAnnotation';
   }
 
+  /**
+   * Type guard to check if a run is a math run.
+   */
+  private isMathRun(run: Run): run is MathRun {
+    return run.kind === 'math';
+  }
+
+  /**
+   * Render a math run as a MathML element wrapped in a span.
+   * Follows the same pattern as renderImageRun — sets explicit dimensions.
+   */
+  private renderMathRun(run: MathRun): HTMLElement | null {
+    if (!this.doc) return null;
+    const wrapper = this.doc.createElement('span');
+    wrapper.className = 'sd-math';
+    wrapper.style.display = 'inline-block';
+    wrapper.style.verticalAlign = 'middle';
+    // Let browser auto-size to MathML content; estimated dimensions are for layout only
+    wrapper.style.minWidth = `${run.width}px`;
+    wrapper.style.minHeight = `${run.height}px`;
+    wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
+
+    const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);
+    if (mathEl) {
+      wrapper.appendChild(mathEl);
+    } else {
+      // Fallback: render plain text content
+      wrapper.textContent = run.textContent || '';
+    }
+
+    if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
+    if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);
+
+    return wrapper;
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -4608,6 +5257,11 @@ export class DomPainter {
     // Handle FieldAnnotationRun - inline pill-styled form fields
     if (this.isFieldAnnotationRun(run)) {
       return this.renderFieldAnnotationRun(run);
+    }
+
+    // Handle MathRun - inline math rendered as MathML
+    if (this.isMathRun(run)) {
+      return this.renderMathRun(run);
     }
 
     // Handle LineBreakRun - line breaks are handled by the measurer creating new lines,
@@ -4660,24 +5314,25 @@ export class DomPainter {
     const textRun = run as TextRun;
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
-    const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
-
-    if (commentHighlight.color && hasAnyComment) {
-      (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
-      // Add thin visual indicator for nested comments when outer comment is selected
-      // Use box-shadow instead of border to avoid affecting text layout
-      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
-        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
-        (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
-      } else {
-        (elem as HTMLElement).style.boxShadow = '';
-      }
-    }
+    // Comment highlight styles are applied post-paint by CommentHighlightDecorator (super-editor).
+    // The painter only stamps metadata attributes below.
     // We still need to preserve the comment ids
     if (hasAnyComment) {
       elem.dataset.commentIds = commentAnnotations.map((c) => c.commentId).join(',');
       if (commentAnnotations.some((c) => c.internal)) {
         elem.dataset.commentInternal = 'true';
+      }
+      // Per-comment internal flag so the editor-side decorator can pick the right color
+      const internalIds = commentAnnotations.filter((c) => c.internal).map((c) => c.commentId);
+      if (internalIds.length > 0) {
+        elem.dataset.commentInternalIds = internalIds.join(',');
+      }
+      // importedId aliases so the decorator can match by either ID
+      const importedEntries = commentAnnotations
+        .filter((c) => c.importedId && c.importedId !== c.commentId)
+        .map((c) => `${c.importedId}=${c.commentId}`);
+      if (importedEntries.length > 0) {
+        elem.dataset.commentImportedIds = importedEntries.join(',');
       }
       elem.classList.add('superdoc-comment-highlight');
     }
@@ -4915,7 +5570,7 @@ export class DomPainter {
       this.applySdtDataset(wrapper, run.sdt);
       if (run.dataAttrs) applyRunDataAttributes(wrapper, run.dataAttrs);
       wrapper.appendChild(img);
-      return wrapper;
+      return this.buildImageHyperlinkAnchor(wrapper, run.hyperlink, 'inline-block');
     }
 
     // Apply PM position tracking for cursor placement (only on img when not wrapped)
@@ -4970,10 +5625,10 @@ export class DomPainter {
       this.applySdtDataset(wrapper, run.sdt);
 
       wrapper.appendChild(img);
-      return wrapper;
+      return this.buildImageHyperlinkAnchor(wrapper, run.hyperlink, 'inline-block');
     }
 
-    return img;
+    return this.buildImageHyperlinkAnchor(img, run.hyperlink, 'inline-block');
   }
 
   /**
@@ -5022,7 +5677,7 @@ export class DomPainter {
 
     // Create outer annotation wrapper
     const annotation = this.doc.createElement('span');
-    annotation.classList.add('annotation');
+    annotation.classList.add(DOM_CLASS_NAMES.ANNOTATION);
     annotation.setAttribute('aria-label', 'Field annotation');
 
     // Apply pill styling (unless highlighted is explicitly false)
@@ -5095,7 +5750,7 @@ export class DomPainter {
 
     // Create inner content wrapper
     const content = this.doc.createElement('span');
-    content.classList.add('annotation-content');
+    content.classList.add(DOM_CLASS_NAMES.ANNOTATION_CONTENT);
     content.style.pointerEvents = 'none';
     content.setAttribute('contenteditable', 'false');
 
@@ -5192,23 +5847,12 @@ export class DomPainter {
 
     // Apply data attributes for field tracking
     annotation.dataset.type = run.variant;
+    annotation.dataset.displayLabel = run.displayLabel;
     if (run.fieldId) {
       annotation.dataset.fieldId = run.fieldId;
     }
     if (run.fieldType) {
       annotation.dataset.fieldType = run.fieldType;
-    }
-
-    // Make field annotation draggable (matching super-editor behavior)
-    annotation.draggable = true;
-    annotation.dataset.draggable = 'true';
-
-    // Store additional data for drag operations
-    if (run.displayLabel) {
-      annotation.dataset.displayLabel = run.displayLabel;
-    }
-    if (run.variant) {
-      annotation.dataset.variant = run.variant;
     }
 
     // Assert PM positions are present for cursor fallback
@@ -5223,39 +5867,10 @@ export class DomPainter {
     }
     annotation.dataset.layoutEpoch = String(this.layoutEpoch);
 
-    this.appendAnnotationCaretAnchor(annotation, run);
-
     // Apply SDT metadata
     this.applySdtDataset(annotation, run.sdt);
 
     return annotation;
-  }
-
-  /**
-   * Adds a hidden DOM anchor at pmEnd so caret placement after the annotation is correct.
-   */
-  private appendAnnotationCaretAnchor(annotation: HTMLElement, run: FieldAnnotationRun): void {
-    if (!this.doc || run.pmEnd == null) return;
-
-    const caretAnchor = this.doc.createElement('span');
-    caretAnchor.dataset.pmStart = String(run.pmEnd);
-    caretAnchor.dataset.pmEnd = String(run.pmEnd);
-    caretAnchor.dataset.layoutEpoch = String(this.layoutEpoch);
-    caretAnchor.classList.add('annotation-caret-anchor');
-    caretAnchor.style.position = 'absolute';
-    caretAnchor.style.left = '100%';
-    caretAnchor.style.top = '0';
-    caretAnchor.style.width = '0';
-    caretAnchor.style.height = '1em';
-    caretAnchor.style.overflow = 'hidden';
-    caretAnchor.style.pointerEvents = 'none';
-    caretAnchor.style.userSelect = 'none';
-    caretAnchor.style.opacity = '0';
-    caretAnchor.textContent = '\u200B';
-    if (!annotation.style.position) {
-      annotation.style.position = 'relative';
-    }
-    annotation.appendChild(caretAnchor);
   }
 
   /**
@@ -5268,6 +5883,7 @@ export class DomPainter {
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
+   * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
    * @returns The rendered line element
    */
   private renderLine(
@@ -5278,6 +5894,7 @@ export class DomPainter {
     lineIndex?: number,
     skipJustify?: boolean,
     resolvedListTextStartPx?: number,
+    indentOffsetOverride?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -5290,20 +5907,13 @@ export class DomPainter {
     el.classList.add(CLASS_NAMES.line);
     applyStyles(el, lineStyles(line.lineHeight));
     el.dataset.layoutEpoch = String(this.layoutEpoch);
-    const styleId = (block.attrs as ParagraphAttrs | undefined)?.styleId;
+    const paragraphAttrs = (block.attrs as ParagraphAttrs | undefined) ?? {};
+    const styleId = paragraphAttrs.styleId;
     if (styleId) {
       el.setAttribute('styleid', styleId);
     }
-    const alignment = (block.attrs as ParagraphAttrs | undefined)?.alignment;
-
-    // Apply text-align for center/right immediately.
-    // For justify, we keep 'left' and apply spacing via word-spacing.
-    if (alignment === 'center' || alignment === 'right') {
-      el.style.textAlign = alignment;
-    } else {
-      // Default to 'left' for 'left', 'justify', 'both', and undefined
-      el.style.textAlign = 'left';
-    }
+    const pAttrs = block.attrs as ParagraphAttrs | undefined;
+    const isRtl = applyRtlStyles(el, pAttrs);
 
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
@@ -5377,6 +5987,8 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
+    const lineContainsTabRun = runsForLine.some((run) => run.kind === 'tab');
+    const manualTabWithoutSegments = lineContainsTabRun && !hasExplicitPositioning;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
@@ -5385,7 +5997,7 @@ export class DomPainter {
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify,
+      skipJustifyOverride: skipJustify || manualTabWithoutSegments,
     });
 
     const countSpaces = (text: string): number => {
@@ -5557,35 +6169,45 @@ export class DomPainter {
       el.style.wordSpacing = `${spacingPerSpace}px`;
     }
 
-    if (hasExplicitPositioning && line.segments) {
-      // Use segment-based rendering with absolute positioning for tab-aligned text
-      // When rendering segments, we need to track cumulative X position
-      // for segments that don't have explicit X coordinates.
+    if (shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl)) {
+      // Use segment-based rendering with absolute positioning for tab-aligned text.
+      // shouldUseSegmentPositioning returns false for RTL because the layout engine
+      // computes tab positions in LTR order; RTL lines fall through to inline-flow
+      // rendering where dir="rtl" lets the browser handle tab positioning.
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
-      const indentLeft = paraIndent?.left ?? 0;
-      const firstLine = paraIndent?.firstLine ?? 0;
-      const hanging = paraIndent?.hanging ?? 0;
-      const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
-      const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
-      const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
-      const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
-      const isListParagraph = Boolean(wordLayout?.marker);
-      const fallbackListTextStartPx =
-        typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
-          ? wordLayout.marker.textStartX
-          : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-            ? wordLayout.textStartPx
-            : undefined;
-      const listIndentOffset = isFirstLineOfPara
-        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
-        : indentLeft;
-      const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+      let indentOffset: number;
+      if (indentOffsetOverride != null) {
+        // Resolved path: indentOffset was pre-computed by the resolver.
+        indentOffset = indentOffsetOverride;
+      } else {
+        // Legacy path: derive from block attrs.
+        const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+        const indentLeft = paraIndent?.left ?? 0;
+        const firstLine = paraIndent?.firstLine ?? 0;
+        const hanging = paraIndent?.hanging ?? 0;
+        const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
+        const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
+        const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
+        const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
+        const isListParagraph = Boolean(wordLayout?.marker);
+        const fallbackListTextStartPx =
+          typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
+            ? wordLayout.marker.textStartX
+            : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
+              ? wordLayout.textStartPx
+              : undefined;
+        const listIndentOffset = isFirstLineOfPara
+          ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+          : indentLeft;
+        indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+      }
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
+
+      const segments = line.segments!;
       const segmentsByRun = new Map<number, LineSegment[]>();
-      line.segments.forEach((segment) => {
+      segments.forEach((segment) => {
         const list = segmentsByRun.get(segment.runIndex);
         if (list) {
           list.push(segment);
@@ -5671,7 +6293,6 @@ export class DomPainter {
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
-          // Adjust element left to be relative to wrapper
           elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
@@ -5787,6 +6408,26 @@ export class DomPainter {
             const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
             const segX = baseSegX + indentOffset;
             const segWidth = (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : 0) ?? 0;
+            elem.style.position = 'absolute';
+            elem.style.left = `${segX}px`;
+            appendToLineGeo(elem, baseRun, segX, segWidth);
+            cumulativeX = baseSegX + segWidth;
+          }
+          continue;
+        }
+
+        // Handle MathRun - render as-is (atomic unit like images)
+        if (this.isMathRun(baseRun)) {
+          const elem = this.renderRun(baseRun, context, trackedConfig);
+          if (elem) {
+            if (styleId) {
+              elem.setAttribute('styleid', styleId);
+            }
+            const runSegments = segmentsByRun.get(runIndex);
+            const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
+            const segX = baseSegX + indentOffset;
+            const segWidth =
+              (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : baseRun.width) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
@@ -6009,9 +6650,7 @@ export class DomPainter {
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
     }
-    if (this.activeCommentId && meta.id === this.activeCommentId) {
-      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
-    }
+    // track-change-focused class is applied post-paint by CommentHighlightDecorator (super-editor).
   }
 
   /**
@@ -6024,13 +6663,28 @@ export class DomPainter {
    *                  Affects PM position validation - only body sections validate PM positions.
    *                  If undefined, defaults to 'body' section behavior.
    */
-  private updateFragmentElement(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
-    this.applyFragmentFrame(el, fragment, section);
-    if (fragment.kind === 'image') {
-      el.style.height = `${fragment.height}px`;
+  private updateFragmentElement(
+    el: HTMLElement,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+    resolvedItem?: ResolvedPaintItem,
+  ): void {
+    // Narrow to fragment-kind resolved items (excludes ResolvedGroupItem)
+    const fragmentItem = resolvedItem?.kind === 'fragment' ? resolvedItem : undefined;
+
+    if (fragment.kind === 'list-item' && fragmentItem) {
+      this.applyResolvedListItemWrapperFrame(el, fragment, fragmentItem as ResolvedFragmentItem, section);
+      return;
     }
-    if (fragment.kind === 'drawing') {
-      el.style.height = `${fragment.height}px`;
+
+    if (fragmentItem) {
+      this.applyResolvedFragmentFrame(el, fragmentItem, fragment, section);
+    } else {
+      this.applyFragmentFrame(el, fragment, section);
+      if (fragment.kind === 'image' || fragment.kind === 'drawing') {
+        el.style.height = `${fragment.height}px`;
+        this.applyFragmentWrapperZIndex(el, fragment);
+      }
     }
   }
 
@@ -6087,6 +6741,140 @@ export class DomPainter {
         delete el.dataset.continuesOnNext;
       }
     }
+  }
+
+  /**
+   * Applies PM position data attributes from a legacy Fragment.
+   * Extracted from applyFragmentFrame for use in the resolved wrapper path.
+   */
+  private applyFragmentPmAttributes(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
+    // Footnote content is read-only: prevent cursor placement and typing
+    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+      el.setAttribute('contenteditable', 'false');
+    }
+
+    if (fragment.kind === 'para') {
+      if (section === 'body' || section === undefined) {
+        assertFragmentPmPositions(fragment, 'paragraph fragment');
+      }
+      if (fragment.pmStart != null) {
+        el.dataset.pmStart = String(fragment.pmStart);
+      } else {
+        delete el.dataset.pmStart;
+      }
+      if (fragment.pmEnd != null) {
+        el.dataset.pmEnd = String(fragment.pmEnd);
+      } else {
+        delete el.dataset.pmEnd;
+      }
+      if (fragment.continuesFromPrev) {
+        el.dataset.continuesFromPrev = 'true';
+      } else {
+        delete el.dataset.continuesFromPrev;
+      }
+      if (fragment.continuesOnNext) {
+        el.dataset.continuesOnNext = 'true';
+      } else {
+        delete el.dataset.continuesOnNext;
+      }
+    }
+  }
+
+  /**
+   * Applies fragment wrapper positioning from a ResolvedFragmentItem.
+   * Uses resolved data for spatial properties and delegates PM attributes to the legacy path.
+   */
+  private isAnchoredMediaFragment(fragment: Fragment): fragment is ImageFragment | DrawingFragment {
+    return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
+  }
+
+  private shouldRenderBehindPageContent(
+    fragment: ImageFragment | DrawingFragment,
+    section: 'header' | 'footer',
+  ): boolean {
+    if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
+      return true;
+    }
+
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(fragment);
+  }
+
+  private isHeaderWordArtWatermark(fragment: DrawingFragment): boolean {
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup || lookup.block.kind !== 'drawing' || lookup.block.drawingKind !== 'vectorShape') {
+      return false;
+    }
+
+    const block = lookup.block;
+    const attrs = (block.attrs as Record<string, unknown> | undefined) ?? {};
+    const hasTextContent = Array.isArray(block.textContent?.parts) && block.textContent.parts.length > 0;
+
+    return (
+      attrs.isWordArt === true &&
+      attrs.isTextBox === true &&
+      hasTextContent &&
+      block.anchor?.isAnchored === true &&
+      block.anchor.hRelativeFrom === 'page' &&
+      block.anchor.alignH === 'center' &&
+      block.anchor.vRelativeFrom === 'page' &&
+      block.anchor.alignV === 'center' &&
+      block.wrap?.type === 'None'
+    );
+  }
+
+  /**
+   * Only anchored images and drawings participate in explicit wrapper stacking.
+   * Inline media intentionally rely on DOM order to preserve legacy paint order.
+   */
+  private resolveFragmentWrapperZIndex(fragment: Fragment, resolvedZIndex?: number): string {
+    if (!this.isAnchoredMediaFragment(fragment)) {
+      return '';
+    }
+
+    const zIndex = resolvedZIndex ?? fragment.zIndex;
+    return zIndex != null ? String(zIndex) : '';
+  }
+
+  private applyFragmentWrapperZIndex(el: HTMLElement, fragment: Fragment, resolvedZIndex?: number): void {
+    el.style.zIndex = this.resolveFragmentWrapperZIndex(fragment, resolvedZIndex);
+  }
+
+  private applyResolvedFragmentFrame(
+    el: HTMLElement,
+    item: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+  ): void {
+    el.style.left = `${item.x}px`;
+    el.style.top = `${item.y}px`;
+    el.style.width = `${item.width}px`;
+    el.dataset.blockId = item.blockId;
+    el.dataset.layoutEpoch = String(this.layoutEpoch);
+    this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
+
+    if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
+      el.style.height = `${item.height}px`;
+    }
+
+    this.applyFragmentPmAttributes(el, fragment, section);
+  }
+
+  /**
+   * Applies the resolved wrapper frame for a list-item fragment.
+   *
+   * List-item wrappers intentionally extend into the marker gutter. The resolved
+   * fragment item stores the paragraph content box, so the marker-width expansion
+   * must be applied consistently on both initial render and incremental updates.
+   */
+  private applyResolvedListItemWrapperFrame(
+    el: HTMLElement,
+    fragment: ListItemFragment,
+    item: ResolvedFragmentItem,
+    section?: 'body' | 'header' | 'footer',
+  ): void {
+    this.applyResolvedFragmentFrame(el, item, fragment, section);
+    el.style.left = `${item.x - fragment.markerWidth}px`;
+    el.style.width = `${item.width + fragment.markerWidth}px`;
   }
 
   /**
@@ -6905,6 +7693,12 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
+          } else if (cellBlock?.kind) {
+            // Non-paragraph cell blocks participate in the parent table version
+            // through their own block-level signatures. layout-bridge/cache.ts
+            // mirrors this policy so repaint and remeasure stay aligned for
+            // nested tables, images, drawings, and other embedded cell content.
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }
@@ -6945,6 +7739,43 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   return block.id;
 };
 
+const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;
+const DEFAULT_SUBSCRIPT_LOWER_RATIO = 0.14;
+
+const hasVerticalPositioning = (run: TextRun): boolean =>
+  normalizeBaselineShift(run.baselineShift) != null || run.vertAlign === 'superscript' || run.vertAlign === 'subscript';
+
+const applyRunVerticalPositioning = (element: HTMLElement, run: TextRun): void => {
+  // Vertically shifted runs should use a tight inline box. If they inherit the
+  // parent line's full line-height, the glyph remains visually low inside an
+  // oversized inline box even when the superscript/subscript offset is correct.
+  if (hasVerticalPositioning(run)) {
+    element.style.lineHeight = '1';
+  }
+
+  const explicitBaselineShift = normalizeBaselineShift(run.baselineShift);
+  if (explicitBaselineShift != null) {
+    element.style.verticalAlign = `${explicitBaselineShift}pt`;
+    return;
+  }
+
+  if (run.vertAlign === 'superscript') {
+    const baseFontSize = resolveBaseFontSizeForVerticalText(run.fontSize, run);
+    element.style.verticalAlign = `${baseFontSize * DEFAULT_SUPERSCRIPT_RAISE_RATIO}px`;
+    return;
+  }
+
+  if (run.vertAlign === 'subscript') {
+    const baseFontSize = resolveBaseFontSizeForVerticalText(run.fontSize, run);
+    element.style.verticalAlign = `${-(baseFontSize * DEFAULT_SUBSCRIPT_LOWER_RATIO)}px`;
+    return;
+  }
+
+  if (run.vertAlign === 'baseline') {
+    element.style.verticalAlign = 'baseline';
+  }
+};
+
 /**
  * Applies run styling properties to a DOM element.
  *
@@ -6961,7 +7792,8 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
     run.kind === 'image' ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||
-    run.kind === 'fieldAnnotation'
+    run.kind === 'fieldAnnotation' ||
+    run.kind === 'math'
   ) {
     // Tab, image, lineBreak, break, and fieldAnnotation runs don't have text styling properties
     return;
@@ -7003,23 +7835,8 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
     element.style.textDecorationLine = decorations.join(' ');
   }
 
-  // Vertical alignment: custom baseline offset takes precedence over vertAlign
-  if (run.baselineShift != null && Number.isFinite(run.baselineShift)) {
-    element.style.verticalAlign = `${run.baselineShift}pt`;
-  } else if (run.vertAlign === 'superscript') {
-    element.style.verticalAlign = 'super';
-  } else if (run.vertAlign === 'subscript') {
-    element.style.verticalAlign = 'sub';
-  } else if (run.vertAlign === 'baseline') {
-    element.style.verticalAlign = 'baseline';
-  }
+  applyRunVerticalPositioning(element, run);
 };
-
-interface CommentHighlightResult {
-  color?: string;
-  baseColor?: string;
-  hasNestedComments?: boolean;
-}
 
 const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
 
@@ -7042,43 +7859,6 @@ const resolveBlockClipPath = (block: unknown): string => {
   if (!block || typeof block !== 'object') return '';
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
-};
-
-const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
-  const comments = run.comments;
-  if (!comments || comments.length === 0) return {};
-
-  // Helper to match comment by ID or importedId
-  const matchesId = (c: { commentId: string; importedId?: string }, id: string) =>
-    c.commentId === id || c.importedId === id;
-
-  // When a comment is selected, only highlight that comment's range
-  if (activeCommentId != null) {
-    const activeComment = comments.find((c) =>
-      matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
-    );
-    if (activeComment) {
-      const base = activeComment.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-      // Check if there are OTHER comments besides the active one (nested comments)
-      const nestedComments = comments.filter(
-        (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
-      );
-      return {
-        color: `${base}${COMMENT_ACTIVE_ALPHA}`,
-        baseColor: base,
-        hasNestedComments: nestedComments.length > 0,
-      };
-    }
-    // Active comment is set but this run does not belong to it - show faded highlight.
-    const fadedPrimary = comments[0];
-    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
-  }
-
-  // No active comment - show uniform light highlight (like Word/Google Docs)
-  const primary = comments[0];
-  const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
 };
 
 /**
@@ -7111,15 +7891,34 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
+const resolveParagraphDirection = (attrs?: ParagraphAttrs): 'ltr' | 'rtl' | undefined => {
+  if (attrs?.direction) {
+    return attrs.direction;
+  }
+  if (attrs?.rtl === true) {
+    return 'rtl';
+  }
+  if (attrs?.rtl === false) {
+    return 'ltr';
+  }
+  return undefined;
+};
+
+const applyParagraphDirection = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
+  const direction = resolveParagraphDirection(attrs);
+  if (!direction) {
+    return;
+  }
+  element.setAttribute('dir', direction);
+  element.style.direction = direction;
+};
+
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
-  if (attrs.alignment) {
-    // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
-    element.style.textAlign = attrs.alignment === 'justify' ? 'left' : attrs.alignment;
-  }
+  applyRtlStyles(element, attrs);
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
   }
@@ -7218,6 +8017,12 @@ export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
 
     // FieldAnnotationRun handling - field annotations are atomic units like images
     if (run.kind === 'fieldAnnotation') {
+      result.push(run);
+      continue;
+    }
+
+    // MathRun handling - math runs are atomic units like images
+    if (run.kind === 'math') {
       result.push(run);
       continue;
     }

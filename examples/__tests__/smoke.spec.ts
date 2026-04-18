@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const example = process.env.EXAMPLE || 'react';
+
 test('example loads without errors', async ({ page }) => {
   const errors: string[] = [];
 
@@ -17,10 +19,46 @@ test('example loads without errors', async ({ page }) => {
   await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
 
   await page.goto('/');
-  await expect(page.locator('body')).toBeVisible();
+  // SPA frameworks (e.g. Nuxt with ssr:false) hide the body during hydration;
+  // give them enough time to mount before checking visibility.
+  await expect(page.locator('body')).toBeVisible({ timeout: 30_000 });
 
   // Give the app a moment to initialize (SuperDoc is async)
   await page.waitForTimeout(2000);
 
   expect(errors).toEqual([]);
+});
+
+test.describe('cdn example', () => {
+  test.skip(example !== 'cdn', 'cdn-specific assertions');
+
+  test('window.SuperDoc is a constructor and the bundled sample renders', async ({ page }) => {
+    await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
+    await page.goto('/');
+
+    const globalShape = await page.evaluate(() => ({
+      isFunction: typeof (window as any).SuperDoc === 'function',
+      hasCreateTheme: typeof (window as any).SuperDoc?.createTheme === 'function',
+      hasDOCX: typeof (window as any).SuperDoc?.DOCX !== 'undefined',
+    }));
+    expect(globalShape).toEqual({ isFunction: true, hasCreateTheme: true, hasDOCX: true });
+
+    await page.waitForFunction(() => (window as any).__SUPERDOC_READY__ === true, null, {
+      timeout: 15_000,
+    });
+
+    const rendered = await page.evaluate(() => {
+      const el = document.querySelector('#editor');
+      return {
+        hasChildren: (el?.children.length || 0) > 0,
+        innerHTMLLength: el?.innerHTML.length || 0,
+        visibleText: (el as HTMLElement)?.innerText || '',
+      };
+    });
+    expect(rendered.hasChildren).toBe(true);
+    expect(rendered.innerHTMLLength).toBeGreaterThan(1000);
+    // The bundled sample DOCX contains "Lorem ipsum" — prove the doc parsed,
+    // not just that editor chrome rendered.
+    expect(rendered.visibleText).toContain('Lorem ipsum');
+  });
 });

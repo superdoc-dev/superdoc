@@ -6,8 +6,6 @@ description: Set keep-with-next, keep-lines-together, and widow/orphan control f
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Set keep-with-next, keep-lines-together, and widow/orphan control flags.
@@ -26,30 +24,37 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (required: keepNext)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `keepNext` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (required: keepLines)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `keepLines` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (required: widowControl)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `widowControl` | boolean | yes |  |
 
 ### Example request
 
 ```json
 {
-  "keepLines": true,
   "keepNext": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "paragraph"
-  },
-  "widowControl": true
+  }
 }
 ```
 

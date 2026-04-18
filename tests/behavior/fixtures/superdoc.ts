@@ -123,6 +123,14 @@ async function waitForStable(page: Page, ms?: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function createFixture(page: Page, editor: Locator, modKey: string) {
+  const focusEditorDom = async (): Promise<void> => {
+    await editor.focus();
+    await page.waitForFunction(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.getAttribute('contenteditable') === 'true';
+    });
+  };
+
   const normalizeHexColor = (value: unknown): string | null => {
     let raw: string | null = null;
     if (typeof value === 'string') raw = value;
@@ -221,9 +229,8 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
         const toWithinAddress = (address: any): any => {
           if (!address || typeof address !== 'object') return null;
-          if (address.kind === 'content' || address.kind === 'inline') return address;
           if (address.kind === 'block' && typeof address.nodeId === 'string' && address.nodeId.length > 0) {
-            return { kind: 'content', stability: 'stable', nodeId: address.nodeId };
+            return address;
           }
           return null;
         };
@@ -308,7 +315,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
             .filter(Boolean);
 
         const hyperlinkResult = docApi.find({
-          select: { type: 'node', nodeKind: 'hyperlink', kind: 'inline' },
+          select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
           within: withinAddress,
         });
 
@@ -411,8 +418,12 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
     // ----- Interaction methods -----
 
+    async focusEditor() {
+      await focusEditorDom();
+    },
+
     async type(text: string) {
-      await editor.focus();
+      await focusEditorDom();
       await page.keyboard.type(text);
     },
 
@@ -449,6 +460,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async selectAll() {
+      await focusEditorDom();
       await page.keyboard.press(`${modKey}+a`);
     },
 
@@ -589,6 +601,20 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         },
         { cmd: name, cmdArgs: args },
       );
+
+      const selection = await page.evaluate(() => {
+        const editor = (window as any).editor;
+        return {
+          from: editor.state.selection.from,
+          to: editor.state.selection.to,
+        };
+      });
+
+      // Programmatic commands update ProseMirror state immediately, but the
+      // hidden editor DOM can retain an older browser selection. Re-applying
+      // the current PM selection keeps the next keyboard event aligned with
+      // the command result.
+      await fixture.setTextSelection(selection.from, selection.to);
     },
 
     async waitForStable(ms?: number) {
@@ -731,14 +757,14 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 return Array.isArray(result?.matches) ? result.matches : [];
               };
 
-              const tableResult = docApi.find({ select: { type: 'node', nodeKind: 'table' }, limit: 1 });
+              const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
               const tableAddress = getAddresses(tableResult)[0];
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
                 const expectedCellCount = expectedRows * expectedCols;
 
-                const rowResult = docApi.find({ select: { type: 'node', nodeKind: 'tableRow' }, within: tableAddress });
+                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
                 const rowCount = getAddresses(rowResult).length;
 
                 // Only validate row count when the adapter exposes row-level querying.
@@ -747,13 +773,13 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 }
 
                 const cellResult = docApi.find({
-                  select: { type: 'node', nodeKind: 'tableCell' },
+                  select: { type: 'node', nodeType: 'tableCell' },
                   within: tableAddress,
                 });
                 let cellCount = getAddresses(cellResult).length;
                 try {
                   const headerResult = docApi.find({
-                    select: { type: 'node', nodeKind: 'tableHeader' },
+                    select: { type: 'node', nodeType: 'tableHeader' },
                     within: tableAddress,
                   });
                   cellCount += getAddresses(headerResult).length;
@@ -764,7 +790,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 // Fallback: count paragraphs when cell-level querying isn't available.
                 if (cellCount === 0) {
                   const paragraphResult = docApi.find({
-                    select: { type: 'node', nodeKind: 'paragraph' },
+                    select: { type: 'node', nodeType: 'paragraph' },
                     within: tableAddress,
                   });
                   cellCount = getAddresses(paragraphResult).length;

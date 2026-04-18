@@ -83,6 +83,10 @@ describe('parseGlobalArgs', () => {
     expect(parseGlobalArgs(['-h']).globals.help).toBe(true);
   });
 
+  test('parses --quiet', () => {
+    expect(parseGlobalArgs(['--quiet']).globals.quiet).toBe(true);
+  });
+
   test('parses --version / -v', () => {
     expect(parseGlobalArgs(['--version']).globals.version).toBe(true);
     expect(parseGlobalArgs(['-v']).globals.version).toBe(true);

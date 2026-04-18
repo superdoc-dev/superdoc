@@ -1,5 +1,6 @@
 /* eslint-env node */
-const path = require('path')
+const path = require('path');
+
 
 /*
  * Commit filter: superdoc bundles multiple sub-packages, so git log must
@@ -12,6 +13,7 @@ const SUPERDOC_PACKAGES = [
   'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
+  'pnpm-workspace.yaml',
 ]
 
 Object.keys(require.cache)
@@ -38,27 +40,38 @@ Object.keys(require.cache)
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH
 
+const branches = [
+  {
+    name: 'stable',
+    channel: 'latest', // Only stable gets @latest
+  },
+  {
+    name: 'main',
+    channel: 'next',
+    prerelease: 'next',
+  },
+  // Maintenance branches - channel defaults to branch name
+  {
+    name: '+([0-9])?(.{+([0-9]),x}).x',
+    // No channel specified - defaults to branch name (0.8.x, 1.2.x, etc)
+  },
+]
+
+const isPrerelease = branches.some(
+  (b) => typeof b === 'object' && b.name === branch && b.prerelease
+)
+
+// Use AI-powered notes for stable releases, conventional generator for prereleases
+const notesPlugin = isPrerelease
+  ? '@semantic-release/release-notes-generator'
+  : ['semantic-release-ai-notes', { style: 'concise' }]
+
 const config = {
-  branches: [
-    {
-      name: 'stable',
-      channel: 'latest', // Only stable gets @latest
-    },
-    {
-      name: 'main',
-      channel: 'next',
-      prerelease: 'next',
-    },
-    // Maintenance branches - channel defaults to branch name
-    {
-      name: '+([0-9])?(.{+([0-9]),x}).x',
-      // No channel specified - defaults to branch name (0.8.x, 1.2.x, etc)
-    },
-  ],
+  branches,
   tagFormat: 'v${version}',
   plugins: [
     '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
+    notesPlugin,
     // NPM plugin MUST come before git plugin
     [
       'semantic-release-pnpm',
@@ -71,9 +84,6 @@ const config = {
 }
 
 // Only add changelog and git plugins for non-prerelease branches
-const isPrerelease = config.branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease
-)
 
 if (!isPrerelease) {
   // Git plugin commits the version bump back to the branch.

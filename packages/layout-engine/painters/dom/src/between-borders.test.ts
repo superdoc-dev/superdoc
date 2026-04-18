@@ -336,6 +336,53 @@ describe('applyParagraphBorderStyles — between borders', () => {
 });
 
 // ---------------------------------------------------------------------------
+// applyParagraphBorderStyles — bar border (w:bar — §17.3.1.4)
+// ---------------------------------------------------------------------------
+//
+// w:bar is preserved through the data model for round-trip fidelity but is
+// intentionally NOT rendered. Word itself ignores w:bar in every observed
+// configuration, and ECMA-376 §17.3.1.4 explicitly permits ignoring it.
+// These tests pin that exclusion so future refactors don't accidentally
+// start rendering bar (which would diverge from Word output).
+
+describe('applyParagraphBorderStyles — bar border', () => {
+  const el = () => document.createElement('div');
+
+  it('does not apply border-left when only bar is set', () => {
+    const e = el();
+    applyParagraphBorderStyles(e, { bar: { style: 'solid', width: 4, color: '#F00' } });
+    expect(e.style.getPropertyValue('border-left-style')).toBe('');
+    expect(e.style.getPropertyValue('border-left-width')).toBe('');
+    expect(e.style.getPropertyValue('border-left-color')).toBe('');
+  });
+
+  it('renders w:left unchanged when both w:left and w:bar are set', () => {
+    const e = el();
+    applyParagraphBorderStyles(e, {
+      left: { style: 'solid', width: 1, color: '#000' },
+      bar: { style: 'solid', width: 4, color: '#F00' },
+    });
+    expect(e.style.getPropertyValue('border-left-style')).toBe('solid');
+    expect(e.style.getPropertyValue('border-left-width')).toBe('1px');
+    expect(e.style.getPropertyValue('border-left-color')).toBe('#000');
+  });
+
+  it('does not affect top/right/bottom when bar is set', () => {
+    const e = el();
+    applyParagraphBorderStyles(e, {
+      top: { style: 'dashed', width: 2, color: '#0F0' },
+      right: { style: 'dotted', width: 1, color: '#00F' },
+      bottom: { style: 'solid', width: 1, color: '#000' },
+      bar: { style: 'solid', width: 4, color: '#F0F' },
+    });
+    expect(e.style.getPropertyValue('border-top-style')).toBe('dashed');
+    expect(e.style.getPropertyValue('border-right-style')).toBe('dotted');
+    expect(e.style.getPropertyValue('border-bottom-style')).toBe('solid');
+    expect(e.style.getPropertyValue('border-left-style')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // createParagraphDecorationLayers — gap extension
 // ---------------------------------------------------------------------------
 

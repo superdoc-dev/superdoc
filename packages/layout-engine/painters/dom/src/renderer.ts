@@ -2230,6 +2230,8 @@ export class DomPainter {
       );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, width, height);
+
     return el;
   }
 
@@ -2307,6 +2309,60 @@ export class DomPainter {
     } catch (error) {
       console.error(`[renderPageRuler] Failed to create ruler for page ${page.number}:`, error);
       return null;
+    }
+  }
+
+  private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
+    if (!this.doc) return;
+    if (!page.margins) return;
+
+    const leftMargin = page.margins.left ?? 0;
+    const rightMargin = page.margins.right ?? 0;
+    const topMargin = page.margins.top ?? 0;
+    const bottomMargin = page.margins.bottom ?? 0;
+    const contentWidth = pageWidth - leftMargin - rightMargin;
+
+    // Prefer columnRegions (per-region configs for pages with continuous
+    // section breaks that change column layout mid-page). Fall back to a
+    // single region derived from page.columns so pages without mid-page
+    // changes keep working unchanged.
+    const regions =
+      page.columnRegions ??
+      (page.columns
+        ? [
+            {
+              yStart: topMargin,
+              yEnd: pageHeight - bottomMargin,
+              columns: page.columns,
+            },
+          ]
+        : []);
+
+    for (const region of regions) {
+      const { columns, yStart, yEnd } = region;
+      if (!columns.withSeparator) continue;
+      if (columns.count <= 1) continue;
+
+      const columnWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+      // Given the separator will have 1px width, ensure column has a larger width.
+      if (columnWidth <= 1) continue;
+
+      const regionHeight = yEnd - yStart;
+      if (regionHeight <= 0) continue;
+
+      for (let i = 0; i < columns.count - 1; i++) {
+        const separatorX = leftMargin + (i + 1) * columnWidth + i * columns.gap + columns.gap / 2;
+        const separatorEl = this.doc.createElement('div');
+
+        separatorEl.style.position = 'absolute';
+        separatorEl.style.left = `${separatorX}px`;
+        separatorEl.style.top = `${yStart}px`;
+        separatorEl.style.height = `${regionHeight}px`;
+        separatorEl.style.width = '1px';
+        separatorEl.style.backgroundColor = '#000000';
+        separatorEl.style.pointerEvents = 'none';
+        pageEl.appendChild(separatorEl);
+      }
     }
   }
 
@@ -2816,6 +2872,8 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
+
     return { element: el, fragments: fragmentStates };
   }
 

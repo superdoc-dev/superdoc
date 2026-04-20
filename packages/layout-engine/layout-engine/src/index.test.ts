@@ -228,6 +228,100 @@ describe('layoutDocument', () => {
     expect(layout.columns).toMatchObject({ count: 2, gap: 20 });
   });
 
+  it('sets "page.columns" with separator when column separator is enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
+  });
+
+  it('does not set "page.columns" on single column layout', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toBeUndefined();
+    expect(layout.columns).toBeUndefined();
+  });
+
+  it('sets "page.columns" without separator when column separator is not enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+    expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
+    // Two sections on the same page: first 2-col with separator, then a
+    // continuous break that switches to 3-col still with separator. The
+    // layout engine should record a ConstraintBoundary and surface it on
+    // page.columnRegions so the renderer can bound each separator to the
+    // correct Y range.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 3, gap: 20, withSeparator: true },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+
+    expect(layout.pages).toHaveLength(1);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    expect(regions!.length).toBeGreaterThanOrEqual(2);
+    // First region covers the initial 2-col layout from topMargin to the boundary.
+    expect(regions![0].yStart).toBe(40);
+    expect(regions![0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    // Second region picks up the continuous break's 3-col config and ends at
+    // the bottom of the content area.
+    const last = regions![regions!.length - 1];
+    expect(last.columns).toMatchObject({ count: 3, gap: 20, withSeparator: true });
+    expect(last.yEnd).toBe(800 - 40);
+    // Regions must tile (no gaps, no overlap).
+    for (let i = 1; i < regions!.length; i++) {
+      expect(regions![i].yStart).toBe(regions![i - 1].yEnd);
+    }
+  });
+
+  it('omits page.columnRegions when no mid-page column change occurs', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columnRegions).toBeUndefined();
+  });
+
   it('applies spacing before and after paragraphs', () => {
     const spacingBlock: FlowBlock = {
       kind: 'paragraph',

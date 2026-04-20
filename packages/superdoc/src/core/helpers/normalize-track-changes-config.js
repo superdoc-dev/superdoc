@@ -5,35 +5,62 @@
  * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, pairReplacements: boolean }} NormalizedTrackChangesConfig
  */
 
-const ALLOWED_MODES = /** @type {const} */ (['review', 'original', 'final', 'off']);
+/** @type {ReadonlyArray<TrackChangesMode>} */
+const ALLOWED_MODES = ['review', 'original', 'final', 'off'];
 
 // Marks a config object we've already normalized so a second pass with the same
 // object (e.g. a consumer reusing the config to mount another SuperDoc) doesn't
 // warn on the legacy keys we wrote back during the first pass.
 const NORMALIZED_MARKER = Symbol.for('@superdoc/trackChanges:normalized');
 
+/** @type {Set<string>} */
 const warnedKeys = new Set();
 
+/**
+ * @param {string} legacyPath
+ * @param {string} newPath
+ */
 function warnOnce(legacyPath, newPath) {
   if (warnedKeys.has(legacyPath)) return;
   warnedKeys.add(legacyPath);
   console.warn(`[SuperDoc] ${legacyPath} is deprecated — use ${newPath} instead.`);
 }
 
+/**
+ * @param {unknown} newVal
+ * @param {unknown} legacyVal
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
 function resolveBool(newVal, legacyVal, fallback) {
   if (typeof newVal === 'boolean') return newVal;
   if (typeof legacyVal === 'boolean') return legacyVal;
   return fallback;
 }
 
+/**
+ * @param {unknown} newVal
+ * @param {unknown} legacyVal
+ * @param {TrackChangesMode} fallback
+ * @returns {TrackChangesMode}
+ */
 function resolveMode(newVal, legacyVal, fallback) {
-  if (ALLOWED_MODES.includes(newVal)) return newVal;
-  if (ALLOWED_MODES.includes(legacyVal)) return legacyVal;
+  if (typeof newVal === 'string' && ALLOWED_MODES.includes(/** @type {TrackChangesMode} */ (newVal))) {
+    return /** @type {TrackChangesMode} */ (newVal);
+  }
+  if (typeof legacyVal === 'string' && ALLOWED_MODES.includes(/** @type {TrackChangesMode} */ (legacyVal))) {
+    return /** @type {TrackChangesMode} */ (legacyVal);
+  }
   return fallback;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown> | null}
+ */
 function pickObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return /** @type {Record<string, unknown>} */ (value);
 }
 
 /**
@@ -50,11 +77,11 @@ function pickObject(value) {
  * same config object so write-through values don't look like new legacy
  * usage.
  *
- * @param {object} config  The SuperDoc config object (mutated in place)
+ * @param {Record<string, any>} config  The SuperDoc config object (mutated in place)
  * @returns {NormalizedTrackChangesConfig}
  */
 export function normalizeTrackChangesConfig(config) {
-  const alreadyNormalized = config[NORMALIZED_MARKER] === true;
+  const alreadyNormalized = /** @type {Record<symbol, unknown>} */ (config)[NORMALIZED_MARKER] === true;
 
   if (!pickObject(config.modules)) {
     config.modules = {};
@@ -85,6 +112,7 @@ export function normalizeTrackChangesConfig(config) {
   // document without an explicit mode falls back to 'original' unless the
   // consumer asked for tracked changes to be visible.
   const isViewingMode = config.documentMode === 'viewing';
+  /** @type {TrackChangesMode} */
   const defaultMode = isViewingMode ? (visible ? 'review' : 'original') : 'review';
   const mode = resolveMode(fromCanonical?.mode, fromLegacyLayout?.mode, defaultMode);
 

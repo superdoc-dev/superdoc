@@ -107,8 +107,14 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
 
       if (element.elements) {
         // Descend with an isolated context so content inside a tracked change
-        // cannot clear the outer replacement candidate.
-        walkElements(element.elements, idMap, { lastTrackedChange: null }, /* insideTrackedChange */ true);
+        // cannot clear the outer replacement candidate. Inherit pairReplacements
+        // so nested changes honor the caller's choice if pairing ever applies.
+        walkElements(
+          element.elements,
+          idMap,
+          { lastTrackedChange: null, pairReplacements: context.pairReplacements },
+          /* insideTrackedChange */ true,
+        );
       }
     } else {
       // Content-bearing elements break replacement pairing. Only non-content

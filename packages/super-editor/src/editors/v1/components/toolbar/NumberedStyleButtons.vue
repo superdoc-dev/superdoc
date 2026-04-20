@@ -101,8 +101,8 @@ onMounted(() => {
     padding: 5px;
     font-size: var(--sd-ui-font-size-600, 16px);
     color: var(--sd-ui-dropdown-text, #47484a);
-    width: 40px;
-    height: 40px;
+    width: 30px;
+    height: 30px;
     border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     display: flex;
     justify-content: center;

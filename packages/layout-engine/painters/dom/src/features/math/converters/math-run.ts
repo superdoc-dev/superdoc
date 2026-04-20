@@ -209,47 +209,82 @@ export const convertMathRun: MathObjectConverter = (node, doc) => {
 };
 
 /**
- * Convert an m:r to a single `<mi>` element, preserving the entire run text.
+ * Tokenize a math run's text for the m:fName context: consecutive non-digit,
+ * non-operator characters stay grouped in one `<mi>` (so "log" in "log_2"
+ * remains a single identifier), while digits still group into `<mn>` and
+ * each operator character is its own `<mo>`.
  *
- * Used by m:func when processing m:fName children — Word's OMML2MML.XSL treats
- * multi-letter function names (e.g. "sin", "lim", "max") as one identifier
- * rather than splitting per character. See `convertFunction` for the calling
- * context.
- *
- * Returns null if the run has no text. If the run contains non-letter
- * characters (digits or operators), falls back to the splitting path so
- * composite function names still render correctly.
+ * Matches Word's OMML2MML.XSL run-internal classification for m:fName
+ * content: `log_2` → `<mi>log</mi><mo>_</mo><mn>2</mn>`.
  */
-export function convertMathRunWhole(node: OmmlJsonNode, doc: Document): Node | null {
+function tokenizeFunctionNameText(text: string): Array<{ tag: MathAtomTag; content: string }> {
+  const atoms: Array<{ tag: MathAtomTag; content: string }> = [];
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    if (isDigit(ch)) {
+      let end = i + 1;
+      let sawDot = false;
+      while (end < text.length) {
+        const c = text[end]!;
+        if (isDigit(c)) {
+          end++;
+          continue;
+        }
+        if (c === '.' && !sawDot && end + 1 < text.length && isDigit(text[end + 1]!)) {
+          sawDot = true;
+          end++;
+          continue;
+        }
+        break;
+      }
+      atoms.push({ tag: 'mn', content: text.slice(i, end) });
+      i = end;
+    } else if (OPERATOR_CHARS.has(ch)) {
+      atoms.push({ tag: 'mo', content: ch });
+      i++;
+    } else {
+      // Group consecutive non-digit, non-operator characters into a single <mi>.
+      let end = i + 1;
+      while (end < text.length) {
+        const c = text[end]!;
+        if (isDigit(c) || OPERATOR_CHARS.has(c)) break;
+        end++;
+      }
+      atoms.push({ tag: 'mi', content: text.slice(i, end) });
+      i = end;
+    }
+  }
+  return atoms;
+}
+
+/**
+ * Convert an m:r inside m:fName (m:func's function-name slot). Word's
+ * OMML2MML.XSL keeps each letter-sequence whole while still splitting out
+ * digits and operators — so `sin` stays `<mi>sin</mi>`, but `log_2` becomes
+ * `<mi>log</mi><mo>_</mo><mn>2</mn>`.
+ *
+ * Returns a single Element for single-atom runs or a DocumentFragment when
+ * the run emits multiple atoms. Returns null for empty text.
+ */
+export function convertMathRunAsFunctionName(node: OmmlJsonNode, doc: Document): Node | null {
   const text = extractText(node);
   if (!text) return null;
 
   const rPr = (node.elements ?? []).find((el) => el.name === 'm:rPr');
   const variant = resolveMathVariant(rPr);
-  const atoms = tokenizeMathText(text);
+  const atoms = tokenizeFunctionNameText(text);
 
-  if (atoms.every((a) => a.tag === 'mi')) {
-    const el = doc.createElementNS(MATHML_NS, 'mi');
-    el.textContent = text;
-    if (variant) el.setAttribute('mathvariant', variant);
-    return el;
-  }
-
-  // Mixed content inside m:fName is rare (e.g. "log_2"). Fall through to the
-  // per-atom path so operators and numbers render with correct semantics.
-  if (atoms.length === 1) {
-    const atom = atoms[0]!;
+  const createAtom = (atom: { tag: MathAtomTag; content: string }): Element => {
     const el = doc.createElementNS(MATHML_NS, atom.tag);
     el.textContent = atom.content;
     if (variant) el.setAttribute('mathvariant', variant);
     return el;
-  }
+  };
+
+  if (atoms.length === 1) return createAtom(atoms[0]!);
+
   const fragment = doc.createDocumentFragment();
-  for (const atom of atoms) {
-    const el = doc.createElementNS(MATHML_NS, atom.tag);
-    el.textContent = atom.content;
-    if (variant) el.setAttribute('mathvariant', variant);
-    fragment.appendChild(el);
-  }
+  for (const atom of atoms) fragment.appendChild(createAtom(atom));
   return fragment;
 }

@@ -828,20 +828,16 @@ test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
 
     // Case 1: lim_(n→∞). Word emits the "→∞" as a single m:r. Previously we
     // rendered it as one <mi>→∞</mi>; now per Word's OMML2MML.XSL it splits
-    // into separate atoms.
+    // into separate atoms. Assert the full ordered sequence so a regression
+    // that drops or misclassifies any atom is caught.
     const limExpressionAtoms = await superdoc.page.evaluate(() => {
       const munders = Array.from(document.querySelectorAll('munder'));
       const limMunder = munders.find((m) => m.children[0]?.querySelector('mi')?.textContent === 'lim');
       const limExpr = limMunder?.children[1];
-      return Array.from(limExpr?.children ?? []).map((c) => ({ tag: c.localName, text: c.textContent }));
+      return Array.from(limExpr?.children ?? []).map((c) => `${c.localName}:${c.textContent}`);
     });
 
-    // At minimum the limit expression contains the identifier "n" and an
-    // operator "→" — they must be separate atoms, not bundled as one <mi>.
-    const nAtom = limExpressionAtoms.find((a) => a.text === 'n');
-    const arrowAtom = limExpressionAtoms.find((a) => a.text === '\u2192');
-    expect(nAtom).toEqual({ tag: 'mi', text: 'n' });
-    expect(arrowAtom).toEqual({ tag: 'mo', text: '\u2192' });
+    expect(limExpressionAtoms).toEqual(['mi:n', 'mo:\u2192', 'mi:\u221E']);
   });
 });
 

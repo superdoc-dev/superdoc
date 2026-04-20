@@ -1,5 +1,5 @@
 import type { MathObjectConverter } from '../types.js';
-import { convertMathRunWhole } from './math-run.js';
+import { convertMathRunAsFunctionName } from './math-run.js';
 
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const FUNCTION_APPLY_OPERATOR = '\u2061';
@@ -44,7 +44,15 @@ function forceNormalMathVariant(root: ParentNode): void {
  * m:sSub → <msub>, etc.). Word's OMML2MML.XSL keeps the base text whole
  * (e.g. "lim" as one <mi>) even though it splits regular runs per-character.
  */
-const BASE_BEARING_ELEMENTS = new Set(['munder', 'mover', 'munderover', 'msub', 'msup', 'msubsup']);
+const BASE_BEARING_ELEMENTS = new Set([
+  'munder',
+  'mover',
+  'munderover',
+  'msub',
+  'msup',
+  'msubsup',
+  'mmultiscripts', // m:sPre inside m:fName
+]);
 
 /**
  * After per-character splitting in convertMathRun, the base of a nested
@@ -107,8 +115,8 @@ export const convertFunction: MathObjectConverter = (node, doc, convertChildren)
   // like a nested m:limLow — go through the normal recursive path.
   for (const child of functionName?.elements ?? []) {
     if (child.name === 'm:r') {
-      const whole = convertMathRunWhole(child, doc);
-      if (whole) functionNameRow.appendChild(whole);
+      const atom = convertMathRunAsFunctionName(child, doc);
+      if (atom) functionNameRow.appendChild(atom);
     } else {
       const converted = convertChildren([child]);
       if (converted.childNodes.length > 0) functionNameRow.appendChild(converted);

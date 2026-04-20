@@ -180,6 +180,30 @@ describe('engines-tabs computeTabStops', () => {
     expect(firstDefault!.pos).toBeLessThan(10593);
     expect(stops.find((stop) => stop.val === 'end' && stop.pos === 10593)).toBeDefined();
   });
+
+  it('preserves legacy defaults-after-rightmost behavior when a start stop is present', () => {
+    // Paragraphs with a start-aligned explicit stop (e.g. signature lines, invoice
+    // headers) must keep the pre-fix behavior: defaults begin after the rightmost
+    // explicit stop, not from zero. Regression guard for the hasStartAlignedExplicit
+    // branch added alongside the TOC fix.
+    const explicitStops = [
+      { val: 'start' as const, pos: 500, leader: 'none' as const },
+      { val: 'end' as const, pos: 5000, leader: 'dot' as const },
+    ];
+    const stops = computeTabStops({
+      explicitStops,
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0 },
+    });
+
+    const explicitPositions = new Set(explicitStops.map((s) => s.pos));
+    // No *default* (non-explicit) stop should appear between 0 and the rightmost
+    // explicit stop (5000). Explicit stops themselves are allowed.
+    const generatedBelowEnd = stops.filter((stop) => stop.pos < 5000 && !explicitPositions.has(stop.pos));
+    expect(generatedBelowEnd).toHaveLength(0);
+    // Defaults should resume at 5720 (5000 + 720 interval).
+    expect(stops.find((stop) => stop.val === 'start' && stop.pos === 5720)).toBeDefined();
+  });
 });
 
 describe('engines-tabs layoutWithTabs', () => {

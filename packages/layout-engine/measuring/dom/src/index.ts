@@ -1360,7 +1360,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   };
 
-  // Process each run
+  // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
+  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // entries where a right-aligned dot-leader stop coexists with default grid stops —
+  // strict greedy next-stop resolution would land the trailing tab on a default stop
+  // instead of the leader stop. Mirrored in layout-bridge/src/remeasure.ts.
   const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
       return null;
@@ -1495,7 +1499,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         typeof (run as TabRun).tabIndex === 'number' && Number.isFinite((run as TabRun).tabIndex)
           ? (run as TabRun).tabIndex!
           : sequentialTabIndex;
-      sequentialTabIndex += 1;
+      // Keep the sequential counter in sync with explicit tabIndex values so mixed
+      // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
+      // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
+      sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
       const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;

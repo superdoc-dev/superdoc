@@ -113,6 +113,28 @@ describe('sd:tableOfContents translator', () => {
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inline content' }] }],
       });
     });
+
+    it('wraps mixed paragraph and inline children so every child is a paragraph', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Entry 1' }] },
+          { type: 'text', text: 'stray inline' },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Entry 2' }] },
+        ]),
+      };
+      const params = {
+        nodes: [{ name: 'sd:tableOfContents', attributes: { instruction: 'TOC' }, elements: [{ name: 'w:r' }] }],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.content).toHaveLength(3);
+      expect(result.content.every((child) => child.type === 'paragraph')).toBe(true);
+      expect(result.content[1]).toEqual({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'stray inline' }],
+      });
+    });
   });
 
   describe('decode', () => {

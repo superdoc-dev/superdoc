@@ -784,6 +784,10 @@ const applyTabLayoutToLines = (
   const alignmentTabStopsPx = tabStops
     .map((stop, index) => ({ stop, index }))
     .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+  // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
+  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // entries where a right-aligned dot-leader stop coexists with default grid stops.
+  // Mirrored in measuring/dom/src/index.ts.
   const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
     if (ordinal < 0 || ordinal >= totalTabRuns) return null;

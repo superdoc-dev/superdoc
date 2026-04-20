@@ -92,10 +92,6 @@ export function dispatchIntentTool(
           return execute('doc.lists.indent', rest);
         case 'outdent':
           return execute('doc.lists.outdent', rest);
-        case 'join':
-          return execute('doc.lists.join', rest);
-        case 'separate':
-          return execute('doc.lists.separate', rest);
         case 'merge':
           return execute('doc.lists.merge', rest);
         case 'split':

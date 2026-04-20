@@ -194,8 +194,6 @@ superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", no
 superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, direction: "withNext"})
 \`\`\`
 
-Use \`join\` only when you specifically need the strict check that both sequences already share the same abstract numbering definition (and no gap cleanup).
-
 ### Split a list into two
 
 Use \`split\` to break one list into two independent lists at a specific item. The target and everything after become a new sequence that restarts numbering at 1:
@@ -204,7 +202,7 @@ Use \`split\` to break one list into two independent lists at a specific item. T
 superdoc_list({action: "split", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}})
 \`\`\`
 
-Pass \`restartNumbering: false\` if you want the new half to keep counting from where the original left off (equivalent to raw \`separate\`).
+Pass \`restartNumbering: false\` if you want the new half to keep counting from where the original left off.
 
 ### Restart numbering at a specific item
 

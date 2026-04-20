@@ -274,10 +274,8 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       '• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
       '\n' +
       'SEQUENCE SHAPE (merge / split):\n' +
-      '• "merge" (preferred) — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously. Use this for the user-facing "merge these lists" intent.\n' +
-      '• "split" (preferred) — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem} (plus optional restartNumbering:false to keep the count continuing instead of restarting). Use this for the user-facing "split this list" intent.\n' +
-      '• "join" (low-level primitive) — like merge, but enforces a strict check that both sequences share the same abstractNumId, and does NOT delete empty gap paragraphs. Prefer "merge" unless you specifically need that strict behavior.\n' +
-      '• "separate" (low-level primitive) — like split, but does NOT restart numbering. Prefer "split" unless you want the new half to continue counting from where the target left off.',
+      '• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -302,12 +300,6 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
         direction: 'withPrevious',
       },
       { action: 'split', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
-      {
-        action: 'join',
-        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
-        direction: 'withPrevious',
-      },
-      { action: 'separate', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
       { action: 'set_value', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, value: 1 },
       { action: 'continue_previous', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
     ],
@@ -1802,8 +1794,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/join.mdx',
     referenceGroup: 'lists',
-    intentGroup: 'list',
-    intentAction: 'join',
   },
   'lists.canJoin': {
     memberPath: 'lists.canJoin',
@@ -1831,8 +1821,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/separate.mdx',
     referenceGroup: 'lists',
-    intentGroup: 'list',
-    intentAction: 'separate',
   },
   'lists.merge': {
     memberPath: 'lists.merge',

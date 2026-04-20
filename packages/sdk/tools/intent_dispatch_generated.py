@@ -87,10 +87,6 @@ def dispatch_intent_tool(
             return execute('doc.lists.indent', rest)
         elif action == 'outdent':
             return execute('doc.lists.outdent', rest)
-        elif action == 'join':
-            return execute('doc.lists.join', rest)
-        elif action == 'separate':
-            return execute('doc.lists.separate', rest)
         elif action == 'merge':
             return execute('doc.lists.merge', rest)
         elif action == 'split':

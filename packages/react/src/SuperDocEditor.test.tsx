@@ -175,6 +175,66 @@ describe('SuperDocEditor', () => {
     });
   });
 
+  describe('prop stability (SD-2635)', () => {
+    it('does not destroy/re-init when user prop is passed as a new object literal with identical content', async () => {
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+
+      const { rerender } = render(
+        <SuperDocEditor
+          user={{ name: 'Alex', email: 'alex@example.com' }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      const readyCallsAfterMount = onReady.mock.calls.length;
+
+      // Re-render with a *new* object literal carrying the same content —
+      // this is the idiomatic React pattern that used to trigger a full
+      // destroy + re-init loop before SD-2635.
+      rerender(
+        <SuperDocEditor
+          user={{ name: 'Alex', email: 'alex@example.com' }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      // Give any spurious effects time to run
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(onEditorDestroy).not.toHaveBeenCalled();
+      expect(onReady.mock.calls.length).toBe(readyCallsAfterMount);
+    });
+
+    it('rebuilds when user prop value actually changes', async () => {
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+
+      const { rerender } = render(
+        <SuperDocEditor
+          user={{ name: 'Alex', email: 'alex@example.com' }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+
+      rerender(
+        <SuperDocEditor
+          user={{ name: 'Jamie', email: 'jamie@example.com' }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
+    });
+  });
+
   describe('unique IDs', () => {
     it('should generate unique container IDs for multiple instances', () => {
       const { container: container1 } = render(<SuperDocEditor />);

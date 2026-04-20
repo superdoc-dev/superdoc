@@ -25,3 +25,45 @@ function useIdPolyfill(): string {
  */
 export const useStableId: () => string =
   typeof (React as any).useId === 'function' ? (React as any).useId : useIdPolyfill;
+
+/**
+ * Returns a reference-stable version of `value` that only changes identity
+ * when the structural content changes (compared via JSON.stringify).
+ *
+ * Use for object/array props that feed into `useEffect` / `useMemo`
+ * dependency arrays where the consumer is likely to pass inline object
+ * literals. Without this, every parent re-render produces a fresh
+ * reference and causes the effect to re-run even when the content is
+ * identical.
+ *
+ * Limitations:
+ * - Values containing functions, Dates, Maps, Sets, or circular references
+ *   are compared imperfectly (functions are dropped by JSON.stringify;
+ *   circular refs fall through to "different"). For config-shaped props
+ *   (plain data) this is sufficient.
+ * - The structural compare only runs when the incoming reference differs
+ *   from the previous one, so steady-state cost is a single pointer check.
+ */
+export function useStableValue<T>(value: T): T {
+  const lastRawRef = React.useRef<T>(value);
+  const stableRef = React.useRef<T>(value);
+
+  if (lastRawRef.current !== value) {
+    if (!structurallyEqual(stableRef.current, value)) {
+      stableRef.current = value;
+    }
+    lastRawRef.current = value;
+  }
+
+  return stableRef.current;
+}
+
+function structurallyEqual<T>(a: T, b: T): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}

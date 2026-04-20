@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type ForwardedRef,
 } from 'react';
-import { useStableId } from './utils';
+import { useStableId, useStableValue } from './utils';
 import type {
   CallbackProps,
   DocumentMode,
@@ -50,9 +50,9 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onException,
     // Key props that trigger rebuild when changed
     document: documentProp,
-    user,
-    users,
-    modules,
+    user: userProp,
+    users: usersProp,
+    modules: modulesProp,
     // All other props passed through
     ...restProps
   } = props;
@@ -60,6 +60,13 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   // Apply defaults
   const documentMode = props.documentMode ?? 'editing';
   const role = props.role ?? 'editor';
+
+  // Stabilize object/array props by value so inline literals (the idiomatic
+  // React pattern) don't trigger a full SuperDoc rebuild on every re-render.
+  // See SD-2635 for the destroy/re-init flicker this prevents.
+  const user = useStableValue(userProp);
+  const users = useStableValue(usersProp);
+  const modules = useStableValue(modulesProp);
 
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
@@ -226,6 +233,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
+    // user/users/modules are wrapped in useStableValue so reference-only changes
+    // (e.g. inline object literals) don't trigger rebuilds — see SD-2635.
   }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');

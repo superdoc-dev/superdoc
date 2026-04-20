@@ -821,6 +821,28 @@ test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
     });
     expect(leaked).toEqual([]);
   });
+
+  test('splits multi-char operator runs in m:lim content (SD-2632)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Case 1: lim_(n→∞). Word emits the "→∞" as a single m:r. Previously we
+    // rendered it as one <mi>→∞</mi>; now per Word's OMML2MML.XSL it splits
+    // into separate atoms.
+    const limExpressionAtoms = await superdoc.page.evaluate(() => {
+      const munders = Array.from(document.querySelectorAll('munder'));
+      const limMunder = munders.find((m) => m.children[0]?.querySelector('mi')?.textContent === 'lim');
+      const limExpr = limMunder?.children[1];
+      return Array.from(limExpr?.children ?? []).map((c) => ({ tag: c.localName, text: c.textContent }));
+    });
+
+    // At minimum the limit expression contains the identifier "n" and an
+    // operator "→" — they must be separate atoms, not bundled as one <mi>.
+    const nAtom = limExpressionAtoms.find((a) => a.text === 'n');
+    const arrowAtom = limExpressionAtoms.find((a) => a.text === '\u2192');
+    expect(nAtom).toEqual({ tag: 'mi', text: 'n' });
+    expect(arrowAtom).toEqual({ tag: 'mo', text: '\u2192' });
+  });
 });
 
 test.describe('m:eqArr (equation array) rendering', () => {
@@ -1341,9 +1363,12 @@ test.describe('m:groupChr (group character) rendering', () => {
     await superdoc.loadDocument(GROUPCHR_DOC);
     await superdoc.waitForStable();
 
+    // Use `:scope > mo` to target the group character directly — the base
+    // expression may itself contain <mo> atoms (e.g. "a+b" splits to
+    // <mi>a</mi><mo>+</mo><mi>b</mi> per Word's OMML2MML.XSL).
     const firstMunder = await superdoc.page.evaluate(() => {
       const munder = document.querySelector('munder');
-      const mo = munder?.querySelector('mo');
+      const mo = munder?.querySelector(':scope > mo');
       return mo ? { text: mo.textContent, stretchy: mo.getAttribute('stretchy') } : null;
     });
 
@@ -1359,7 +1384,7 @@ test.describe('m:groupChr (group character) rendering', () => {
     // Variant 2 — second munder in DOM order.
     const hiddenChar = await superdoc.page.evaluate(() => {
       const munders = document.querySelectorAll('munder');
-      const mo = munders[1]?.querySelector('mo');
+      const mo = munders[1]?.querySelector(':scope > mo');
       return mo?.textContent;
     });
 
@@ -1372,7 +1397,7 @@ test.describe('m:groupChr (group character) rendering', () => {
 
     const chars = await superdoc.page.evaluate(() => {
       const wrappers = document.querySelectorAll('munder, mover');
-      return Array.from(wrappers).map((w) => w.querySelector('mo')?.textContent ?? null);
+      return Array.from(wrappers).map((w) => w.querySelector(':scope > mo')?.textContent ?? null);
     });
 
     // Variants 4 (U+23DE), 5 (U+2190), 6 (U+2192).

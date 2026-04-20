@@ -3,7 +3,7 @@ import type { MathObjectConverter } from '../types.js';
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 
 /**
- * Convert m:box (box / invisible grouping container) to MathML <mrow>.
+ * Convert m:box (grouping container) to MathML <mrow>.
  *
  * OMML structure:
  *   m:box → m:boxPr (optional), m:e (content)
@@ -11,10 +11,14 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
  * MathML output:
  *   <mrow> content </mrow>
  *
- * The box is purely a grouping mechanism with no visual rendering;
- * it maps directly to MathML's <mrow>.
+ * Per §22.1.2.13 / §22.1.2.14, m:box can carry boxPr children that affect
+ * layout and spacing — opEmu (operator emulator), noBreak (disallow line
+ * breaks), aln (alignment point), diff (differential spacing), argSz. These
+ * have no clean MathML equivalent and are currently dropped; the box
+ * degrades to a plain <mrow> that preserves grouping but not the other
+ * semantics. Extend here when any of these need first-class support.
  *
- * @spec ECMA-376 §22.1.2.13
+ * @spec ECMA-376 §22.1.2.13, §22.1.2.14
  */
 export const convertBox: MathObjectConverter = (node, doc, convertChildren) => {
   const elements = node.elements ?? [];
@@ -48,13 +52,19 @@ export const convertBorderBox: MathObjectConverter = (node, doc, convertChildren
   const props = elements.find((e) => e.name === 'm:borderBoxPr');
   const base = elements.find((e) => e.name === 'm:e');
 
-  /** OOXML ST_OnOff true values: "1", "on", "true", or boolean-flag presence. */
-  const isOn = (el?: { attributes?: Record<string, string> }) =>
-    el &&
-    (el.attributes?.['m:val'] === '1' ||
-      el.attributes?.['m:val'] === 'on' ||
-      el.attributes?.['m:val'] === 'true' ||
-      !el.attributes);
+  /**
+   * OOXML ST_OnOff (§22.9.2.7): on when the element is present and either
+   * `m:val` is absent (spec default = 1) or equals "1" / "true". "on" is
+   * accepted for leniency — Annex L.6.1.3 uses that form even though the
+   * normative enum is {0, 1, true, false}.
+   * TODO: extract to a shared util when m:acc / m:phant / matrix m:tblLook land.
+   */
+  const isOn = (el?: { attributes?: Record<string, string> }) => {
+    if (!el) return false;
+    const val = el.attributes?.['m:val'];
+    if (val === undefined) return true;
+    return val === '1' || val === 'true' || val === 'on';
+  };
 
   const hideTop = props?.elements?.find((e) => e.name === 'm:hideTop');
   const hideBot = props?.elements?.find((e) => e.name === 'm:hideBot');
@@ -86,6 +96,9 @@ export const convertBorderBox: MathObjectConverter = (node, doc, convertChildren
   if (isOn(strikeV)) notations.push('verticalstrike');
 
   const content = convertChildren(base?.elements ?? []);
+
+  // Drop empty wrappers — matches convertBox / convertFunction.
+  if (content.childNodes.length === 0) return null;
 
   if (notations.length === 0) {
     const mrow = doc.createElementNS(MATHML_NS, 'mrow');

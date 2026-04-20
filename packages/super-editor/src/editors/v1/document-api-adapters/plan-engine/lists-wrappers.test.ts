@@ -108,7 +108,10 @@ import {
   listsConvertToTextWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
+  listsInsertWrapper,
 } from './lists-wrappers.js';
+
+import { getBlockIndex } from '../helpers/index-cache.js';
 
 import { listListItems, resolveListItem } from '../helpers/list-item-resolver.js';
 import {
@@ -361,6 +364,64 @@ describe('lists-wrappers', () => {
         editor,
         expect.anything(),
       );
+    });
+  });
+
+  // =========================================================================
+  // listsInsertWrapper
+  // =========================================================================
+
+  describe('listsInsertWrapper', () => {
+    it('passes both sdBlockId and paraId to insertListItemAt (SD-2296: paraId survives OOXML roundtrip)', () => {
+      const target = makeProjection({ numId: 1, level: 0 });
+      vi.mocked(resolveListItem).mockReturnValueOnce(target);
+      vi.mocked(getBlockIndex).mockReturnValueOnce({ candidates: [], byId: new Map(), ambiguous: new Set() } as any);
+
+      const insertCmd = editor.commands!.insertListItemAt as ReturnType<typeof vi.fn>;
+      listsInsertWrapper(editor, { target: target.address, position: 'after', text: 'new item' });
+
+      expect(insertCmd).toHaveBeenCalledTimes(1);
+      const args = insertCmd.mock.calls[0]![0] as { sdBlockId: unknown; paraId: unknown };
+      expect(typeof args.sdBlockId).toBe('string');
+      expect(typeof args.paraId).toBe('string');
+      // paraId is derived as `uuid.replace(/-/g, '').slice(0, 8).toUpperCase()`,
+      // so it must be 8 chars, uppercase, and hyphen-free regardless of the uuid shape.
+      expect((args.paraId as string).length).toBe(8);
+      expect(args.paraId).toBe((args.paraId as string).toUpperCase());
+      expect(args.paraId).not.toContain('-');
+    });
+
+    it('returns a short docx-style paraId in the receipt nodeId (not a UUID)', () => {
+      const target = makeProjection({ numId: 1, level: 0 });
+      vi.mocked(resolveListItem).mockReturnValueOnce(target);
+      // Force the resolver-by-sdBlockId path to miss so the wrapper falls back
+      // to returning the generated paraId directly in the receipt.
+      vi.mocked(getBlockIndex).mockReturnValueOnce({ candidates: [], byId: new Map(), ambiguous: new Set() } as any);
+
+      const result = listsInsertWrapper(editor, { target: target.address, position: 'after', text: 'new' });
+      if (!result.success) throw new Error('expected success');
+
+      // Receipt nodeId must be the 8-char paraId, NOT a UUID. The UUID sdBlockId
+      // used to leak into receipts pre-SD-2296 fix and failed to resolve in
+      // subsequent CLI processes after OOXML export/import.
+      expect(result.item.nodeId.length).toBe(8);
+      expect(result.item.nodeId).not.toContain('-');
+      expect(result.insertionPoint.blockId).toBe(result.item.nodeId);
+    });
+
+    it('returns dry-run placeholder and does not call insertListItemAt when dryRun is set', () => {
+      const target = makeProjection({ numId: 1, level: 0 });
+      vi.mocked(resolveListItem).mockReturnValueOnce(target);
+
+      const result = listsInsertWrapper(
+        editor,
+        { target: target.address, position: 'before', text: 'dry' },
+        { dryRun: true },
+      );
+      if (!result.success) throw new Error('expected success');
+
+      expect(result.item.nodeId).toBe('(dry-run)');
+      expect(editor.commands!.insertListItemAt).not.toHaveBeenCalled();
     });
   });
 

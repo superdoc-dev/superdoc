@@ -154,6 +154,27 @@ describe('insertListItemAt', () => {
     expect(callArgs?.[0]).toMatchObject({ sdBlockId: 'custom-id' });
   });
 
+  it('passes paraId into the created node attrs (survives OOXML roundtrip via w14:paraId)', () => {
+    const { state, dispatch, paragraphType } = createMockState();
+
+    insertListItemAt({ pos: 0, position: 'after', paraId: 'A1B2C3D4' })({
+      state,
+      dispatch,
+    });
+
+    const callArgs = paragraphType.createAndFill.mock.calls[0];
+    expect(callArgs?.[0]).toMatchObject({ paraId: 'A1B2C3D4' });
+  });
+
+  it('sets paraId to null when not provided (preserves existing insert behavior)', () => {
+    const { state, dispatch, paragraphType } = createMockState();
+
+    insertListItemAt({ pos: 0, position: 'after' })({ state, dispatch });
+
+    const callArgs = paragraphType.createAndFill.mock.calls[0];
+    expect(callArgs?.[0]?.paraId).toBeNull();
+  });
+
   it('preserves numbering properties from the target node', () => {
     const { state, dispatch, paragraphType } = createMockState();
 

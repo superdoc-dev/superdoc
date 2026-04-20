@@ -176,6 +176,13 @@ function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemPro
   );
 }
 
+// paraId survives OOXML roundtrips (written as w14:paraId on export); sdBlockId
+// does not. Generate an 8-char hex paraId alongside sdBlockId so newly-inserted
+// items have a stable public identity that persists across save/reload cycles.
+function generateRuntimeParaId(): string {
+  return uuidv4().replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
 function withListTarget(editor: Editor, input: ListTargetInput): ListItemProjection {
   return resolveListItem(editor, input.target);
 }
@@ -328,6 +335,7 @@ export function listsInsertWrapper(
   }
 
   const createdId = uuidv4();
+  const createdParaId = generateRuntimeParaId();
   let created: ListItemProjection | null = null;
 
   const receipt = executeDomainCommand(
@@ -338,6 +346,7 @@ export function listsInsertWrapper(
         position: input.position,
         text: input.text ?? '',
         sdBlockId: createdId,
+        paraId: createdParaId,
         tracked: mode === 'tracked',
       });
       if (didApply) {
@@ -364,12 +373,13 @@ export function listsInsertWrapper(
   const resolved = created as ListItemProjection | null;
 
   if (!resolved) {
+    // paraId (not sdBlockId) survives OOXML roundtrips, so the caller can reuse it.
     return {
       success: true,
-      item: { kind: 'block', nodeType: 'listItem', nodeId: createdId },
+      item: { kind: 'block', nodeType: 'listItem', nodeId: createdParaId },
       insertionPoint: {
         kind: 'text',
-        blockId: createdId,
+        blockId: createdParaId,
         range: { start: 0, end: 0 },
       },
     };

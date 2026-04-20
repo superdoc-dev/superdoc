@@ -1,5 +1,6 @@
 import type {
   ColumnLayout,
+  ColumnRegion,
   FlowBlock,
   Fragment,
   HeaderFooterLayout,
@@ -35,6 +36,7 @@ import {
   scheduleSectionBreak as scheduleSectionBreakExport,
   type SectionState,
   applyPendingToActive,
+  SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
 import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
@@ -1001,14 +1003,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
     // Check if columns are changing: either explicitly to a different config,
-    // or implicitly resetting to single column (undefined = single column in OOXML)
+    // or implicitly resetting to single column (undefined = single column in OOXML).
+    // withSeparator must be compared because a sep-only toggle still needs a new
+    // column region so the renderer can draw (or stop drawing) the separator from
+    // the toggle point onward.
     const isColumnsChanging =
       (block.columns &&
         (block.columns.count !== next.activeColumns.count ||
           block.columns.gap !== next.activeColumns.gap ||
+          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
           block.columns.equalWidth !== next.activeColumns.equalWidth ||
           !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
-      (!block.columns && next.activeColumns.count > 1);
+      (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -1074,6 +1080,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (activeOrientation) {
       page.orientation = activeOrientation;
     }
+
+    if (activeColumns.count > 1) {
+      page.columns = { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator };
+    }
+
     // Set vertical alignment from active section state
     if (activeVAlign && activeVAlign !== 'top') {
       page.vAlign = activeVAlign;
@@ -1440,9 +1451,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Start a new mid-page region with different column configuration
   const startMidPageRegion = (state: PageState, newColumns: ColumnLayout): void => {
-    // Record the boundary at current Y position
+    // Use the maximum Y reached across all columns so the new region starts
+    // below ALL column content, not just the current column's cursor position.
+    // This prevents overlap when a multi-column section's columns have unequal heights.
+    const regionStartY = Math.max(state.cursorY, state.maxCursorY);
+    state.cursorY = regionStartY;
+    state.maxCursorY = regionStartY;
+
+    // Record the boundary at the resolved Y position
     const boundary: ConstraintBoundary = {
-      y: state.cursorY,
+      y: regionStartY,
       columns: newColumns,
     };
     state.constraintBoundaries.push(boundary);
@@ -1454,7 +1472,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`[Layout] *** COLUMNS CHANGED MID-PAGE ***`);
     layoutLog(`  OLD activeColumns: ${JSON.stringify(activeColumns)}`);
     layoutLog(`  NEW activeColumns: ${JSON.stringify(newColumns)}`);
-    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
+    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}, maxCursorY: ${state.maxCursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
     activeColumns = cloneColumnLayout(newColumns);
@@ -1468,9 +1486,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       { left: activeLeftMargin, right: activeRightMargin },
       activePageSize.w,
     );
-
-    // Note: We do NOT reset cursorY - content continues from current position
-    // This creates the mid-page region effect
   };
 
   // Collect anchored drawings mapped to their anchor paragraphs
@@ -2118,6 +2133,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
         state.cursorY = tableBottomY;
+        state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       }
       continue;
     }
@@ -2527,6 +2543,39 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
+  // Serialize constraint boundaries into page.columnRegions so DomPainter can
+  // draw per-region overlays (e.g. column separator lines) bounded by the
+  // correct Y span. Continuous section breaks with a changed column config
+  // push boundaries into PageState.constraintBoundaries during layout; without
+  // this step the renderer only sees the page-start column config and would
+  // draw a single full-page separator across regions it no longer applies to.
+  for (const state of states) {
+    const boundaries = state.constraintBoundaries;
+    if (boundaries.length === 0) continue;
+
+    const regions: ColumnRegion[] = [];
+    // First region spans from the top of the content area to the first boundary.
+    // Its columns come from page.columns (set at page creation before any
+    // mid-page region change) or fall back to a single-column default so the
+    // contract stays self-describing even when the page starts single-column.
+    const firstRegionColumns: ColumnLayout = state.page.columns ?? { count: 1, gap: 0 };
+    regions.push({
+      yStart: state.topMargin,
+      yEnd: boundaries[0].y,
+      columns: firstRegionColumns,
+    });
+    for (let i = 0; i < boundaries.length; i++) {
+      const start = boundaries[i];
+      const end = boundaries[i + 1];
+      regions.push({
+        yStart: start.y,
+        yEnd: end ? end.y : state.contentBottom,
+        columns: start.columns,
+      });
+    }
+    state.page.columnRegions = regions;
+  }
+
   return {
     pageSize,
     pages,
@@ -2534,7 +2583,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns: activeColumns.count > 1 ? { count: activeColumns.count, gap: activeColumns.gap } : undefined,
+    columns:
+      activeColumns.count > 1
+        ? { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator }
+        : undefined,
   };
 }
 
@@ -2961,3 +3013,5 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 // Table utilities consumed by layout-bridge and cross-package sync tests
 export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
+
+export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

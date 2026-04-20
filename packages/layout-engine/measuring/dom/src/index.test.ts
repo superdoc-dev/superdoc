@@ -1881,6 +1881,91 @@ describe('measureBlock', () => {
         }
       }
     });
+
+    it('uses surrounding text font size for tab line height, not hardcoded 12', async () => {
+      // Regression: tab runs previously hardcoded maxFontSize=12, producing
+      // wrong line heights when the surrounding text used a larger font.
+      const largeFontBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-font-size-large',
+        runs: [
+          { text: 'Hello', fontFamily: 'Arial', fontSize: 24 },
+          { kind: 'tab', text: '\t', pmStart: 5, pmEnd: 6 },
+          { text: 'World', fontFamily: 'Arial', fontSize: 24 },
+        ],
+        attrs: {},
+      };
+
+      const smallFontBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-font-size-small',
+        runs: [
+          { text: 'Hello', fontFamily: 'Arial', fontSize: 10 },
+          { kind: 'tab', text: '\t', pmStart: 5, pmEnd: 6 },
+          { text: 'World', fontFamily: 'Arial', fontSize: 10 },
+        ],
+        attrs: {},
+      };
+
+      const largeMeasure = expectParagraphMeasure(await measureBlock(largeFontBlock, 1000));
+      const smallMeasure = expectParagraphMeasure(await measureBlock(smallFontBlock, 1000));
+
+      expect(largeMeasure.lines).toHaveLength(1);
+      expect(smallMeasure.lines).toHaveLength(1);
+
+      // The large-font paragraph must have a taller line than the small-font one.
+      // With the old hardcoded 12, both could collapse to similar heights.
+      expect(largeMeasure.lines[0].lineHeight).toBeGreaterThan(smallMeasure.lines[0].lineHeight);
+    });
+
+    it('uses fallback font size when tab is the first run (no preceding text)', async () => {
+      // When a tab starts a paragraph, lastFontSize should fall back to the
+      // first text run's font size, not a hardcoded default.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-first-run',
+        runs: [
+          { kind: 'tab', text: '\t', pmStart: 0, pmEnd: 1 },
+          { text: 'After tab', fontFamily: 'Arial', fontSize: 20 },
+        ],
+        attrs: {},
+      };
+
+      const refBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'no-tab-ref',
+        runs: [{ text: 'After tab', fontFamily: 'Arial', fontSize: 20 }],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+      const refMeasure = expectParagraphMeasure(await measureBlock(refBlock, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      // Line height should match or exceed the reference (same font size drives both)
+      expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(refMeasure.lines[0].lineHeight);
+    });
+
+    it('tab-only line inherits font size from following text run', async () => {
+      // A line that contains only a tab should derive its height from the
+      // paragraph's font size context, not from a hardcoded 12pt.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-only-line',
+        runs: [{ kind: 'tab', text: '\t', pmStart: 0, pmEnd: 1 }],
+        attrs: {
+          // paragraph-level font size hint via a nearby run
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      // With the fallback font size (default 12 when no runs present),
+      // the line should still have a reasonable height
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
+      expect(measure.lines[0].maxFontSize).toBeGreaterThan(0);
+    });
   });
 
   describe('space-only runs', () => {

@@ -228,6 +228,100 @@ describe('layoutDocument', () => {
     expect(layout.columns).toMatchObject({ count: 2, gap: 20 });
   });
 
+  it('sets "page.columns" with separator when column separator is enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
+  });
+
+  it('does not set "page.columns" on single column layout', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toBeUndefined();
+    expect(layout.columns).toBeUndefined();
+  });
+
+  it('sets "page.columns" without separator when column separator is not enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+    expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
+    // Two sections on the same page: first 2-col with separator, then a
+    // continuous break that switches to 3-col still with separator. The
+    // layout engine should record a ConstraintBoundary and surface it on
+    // page.columnRegions so the renderer can bound each separator to the
+    // correct Y range.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 3, gap: 20, withSeparator: true },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+
+    expect(layout.pages).toHaveLength(1);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    expect(regions!.length).toBeGreaterThanOrEqual(2);
+    // First region covers the initial 2-col layout from topMargin to the boundary.
+    expect(regions![0].yStart).toBe(40);
+    expect(regions![0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    // Second region picks up the continuous break's 3-col config and ends at
+    // the bottom of the content area.
+    const last = regions![regions!.length - 1];
+    expect(last.columns).toMatchObject({ count: 3, gap: 20, withSeparator: true });
+    expect(last.yEnd).toBe(800 - 40);
+    // Regions must tile (no gaps, no overlap).
+    for (let i = 1; i < regions!.length; i++) {
+      expect(regions![i].yStart).toBe(regions![i - 1].yEnd);
+    }
+  });
+
+  it('omits page.columnRegions when no mid-page column change occurs', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columnRegions).toBeUndefined();
+  });
+
   it('applies spacing before and after paragraphs', () => {
     const spacingBlock: FlowBlock = {
       kind: 'paragraph',
@@ -1918,6 +2012,78 @@ describe('layoutDocument', () => {
       const p3Fragment = layout.pages[0].fragments.find((f) => f.kind === 'para' && f.blockId === 'p3');
       expect(p3Fragment).toBeDefined();
       expect(p3Fragment?.width).toBe(210); // Half width = two columns
+    });
+
+    it('starts new region below tallest column when columns have unequal heights', () => {
+      // Regression test for SD-1869: when a multi-column section has unequal column
+      // heights, the next region must start below the TALLEST column, not the last
+      // column's cursor. Without the maxCursorY fix, the new region would start at
+      // the shorter column's bottom, overlapping the taller one.
+      //
+      // Uses a 3-col → 2-col transition because the layout engine forces a new page
+      // when reducing to fewer columns than the current column index (guard at
+      // columnIndexBefore >= newColumns.count). With 3→2, content in col1
+      // (columnIndex=1) stays on the same page (1 < 2).
+      const toThreeColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-3col',
+        type: 'continuous',
+        columns: { count: 3, gap: 24 },
+        margins: {},
+      };
+      const toTwoColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-2col',
+        type: 'continuous',
+        columns: { count: 2, gap: 48 },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] }, // single column preamble
+        toThreeColumns,
+        { kind: 'paragraph', id: 'p-cols', runs: [] }, // 3 lines → col0 gets 2, col1 gets 1
+        toTwoColumns,
+        { kind: 'paragraph', id: 'p-after', runs: [] }, // must start below tallest column
+      ];
+
+      // p-cols: 3 lines of 250px each (750px total)
+      // Available column height = 720 (page bottom) - 112 (region top) = 608px
+      // Column 0 fits lines 0+1 (500px), line 2 overflows to column 1
+      // Column 0 bottom = 112 + 500 = 612
+      // Column 1 bottom = 112 + 250 = 362
+      const measures: Measure[] = [
+        makeMeasure([40]), // p1
+        { kind: 'sectionBreak' },
+        makeMeasure([250, 250, 250]), // p-cols: 3 lines, 2 in col0 + 1 in col1
+        { kind: 'sectionBreak' },
+        makeMeasure([40]), // p-after
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      // Everything should fit on one page
+      expect(layout.pages.length).toBe(1);
+
+      // p1 at y=72, height=40 → region for 3-col section starts at y=112
+      const regionTop = 72 + 40; // 112
+
+      // Column 0: 2 lines × 250px = 500px → bottom at 112 + 500 = 612
+      // Column 1: 1 line × 250px = 250px → bottom at 112 + 250 = 362
+      const tallestColumnBottom = regionTop + 500; // 612
+
+      const page = layout.pages[0];
+      const pAfter = page.fragments.find((f) => f.blockId === 'p-after');
+      expect(pAfter).toBeDefined();
+
+      // KEY ASSERTION: p-after must start at or below the tallest column's bottom (612)
+      // Without the fix, it would start at 362 (column 1's bottom), overlapping column 0
+      expect(pAfter!.y).toBeGreaterThanOrEqual(tallestColumnBottom);
     });
   });
 

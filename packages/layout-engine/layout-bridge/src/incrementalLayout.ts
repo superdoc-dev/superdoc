@@ -19,6 +19,7 @@ import {
   resolvePageNumberTokens,
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
+  SINGLE_COLUMN_DEFAULT,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
@@ -183,7 +184,7 @@ const resolvePageColumns = (layout: Layout, options: LayoutOptions, blocks?: Flo
     );
     const contentWidth = pageSize.w - (marginLeft + marginRight);
     const sectionIndex = page.sectionIndex ?? 0;
-    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? { count: 1, gap: 0 };
+    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? SINGLE_COLUMN_DEFAULT;
     const normalized = normalizeColumnsForFootnotes(columnsConfig, contentWidth);
     result.set(pageIndex, { ...normalized, left: marginLeft, contentWidth });
   }
@@ -1503,7 +1504,7 @@ export async function incrementalLayout(
           );
           const pageContentWidth = pageSize.w - (marginLeft + marginRight);
           const fallbackColumns = normalizeColumnsForFootnotes(
-            options.columns ?? { count: 1, gap: 0 },
+            options.columns ?? SINGLE_COLUMN_DEFAULT,
             pageContentWidth,
           );
           const columns = pageColumns.get(pageIndex) ?? {

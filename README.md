@@ -165,6 +165,9 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/baristaGeek"><img src="https://github.com/baristaGeek.png" width="50" height="50" alt="baristaGeek" title="Esteban Vargas" /></a>
 <a href="https://github.com/Anuj52"><img src="https://github.com/Anuj52.png" width="50" height="50" alt="Anuj52" title="Anuj Chaudhary" /></a>
 <a href="https://github.com/Abdeltoto"><img src="https://github.com/Abdeltoto.png" width="50" height="50" alt="Abdeltoto" title="Abdel ATIA" /></a>
+<a href="https://github.com/JoaaoVerona"><img src="https://github.com/JoaaoVerona.png" width="50" height="50" alt="JoaaoVerona" title="João Vitor Verona Biazibetti" /></a>
+<a href="https://github.com/michaelreavant"><img src="https://github.com/michaelreavant.png" width="50" height="50" alt="michaelreavant" title="michaelreavant" /></a>
+<a href="https://github.com/ArturQuirino"><img src="https://github.com/ArturQuirino.png" width="50" height="50" alt="ArturQuirino" title="ARTUR QUIRINO" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

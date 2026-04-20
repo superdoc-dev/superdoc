@@ -3929,3 +3929,344 @@ describe('m:m converter', () => {
     expect(mtable!.textContent).toBe('ab');
   });
 });
+describe('m:box converter', () => {
+  it('converts m:box to <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:box',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mrow')).not.toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('returns null for empty m:box', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:box', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('drops m:boxPr children (opEmu / noBreak / aln / diff are not yet mapped)', () => {
+    // Pins current scope: we render <mrow> and silently ignore boxPr semantics.
+    // When opEmu or noBreak grow real MathML mappings, this test should fail
+    // and be updated — that failure is the point.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:box',
+          elements: [
+            {
+              name: 'm:boxPr',
+              elements: [
+                { name: 'm:opEmu', attributes: { 'm:val': '1' } },
+                { name: 'm:noBreak', attributes: { 'm:val': '1' } },
+                { name: 'm:aln' },
+                { name: 'm:diff', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '==' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mrow')).not.toBeNull();
+    expect(result!.querySelector('menclose')).toBeNull();
+    expect(result!.textContent).toBe('==');
+  });
+});
+
+describe('m:borderBox converter', () => {
+  it('converts m:borderBox to <menclose notation="box"> by default', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'E' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('box');
+    expect(menclose!.textContent).toBe('E');
+  });
+
+  it('hides top and bottom sides (notation="left right")', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    // Exact string — production order is top/bottom/left/right, so a side-swap regression fails here.
+    expect(menclose!.getAttribute('notation')).toBe('left right');
+  });
+
+  it('adds strike notations', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('horizontalstrike');
+  });
+
+  it('falls back to <mrow> when all borders hidden and no strikes', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'q' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).toBeNull();
+    expect(result!.textContent).toBe('q');
+  });
+
+  // ── ST_OnOff variants (ECMA-376 §22.9.2.7) ────────────────────────────────
+  // isOn accepts "1", "true", "on", and bare tags; rejects "0" / "false" / "off".
+  // Annex L.6.1.3 itself uses m:val="on" even though the normative enum is {0,1,true,false}.
+
+  const makeBorderBox = (hideTopFlag: Record<string, unknown>) => ({
+    name: 'm:oMath',
+    elements: [
+      {
+        name: 'm:borderBox',
+        elements: [
+          { name: 'm:borderBoxPr', elements: [{ name: 'm:hideTop', ...hideTopFlag }] },
+          {
+            name: 'm:e',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('treats m:val="true" as on (ST_OnOff)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'true' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats m:val="on" as on (Annex L.6.1.3 form)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'on' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats bare <m:hideTop/> as on (spec default val=1)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({}), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats m:val="0" as off (top remains visible)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': '0' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('box');
+  });
+
+  it('treats m:val="false" as off', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'false' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('box');
+  });
+
+  // ── Strike directions ─────────────────────────────────────────────────────
+  // BLTR (bottom-left → top-right = "/") maps to updiagonalstrike.
+  // TLBR (top-left → bottom-right = "\") maps to downdiagonalstrike.
+  // The directional naming is counter-intuitive — these tests pin it.
+
+  const makeStrike = (strikeName: string) => ({
+    name: 'm:oMath',
+    elements: [
+      {
+        name: 'm:borderBox',
+        elements: [
+          {
+            name: 'm:borderBoxPr',
+            elements: [
+              { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+              { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+              { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+              { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+              { name: strikeName, attributes: { 'm:val': '1' } },
+            ],
+          },
+          {
+            name: 'm:e',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('maps m:strikeBLTR to notation="updiagonalstrike" (/ direction)', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeBLTR'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('updiagonalstrike');
+  });
+
+  it('maps m:strikeTLBR to notation="downdiagonalstrike" (\\ direction)', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeTLBR'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('downdiagonalstrike');
+  });
+
+  it('maps m:strikeV to notation="verticalstrike"', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeV'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('verticalstrike');
+  });
+
+  it('combines multiple strikes in a fixed order', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:strikeBLTR', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeTLBR', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeV', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe(
+      'box updiagonalstrike horizontalstrike downdiagonalstrike verticalstrike',
+    );
+  });
+
+  it('combines partial hide flags with a strike (hideTop + strikeH)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right horizontalstrike');
+  });
+
+  it('returns null when m:e is empty (no bordered-but-empty <menclose>)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [{ name: 'm:borderBoxPr', elements: [{ name: 'm:strikeH', attributes: { 'm:val': '1' } }] }],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    // oMath still renders but has no children because borderBox dropped itself.
+    expect(result).toBeNull();
+  });
+});

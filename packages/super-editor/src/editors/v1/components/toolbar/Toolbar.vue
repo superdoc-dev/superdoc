@@ -1,5 +1,14 @@
 <script setup>
-import { ref, getCurrentInstance, onMounted, onDeactivated, nextTick, computed } from 'vue';
+import {
+  ref,
+  getCurrentInstance,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  nextTick,
+  computed,
+} from 'vue';
 import { throttle } from './helpers.js';
 import ButtonGroup from './ButtonGroup.vue';
 
@@ -40,16 +49,6 @@ const getFilteredItems = (position) => {
   return proxy.$toolbar.getToolbarItemByGroup(position).filter((item) => !excludeButtonsList.includes(item.name.value));
 };
 
-onMounted(() => {
-  window.addEventListener('resize', onResizeThrottled);
-  window.addEventListener('keydown', onKeyDown);
-});
-
-onDeactivated(() => {
-  window.removeEventListener('resize', onResizeThrottled);
-  window.removeEventListener('keydown', onKeyDown);
-});
-
 const onKeyDown = async (e) => {
   if (e.metaKey && e.key === 'f') {
     const searchItem = proxy.$toolbar.getToolbarItemByName('search');
@@ -69,6 +68,21 @@ const onWindowResized = async () => {
   toolbarKey.value += 1;
 };
 const onResizeThrottled = throttle(onWindowResized, 300);
+
+function teardownWindowListeners() {
+  window.removeEventListener('resize', onResizeThrottled);
+  window.removeEventListener('keydown', onKeyDown);
+}
+
+function setupWindowListeners() {
+  window.addEventListener('resize', onResizeThrottled);
+  window.addEventListener('keydown', onKeyDown);
+}
+
+onMounted(setupWindowListeners);
+onActivated(setupWindowListeners);
+onDeactivated(teardownWindowListeners);
+onBeforeUnmount(teardownWindowListeners);
 
 const handleCommand = ({ item, argument, option }) => {
   proxy.$toolbar.emitCommand({ item, argument, option });

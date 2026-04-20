@@ -24,3 +24,4 @@ export { convertNary } from './nary.js';
 export { convertPhantom } from './phantom.js';
 export { convertGroupCharacter } from './group-character.js';
 export { convertMatrix } from './matrix.js';
+export { convertBox, convertBorderBox } from './box.js';

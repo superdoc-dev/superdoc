@@ -1378,7 +1378,8 @@ export class SuperToolbar extends EventEmitter {
 
   /**
    * Cleans up resources when the toolbar is destroyed.
-   * Clears any pending timeouts to prevent callbacks firing after unmount.
+   * Clears any pending timeouts and unmounts the Vue app so the Toolbar
+   * component's onBeforeUnmount hook runs and removes its window listeners.
    * @returns {void}
    */
   destroy() {
@@ -1386,6 +1387,7 @@ export class SuperToolbar extends EventEmitter {
       clearTimeout(this._restoreFocusTimeoutId);
       this._restoreFocusTimeoutId = null;
     }
+    this.app?.unmount();
   }
 }
 

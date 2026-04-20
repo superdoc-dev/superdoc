@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, ref, KeepAlive } from 'vue';
 import Toolbar from './Toolbar.vue';
@@ -28,6 +28,10 @@ function createMockToolbar() {
 }
 
 describe('Toolbar', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('removes resize and keydown listeners on unmount (not only on KeepAlive deactivate)', () => {
     const mockToolbar = createMockToolbar();
     const addSpy = vi.spyOn(window, 'addEventListener');

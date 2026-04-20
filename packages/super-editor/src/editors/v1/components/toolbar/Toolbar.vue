@@ -75,7 +75,6 @@ function teardownWindowListeners() {
 }
 
 function setupWindowListeners() {
-  teardownWindowListeners();
   window.addEventListener('resize', onResizeThrottled);
   window.addEventListener('keydown', onKeyDown);
 }

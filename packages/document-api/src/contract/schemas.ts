@@ -1478,11 +1478,34 @@ const commentDomainItemSchema = discoveryItemSchema(
 
 const commentsListResultSchema = discoveryResultSchema(commentDomainItemSchema);
 
+const trackChangeWordRevisionIdsSchema: JsonSchema = {
+  ...objectSchema({
+    insert: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:ins>` element when this logical change includes an insertion.',
+    },
+    delete: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:del>` element when this logical change includes a deletion.',
+    },
+    format: {
+      type: 'string',
+      description:
+        'Raw imported Word OOXML revision ID (`w:id`) from a `<w:rPrChange>` element when this logical change includes a formatting revision.',
+    },
+  }),
+  description:
+    'Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. This is provenance metadata, not the canonical SuperDoc tracked-change ID. Replacements may include both `insert` and `delete` IDs.',
+};
+
 const trackChangeInfoSchema = objectSchema(
   {
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },
@@ -1496,6 +1519,7 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: ['insert', 'delete', 'format'] },
+    wordRevisionIds: trackChangeWordRevisionIdsSchema,
     author: { type: 'string' },
     authorEmail: { type: 'string' },
     authorImage: { type: 'string' },
@@ -2166,6 +2190,7 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
           kind: { enum: ['block', 'inline'] },
           controlType: { type: 'string' },
           target: contentControlTargetSchema,
+          at: selectionTargetSchema,
           tag: { type: 'string' },
           alias: { type: 'string' },
           lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
@@ -2928,6 +2953,60 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
   },
+  extract: {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
+              type: { type: 'string', description: 'Block type: paragraph, heading, listItem, table, image, etc.' },
+              text: { type: 'string', description: 'Full plain text content of the block.' },
+              headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+            },
+            ['nodeId', 'type', 'text'],
+          ),
+        },
+        comments: {
+          type: 'array',
+          items: objectSchema(
+            {
+              entityId: {
+                type: 'string',
+                description: 'Comment entity ID — pass to scrollToElement() for navigation.',
+              },
+              text: { type: 'string', description: 'Comment body text.' },
+              anchoredText: { type: 'string', description: 'The document text the comment is anchored to.' },
+              blockId: { type: 'string', description: 'Block ID the comment is anchored to.' },
+              status: { type: 'string', enum: ['open', 'resolved'] },
+              author: { type: 'string', description: 'Comment author name.' },
+            },
+            ['entityId', 'status'],
+          ),
+        },
+        trackedChanges: {
+          type: 'array',
+          items: objectSchema(
+            {
+              entityId: {
+                type: 'string',
+                description: 'Tracked change entity ID — pass to scrollToElement() for navigation.',
+              },
+              type: { type: 'string', enum: ['insert', 'delete', 'format'] },
+              excerpt: { type: 'string', description: 'Short text excerpt of the changed content.' },
+              author: { type: 'string', description: 'Change author name.' },
+              date: { type: 'string', description: 'Change date (ISO string).' },
+            },
+            ['entityId', 'type'],
+          ),
+        },
+        revision: { type: 'string', description: 'Document revision at the time of extraction.' },
+      },
+      ['blocks', 'comments', 'trackedChanges', 'revision'],
+    ),
+  },
   clearContent: {
     input: strictEmptyObjectSchema,
     output: receiptResultSchemaFor('clearContent'),
@@ -3030,6 +3109,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         items: { enum: [...blockNodeTypeValues] },
         description: "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
       },
+      includeText: {
+        type: 'boolean',
+        description: 'When true, includes the full flattened block text in each block entry.',
+      },
     }),
     output: objectSchema(
       {
@@ -3042,6 +3125,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               nodeId: { type: 'string', description: 'Block ID for targeting with other tools.' },
               nodeType: { enum: [...blockNodeTypeValues] },
               textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              text: {
+                oneOf: [{ type: 'string' }, { type: 'null' }],
+                description: 'Full flattened block text when requested with includeText.',
+              },
               isEmpty: { type: 'boolean' },
               styleId: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Named paragraph style.' },
               fontFamily: { type: 'string', description: 'Font family from first text run.' },
@@ -4745,18 +4832,36 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['by', 'target'],
     );
 
-    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema] };
+    const blockWhereSchema = objectSchema(
+      {
+        by: { const: 'block', type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        nodeId: { type: 'string' },
+      },
+      ['by', 'nodeType', 'nodeId'],
+    );
+
+    const stepWhereSchema: JsonSchema = {
+      oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema, blockWhereSchema],
+    };
 
     // Insert-only where (no 'all' require, no ref)
-    const insertWhereSchema = objectSchema(
-      {
-        by: { const: 'select', type: 'string' },
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: blockNodeAddressSchema,
-        require: { enum: ['first', 'exactlyOne'] },
-      },
-      ['by', 'select', 'require'],
-    );
+    const insertWhereSchema: JsonSchema = {
+      oneOf: [
+        objectSchema(
+          {
+            by: { const: 'select', type: 'string' },
+            select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+            within: blockNodeAddressSchema,
+            require: { enum: ['first', 'exactlyOne'] },
+          },
+          ['by', 'select', 'require'],
+        ),
+        refWhereSchema,
+        targetWhereSchema,
+        blockWhereSchema,
+      ],
+    };
 
     // Assert where (select only, no require)
     const assertWhereSchema = objectSchema(
@@ -4869,12 +4974,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'format.apply', type: 'string' },
         where: stepWhereSchema,
-        args: objectSchema(
-          {
-            inline: buildInlineRunPatchSchema(),
-          },
-          ['inline'],
-        ),
+        args: {
+          ...objectSchema(
+            {
+              inline: buildInlineRunPatchSchema(),
+              alignment: {
+                type: 'string',
+                enum: ['left', 'center', 'right', 'justify'],
+                description:
+                  'Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.',
+              },
+              scope: {
+                type: 'string',
+                enum: ['match', 'block'],
+                description:
+                  'When "block", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use "block" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: "match".',
+              },
+            },
+            [],
+          ),
+          minProperties: 1,
+        },
       },
       ['id', 'op', 'where', 'args'],
     );

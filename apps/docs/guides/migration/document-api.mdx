@@ -1,0 +1,184 @@
+---
+title: Migrate to the Document API
+sidebarTitle: Migrate to Document API
+keywords: "migrate commands, document api migration, editor commands deprecated, prosemirror deprecated, editor.doc"
+---
+
+`editor.commands`, `editor.state`, `editor.view`, and direct ProseMirror access are deprecated and will be removed in a future version. The [Document API](/document-api/overview) (`editor.doc`) is the replacement for all programmatic document operations.
+
+## Why migrate
+
+- **Stable contract** — the Document API is versioned and engine-agnostic. It will survive the ProseMirror removal.
+- **300+ operations** — formatting, comments, tables, track changes, lists, images, sections, and more.
+- **Works everywhere** — same operations available in the browser, Node.js SDK, Python SDK, and CLI.
+
+## Quick comparison
+
+```javascript
+// Deprecated
+editor.commands.toggleBold();
+editor.commands.insertTable({ rows: 3, cols: 3 });
+editor.commands.addComment({ content: 'Review this' });
+const text = editor.state.doc.textContent;
+
+// Document API
+editor.doc.format.bold({ target });
+editor.doc.create.table({ rows: 3, columns: 3 });
+editor.doc.comments.create({ target, content: 'Review this' });
+const text = editor.doc.getText();
+```
+
+## Common migrations
+
+### Reading document content
+
+```javascript
+// Before
+const text = editor.state.doc.textContent;
+const json = editor.getJSON();
+
+// After
+const text = editor.doc.getText();
+const content = editor.doc.get();
+const markdown = editor.doc.getMarkdown();
+const html = editor.doc.getHtml();
+```
+
+### Finding and replacing text
+
+```javascript
+// Before
+editor.commands.search('ACME Corp');
+// manually iterate results...
+
+// After
+const result = editor.doc.query.match({
+  select: { type: 'text', pattern: 'ACME Corp' },
+});
+editor.doc.replace({
+  target: result.items[0].target,
+  text: 'Globex Inc',
+});
+```
+
+### Formatting
+
+```javascript
+// Before
+editor.commands.toggleBold();
+editor.commands.toggleItalic();
+editor.commands.setColor('#ff0000');
+editor.commands.setFontSize(14);
+editor.chain().toggleBold().toggleItalic().run();
+
+// After
+editor.doc.format.bold({ target });
+editor.doc.format.italic({ target });
+editor.doc.format.color({ target, value: '#ff0000' });
+editor.doc.format.fontSize({ target, value: 14 });
+// Apply multiple formats at once:
+editor.doc.format.apply({ target, bold: true, italic: true });
+```
+
+### Comments
+
+```javascript
+// Before
+editor.commands.addComment({ content: 'Please review' });
+
+// After
+editor.doc.comments.create({ target, content: 'Please review' });
+editor.doc.comments.list();
+editor.doc.comments.delete({ id: commentId });
+```
+
+### Track changes
+
+```javascript
+// Before
+editor.commands.acceptTrackedChange(changeId);
+editor.commands.rejectTrackedChange(changeId);
+
+// After
+editor.doc.trackChanges.list();
+editor.doc.trackChanges.decide({ id: changeId, decision: 'accept' });
+editor.doc.trackChanges.decide({ id: changeId, decision: 'reject' });
+```
+
+### Tables
+
+```javascript
+// Before
+editor.commands.insertTable({ rows: 3, cols: 3 });
+editor.commands.addColumnAfter();
+editor.commands.deleteRow();
+
+// After
+editor.doc.create.table({ rows: 3, columns: 3 });
+editor.doc.tables.insertColumn({ tableId, index: 2 });
+editor.doc.tables.deleteRow({ tableId, index: 1 });
+```
+
+### Lists
+
+```javascript
+// Before
+editor.commands.toggleBulletList();
+editor.commands.toggleOrderedList();
+
+// After
+editor.doc.lists.insert({ target, type: 'bullet' });
+editor.doc.lists.insert({ target, type: 'ordered' });
+editor.doc.lists.indent({ target });
+editor.doc.lists.outdent({ target });
+```
+
+### History
+
+```javascript
+// Before
+editor.commands.undo();
+editor.commands.redo();
+
+// After
+editor.doc.history.undo();
+editor.doc.history.redo();
+```
+
+### Images
+
+```javascript
+// Before
+editor.commands.setImage({ src: 'photo.png' });
+
+// After
+editor.doc.create.image({ src: 'photo.png' });
+editor.doc.images.setSize({ imageId, width: 200, height: 150 });
+editor.doc.images.setAltText({ imageId, altText: 'Team photo' });
+```
+
+## Accessing the editor from callbacks
+
+The `onEditorCreate` callback now provides a proxied editor that warns when deprecated properties are accessed. All Document API operations work without warnings:
+
+```javascript
+superdoc.on('editorCreate', ({ editor }) => {
+  // No warnings — this is the recommended path
+  const content = editor.doc.get();
+  editor.doc.format.bold({ target });
+
+  // Console warning — deprecated, will be removed
+  const state = editor.state;
+  editor.commands.toggleBold();
+});
+```
+
+## Full reference
+
+See [Available Operations](/document-api/available-operations) for the complete mapping of all 300+ operations, and the [Document API Reference](/document-api/reference/index) for detailed input/output schemas.
+
+## Need help?
+
+- [GitHub Issues](https://github.com/superdoc-dev/superdoc/issues)
+- [Discord Community](https://discord.com/invite/b9UuaZRyaB)
+- Email: q@superdoc.dev

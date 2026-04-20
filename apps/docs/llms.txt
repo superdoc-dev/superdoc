@@ -1,0 +1,55 @@
+# SuperDoc
+
+> The document engine for the modern web.
+
+SuperDoc renders, edits, and automates .docx files — in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. No conversion layer. Import a document, edit it, export it. Nothing lost.
+
+## What it does
+
+- Reads and writes OOXML natively — documents stay real .docx files at every step
+- 180+ MCP tools covering reading, editing, formatting, comments, tracked changes, and more
+- Tracked changes and comments as first-class operations
+- Same document model across browser editor, headless Node, and APIs
+- Stateless API for convert, annotate, sign, and verify
+- Real-time collaboration with Yjs CRDT
+- Runs client-side. Documents never leave your infrastructure
+
+## Quick start (MCP)
+
+```
+claude mcp add superdoc -- npx @superdoc-dev/mcp
+```
+
+## Quick start (SDK)
+
+```
+npm install @superdoc-dev/sdk
+```
+
+## Links
+
+- Docs: https://docs.superdoc.dev
+- AI agents guide: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
+- MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
+- Document API: https://docs.superdoc.dev/document-api/overview
+- Available operations: https://docs.superdoc.dev/document-api/available-operations
+- API reference (backend): https://docs.superdoc.dev/api-reference/introduction
+- SDK docs: https://docs.superdoc.dev/document-engine/sdks
+- CLI: https://docs.superdoc.dev/document-engine/cli
+- GitHub: https://github.com/superdoc-dev/superdoc
+- npm: https://www.npmjs.com/package/superdoc
+- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Full context: https://docs.superdoc.dev/llms-full.txt
+
+## Packages
+
+- superdoc — main library (browser editor)
+- @superdoc-dev/react — React wrapper
+- @superdoc-dev/sdk — Node.js SDK for programmatic access
+- @superdoc-dev/cli — command-line interface
+- @superdoc-dev/mcp — MCP server for AI coding agents
+- superdoc-sdk (PyPI) — Python SDK
+
+## License
+
+AGPLv3 (open source) or Commercial license for proprietary use.

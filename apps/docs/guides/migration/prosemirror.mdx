@@ -6,6 +6,10 @@ keywords: "migrate from prosemirror, migrate from tiptap, switch to superdoc, do
 
 SuperDoc is built on ProseMirror but provides a complete document editing solution rather than a framework.
 
+<Warning>
+  **ProseMirror internals are deprecated.** Direct access to `editor.state`, `editor.view`, `editor.schema`, `editor.commands`, and ProseMirror transactions will be removed in a future version. Use the [Document API](/document-api/overview) (`editor.doc`) for all programmatic document operations.
+</Warning>
+
 ### Key differences
 
 | ProseMirror                         | SuperDoc                         |
@@ -32,15 +36,52 @@ const superdoc = new SuperDoc({
 });
 ```
 
-### Accessing ProseMirror internals
+### Programmatic document access
 
-While SuperDoc doesn't support custom ProseMirror plugins, you can access the underlying instances:
+The [Document API](/document-api/overview) (`editor.doc`) replaces direct ProseMirror access for all programmatic operations. 300+ operations across formatting, comments, tables, track changes, lists, images, and sections.
 
 ```javascript
 superdoc.on("editorCreate", ({ editor }) => {
-  const view = editor.view; // ProseMirror EditorView
-  const state = view.state; // ProseMirror EditorState
-  const schema = state.schema; // ProseMirror Schema
+  // Read document content
+  const content = editor.doc.get();
+
+  // Find and replace text
+  const matches = editor.doc.query.match({
+    select: { type: "text", pattern: "ACME Corp" },
+  });
+  editor.doc.replace({ target: matches.items[0].target, text: "Globex Inc" });
+
+  // Format text
+  editor.doc.format.bold({ target: matches.items[0].target });
+
+  // Add comments
+  editor.doc.comments.create({ target, content: "Please review" });
+});
+```
+
+For backend and AI workflows, use the [Node SDK](/document-engine/sdks), [Python SDK](/document-engine/sdks), or [CLI](/document-engine/cli).
+
+### Deprecated: ProseMirror internals
+
+<Warning>
+  The following patterns are deprecated and will stop working in a future version. Migrate to the Document API.
+</Warning>
+
+Previously, you could access the underlying ProseMirror instances directly:
+
+```javascript
+// Deprecated — will be removed
+superdoc.on("editorCreate", ({ editor }) => {
+  const view = editor.view;
+  const state = editor.state;
+  const schema = editor.schema;
+  editor.commands.toggleBold();
+});
+
+// Use the Document API instead
+superdoc.on("editorCreate", ({ editor }) => {
+  const content = editor.doc.get();
+  editor.doc.format.bold({ target });
 });
 ```
 
@@ -48,15 +89,15 @@ superdoc.on("editorCreate", ({ editor }) => {
 
 - **No custom plugins**: SuperDoc modules aren't ProseMirror plugins
 - **Fixed schema**: Can't modify the document schema
-- **Controlled commands**: Use SuperDoc's command set, not raw transactions
+- **Use the Document API**: For programmatic operations, use `editor.doc` — not raw ProseMirror transactions
 
 ### Custom functionality
 
-If you need features SuperDoc doesn't provide, you have limited options:
+If you need features SuperDoc doesn't provide:
 
-- Use SuperEditor for lower-level access
-- Request features via GitHub issues
-- Consider if SuperDoc is the right fit
+- Check the [Document API reference](/document-api/overview) — 300+ operations
+- Use the [SDK](/document-engine/sdks) or [CLI](/document-engine/cli) for backend workflows
+- Request features via [GitHub issues](https://github.com/superdoc-dev/superdoc/issues)
 
 ## Need help?
 

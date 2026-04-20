@@ -29,6 +29,8 @@ type ParagraphBlockAttrs = {
   decimalSeparator?: string;
   wordLayout?: WordParagraphLayoutOutput;
   numberingProperties?: unknown;
+  /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */
+  suppressFirstLineIndent?: boolean;
 };
 
 let canvas: HTMLCanvasElement | null = null;
@@ -1081,12 +1083,25 @@ export function remeasureParagraph(
   const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
-  const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
-  const rawFirstLineOffset = baseFirstLineOffset;
+  // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where
+  // justified paragraphs ignore their first-line indent. Without honoring it here, the
+  // initial measure and remeasure (triggered by live editing, resize, etc.) produce
+  // different first-line offsets and the first line jumps on redraw.
+  const suppressFirstLine = attrs?.suppressFirstLineIndent === true;
+  const baseFirstLineOffset = suppressFirstLine ? 0 : firstLineIndent || indentFirstLine - indentHanging;
+  // When wordLayout is present, the hanging region is occupied by the list marker/tab,
+  // so keep the same available width as body lines. For normal paragraphs we must honor
+  // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, baseFirstLineOffset);
-  const hasNegativeIndent = rawIndentLeft < 0 || rawIndentRight < 0;
-  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
-  const effectiveFirstLineOffset = allowNegativeFirstLineOffset ? baseFirstLineOffset : clampedFirstLineOffset;
+  // Avoid widening the first line when a negative LEFT indent already expands the content area.
+  // Negative right indent doesn't cause this problem — it only extends rightward.
+  const hasNegativeLeftIndent = rawIndentLeft < 0;
+  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeLeftIndent && baseFirstLineOffset < 0;
+  const effectiveFirstLineOffset = wordLayout?.marker
+    ? 0
+    : allowNegativeFirstLineOffset
+      ? baseFirstLineOffset
+      : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
   // Shared helper is the canonical source for list text-start geometry.
   // Keep an explicit top-level fallback for producers that only provide textStartPx.
@@ -1127,7 +1142,7 @@ export function remeasureParagraph(
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
     const effectiveMaxWidth = Math.max(1, isFirstLine ? firstLineWidth : contentWidth);
-    const effectiveIndent = isFirstLine ? indentLeft + rawFirstLineOffset : indentLeft;
+    const effectiveIndent = isFirstLine ? indentLeft + baseFirstLineOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -1322,7 +1337,7 @@ export function remeasureParagraph(
     (run) => run?.kind === 'text' && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\t'),
   );
   if (hasTabRun || hasTextTab) {
-    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, rawFirstLineOffset);
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, baseFirstLineOffset);
   }
 
   const totalHeight = lines.reduce((s, l) => s + l.lineHeight, 0);

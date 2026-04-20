@@ -29,6 +29,64 @@ npm install @superdoc-dev/react  # React (includes superdoc)
 </script>
 ```
 
+## Embed editor — CDN (no build step)
+
+Drop SuperDoc into any HTML page via `<script>` tag. No bundler, no `npm install`. Served from jsDelivr.
+
+### Script tag (global)
+
+```html
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
+/>
+<div id="editor" style="height: 100vh"></div>
+<script src="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js"></script>
+<script>
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: '/path/to/file.docx',
+    documentMode: 'editing',
+  });
+</script>
+```
+
+`window.SuperDoc` is the class directly. Named exports are attached as static properties (`SuperDoc.createTheme`, `SuperDoc.DOCX`, etc.). Collaboration (Yjs) is included. PDF viewing (`pdfjs-dist`) is not — use the ESM path below if you need it.
+
+### ES modules + import map
+
+For modern apps that want peer-dep control and smaller payload:
+
+```html
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
+/>
+<script type="importmap">
+  {
+    "imports": {
+      "superdoc": "https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.es.js",
+      "vue": "https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js"
+    }
+  }
+</script>
+<div id="editor" style="height: 100vh"></div>
+<script type="module">
+  import { SuperDoc } from 'superdoc';
+  new SuperDoc({ selector: '#editor', document: '/path/to/file.docx' });
+</script>
+```
+
+Add `yjs`, `y-prosemirror`, `@hocuspocus/provider`, or `pdfjs-dist` to the import map if your build needs them.
+
+### Production pinning and integrity
+
+- The examples above use `@latest` for copy-paste. **In production, pin to a specific version** (e.g. `superdoc@1.26.0`) so you control upgrades.
+- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production. Generate with: `curl -s https://cdn.jsdelivr.net/npm/superdoc@1.26.0/dist/superdoc.min.js | openssl dgst -sha384 -binary | openssl base64 -A | sed 's/^/sha384-/'`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` and `<link>`.
+- jsDelivr serves immutable, gzipped responses (~1.5 MB on the wire for `superdoc.min.js`).
+
+Unpkg is mirrored automatically: replace `cdn.jsdelivr.net/npm/` with `unpkg.com/`.
+
 ## Embed editor — React
 
 ```tsx
@@ -135,10 +193,31 @@ Docs: https://docs.superdoc.dev/document-engine/overview
 | Import DOCX | Pass URL, File, or Blob to `document` option |
 | Export DOCX | `const blob = await superdoc.export({ isFinalDoc: true })` |
 | Track changes | Set `documentMode: 'suggesting'` or use SDK with `defaultChangeMode: 'tracked'` |
-| Add comments | `superdoc.activeEditor.commands.addComment({ content: 'text' })` |
+| Add comments | Use Document API: `editor.doc.comments.create({ target, content: 'text' })` |
+| Find and replace | Use Document API: `editor.doc.query.match(...)` then `editor.doc.replace(...)` |
+| Format text | Use Document API: `editor.doc.format.bold(...)`, `.italic(...)`, etc. |
 | Real-time collab | Configure `modules.collaboration` with a Yjs provider |
 | Custom toolbar | Use `modules.toolbar.customButtons` array |
 | Listen to events | `superdoc.on('ready', ({ superdoc }) => { ... })` |
+
+### Programmatic access (Document API)
+
+For reading and mutating documents programmatically, use the Document API (`editor.doc`). It provides 300+ stable operations. Direct access to ProseMirror internals (`editor.state`, `editor.view`) and editor commands (`editor.commands`) is deprecated and will be removed.
+
+```javascript
+superdoc.on('editorCreate', ({ editor }) => {
+  // Query document content
+  const result = editor.doc.query.match({ select: { type: 'text', pattern: 'ACME' } });
+
+  // Replace matched text
+  editor.doc.replace({ target: result.items[0].target, text: 'Globex' });
+
+  // Add a comment
+  editor.doc.comments.create({ target: result.items[0].target, content: 'Updated name' });
+});
+```
+
+For backend or AI agent workflows, use the [SDK](https://docs.superdoc.dev/document-engine/sdks), [CLI](https://docs.superdoc.dev/document-engine/cli), or [MCP server](https://docs.superdoc.dev/document-engine/ai-agents/mcp-server) instead of browser editor access.
 
 ## Knowledge corrections
 

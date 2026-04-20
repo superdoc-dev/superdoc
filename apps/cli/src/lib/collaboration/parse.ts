@@ -21,10 +21,14 @@ const WEBSOCKET_ALLOWED_KEYS = new Set([
   'url',
   'documentId',
   'tokenEnv',
+  'params',
   'syncTimeoutMs',
   'onMissing',
   'bootstrapSettlingMs',
 ]);
+
+// Keys the CLI sets itself on the WebSocket URL — users cannot override via `params`.
+const RESERVED_WEBSOCKET_PARAM_KEYS = new Set(['token']);
 
 const LIVEBLOCKS_ALLOWED_KEYS = new Set([
   'providerType',
@@ -62,6 +66,30 @@ function expectOptionalEnvVarName(value: unknown, path: string): string | undefi
     throw new CliError('VALIDATION_ERROR', `${path} must be a valid environment variable name.`);
   }
   return value;
+}
+
+function expectOptionalWebSocketParams(value: unknown, path: string): Record<string, string> | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) {
+    throw new CliError('VALIDATION_ERROR', `${path} must be an object of string key-value pairs.`);
+  }
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (key.trim().length === 0) {
+      throw new CliError('VALIDATION_ERROR', `${path} keys must be non-empty strings.`);
+    }
+    if (RESERVED_WEBSOCKET_PARAM_KEYS.has(key)) {
+      throw new CliError(
+        'VALIDATION_ERROR',
+        `${path}.${key} is reserved; the collaboration token is set automatically from tokenEnv.`,
+      );
+    }
+    if (typeof val !== 'string') {
+      throw new CliError('VALIDATION_ERROR', `${path}.${key} must be a string.`);
+    }
+    result[key] = val;
+  }
+  return result;
 }
 
 function parseOnMissing(value: unknown): OnMissing | undefined {
@@ -107,9 +135,6 @@ function parseWebSocketInput(raw: Record<string, unknown>): WebSocketCollaborati
   if ('token' in raw) {
     throw new CliError('VALIDATION_ERROR', 'collaboration.token is not supported in v1; use collaboration.tokenEnv.');
   }
-  if ('params' in raw) {
-    throw new CliError('VALIDATION_ERROR', 'collaboration.params is not supported in v1.');
-  }
 
   const providerType = normalizeProviderType(raw.providerType, 'collaboration.providerType') as WebSocketProviderType;
 
@@ -118,6 +143,7 @@ function parseWebSocketInput(raw: Record<string, unknown>): WebSocketCollaborati
     url: expectNonEmptyString(raw.url, 'collaboration.url').trim(),
     documentId: raw.documentId != null ? expectNonEmptyString(raw.documentId, 'collaboration.documentId') : undefined,
     tokenEnv: expectOptionalEnvVarName(raw.tokenEnv, 'collaboration.tokenEnv'),
+    params: expectOptionalWebSocketParams(raw.params, 'collaboration.params'),
     ...parseSharedFields(raw),
   };
 }
@@ -137,7 +163,7 @@ function parseLiveblocksInput(raw: Record<string, unknown>): LiveblocksCollabora
     throw new CliError('VALIDATION_ERROR', 'collaboration.token is not supported in v1.');
   }
   if ('params' in raw) {
-    throw new CliError('VALIDATION_ERROR', 'collaboration.params is not supported in v1.');
+    throw new CliError('VALIDATION_ERROR', 'collaboration.params is not supported for Liveblocks.');
   }
   if ('headers' in raw) {
     throw new CliError(

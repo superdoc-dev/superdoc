@@ -3,7 +3,11 @@ import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
 import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
-import { clearInheritedLinkedStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
+import {
+  clearInheritedLinkedStyleId,
+  isLinkedParagraphStyleId,
+  isLinkedCharacterStyleId,
+} from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
 
@@ -89,6 +93,7 @@ export function splitBlockPatch(state, dispatch, editor) {
         atEnd = $from.end(d) == $from.pos + ($from.depth - d);
         atStart = $from.start(d) == $from.pos - ($from.depth - d);
         deflt = defaultBlockAt($from.node(d - 1).contentMatchAt($from.indexAfter(d - 1)));
+        const sourceParagraphStyleId = node.attrs?.paragraphProperties?.styleId;
         paragraphAttrs = /** @type {Record<string, unknown>} */ ({
           ...node.attrs,
           // Ensure newly created block gets a fresh ID (block-node plugin assigns one)
@@ -104,7 +109,16 @@ export function splitBlockPatch(state, dispatch, editor) {
         // current run's runProperties on the new paragraph so the toolbar and
         // wrapTextInRunsPlugin know which inline formatting to inherit.
         if (atEnd && $from.parent.type.name === 'run') {
-          paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, getSplitRunProperties(state, $from));
+          if (!isLinkedParagraphStyleId(editor, sourceParagraphStyleId)) {
+            paragraphAttrs = syncSplitParagraphRunProperties(paragraphAttrs, getSplitRunProperties(state, $from));
+          }
+          const pp = paragraphAttrs?.paragraphProperties;
+          const runStyleIsLinkedCharacter = isLinkedCharacterStyleId(editor, pp?.runProperties?.styleId);
+          if (pp && (isLinkedParagraphStyleId(editor, sourceParagraphStyleId) || runStyleIsLinkedCharacter)) {
+            const nextPp = { ...pp };
+            delete nextPp.runProperties;
+            paragraphAttrs = { ...paragraphAttrs, paragraphProperties: nextPp };
+          }
         }
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;
@@ -234,7 +248,10 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
         )
       : [];
 
-    const selectionMarks = state.selection?.$from?.marks ? state.selection.$from.marks() : [];
+    // Use the post-split selection on `tr`. `state.selection` still points at the pre-split
+    // cursor (e.g. end of styled text), which would incorrectly re-apply marks like textStyle
+    // onto a new empty paragraph after Enter.
+    const selectionMarks = tr.selection?.$from?.marks ? tr.selection.$from.marks() : [];
     const selectionMarkDefs = selectionMarks.map((mark) => ({ type: mark.type.name, attrs: mark.attrs }));
 
     /** @type {Array<{type: string, attrs: Record<string, unknown>}>} */

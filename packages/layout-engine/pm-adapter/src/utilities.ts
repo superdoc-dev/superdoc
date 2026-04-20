@@ -10,6 +10,7 @@ import type {
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
+  ImageHyperlink,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -222,6 +223,24 @@ export const normalizeString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+};
+
+/**
+ * Extracts image hyperlink metadata from a ProseMirror node attribute object.
+ *
+ * Accepts the raw `attrs.hyperlink` value and normalizes it to the shared
+ * `{ url, tooltip? }` shape used by ImageBlock and ImageRun. Empty or invalid
+ * URLs are dropped, and tooltip text is trimmed before inclusion.
+ */
+export const readImageHyperlink = (value: unknown): ImageHyperlink | undefined => {
+  const hyperlink = isPlainObject(value) ? value : undefined;
+  const url = normalizeString(hyperlink?.url);
+  if (!url) {
+    return undefined;
+  }
+
+  const tooltip = normalizeString(hyperlink?.tooltip);
+  return tooltip ? { url, tooltip } : { url };
 };
 
 /**

@@ -1,0 +1,210 @@
+---
+title: Headless Toolbar Examples
+sidebarTitle: Examples
+keywords: "toolbar examples, react toolbar, vue toolbar, svelte toolbar, shadcn toolbar, mui toolbar, custom toolbar examples"
+---
+
+Five examples, five frameworks, five toolbar patterns. Pick the one closest to your stack.
+
+## React + shadcn/ui
+
+Classic top ribbon, like Google Docs. Toggle groups for formatting, select dropdowns for fonts, popovers for colors.
+
+**Stack:** React, Radix primitives + Tailwind CSS, Lucide icons
+
+```tsx
+const toolbar = createHeadlessToolbar({ superdoc, commands: COMMANDS });
+const [snapshot, setSnapshot] = useState(toolbar.getSnapshot());
+
+useEffect(() => {
+  const unsub = toolbar.subscribe(({ snapshot: s }) => setSnapshot(s));
+  return unsub;
+}, []);
+
+// In JSX:
+<ToggleGroup value={activeFormats} onValueChange={() => {}}>
+  <ToggleGroup.Item value="bold" onClick={() => toolbar.execute('bold')}>
+    <Bold />
+  </ToggleGroup.Item>
+  <ToggleGroup.Item value="italic" onClick={() => toolbar.execute('italic')}>
+    <Italic />
+  </ToggleGroup.Item>
+</ToggleGroup>
+```
+
+<Card
+  title="Full source"
+  icon="external-link"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/react-shadcn"
+>
+  React + shadcn/ui example
+</Card>
+
+## React + MUI
+
+Floating bubble bar. Compact Material Design Paper component above the editor with toggle buttons and selects.
+
+**Stack:** React, MUI Material, Material Icons
+
+```tsx
+<Paper elevation={3} sx={{ borderRadius: 3, px: 1, py: 0.5 }}>
+  <ToggleButtonGroup value={activeFormats} onChange={handleFormats}>
+    <ToggleButton value="bold"><FormatBold /></ToggleButton>
+    <ToggleButton value="italic"><FormatItalic /></ToggleButton>
+    <ToggleButton value="underline"><FormatUnderlined /></ToggleButton>
+  </ToggleButtonGroup>
+
+  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+  <Select
+    value={fontFamily}
+    size="small"
+    onChange={(e) => toolbar.execute('font-family', e.target.value)}
+  >
+    {FONT_FAMILIES.map(f => (
+      <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
+    ))}
+  </Select>
+</Paper>
+```
+
+<Card
+  title="Full source"
+  icon="external-link"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/react-mui"
+>
+  React + MUI example
+</Card>
+
+## Vue + Vuetify
+
+Vertical sidebar panel. Navigation drawer with expansion panels grouping related controls.
+
+**Stack:** Vue 3, Vuetify 3, Material Design Icons
+
+```vue
+<v-navigation-drawer permanent width="260">
+  <v-expansion-panels>
+    <v-expansion-panel title="Text">
+      <template #text>
+        <v-btn-toggle v-model="activeFormats" multiple>
+          <v-btn icon="mdi-format-bold" @click="execute('bold')" />
+          <v-btn icon="mdi-format-italic" @click="execute('italic')" />
+          <v-btn icon="mdi-format-underline" @click="execute('underline')" />
+        </v-btn-toggle>
+
+        <v-select
+          label="Font size"
+          :items="fontSizes"
+          @update:model-value="v => execute('font-size', v)"
+        />
+      </template>
+    </v-expansion-panel>
+  </v-expansion-panels>
+</v-navigation-drawer>
+```
+
+<Card
+  title="Full source"
+  icon="external-link"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/vue-vuetify"
+>
+  Vue + Vuetify example
+</Card>
+
+## Svelte + Tailwind
+
+Fixed bottom bar. Compact, mobile-inspired layout with Svelte 5 runes for reactivity.
+
+**Stack:** Svelte 5, Tailwind CSS, Lucide Svelte
+
+```svelte
+<script>
+  let snapshot = $state(toolbar.getSnapshot());
+
+  $effect(() => {
+    return toolbar.subscribe(({ snapshot: s }) => {
+      snapshot = s;
+    });
+  });
+</script>
+
+<div class="fixed bottom-0 inset-x-0 flex items-center gap-1 px-3 h-12 bg-white border-t">
+  <button
+    class:active={snapshot.commands.bold?.active}
+    onclick={() => toolbar.execute('bold')}
+  >
+    <Bold size={16} />
+  </button>
+  <button
+    class:active={snapshot.commands.italic?.active}
+    onclick={() => toolbar.execute('italic')}
+  >
+    <Italic size={16} />
+  </button>
+</div>
+```
+
+<Card
+  title="Full source"
+  icon="external-link"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/svelte-shadcn"
+>
+  Svelte + Tailwind example
+</Card>
+
+## Vanilla JS
+
+Zero-framework proof. Plain buttons, native selects, DOM manipulation. No build step required.
+
+**Stack:** No framework, plain HTML/CSS/JS, Lucide
+
+```ts
+// Sync button states from toolbar snapshot
+toolbar.subscribe(({ snapshot }) => {
+  for (const btn of document.querySelectorAll('[data-cmd]')) {
+    const cmd = snapshot.commands[btn.dataset.cmd];
+    btn.classList.toggle('active', cmd?.active);
+    btn.disabled = cmd?.disabled;
+  }
+});
+
+// Single event listener via delegation
+document.querySelector('#toolbar').addEventListener('click', (e) => {
+  const cmd = e.target.closest('[data-cmd]')?.dataset.cmd;
+  if (cmd) toolbar.execute(cmd);
+});
+```
+
+```html
+<!-- Markup -->
+<div id="toolbar">
+  <button data-cmd="bold"><b>B</b></button>
+  <button data-cmd="italic"><i>I</i></button>
+  <button data-cmd="underline"><u>U</u></button>
+</div>
+```
+
+<Card
+  title="Full source"
+  icon="external-link"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/vanilla"
+>
+  Vanilla JS example
+</Card>
+
+## Running the examples
+
+```bash
+cd examples/advanced/headless-toolbar/<example-name>
+pnpm install
+pnpm dev
+```
+
+Replace `<example-name>` with `react-shadcn`, `react-mui`, `vue-vuetify`, `svelte-shadcn`, or `vanilla`.
+
+## Next steps
+
+<Card title="Headless toolbar API reference" icon="code" href="/modules/toolbar/headless">
+  Full command table, snapshot shape, and helper utilities
+</Card>

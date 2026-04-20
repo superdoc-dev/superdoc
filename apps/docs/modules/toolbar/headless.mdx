@@ -1,0 +1,428 @@
+---
+title: Headless Toolbar
+sidebarTitle: Headless
+keywords: "headless toolbar, custom toolbar, toolbar api, createHeadlessToolbar, toolbar state, toolbar commands"
+---
+
+Build your own toolbar UI. SuperDoc provides the state and commands — you render whatever you want.
+
+## Quick start
+
+```ts
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/contract.docx',
+});
+
+const toolbar = createHeadlessToolbar({
+  superdoc,
+  commands: ['bold', 'italic', 'underline', 'font-size', 'link', 'undo', 'redo'],
+});
+
+toolbar.subscribe(({ snapshot }) => {
+  renderToolbar(snapshot);
+});
+
+toolbar.execute('bold');
+```
+
+<Tip>
+Don't pass `toolbar` to the SuperDoc constructor. The headless toolbar replaces the built-in UI entirely — no flags needed.
+</Tip>
+
+## Core concepts
+
+### Snapshot
+
+Every time the editor state changes, the toolbar produces a `ToolbarSnapshot`. Read it to know what your UI should look like.
+
+```ts
+snapshot.commands['bold']?.active    // true if bold is on
+snapshot.commands['bold']?.disabled  // true if the command can't run
+snapshot.commands['font-size']?.value // '12pt' — the current value
+```
+
+### Execute
+
+Run a command by ID. Returns `true` if the command executed, `false` otherwise.
+
+```ts
+toolbar.execute('bold');
+toolbar.execute('font-size', '14pt');
+toolbar.execute('text-color', '#ff0000');
+toolbar.execute('zoom', 125);
+```
+
+### Subscribe
+
+`subscribe()` fires immediately with the current snapshot, then again on every change. It returns an unsubscribe function.
+
+```ts
+const unsub = toolbar.subscribe(({ snapshot }) => {
+  updateUI(snapshot);
+});
+
+// Later:
+unsub();
+```
+
+## API reference
+
+### `createHeadlessToolbar(options)`
+
+Creates a headless toolbar controller bound to a SuperDoc instance.
+
+<ParamField path="options.superdoc" type="SuperDoc" required>
+  The SuperDoc instance to bind to.
+</ParamField>
+
+<ParamField path="options.commands" type="PublicToolbarItemId[]">
+  Command IDs to track. When omitted, all available commands are tracked.
+</ParamField>
+
+Returns a `HeadlessToolbarController`.
+
+---
+
+### `HeadlessToolbarController`
+
+#### `getSnapshot()`
+
+Returns the current `ToolbarSnapshot` without subscribing.
+
+<CodeGroup>
+
+```ts Usage
+const snapshot = toolbar.getSnapshot();
+const isBold = snapshot.commands['bold']?.active;
+```
+
+```ts Full Example
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+const snapshot = toolbar.getSnapshot();
+const isBold = snapshot.commands['bold']?.active;
+const isDisabled = snapshot.commands['bold']?.disabled;
+const fontSize = snapshot.commands['font-size']?.value;
+```
+
+</CodeGroup>
+
+#### `subscribe(listener)`
+
+Registers a listener that receives `{ snapshot }` on every state change. Fires immediately with the current snapshot. Returns an unsubscribe function.
+
+<CodeGroup>
+
+```ts Usage
+const unsub = toolbar.subscribe(({ snapshot }) => {
+  // update your UI
+});
+```
+
+```ts Full Example
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+const unsub = toolbar.subscribe(({ snapshot }) => {
+  const boldActive = snapshot.commands['bold']?.active;
+  const fontSizeValue = snapshot.commands['font-size']?.value;
+});
+unsub();
+```
+
+</CodeGroup>
+
+#### `execute(id, payload?)`
+
+Runs the command identified by `id`. Returns `true` if the command executed, `false` otherwise.
+
+<CodeGroup>
+
+```ts Usage
+toolbar.execute('bold');                    // toggle
+toolbar.execute('font-size', '14pt');       // set value
+toolbar.execute('table-insert', { rows: 3, cols: 4 }); // with object payload
+```
+
+```ts Full Example
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+toolbar.execute('bold');
+toolbar.execute('italic');
+toolbar.execute('underline');
+toolbar.execute('strikethrough');
+toolbar.execute('font-size', '14pt');
+toolbar.execute('font-family', 'Arial, sans-serif');
+toolbar.execute('text-color', '#ff0000');
+toolbar.execute('highlight-color', '#ffff00');
+toolbar.execute('text-align', 'center');
+toolbar.execute('line-height', 1.5);
+toolbar.execute('bullet-list');
+toolbar.execute('numbered-list');
+toolbar.execute('indent-increase');
+toolbar.execute('indent-decrease');
+toolbar.execute('undo');
+toolbar.execute('redo');
+toolbar.execute('clear-formatting');
+toolbar.execute('zoom', 125);
+toolbar.execute('document-mode', 'editing');
+```
+
+</CodeGroup>
+
+#### `destroy()`
+
+Tears down event listeners and clears all subscriptions. Call this when unmounting your toolbar.
+
+<CodeGroup>
+
+```ts Usage
+toolbar.destroy();
+```
+
+```ts Full Example
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+const snapshot = toolbar.getSnapshot();
+toolbar.execute('bold');
+toolbar.destroy();
+```
+
+</CodeGroup>
+
+---
+
+### `ToolbarSnapshot`
+
+<ParamField path="context" type="ToolbarContext | null">
+  The current editing context. `null` when no editor is active.
+</ParamField>
+
+<ParamField path="commands" type="Partial<Record<PublicToolbarItemId, ToolbarCommandState>>">
+  Map of command IDs to their current state.
+</ParamField>
+
+### `ToolbarCommandState`
+
+<ParamField path="active" type="boolean">
+  Whether the command is currently active (e.g., bold is on at the cursor position).
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Whether the command can run right now. Disabled when the editor isn't editable or the command doesn't apply to the current selection.
+</ParamField>
+
+<ParamField path="value" type="unknown">
+  The current value for commands that have one (font size, text color, zoom, etc.). Not present for toggle commands like bold.
+</ParamField>
+
+### `ToolbarContext`
+
+<ParamField path="target" type="ToolbarTarget">
+  The primary execution surface. Use `target.commands` for direct command access when `execute()` doesn't cover your use case.
+</ParamField>
+
+<ParamField path="surface" type="'body' | 'header' | 'footer'">
+  Which document surface is currently active.
+</ParamField>
+
+<ParamField path="isEditable" type="boolean">
+  Whether the editor is in an editable state.
+</ParamField>
+
+<ParamField path="selectionEmpty" type="boolean">
+  Whether the current selection is collapsed (cursor with no range).
+</ParamField>
+
+## Command reference
+
+<Tip>
+Snapshot values match the format you pass to `execute()`. What you read is what you write — no conversion needed.
+</Tip>
+
+### Text formatting
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `bold` | — | — |
+| `italic` | — | — |
+| `underline` | — | — |
+| `strikethrough` | — | — |
+| `clear-formatting` | — | — |
+| `copy-format` | — | — |
+
+### Font controls
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `font-size` | `'12pt'` | `'12pt'` |
+| `font-family` | `'Arial, sans-serif'` | `'Arial, sans-serif'` |
+| `text-color` | `'#ff0000'` or `'none'` | `'#ff0000'` |
+| `highlight-color` | `'#ffff00'` or `'none'` | `'#ffff00'` |
+
+### Paragraph
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `text-align` | `'left'` \| `'center'` \| `'right'` \| `'justify'` | alignment string |
+| `line-height` | number (e.g. `1.5`) | number |
+| `linked-style` | style object from helpers | style ID string |
+| `bullet-list` | — | — |
+| `numbered-list` | — | — |
+| `indent-increase` | — | — |
+| `indent-decrease` | — | — |
+
+### Insert
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `link` | `{ href: string \| null }` | href string or `null` |
+| `image` | — (opens file picker) | — |
+| `table-insert` | `{ rows: number, cols: number }` | — |
+
+### Table actions
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `table-add-row-before` | — | — |
+| `table-add-row-after` | — | — |
+| `table-delete-row` | — | — |
+| `table-add-column-before` | — | — |
+| `table-add-column-after` | — | — |
+| `table-delete-column` | — | — |
+| `table-delete` | — | — |
+| `table-merge-cells` | — | — |
+| `table-split-cell` | — | — |
+| `table-remove-borders` | — | — |
+| `table-fix` | — | — |
+
+### Document
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `undo` | — | — |
+| `redo` | — | — |
+| `ruler` | — | — |
+| `zoom` | number (e.g. `125`) | number |
+| `document-mode` | `'editing'` \| `'suggesting'` \| `'viewing'` | mode string |
+
+### Track changes
+
+| Command | Payload | `value` in snapshot |
+|---------|---------|---------------------|
+| `track-changes-accept-selection` | — | — |
+| `track-changes-reject-selection` | — | — |
+
+## Constants
+
+`headlessToolbarConstants` provides preset option arrays for dropdown-style controls. Each option has `{ label, value }` — use `value` when calling `execute()`.
+
+<CodeGroup>
+
+```ts Usage
+import { headlessToolbarConstants } from 'superdoc/headless-toolbar';
+
+const { DEFAULT_FONT_SIZE_OPTIONS } = headlessToolbarConstants;
+// [{ label: '8', value: '8pt' }, { label: '9', value: '9pt' }, ...]
+```
+
+```ts Full Example
+import { headlessToolbarConstants } from 'superdoc/headless-toolbar';
+
+const {
+  DEFAULT_FONT_FAMILY_OPTIONS,
+  DEFAULT_FONT_SIZE_OPTIONS,
+  DEFAULT_TEXT_ALIGN_OPTIONS,
+  DEFAULT_LINE_HEIGHT_OPTIONS,
+  DEFAULT_ZOOM_OPTIONS,
+  DEFAULT_DOCUMENT_MODE_OPTIONS,
+  DEFAULT_TEXT_COLOR_OPTIONS,
+  DEFAULT_HIGHLIGHT_COLOR_OPTIONS,
+} = headlessToolbarConstants;
+```
+
+</CodeGroup>
+
+| Constant | Contents |
+|----------|----------|
+| `DEFAULT_FONT_FAMILY_OPTIONS` | Aptos, Georgia, Arial, Courier New, Times New Roman |
+| `DEFAULT_FONT_SIZE_OPTIONS` | 8pt through 96pt (14 sizes) |
+| `DEFAULT_TEXT_ALIGN_OPTIONS` | left, center, right, justify |
+| `DEFAULT_LINE_HEIGHT_OPTIONS` | 1.00, 1.15, 1.50, 2.00, 2.50, 3.00 |
+| `DEFAULT_ZOOM_OPTIONS` | 50% through 200% (7 levels) |
+| `DEFAULT_DOCUMENT_MODE_OPTIONS` | editing, suggesting, viewing (with descriptions) |
+| `DEFAULT_TEXT_COLOR_OPTIONS` | 13 colors including none |
+| `DEFAULT_HIGHLIGHT_COLOR_OPTIONS` | 8 colors including none |
+
+## Helpers
+
+`headlessToolbarHelpers` provides utilities for advanced workflows.
+
+```ts
+import { headlessToolbarHelpers } from 'superdoc/headless-toolbar';
+```
+
+| Helper | What it does |
+|--------|-------------|
+| `getQuickFormatList(editor)` | Returns available paragraph styles (Normal, Heading 1, etc.) for a style dropdown. |
+| `generateLinkedStyleString(style, ...)` | Returns inline CSS for previewing a paragraph style in your UI. |
+| `getFileOpener()` | Returns a function that opens a file picker. Most consumers should use `execute('image')` instead. |
+| `processAndInsertImageFile(...)` | Processes and inserts an image file into the editor. Most consumers should use `execute('image')` instead. |
+
+## React example
+
+A minimal hook that wires the headless toolbar to React state:
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
+
+function useHeadlessToolbar(superdoc, commands) {
+  const [snapshot, setSnapshot] = useState({ context: null, commands: {} });
+  const controllerRef = useRef(null);
+
+  useEffect(() => {
+    const toolbar = createHeadlessToolbar({ superdoc, commands });
+    controllerRef.current = toolbar;
+    const unsub = toolbar.subscribe(({ snapshot: s }) => setSnapshot(s));
+    return () => { unsub(); toolbar.destroy(); };
+  }, [superdoc]);
+
+  return {
+    snapshot,
+    execute: (id, payload) => controllerRef.current?.execute(id, payload),
+  };
+}
+```
+
+Then in your component:
+
+```tsx
+function Toolbar({ superdoc }) {
+  const { snapshot, execute } = useHeadlessToolbar(superdoc, [
+    'bold', 'italic', 'underline', 'font-size',
+  ]);
+
+  return (
+    <div>
+      <button
+        onClick={() => execute('bold')}
+        data-active={snapshot.commands['bold']?.active}
+        disabled={snapshot.commands['bold']?.disabled}
+      >
+        Bold
+      </button>
+    </div>
+  );
+}
+```
+
+## Examples
+
+<CardGroup cols={2}>
+  <Card title="Framework examples" icon="layout-grid" href="/modules/toolbar/examples">
+    Full examples with React + shadcn, React + MUI, Vue + Vuetify, Svelte, and vanilla JS
+  </Card>
+</CardGroup>

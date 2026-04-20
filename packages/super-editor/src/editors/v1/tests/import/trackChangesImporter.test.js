@@ -336,6 +336,7 @@ describe('trackChanges live xml test', () => {
     expect(changeMark).toBeDefined();
     // Check the essential properties of the trackFormat mark
     expect(changeMark.attrs.id).toBe('2');
+    expect(changeMark.attrs.sourceId).toBe('2');
     expect(changeMark.attrs.date).toBe('2024-09-04T09:29:00Z');
     expect(changeMark.attrs.author).toBe('torcsi@harbourcollaborators.com');
     expect(changeMark.attrs.before).toEqual([]);

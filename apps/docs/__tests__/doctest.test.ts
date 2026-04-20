@@ -1,6 +1,20 @@
 import { test, describe, beforeAll, expect } from 'bun:test';
 import { resolve } from 'node:path';
 import { Editor, getStarterExtensions } from '../../../packages/superdoc/dist/super-editor.es.js';
+
+// Headless toolbar exports — loaded dynamically because they may not
+// exist in the dist until the feature branch is merged and rebuilt.
+let createHeadlessToolbar: any;
+let headlessToolbarConstants: any;
+let headlessToolbarHelpers: any;
+try {
+  const mod = await import('../../../packages/superdoc/dist/super-editor.es.js');
+  createHeadlessToolbar = mod.createHeadlessToolbar;
+  headlessToolbarConstants = mod.headlessToolbarConstants;
+  headlessToolbarHelpers = mod.headlessToolbarHelpers;
+} catch {
+  // Not available yet — headless tests will be skipped
+}
 import { extractExamples } from './lib/extract.ts';
 import { transformCode, applyStubs } from './lib/transform.ts';
 
@@ -44,6 +58,28 @@ function isApiError(err: unknown, code: string): boolean {
   return false;
 }
 
+function createMockSuperdocHost(editor: Editor) {
+  const listeners = new Map<string, Set<Function>>();
+  return {
+    activeEditor: editor,
+    on(event: string, fn: Function) {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event)!.add(fn);
+    },
+    off(event: string, fn: Function) {
+      listeners.get(event)?.delete(fn);
+    },
+    superdocStore: {
+      documents: [],
+    },
+    config: { rulers: false, documentMode: 'editing' },
+    getZoom: () => 100,
+    setZoom: () => {},
+    toggleRuler: () => {},
+    setDocumentMode: () => {},
+  };
+}
+
 const examples = extractExamples(docsRoot);
 
 const byFile = new Map<string, typeof examples>();
@@ -69,9 +105,55 @@ for (const [file, fileExamples] of byFile) {
         });
 
         try {
-          editor.commands.selectAll();
-          const fn = new AsyncFunction('editor', code);
-          await fn(editor);
+          if (example.pattern === 'headless') {
+            if (!createHeadlessToolbar) return; // skip until dist includes headless toolbar
+            const superdoc = createMockSuperdocHost(editor);
+            const toolbar = createHeadlessToolbar({
+              superdoc,
+              commands: [
+                'bold',
+                'italic',
+                'underline',
+                'strikethrough',
+                'font-family',
+                'font-size',
+                'text-color',
+                'highlight-color',
+                'link',
+                'text-align',
+                'line-height',
+                'linked-style',
+                'bullet-list',
+                'numbered-list',
+                'indent-increase',
+                'indent-decrease',
+                'undo',
+                'redo',
+                'ruler',
+                'zoom',
+                'document-mode',
+                'clear-formatting',
+                'copy-format',
+                'image',
+                'track-changes-accept-selection',
+                'track-changes-reject-selection',
+                'table-insert',
+              ],
+            });
+            const fn = new AsyncFunction(
+              'toolbar',
+              'headlessToolbarConstants',
+              'headlessToolbarHelpers',
+              'editor',
+              code,
+            );
+            await fn(toolbar, headlessToolbarConstants, headlessToolbarHelpers, editor);
+            toolbar.destroy();
+          } else {
+            editor.commands.selectAll();
+            const fn = new AsyncFunction('editor', code);
+            await fn(editor);
+          }
         } catch (err) {
           if (isApiError(err, code)) {
             throw new Error(

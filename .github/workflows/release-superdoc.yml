@@ -1,6 +1,7 @@
 # Auto-releases on push to:
 # - main (@next channel)
 # - stable (@latest channel)
+# Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
 on:
@@ -18,10 +19,16 @@ on:
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to publish a preview package for (leave empty for normal release)'
+        required: false
+        type: number
 
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 concurrency:
   group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
@@ -38,13 +45,25 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      # PR preview: check out the PR branch
+      - name: Get PR head ref
+        if: inputs.pr_number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }} --jq '{ref: .head.ref, sha: .head.sha}')
+          echo "ref=$(echo $PR_DATA | jq -r .ref)" >> $GITHUB_OUTPUT
+          echo "sha=$(echo $PR_DATA | jq -r .sha)" >> $GITHUB_OUTPUT
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.pr.outputs.sha || '' }}
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Refresh stable branch head
-        if: github.ref_name == 'stable'
+        if: github.ref_name == 'stable' && !inputs.pr_number
         run: |
           git fetch origin "${{ github.ref_name }}" --tags
           git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
@@ -81,10 +100,48 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # PR preview: set version before build so it's baked into the package
+      - name: Set preview version
+        if: inputs.pr_number
+        id: version
+        run: |
+          BASE_VERSION=$(node -p "require('./packages/superdoc/package.json').version")
+          PREVIEW_VERSION="${BASE_VERSION}-pr.${{ inputs.pr_number }}.$(date +%s)"
+          echo "version=$PREVIEW_VERSION" >> $GITHUB_OUTPUT
+          cd packages/superdoc
+          npm version "$PREVIEW_VERSION" --no-git-tag-version
+
       - name: Build packages
         run: pnpm run build
 
+      # PR preview: publish with pr-<number> dist-tag
+      - name: Publish PR preview
+        if: inputs.pr_number
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          node scripts/publish-superdoc.cjs \
+            --dist-tag pr-${{ inputs.pr_number }} \
+            --skip-build
+
+      - name: Comment on PR
+        if: inputs.pr_number
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ inputs.pr_number }} --body "$(cat <<'EOF'
+          📦 **Preview published:** `superdoc@${{ steps.version.outputs.version }}`
+
+          ```bash
+          npm install superdoc@pr-${{ inputs.pr_number }}
+          ```
+          EOF
+          )"
+
+      # Normal release: semantic-release (only when NOT a PR preview)
       - name: Release
+        if: ${{ !inputs.pr_number }}
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

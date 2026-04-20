@@ -47,15 +47,34 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 /**
  * @typedef {import('@superdoc/super-editor').EditorState} EditorState
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Transaction} Transaction
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Schema} Schema
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').EditorView} EditorView
+ * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').EditorCommands} EditorCommands
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ChainedCommand} ChainedCommand
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ChainableCommandObject} ChainableCommandObject
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').CommandProps} CommandProps
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').Command} Command
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').CanObject} CanObject
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').PresentationEditorOptions} PresentationEditorOptions
  * @typedef {import('@superdoc/super-editor').LayoutEngineOptions} LayoutEngineOptions
  * @typedef {import('@superdoc/super-editor').PageSize} PageSize
@@ -90,8 +109,12 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').ResolveRangeOutput} ResolveRangeOutput
  * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
  * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
+ *
  * @typedef {import('@superdoc/super-editor').ExtensionCommandMap} ExtensionCommandMap
+ * @deprecated Editor commands will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').Comment} Comment
+ * @typedef {import('@superdoc/super-editor').CommentElement} CommentElement
  * @typedef {import('@superdoc/super-editor').CommentsPayload} CommentsPayload
  * @typedef {import('@superdoc/super-editor').CommentLocationsPayload} CommentLocationsPayload
  * @typedef {import('@superdoc/super-editor').FontsResolvedPayload} FontsResolvedPayload
@@ -107,7 +130,9 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').EditorLifecycleState} EditorLifecycleState
  * @typedef {import('@superdoc/super-editor').User} User
  * @typedef {import('@superdoc/super-editor').ProseMirrorJSON} ProseMirrorJSON
+ * @deprecated ProseMirror JSON format will be removed in a future version. Use the Document API instead.
  * @typedef {import('@superdoc/super-editor').ExportFormat} ExportFormat
+ * @typedef {import('@superdoc/super-editor').ExportDocxParams} ExportDocxParams
  * @typedef {import('@superdoc/super-editor').EditorExtension} EditorExtension
  * @typedef {import('@superdoc/super-editor').ViewLayout} ViewLayout
  * @typedef {import('@superdoc/super-editor').ViewOptions} ViewOptions
@@ -117,7 +142,31 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').LinkPopoverContext} LinkPopoverContext
  * @typedef {import('@superdoc/super-editor').LinkPopoverResolution} LinkPopoverResolution
  * @typedef {import('@superdoc/super-editor').PermissionParams} PermissionParams
+ * @typedef {import('@superdoc/super-editor').FontConfig} FontConfig
  * @typedef {import('@superdoc/super-editor').FieldValue} FieldValue
+ * @typedef {import('@superdoc/super-editor').LayoutState} LayoutState
+ * @typedef {import('@superdoc/super-editor').ImageSelectedEvent} ImageSelectedEvent
+ * @typedef {import('@superdoc/super-editor').ImageDeselectedEvent} ImageDeselectedEvent
+ * @typedef {import('@superdoc/super-editor').TelemetryEvent} TelemetryEvent
+ * @typedef {import('@superdoc/super-editor').RemoteCursorsRenderPayload} RemoteCursorsRenderPayload
+ * @typedef {import('@superdoc/super-editor').FlowMode} FlowMode
+ * @typedef {import('@superdoc/super-editor').ProofingProvider} ProofingProvider
+ * @typedef {import('@superdoc/super-editor').ProofingCapabilities} ProofingCapabilities
+ * @typedef {import('@superdoc/super-editor').ProofingCheckRequest} ProofingCheckRequest
+ * @typedef {import('@superdoc/super-editor').ProofingCheckResult} ProofingCheckResult
+ * @typedef {import('@superdoc/super-editor').ProofingSegment} ProofingSegment
+ * @typedef {import('@superdoc/super-editor').ProofingSegmentMetadata} ProofingSegmentMetadata
+ * @typedef {import('@superdoc/super-editor').ProofingIssue} ProofingIssue
+ * @typedef {import('@superdoc/super-editor').ProofingIssueKind} ProofingIssueKind
+ * @typedef {import('@superdoc/super-editor').ProofingConfig} ProofingConfig
+ * @typedef {import('@superdoc/super-editor').ProofingStatus} ProofingStatus
+ * @typedef {import('@superdoc/super-editor').ProofingError} ProofingError
+ * @typedef {import('@superdoc/super-editor').PageStyles} PageStyles
+ *
+ * @typedef {import('./core/types/index.js').ContextMenuContext} ContextMenuContext
+ * @typedef {import('./core/types/index.js').ContextMenuItem} ContextMenuItem
+ * @typedef {import('./core/types/index.js').ContextMenuSection} ContextMenuSection
+ * @typedef {import('./core/types/index.js').ContextMenuConfig} ContextMenuConfig
  */
 
 // Public exports

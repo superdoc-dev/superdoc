@@ -38,6 +38,7 @@ const NPM_PACKAGE_NAME = 'superdoc';
 const DEFAULT_NPM_DIST_TAG = 'next';
 const MAX_RECOMMENDED_JOBS = 8;
 const TERMINAL_PALETTE = createTerminalPalette();
+const REQUIRED_VISUAL_TESTING_PACKAGES = ['dotenv', 'pngjs', 'tsx', '@playwright/test'];
 
 function getRecommendedJobs() {
   const cpuCount =
@@ -796,6 +797,48 @@ function canonicalizePaintSnapshot(rawPaintSnapshot) {
   return snapshot;
 }
 
+function shouldDropLayoutMetadataField(pathSegments) {
+  const key = pathSegments[pathSegments.length - 1];
+  const parent = pathSegments[pathSegments.length - 2];
+
+  if (key === 'anchorParagraphId') return true;
+  if (key === 'pmStart' || key === 'pmEnd') return true;
+  if (key === 'id' && parent === 'trackedChange') return true;
+  if (key === 'sdBlockId' && parent === 'sdt') return true;
+  if (key === 'rId' && parent === 'link') return true;
+  return false;
+}
+
+function isPaintImageBlockIdPath(pathSegments) {
+  return (
+    pathSegments.length === 5 &&
+    pathSegments[0] === 'paintSnapshot' &&
+    pathSegments[1] === 'entities' &&
+    pathSegments[2] === 'images' &&
+    typeof pathSegments[3] === 'number' &&
+    pathSegments[4] === 'blockId'
+  );
+}
+
+function stripMetadataFields(node, shouldDropField, pathSegments = []) {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      stripMetadataFields(node[i], shouldDropField, [...pathSegments, i]);
+    }
+    return;
+  }
+
+  for (const key of Object.keys(node)) {
+    const nextPath = [...pathSegments, key];
+    if (shouldDropField(nextPath)) {
+      delete node[key];
+      continue;
+    }
+    stripMetadataFields(node[key], shouldDropField, nextPath);
+  }
+}
+
 function normalizeDocSnapshot(raw) {
   const layoutSnapshot = cloneDeep(raw?.layoutSnapshot ?? {});
   const paintSnapshot = cloneDeep(raw?.paintSnapshot ?? null);
@@ -826,38 +869,8 @@ function normalizeDocSnapshot(raw) {
     }
   }
 
-  const shouldDropNonVisualField = (pathSegments) => {
-    const key = pathSegments[pathSegments.length - 1];
-    const parent = pathSegments[pathSegments.length - 2];
-
-    if (key === 'anchorParagraphId') return true;
-    if (key === 'pmStart' || key === 'pmEnd') return true;
-    if (key === 'id' && parent === 'trackedChange') return true;
-    if (key === 'sdBlockId' && parent === 'sdt') return true;
-    if (key === 'rId' && parent === 'link') return true;
-    return false;
-  };
-
-  const stripNonVisualMetadata = (node, pathSegments = []) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (let i = 0; i < node.length; i += 1) {
-        stripNonVisualMetadata(node[i], [...pathSegments, i]);
-      }
-      return;
-    }
-
-    for (const key of Object.keys(node)) {
-      const nextPath = [...pathSegments, key];
-      if (shouldDropNonVisualField(nextPath)) {
-        delete node[key];
-        continue;
-      }
-      stripNonVisualMetadata(node[key], nextPath);
-    }
-  };
-
-  stripNonVisualMetadata(layoutSnapshot, ['layoutSnapshot']);
+  stripMetadataFields(layoutSnapshot, shouldDropLayoutMetadataField, ['layoutSnapshot']);
+  stripMetadataFields(paintSnapshot, isPaintImageBlockIdPath, ['paintSnapshot']);
 
   return {
     formatVersion: raw?.formatVersion ?? null,
@@ -1412,17 +1425,67 @@ function collectChangedDocRelativePaths(changedDocs) {
   return [...uniquePaths].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
+function buildVisualComparisonPlan({ changedDocs, visualOnChange, visualReference }) {
+  const changedDocPaths = collectChangedDocRelativePaths(changedDocs);
+  const hasChangedDocs = changedDocPaths.length > 0;
+  const visualEligible = visualOnChange && hasChangedDocs && Boolean(visualReference);
+
+  let visualSkipReason = null;
+  if (!visualOnChange) {
+    visualSkipReason = 'Disabled via --no-visual-on-change.';
+  } else if (!hasChangedDocs) {
+    visualSkipReason = 'No changed docs.';
+  } else if (!visualReference) {
+    visualSkipReason = 'No --reference/--visual-reference provided.';
+  }
+
+  return {
+    changedDocPaths,
+    visualEligible,
+    visualSkipReason,
+  };
+}
+
+function getInstalledPackageManifestPath(workdir, packageName) {
+  return path.join(workdir, 'node_modules', ...packageName.split('/'), 'package.json');
+}
+
+async function collectMissingVisualTestingPackages(visualWorkdir) {
+  const missingPackages = [];
+
+  for (const packageName of REQUIRED_VISUAL_TESTING_PACKAGES) {
+    const manifestPath = getInstalledPackageManifestPath(visualWorkdir, packageName);
+    if (!(await pathExists(manifestPath))) {
+      missingPackages.push(packageName);
+    }
+  }
+
+  return missingPackages;
+}
+
 async function ensureVisualTestingDependencies(visualWorkdir) {
   const nodeModulesPath = path.join(visualWorkdir, 'node_modules');
-  if (await pathExists(nodeModulesPath)) {
+  const hasNodeModules = await pathExists(nodeModulesPath);
+  const missingPackages = hasNodeModules ? await collectMissingVisualTestingPackages(visualWorkdir) : [];
+
+  if (hasNodeModules && missingPackages.length === 0) {
     return;
   }
 
-  logLine('Visual', 'install dependencies');
+  const installReason = hasNodeModules
+    ? `repair dependencies (${missingPackages.join(', ')})`
+    : 'install dependencies';
+
+  logLine('Visual', installReason);
 
   const exitCode = await runCommand('pnpm', ['install'], { cwd: visualWorkdir });
   if (exitCode !== 0) {
     throw new Error(`Visual dependency install failed with exit code ${exitCode}.`);
+  }
+
+  const missingAfterInstall = await collectMissingVisualTestingPackages(visualWorkdir);
+  if (missingAfterInstall.length > 0) {
+    throw new Error(`Visual dependencies remain unavailable: ${missingAfterInstall.join(', ')}.`);
   }
 }
 
@@ -2131,19 +2194,12 @@ async function main() {
 
     const uniqueChangeDocs = changedDocs.filter((d) => !d.widespreadOnly);
     const widespreadOnlyDocs = changedDocs.filter((d) => d.widespreadOnly);
-
-    const changedDocPaths = collectChangedDocRelativePaths(uniqueChangeDocs);
     const visualReference = args.visualReference ?? args.reference;
-    const visualEligible = args.visualOnChange && changedDocPaths.length > 0 && Boolean(visualReference);
-
-    let visualSkipReason = null;
-    if (!args.visualOnChange) {
-      visualSkipReason = 'Disabled via --no-visual-on-change.';
-    } else if (changedDocPaths.length === 0) {
-      visualSkipReason = 'No changed docs.';
-    } else if (!visualReference) {
-      visualSkipReason = 'No --reference/--visual-reference provided.';
-    }
+    const { changedDocPaths, visualEligible, visualSkipReason } = buildVisualComparisonPlan({
+      changedDocs,
+      visualOnChange: args.visualOnChange,
+      visualReference,
+    });
 
     let visualComparison = {
       enabled: args.visualOnChange,
@@ -2269,7 +2325,15 @@ function isDirectExecution() {
   return path.resolve(process.argv[1]) === SCRIPT_PATH;
 }
 
-export { buildAgentArtifact, determineCompareStatus, normalizeGenerationWarningMessage, toDisplayDocPath };
+export {
+  buildAgentArtifact,
+  buildVisualComparisonPlan,
+  collectMissingVisualTestingPackages,
+  determineCompareStatus,
+  normalizeGenerationWarningMessage,
+  normalizeDocSnapshot,
+  toDisplayDocPath,
+};
 
 if (isDirectExecution()) {
   main().catch((error) => {

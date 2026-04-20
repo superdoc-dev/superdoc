@@ -1,8 +1,7 @@
 <script setup>
 import { storeToRefs } from 'pinia';
-import { computed, onBeforeUnmount, onMounted, reactive, getCurrentInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { useCommentsStore } from '@stores/comments-store';
-import { useSuperdocStore } from '@stores/superdoc-store';
 import CommentDialog from '../CommentDialog.vue';
 
 const props = defineProps({
@@ -16,11 +15,8 @@ const props = defineProps({
   },
 });
 
-const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
-const { COMMENT_EVENTS } = commentsStore;
-const { commentsList, getGroupedComments, isCommentsListVisible } = storeToRefs(commentsStore);
-const { proxy } = getCurrentInstance();
+const { getGroupedComments, isCommentsListVisible } = storeToRefs(commentsStore);
 
 const shouldShowResolvedComments = computed(() => {
   return props.showResolvedComments && getGroupedComments.value?.resolvedComments?.length > 0;
@@ -38,14 +34,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="comments-list">
     <div v-if="showMainComments">
-      <div v-for="comment in getGroupedComments.parentComments" class="comment-item">
+      <div v-for="comment in getGroupedComments.parentComments" :key="comment.commentId" class="comment-item">
         <CommentDialog :comment="comment" />
       </div>
     </div>
 
     <div v-if="shouldShowResolvedComments">
       <div class="comment-title">Resolved</div>
-      <div v-for="comment in getGroupedComments.resolvedComments" class="comment-item">
+      <div v-for="comment in getGroupedComments.resolvedComments" :key="comment.commentId" class="comment-item">
         <CommentDialog :comment="comment" />
       </div>
     </div>

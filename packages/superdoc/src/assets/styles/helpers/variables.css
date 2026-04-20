@@ -180,8 +180,18 @@
   /* Styles: tracked changes — old names honored via fallback */
   --sd-tracked-changes-insert-background: var(--sd-track-insert-bg, #399c7222);
   --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
+  --sd-tracked-changes-insert-border-width: 1px;
+  --sd-tracked-changes-insert-focused-border-width: 2px;
+  --sd-tracked-changes-insert-text: currentColor;
+  --sd-tracked-changes-insert-decoration-line: none;
+  --sd-tracked-changes-insert-decoration-thickness: 1px;
+  --sd-tracked-changes-insert-underline-offset: 0px;
   --sd-tracked-changes-delete-background: var(--sd-track-delete-bg, #cb0e4722);
   --sd-tracked-changes-delete-border: var(--sd-track-delete-border, #cb0e47);
+  --sd-tracked-changes-delete-border-width: 1px;
+  --sd-tracked-changes-delete-focused-border-width: 2px;
+  --sd-tracked-changes-delete-text: currentColor;
+  --sd-tracked-changes-delete-decoration-thickness: 2px;
   --sd-tracked-changes-format-border: var(--sd-track-format-border, gold);
   --sd-tracked-changes-insert-background-focused: #399c7244;
   --sd-tracked-changes-delete-background-focused: #cb0e4744;

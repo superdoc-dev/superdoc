@@ -42,6 +42,7 @@ const RESIZE_DEBOUNCE_MS = 150;
  * This value provides consistent vertical spacing and improves readability.
  */
 const DEFAULT_LINE_HEIGHT = 1.2;
+const HEADER_FOOTER_LINE_HEIGHT = 1;
 
 /**
  * Listener cleanup function type for tracking registered event listeners.
@@ -617,7 +618,9 @@ export class ProseMirrorRenderer implements EditorRenderer {
     }
 
     // Line height
-    proseMirror.style.lineHeight = String(DEFAULT_LINE_HEIGHT);
+    proseMirror.style.lineHeight = editor.options.isHeaderOrFooter
+      ? String(HEADER_FOOTER_LINE_HEIGHT)
+      : String(DEFAULT_LINE_HEIGHT);
 
     // Mobile styles
     element.style.transformOrigin = 'top left';

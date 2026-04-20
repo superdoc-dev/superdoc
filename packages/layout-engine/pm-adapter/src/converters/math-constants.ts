@@ -23,14 +23,14 @@ const VERTICAL_ELEMENTS: Record<string, number> = {
   'm:sSup': 0.1, // Superscript
   'm:sSubSup': 0.2, // Sub-superscript
   'm:sPre': 0.2, // Pre-sub-superscript
+  'm:groupChr': 0.35, // Group character (overbrace/underbrace)
 };
 
 /** Count elements in an m:eqArr (equation array) for row-based height. */
 function countEqArrayRows(node: { elements?: unknown[] }): number {
   if (!Array.isArray(node.elements)) return 1;
-  return node.elements.filter(
-    (el: unknown) => el && typeof el === 'object' && (el as { name?: string }).name === 'm:e',
-  ).length;
+  return node.elements.filter((el: unknown) => el && typeof el === 'object' && (el as { name?: string }).name === 'm:e')
+    .length;
 }
 
 /**
@@ -74,10 +74,7 @@ function estimateHeightMultiplier(node: unknown): number {
  * When ommlJson is provided, the height scales based on vertical stacking
  * (fractions, bars, limits, equation arrays).
  */
-export function estimateMathDimensions(
-  textContent: string,
-  ommlJson?: unknown,
-): { width: number; height: number } {
+export function estimateMathDimensions(textContent: string, ommlJson?: unknown): { width: number; height: number } {
   const multiplier = ommlJson ? estimateHeightMultiplier(ommlJson) : 0;
   return {
     width: Math.max(textContent.length * MATH_CHAR_WIDTH, MATH_MIN_WIDTH),

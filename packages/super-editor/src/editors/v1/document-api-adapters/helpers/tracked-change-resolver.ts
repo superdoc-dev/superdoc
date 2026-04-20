@@ -1,6 +1,6 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import type { TrackChangeType } from '@superdoc/document-api';
+import type { TrackChangeType, TrackChangeWordRevisionIds } from '@superdoc/document-api';
 import {
   TrackDeleteMarkName,
   TrackFormatMarkName,
@@ -29,6 +29,7 @@ export type GroupedTrackedChange = {
   hasDelete: boolean;
   hasFormat: boolean;
   attrs: Record<string, unknown>;
+  wordRevisionIds?: TrackChangeWordRevisionIds;
 };
 
 type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat'>;
@@ -100,6 +101,31 @@ export function resolveTrackedChangeType(change: ChangeTypeInput): TrackChangeTy
 
 const groupedCache = new WeakMap<Editor, { doc: ProseMirrorNode; grouped: GroupedTrackedChange[] }>();
 
+function mergeWordRevisionId(
+  target: TrackChangeWordRevisionIds | undefined,
+  key: keyof TrackChangeWordRevisionIds,
+  value: string | undefined,
+): TrackChangeWordRevisionIds | undefined {
+  if (!value) return target;
+
+  if (!target) {
+    return { [key]: value };
+  }
+
+  if (!target[key]) {
+    target[key] = value;
+  }
+
+  return target;
+}
+
+function getWordRevisionIdKey(markType: string): keyof TrackChangeWordRevisionIds | null {
+  if (markType === TrackInsertMarkName) return 'insert';
+  if (markType === TrackDeleteMarkName) return 'delete';
+  if (markType === TrackFormatMarkName) return 'format';
+  return null;
+}
+
 export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   const currentDoc = editor.state.doc;
   const cached = groupedCache.get(editor);
@@ -118,6 +144,8 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     const nextHasInsert = markType === TrackInsertMarkName;
     const nextHasDelete = markType === TrackDeleteMarkName;
     const nextHasFormat = markType === TrackFormatMarkName;
+    const wordRevisionId = toNonEmptyString(attrs.sourceId);
+    const wordRevisionIdKey = getWordRevisionIdKey(markType);
 
     if (!existing) {
       byRawId.set(id, {
@@ -128,6 +156,9 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
         hasDelete: nextHasDelete,
         hasFormat: nextHasFormat,
         attrs: { ...attrs },
+        wordRevisionIds: wordRevisionIdKey
+          ? mergeWordRevisionId(undefined, wordRevisionIdKey, wordRevisionId ?? undefined)
+          : undefined,
       });
       continue;
     }
@@ -139,6 +170,13 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     existing.hasFormat = existing.hasFormat || nextHasFormat;
     if (Object.keys(existing.attrs).length === 0 && Object.keys(attrs).length > 0) {
       existing.attrs = { ...attrs };
+    }
+    if (wordRevisionIdKey) {
+      existing.wordRevisionIds = mergeWordRevisionId(
+        existing.wordRevisionIds,
+        wordRevisionIdKey,
+        wordRevisionId ?? undefined,
+      );
     }
   }
 

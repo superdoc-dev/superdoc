@@ -1,4 +1,4 @@
-import type { FlowBlock, HeaderFooterLayout, Layout, SectionMetadata } from '@superdoc/contracts';
+import type { FlowBlock, HeaderFooterLayout, Layout, SectionMetadata, SectionRefType } from '@superdoc/contracts';
 import { OOXML_PCT_DIVISOR } from '@superdoc/contracts';
 import { computeDisplayPageNumber, layoutHeaderFooterWithCache } from '@superdoc/layout-bridge';
 import type { HeaderFooterLayoutResult, HeaderFooterConstraints } from '@superdoc/layout-bridge';
@@ -13,6 +13,8 @@ export type HeaderFooterPerRidLayoutInput = {
 };
 
 type Constraints = HeaderFooterConstraints;
+type HeaderFooterRefs = Partial<Record<SectionRefType, string>>;
+const HEADER_FOOTER_VARIANTS: SectionRefType[] = ['default', 'first', 'even', 'odd'];
 
 /**
  * Compute the content width for a section, falling back to global constraints.
@@ -133,23 +135,84 @@ function resolveTableMinWidth(spec: TableWidthSpec | undefined, contentWidth: nu
   return spec.value; // grid or px: already in pixels
 }
 
+function getRefsForKind(section: SectionMetadata, kind: 'header' | 'footer'): HeaderFooterRefs | undefined {
+  return kind === 'header' ? section.headerRefs : section.footerRefs;
+}
+
 /**
- * Resolve the rId for each section, inheriting from previous sections when not explicitly set.
- * This follows Word's OOXML inheritance model: if a section has no ref for a given kind,
- * it inherits the previous section's ref.
+ * Resolve the effective header/footer references for each section.
+ *
+ * Word inherits missing header/footer references from the previous section. This
+ * helper applies that inheritance for every supported variant so downstream
+ * layout only measures content that can actually be selected at render time.
  */
-function resolveRIdPerSection(sectionMetadata: SectionMetadata[], kind: 'header' | 'footer'): Map<number, string> {
-  const result = new Map<number, string>();
-  let inherited: string | undefined;
+function buildEffectiveRefsBySection(
+  sectionMetadata: SectionMetadata[],
+  kind: 'header' | 'footer',
+): Map<number, HeaderFooterRefs> {
+  const result = new Map<number, HeaderFooterRefs>();
+  let inheritedRefs: HeaderFooterRefs = {};
 
   for (const section of sectionMetadata) {
-    const refs = kind === 'header' ? section.headerRefs : section.footerRefs;
-    const rId = refs?.default;
-    if (rId) {
-      inherited = rId;
+    const explicitRefs = getRefsForKind(section, kind);
+    const effectiveRefs: HeaderFooterRefs = { ...inheritedRefs };
+
+    for (const variant of HEADER_FOOTER_VARIANTS) {
+      const rId = explicitRefs?.[variant];
+      if (rId) {
+        effectiveRefs[variant] = rId;
+      }
     }
-    if (inherited) {
-      result.set(section.sectionIndex, inherited);
+
+    if (Object.keys(effectiveRefs).length > 0) {
+      result.set(section.sectionIndex, effectiveRefs);
+    }
+
+    inheritedRefs = effectiveRefs;
+  }
+
+  return result;
+}
+
+function collectReferencedRIdsBySection(effectiveRefsBySection: Map<number, HeaderFooterRefs>): Set<string> {
+  const result = new Set<string>();
+
+  for (const refs of effectiveRefsBySection.values()) {
+    for (const variant of HEADER_FOOTER_VARIANTS) {
+      const rId = refs[variant];
+      if (rId) {
+        result.add(rId);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolve the default header/footer rId for each section.
+ *
+ * Multi-section layout has historically measured only the default variant with
+ * section-specific constraints. Preserve that behavior to avoid changing
+ * established rendering for documents that use first/even/odd variants.
+ */
+function resolveDefaultRIdPerSection(
+  sectionMetadata: SectionMetadata[],
+  kind: 'header' | 'footer',
+): Map<number, string> {
+  const result = new Map<number, string>();
+  let inheritedDefaultRId: string | undefined;
+
+  for (const section of sectionMetadata) {
+    const refs = getRefsForKind(section, kind);
+    const explicitDefaultRId = refs?.default;
+
+    if (explicitDefaultRId) {
+      inheritedDefaultRId = explicitDefaultRId;
+    }
+
+    if (inheritedDefaultRId) {
+      result.set(section.sectionIndex, inheritedDefaultRId);
     }
   }
 
@@ -213,8 +276,24 @@ export async function layoutPerRIdHeaderFooters(
     );
   } else {
     // Single-section or uniform margins: use original single-constraint path
-    await layoutBlocksByRId('header', headerBlocksByRId, constraints, pageResolver, deps.headerLayoutsByRId);
-    await layoutBlocksByRId('footer', footerBlocksByRId, constraints, pageResolver, deps.footerLayoutsByRId);
+    const effectiveHeaderRefsBySection = buildEffectiveRefsBySection(sectionMetadata, 'header');
+    const effectiveFooterRefsBySection = buildEffectiveRefsBySection(sectionMetadata, 'footer');
+    await layoutBlocksByRId(
+      'header',
+      headerBlocksByRId,
+      collectReferencedRIdsBySection(effectiveHeaderRefsBySection),
+      constraints,
+      pageResolver,
+      deps.headerLayoutsByRId,
+    );
+    await layoutBlocksByRId(
+      'footer',
+      footerBlocksByRId,
+      collectReferencedRIdsBySection(effectiveFooterRefsBySection),
+      constraints,
+      pageResolver,
+      deps.footerLayoutsByRId,
+    );
   }
 }
 
@@ -225,13 +304,15 @@ export async function layoutPerRIdHeaderFooters(
 async function layoutBlocksByRId(
   kind: 'header' | 'footer',
   blocksByRId: Map<string, FlowBlock[]> | undefined,
+  referencedRIds: Set<string>,
   constraints: Constraints,
   pageResolver: (pageNumber: number) => { displayText: string; totalPages: number },
   layoutsByRId: Map<string, HeaderFooterLayoutResult>,
 ): Promise<void> {
-  if (!blocksByRId) return;
+  if (!blocksByRId || referencedRIds.size === 0) return;
 
   for (const [rId, blocks] of blocksByRId) {
+    if (!referencedRIds.has(rId)) continue;
     if (!blocks || blocks.length === 0) continue;
 
     try {
@@ -330,7 +411,7 @@ async function layoutWithPerSectionConstraints(
 ): Promise<void> {
   if (!blocksByRId) return;
 
-  const rIdPerSection = resolveRIdPerSection(sectionMetadata, kind);
+  const defaultRIdPerSection = resolveDefaultRIdPerSection(sectionMetadata, kind);
 
   // Extract table width specs per rId (SD-1837).
   // Word allows tables in headers/footers to extend beyond content margins.
@@ -352,7 +433,7 @@ async function layoutWithPerSectionConstraints(
   >();
 
   for (const section of sectionMetadata) {
-    const rId = rIdPerSection.get(section.sectionIndex);
+    const rId = defaultRIdPerSection.get(section.sectionIndex);
     if (!rId || !blocksByRId.has(rId)) continue;
 
     // Resolve the minimum width needed for tables in this section.

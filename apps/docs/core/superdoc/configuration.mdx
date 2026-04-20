@@ -215,7 +215,7 @@ new SuperDoc({
       Text label overrides
     </ParamField>
     <ParamField path="fonts" type="string[]">
-      Available font families. See [Toolbar fonts](/modules/toolbar#font-configuration) for details.
+      Available font families. See [Toolbar fonts](/modules/toolbar/built-in#font-configuration) for details.
 
       <Info>Custom fonts from DOCX files will display in the toolbar but won't be selectable unless loaded in your app and added here.</Info>
     </ParamField>
@@ -444,7 +444,9 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="toolbar" type="string">
-  CSS selector for the toolbar container (e.g. `'#toolbar'`). Shorthand for `modules.toolbar.selector`.
+  CSS selector for the built-in toolbar container (e.g. `'#toolbar'`). Shorthand for `modules.toolbar.selector`.
+
+  Omit this to skip the built-in toolbar — for example, when using the [headless toolbar](/modules/toolbar/headless) to build your own UI.
 </ParamField>
 
 ## Advanced options

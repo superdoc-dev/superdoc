@@ -3,10 +3,36 @@ import type { MathObjectConverter } from '../types.js';
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const FUNCTION_APPLY_OPERATOR = '\u2061';
 
+// MathML elements whose contents have their own semantic slot (base, subscript,
+// limit expression, matrix cell, etc.) and must keep authored styling when
+// m:fName wraps a nested construct like m:limLow.
+const STRUCTURAL_MATHML = new Set([
+  'munder',
+  'mover',
+  'munderover',
+  'msub',
+  'msup',
+  'msubsup',
+  'mmultiscripts',
+  'mfrac',
+  'msqrt',
+  'mroot',
+  'mtable',
+  'mtr',
+  'mtd',
+]);
+
 function forceNormalMathVariant(root: ParentNode): void {
-  root.querySelectorAll('mi').forEach((identifier) => {
-    identifier.setAttribute('mathvariant', 'normal');
-  });
+  const walk = (node: ParentNode): void => {
+    for (const child of Array.from(node.children)) {
+      if (STRUCTURAL_MATHML.has(child.localName)) continue;
+      if (child.localName === 'mi' && !child.hasAttribute('mathvariant')) {
+        child.setAttribute('mathvariant', 'normal');
+      }
+      walk(child);
+    }
+  };
+  walk(root);
 }
 
 /**

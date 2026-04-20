@@ -2299,6 +2299,64 @@ describe('m:limLow converter', () => {
     expect(munder!.children[0]!.textContent).toBe('lim');
     expect(munder!.children[1]!.textContent).toBe('n');
   });
+
+  it('keeps variables inside m:lim italic when wrapped in m:func (SD-2538)', () => {
+    // Regression: convertFunction used to force mathvariant="normal" on every
+    // <mi> in m:fName, including variables inside a nested m:limLow's m:lim.
+    // Only the function-name text ("lim") should be upright.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [
+                {
+                  name: 'm:limLow',
+                  elements: [
+                    {
+                      name: 'm:e',
+                      elements: [
+                        {
+                          name: 'm:r',
+                          elements: [
+                            { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'p' } }] },
+                            { name: 'm:t', elements: [{ type: 'text', text: 'lim' }] },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'm:lim',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+            { name: 'm:e', elements: [] },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+
+    const munder = result!.querySelector('munder');
+    expect(munder).not.toBeNull();
+
+    // Base: "lim" — upright via m:sty=p
+    const limMi = munder!.children[0]!.querySelector('mi');
+    expect(limMi!.textContent).toBe('lim');
+    expect(limMi!.getAttribute('mathvariant')).toBe('normal');
+
+    // Limit expression: "n" — must stay italic (no mathvariant attribute set)
+    const nMi = munder!.children[1]!.querySelector('mi');
+    expect(nMi!.textContent).toBe('n');
+    expect(nMi!.getAttribute('mathvariant')).toBeNull();
+  });
 });
 
 describe('m:limUpp converter', () => {

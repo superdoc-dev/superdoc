@@ -1863,22 +1863,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const columnIndexBefore = state.columnIndex;
         const newColumns = updatedState.pendingColumns;
 
-        // If reducing column count and currently in a column that won't exist
-        // in the new layout, start a fresh page to avoid overwriting earlier columns
-        if (columnIndexBefore >= newColumns.count) {
-          state = paginator.startNewPage();
-        }
-
-        // Balance the ending section's fragments on this page BEFORE starting the
-        // new region. Word produces a minimum-height section, then places the next
-        // region just below the balanced columns. Without this, columns fill
-        // top-to-bottom and the next region starts far below where Word would place it.
-        //
+        // Identify the ending section from the current page's fragments.
         // `activeSectionIndex` only updates at page boundaries, so for continuous
-        // mid-page section breaks it's stale. Instead, look at the current page's
-        // fragments and find the most recent section index — that's the section
-        // that's ending. Usually this is `metadataIndex - 1` (sections are sequential),
-        // but using blockSectionMap handles non-sequential indices too.
+        // mid-page section breaks it's stale. Walk back through page fragments
+        // to find the most recent section index that isn't the new one — that's
+        // the section that's ending.
         let endingSectionIndex: number | null = null;
         for (let i = state.page.fragments.length - 1; i >= 0; i--) {
           const mapped = blockSectionMap.get(state.page.fragments[i].blockId);
@@ -1889,25 +1878,40 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
         const endingSectionColumns =
           endingSectionIndex !== null ? sectionColumnsMap.get(endingSectionIndex) : undefined;
-        if (endingSectionIndex !== null && endingSectionColumns && endingSectionColumns.count > 1) {
+        const willBalance =
+          endingSectionIndex !== null &&
+          !!endingSectionColumns &&
+          endingSectionColumns.count > 1 &&
+          !sectionHasExplicitColumnBreak.has(endingSectionIndex);
+
+        // Balance BEFORE any forced page break. After balancing, all of the
+        // ending section's fragments are repositioned within the section's own
+        // vertical region — there's no risk of the new 1-col region overwriting
+        // prior column content, because the cursor moves to maxY below them.
+        //
+        // When not balancing (e.g. single-col → multi-col, or explicit column
+        // break), fall back to the original "force a new page if currently in a
+        // column that won't exist after the change" guard so new content doesn't
+        // overwrite earlier column positions on the same page.
+        if (willBalance) {
           // The current region starts at the last constraint boundary's Y, or at
           // the page's top margin if no mid-page region change has happened yet.
           const lastBoundary = state.constraintBoundaries[state.constraintBoundaries.length - 1];
           const activeRegionTop = lastBoundary?.y ?? activeTopMargin;
           const availableHeight = activePageSize.h - activeBottomMargin - activeRegionTop;
           const contentWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
-          const normalized = normalizeColumns(endingSectionColumns, contentWidth);
+          const normalized = normalizeColumns(endingSectionColumns!, contentWidth);
           const balanceResult = balanceSectionOnPage({
             fragments: state.page.fragments as BalancingFragment[],
-            sectionIndex: endingSectionIndex,
+            sectionIndex: endingSectionIndex!,
             sectionColumns: {
               count: normalized.count,
               gap: normalized.gap,
               width: normalized.width,
-              widths: endingSectionColumns.widths,
-              equalWidth: endingSectionColumns.equalWidth,
+              widths: endingSectionColumns!.widths,
+              equalWidth: endingSectionColumns!.equalWidth,
             },
-            sectionHasExplicitColumnBreak: sectionHasExplicitColumnBreak.has(endingSectionIndex),
+            sectionHasExplicitColumnBreak: false,
             blockSectionMap,
             margins: { left: activeLeftMargin },
             topMargin: activeRegionTop,
@@ -1920,8 +1924,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             // region starts there, not below an unbalanced tallest column.
             state.cursorY = balanceResult.maxY;
             state.maxCursorY = balanceResult.maxY;
-            alreadyBalancedSections.add(endingSectionIndex);
+            alreadyBalancedSections.add(endingSectionIndex!);
           }
+        } else if (columnIndexBefore >= newColumns.count) {
+          // Non-balancing case: reducing column count without balancing means
+          // starting the new region at col 0 could overwrite earlier column
+          // content. Force a fresh page to avoid that.
+          state = paginator.startNewPage();
         }
 
         startMidPageRegion(state, newColumns);

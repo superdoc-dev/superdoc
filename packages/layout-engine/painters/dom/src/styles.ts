@@ -646,12 +646,81 @@ const IMAGE_SELECTION_STYLES = `
 }
 `;
 
+const MATH_MENCLOSE_STYLES = `
+/* MathML <menclose> polyfill.
+ *
+ * MathML 3 defined <menclose notation="..."> with borders, strikes, and other
+ * enclosure notations. MathML Core (the subset shipped in Chrome 109+, 2023)
+ * dropped <menclose> — the WG moved its rendering to CSS/SVG. Firefox and
+ * WebKit also do not paint it. Without this polyfill, m:borderBox content
+ * imports correctly (the notation attribute is right) but renders invisibly.
+ *
+ * Each notation token is composable: "box horizontalstrike" draws the box
+ * border and a horizontal strike together. Diagonal strikes layer through
+ * CSS custom properties so X patterns (both diagonals) stack correctly.
+ *
+ * @spec MathML 3 §3.3.8 menclose
+ */
+menclose {
+  display: inline-block;
+  position: relative;
+  padding: 0.15em 0.25em;
+
+  --sd-menclose-stroke: currentColor;
+  --sd-menclose-h: none;
+  --sd-menclose-v: none;
+  --sd-menclose-up: none;
+  --sd-menclose-down: none;
+}
+
+menclose[notation~="box"] { border: 1px solid var(--sd-menclose-stroke); }
+menclose[notation~="roundedbox"] { border: 1px solid var(--sd-menclose-stroke); border-radius: 0.3em; }
+menclose[notation~="top"] { border-top: 1px solid var(--sd-menclose-stroke); }
+menclose[notation~="bottom"] { border-bottom: 1px solid var(--sd-menclose-stroke); }
+menclose[notation~="left"] { border-left: 1px solid var(--sd-menclose-stroke); }
+menclose[notation~="right"] { border-right: 1px solid var(--sd-menclose-stroke); }
+
+menclose[notation~="horizontalstrike"] {
+  --sd-menclose-h: linear-gradient(var(--sd-menclose-stroke), var(--sd-menclose-stroke)) no-repeat center / 100% 1px;
+}
+menclose[notation~="verticalstrike"] {
+  --sd-menclose-v: linear-gradient(var(--sd-menclose-stroke), var(--sd-menclose-stroke)) no-repeat center / 1px 100%;
+}
+menclose[notation~="updiagonalstrike"] {
+  --sd-menclose-up: linear-gradient(
+    to top right,
+    transparent calc(50% - 0.5px),
+    var(--sd-menclose-stroke) calc(50% - 0.5px),
+    var(--sd-menclose-stroke) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+menclose[notation~="downdiagonalstrike"] {
+  --sd-menclose-down: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 0.5px),
+    var(--sd-menclose-stroke) calc(50% - 0.5px),
+    var(--sd-menclose-stroke) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+menclose::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--sd-menclose-h), var(--sd-menclose-v), var(--sd-menclose-up), var(--sd-menclose-down);
+}
+`;
+
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
+let mathMencloseStylesInjected = false;
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
   if (printStylesInjected || !doc) return;
@@ -711,4 +780,18 @@ export const ensureImageSelectionStyles = (doc: Document | null | undefined) => 
   styleEl.textContent = IMAGE_SELECTION_STYLES;
   doc.head?.appendChild(styleEl);
   imageSelectionStylesInjected = true;
+};
+
+/**
+ * Injects the MathML <menclose> polyfill into the document head. Required
+ * because no browser paints menclose natively (MathML Core dropped it). See
+ * MATH_MENCLOSE_STYLES for the full rationale.
+ */
+export const ensureMathMencloseStyles = (doc: Document | null | undefined) => {
+  if (mathMencloseStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-math-menclose-styles', 'true');
+  styleEl.textContent = MATH_MENCLOSE_STYLES;
+  doc.head?.appendChild(styleEl);
+  mathMencloseStylesInjected = true;
 };

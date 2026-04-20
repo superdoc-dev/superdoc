@@ -396,6 +396,17 @@ describe('convertOmmlToMathml', () => {
     expect(tokenizeMathText('\u221E')).toEqual([{ tag: 'mi', content: '\u221E' }]);
   });
 
+  it('keeps astral-plane characters whole (does not split surrogate pairs)', () => {
+    // 𝑥 (U+1D465, mathematical italic small x) is a UTF-16 surrogate pair.
+    // Splitting by code unit would emit two bogus half-pair <mi>s.
+    const text = '\u{1D465}+1';
+    expect(tokenizeMathText(text)).toEqual([
+      { tag: 'mi', content: '\u{1D465}' },
+      { tag: 'mo', content: '+' },
+      { tag: 'mn', content: '1' },
+    ]);
+  });
+
   // ─── SD-2632: per-character split of multi-char m:r text ──────────────────
 
   it('splits a single m:r containing operator + identifier into <mo> + <mi> (SD-2632)', () => {

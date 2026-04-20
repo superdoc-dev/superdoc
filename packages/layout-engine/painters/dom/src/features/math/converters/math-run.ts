@@ -71,6 +71,20 @@ function isDigit(ch: string): boolean {
 }
 
 /**
+ * Length in UTF-16 code units of the code point starting at `text[i]`.
+ * Handles surrogate pairs so astral-plane characters (e.g. mathematical
+ * italic U+1D465) don't get split into two bogus <mi> atoms.
+ */
+function codePointUnitLength(text: string, i: number): number {
+  const hi = text.charCodeAt(i);
+  if (hi >= 0xd800 && hi <= 0xdbff && i + 1 < text.length) {
+    const lo = text.charCodeAt(i + 1);
+    if (lo >= 0xdc00 && lo <= 0xdfff) return 2;
+  }
+  return 1;
+}
+
+/**
  * Split a math run's text into MathML atoms, matching Word's OMML2MML.XSL.
  *
  * Rules (ECMA-376 §22.1.2.116 example + Annex L.6.1.13):
@@ -85,8 +99,9 @@ export function tokenizeMathText(text: string): Array<{ tag: MathAtomTag; conten
   const atoms: Array<{ tag: MathAtomTag; content: string }> = [];
   let i = 0;
   while (i < text.length) {
-    const ch = text[i]!;
-    if (isDigit(ch)) {
+    const step = codePointUnitLength(text, i);
+    const ch = text.slice(i, i + step);
+    if (step === 1 && isDigit(ch)) {
       let end = i + 1;
       let sawDot = false;
       while (end < text.length) {
@@ -104,12 +119,12 @@ export function tokenizeMathText(text: string): Array<{ tag: MathAtomTag; conten
       }
       atoms.push({ tag: 'mn', content: text.slice(i, end) });
       i = end;
-    } else if (OPERATOR_CHARS.has(ch)) {
+    } else if (step === 1 && OPERATOR_CHARS.has(ch)) {
       atoms.push({ tag: 'mo', content: ch });
       i++;
     } else {
       atoms.push({ tag: 'mi', content: ch });
-      i++;
+      i += step;
     }
   }
   return atoms;
@@ -221,8 +236,9 @@ function tokenizeFunctionNameText(text: string): Array<{ tag: MathAtomTag; conte
   const atoms: Array<{ tag: MathAtomTag; content: string }> = [];
   let i = 0;
   while (i < text.length) {
-    const ch = text[i]!;
-    if (isDigit(ch)) {
+    const step = codePointUnitLength(text, i);
+    const ch = text.slice(i, i + step);
+    if (step === 1 && isDigit(ch)) {
       let end = i + 1;
       let sawDot = false;
       while (end < text.length) {
@@ -240,16 +256,17 @@ function tokenizeFunctionNameText(text: string): Array<{ tag: MathAtomTag; conte
       }
       atoms.push({ tag: 'mn', content: text.slice(i, end) });
       i = end;
-    } else if (OPERATOR_CHARS.has(ch)) {
+    } else if (step === 1 && OPERATOR_CHARS.has(ch)) {
       atoms.push({ tag: 'mo', content: ch });
       i++;
     } else {
-      // Group consecutive non-digit, non-operator characters into a single <mi>.
-      let end = i + 1;
+      // Group consecutive non-digit, non-operator code points into one <mi>.
+      let end = i + step;
       while (end < text.length) {
-        const c = text[end]!;
-        if (isDigit(c) || OPERATOR_CHARS.has(c)) break;
-        end++;
+        const s = codePointUnitLength(text, end);
+        const c = text.slice(end, end + s);
+        if (s === 1 && (isDigit(c) || OPERATOR_CHARS.has(c))) break;
+        end += s;
       }
       atoms.push({ tag: 'mi', content: text.slice(i, end) });
       i = end;

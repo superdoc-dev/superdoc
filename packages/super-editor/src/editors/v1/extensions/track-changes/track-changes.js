@@ -12,7 +12,13 @@ import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from '../commen
 import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
 
-const readPairReplacements = (editor) => editor?.options?.trackedChanges?.pairReplacements !== false;
+/**
+ * Reads the `replacements` mode from editor.options.trackedChanges.
+ * Defaults to `'paired'` when unset; anything other than the exact
+ * `'independent'` string is treated as paired to be defensive.
+ */
+const readReplacementsMode = (editor) =>
+  editor?.options?.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired';
 
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
@@ -322,17 +328,18 @@ export const TrackChanges = Extension.create({
           //  - The primary id is used for the insertion (pure insert) or the
           //    lone deletion (pure delete), and always as the `changeId` we
           //    report back — comment threads key off this id too.
-          //  - For a replacement: in paired mode both halves share the
-          //    primary id (Google-Docs-like one-click resolve). In unpaired
-          //    mode (modules.trackChanges.pairReplacements: false), the
-          //    insertion keeps the primary id and the deletion mints its own
-          //    fresh id via markDeletion, so each revision is independently
-          //    addressable per ECMA-376 §17.13.5.
-          const pairReplacements = readPairReplacements(editor);
+          //  - For a replacement: in `'paired'` mode both halves share the
+          //    primary id (Google-Docs-like one-click resolve). In
+          //    `'independent'` mode (modules.trackChanges.replacements:
+          //    'independent'), the insertion keeps the primary id and the
+          //    deletion mints its own fresh id via markDeletion, so each
+          //    revision is independently addressable per ECMA-376 §17.13.5.
+          const replacementsMode = readReplacementsMode(editor);
+          const pairedReplacements = replacementsMode === 'paired';
           const isReplacement = from !== to && text;
           const primaryId = id ?? uuidv4();
           const insertionId = primaryId;
-          const deletionId = pairReplacements || !isReplacement ? primaryId : null;
+          const deletionId = pairedReplacements || !isReplacement ? primaryId : null;
 
           const changeId = primaryId;
           let insertPos = to; // Default insert position is after the selection
@@ -682,9 +689,9 @@ const getChangesByIdToResolve = (state, id) => {
   // This catches:
   //   - A single logical mark split across multiple segments (e.g. because
   //     surrounding text marks differ) — always correct to resolve together.
-  //   - The paired opposite-type mark when pairReplacements is true (shared id).
-  // In unpaired mode, the ins/del halves have distinct ids so the walk stops
-  // at the revision boundary naturally — no special casing needed here.
+  //   - The paired opposite-type mark when replacements='paired' (shared id).
+  // In 'independent' mode, the ins/del halves have distinct ids so the walk
+  // stops at the revision boundary naturally — no special casing needed here.
 
   const linkedBefore = [];
   const linkedAfter = [];

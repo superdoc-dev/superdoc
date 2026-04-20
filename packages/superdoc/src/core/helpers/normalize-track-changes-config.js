@@ -2,11 +2,15 @@
 
 /**
  * @typedef {'review' | 'original' | 'final' | 'off'} TrackChangesMode
- * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, pairReplacements: boolean }} NormalizedTrackChangesConfig
+ * @typedef {'paired' | 'independent'} TrackChangesReplacements
+ * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, replacements: TrackChangesReplacements }} NormalizedTrackChangesConfig
  */
 
 /** @type {ReadonlyArray<TrackChangesMode>} */
 const ALLOWED_MODES = ['review', 'original', 'final', 'off'];
+
+/** @type {ReadonlyArray<TrackChangesReplacements>} */
+const ALLOWED_REPLACEMENTS = ['paired', 'independent'];
 
 // Marks a config object we've already normalized so a second pass with the same
 // object (e.g. a consumer reusing the config to mount another SuperDoc) doesn't
@@ -52,6 +56,17 @@ function resolveMode(newVal, legacyVal, fallback) {
     return /** @type {TrackChangesMode} */ (legacyVal);
   }
   return fallback;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {TrackChangesReplacements | null}
+ */
+function coerceReplacements(value) {
+  if (typeof value === 'string' && ALLOWED_REPLACEMENTS.includes(/** @type {TrackChangesReplacements} */ (value))) {
+    return /** @type {TrackChangesReplacements} */ (value);
+  }
+  return null;
 }
 
 /**
@@ -104,9 +119,9 @@ export function normalizeTrackChangesConfig(config) {
 
   const enabled = resolveBool(fromCanonical?.enabled, fromLegacyLayout?.enabled, true);
 
-  // Replacement pairing is only surfaced on the canonical path. The legacy
+  // Replacement behavior is only surfaced on the canonical path. The legacy
   // buckets never exposed this knob, so there's no alias to resolve.
-  const pairReplacements = resolveBool(fromCanonical?.pairReplacements, undefined, true);
+  const replacements = coerceReplacements(fromCanonical?.replacements) ?? 'paired';
 
   // Default mode derives from documentMode + visibility so a viewing-mode
   // document without an explicit mode falls back to 'original' unless the
@@ -117,7 +132,7 @@ export function normalizeTrackChangesConfig(config) {
   const mode = resolveMode(fromCanonical?.mode, fromLegacyLayout?.mode, defaultMode);
 
   /** @type {NormalizedTrackChangesConfig} */
-  const normalized = { visible, mode, enabled, pairReplacements };
+  const normalized = { visible, mode, enabled, replacements };
 
   // Write-through to every path so all existing internal reads see the same
   // resolved values without needing to migrate each call site in this pass.

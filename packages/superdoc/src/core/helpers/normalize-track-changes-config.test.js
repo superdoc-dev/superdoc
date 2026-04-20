@@ -18,7 +18,7 @@ describe('normalizeTrackChangesConfig', () => {
       const config = {};
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, pairReplacements: true });
+      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, replacements: 'paired' });
       expect(config.modules.trackChanges).toEqual(result);
       expect(config.trackChanges).toEqual({ visible: false });
       expect(config.layoutEngineOptions.trackedChanges).toEqual({ mode: 'review', enabled: true });
@@ -54,7 +54,7 @@ describe('normalizeTrackChangesConfig', () => {
       };
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, pairReplacements: true });
+      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, replacements: 'paired' });
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -160,7 +160,7 @@ describe('normalizeTrackChangesConfig', () => {
       };
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, pairReplacements: true });
+      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, replacements: 'paired' });
     });
   });
 
@@ -172,7 +172,7 @@ describe('normalizeTrackChangesConfig', () => {
       };
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, pairReplacements: true });
+      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, replacements: 'paired' });
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -184,7 +184,7 @@ describe('normalizeTrackChangesConfig', () => {
       };
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, pairReplacements: true });
+      expect(result).toEqual({ visible: false, mode: 'review', enabled: true, replacements: 'paired' });
       expect(Array.isArray(config.modules)).toBe(false);
     });
 
@@ -218,41 +218,41 @@ describe('normalizeTrackChangesConfig', () => {
     });
   });
 
-  describe('pairReplacements flag', () => {
-    it('defaults to true when not supplied', () => {
+  describe("replacements: 'paired' | 'independent'", () => {
+    it("defaults to 'paired' when not supplied", () => {
       const result = normalizeTrackChangesConfig({});
-      expect(result.pairReplacements).toBe(true);
+      expect(result.replacements).toBe('paired');
     });
 
-    it('accepts pairReplacements: false on the canonical path', () => {
+    it("accepts replacements: 'independent' on the canonical path", () => {
       const result = normalizeTrackChangesConfig({
-        modules: { trackChanges: { pairReplacements: false } },
+        modules: { trackChanges: { replacements: 'independent' } },
       });
-      expect(result.pairReplacements).toBe(false);
+      expect(result.replacements).toBe('independent');
     });
 
-    it('mirrors pairReplacements onto the canonical path write-through', () => {
+    it('mirrors the resolved replacements onto the canonical path write-through', () => {
       const config = {
-        modules: { trackChanges: { pairReplacements: false } },
+        modules: { trackChanges: { replacements: 'independent' } },
       };
       normalizeTrackChangesConfig(config);
-      expect(config.modules.trackChanges.pairReplacements).toBe(false);
+      expect(config.modules.trackChanges.replacements).toBe('independent');
     });
 
-    it('coerces non-boolean pairReplacements to the default (true)', () => {
+    it("coerces invalid values to the default ('paired')", () => {
       const result = normalizeTrackChangesConfig({
-        modules: { trackChanges: { pairReplacements: 'no' } },
+        modules: { trackChanges: { replacements: 'whatever' } },
       });
-      expect(result.pairReplacements).toBe(true);
+      expect(result.replacements).toBe('paired');
     });
 
     it('is not derivable from any legacy key (no alias)', () => {
-      // Even if a legacy key is set, pairReplacements stays at its default.
+      // Legacy keys never carried this knob — it stays at its default.
       const result = normalizeTrackChangesConfig({
         trackChanges: { visible: true },
         layoutEngineOptions: { trackedChanges: { mode: 'original' } },
       });
-      expect(result.pairReplacements).toBe(true);
+      expect(result.replacements).toBe('paired');
     });
   });
 
@@ -294,7 +294,7 @@ describe('normalizeTrackChangesConfig', () => {
       };
       const result = normalizeTrackChangesConfig(config);
 
-      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, pairReplacements: true });
+      expect(result).toEqual({ visible: true, mode: 'original', enabled: false, replacements: 'paired' });
       expect(warnSpy).toHaveBeenCalledTimes(2);
       const messages = warnSpy.mock.calls.map((call) => call[0]);
       expect(messages.some((m) => /config\.trackChanges\b/.test(m) && !/layoutEngineOptions/.test(m))).toBe(true);
@@ -346,7 +346,7 @@ describe('normalizeTrackChangesConfig', () => {
       const first = normalizeTrackChangesConfig(config);
       const second = normalizeTrackChangesConfig(config);
 
-      expect(first).toEqual({ visible: true, mode: 'final', enabled: true, pairReplacements: true });
+      expect(first).toEqual({ visible: true, mode: 'final', enabled: true, replacements: 'paired' });
       expect(second).toEqual(first);
     });
   });

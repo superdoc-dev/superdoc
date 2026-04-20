@@ -1896,7 +1896,7 @@ describe('TrackChanges extension commands', () => {
       expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
     });
 
-    it('gives each replacement mark its own ID when pairReplacements is false', () => {
+    it("gives each replacement mark its own ID when replacements='independent'", () => {
       const doc = createDoc('Hello world');
       const state = createState(doc);
 
@@ -1917,7 +1917,7 @@ describe('TrackChanges extension commands', () => {
         editor: {
           options: {
             user: { name: 'Default', email: 'default@example.com' },
-            trackedChanges: { pairReplacements: false },
+            trackedChanges: { replacements: 'independent' },
           },
           commands: { addCommentReply: vi.fn() },
         },
@@ -1934,7 +1934,7 @@ describe('TrackChanges extension commands', () => {
         mode: 'text',
         content: '<p>Hello world</p>',
         user: { name: 'Track Tester', email: 'track@example.com' },
-        trackedChanges: { pairReplacements: false },
+        trackedChanges: { replacements: 'independent' },
       });
 
       try {

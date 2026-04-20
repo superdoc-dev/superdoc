@@ -215,8 +215,10 @@ new SuperDoc({
     <ParamField path="modules.trackChanges.enabled" type="boolean" default="true">
       Whether the layout engine treats tracked changes as active.
     </ParamField>
-    <ParamField path="modules.trackChanges.pairReplacements" type="boolean" default="true">
-      When `true` (default), a tracked replacement (insertion paired with deletion) is resolved as a single change with one accept/reject action — closer to the Google Docs model. When `false`, each insertion and each deletion is an independent change with its own id, matching Microsoft Word and ECMA-376 §17.13.5.
+    <ParamField path="modules.trackChanges.replacements" type="'paired' | 'independent'" default="'paired'">
+      How a tracked replacement (adjacent insertion + deletion created by typing over selected text) surfaces in the UI and API.
+      - `'paired'` (default, Google Docs model): the two halves share one id and resolve together with a single accept/reject click.
+      - `'independent'` (Microsoft Word / ECMA-376 §17.13.5 model): each insertion and each deletion has its own id, is addressable on its own, and resolves independently.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -239,7 +241,7 @@ new SuperDoc({
   selector: '#editor',
   document: 'contract.docx',
   modules: {
-    trackChanges: { pairReplacements: false },
+    trackChanges: { replacements: 'independent' },
   },
 });
 ```

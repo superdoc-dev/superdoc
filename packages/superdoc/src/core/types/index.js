@@ -544,7 +544,9 @@
  *   - 'final': show the document with changes applied
  *   - 'off': disable tracked-change rendering
  * @property {boolean} [enabled=true] Whether the layout engine treats tracked changes as active
- * @property {boolean} [pairReplacements=true] When `true` (default), a tracked replacement (insertion paired with deletion) is resolved as a single change with one accept/reject action — closer to the Google Docs model. When `false`, each insertion and each deletion is an independent change with its own id, matching Microsoft Word and ECMA-376 §17.13.5.
+ * @property {'paired' | 'independent'} [replacements='paired'] How a tracked replacement (adjacent insertion + deletion created by typing over selected text) surfaces in the UI and API.
+ *   - `'paired'` (default, Google Docs model): the two halves share one id and resolve together with a single accept/reject click.
+ *   - `'independent'` (Microsoft Word / ECMA-376 §17.13.5 model): each insertion and each deletion has its own id, is addressable on its own, and resolves independently.
  */
 
 /**

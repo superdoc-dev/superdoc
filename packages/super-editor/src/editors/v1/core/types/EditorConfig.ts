@@ -375,7 +375,13 @@ export interface EditorOptions {
     visible?: boolean;
     mode?: 'review' | 'original' | 'final' | 'off';
     enabled?: boolean;
-    pairReplacements?: boolean;
+    /**
+     * How a tracked replacement (ins + del) surfaces in the UI and API.
+     * `'paired'` (default) groups both halves under one id and resolves them
+     * together. `'independent'` gives each half its own id, matching the
+     * Microsoft Word / ECMA-376 §17.13.5 revision model.
+     */
+    replacements?: 'paired' | 'independent';
   };
 
   /** Whether this is a new file */

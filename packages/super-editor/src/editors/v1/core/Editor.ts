@@ -2688,6 +2688,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
             tr: transactionToApply,
             state: prevState,
             user: this.options.user!,
+            replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
 

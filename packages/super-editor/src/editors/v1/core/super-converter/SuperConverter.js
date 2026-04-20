@@ -211,8 +211,8 @@ class SuperConverter {
     /**
      * Track-changes options forwarded from the editor. Consumed during
      * import (e.g. by `buildTrackedChangeIdMap`) so behaviors like
-     * `pairReplacements` can be toggled per SuperDoc instance.
-     * @type {{ pairReplacements?: boolean } | null}
+     * `replacements` can be toggled per SuperDoc instance.
+     * @type {{ replacements?: 'paired' | 'independent' } | null}
      */
     this.trackedChangesOptions = params?.trackedChangesOptions || null;
 

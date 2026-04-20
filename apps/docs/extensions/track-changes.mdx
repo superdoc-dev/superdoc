@@ -284,6 +284,43 @@ const superdoc = new SuperDoc({
 ```
 </CodeGroup>
 
+## Revision model
+
+SuperDoc supports two models for how a tracked replacement (typing over selected text) is represented. Pick the one that matches the editor your users expect.
+
+| Model | `modules.trackChanges.replacements` | Behavior |
+| --- | --- | --- |
+| **Paired** (default — Google Docs) | `'paired'` | The insertion and deletion share one id. One accept/reject click resolves both halves. One comment bubble per replacement. |
+| **Independent** (Microsoft Word / ECMA-376 §17.13.5) | `'independent'` | Each insertion and each deletion has its own id. Accept/reject resolves one side at a time. A replacement produces two sidebar rows. |
+
+Both modes round-trip cleanly through DOCX import and export — the OOXML always emits one `<w:ins>` / `<w:del>` per mark per ECMA-376. The difference is how SuperDoc's UI and public API surface them at runtime.
+
+### Paired (default)
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  // default: modules.trackChanges.replacements === 'paired'
+});
+```
+
+### Independent (Word-style)
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  modules: {
+    trackChanges: { replacements: 'independent' },
+  },
+});
+```
+
+When `replacements: 'independent'` is set, `editor.doc.trackChanges.list()` returns one entry per revision and `decide({ id })` resolves exactly that one side. The other side of the replacement stays in the document, still addressable by its own id — useful when you're building a custom sidebar and want each revision as a separate row.
+
+See the [Configuration reference](/core/superdoc/configuration#track-changes-module) for the full `modules.trackChanges` shape.
+
 ## Full example
 
 <Card

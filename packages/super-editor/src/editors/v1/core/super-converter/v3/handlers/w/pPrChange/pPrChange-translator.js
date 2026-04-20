@@ -31,7 +31,7 @@ export const translator = NodeTranslator.from({
     const changeNode = params.nodes[0];
     const pPrNode = changeNode?.elements?.find((el) => el.name === 'w:pPr');
 
-    let paragraphProperties = pPrNode ? pPrTranslator.encode({ ...params, nodes: [pPrNode] }) : undefined;
+    let paragraphProperties = pPrNode ? (pPrTranslator.encode({ ...params, nodes: [pPrNode] }) ?? {}) : undefined;
     const sectPr = getSectPr(pPrNode);
     if (sectPr) {
       paragraphProperties = {

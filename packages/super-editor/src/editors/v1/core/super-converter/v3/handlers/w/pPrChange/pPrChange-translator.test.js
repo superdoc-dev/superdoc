@@ -58,7 +58,7 @@ describe('w:pPrChange translator', () => {
       });
     });
 
-    it('should encode a w:pPrChange with only attributes and empty w:pPr', () => {
+    it('should encode a w:pPrChange with an empty w:pPr as an empty paragraphProperties object', () => {
       const xmlNode = {
         name: 'w:pPrChange',
         attributes: {
@@ -80,6 +80,7 @@ describe('w:pPrChange translator', () => {
         id: '5',
         author: 'Test Author',
         date: '2026-01-01T00:00:00Z',
+        paragraphProperties: {},
       });
     });
 
@@ -344,6 +345,31 @@ describe('w:pPrChange translator', () => {
       const encoded = translator.encode({ nodes: [decoded] });
 
       expect(encoded).toEqual(initialChange);
+    });
+
+    it('preserves an empty w:pPr when starting from XML', () => {
+      const initialXml = {
+        name: 'w:pPrChange',
+        type: 'element',
+        attributes: {
+          'w:id': '10',
+          'w:author': 'Empty pPr Round Trip',
+          'w:date': '2026-01-05T00:00:00Z',
+        },
+        elements: [
+          {
+            name: 'w:pPr',
+            type: 'element',
+            attributes: {},
+            elements: [],
+          },
+        ],
+      };
+
+      const encoded = translator.encode({ nodes: [initialXml] });
+      const decoded = translator.decode({ node: { attrs: { change: encoded } } });
+
+      expect(decoded).toEqual(initialXml);
     });
 
     it('maintains consistency for a pPrChange with sectPr-only paragraph properties', () => {

@@ -686,9 +686,13 @@ menclose[notation~="horizontalstrike"] {
 menclose[notation~="verticalstrike"] {
   --sd-menclose-v: linear-gradient(var(--sd-menclose-stroke), var(--sd-menclose-stroke)) no-repeat center / 1px 100%;
 }
+/* Gradient direction is perpendicular to the stripe it produces.
+ * "to bottom right" → stripe runs bottom-left → top-right (visually "/") = updiagonalstrike.
+ * "to top right"    → stripe runs top-left → bottom-right (visually "\") = downdiagonalstrike.
+ */
 menclose[notation~="updiagonalstrike"] {
   --sd-menclose-up: linear-gradient(
-    to top right,
+    to bottom right,
     transparent calc(50% - 0.5px),
     var(--sd-menclose-stroke) calc(50% - 0.5px),
     var(--sd-menclose-stroke) calc(50% + 0.5px),
@@ -697,7 +701,7 @@ menclose[notation~="updiagonalstrike"] {
 }
 menclose[notation~="downdiagonalstrike"] {
   --sd-menclose-down: linear-gradient(
-    to bottom right,
+    to top right,
     transparent calc(50% - 0.5px),
     var(--sd-menclose-stroke) calc(50% - 0.5px),
     var(--sd-menclose-stroke) calc(50% + 0.5px),

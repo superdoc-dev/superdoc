@@ -25,7 +25,10 @@ const MATH_VARIANT_BOUNDARY_ELEMENTS = new Set([
 ]);
 
 function forceNormalMathVariant(root: ParentNode): void {
-  for (const child of root.children) {
+  // Array.from is required here: HTMLCollection is not iterable under the
+  // default DOM lib (needs `dom.iterable`), so `for…of root.children` fails
+  // type-check.
+  for (const child of Array.from(root.children)) {
     if (MATH_VARIANT_BOUNDARY_ELEMENTS.has(child.localName)) continue;
     if (child.localName === 'mi' && !child.hasAttribute('mathvariant')) {
       child.setAttribute('mathvariant', 'normal');

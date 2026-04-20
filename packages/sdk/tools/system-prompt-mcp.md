@@ -218,12 +218,42 @@ superdoc_get_content({action: "blocks"})  // find the listItem nodeId you want t
 superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, position: "after", text: "New item text"})
 ```
 
-To add a sub-point under an existing item, insert and then indent:
+**Level inheritance.** The new item inherits the target's nesting level. Insert after a level-0 item → new item is level 0. Insert after a level-2 item → new item is level 2. To change the level, chain `indent` / `outdent` / `set_level` on the nodeId returned in the insert response.
+
+**Use the nodeId from the response directly.** `superdoc_list({action: "insert"})` returns `{item: {nodeId: "<id>"}}` — that id is ready for subsequent `indent`, `outdent`, `set_level`, or text edits. You do NOT need to re-fetch blocks between the insert and the follow-up operation.
+
+### Add a sub-point under an existing item
+
+Insert a peer, then indent it one level:
+
 ```
-superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parentItemId>"}, position: "after", text: "Sub-point"})
-// Use the new item's nodeId from the response
-superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<newItemId>"}})
+// 1. Insert a peer item after the parent — new item is at the parent's level
+const resp = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parentItemId>"}, position: "after", text: "Sub-point"})
+
+// 2. Indent using the nodeId from resp.item.nodeId
+superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<resp.item.nodeId>"}})
 ```
+
+### Build a nested list with mixed levels
+
+`lists.create` produces a flat list. Add nesting by chaining `insert` + `indent` / `set_level`, using the nodeId returned by each insert to target the next step:
+
+```
+// Starting point: a list item at level 0 ("Parent" with nodeId <parent>)
+
+// Sibling at level 0
+const r1 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parent>"}, position: "after", text: "Sibling"})
+
+// Child at level 1 (insert after r1, then indent)
+const r2 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<r1.item.nodeId>"}, position: "after", text: "Child"})
+superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<r2.item.nodeId>"}})
+
+// Grandchild at level 3 (insert after r2, then jump to level 3 directly)
+const r3 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<r2.item.nodeId>"}, position: "after", text: "Deep"})
+superdoc_list({action: "set_level", target: {kind: "block", nodeType: "listItem", nodeId: "<r3.item.nodeId>"}, level: 3})
+```
+
+`indent` bumps the level by one (bounded 0–8). `set_level` jumps directly to any level 0–8. Markers update automatically based on the list's definition for each level (e.g. `1.` / `a.` / `i.` for an ordered list).
 
 ### Merge two adjacent lists into one
 

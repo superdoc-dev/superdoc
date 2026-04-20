@@ -4905,14 +4905,12 @@ export class DomPainter {
     // Let browser auto-size to MathML content; estimated dimensions are for layout only
     wrapper.style.minWidth = `${run.width}px`;
     wrapper.style.minHeight = `${run.height}px`;
-    // Restore font-size so MathML content and the plain-text fallback render
-    // correctly (the line container sets fontSize: 0 to eliminate the CSS strut).
-    // We use run.height as a rough proxy — it's a layout heuristic from
-    // estimateMathDimensions(), not actual font metrics. The exact value doesn't
-    // matter much: MathML has its own internal scaling, and the plain-text
-    // fallback just needs a non-zero size. Don't rely on this for precise
-    // typographic sizing.
-    wrapper.style.fontSize = `${run.height}px`;
+    // Restore font-size so the plain-text fallback renders at a reasonable size
+    // (the line container sets fontSize: 0 to eliminate the CSS strut). MathML
+    // has its own internal scaling, so this only matters for the textContent
+    // fallback path. run.height would make tall expressions (fractions, equation
+    // arrays) render at 80–100px — use the browser default instead.
+    wrapper.style.fontSize = BROWSER_DEFAULT_FONT_SIZE;
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
 
     const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);

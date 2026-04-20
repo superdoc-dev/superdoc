@@ -1836,8 +1836,10 @@ describe('DomPainter', () => {
     painter.paint(testLayout, mount);
 
     const mathWrapper = mount.querySelector('.sd-math') as HTMLElement | null;
-    // Must set fontSize so fallback text doesn't inherit fontSize:0 from the line
-    expect(mathWrapper?.style.fontSize).toBe('14px');
+    // Must set fontSize so fallback text doesn't inherit fontSize:0 from the line.
+    // Uses browser default (16px) rather than run.height, which would render tall
+    // expressions at 80–100px for the plain-text fallback path.
+    expect(mathWrapper?.style.fontSize).toBe('16px');
   });
 
   it('renders image fragments', () => {

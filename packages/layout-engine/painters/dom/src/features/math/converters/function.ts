@@ -3,10 +3,38 @@ import type { MathObjectConverter } from '../types.js';
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const FUNCTION_APPLY_OPERATOR = '\u2061';
 
+// Boundary elements for the function-name mathvariant walk: every MathML
+// element whose children occupy their own semantic slot (base, subscript,
+// limit, matrix cell, etc.). When m:fName wraps one of these, the slot
+// content carries authored styling per ECMA-376 §22.1.2.111 and must not be
+// overwritten. Anything inside these is skipped.
+const MATH_VARIANT_BOUNDARY_ELEMENTS = new Set([
+  'munder',
+  'mover',
+  'munderover',
+  'msub',
+  'msup',
+  'msubsup',
+  'mmultiscripts',
+  'mfrac',
+  'msqrt',
+  'mroot',
+  'mtable',
+  'mtr',
+  'mtd',
+]);
+
 function forceNormalMathVariant(root: ParentNode): void {
-  root.querySelectorAll('mi').forEach((identifier) => {
-    identifier.setAttribute('mathvariant', 'normal');
-  });
+  // Array.from is required here: HTMLCollection is not iterable under the
+  // default DOM lib (needs `dom.iterable`), so `for…of root.children` fails
+  // type-check.
+  for (const child of Array.from(root.children)) {
+    if (MATH_VARIANT_BOUNDARY_ELEMENTS.has(child.localName)) continue;
+    if (child.localName === 'mi' && !child.hasAttribute('mathvariant')) {
+      child.setAttribute('mathvariant', 'normal');
+    }
+    forceNormalMathVariant(child);
+  }
 }
 
 /**

@@ -724,46 +724,44 @@ test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
     expect(counts.sup).toBe(1);
   });
 
-  test('keeps limit variables italic when m:limLow is wrapped in m:func (SD-2538)', async ({ superdoc }) => {
+  test('keeps limit variables italic when m:limLow/m:limUpp is wrapped in m:func (SD-2538)', async ({ superdoc }) => {
     await superdoc.loadDocument(LIMIT_DOC);
     await superdoc.waitForStable();
 
-    // ECMA-376 §22.1.2.111: m:r without m:sty defaults to italic.
-    // Case 1 of math-limit-tests.docx is lim_(n→∞), encoded as
-    // m:func > m:fName > m:limLow. The function-name run ("lim") carries
-    // m:sty="p" so it renders upright; the limit expression runs ("n", "→∞")
-    // have no m:sty and must stay italic — i.e. <mi> with no mathvariant.
+    // ECMA-376 §22.1.2.111: m:r without m:sty defaults to italic. Word's own
+    // OMML2MML.xsl emits <mi>n</mi> (no mathvariant) for limit variables.
     //
-    // Pre-SD-2538 convertFunction forced mathvariant="normal" on every <mi>
-    // inside m:fName, including nested limit variables. This asserts Word's
-    // own OMML2MML.xsl output shape: <mi>n</mi> (no attribute).
-    const limitVariantCheck = await superdoc.page.evaluate(() => {
-      const munders = Array.from(document.querySelectorAll('munder'));
-      const results: Array<{ hasLimUpright: boolean; limitMis: Array<{ text: string; mathvariant: string | null }> }> =
-        [];
-      for (const munder of munders) {
-        const base = munder.children[0];
-        const limit = munder.children[1];
-        const baseMi = base?.querySelector('mi');
-        if (baseMi?.textContent !== 'lim') continue;
-        results.push({
-          hasLimUpright: baseMi.getAttribute('mathvariant') === 'normal',
-          limitMis: Array.from(limit?.querySelectorAll('mi') ?? []).map((mi) => ({
-            text: mi.textContent ?? '',
-            mathvariant: mi.getAttribute('mathvariant'),
-          })),
-        });
-      }
-      return results;
-    });
+    // Fixture math-limit-tests.docx has 6 m:func>m:fName wrappers: 5 around
+    // m:limLow (→ <munder>) and 1 around m:limUpp (→ <mover>). The function
+    // bases are lim×4, max×1, sup×1 — all carry m:sty=p and must render
+    // upright. The limit expression runs have no m:sty and must stay italic.
+    const FUNCTION_BASES = ['lim', 'max', 'sup'];
+    const variantCheck = await superdoc.page.evaluate((bases) => {
+      const collect = (tag: string) =>
+        Array.from(document.querySelectorAll(tag))
+          .map((el) => {
+            const baseMi = el.children[0]?.querySelector('mi');
+            const limitEl = el.children[1];
+            return {
+              base: baseMi?.textContent ?? '',
+              baseVariant: baseMi?.getAttribute('mathvariant') ?? null,
+              limitVariants: Array.from(limitEl?.querySelectorAll('mi') ?? []).map((mi) =>
+                mi.getAttribute('mathvariant'),
+              ),
+            };
+          })
+          .filter((entry) => bases.includes(entry.base));
+      return { munder: collect('munder'), mover: collect('mover') };
+    }, FUNCTION_BASES);
 
-    // Every lim-based <munder> should have an upright base and NO mathvariant
-    // on any <mi> inside the limit expression.
-    expect(limitVariantCheck.length).toBeGreaterThan(0);
-    for (const entry of limitVariantCheck) {
-      expect(entry.hasLimUpright).toBe(true);
-      for (const limMi of entry.limitMis) {
-        expect(limMi.mathvariant).toBeNull();
+    // Exact counts pin against a regression that drops a case silently.
+    expect(variantCheck.munder).toHaveLength(5); // 3×lim + 1×max + 1×sup
+    expect(variantCheck.mover).toHaveLength(1); // 1×lim (case: m:limUpp in func)
+
+    for (const entry of [...variantCheck.munder, ...variantCheck.mover]) {
+      expect(entry.baseVariant).toBe('normal');
+      for (const limVariant of entry.limitVariants) {
+        expect(limVariant).toBeNull();
       }
     }
   });

@@ -40,6 +40,13 @@ export function createPaginator(opts: PaginatorOptions) {
   const states: PageState[] = [];
   const pages: Page[] = [];
 
+  const pruneTrailingEmptyPages = (): void => {
+    while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
+      pages.pop();
+      states.pop();
+    }
+  };
+
   const getActiveColumnsForState = (state: PageState): ColumnLayout => {
     if (state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
@@ -143,5 +150,6 @@ export function createPaginator(opts: PaginatorOptions) {
     columnX,
     getActiveColumnsForState,
     getPageByNumber,
+    pruneTrailingEmptyPages,
   } as const;
 }

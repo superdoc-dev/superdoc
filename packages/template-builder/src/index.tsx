@@ -2,12 +2,22 @@ import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImper
 import type { SuperDoc } from 'superdoc'; // requires superdoc >=1.24.2 for correct types
 import type * as Types from './types';
 import { FieldMenu, FieldList } from './defaults';
-import { areTemplateFieldsEqual, resolveToolbar, clampToViewport, getPresentationEditor } from './utils';
+import {
+  areTemplateFieldsEqual,
+  resolveToolbar,
+  clampToViewport,
+  getPresentationEditor,
+  generateFieldColorCSS,
+} from './utils';
 
 export * from './types';
 export { FieldMenu, FieldList };
 
 type Editor = NonNullable<SuperDoc['activeEditor']>;
+
+const applyDocumentMode = (instance: SuperDoc, mode: string) => {
+  (instance as any).setDocumentMode(mode);
+};
 
 const getTemplateFieldsFromEditor = (editor: Editor): Types.TemplateField[] => {
   const structuredContentHelpers = (editor.helpers as any)?.structuredContentCommands;
@@ -39,6 +49,7 @@ const getTemplateFieldsFromEditor = (editor: Editor): Types.TemplateField[] => {
       mode,
       group: structuredContentHelpers.getGroup?.(attrs.tag) ?? undefined,
       fieldType: parsedTag?.fieldType ?? 'owner',
+      lockMode: attrs.lockMode ?? undefined,
     } as Types.TemplateField;
   });
 };
@@ -51,6 +62,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       menu = {},
       list = {},
       toolbar,
+      defaultLockMode,
+      fieldColors,
       cspNonce,
       telemetry,
       licenseKey,
@@ -99,6 +112,26 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       [telemetry?.enabled, JSON.stringify(telemetry?.metadata)],
     );
 
+    const fieldColorCSS = useMemo(() => {
+      if (!fieldColors) return '';
+      return generateFieldColorCSS(fieldColors, '.superdoc-template-builder');
+    }, [fieldColors]);
+
+    // Inject scoped field-color CSS when fieldColors is provided
+    useEffect(() => {
+      if (!fieldColorCSS) return;
+
+      const style = window.document.createElement('style');
+      style.setAttribute('data-superdoc-field-colors', '');
+      if (cspNonce) style.nonce = cspNonce;
+      style.textContent = fieldColorCSS;
+      window.document.head.appendChild(style);
+
+      return () => {
+        style.remove();
+      };
+    }, [fieldColorCSS, cspNonce]);
+
     const computeFilteredFields = useCallback(
       (query: string) => {
         const normalized = query.trim().toLowerCase();
@@ -139,22 +172,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               })
             : undefined;
 
+        const lockMode = field.lockMode ?? defaultLockMode;
+
+        const attrs: Record<string, unknown> = {
+          alias: field.alias,
+          tag: tagData,
+          ...(lockMode != null && { lockMode }),
+        };
+
         const success = (
           mode === 'inline'
-            ? editor.commands.insertStructuredContentInline?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagData,
-                },
-                text: field.defaultValue || field.alias,
-              })
-            : editor.commands.insertStructuredContentBlock?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagData,
-                },
-                text: field.defaultValue || field.alias,
-              })
+            ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.defaultValue || field.alias })
+            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.defaultValue || field.alias })
         ) as boolean | undefined;
 
         if (success) {
@@ -174,7 +203,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         return success ?? false;
       },
-      [onFieldInsert, onFieldsChange, templateFields],
+      [onFieldInsert, onFieldsChange, templateFields, defaultLockMode],
     );
 
     const updateField = useCallback(
@@ -418,6 +447,12 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
             discoverFields(editor);
           }
 
+          // Apply any mode change that arrived during init
+          if (pendingModeRef.current && instance) {
+            applyDocumentMode(instance, pendingModeRef.current);
+            pendingModeRef.current = null;
+          }
+
           onReady?.();
         };
 
@@ -450,10 +485,10 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         }
 
         superdocRef.current = null;
+        pendingModeRef.current = null;
       };
     }, [
       document?.source,
-      document?.mode,
       trigger,
       discoverFields,
       onReady,
@@ -463,6 +498,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       stableTelemetry,
       licenseKey,
     ]);
+
+    // Apply document mode changes without recreating the editor
+    const pendingModeRef = useRef<string | null>(null);
+    useEffect(() => {
+      const mode = document?.mode || 'editing';
+      if (superdocRef.current) {
+        applyDocumentMode(superdocRef.current, mode);
+        pendingModeRef.current = null;
+      } else {
+        pendingModeRef.current = mode;
+      }
+    }, [document?.mode]);
 
     const handleMenuSelect = useCallback(
       async (field: Types.FieldDefinition) => {
@@ -485,6 +532,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               metadata: createdField.metadata,
               defaultValue: createdField.defaultValue,
               fieldType: createdField.fieldType,
+              lockMode: createdField.lockMode,
             });
             setMenuVisible(false);
             return;
@@ -496,6 +544,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           metadata: field.metadata,
           defaultValue: field.defaultValue,
           fieldType: field.fieldType,
+          lockMode: field.lockMode,
         });
         setMenuVisible(false);
       },
@@ -526,23 +575,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         });
 
         const mode = field.mode || 'inline';
+        const lockMode = field.lockMode ?? defaultLockMode;
+
+        const attrs: Record<string, unknown> = {
+          alias: field.alias,
+          tag: tagWithGroup,
+          ...(lockMode != null && { lockMode }),
+        };
 
         const success =
           mode === 'inline'
-            ? editor.commands.insertStructuredContentInline?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagWithGroup,
-                },
-                text: field.alias,
-              })
-            : editor.commands.insertStructuredContentBlock?.({
-                attrs: {
-                  alias: field.alias,
-                  tag: tagWithGroup,
-                },
-                text: field.alias,
-              });
+            ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.alias })
+            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.alias });
 
         if (success) {
           if (!field.group) {
@@ -556,7 +600,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           onFieldsChange?.(updatedFields);
         }
       },
-      [updateField, resetMenuFilter, onFieldsChange],
+      [updateField, resetMenuFilter, onFieldsChange, defaultLockMode],
     );
 
     const handleMenuClose = useCallback(() => {
@@ -616,6 +660,11 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       nextField,
       previousField,
       getFields: () => templateFields,
+      refresh: () => {
+        if (superdocRef.current?.activeEditor) {
+          discoverFields(superdocRef.current.activeEditor);
+        }
+      },
       exportTemplate,
       getSuperDoc: () => superdocRef.current,
     }));
@@ -634,6 +683,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 onDelete={deleteField}
                 onUpdate={(field) => updateField(field.id, field)}
                 selectedFieldId={selectedFieldId || undefined}
+                fieldColors={fieldColors}
               />
             </div>
           )}
@@ -662,6 +712,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 onDelete={deleteField}
                 onUpdate={(field) => updateField(field.id, field)}
                 selectedFieldId={selectedFieldId || undefined}
+                fieldColors={fieldColors}
               />
             </div>
           )}
@@ -679,6 +730,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           onCreateField={onFieldCreate}
           existingFields={templateFields}
           onSelectExisting={handleSelectExisting}
+          fieldColors={fieldColors}
         />
       </div>
     );

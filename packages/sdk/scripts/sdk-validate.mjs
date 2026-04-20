@@ -301,6 +301,7 @@ async function main() {
       'tools.vercel.json',
       'tools.generic.json',
       'system-prompt.md',
+      'system-prompt-mcp.md',
     ];
     const missingTools = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
     if (missingTools.length > 0) {

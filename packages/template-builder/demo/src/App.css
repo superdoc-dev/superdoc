@@ -255,12 +255,6 @@ header {
   background: #000000;
 }
 
-/* Field type color overrides — just set the CSS variables */
-:root {
-  --superdoc-field-owner-color: #1bb754;
-  --superdoc-field-signer-color: #d81313;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .header-content {

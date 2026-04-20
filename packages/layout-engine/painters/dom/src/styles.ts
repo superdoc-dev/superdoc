@@ -237,17 +237,26 @@ const TRACK_CHANGE_STYLES = `
 }
 
 .superdoc-layout .track-insert-dec.highlighted {
-  border-top: 1px dashed var(--sd-tracked-changes-insert-border, #00853d);
-  border-bottom: 1px dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-top: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
   background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration-line: var(--sd-tracked-changes-insert-decoration-line, none);
+  text-decoration-color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration-thickness: var(--sd-tracked-changes-insert-decoration-thickness, 1px);
+  text-underline-offset: var(--sd-tracked-changes-insert-underline-offset, 0px);
 }
 
 .superdoc-layout .track-delete-dec.highlighted {
-  border-top: 1px dashed var(--sd-tracked-changes-delete-border, #cb0e47);
-  border-bottom: 1px dashed var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-top: var(--sd-tracked-changes-delete-border-width, 1px) dashed var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-bottom: var(--sd-tracked-changes-delete-border-width, 1px) dashed var(--sd-tracked-changes-delete-border, #cb0e47);
   background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
-  text-decoration: line-through !important;
-  text-decoration-thickness: 2px !important;
+  color: var(--sd-tracked-changes-delete-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, currentColor)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
 }
 
 .superdoc-layout .track-format-dec.highlighted {
@@ -256,13 +265,13 @@ const TRACK_CHANGE_STYLES = `
 
 .superdoc-layout .track-insert-dec.highlighted.track-change-focused {
   border-style: solid;
-  border-width: 2px;
+  border-width: var(--sd-tracked-changes-insert-focused-border-width, 2px);
   background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
 }
 
 .superdoc-layout .track-delete-dec.highlighted.track-change-focused {
   border-style: solid;
-  border-width: 2px;
+  border-width: var(--sd-tracked-changes-delete-focused-border-width, 2px);
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 

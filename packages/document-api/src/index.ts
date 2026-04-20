@@ -63,6 +63,7 @@ import type {
   SDMutationReceipt,
   TrackChangeInfo,
   TrackChangesListResult,
+  ExtractResult,
 } from './types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 import type {
@@ -115,6 +116,7 @@ import {
 } from './markdown-to-fragment/markdown-to-fragment.js';
 import type { SDMarkdownToFragmentResult } from './types/sd-contract.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
+import { executeExtract, type ExtractAdapter, type ExtractInput } from './extract/extract.js';
 import {
   executeClearContent,
   type ClearContentAdapter,
@@ -889,6 +891,7 @@ export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
 export type { GetMarkdownAdapter, GetMarkdownInput } from './get-markdown/get-markdown.js';
 export type { GetHtmlAdapter, GetHtmlInput } from './get-html/get-html.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
+export type { ExtractAdapter, ExtractInput } from './extract/extract.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatInlineAliasApi,
@@ -1532,6 +1535,11 @@ export interface DocumentApi {
    */
   info(input: InfoInput): DocumentInfo;
   /**
+   * Extract all document content with stable IDs for RAG pipelines.
+   * Returns blocks with full text, comments, and tracked changes.
+   */
+  extract(input: ExtractInput): ExtractResult;
+  /**
    * Clear all document body content, leaving a single empty paragraph.
    */
   clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt;
@@ -1695,6 +1703,7 @@ export interface DocumentApiAdapters {
   getHtml: GetHtmlAdapter;
   markdownToFragment: MarkdownToFragmentAdapter;
   info: InfoAdapter;
+  extract: ExtractAdapter;
   clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
@@ -1893,6 +1902,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
+    },
+    extract(input: ExtractInput): ExtractResult {
+      return executeExtract(adapters.extract, input);
     },
     clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt {
       return executeClearContent(adapters.clearContent, input, options);

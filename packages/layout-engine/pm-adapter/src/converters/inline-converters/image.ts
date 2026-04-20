@@ -1,6 +1,6 @@
 import type { ImageRun } from '@superdoc/contracts';
 import type { PMNode } from '../../types.js';
-import { pickNumber, isPlainObject } from '../../utilities.js';
+import { pickNumber, isPlainObject, readImageHyperlink } from '../../utilities.js';
 import { type InlineConverterParams, NotInlineNodeError } from './common.js';
 
 /**
@@ -164,6 +164,11 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
       ...(bright != null ? { bright } : {}),
       ...(contrast != null ? { contrast } : {}),
     };
+  }
+
+  const hyperlink = readImageHyperlink(attrs.hyperlink);
+  if (hyperlink) {
+    run.hyperlink = hyperlink;
   }
 
   return run;

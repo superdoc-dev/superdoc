@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 import {
   buildAgentArtifact,
+  buildVisualComparisonPlan,
+  collectMissingVisualTestingPackages,
   determineCompareStatus,
   normalizeGenerationWarningMessage,
+  normalizeDocSnapshot,
   toDisplayDocPath,
 } from './compare-layout-snapshots.mjs';
+
+const REPO_ROOT = process.cwd();
 
 test('normalizeGenerationWarningMessage strips command-service prefix and trims whitespace', () => {
   const raw = '   [CommandService] Dispatch failed: Invalid content for node structuredContentBlock   ';
@@ -48,6 +55,90 @@ test('determineCompareStatus treats generation failures as failed', () => {
   assert.equal(status, 'failed');
 });
 
+test('buildVisualComparisonPlan includes widespread-only changed docs in visual coverage', () => {
+  const plan = buildVisualComparisonPlan({
+    changedDocs: [
+      {
+        path: 'layout/79.docx.layout.json',
+        widespreadOnly: true,
+      },
+      {
+        path: 'layout/82.docx.layout.json',
+        widespreadOnly: false,
+      },
+    ],
+    visualOnChange: true,
+    visualReference: '1.24.0-next.65',
+  });
+
+  assert.equal(plan.visualEligible, true);
+  assert.equal(plan.visualSkipReason, null);
+  assert.deepEqual(plan.changedDocPaths, ['layout/79.docx', 'layout/82.docx']);
+});
+
+test('buildVisualComparisonPlan reports no changed docs only when there are no changed docs at all', () => {
+  const plan = buildVisualComparisonPlan({
+    changedDocs: [],
+    visualOnChange: true,
+    visualReference: '1.24.0-next.65',
+  });
+
+  assert.equal(plan.visualEligible, false);
+  assert.equal(plan.visualSkipReason, 'No changed docs.');
+  assert.deepEqual(plan.changedDocPaths, []);
+});
+
+test('collectMissingVisualTestingPackages flags broken or missing package manifests', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-deps-'));
+  const createManifest = async (packageName) => {
+    const manifestPath = path.join(tempRoot, 'node_modules', ...packageName.split('/'), 'package.json');
+    await fs.mkdir(path.dirname(manifestPath), { recursive: true });
+    await fs.writeFile(manifestPath, JSON.stringify({ name: packageName }), 'utf8');
+  };
+
+  try {
+    await createManifest('dotenv');
+    await createManifest('tsx');
+
+    const missingPackages = await collectMissingVisualTestingPackages(tempRoot);
+
+    assert.deepEqual(missingPackages, ['pngjs', '@playwright/test']);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('normalizeDocSnapshot ignores internal paint image block ids', () => {
+  const buildRawSnapshot = (imageBlockId) => ({
+    layoutSnapshot: {
+      blocks: [{ id: 'layout-block-uuid' }],
+      layout: {
+        pages: [{ fragments: [{ blockId: 'layout-block-uuid' }] }],
+      },
+    },
+    paintSnapshot: {
+      pages: [],
+      entities: {
+        images: [
+          {
+            kind: 'fragment',
+            pageIndex: 0,
+            element: {},
+            blockId: imageBlockId,
+          },
+        ],
+      },
+    },
+  });
+
+  const reference = normalizeDocSnapshot(buildRawSnapshot('image-uuid-a'));
+  const candidate = normalizeDocSnapshot(buildRawSnapshot('image-uuid-b'));
+
+  assert.deepEqual(reference.paintSnapshot, candidate.paintSnapshot);
+  assert.equal(reference.paintSnapshot.entities.images[0].blockId, undefined);
+  assert.equal(reference.layoutSnapshot.layout.pages[0].fragments[0].blockId, 'b0');
+});
+
 test('buildAgentArtifact produces repo-relative report paths', () => {
   const args = {
     reference: '1.24.0-next.36',
@@ -59,9 +150,9 @@ test('buildAgentArtifact produces repo-relative report paths', () => {
   };
   const summary = {
     generatedAt: '2026-03-28T18:24:07.572Z',
-    reportDir: '/Users/nickjbernal/dev/superdoc7/tests/layout/reports/example-report',
-    candidateRoot: '/Users/nickjbernal/dev/superdoc7/tests/layout/candidate',
-    referenceRoot: '/Users/nickjbernal/dev/superdoc7/tests/layout/reference/v.1.24.0-next.36',
+    reportDir: path.join(REPO_ROOT, 'tests/layout/reports/example-report'),
+    candidateRoot: path.join(REPO_ROOT, 'tests/layout/candidate'),
+    referenceRoot: path.join(REPO_ROOT, 'tests/layout/reference/v.1.24.0-next.36'),
     referenceLabel: 'v.1.24.0-next.36',
     candidateDocCount: 4,
     referenceDocCount: 4,
@@ -86,8 +177,8 @@ test('buildAgentArtifact produces repo-relative report paths', () => {
     referenceGenerationFailures: [],
     visualComparison: {
       status: 'skipped',
-      workdir: '/Users/nickjbernal/dev/superdoc7/devtools/visual-testing',
-      docsRoot: '/Users/nickjbernal/dev/superdoc7/test-corpus',
+      workdir: path.join(REPO_ROOT, 'devtools/visual-testing'),
+      docsRoot: path.join(REPO_ROOT, 'test-corpus'),
     },
   };
 
@@ -112,9 +203,9 @@ test('buildAgentArtifact surfaces untested docs from generation failures', () =>
   };
   const summary = {
     generatedAt: '2026-03-28T19:33:57.739Z',
-    reportDir: '/Users/nickjbernal/dev/superdoc7/tests/layout/reports/example-report',
-    candidateRoot: '/Users/nickjbernal/dev/superdoc7/tests/layout/candidate',
-    referenceRoot: '/Users/nickjbernal/dev/superdoc7/tests/layout/reference/v.1.24.0-next.36',
+    reportDir: path.join(REPO_ROOT, 'tests/layout/reports/example-report'),
+    candidateRoot: path.join(REPO_ROOT, 'tests/layout/candidate'),
+    referenceRoot: path.join(REPO_ROOT, 'tests/layout/reference/v.1.24.0-next.36'),
     referenceLabel: 'v.1.24.0-next.36',
     candidateDocCount: 424,
     referenceDocCount: 424,

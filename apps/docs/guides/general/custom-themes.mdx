@@ -278,13 +278,45 @@ Insert, delete, and format change decorations in the document.
 | Variable | Default | Controls |
 |----------|---------|----------|
 | `--sd-tracked-changes-insert-background` | `#399c7222` | Insert highlight |
-| `--sd-tracked-changes-insert-border` | `#00853d` | Insert left border |
+| `--sd-tracked-changes-insert-border` | `#00853d` | Insert border color |
+| `--sd-tracked-changes-insert-border-width` | `1px` | Insert border width |
+| `--sd-tracked-changes-insert-focused-border-width` | `2px` | Focused insert border width |
+| `--sd-tracked-changes-insert-text` | `currentColor` | Insert text color |
+| `--sd-tracked-changes-insert-decoration-line` | `none` | Insert text decoration |
+| `--sd-tracked-changes-insert-decoration-thickness` | `1px` | Insert decoration thickness |
+| `--sd-tracked-changes-insert-underline-offset` | `0px` | Insert underline offset |
 | `--sd-tracked-changes-delete-background` | `#cb0e4722` | Delete highlight |
-| `--sd-tracked-changes-delete-border` | `#cb0e47` | Delete left border |
+| `--sd-tracked-changes-delete-border` | `#cb0e47` | Delete border color |
+| `--sd-tracked-changes-delete-border-width` | `1px` | Delete border width |
+| `--sd-tracked-changes-delete-focused-border-width` | `2px` | Focused delete border width |
+| `--sd-tracked-changes-delete-text` | `currentColor` | Delete text color |
+| `--sd-tracked-changes-delete-decoration-thickness` | `2px` | Delete strike thickness |
 | `--sd-tracked-changes-format-border` | `gold` | Format change border |
 | `--sd-tracked-changes-insert-background-focused` | `#399c7244` | Focused insert |
 | `--sd-tracked-changes-delete-background-focused` | `#cb0e4744` | Focused delete |
 | `--sd-tracked-changes-format-background-focused` | `#ffd70033` | Focused format change |
+
+Word-style redlines can be approximated with CSS vars only:
+
+```css
+.word-like-redlines {
+  --sd-tracked-changes-insert-border-width: 0px;
+  --sd-tracked-changes-insert-focused-border-width: 0px;
+  --sd-tracked-changes-insert-background: transparent;
+  --sd-tracked-changes-insert-text: #bf3848;
+  --sd-tracked-changes-insert-decoration-line: underline;
+  --sd-tracked-changes-insert-decoration-thickness: 1.5px;
+  --sd-tracked-changes-insert-underline-offset: 2px;
+
+  --sd-tracked-changes-delete-border-width: 0px;
+  --sd-tracked-changes-delete-focused-border-width: 0px;
+  --sd-tracked-changes-delete-background: transparent;
+  --sd-tracked-changes-delete-text: #2e64a8;
+  --sd-tracked-changes-delete-decoration-thickness: 1.5px;
+}
+```
+
+If you also want tracked-change text inside comment threads to match, set `--sd-ui-comments-insert-text` and `--sd-ui-comments-delete-text` too.
 
 ### Content controls
 

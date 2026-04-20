@@ -19,6 +19,7 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
         gap: columns.gap,
         ...(Array.isArray(columns.widths) ? { widths: [...columns.widths] } : {}),
         ...(columns.equalWidth !== undefined ? { equalWidth: columns.equalWidth } : {}),
+        ...(columns.withSeparator !== undefined ? { withSeparator: columns.withSeparator } : {}),
       }
     : { count: 1, gap: 0 };
 }
@@ -62,6 +63,7 @@ export function normalizeColumnLayout(
       count: 1,
       gap: 0,
       width: Math.max(0, contentWidth),
+      ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
     };
   }
 
@@ -70,6 +72,7 @@ export function normalizeColumnLayout(
     gap,
     ...(widths.length > 0 ? { widths } : {}),
     ...(input?.equalWidth !== undefined ? { equalWidth: input.equalWidth } : {}),
+    ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
     width,
   };
 }

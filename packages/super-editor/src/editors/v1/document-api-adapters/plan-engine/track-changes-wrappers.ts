@@ -12,6 +12,7 @@ import type {
   Receipt,
   RevisionGuardOptions,
   TrackChangeInfo,
+  TrackChangeWordRevisionIds,
   TrackChangesAcceptAllInput,
   TrackChangesAcceptInput,
   TrackChangesGetInput,
@@ -35,6 +36,19 @@ import {
 } from '../helpers/tracked-change-resolver.js';
 import { normalizeExcerpt, toNonEmptyString } from '../helpers/value-utils.js';
 
+function normalizeWordRevisionIds(
+  wordRevisionIds: TrackChangeWordRevisionIds | undefined,
+): TrackChangeWordRevisionIds | undefined {
+  if (!wordRevisionIds) return undefined;
+
+  const normalized: TrackChangeWordRevisionIds = {};
+  if (wordRevisionIds.insert) normalized.insert = wordRevisionIds.insert;
+  if (wordRevisionIds.delete) normalized.delete = wordRevisionIds.delete;
+  if (wordRevisionIds.format) normalized.format = wordRevisionIds.format;
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function buildTrackChangeInfo(editor: Editor, change: GroupedTrackedChange): TrackChangeInfo {
   const excerpt = normalizeExcerpt(editor.state.doc.textBetween(change.from, change.to, ' ', '\ufffc'));
   const type = resolveTrackedChangeType(change);
@@ -47,6 +61,7 @@ function buildTrackChangeInfo(editor: Editor, change: GroupedTrackedChange): Tra
     },
     id: change.id,
     type,
+    wordRevisionIds: normalizeWordRevisionIds(change.wordRevisionIds),
     author: toNonEmptyString(change.attrs.author),
     authorEmail: toNonEmptyString(change.attrs.authorEmail),
     authorImage: toNonEmptyString(change.attrs.authorImage),
@@ -94,8 +109,17 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
   const items = paged.items.map((change) => {
     const info = buildTrackChangeInfo(editor, change);
     const handle = buildResolvedHandle(`tc:${info.id}`, 'stable', 'trackedChange');
-    const { address, type, author, authorEmail, authorImage, date, excerpt } = info;
-    return buildDiscoveryItem(info.id, handle, { address, type, author, authorEmail, authorImage, date, excerpt });
+    const { address, type, wordRevisionIds, author, authorEmail, authorImage, date, excerpt } = info;
+    return buildDiscoveryItem(info.id, handle, {
+      address,
+      type,
+      wordRevisionIds,
+      author,
+      authorEmail,
+      authorImage,
+      date,
+      excerpt,
+    });
   });
 
   return buildDiscoveryResult({

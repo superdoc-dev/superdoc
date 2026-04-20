@@ -102,6 +102,68 @@ describe('normalizeContextMetadata', () => {
       expect(result.collaboration).toBeUndefined();
     });
 
+    test('preserves websocket params on rehydration', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'y-websocket',
+          url: 'ws://localhost:4000',
+          documentId: 'test-doc',
+          params: { customAttributions: 'agent_id:abc', region: 'us-east-1' },
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('collab');
+      expect(result.collaboration).toMatchObject({
+        params: { customAttributions: 'agent_id:abc', region: 'us-east-1' },
+      });
+    });
+
+    test('preserves websocket profile when params is absent', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'y-websocket',
+          url: 'ws://localhost:4000',
+          documentId: 'test-doc',
+        },
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('collab');
+      expect(result.collaboration).toBeDefined();
+      expect((result.collaboration as any).params).toBeUndefined();
+    });
+
+    test('rejects websocket profile with non-object params', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'y-websocket',
+          url: 'ws://localhost:4000',
+          documentId: 'test-doc',
+          params: 'not-an-object',
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
+    test('rejects websocket profile with non-string param values', () => {
+      const metadata = makeMetadata({
+        sessionType: 'collab',
+        collaboration: {
+          providerType: 'y-websocket',
+          url: 'ws://localhost:4000',
+          documentId: 'test-doc',
+          params: { count: 42 },
+        } as any,
+      });
+      const result = normalizeContextMetadata(metadata);
+      expect(result.sessionType).toBe('local');
+      expect(result.collaboration).toBeUndefined();
+    });
+
     test('preserves Liveblocks collab profile with publicApiKey', () => {
       const metadata = makeMetadata({
         sessionType: 'collab',

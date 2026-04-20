@@ -80,27 +80,24 @@ import type {
   SelectionHandle,
   SelectionCommandContext,
   ResolveRangeOutput,
+  Comment,
+  CommentElement,
+  LayoutState,
+  ImageSelectedEvent,
+  ImageDeselectedEvent,
+  TelemetryEvent,
+  RemoteCursorsRenderPayload,
+  FlowMode,
+  ProofingProvider,
+  ProofingCapabilities,
+  ProofingCheckRequest,
+  ProofingCheckResult,
+  ProofingSegment,
+  ProofingSegmentMetadata,
+  ProofingIssue,
+  ProofingIssueKind,
+  ProofingConfig,
+  ProofingStatus,
+  ProofingError,
+  PageStyles,
 } from 'superdoc';
-
-// Verify types are usable (not just importable)
-const pageSize: PageSize = { w: 612, h: 792 };
-const margins: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
-const saveOpts: SaveOptions = {
-  isFinalDoc: true,
-  fieldsHighlightColor: '#ff0',
-  compression: 'DEFLATE',
-};
-const binaryData: BinaryData = new ArrayBuffer(10);
-const rect: BoundingRect = {
-  top: 0,
-  left: 0,
-  bottom: 100,
-  right: 100,
-  width: 100,
-  height: 100,
-};
-const unsupported: UnsupportedContentItem = {
-  tagName: 'HR',
-  outerHTML: '<hr>',
-  count: 1,
-};

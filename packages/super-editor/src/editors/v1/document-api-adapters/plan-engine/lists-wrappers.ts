@@ -29,6 +29,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -885,6 +889,172 @@ export function listsSeparateWrapper(
   }
 
   return { success: true, listId: `${newNumId!}:${target.address.nodeId}`, numId: newNumId! };
+}
+
+/**
+ * Compound merge: structurally merge two adjacent list sequences into one.
+ *
+ * Unlike lists.join, merge does NOT require identical abstractNumId — absorbed
+ * items adopt the absorbing sequence's numbering definition. Additionally,
+ * empty paragraphs between the two sequences are removed so numbering flows
+ * continuously.
+ */
+export function listsMergeWrapper(editor: Editor, input: ListsMergeInput, options?: MutationOptions): ListsMergeResult {
+  rejectTrackedMode('lists.merge', options);
+
+  const target = resolveListItem(editor, input.target);
+  if (target.numId == null) {
+    return toListsFailure('INVALID_TARGET', 'Target must have numbering metadata.', { target: input.target });
+  }
+
+  const adjacent = findAdjacentSequence(editor, target, input.direction);
+  if (!adjacent) {
+    return toListsFailure('NO_ADJACENT_SEQUENCE', 'No adjacent list sequence found in the given direction.', {
+      target: input.target,
+      direction: input.direction,
+    });
+  }
+
+  const targetSequence = getContiguousSequence(editor, target);
+  if (adjacent.numId === target.numId) {
+    return toListsFailure('NO_OP', 'Target and adjacent items already belong to the same sequence.', {
+      target: input.target,
+    });
+  }
+
+  let absorbingNumId: number;
+  let absorbedItems: ListItemProjection[];
+  let anchorNodeId: string;
+  let gapFromPos: number;
+  let gapToPos: number;
+
+  if (input.direction === 'withPrevious') {
+    absorbingNumId = adjacent.numId;
+    absorbedItems = targetSequence;
+    anchorNodeId = adjacent.sequence[0]?.address.nodeId ?? target.address.nodeId;
+    const lastOfAdjacent = adjacent.sequence[adjacent.sequence.length - 1]!;
+    const firstOfTarget = targetSequence[0]!;
+    gapFromPos = lastOfAdjacent.candidate.pos + lastOfAdjacent.candidate.node.nodeSize;
+    gapToPos = firstOfTarget.candidate.pos;
+  } else {
+    absorbingNumId = target.numId;
+    absorbedItems = adjacent.sequence;
+    anchorNodeId = targetSequence[0]?.address.nodeId ?? target.address.nodeId;
+    const lastOfTarget = targetSequence[targetSequence.length - 1]!;
+    const firstOfAdjacent = adjacent.sequence[0]!;
+    gapFromPos = lastOfTarget.candidate.pos + lastOfTarget.candidate.node.nodeSize;
+    gapToPos = firstOfAdjacent.candidate.pos;
+  }
+
+  const gapEmptyParagraphs =
+    gapFromPos < gapToPos
+      ? getBlockIndex(editor).candidates.filter(
+          (c) =>
+            c.nodeType === 'paragraph' &&
+            c.pos >= gapFromPos &&
+            c.pos + c.node.nodeSize <= gapToPos &&
+            !c.node.textContent.trim(),
+        )
+      : [];
+
+  const mergedListId = `${absorbingNumId}:${anchorNodeId}`;
+
+  if (options?.dryRun) {
+    return {
+      success: true,
+      listId: mergedListId,
+      absorbedCount: absorbedItems.length,
+      removedEmptyBlocks: gapEmptyParagraphs.length,
+    };
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      for (const item of absorbedItems) {
+        const currentLevel = item.level ?? 0;
+        updateNumberingProperties(
+          { numId: absorbingNumId, ilvl: currentLevel },
+          item.candidate.node,
+          item.candidate.pos,
+          editor,
+          tr,
+        );
+      }
+      // Delete empty gap paragraphs in descending position order so earlier
+      // deletions do not shift subsequent positions.
+      const sorted = [...gapEmptyParagraphs].sort((a, b) => b.pos - a.pos);
+      for (const gap of sorted) {
+        tr.delete(gap.pos, gap.pos + gap.node.nodeSize);
+      }
+      dispatchEditorTransaction(editor, tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return toListsFailure('INVALID_TARGET', 'List merge could not be applied.', {
+      target: input.target,
+      direction: input.direction,
+    });
+  }
+
+  return {
+    success: true,
+    listId: mergedListId,
+    absorbedCount: absorbedItems.length,
+    removedEmptyBlocks: gapEmptyParagraphs.length,
+  };
+}
+
+/**
+ * Compound split: separate a list sequence at the target and restart the new
+ * half's numbering at 1 (by default).
+ *
+ * Equivalent to lists.separate + lists.setValue(1) applied atomically, with
+ * restartNumbering opt-out for callers that want raw separate semantics.
+ */
+export function listsSplitWrapper(editor: Editor, input: ListsSplitInput, options?: MutationOptions): ListsSplitResult {
+  rejectTrackedMode('lists.split', options);
+
+  const separateResult = listsSeparateWrapper(editor, { target: input.target }, options);
+  if (!separateResult.success) {
+    return separateResult;
+  }
+
+  const restartNumbering = input.restartNumbering !== false;
+  if (!restartNumbering) {
+    return {
+      success: true,
+      listId: separateResult.listId,
+      numId: separateResult.numId,
+      restartedAt: null,
+    };
+  }
+
+  if (options?.dryRun) {
+    return {
+      success: true,
+      listId: separateResult.listId,
+      numId: separateResult.numId,
+      restartedAt: 1,
+    };
+  }
+
+  const setValueResult = listsSetValueWrapper(editor, { target: input.target, value: 1 }, options);
+  if (!setValueResult.success) {
+    return setValueResult as ListsSplitResult;
+  }
+
+  return {
+    success: true,
+    listId: separateResult.listId,
+    numId: separateResult.numId,
+    restartedAt: 1,
+  };
 }
 
 export function listsSetLevelWrapper(

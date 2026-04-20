@@ -209,6 +209,66 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
+### Add items to an existing list
+
+To add a new item adjacent to an existing list item, use `superdoc_list({action: "insert"})`, NOT `superdoc_create({action: "paragraph"})` — the latter creates a standalone paragraph that is not part of the list:
+
+```
+superdoc_get_content({action: "blocks"})  // find the listItem nodeId you want to insert next to
+superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, position: "after", text: "New item text"})
+```
+
+To add a sub-point under an existing item, insert and then indent:
+```
+superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parentItemId>"}, position: "after", text: "Sub-point"})
+// Use the new item's nodeId from the response
+superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<newItemId>"}})
+```
+
+### Merge two adjacent lists into one
+
+Use `merge` — it handles the common case where two ordered or bulleted lists sit next to each other and should become one continuous list. Absorbed items adopt the absorbing sequence's definition, and any empty paragraphs between the two lists are removed so numbering flows continuously.
+
+```
+superdoc_get_content({action: "blocks"})  // find a listItem in either sequence
+// To merge with the previous sequence:
+superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, direction: "withPrevious"})
+// Or with the next sequence:
+superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, direction: "withNext"})
+```
+
+Use `join` only when you specifically need the strict check that both sequences already share the same abstract numbering definition (and no gap cleanup).
+
+### Split a list into two
+
+Use `split` to break one list into two independent lists at a specific item. The target and everything after become a new sequence that restarts numbering at 1:
+
+```
+superdoc_list({action: "split", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}})
+```
+
+Pass `restartNumbering: false` if you want the new half to keep counting from where the original left off (equivalent to raw `separate`).
+
+### Restart numbering at a specific item
+
+For ordered lists. To make item N restart from a chosen number (commonly 1):
+
+```
+superdoc_list({action: "set_value", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, value: 1})
+```
+
+Pass `value: null` to clear a previously-set restart override and let the item resume natural numbering.
+
+### Continue numbering across a break
+
+For ordered lists. When two sibling sequences should be numbered as one (e.g. numbering jumps back to 1 and you want it to continue from where the previous list left off), target the FIRST item of the second sequence:
+
+```
+superdoc_list({action: "continue_previous", target: {kind: "block", nodeType: "listItem", nodeId: "<firstItemOfSecondList>"}})
+```
+
+Fails with `NO_COMPATIBLE_PREVIOUS` or `INCOMPATIBLE_DEFINITIONS` if no prior sequence shares the same abstract definition. In that case, use `merge` instead — it handles mismatched definitions, removes empty gap paragraphs, and produces one continuous list.
+
 ### Insert content into a document (new or existing)
 
 Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting so inserted content looks like it belongs in the document.

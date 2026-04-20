@@ -1,0 +1,251 @@
+---
+title: lists.merge
+sidebarTitle: lists.merge
+description: "Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing \"merge these lists\" intent."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.
+
+- Operation ID: `lists.merge`
+- API member path: `editor.doc.lists.merge(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `direction` | enum | yes | `"withPrevious"`, `"withNext"` |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "direction": "withPrevious",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `absorbedCount` | integer | yes |  |
+| `listId` | string | yes |  |
+| `removedEmptyBlocks` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_ADJACENT_SEQUENCE"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "absorbedCount": 1,
+  "listId": "example",
+  "removedEmptyBlocks": 1,
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `NO_ADJACENT_SEQUENCE`
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "direction": {
+      "enum": [
+        "withPrevious",
+        "withNext"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    }
+  },
+  "required": [
+    "target",
+    "direction"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "absorbedCount": {
+          "type": "integer"
+        },
+        "listId": {
+          "type": "string"
+        },
+        "removedEmptyBlocks": {
+          "type": "integer"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "listId",
+        "absorbedCount",
+        "removedEmptyBlocks"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET",
+                "NO_ADJACENT_SEQUENCE",
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "absorbedCount": {
+      "type": "integer"
+    },
+    "listId": {
+      "type": "string"
+    },
+    "removedEmptyBlocks": {
+      "type": "integer"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "listId",
+    "absorbedCount",
+    "removedEmptyBlocks"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "NO_ADJACENT_SEQUENCE",
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

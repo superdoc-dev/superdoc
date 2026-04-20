@@ -571,6 +571,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -851,6 +852,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.canJoin` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.setLevel` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.setValue` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continuePrevious` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
@@ -1031,6 +1034,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -1311,6 +1315,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.can_join` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.set_level` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.set_value` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continue_previous` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |

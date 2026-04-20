@@ -1,0 +1,250 @@
+---
+title: lists.split
+sidebarTitle: lists.split
+description: "Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count)."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count).
+
+- Operation ID: `lists.split`
+- API member path: `editor.doc.lists.split(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsSplitResult with the new listId, numId, and the restart value applied (or null).
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `restartNumbering` | boolean | no |  |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "restartNumbering": true,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `listId` | string | yes |  |
+| `numId` | integer | yes |  |
+| `restartedAt` | any | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "listId": "example",
+  "numId": 1,
+  "restartedAt": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "restartNumbering": {
+      "type": "boolean"
+    },
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "listId": {
+          "type": "string"
+        },
+        "numId": {
+          "type": "integer"
+        },
+        "restartedAt": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "listId",
+        "numId",
+        "restartedAt"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET",
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "listId": {
+      "type": "string"
+    },
+    "numId": {
+      "type": "integer"
+    },
+    "restartedAt": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "listId",
+    "numId",
+    "restartedAt"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

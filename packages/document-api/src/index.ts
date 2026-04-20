@@ -148,6 +148,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -190,6 +194,8 @@ import {
   executeListsJoin,
   executeListsCanJoin,
   executeListsSeparate,
+  executeListsMerge,
+  executeListsSplit,
   executeListsSetLevel,
   executeListsSetValue,
   executeListsContinuePrevious,
@@ -1274,6 +1280,10 @@ export type {
   ListsMutateItemResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetLevelRestartInput,
   ListsSetValueInput,
@@ -2185,6 +2195,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult {
         return executeListsSeparate(adapters.lists, input, options);
+      },
+      merge(input: ListsMergeInput, options?: MutationOptions): ListsMergeResult {
+        return executeListsMerge(adapters.lists, input, options);
+      },
+      split(input: ListsSplitInput, options?: MutationOptions): ListsSplitResult {
+        return executeListsSplit(adapters.lists, input, options);
       },
       setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetLevel(adapters.lists, input, options);

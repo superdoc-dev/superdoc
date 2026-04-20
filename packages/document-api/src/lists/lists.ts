@@ -32,6 +32,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -83,6 +87,10 @@ export type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -480,6 +488,8 @@ export interface ListsAdapter {
   join(input: ListsJoinInput, options?: MutationOptions): ListsJoinResult;
   canJoin(input: ListsCanJoinInput): ListsCanJoinResult;
   separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult;
+  merge(input: ListsMergeInput, options?: MutationOptions): ListsMergeResult;
+  split(input: ListsSplitInput, options?: MutationOptions): ListsSplitResult;
   setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult;
   setValue(input: ListsSetValueInput, options?: MutationOptions): ListsMutateItemResult;
   continuePrevious(input: ListsContinuePreviousInput, options?: MutationOptions): ListsMutateItemResult;
@@ -698,6 +708,26 @@ export function executeListsSeparate(
   validateListItemTarget(input, 'lists.separate');
   optionalBoolean(input.copyOverrides, 'copyOverrides', 'lists.separate');
   return adapter.separate(input, normalizeMutationOptions(options));
+}
+
+export function executeListsMerge(
+  adapter: ListsAdapter,
+  input: ListsMergeInput,
+  options?: MutationOptions,
+): ListsMergeResult {
+  validateListItemTarget(input, 'lists.merge');
+  requireEnum(input.direction, 'direction', VALID_JOIN_DIRECTIONS, 'lists.merge');
+  return adapter.merge(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSplit(
+  adapter: ListsAdapter,
+  input: ListsSplitInput,
+  options?: MutationOptions,
+): ListsSplitResult {
+  validateListItemTarget(input, 'lists.split');
+  optionalBoolean(input.restartNumbering, 'restartNumbering', 'lists.split');
+  return adapter.split(input, normalizeMutationOptions(options));
 }
 
 export function executeListsSetLevel(

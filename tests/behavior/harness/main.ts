@@ -27,6 +27,8 @@ const showSelection = params.get('showSelection') === '1';
 const toolbar = params.get('toolbar');
 const comments = params.get('comments');
 const trackChanges = params.get('trackChanges') === '1';
+const pairReplacementsParam = params.get('pairReplacements');
+const pairReplacements = pairReplacementsParam == null ? true : pairReplacementsParam !== '0';
 const allowSelectionInViewMode = params.get('allowSelectionInViewMode') === '1';
 const documentMode = params.get('documentMode') as 'editing' | 'viewing' | 'suggesting' | null;
 const contentOverride = params.get('contentOverride') ?? undefined;
@@ -103,9 +105,16 @@ function init(file?: File, content?: ContentOverrideInput) {
     config.modules = { ...(config.modules ?? {}), comments: false };
   }
 
-  // Track changes
-  if (trackChanges) {
-    config.trackChanges = { visible: true };
+  // Track changes — use the canonical modules.trackChanges surface so the
+  // harness can exercise the pairReplacements flag end-to-end.
+  if (trackChanges || pairReplacementsParam != null) {
+    config.modules = {
+      ...(config.modules ?? {}),
+      trackChanges: {
+        ...(trackChanges ? { visible: true } : {}),
+        pairReplacements,
+      },
+    };
   }
 
   // Selection in viewing mode

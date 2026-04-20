@@ -11,6 +11,12 @@ interface HarnessConfig {
   toolbar?: 'none' | 'full';
   comments?: 'off' | 'on' | 'panel' | 'readonly' | 'disabled';
   trackChanges?: boolean;
+  /**
+   * When set, forwards `modules.trackChanges.pairReplacements` to SuperDoc.
+   * Default (unset) leaves pairing at its built-in default of `true`.
+   * Set to `false` to exercise Word/ECMA-376-style independent revisions.
+   */
+  pairReplacements?: boolean;
   showCaret?: boolean;
   showSelection?: boolean;
   allowSelectionInViewMode?: boolean;
@@ -45,6 +51,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.toolbar) params.set('toolbar', config.toolbar);
   if (config.comments) params.set('comments', config.comments);
   if (config.trackChanges) params.set('trackChanges', '1');
+  if (config.pairReplacements !== undefined) params.set('pairReplacements', config.pairReplacements ? '1' : '0');
   if (config.showCaret !== undefined) params.set('showCaret', config.showCaret ? '1' : '0');
   if (config.showSelection !== undefined) params.set('showSelection', config.showSelection ? '1' : '0');
   if (config.allowSelectionInViewMode) params.set('allowSelectionInViewMode', '1');

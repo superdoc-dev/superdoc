@@ -1451,9 +1451,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Start a new mid-page region with different column configuration
   const startMidPageRegion = (state: PageState, newColumns: ColumnLayout): void => {
-    // Record the boundary at current Y position
+    // Use the maximum Y reached across all columns so the new region starts
+    // below ALL column content, not just the current column's cursor position.
+    // This prevents overlap when a multi-column section's columns have unequal heights.
+    const regionStartY = Math.max(state.cursorY, state.maxCursorY);
+    state.cursorY = regionStartY;
+    state.maxCursorY = regionStartY;
+
+    // Record the boundary at the resolved Y position
     const boundary: ConstraintBoundary = {
-      y: state.cursorY,
+      y: regionStartY,
       columns: newColumns,
     };
     state.constraintBoundaries.push(boundary);
@@ -1465,7 +1472,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`[Layout] *** COLUMNS CHANGED MID-PAGE ***`);
     layoutLog(`  OLD activeColumns: ${JSON.stringify(activeColumns)}`);
     layoutLog(`  NEW activeColumns: ${JSON.stringify(newColumns)}`);
-    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
+    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}, maxCursorY: ${state.maxCursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
     activeColumns = cloneColumnLayout(newColumns);
@@ -1479,9 +1486,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       { left: activeLeftMargin, right: activeRightMargin },
       activePageSize.w,
     );
-
-    // Note: We do NOT reset cursorY - content continues from current position
-    // This creates the mid-page region effect
   };
 
   // Collect anchored drawings mapped to their anchor paragraphs
@@ -2129,6 +2133,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
         state.cursorY = tableBottomY;
+        state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       }
       continue;
     }

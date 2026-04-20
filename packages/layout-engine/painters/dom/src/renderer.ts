@@ -84,12 +84,14 @@ import {
 import { assertFragmentPmPositions, assertPmPositions } from './pm-position-validation.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
+  BROWSER_DEFAULT_FONT_SIZE,
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
+  ensureMathMencloseStyles,
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -1674,6 +1676,7 @@ export class DomPainter {
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
+    ensureMathMencloseStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -5228,6 +5231,12 @@ export class DomPainter {
     // Let browser auto-size to MathML content; estimated dimensions are for layout only
     wrapper.style.minWidth = `${run.width}px`;
     wrapper.style.minHeight = `${run.height}px`;
+    // Restore font-size so the plain-text fallback renders at a reasonable size
+    // (the line container sets fontSize: 0 to eliminate the CSS strut). MathML
+    // has its own internal scaling, so this only matters for the textContent
+    // fallback path. run.height would make tall expressions (fractions, equation
+    // arrays) render at 80–100px — use the browser default instead.
+    wrapper.style.fontSize = BROWSER_DEFAULT_FONT_SIZE;
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
 
     const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);
@@ -5724,12 +5733,20 @@ export class DomPainter {
       }
     }
 
-    // Apply typography to the annotation element
+    // Apply typography to the annotation element.
+    // Always set a font-size so the annotation never inherits fontSize: 0 from
+    // the line container (which zeroes it to eliminate the CSS strut). When the
+    // run has no explicit fontSize, fall back to BROWSER_DEFAULT_FONT_SIZE (the
+    // browser default that was previously inherited before the strut fix).
     if (run.fontFamily) {
       annotation.style.fontFamily = run.fontFamily;
     }
-    if (run.fontSize) {
-      const fontSize = typeof run.fontSize === 'number' ? `${run.fontSize}pt` : run.fontSize;
+    {
+      const fontSize = run.fontSize
+        ? typeof run.fontSize === 'number'
+          ? `${run.fontSize}pt`
+          : run.fontSize
+        : BROWSER_DEFAULT_FONT_SIZE;
       annotation.style.fontSize = fontSize;
     }
     if (run.textColor) {
@@ -5933,6 +5950,9 @@ export class DomPainter {
       if (lineRange.pmEnd != null) {
         span.dataset.pmEnd = String(lineRange.pmEnd);
       }
+      // Restore font-size so the &nbsp; remains a visible caret target
+      // (the line container sets fontSize: 0 to eliminate the CSS strut).
+      span.style.fontSize = `${line.lineHeight}px`;
       span.innerHTML = '&nbsp;';
       el.appendChild(span);
     }

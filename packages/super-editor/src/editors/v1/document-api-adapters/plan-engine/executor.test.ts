@@ -505,6 +505,42 @@ describe('executeTextInsert: tab character to tab node conversion', () => {
     const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
     expect(textCalls.map(([t]: [string]) => t)).toEqual(['hello', 'world']);
   });
+
+  it('falls back to a raw text node when the parent disallows tab nodes', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    // Simulate a restrictive parent (e.g. total-page-number with content: 'text*')
+    // by having contentMatch.matchType reject the tab node type.
+    const matchType = vi.fn(() => null);
+    (tr as any).doc.resolve = () => ({
+      marks: () => [],
+      parent: { type: { contentMatch: { matchType } } },
+    });
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-tab-restrictive',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: 'a\tb' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(matchType).toHaveBeenCalled();
+    // No tab node created — parent only allows text.
+    expect(tabCreate).not.toHaveBeenCalled();
+    // Single schema.text call with the raw '\t' preserved in the text.
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    expect(textCalls).toHaveLength(1);
+    expect(textCalls[0][0]).toBe('a\tb');
+    // Exactly one insert (the raw text node), not a fragment with a tab child.
+    expect(tr.insert).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

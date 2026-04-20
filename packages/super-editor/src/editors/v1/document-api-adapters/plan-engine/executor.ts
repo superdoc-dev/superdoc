@@ -970,8 +970,8 @@ export function executeTextInsert(
     }
   }
 
-  const tabNodeType = editor.state.schema.nodes.tab;
-  if (tabNodeType && text.includes('\t')) {
+  const tabNodeType = editor.state.schema.nodes?.tab;
+  if (tabNodeType && text.includes('\t') && parentAllowsNode(tr, absPos, tabNodeType)) {
     const parts = text.split('\t');
     const nodes: ProseMirrorNode[] = [];
     for (let i = 0; i < parts.length; i++) {
@@ -985,11 +985,20 @@ export function executeTextInsert(
     const fragment = Fragment.from(nodes);
     tr.insert(absPos, fragment);
   } else {
+    // Parent (e.g. total-page-number with content: 'text*') only accepts
+    // text nodes — keep '\t' as a raw character inside a single text node.
     const textNode = editor.state.schema.text(text, marks);
     tr.insert(absPos, textNode);
   }
 
   return { changed: true };
+}
+
+function parentAllowsNode(tr: Transaction, absPos: number, nodeType: NodeType): boolean {
+  const $pos = tr.doc.resolve(absPos);
+  const contentMatch = $pos?.parent?.type?.contentMatch;
+  if (!contentMatch || typeof contentMatch.matchType !== 'function') return true;
+  return contentMatch.matchType(nodeType) != null;
 }
 
 export function executeTextDelete(

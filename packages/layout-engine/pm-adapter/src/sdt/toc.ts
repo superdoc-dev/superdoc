@@ -102,6 +102,7 @@ export function processTocChildren(
     converters: NestedConverters;
     converterContext: ConverterContext;
     themeColors?: ThemeColorPalette;
+    sectionState?: NodeHandlerContext['sectionState'];
   },
   outputArrays: {
     blocks: FlowBlock[];
@@ -114,6 +115,16 @@ export function processTocChildren(
 
   children.forEach((child) => {
     if (child.type === 'paragraph') {
+      // SD-2557: emit any pending section break before this child. `findParagraphsWithSectPr`
+      // recurses into documentPartObject, so TOC child paragraph indices are part of the
+      // section-range counting — advance the counter after processing to stay in sync.
+      emitPendingSectionBreakForParagraph({
+        sectionState: context.sectionState,
+        nextBlockId: context.nextBlockId,
+        blocks,
+        recordBlockKind,
+      });
+
       // Direct paragraph child - convert and tag
       const paragraphBlocks = paragraphConverter({
         para: child,
@@ -141,6 +152,8 @@ export function processTocChildren(
         blocks.push(block);
         recordBlockKind?.(block.kind);
       });
+
+      if (context.sectionState) context.sectionState.currentParagraphIndex++;
     } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
       // Nested tableOfContents - recurse with potentially different instruction
       const childInstruction = getNodeInstruction(child);

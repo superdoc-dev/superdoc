@@ -44,8 +44,6 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
     themeColors,
   } = context;
 
-  emitPendingSectionBreakForParagraph({ sectionState, nextBlockId, blocks, recordBlockKind });
-
   const docPartGallery = getDocPartGallery(node);
   const docPartObjectId = getDocPartObjectId(node);
   const tocInstruction = getNodeInstruction(node);
@@ -65,13 +63,18 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         trackedChangesConfig,
         converters,
         converterContext,
+        sectionState,
       },
       { blocks, recordBlockKind },
     );
   } else if (paragraphToFlowBlocks) {
-    // For non-ToC gallery types (page numbers, etc.), process child paragraphs normally
+    // For non-ToC gallery types (page numbers, etc.), process child paragraphs normally.
+    // `findParagraphsWithSectPr` recurses into documentPartObject (SD-2557), so child
+    // paragraph indices ARE counted — we must mirror that by emitting pending section
+    // breaks and advancing currentParagraphIndex per child.
     for (const child of node.content) {
       if (child.type === 'paragraph') {
+        emitPendingSectionBreakForParagraph({ sectionState, nextBlockId, blocks, recordBlockKind });
         const childBlocks = paragraphToFlowBlocks({
           para: child,
           nextBlockId,
@@ -88,6 +91,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           blocks.push(block);
           recordBlockKind?.(block.kind);
         }
+        if (sectionState) sectionState.currentParagraphIndex++;
       }
     }
   }

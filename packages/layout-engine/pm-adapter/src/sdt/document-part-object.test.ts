@@ -503,21 +503,23 @@ describe('document-part-object', () => {
         currentParagraphIndex: startParagraphIndex,
       });
 
-      it('emits a section break before the TOC when the SDT sits at a section boundary', () => {
-        // Repro for SD-2557: a nextPage section break on the empty paragraph
-        // immediately before a TOC docPartObj was dropped, keeping the TOC on
-        // the same page as the prior section's content.
+      // For the TOC branch, per-child emission now lives inside `processTocChildren`
+      // (which is mocked in these tests). The non-TOC branch below exercises the
+      // inline per-child emission path directly.
+      it('emits a section break before a docPartObj non-TOC child at a section boundary', () => {
+        // Repro for SD-2557 at the non-TOC path: same root cause — the handler
+        // processes child paragraphs but previously skipped the section-break check.
         const node: PMNode = {
           type: 'documentPartObject',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Page Number' }] }],
         };
-        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Table of Contents');
-        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Building Block Gallery');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('bb-1');
         vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
         vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
 
-        // currentParagraphIndex === nextSection.startParagraphIndex → the next
-        // paragraph-flow entry would start section 1. The SDT IS that entry.
+        // currentParagraphIndex === nextSection.startParagraphIndex → the first
+        // child paragraph is the start of section 1.
         mockContext.sectionState = sectionFixture(3) as unknown as NodeHandlerContext['sectionState'];
 
         handleDocumentPartObjectNode(node, mockContext);
@@ -525,19 +527,22 @@ describe('document-part-object', () => {
         const sectionBreak = mockContext.blocks.find((b) => b.kind === 'sectionBreak');
         expect(sectionBreak).toBeDefined();
         expect(mockContext.sectionState!.currentSectionIndex).toBe(1);
+        // Counter must advance past the child paragraph so subsequent body
+        // content sees the correct paragraph index.
+        expect(mockContext.sectionState!.currentParagraphIndex).toBe(4);
       });
 
-      it('does not emit a section break when the SDT is not at a section boundary', () => {
+      it('does not emit a section break when the child is not at a section boundary', () => {
         const node: PMNode = {
           type: 'documentPartObject',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Page Number' }] }],
         };
-        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Table of Contents');
-        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Building Block Gallery');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('bb-1');
         vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
         vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
 
-        // currentParagraphIndex (2) < startParagraphIndex (5): not at boundary yet.
+        // currentParagraphIndex (2) < startParagraphIndex (5): not at boundary.
         const state = sectionFixture(5);
         state.currentParagraphIndex = 2;
         mockContext.sectionState = state as unknown as NodeHandlerContext['sectionState'];
@@ -546,9 +551,27 @@ describe('document-part-object', () => {
 
         expect(mockContext.blocks.find((b) => b.kind === 'sectionBreak')).toBeUndefined();
         expect(mockContext.sectionState!.currentSectionIndex).toBe(0);
+        // Counter still advances past the processed child.
+        expect(mockContext.sectionState!.currentParagraphIndex).toBe(3);
       });
 
       it('is a no-op when sectionState is undefined', () => {
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Page Number' }] }],
+        };
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Building Block Gallery');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('bb-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
+
+        mockContext.sectionState = undefined;
+
+        expect(() => handleDocumentPartObjectNode(node, mockContext)).not.toThrow();
+        expect(mockContext.blocks.find((b) => b.kind === 'sectionBreak')).toBeUndefined();
+      });
+
+      it('passes sectionState through to processTocChildren for TOC gallery', () => {
         const node: PMNode = {
           type: 'documentPartObject',
           content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
@@ -558,10 +581,15 @@ describe('document-part-object', () => {
         vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
         vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
 
-        mockContext.sectionState = undefined;
+        const state = sectionFixture(3);
+        mockContext.sectionState = state as unknown as NodeHandlerContext['sectionState'];
 
-        expect(() => handleDocumentPartObjectNode(node, mockContext)).not.toThrow();
-        expect(mockContext.blocks.find((b) => b.kind === 'sectionBreak')).toBeUndefined();
+        handleDocumentPartObjectNode(node, mockContext);
+
+        // processTocChildren is mocked; just verify it received sectionState
+        // so the helper-inside-processTocChildren pattern can work end-to-end.
+        const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
+        expect(callArgs[2]).toMatchObject({ sectionState: state });
       });
     });
   });

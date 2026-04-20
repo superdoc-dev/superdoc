@@ -5,6 +5,7 @@ import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
 import BulletStyleButtons from './BulletStyleButtons.vue';
+import NumberedStyleButtons from './NumberedStyleButtons.vue';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -663,16 +664,34 @@ export const makeDefaultItems = ({
 
   // number list
   const numberedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'numberedlist',
-    command: 'toggleOrderedList',
+    command: 'toggleOrderedListStyle',
     icon: toolbarIcons.numberedList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
+    suppressActiveHighlight: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'numbered-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(numberedList);
+            const item = { ...numberedList, command: 'toggleOrderedListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(NumberedStyleButtons, {
+            selectedStyle: numberedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // indent left

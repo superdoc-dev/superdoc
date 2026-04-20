@@ -124,7 +124,7 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
     },
     'numbered-list': {
       id: 'numbered-list',
-      directCommandName: 'toggleOrderedList',
+      directCommandName: 'toggleOrderedListStyle',
       state: createListStateDeriver('ordered'),
     },
     'indent-increase': {

@@ -501,10 +501,10 @@ describe('createHeadlessToolbar', () => {
   });
 
   it('executes numbered-list through the registry direct command path', () => {
-    const toggleOrderedList = vi.fn(() => true);
+    const toggleOrderedListStyle = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
-        toggleOrderedList,
+        toggleOrderedListStyle,
       },
       state: createSelectionState({
         empty: true,
@@ -523,7 +523,7 @@ describe('createHeadlessToolbar', () => {
     });
 
     expect(controller.execute?.('numbered-list')).toBe(true);
-    expect(toggleOrderedList).toHaveBeenCalledTimes(1);
+    expect(toggleOrderedListStyle).toHaveBeenCalledTimes(1);
 
     controller.destroy();
   });

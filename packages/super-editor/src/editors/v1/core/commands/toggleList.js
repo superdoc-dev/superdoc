@@ -1,6 +1,6 @@
 // @ts-check
 import { updateNumberingProperties } from './changeListLevel.js';
-import { ListHelpers, markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, markerTextToBulletStyle, numberingInfoToOrderedStyle } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { Selection, TextSelection } from 'prosemirror-state';
@@ -26,7 +26,14 @@ function getParagraphListKind(node, editor) {
   return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
 }
 
-function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
+/**
+ * @param {any} node
+ * @param {any} editor
+ * @param {string} listType
+ * @param {'disc'|'circle'|'square'|null} [bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [orderedStyle]
+ */
+function paragraphMatchesToggleListType(node, editor, listType, bulletStyle, orderedStyle) {
   const kind = getParagraphListKind(node, editor);
   if (!kind) return false;
   if (listType === 'bulletList') {
@@ -35,7 +42,12 @@ function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
     const markerText = node.attrs.listRendering?.markerText;
     return markerTextToBulletStyle(markerText) === bulletStyle;
   }
-  if (listType === 'orderedList') return kind === 'ordered';
+  if (listType === 'orderedList') {
+    if (kind !== 'ordered') return false;
+    if (!orderedStyle) return true;
+    const { numberingType, markerText } = node.attrs.listRendering ?? {};
+    return numberingInfoToOrderedStyle(numberingType, markerText) === orderedStyle;
+  }
   return false;
 }
 
@@ -64,14 +76,19 @@ function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
   return nb?.type?.name === 'paragraph' ? nb : null;
 }
 
+/**
+ * @param {string} listType
+ * @param {'disc'|'circle'|'square'|null} [bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [orderedStyle]
+ */
 export const toggleList =
-  (listType, bulletStyle) =>
+  (listType, bulletStyle, orderedStyle) =>
   ({ editor, state, tr, dispatch }) => {
     if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
 
-    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle);
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle, orderedStyle);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -132,7 +149,7 @@ export const toggleList =
 
     if (mode === 'create') {
       const numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor, bulletStyle });
+      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor, bulletStyle, orderedStyle });
       sharedNumberingProperties = {
         numId: Number(numId),
         ilvl: 0,

@@ -5,7 +5,6 @@ import { translator as wNumTranslator } from '@core/super-converter/v3/handlers/
 import { baseBulletList, baseOrderedListDef } from './baseListDefinitions';
 import { updateNumberingProperties } from '@core/commands/changeListLevel';
 import { findParentNode } from './findParentNode.js';
-
 import {
   generateNewListDefinition as pureGenerateNewListDefinition,
   changeNumIdSameAbstract as pureChangeNumIdSameAbstract,
@@ -41,6 +40,26 @@ export function markerTextToBulletStyle(markerText) {
 }
 
 /**
+ * Maps `listRendering.numberingType` + last char of `listRendering.markerText` to a named ordered style.
+ * Returns null for unrecognized combinations.
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null|undefined} numberingType
+ * @param {string|null|undefined} markerText
+ * @returns {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null}
+ */
+export function numberingInfoToOrderedStyle(numberingType, markerText) {
+  const suffix = markerText?.slice(-1);
+  /** @type {Record<string, Record<string, import('../../extensions/types/paragraph-commands.js').OrderedListStyle>>} */
+  const map = {
+    decimal: { '.': 'decimal', ')': 'decimal-paren' },
+    upperRoman: { '.': 'upper-roman' },
+    lowerRoman: { '.': 'lower-roman' },
+    upperLetter: { '.': 'upper-alpha' },
+    lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
+  };
+  return map[numberingType]?.[suffix] ?? null;
+}
+
+/**
  * Generate a new list definition for the given list type.
  * @param {Object} param0
  * @param {number} param0.numId
@@ -51,6 +70,7 @@ export function markerTextToBulletStyle(markerText) {
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
  * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle} [param0.orderedStyle]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
@@ -64,6 +84,7 @@ export const generateNewListDefinition = ({
   editor,
   markerFontFamily,
   bulletStyle,
+  orderedStyle,
 }) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
@@ -78,6 +99,7 @@ export const generateNewListDefinition = ({
       fmt,
       markerFontFamily,
       bulletStyle,
+      orderedStyle,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });

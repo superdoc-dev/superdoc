@@ -12,6 +12,7 @@
  */
 
 import { baseBulletList, baseOrderedListDef } from '../../helpers/baseListDefinitions.js';
+import type { OrderedListStyle } from '../../../extensions/types/paragraph-commands.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,12 +32,23 @@ interface GenerateOptions {
   fmt?: string | null;
   markerFontFamily?: string | null;
   bulletStyle?: 'disc' | 'circle' | 'square' | null;
+  orderedStyle?: OrderedListStyle | null;
 }
 
 const BULLET_STYLE_CHARS: Record<string, string> = {
   disc: '•',
   circle: '◦',
   square: '▪',
+};
+
+const ORDERED_LIST_STYLES: Record<string, { fmt: string; text: string }> = {
+  decimal: { fmt: 'decimal', text: '%1.' },
+  'decimal-paren': { fmt: 'decimal', text: '%1)' },
+  'upper-roman': { fmt: 'upperRoman', text: '%1.' },
+  'lower-roman': { fmt: 'lowerRoman', text: '%1.' },
+  'upper-alpha': { fmt: 'upperLetter', text: '%1.' },
+  'lower-alpha': { fmt: 'lowerLetter', text: '%1.' },
+  'lower-alpha-paren': { fmt: 'lowerLetter', text: '%1)' },
 };
 
 interface GenerateResult {
@@ -79,7 +91,7 @@ function buildNumDef(numId: number, abstractId: number): any {
  */
 export function generateNewListDefinition(numbering: NumberingModel, options: GenerateOptions): GenerateResult {
   let { listType } = options;
-  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle } = options;
+  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle, orderedStyle } = options;
   if (typeof listType !== 'string') listType = (listType as any).name;
 
   const definition = listType === 'orderedList' ? baseOrderedListDef : baseBulletList;
@@ -108,6 +120,24 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
         // Remove any inherited font so the Unicode char renders in the document's default font
         const rPr = lvl0.elements.find((el: any) => el.name === 'w:rPr');
         if (rPr) rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+      }
+    }
+  }
+
+  // Override the ordered list style for the new list if an ordered style is provided
+  const shouldOverrideOrderedStyle = orderedStyle && listType === 'orderedList';
+  if (shouldOverrideOrderedStyle) {
+    const styleConfig = ORDERED_LIST_STYLES[orderedStyle];
+
+    if (styleConfig) {
+      const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
+
+      if (lvl0) {
+        const numFmt = lvl0.elements.find((el: any) => el.name === 'w:numFmt');
+        if (numFmt) numFmt.attributes['w:val'] = styleConfig.fmt;
+
+        const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
+        if (lvlText) lvlText.attributes['w:val'] = styleConfig.text;
       }
     }
   }

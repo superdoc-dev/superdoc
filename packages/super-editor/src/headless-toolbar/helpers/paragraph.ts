@@ -1,4 +1,6 @@
 import { isList } from '../../editors/v1/core/commands/list-helpers/is-list.js';
+import { numberingInfoToOrderedStyle } from '../../editors/v1/core/helpers/list-numbering-helpers.js';
+import type { OrderedListStyle } from '../../editors/v1/extensions/types/paragraph-commands.js';
 import { twipsToLines } from '../../editors/v1/core/super-converter/helpers.js';
 import { getQuickFormatList } from '../../editors/v1/extensions/linked-styles/index.js';
 import { getCurrentParagraphParent, getCurrentResolvedParagraphProperties, resolveStateEditor } from './context.js';
@@ -122,10 +124,12 @@ export const createListStateDeriver =
       return { active: isActive, disabled: false, value: markerText };
     }
 
-    return {
-      active: isActive,
-      disabled: false,
-    };
+    const activeNumberingFmt = isActive ? (paragraphNode?.attrs?.listRendering?.numberingType ?? null) : null;
+    const activeMarkerText = isActive ? (paragraphNode?.attrs?.listRendering?.markerText ?? null) : null;
+    const orderedStyleValue = (
+      activeNumberingFmt && activeMarkerText ? numberingInfoToOrderedStyle(activeNumberingFmt, activeMarkerText) : null
+    ) as OrderedListStyle | null;
+    return { active: isActive, disabled: false, value: orderedStyleValue };
   };
 
 export const createIndentIncreaseExecute =

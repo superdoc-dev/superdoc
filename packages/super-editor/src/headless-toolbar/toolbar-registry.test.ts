@@ -566,6 +566,7 @@ describe('createToolbarRegistry', () => {
                         attrs: {
                           listRendering: {
                             numberingType: 'decimal',
+                            markerText: '1.',
                           },
                           paragraphProperties: {
                             numberingProperties: {
@@ -589,6 +590,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: 'decimal',
     });
   });
 

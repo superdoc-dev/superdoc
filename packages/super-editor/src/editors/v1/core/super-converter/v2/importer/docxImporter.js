@@ -152,7 +152,9 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx);
+    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, {
+      pairReplacements: converter.trackedChangesOptions?.pairReplacements !== false,
+    });
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });

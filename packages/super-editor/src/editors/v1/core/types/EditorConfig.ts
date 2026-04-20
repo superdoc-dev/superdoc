@@ -352,6 +352,19 @@ export interface EditorOptions {
   /** Comment highlight configuration */
   comments?: CommentConfig;
 
+  /**
+   * Track-changes runtime configuration forwarded from the SuperDoc-level
+   * `modules.trackChanges` config. Read by the TrackChanges extension and
+   * by the SuperConverter during import. Fields are all optional; missing
+   * ones fall back to defaults resolved at SuperDoc construction time.
+   */
+  trackedChanges?: {
+    visible?: boolean;
+    mode?: 'review' | 'original' | 'final' | 'off';
+    enabled?: boolean;
+    pairReplacements?: boolean;
+  };
+
   /** Whether this is a new file */
   isNewFile?: boolean;
 

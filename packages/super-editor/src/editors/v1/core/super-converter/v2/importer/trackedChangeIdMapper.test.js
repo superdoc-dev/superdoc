@@ -255,4 +255,39 @@ describe('buildTrackedChangeIdMap', () => {
 
     expect(idMap.get('0')).toBe(idMap.get('1'));
   });
+
+  describe('pairReplacements: false (unpaired mode)', () => {
+    it('keeps adjacent w:del + w:ins with matching author/date as independent ids', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:del', '10', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', '11', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx, { pairReplacements: false });
+
+      expect(idMap.size).toBe(2);
+      expect(idMap.get('10')).toBeTruthy();
+      expect(idMap.get('11')).toBeTruthy();
+      expect(idMap.get('10')).not.toBe(idMap.get('11'));
+    });
+
+    it('still maps each standalone tracked change to its own UUID', () => {
+      const docx = createDocx(paragraph(trackedChange('w:del', '1')), paragraph(trackedChange('w:ins', '2')));
+
+      const idMap = buildTrackedChangeIdMap(docx, { pairReplacements: false });
+
+      expect(idMap.size).toBe(2);
+      expect(idMap.get('1')).not.toBe(idMap.get('2'));
+    });
+
+    it('treats real Word replacement siblings as independent', () => {
+      const docx = createDocx(paragraph(wordDelete('0', 'test '), wordInsert('1', 'abc ')));
+
+      const idMap = buildTrackedChangeIdMap(docx, { pairReplacements: false });
+
+      expect(idMap.get('0')).not.toBe(idMap.get('1'));
+    });
+  });
 });

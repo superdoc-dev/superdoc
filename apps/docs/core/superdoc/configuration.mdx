@@ -215,6 +215,9 @@ new SuperDoc({
     <ParamField path="modules.trackChanges.enabled" type="boolean" default="true">
       Whether the layout engine treats tracked changes as active.
     </ParamField>
+    <ParamField path="modules.trackChanges.pairReplacements" type="boolean" default="true">
+      When `true` (default), a tracked replacement (insertion paired with deletion) is resolved as a single change with one accept/reject action — closer to the Google Docs model. When `false`, each insertion and each deletion is an independent change with its own id, matching Microsoft Word and ECMA-376 §17.13.5.
+    </ParamField>
   </Expandable>
 </ParamField>
 
@@ -225,6 +228,18 @@ new SuperDoc({
   documentMode: 'viewing',
   modules: {
     trackChanges: { visible: true, mode: 'review' },
+  },
+});
+```
+
+Opt into Microsoft Word / ECMA-376-style independent revisions, where each insertion and each deletion has its own id and resolves on its own:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    trackChanges: { pairReplacements: false },
   },
 });
 ```

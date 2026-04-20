@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @typedef {{ type: string, author: string, date: string, internalId: string }} TrackedChangeEntry
- * @typedef {{ lastTrackedChange: TrackedChangeEntry | null }} WalkContext
+ * @typedef {{ lastTrackedChange: TrackedChangeEntry | null, pairReplacements: boolean }} WalkContext
  */
 
 const TRACKED_CHANGE_NAMES = new Set(['w:ins', 'w:del']);
@@ -70,7 +70,7 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
     date: element.attributes?.['w:date'] ?? '',
   };
 
-  if (context.lastTrackedChange && isReplacementPair(context.lastTrackedChange, current)) {
+  if (context.pairReplacements && context.lastTrackedChange && isReplacementPair(context.lastTrackedChange, current)) {
     // Second half of a replacement — share the first half's UUID, but only
     // if this w:id hasn't already been mapped. A reused id that was already
     // part of an earlier pair must keep its original mapping.
@@ -128,23 +128,27 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
  * Builds a map from OOXML `w:id` values to stable internal UUIDs by scanning
  * `word/document.xml`.
  *
- * Word tracked replacements use separate `w:id` values for the delete and
- * insert halves. This function detects adjacent opposite-type changes with
- * matching author and date and maps both halves to the same internal UUID so
- * the editor can resolve them as a single logical change.
+ * When `pairReplacements` is `true` (the default), Word tracked replacements
+ * are detected as adjacent opposite-type changes with matching author and
+ * date, and both halves map to the same internal UUID so the editor can
+ * resolve them as one logical change. When `pairReplacements` is `false`,
+ * each `w:id` maps to its own UUID — matching the ECMA-376 §17.13.5 model
+ * where every `<w:ins>` and `<w:del>` is an independent revision.
  *
  * Must run before comment import so all consumers — translators, comment
  * helpers, and the tracked-change resolver — see a fully populated map.
  *
  * @param {object} docx  Parsed DOCX package
+ * @param {{ pairReplacements?: boolean }} [options]
  * @returns {Map<string, string>}  Word `w:id` → internal UUID
  */
-export function buildTrackedChangeIdMap(docx) {
+export function buildTrackedChangeIdMap(docx, options = {}) {
   const body = docx?.['word/document.xml']?.elements?.[0];
   if (!body?.elements) return new Map();
 
+  const pairReplacements = options.pairReplacements !== false;
   const idMap = new Map();
-  walkElements(body.elements, idMap, { lastTrackedChange: null });
+  walkElements(body.elements, idMap, { lastTrackedChange: null, pairReplacements });
 
   return idMap;
 }

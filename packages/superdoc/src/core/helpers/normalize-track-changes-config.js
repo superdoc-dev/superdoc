@@ -2,7 +2,7 @@
 
 /**
  * @typedef {'review' | 'original' | 'final' | 'off'} TrackChangesMode
- * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean }} NormalizedTrackChangesConfig
+ * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, pairReplacements: boolean }} NormalizedTrackChangesConfig
  */
 
 const ALLOWED_MODES = /** @type {const} */ (['review', 'original', 'final', 'off']);
@@ -77,6 +77,10 @@ export function normalizeTrackChangesConfig(config) {
 
   const enabled = resolveBool(fromCanonical?.enabled, fromLegacyLayout?.enabled, true);
 
+  // Replacement pairing is only surfaced on the canonical path. The legacy
+  // buckets never exposed this knob, so there's no alias to resolve.
+  const pairReplacements = resolveBool(fromCanonical?.pairReplacements, undefined, true);
+
   // Default mode derives from documentMode + visibility so a viewing-mode
   // document without an explicit mode falls back to 'original' unless the
   // consumer asked for tracked changes to be visible.
@@ -85,7 +89,7 @@ export function normalizeTrackChangesConfig(config) {
   const mode = resolveMode(fromCanonical?.mode, fromLegacyLayout?.mode, defaultMode);
 
   /** @type {NormalizedTrackChangesConfig} */
-  const normalized = { visible, mode, enabled };
+  const normalized = { visible, mode, enabled, pairReplacements };
 
   // Write-through to every path so all existing internal reads see the same
   // resolved values without needing to migrate each call site in this pass.

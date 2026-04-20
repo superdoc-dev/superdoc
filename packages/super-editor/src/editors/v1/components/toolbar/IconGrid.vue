@@ -60,6 +60,8 @@ const handleSelect = (option) => {
   align-items: center;
   gap: 4px;
   padding: 4px;
+  color: var(--sd-ui-text, #47484a);
+
   &:hover {
     opacity: 0.65;
   }

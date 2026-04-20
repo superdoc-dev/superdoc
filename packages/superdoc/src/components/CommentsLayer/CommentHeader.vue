@@ -255,6 +255,7 @@ const getCurrentUser = computed(() => {
   height: 14px;
   padding: 3px;
   border-radius: 50%;
+  color: var(--sd-ui-text, #47484a);
   cursor: pointer;
   transition: all 250ms ease;
 }

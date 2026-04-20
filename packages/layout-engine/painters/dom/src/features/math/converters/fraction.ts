@@ -19,8 +19,14 @@ export const convertFraction: MathObjectConverter = (node, doc, convertChildren)
   const den = elements.find((e) => e.name === 'm:den');
 
   const frac = doc.createElementNS(MATHML_NS, 'mfrac');
-  frac.appendChild(convertChildren(num?.elements ?? []));
-  frac.appendChild(convertChildren(den?.elements ?? []));
+
+  const numRow = doc.createElementNS(MATHML_NS, 'mrow');
+  numRow.appendChild(convertChildren(num?.elements ?? []));
+  frac.appendChild(numRow);
+
+  const denRow = doc.createElementNS(MATHML_NS, 'mrow');
+  denRow.appendChild(convertChildren(den?.elements ?? []));
+  frac.appendChild(denRow);
 
   return frac;
 };

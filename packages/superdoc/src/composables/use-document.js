@@ -33,10 +33,20 @@ export default function useDocument(params, superdocConfig) {
   // For docx
   const editorRef = shallowRef(null);
   const setEditor = (ref) => (editorRef.value = ref);
+
+  /**
+   * @deprecated Direct editor access will be removed in a future version. Use the Document API (`editor.doc`) instead.
+   * See https://docs.superdoc.dev/document-api/overview
+   */
   const getEditor = () => editorRef.value;
 
   const presentationEditorRef = shallowRef(null);
   const setPresentationEditor = (ref) => (presentationEditorRef.value = ref);
+
+  /**
+   * @deprecated Direct editor access will be removed in a future version. Use the Document API (`editor.doc`) instead.
+   * See https://docs.superdoc.dev/document-api/overview
+   */
   const getPresentationEditor = () => presentationEditorRef.value;
 
   /**

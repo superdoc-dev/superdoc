@@ -8,6 +8,7 @@ import { getMarkdownAdapter } from './get-markdown-adapter.js';
 import { getHtmlAdapter } from './get-html-adapter.js';
 import { markdownToFragmentAdapter } from './markdown-to-fragment-adapter.js';
 import { infoAdapter } from './info-adapter.js';
+import { extractAdapter } from './extract-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import {
@@ -382,6 +383,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     info: {
       info: (input) => infoAdapter(editor, input),
+    },
+    extract: {
+      extract: (input) => extractAdapter(editor, input),
     },
     clearContent: {
       clearContent: (input, options) => clearContentWrapper(editor, input, options),

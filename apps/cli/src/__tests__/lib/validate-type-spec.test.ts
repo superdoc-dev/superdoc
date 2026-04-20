@@ -72,6 +72,42 @@ describe('validateValueAgainstTypeSpec – oneOf with mixed schemas', () => {
   });
 });
 
+describe('validateValueAgainstTypeSpec – repeated actionable oneOf errors', () => {
+  const repeatedUnknownKeySchema: CliTypeSpec = {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          op: { const: 'text.rewrite' },
+        },
+        required: ['id', 'op'],
+      },
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          op: { const: 'text.insert' },
+        },
+        required: ['id', 'op'],
+      },
+    ],
+  };
+
+  test('surfaces the shared nested schema error instead of the generic oneOf message', () => {
+    try {
+      validateValueAgainstTypeSpec({ id: 'r1', op: 'text.rewrite', '},{': ':' }, repeatedUnknownKeySchema, 'steps[0]');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      const cliError = error as CliError;
+      expect(cliError.message).toBe('steps[0].},{ is not allowed by schema.');
+      expect((cliError.details as { selectedError?: string }).selectedError).toBe(
+        'steps[0].},{ is not allowed by schema.',
+      );
+    }
+  });
+});
+
 describe('validateValueAgainstTypeSpec – enum branch', () => {
   const enumSchema: CliTypeSpec = {
     type: 'string',
@@ -140,5 +176,25 @@ describe('doc.find select schema — accepts canonical and shorthand forms', () 
 
   test('rejects text selector missing required pattern', () => {
     expect(() => validateValueAgainstTypeSpec({ type: 'text' }, schema, 'select')).toThrow(CliError);
+  });
+});
+
+describe('validateValueAgainstTypeSpec – object without explicit properties', () => {
+  // type: 'object' schemas that use additionalProperties (or nothing at all)
+  // must not crash the validator when `properties` is absent.
+  const schema = {
+    type: 'object',
+    additionalProperties: { type: 'string' },
+  } as unknown as CliTypeSpec;
+
+  test('accepts any object when properties is absent', () => {
+    expect(() => validateValueAgainstTypeSpec({ foo: 'bar' }, schema, 'params')).not.toThrow();
+    expect(() => validateValueAgainstTypeSpec({}, schema, 'params')).not.toThrow();
+  });
+
+  test('still rejects non-object values', () => {
+    expect(() => validateValueAgainstTypeSpec('nope', schema, 'params')).toThrow(CliError);
+    expect(() => validateValueAgainstTypeSpec(42, schema, 'params')).toThrow(CliError);
+    expect(() => validateValueAgainstTypeSpec(null, schema, 'params')).toThrow(CliError);
   });
 });

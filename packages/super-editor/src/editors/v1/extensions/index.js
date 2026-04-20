@@ -274,6 +274,7 @@ export {
   TableCell,
   TableHeader,
   DocumentIndex,
+  TableOfContents,
   IndexEntry,
   TableOfContentsEntry,
   TocPageNumber,

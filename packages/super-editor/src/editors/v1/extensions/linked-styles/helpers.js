@@ -2,6 +2,7 @@
 import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getLineHeightValueString } from '@core/super-converter/helpers.js';
 import { findParentNode } from '../../core/helpers/findParentNode.js';
+import { findParentNodeClosestToPos } from '../../core/helpers/findParentNodeClosestToPos.js';
 import { kebabCase } from '@superdoc/common';
 import { getUnderlineCssString } from './index.js';
 import { twipsToLines, twipsToPixels, halfPointToPixels } from '@converter/helpers.js';
@@ -309,6 +310,33 @@ export const generateLinkedStyleString = (linkedStyle, basedOnStyle, node, paren
 };
 
 /**
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} paragraphPos
+ * @param {import('prosemirror-model').Node} paragraphNode
+ * @returns {{ from: number; to: number } | null} Half-span [from, to) covering all text in the paragraph
+ */
+const getParagraphTextBounds = (doc, paragraphPos, paragraphNode) => {
+  let minPos = null;
+  let maxPos = null;
+  const innerStart = paragraphPos + 1;
+  const innerEnd = paragraphPos + paragraphNode.nodeSize - 1;
+  doc.nodesBetween(innerStart, innerEnd, (node, pos) => {
+    if (node.isText) {
+      if (minPos === null || pos < minPos) minPos = pos;
+      maxPos = pos + node.nodeSize;
+    }
+    return true;
+  });
+  if (minPos === null || maxPos === null) return null;
+  return { from: minPos, to: maxPos };
+};
+
+const applyCharacterStyleMarkToRange = (tr, textStyleType, from, to, styleId) => {
+  tr.removeMark(from, to, textStyleType);
+  tr.addMark(from, to, textStyleType.create({ styleId }));
+};
+
+/**
  * Apply a linked style to a transaction
  * @category Helper
  * @param {Object} tr - The transaction to mutate
@@ -325,6 +353,7 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
 
   let selection = tr.selection;
   const state = editor.state;
+  const textStyleType = editor.schema.marks.textStyle;
 
   // Check for preserved selection from custom selection plugin
   const focusState = CustomSelectionPluginKey.getState(state);
@@ -351,16 +380,24 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     };
   };
 
-  // Function to clear formatting marks from text content
-  const clearFormattingMarks = (startPos, endPos) => {
-    tr.doc.nodesBetween(startPos, endPos, (node, pos) => {
-      if (node.isText && node.marks.length > 0) {
-        node.marks.forEach((mark) => {
-          if (FORMATTING_MARK_NAMES.has(mark.type.name)) {
-            tr.removeMark(pos, pos + node.nodeSize, mark);
-          }
-        });
+  // Clear FORMATTING_MARK_NAMES only inside [rangeFrom, rangeTo), not across whole text nodes
+  // (selection can split mid-node; removeMark must use the intersection with each text slice).
+  const clearFormattingMarks = (rangeFrom, rangeTo) => {
+    tr.doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+      if (!node.isText || node.marks.length === 0) {
+        return true;
       }
+      const nodeEnd = pos + node.nodeSize;
+      const clearFrom = Math.max(pos, rangeFrom);
+      const clearTo = Math.min(nodeEnd, rangeTo);
+      if (clearFrom >= clearTo) {
+        return true;
+      }
+      node.marks.forEach((mark) => {
+        if (FORMATTING_MARK_NAMES.has(mark.type.name)) {
+          tr.removeMark(clearFrom, clearTo, mark);
+        }
+      });
       return true;
     });
   };
@@ -377,7 +414,23 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     }
   };
 
-  // Handle cursor position (no selection)
+  // Character styles: only affect the selected range (or stored marks for collapsed cursor)
+  if (style.type === 'character') {
+    if (!textStyleType) return false;
+    if (from === to) {
+      // Collapsed cursor: set stored marks for subsequent typing
+      const sourceMarks = tr.storedMarks ?? state.storedMarks ?? selection.$from.marks();
+      const filtered = sourceMarks.filter((mark) => mark.type !== textStyleType);
+      tr.setStoredMarks([...filtered, textStyleType.create({ styleId: style.id })]);
+      return true;
+    }
+    clearFormattingMarks(from, to);
+    applyCharacterStyleMarkToRange(tr, textStyleType, from, to, style.id);
+    clearStoredFormattingMarks();
+    return true;
+  }
+
+  // Handle cursor position (no selection) — paragraph styles only
   if (from === to) {
     let pos = from;
     let paragraphNode = tr.doc.nodeAt(from);
@@ -398,7 +451,29 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     return true;
   }
 
-  // Handle selection spanning multiple nodes
+  // Paragraph style + partial selection in a single paragraph: apply linked character style to range only (Word behavior)
+  if (style.type === 'paragraph' && textStyleType) {
+    const linkedCharStyleId = style.definition?.attrs?.link;
+    if (linkedCharStyleId) {
+      const $fromPos = tr.doc.resolve(from);
+      const $toPos = tr.doc.resolve(to);
+      const startPara = findParentNodeClosestToPos($fromPos, (n) => n.type.name === 'paragraph');
+      const endPara = findParentNodeClosestToPos($toPos, (n) => n.type.name === 'paragraph');
+      if (startPara && endPara && startPara.pos === endPara.pos) {
+        const bounds = getParagraphTextBounds(tr.doc, startPara.pos, startPara.node);
+        const coversFullParagraphText = bounds && from <= bounds.from && to >= bounds.to;
+        // No text (empty / image-only): cannot do linked character range apply; use paragraph path below.
+        if (bounds && !coversFullParagraphText) {
+          clearFormattingMarks(from, to);
+          applyCharacterStyleMarkToRange(tr, textStyleType, from, to, linkedCharStyleId);
+          clearStoredFormattingMarks();
+          return true;
+        }
+      }
+    }
+  }
+
+  // Handle selection spanning multiple nodes / full paragraph(s)
   const paragraphPositions = [];
 
   tr.doc.nodesBetween(from, to, (node, pos) => {
@@ -407,6 +482,18 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     }
     return true;
   });
+
+  // nodesBetween often skips block parents when the range only covers inline content (e.g. image-only).
+  if (paragraphPositions.length === 0 && from !== to) {
+    const seen = new Set();
+    const pushParagraph = (info) => {
+      if (!info || seen.has(info.pos)) return;
+      seen.add(info.pos);
+      paragraphPositions.push({ node: info.node, pos: info.pos });
+    };
+    pushParagraph(findParentNodeClosestToPos(tr.doc.resolve(from), (n) => n.type.name === 'paragraph'));
+    pushParagraph(findParentNodeClosestToPos(tr.doc.resolve(to), (n) => n.type.name === 'paragraph'));
+  }
 
   // Apply style to all paragraphs in selection (with clean attributes and cleared marks)
   paragraphPositions.forEach(({ node, pos }) => {

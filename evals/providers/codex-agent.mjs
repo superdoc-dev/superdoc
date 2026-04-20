@@ -1,42 +1,37 @@
 /**
- * Custom Promptfoo provider: Codex agent benchmark.
+ * Custom Promptfoo provider: OpenAI Codex SDK benchmark.
  *
- * Uses @openai/codex-sdk to run Codex against DOCX tasks
- * under different conditions (baseline, vendor, superdoc-skill, superdoc-cli, choice).
+ * Uses @openai/codex-sdk to run Codex against DOCX tasks.
+ * API: new Codex(opts) -> codex.startThread(opts) -> thread.runStreamed(prompt)
  *
  * Config (set per provider instance in YAML):
- *   condition:      'baseline' | 'vendor' | 'superdoc-skill' | 'superdoc-cli' | 'choice'
+ *   condition:      'baseline' | 'baseline-with-docx-skill' | 'superdoc-mcp' | 'superdoc-cli' | 'choice'
  *   superdocOnPath: Whether SuperDoc CLI is available on PATH
+ *   superdocMcp:    Whether to attach the SuperDoc MCP server
  *
  * Vars (set per test):
  *   fixture:   DOCX filename in fixtures/
  *   task:      The user task prompt
- *   keepFile:  Save the edited DOCX to results/output/ (default: false)
+ *   keepFile:  Save the edited DOCX (default: false)
  */
 
 import { Codex } from '@openai/codex-sdk';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
+  PATHS,
+  buildFileInstruction,
+  buildResult,
   cacheKey,
   cleanupTemp,
-  createTempCopy,
-  extractDocxText,
+  collectMetrics,
+  installSkillAndCli,
+  loadMcpSystemPrompt,
+  performance,
+  preflightCheck,
   readCache,
-  writeCache,
-} from './utils.mjs';
-
-/** Detect which DOCX workflow the agent used based on tool calls. */
-function detectPathUsed(toolCalls) {
-  const names = toolCalls.map(tc => tc.tool || '');
-  const allArgs = toolCalls.map(tc => JSON.stringify(tc.args || {}));
-
-  if (names.some(n => n.startsWith('superdoc_'))) return 'superdoc-skill';
-  if (allArgs.some(a => a.includes('superdoc '))) return 'superdoc-cli';
-  if (allArgs.some(a =>
-    a.includes('python-docx') || a.includes('mammoth') || a.includes('docx')
-  )) return 'raw';
-  if (allArgs.some(a => a.includes('.docx'))) return 'raw';
-  return 'none';
-}
+  setupWorkDir,
+} from '../shared/agent-harness.mjs';
 
 export default class CodexBenchmarkProvider {
   constructor(options) {
@@ -52,65 +47,129 @@ export default class CodexBenchmarkProvider {
     const fixture = vars.fixture;
     const task = vars.task || prompt;
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
+    const blankDocument = vars.blankDocument === true || vars.blankDocument === 'true';
 
-    if (!fixture) {
+    if (!fixture && !blankDocument) {
       return { error: 'No fixture specified in test vars' };
     }
 
-    const key = cacheKey(`codex-${this.config.condition}`, fixture, task, 'o3');
+    const key = cacheKey(`codex-${this.config.condition}`, fixture || 'blank', task, 'o3');
     const cached = readCache(key);
     if (cached) return cached;
 
-    const { docPath, stateDir } = createTempCopy(fixture);
-    const beforeText = extractDocxText(docPath);
+    const preflight = preflightCheck(this.config);
+    if (preflight) return preflight;
+
+    const { docPath, stateDir, localDocPath, beforeText } = setupWorkDir(vars);
     const startTime = performance.now();
 
     try {
-      const env = { ...process.env };
-      if (!this.config.superdocOnPath) {
-        env.PATH = env.PATH.split(':')
-          .filter(p => !p.includes('superdoc'))
-          .join(':');
+      // Minimal env to prevent stray stdout from deps
+      const env = {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        NODE_ENV: 'production',
+        FORCE_COLOR: '0',
+        NO_COLOR: '1',
+        ENABLE_TOOL_SEARCH: 'auto:5',
+      };
+
+      installSkillAndCli(this.config, stateDir, env, 'AGENTS.md');
+
+      const codexOpts = {
+        apiKey: process.env.OPENAI_API_KEY,
+        config: {
+          mcp_auto_approve: ['superdoc/*'],
+        },
+      };
+
+      // Attach SuperDoc MCP server via stdio wrapper for transport debugging
+      if (this.config.superdocMcp) {
+        const mcpLogDir = resolve(stateDir, 'mcp-logs');
+        mkdirSync(mcpLogDir, { recursive: true });
+
+        codexOpts.config = {
+          ...codexOpts.config,
+          mcp_servers: {
+            superdoc: {
+              command: process.execPath,
+              args: [PATHS.mcpWrapper, process.execPath, PATHS.mcpServer],
+            },
+          },
+        };
+        codexOpts.env = { ...env, LOGDIR: mcpLogDir };
+
+        writeFileSync(resolve(stateDir, 'AGENTS.md'), loadMcpSystemPrompt());
       }
 
-      // Run via Codex SDK
-      const codex = new Codex({ env });
+      const codex = new Codex(codexOpts);
       const thread = codex.startThread({
         workingDirectory: stateDir,
         skipGitRepoCheck: true,
+        approvalPolicy: 'never',
+        sandboxMode: 'danger-full-access',
       });
 
-      const turn = await thread.run(`The DOCX file is at: ${docPath}\n\n${task}`);
-      const duration = performance.now() - startTime;
+      // Build prompt
+      const fileInstruction = buildFileInstruction(localDocPath, blankDocument);
+      let fullPrompt = `${fileInstruction}\n\n${task}`;
+      if (this.config.superdocMcp) {
+        fullPrompt += '\n\nIMPORTANT: Use the superdoc MCP tools (superdoc_open, superdoc_get_content, superdoc_edit, etc.) for this task. Do NOT use unzip or manual XML parsing.';
+      } else if (this.config.superdocOnPath) {
+        fullPrompt += '\n\nIMPORTANT: A `superdoc` CLI is available on PATH for working with .docx files. Use `superdoc --help` to see commands. Use the superdoc CLI instead of unzip or manual XML parsing.';
+      }
 
-      // Extract tool calls from turn items
-      const toolCalls = (turn.items || [])
-        .filter(item => item.type === 'tool_call' || item.type === 'function_call')
-        .map(item => ({
-          tool: item.name || item.tool,
-          args: item.arguments || item.input,
-        }));
+      const { events } = await thread.runStreamed(fullPrompt);
 
-      const afterText = extractDocxText(docPath);
+      const toolCalls = [];
+      let finalResponse = '';
+      let usage = null;
 
-      const result = {
-        output: JSON.stringify({
-          agentResponseText: turn.finalResponse || '',
-          documentText: afterText,
-          documentChanged: beforeText !== afterText,
-          condition: this.config.condition,
-          toolCalls,
+      for await (const event of events) {
+        if (event.type === 'item.completed') {
+          const item = event.item;
+          if (item.type === 'command_execution') {
+            toolCalls.push({
+              tool: 'Bash',
+              args: { command: item.command },
+              status: item.status,
+            });
+          } else if (item.type === 'mcp_tool_call') {
+            toolCalls.push({
+              tool: item.tool,
+              server: item.server,
+              args: item.arguments,
+              status: item.status,
+              error: item.error?.message || null,
+              hasResult: !!item.result,
+            });
+          } else if (item.type === 'agent_message') {
+            finalResponse = item.text;
+          }
+        } else if (event.type === 'turn.completed') {
+          usage = event.usage;
+        }
+      }
+
+      const metrics = collectMetrics({ localDocPath, stateDir, beforeText, startTime, toolCalls, extra: { usage: usage || {} } });
+
+      return buildResult({
+        config: this.config,
+        agentResponseText: finalResponse,
+        afterText: metrics.afterText,
+        beforeText,
+        toolCalls,
+        metrics,
+        extra: {
           stepCount: toolCalls.length,
-          cost: 0, // Codex SDK doesn't expose cost directly
-          duration,
-          usage: turn.usage || {},
-          pathUsed: detectPathUsed(toolCalls),
-          outputFile: keepFile ? docPath : null,
-        }),
-      };
-
-      writeCache(key, result);
-      return result;
+          cost: 0,
+          usage: usage || {},
+        },
+        keepFile,
+        localDocPath,
+        cacheKeyStr: key,
+      });
     } catch (err) {
       return { error: err.message };
     } finally {

@@ -1,5 +1,6 @@
 import type {
   ColumnLayout,
+  ColumnRegion,
   FlowBlock,
   Fragment,
   HeaderFooterLayout,
@@ -35,6 +36,7 @@ import {
   scheduleSectionBreak as scheduleSectionBreakExport,
   type SectionState,
   applyPendingToActive,
+  SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
 import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
@@ -510,6 +512,22 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Allow body layout to synthesize page 1 for anchored tables when a document has
+   * no anchor paragraphs and would otherwise render zero pages.
+   *
+   * Header/footer layout keeps this disabled to avoid changing long-standing
+   * overlay behavior in paragraph-free header/footer regions.
+   */
+  allowParagraphlessAnchoredTableFallback?: boolean;
+  /**
+   * Allow body layout to synthesize page 1 when section metadata exists but no
+   * renderable body blocks survive conversion.
+   *
+   * Header/footer layout keeps this disabled to preserve existing empty-region
+   * behavior for paragraph-free overlays.
+   */
+  allowSectionBreakOnlyPageFallback?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -581,6 +599,10 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
+  return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
 // List constants sourced from shared/common
@@ -804,6 +826,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Track active and pending columns
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
+  const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -979,14 +1003,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
     // Check if columns are changing: either explicitly to a different config,
-    // or implicitly resetting to single column (undefined = single column in OOXML)
+    // or implicitly resetting to single column (undefined = single column in OOXML).
+    // withSeparator must be compared because a sep-only toggle still needs a new
+    // column region so the renderer can draw (or stop drawing) the separator from
+    // the toggle point onward.
     const isColumnsChanging =
       (block.columns &&
         (block.columns.count !== next.activeColumns.count ||
           block.columns.gap !== next.activeColumns.gap ||
+          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
           block.columns.equalWidth !== next.activeColumns.equalWidth ||
           !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
-      (!block.columns && next.activeColumns.count > 1);
+      (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -1052,6 +1080,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (activeOrientation) {
       page.orientation = activeOrientation;
     }
+
+    if (activeColumns.count > 1) {
+      page.columns = { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator };
+    }
+
     // Set vertical alignment from active section state
     if (activeVAlign && activeVAlign !== 'top') {
       page.vAlign = activeVAlign;
@@ -1073,6 +1106,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
     'decimal';
   let activePageCounter = 1;
+  let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;
   // Section header/footer ref tracking state
   type SectionRefs = {
@@ -1100,6 +1134,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
   if (typeof initialSectionMetadata?.numbering?.start === 'number') {
     activePageCounter = initialSectionMetadata.numbering.start;
+    activeSectionPageCounterStart = activePageCounter;
   }
   let activeSectionRefs: SectionRefs | null = null;
   let pendingSectionRefs: SectionRefs | null = null;
@@ -1143,6 +1178,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
+        const isApplyingPendingSection =
+          pendingTopMargin !== null ||
+          pendingBottomMargin !== null ||
+          pendingLeftMargin !== null ||
+          pendingRightMargin !== null ||
+          pendingHeaderDistance !== null ||
+          pendingFooterDistance !== null ||
+          pendingPageSize !== null ||
+          pendingColumns !== null ||
+          pendingOrientation !== null ||
+          pendingNumbering !== null ||
+          pendingSectionRefs !== null ||
+          pendingSectionIndex !== null ||
+          pendingVAlign !== undefined ||
+          pendingSectionBaseTopMargin !== null ||
+          pendingSectionBaseBottomMargin !== null;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1223,6 +1274,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pendingSectionBaseBottomMargin !== null) {
           activeSectionBaseBottomMargin = pendingSectionBaseBottomMargin;
           pendingSectionBaseBottomMargin = null;
+        }
+        if (isApplyingPendingSection) {
+          activeSectionPageCounterStart = activePageCounter;
         }
         pageCount += 1;
 
@@ -1397,9 +1451,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Start a new mid-page region with different column configuration
   const startMidPageRegion = (state: PageState, newColumns: ColumnLayout): void => {
-    // Record the boundary at current Y position
+    // Use the maximum Y reached across all columns so the new region starts
+    // below ALL column content, not just the current column's cursor position.
+    // This prevents overlap when a multi-column section's columns have unequal heights.
+    const regionStartY = Math.max(state.cursorY, state.maxCursorY);
+    state.cursorY = regionStartY;
+    state.maxCursorY = regionStartY;
+
+    // Record the boundary at the resolved Y position
     const boundary: ConstraintBoundary = {
-      y: state.cursorY,
+      y: regionStartY,
       columns: newColumns,
     };
     state.constraintBoundaries.push(boundary);
@@ -1411,7 +1472,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`[Layout] *** COLUMNS CHANGED MID-PAGE ***`);
     layoutLog(`  OLD activeColumns: ${JSON.stringify(activeColumns)}`);
     layoutLog(`  NEW activeColumns: ${JSON.stringify(newColumns)}`);
-    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
+    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}, maxCursorY: ${state.maxCursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
     activeColumns = cloneColumnLayout(newColumns);
@@ -1425,15 +1486,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       { left: activeLeftMargin, right: activeRightMargin },
       activePageSize.w,
     );
-
-    // Note: We do NOT reset cursorY - content continues from current position
-    // This creates the mid-page region effect
   };
 
   // Collect anchored drawings mapped to their anchor paragraphs
   const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
-  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs
-  const anchoredTablesByParagraph = collectAnchoredTables(blocks, measures);
+  // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
+  // Tables without any anchor paragraph need explicit fallback placement so
+  // floating-only documents still produce a page and render their content.
+  const anchoredTables = collectAnchoredTables(blocks, measures);
+  const anchoredTablesByParagraph = anchoredTables.byParagraph;
+  const paragraphlessAnchoredTables = anchoredTables.withoutParagraph;
   const placedAnchoredIds = new Set<string>();
   const placedAnchoredTableIds = new Set<string>();
 
@@ -1445,6 +1507,44 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
   const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+
+  const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
+    const contentTop = state.topMargin;
+    const contentBottom = state.contentBottom;
+    const contentHeight = Math.max(0, contentBottom - contentTop);
+    const tableHeight = measure.totalHeight ?? 0;
+    const anchor = block.anchor;
+    const offsetV = anchor?.offsetV ?? 0;
+    const vRelativeFrom = anchor?.vRelativeFrom;
+    const alignV = anchor?.alignV;
+
+    if (vRelativeFrom === 'margin') {
+      if (alignV === 'bottom') {
+        return contentBottom - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        return contentTop + (contentHeight - tableHeight) / 2 + offsetV;
+      }
+      return contentTop + offsetV;
+    }
+
+    if (vRelativeFrom === 'page') {
+      if (alignV === 'bottom') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return pageHeight - tableHeight + offsetV;
+      }
+      if (alignV === 'center') {
+        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+        return (pageHeight - tableHeight) / 2 + offsetV;
+      }
+      return offsetV;
+    }
+
+    // Paragraph-relative floating tables normally anchor to a body paragraph.
+    // When a document has no body paragraphs at all, fall back to the top of the
+    // content area so the table can still render on page 1.
+    return contentTop + offsetV;
+  };
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -1699,6 +1799,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (sectionMetadata.numbering.format) activeNumberFormat = sectionMetadata.numbering.format;
           if (typeof sectionMetadata.numbering.start === 'number') {
             activePageCounter = sectionMetadata.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           // Non-first section: schedule for next page
@@ -1709,6 +1810,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (effectiveBlock.numbering.format) activeNumberFormat = effectiveBlock.numbering.format;
           if (typeof effectiveBlock.numbering.start === 'number') {
             activePageCounter = effectiveBlock.numbering.start;
+            activeSectionPageCounterStart = activePageCounter;
           }
         } else {
           pendingNumbering = { ...effectiveBlock.numbering };
@@ -2031,6 +2133,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
         state.cursorY = tableBottomY;
+        state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       }
       continue;
     }
@@ -2209,8 +2312,46 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Prune trailing empty page(s) that can be created by page-boundary rules
   // (e.g., parity requirements) when no content follows. Word does not render
   // a final blank page for continuous final sections.
-  while (pages.length > 0 && pages[pages.length - 1].fragments.length === 0) {
-    pages.pop();
+  paginator.pruneTrailingEmptyPages();
+
+  const resetPaginationStateForBlankPageFallback = (): void => {
+    pageCount = 0;
+    activePageCounter = activeSectionPageCounterStart;
+    sectionFirstPageNumbers.clear();
+  };
+
+  if (
+    pages.length === 0 &&
+    ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
+  ) {
+    resetPaginationStateForBlankPageFallback();
+  }
+
+  if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
+    const state = paginator.ensurePage();
+
+    for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
+      const columnWidthForTable = getCurrentColumnWidth();
+      const totalWidth = tableMeasure.totalWidth ?? 0;
+      const shouldFlowInline =
+        columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+
+      if (shouldFlowInline) {
+        continue;
+      }
+
+      const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
+      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+
+      floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      placedAnchoredTableIds.add(tableBlock.id);
+    }
+  }
+
+  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+    paginator.ensurePage();
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -2402,6 +2543,39 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
+  // Serialize constraint boundaries into page.columnRegions so DomPainter can
+  // draw per-region overlays (e.g. column separator lines) bounded by the
+  // correct Y span. Continuous section breaks with a changed column config
+  // push boundaries into PageState.constraintBoundaries during layout; without
+  // this step the renderer only sees the page-start column config and would
+  // draw a single full-page separator across regions it no longer applies to.
+  for (const state of states) {
+    const boundaries = state.constraintBoundaries;
+    if (boundaries.length === 0) continue;
+
+    const regions: ColumnRegion[] = [];
+    // First region spans from the top of the content area to the first boundary.
+    // Its columns come from page.columns (set at page creation before any
+    // mid-page region change) or fall back to a single-column default so the
+    // contract stays self-describing even when the page starts single-column.
+    const firstRegionColumns: ColumnLayout = state.page.columns ?? { count: 1, gap: 0 };
+    regions.push({
+      yStart: state.topMargin,
+      yEnd: boundaries[0].y,
+      columns: firstRegionColumns,
+    });
+    for (let i = 0; i < boundaries.length; i++) {
+      const start = boundaries[i];
+      const end = boundaries[i + 1];
+      regions.push({
+        yStart: start.y,
+        yEnd: end ? end.y : state.contentBottom,
+        columns: start.columns,
+      });
+    }
+    state.page.columnRegions = regions;
+  }
+
   return {
     pageSize,
     pages,
@@ -2409,7 +2583,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns: activeColumns.count > 1 ? { count: activeColumns.count, gap: activeColumns.gap } : undefined,
+    columns:
+      activeColumns.count > 1
+        ? { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator }
+        : undefined,
   };
 }
 
@@ -2452,6 +2629,34 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
   return bottom;
 }
 
+type VerticalBand = {
+  start: number;
+  end: number;
+};
+
+function rangesIntersect(startA: number, endA: number, startB: number, endB: number): boolean {
+  return endA > startB && startA < endB;
+}
+
+function getPageRelativeMeasurementBand(
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): VerticalBand | null {
+  if (!kind || !constraints.margins) {
+    return null;
+  }
+
+  const bandSize = kind === 'header' ? constraints.margins.top : constraints.margins.bottom;
+  if (!Number.isFinite(bandSize) || bandSize == null || bandSize <= 0) {
+    return null;
+  }
+
+  return {
+    start: 0,
+    end: bandSize,
+  };
+}
+
 /**
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
@@ -2460,8 +2665,18 @@ function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Me
  * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
  *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
  *    the measurement used by body pagination.
+ * 3. Page-relative header/footer overlays that do not intersect the region's
+ *    reserved margin band — they should still render, but must not reserve
+ *    body space like true header/footer content.
  */
-function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canvasHeight: number): boolean {
+function shouldExcludeFromMeasurement(
+  fragment: Fragment,
+  block: FlowBlock,
+  fragmentBottom: number,
+  canvasHeight: number,
+  kind: 'header' | 'footer' | undefined,
+  constraints: HeaderFooterConstraints,
+): boolean {
   const isAnchoredFragment =
     (fragment.kind === 'image' || fragment.kind === 'drawing') &&
     (fragment as { isAnchored?: boolean }).isAnchored === true;
@@ -2482,11 +2697,16 @@ function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canv
   // Page-relative anchored fragments that sit entirely outside the measurement band
   // should not inflate pagination height.
   if (isPageRelativeAnchor(anchoredBlock)) {
-    const fragmentHeight = (fragment as { height?: number }).height ?? 0;
     const fragmentTop = fragment.y;
-    const fragmentBottom = fragment.y + fragmentHeight;
     // Exclude if the fragment range [top, bottom] does not intersect [0, canvasHeight]
     if (fragmentBottom <= 0 || fragmentTop >= canvasHeight) {
+      return true;
+    }
+  }
+
+  if (anchoredBlock.anchor?.vRelativeFrom === 'page') {
+    const measurementBand = getPageRelativeMeasurementBand(kind, constraints);
+    if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
   }
@@ -2533,6 +2753,8 @@ export function layoutHeaderFooter(
   const layout = layoutDocument(blocks, measures, {
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    allowParagraphlessAnchoredTableFallback: false,
+    allowSectionBreakOnlyPageFallback: false,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.
@@ -2577,7 +2799,7 @@ export function layoutHeaderFooter(
       if (bottom > renderMaxY) renderMaxY = bottom;
 
       // Determine whether this fragment should be excluded from measurement (pagination) bounds
-      if (shouldExcludeFromMeasurement(fragment, block, height)) continue;
+      if (shouldExcludeFromMeasurement(fragment, block, bottom, height, kind, constraints)) continue;
 
       if (fragment.y < measureMinY) measureMinY = fragment.y;
       if (bottom > measureMaxY) measureMaxY = bottom;
@@ -2791,3 +3013,5 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 // Table utilities consumed by layout-bridge and cross-package sync tests
 export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
+
+export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

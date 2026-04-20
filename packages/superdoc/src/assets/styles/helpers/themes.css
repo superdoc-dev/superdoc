@@ -34,6 +34,7 @@
   --sd-ui-comments-card-shadow: 0 1px 2px rgba(60, 64, 67, 0.2), 0 2px 6px rgba(60, 64, 67, 0.18);
   --sd-ui-comments-separator: #c7cdd6;
   --sd-ui-comments-timestamp-text: #5f6368;
+  --sd-ui-comments-input-bg: #fff;
   --sd-ui-comments-option-hover-bg: #e8eaed;
   --sd-ui-comments-input-border: #80868b;
 
@@ -94,6 +95,7 @@
   --sd-ui-comments-card-shadow: 0 2px 4px rgba(0, 0, 0, 0.16), 0 10px 20px rgba(0, 0, 0, 0.1);
   --sd-ui-comments-separator: #c8c6c4;
   --sd-ui-comments-timestamp-text: #605e5c;
+  --sd-ui-comments-input-bg: #fff;
   --sd-ui-comments-option-hover-bg: #f3f2f1;
   --sd-ui-comments-input-border: #8a8886;
 
@@ -161,6 +163,7 @@
   --sd-ui-comments-input-border: #7f96aa;
   --sd-ui-comments-separator: #9fb4c7;
   --sd-ui-comments-timestamp-text: #475569;
+  --sd-ui-comments-input-bg: #fff;
 
   /* Highlights */
   --sd-comments-highlight-external-base: #b45309;

@@ -570,6 +570,54 @@ describe('text measurement utility', () => {
       // Last line should NOT be justified (same width)
       expect(lastX).toBe(lastXNormal);
     });
+
+    it('skips justify spacing for manual tabs without explicit segments', () => {
+      const trailingText = 'Item body';
+      const tabWidth = 48;
+      const block = createBlock([
+        { text: '1 ', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: tabWidth },
+        { text: trailingText, fontFamily: 'Arial', fontSize: 16 },
+      ]);
+      (block as any).attrs = { alignment: 'justify' };
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 2,
+        toChar: trailingText.length,
+        width: (2 + trailingText.length) * CHAR_WIDTH + tabWidth,
+        maxWidth: 300,
+      });
+
+      const targetCharOffset = 7;
+      const baseX = measureCharacterX(block, line, targetCharOffset, line.width);
+      const wideX = measureCharacterX(block, line, targetCharOffset, 300);
+      expect(wideX).toBe(baseX);
+
+      const hitResult = findCharacterAtX(block, line, baseX, 0, 300);
+      expect(hitResult.charOffset).toBe(targetCharOffset);
+    });
+
+    it('still applies justify to lines without any tab runs', () => {
+      // Two runs so the first line is not derived as the last line of the paragraph
+      const block = createBlock([
+        { text: 'hello world foo', fontFamily: 'Arial', fontSize: 16 },
+        { text: 'bar baz qux', fontFamily: 'Arial', fontSize: 16 },
+      ]);
+      (block as any).attrs = { alignment: 'justify' };
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0,
+        toChar: 15,
+        width: 15 * CHAR_WIDTH,
+        maxWidth: 300,
+      });
+
+      const targetCharOffset = 7;
+      const baseX = measureCharacterX(block, line, targetCharOffset, line.width);
+      const wideX = measureCharacterX(block, line, targetCharOffset, 300);
+      // No tabs — justify should apply, so wider available width produces different position
+      expect(wideX).not.toBe(baseX);
+    });
   });
 
   describe('center and right alignment', () => {

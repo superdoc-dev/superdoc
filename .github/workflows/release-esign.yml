@@ -1,11 +1,11 @@
-# Auto-releases on push to main (@next channel)
-# For stable (@latest): cherry-pick commits to stable branch, then manually dispatch this workflow
+# Auto-releases on push to main (@next) or stable (@latest)
 name: 📦 Release esign
 
 on:
   push:
     branches:
       - main
+      - stable
     paths:
       - 'packages/esign/**'
       - 'packages/superdoc/**'

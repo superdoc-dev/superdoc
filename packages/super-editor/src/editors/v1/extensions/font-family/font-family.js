@@ -57,6 +57,18 @@ export const FontFamily = Extension.create({
               return { style: `font-family: ${attrs.fontFamily}` };
             },
           },
+          // Per-script font overrides (ECMA-376 §17.3.2.26). These are round-trip
+          // metadata — not rendered to DOM. They preserve per-script font data through
+          // the mark round-trip so the inline/style comparison doesn't produce false
+          // positives that inject w:rFonts on export. (SD-2517)
+          eastAsiaFontFamily: {
+            default: null,
+            rendered: false,
+          },
+          csFontFamily: {
+            default: null,
+            rendered: false,
+          },
         },
       },
     ];

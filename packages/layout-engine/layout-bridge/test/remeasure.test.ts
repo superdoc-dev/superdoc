@@ -611,6 +611,63 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[1].maxWidth).toBe(maxWidth);
     });
 
+    // SD-2415: the guard was relaxed from `hasNegativeIndent` to `hasNegativeLeftIndent`.
+    // These tests pin the new behavior so a revert is caught.
+    it('widens first line with hanging when only right indent is negative', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: -30, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      // First line widens by hanging amount; body lines use plain content width.
+      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    it('does NOT widen first line when left indent is negative (SD-1401 regression guard)', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: -20, right: 0, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    // SD-2415: remeasure must match the initial measurer on `suppressFirstLineIndent`.
+    // Without this, remeasure (triggered by typing, resize, style change) produces a
+    // different first-line offset than the initial measure and text jumps on redraw.
+    it('honors suppressFirstLineIndent by not widening the first line', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: 0, hanging: 20 },
+        suppressFirstLineIndent: true,
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      // With suppressFirstLineIndent=true, firstLineOffset is forced to 0,
+      // so the first line uses the same width as body lines.
+      expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
+    it('widens first line when suppressFirstLineIndent is false (default)', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: 0, right: 0, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+    });
+
     it('respects firstLineIndent parameter for list markers', () => {
       // firstLineIndent parameter (different from attrs.indent.firstLine) is for in-flow list markers
       const block = createBlock([textRun('A'.repeat(15))]); // 15 chars = 150px

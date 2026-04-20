@@ -20,6 +20,10 @@ export type PageState = {
   lastParagraphContextualSpacing: boolean;
   /** Border hash of the last paragraph for between-border group detection. */
   lastParagraphBorderHash?: string;
+  /** Tracks the maximum cursorY reached across all columns on this page.
+   *  Used when starting a mid-page region so the new section begins below
+   *  all column content, not just the current column's cursor. */
+  maxCursorY: number;
 };
 
 export type PaginatorOptions = {
@@ -107,6 +111,7 @@ export function createPaginator(opts: PaginatorOptions) {
       trailingSpacing: 0,
       lastParagraphStyleId: undefined,
       lastParagraphContextualSpacing: false,
+      maxCursorY: topMargin,
     };
     states.push(state);
     pages.push(state.page);
@@ -123,6 +128,8 @@ export function createPaginator(opts: PaginatorOptions) {
   const advanceColumn = (state: PageState): PageState => {
     const activeCols = getActiveColumnsForState(state);
     if (state.columnIndex < activeCols.count - 1) {
+      // Snapshot max Y before resetting cursor for the next column
+      state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       state.columnIndex += 1;
       if (state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]) {
         state.cursorY = state.constraintBoundaries[state.activeConstraintIndex].y;

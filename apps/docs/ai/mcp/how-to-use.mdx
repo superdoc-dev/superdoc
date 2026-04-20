@@ -1,0 +1,161 @@
+---
+title: How to use
+sidebarTitle: How to use
+description: Workflow patterns, targeting, and common operations for the SuperDoc MCP server
+keywords: "mcp, superdoc, workflow, targeting, formatting, document editing, ai agents"
+---
+
+## Workflow
+
+Every interaction follows the same pattern: open, read or edit, save, close.
+
+```
+superdoc_open → superdoc_get_content / superdoc_search → intent tools → superdoc_save → superdoc_close
+```
+
+1. `superdoc_open` loads a `.docx` file and returns a `session_id`
+2. `superdoc_get_content` reads the current document and `superdoc_search` finds stable handles or addresses
+3. Intent tools use `session_id` plus `action` to edit, format, create, comment, review track changes, or run batched mutations
+4. `superdoc_save` writes changes to disk
+5. `superdoc_close` releases the session
+
+## Efficient patterns
+
+### Create multiple sections at once
+
+Use `superdoc_edit` with `type: "markdown"` to insert structured content in a single call. It parses markdown into proper document nodes — headings, paragraphs, bold, italic, and lists.
+
+```
+superdoc_edit({
+  session_id,
+  action: "insert",
+  type: "markdown",
+  value: "# Background\n\nThis section covers the project history.\n\n# Next steps\n\n1. Review the proposal\n2. Assign owners\n3. Set a deadline"
+})
+```
+
+Markdown syntax maps to document styles:
+
+| Markdown | Document node |
+|----------|--------------|
+| `# Heading` | Heading 1 |
+| `## Heading` | Heading 2 |
+| `**text**` | Bold |
+| `*text*` | Italic |
+| `- item` | Bullet list |
+| `1. item` | Numbered list |
+
+### Format multiple items at once
+
+Use `superdoc_mutations` with `format.apply` steps to apply formatting across the document in one atomic call.
+
+```
+superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "direct", steps: [
+  {id: "f1", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading", level: 1}, require: "all"}, args: {inline: {bold: true}}},
+  {id: "f2", op: "format.apply", where: {by: "select", select: {type: "node", nodeType: "heading", level: 2}, require: "all"}, args: {inline: {italic: true}}}
+]})
+```
+
+<Warning>
+Format targets must exist before the batch runs. Node selectors resolve at step execution time using the current document state. If a required target is missing, the step fails and — with `atomic: true` — the entire batch rolls back.
+</Warning>
+
+### When to use which tool
+
+| Task | Best tool |
+|------|-----------|
+| Insert one paragraph or heading | `superdoc_create` |
+| Insert multiple sections with structure | `superdoc_edit` with `type: "markdown"` |
+| Replace text across the whole document | `superdoc_search` + `superdoc_edit` |
+| Rewrite a whole paragraph | `superdoc_get_content` + `superdoc_edit` with block ref |
+| Apply formatting to known text | `superdoc_search` + `superdoc_format` |
+| Apply formatting to all nodes of a type | `superdoc_mutations` with `format.apply` |
+| Multiple text changes that must succeed together | `superdoc_mutations` with `atomic: true` |
+| Review or resolve tracked changes | `superdoc_track_changes` |
+
+## Targeting
+
+Every editing tool needs a **target** telling the API *where* to apply the change. There are three ways to get one:
+
+- **From blocks data**: Each block has a `ref` (pass to `superdoc_edit` or `superdoc_format`) and a `nodeId` (for building `at` positions with `superdoc_create`).
+- **From `superdoc_search`**: Returns `handle.ref` covering the matched text. Use search when you need to find text patterns, not when you already know which block to target.
+- **From `superdoc_create`**: Returns `nodeId` and `ref` for the new node. For creating multiple sections or blocks at once, prefer `superdoc_edit` with `type: "markdown"` instead of multiple `superdoc_create` calls. Re-fetch blocks after create to get a fresh ref before formatting.
+
+<Warning>
+**Refs expire after any mutation.** Always re-search or re-read blocks before the next operation. Within a `superdoc_mutations` batch, node selectors resolve automatically at step execution time, so re-fetching between steps is not required.
+</Warning>
+
+## Common operations
+
+### Replace text everywhere
+
+```
+superdoc_search({session_id, select: {type: "text", pattern: "old word"}, require: "all"})
+superdoc_edit({session_id, action: "replace", ref: "<handle.ref>", text: "new word"})
+```
+
+### Rewrite a paragraph
+
+```
+superdoc_get_content({session_id, action: "blocks"})
+superdoc_edit({session_id, action: "replace", ref: "<block.ref>", text: "Entirely new paragraph text."})
+```
+
+A block ref covers the entire block text. A search ref covers only the matched substring. Use block refs when rewriting whole paragraphs.
+
+### Add content after a heading
+
+```
+superdoc_search({session_id, select: {type: "text", pattern: "Introduction"}, require: "first"})
+superdoc_create({session_id, action: "paragraph", text: "New content.", at: {kind: "after", target: {kind: "block", nodeType: "heading", nodeId: "<blockId>"}}})
+```
+
+### Format text
+
+```
+superdoc_search({session_id, select: {type: "text", pattern: "important phrase"}, require: "first"})
+superdoc_format({session_id, action: "inline", ref: "<handle.ref>", inline: {bold: true}})
+```
+
+### Create a list
+
+Create paragraphs first, then convert:
+
+```
+superdoc_create({session_id, action: "paragraph", text: "Item one", at: {kind: "documentEnd"}})
+superdoc_create({session_id, action: "paragraph", text: "Item two", at: {kind: "after", target: {kind: "block", nodeType: "paragraph", nodeId: "<nodeId1>"}}})
+superdoc_list({session_id, action: "create", mode: "fromParagraphs", preset: "disc", target: {from: {kind: "block", nodeType: "paragraph", nodeId: "<first>"}, to: {kind: "block", nodeType: "paragraph", nodeId: "<last>"}}})
+```
+
+### Batch edits atomically
+
+Use `superdoc_mutations` when you need multiple changes that must succeed or fail together. Supported step types include `text.rewrite`, `text.delete`, `format.apply`, `create.heading`, `create.paragraph`, and `create.table`.
+
+```
+superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "direct", steps: [
+  {id: "s1", op: "text.rewrite", where: {by: "select", select: {type: "text", pattern: "old"}, require: "all"}, args: {replacement: {text: "new"}}},
+  {id: "s2", op: "text.delete", where: {by: "select", select: {type: "text", pattern: " (deprecated)"}, require: "all"}, args: {}}
+]})
+```
+
+## Tracked changes
+
+Actions that support tracked edits use the underlying Document API's `changeMode: "tracked"` option. Review or resolve tracked edits with `superdoc_track_changes`:
+
+```
+superdoc_track_changes({session_id, action: "list"})
+superdoc_track_changes({session_id, action: "decide", decision: "accept", target: {id: "<changeId>"}})
+```
+
+## Tips
+
+- **Format calls must be sequential.** Each call invalidates all outstanding refs. Format one block, re-fetch, then format the next.
+- **Search patterns are plain text.** Do not include markdown markers like `#` or `**`.
+- **Pass structured objects, not JSON strings.** Fields like `at`, `target`, and `inline` expect objects.
+- **On a blank document**, omit positional `at` on the first `superdoc_create`. Then fetch blocks for nodeIds before subsequent inserts.
+
+## Related
+
+- [MCP overview](/ai/mcp/overview) — setup and tool reference
+- [Debugging](/ai/mcp/debugging) — inspect and troubleshoot MCP tool calls
+- [Best practices](/ai/agents/best-practices) — general AI agent patterns

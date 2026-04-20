@@ -23,7 +23,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange } from '@superdoc/contracts';
+import { adjustAvailableWidthForTextIndent, computeLinePmRange, getFirstLineIndentOffset } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
 
@@ -75,6 +75,14 @@ export type TableHitResult = {
   localX: number;
   /** Y coordinate relative to the cell content area */
   localY: number;
+  /**
+   * Cumulative line count of preceding paragraph blocks in this cell.
+   * Used by callers to compute the hit paragraph's local first-line flag
+   * when the row continues from a prior page: `isFirstLineOfParagraph` is
+   * `lineIndex === 0 && max(0, cellLineStart - blockStartGlobal) === 0`,
+   * matching `renderTableCell.ts`'s `localStartLine` computation.
+   */
+  blockStartGlobal: number;
 };
 
 type AtomicFragment = DrawingFragment | ImageFragment;
@@ -556,6 +564,12 @@ export const hitTestTableFragment = (
     );
 
     let blockStartY = 0;
+    // Cumulative line count of preceding paragraph blocks in this cell.
+    // Tracked in parallel with blockStartY so we can report it on hit return —
+    // callers use it to compute the hit paragraph's local first-line flag
+    // when a row spans multiple pages (matches renderTableCell's per-block
+    // `localStartLine = max(0, globalFromLine - blockStartGlobal)`).
+    let blockStartGlobalLines = 0;
     const getBlockHeight = (m: Measure | undefined): number => {
       if (!m) return 0;
       if ('totalHeight' in m && typeof (m as { totalHeight?: number }).totalHeight === 'number') {
@@ -600,10 +614,12 @@ export const hitTestTableFragment = (
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
           localY: Math.max(0, localYWithinBlock),
+          blockStartGlobal: blockStartGlobalLines,
         };
       }
 
       blockStartY = blockEndY;
+      blockStartGlobalLines += paragraphMeasure.lines.length;
     }
   }
 
@@ -769,7 +785,7 @@ export function clickToPositionGeometry(
       const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
 
       const totalIndent = paraIndentLeft + paraIndentRight;
-      const availableWidth = Math.max(0, fragment.width - totalIndent);
+      let availableWidth = Math.max(0, fragment.width - totalIndent);
 
       if (totalIndent > fragment.width) {
         console.warn(
@@ -781,6 +797,16 @@ export function clickToPositionGeometry(
 
       const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
       const isListItem = markerWidth > 0;
+      const hasRenderedMarkerText = isListItem && Boolean(fragment.markerTextWidth);
+
+      // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+      // Skip for list-marker first lines — the renderer doesn't adjust those (only when marker has actual text).
+      const isFirstLineOfParagraph = lineIndex === 0 && !fragment.continuesFromPrev;
+      if (isFirstLineOfParagraph && !hasRenderedMarkerText) {
+        const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
+        availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
+      }
       const paraAlignment = block.attrs?.alignment;
       const isJustified = paraAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
@@ -836,7 +862,7 @@ export function clickToPositionGeometry(
       const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
 
       const totalIndent = paraIndentLeft + paraIndentRight;
-      const availableWidth = Math.max(0, tableHit.fragment.width - totalIndent);
+      let availableWidth = Math.max(0, tableHit.fragment.width - totalIndent);
 
       if (totalIndent > tableHit.fragment.width) {
         console.warn(
@@ -848,6 +874,21 @@ export function clickToPositionGeometry(
 
       const cellMarkerWidth = cellMeasure.marker?.markerWidth ?? 0;
       const isListItem = cellMarkerWidth > 0;
+
+      // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+      // Skip for list-marker first lines — the renderer doesn't adjust those.
+      // When a row is split across pages, partialRow.fromLineByCell tells us the real
+      // starting line for the cell slice, but the painter decides per-paragraph (see
+      // renderTableCell's `localStartLine = max(0, globalFromLine - blockStartGlobal)`).
+      // Subtract the hit paragraph's cumulative block offset so multi-block cells
+      // spanning pages stay aligned with the painter (SD-2415).
+      const cellLineStart = tableHit.fragment.partialRow?.fromLineByCell?.[tableHit.cellColIndex] ?? 0;
+      const localStartLine = Math.max(0, cellLineStart - tableHit.blockStartGlobal);
+      if (lineIndex === 0 && localStartLine === 0 && !isListItem) {
+        const suppressFLI = (cellBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+        const firstLineOffset = getFirstLineIndentOffset(cellBlock.attrs?.indent, suppressFLI);
+        availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
+      }
       const cellAlignment = cellBlock.attrs?.alignment;
       const isJustified = cellAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;

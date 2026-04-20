@@ -228,6 +228,100 @@ describe('layoutDocument', () => {
     expect(layout.columns).toMatchObject({ count: 2, gap: 20 });
   });
 
+  it('sets "page.columns" with separator when column separator is enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
+  });
+
+  it('does not set "page.columns" on single column layout', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toBeUndefined();
+    expect(layout.columns).toBeUndefined();
+  });
+
+  it('sets "page.columns" without separator when column separator is not enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+    expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
+    // Two sections on the same page: first 2-col with separator, then a
+    // continuous break that switches to 3-col still with separator. The
+    // layout engine should record a ConstraintBoundary and surface it on
+    // page.columnRegions so the renderer can bound each separator to the
+    // correct Y range.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 3, gap: 20, withSeparator: true },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+
+    expect(layout.pages).toHaveLength(1);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    expect(regions!.length).toBeGreaterThanOrEqual(2);
+    // First region covers the initial 2-col layout from topMargin to the boundary.
+    expect(regions![0].yStart).toBe(40);
+    expect(regions![0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    // Second region picks up the continuous break's 3-col config and ends at
+    // the bottom of the content area.
+    const last = regions![regions!.length - 1];
+    expect(last.columns).toMatchObject({ count: 3, gap: 20, withSeparator: true });
+    expect(last.yEnd).toBe(800 - 40);
+    // Regions must tile (no gaps, no overlap).
+    for (let i = 1; i < regions!.length; i++) {
+      expect(regions![i].yStart).toBe(regions![i - 1].yEnd);
+    }
+  });
+
+  it('omits page.columnRegions when no mid-page column change occurs', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columnRegions).toBeUndefined();
+  });
+
   it('applies spacing before and after paragraphs', () => {
     const spacingBlock: FlowBlock = {
       kind: 'paragraph',
@@ -1919,6 +2013,78 @@ describe('layoutDocument', () => {
       expect(p3Fragment).toBeDefined();
       expect(p3Fragment?.width).toBe(210); // Half width = two columns
     });
+
+    it('starts new region below tallest column when columns have unequal heights', () => {
+      // Regression test for SD-1869: when a multi-column section has unequal column
+      // heights, the next region must start below the TALLEST column, not the last
+      // column's cursor. Without the maxCursorY fix, the new region would start at
+      // the shorter column's bottom, overlapping the taller one.
+      //
+      // Uses a 3-col → 2-col transition because the layout engine forces a new page
+      // when reducing to fewer columns than the current column index (guard at
+      // columnIndexBefore >= newColumns.count). With 3→2, content in col1
+      // (columnIndex=1) stays on the same page (1 < 2).
+      const toThreeColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-3col',
+        type: 'continuous',
+        columns: { count: 3, gap: 24 },
+        margins: {},
+      };
+      const toTwoColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-2col',
+        type: 'continuous',
+        columns: { count: 2, gap: 48 },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] }, // single column preamble
+        toThreeColumns,
+        { kind: 'paragraph', id: 'p-cols', runs: [] }, // 3 lines → col0 gets 2, col1 gets 1
+        toTwoColumns,
+        { kind: 'paragraph', id: 'p-after', runs: [] }, // must start below tallest column
+      ];
+
+      // p-cols: 3 lines of 250px each (750px total)
+      // Available column height = 720 (page bottom) - 112 (region top) = 608px
+      // Column 0 fits lines 0+1 (500px), line 2 overflows to column 1
+      // Column 0 bottom = 112 + 500 = 612
+      // Column 1 bottom = 112 + 250 = 362
+      const measures: Measure[] = [
+        makeMeasure([40]), // p1
+        { kind: 'sectionBreak' },
+        makeMeasure([250, 250, 250]), // p-cols: 3 lines, 2 in col0 + 1 in col1
+        { kind: 'sectionBreak' },
+        makeMeasure([40]), // p-after
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      // Everything should fit on one page
+      expect(layout.pages.length).toBe(1);
+
+      // p1 at y=72, height=40 → region for 3-col section starts at y=112
+      const regionTop = 72 + 40; // 112
+
+      // Column 0: 2 lines × 250px = 500px → bottom at 112 + 500 = 612
+      // Column 1: 1 line × 250px = 250px → bottom at 112 + 250 = 362
+      const tallestColumnBottom = regionTop + 500; // 612
+
+      const page = layout.pages[0];
+      const pAfter = page.fragments.find((f) => f.blockId === 'p-after');
+      expect(pAfter).toBeDefined();
+
+      // KEY ASSERTION: p-after must start at or below the tallest column's bottom (612)
+      // Without the fix, it would start at 362 (column 1's bottom), overlapping column 0
+      expect(pAfter!.y).toBeGreaterThanOrEqual(tallestColumnBottom);
+    });
   });
 
   describe('columnBreak with multi-column pages', () => {
@@ -3038,6 +3204,66 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(60, 0);
   });
 
+  it('excludes centered page-relative header overlays from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const centeredOverlay: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-1',
+      drawingKind: 'vectorShape',
+      geometry: { width: 596, height: 531 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 596,
+      height: 531,
+      scale: 1,
+      naturalWidth: 596,
+      naturalHeight: 531,
+      geometry: { width: 596, height: 531, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, centeredOverlay],
+      [paragraphMeasure, overlayMeasure],
+      constraints,
+      'header',
+    );
+    const overlayFragment = layout.pages[0]?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+      | DrawingFragment
+      | undefined;
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(500);
+    expect(overlayFragment).toBeDefined();
+    expect(overlayFragment?.y).toBeGreaterThan(150);
+  });
+
   it('returns minimal height when header contains only behindDoc fragments with extreme offsets', () => {
     const imageBlock1: FlowBlock = {
       kind: 'image',
@@ -3252,6 +3478,77 @@ describe('layoutHeaderFooter', () => {
     // But render bounds should include it
     expect(layout.minY).toBeLessThan(0);
     expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('keeps top-aligned page-relative header anchors in measurement height', () => {
+    const overlayBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-top',
+      drawingKind: 'vectorShape',
+      geometry: { width: 120, height: 60 },
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 40,
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 120,
+      height: 60,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 60,
+      geometry: { width: 120, height: 60, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter([overlayBlock], [overlayMeasure], constraints, 'header');
+
+    expect(layout.height).toBeCloseTo(100);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
+  });
+
+  it('keeps bottom-aligned page-relative footer anchors in measurement height', () => {
+    const footerOverlay: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+        hRelativeFrom: 'page',
+        offsetH: 0,
+      },
+    };
+    const footerOverlayMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    const layout = layoutHeaderFooter([footerOverlay], [footerOverlayMeasure], constraints, 'footer');
+
+    expect(layout.height).toBeCloseTo(72);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
   });
 
   it('post-normalizes page-relative anchors in footer layout', () => {

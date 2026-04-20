@@ -543,6 +543,37 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                       "target"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "block",
+                        "type": "string"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": [
+                          "paragraph",
+                          "heading",
+                          "listItem",
+                          "table",
+                          "tableRow",
+                          "tableCell",
+                          "tableOfContents",
+                          "image",
+                          "sdt"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "nodeType",
+                      "nodeId"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -654,108 +685,180 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                 "type": "string"
               },
               "where": {
-                "additionalProperties": false,
-                "properties": {
-                  "by": {
-                    "const": "select",
-                    "type": "string"
-                  },
-                  "require": {
-                    "enum": [
-                      "first",
-                      "exactlyOne"
-                    ]
-                  },
-                  "select": {
-                    "oneOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "caseSensitive": {
-                            "description": "Case-sensitive matching. Default: false.",
-                            "type": "boolean"
-                          },
-                          "mode": {
-                            "description": "Match mode: 'contains' (substring) or 'regex'.",
-                            "enum": [
-                              "contains",
-                              "regex"
-                            ]
-                          },
-                          "pattern": {
-                            "description": "Text or regex pattern to match.",
-                            "type": "string"
-                          },
-                          "type": {
-                            "const": "text",
-                            "description": "Must be 'text' for text pattern search."
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "pattern"
-                        ],
-                        "type": "object"
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "select",
+                        "type": "string"
                       },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "description": "Filter: 'block' or 'inline'.",
-                            "enum": [
-                              "block",
-                              "inline"
-                            ]
+                      "require": {
+                        "enum": [
+                          "first",
+                          "exactlyOne"
+                        ]
+                      },
+                      "select": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "caseSensitive": {
+                                "description": "Case-sensitive matching. Default: false.",
+                                "type": "boolean"
+                              },
+                              "mode": {
+                                "description": "Match mode: 'contains' (substring) or 'regex'.",
+                                "enum": [
+                                  "contains",
+                                  "regex"
+                                ]
+                              },
+                              "pattern": {
+                                "description": "Text or regex pattern to match.",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "text",
+                                "description": "Must be 'text' for text pattern search."
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "pattern"
+                            ],
+                            "type": "object"
                           },
-                          "nodeType": {
-                            "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
-                            "enum": [
-                              "paragraph",
-                              "heading",
-                              "listItem",
-                              "table",
-                              "tableRow",
-                              "tableCell",
-                              "tableOfContents",
-                              "image",
-                              "sdt",
-                              "run",
-                              "bookmark",
-                              "comment",
-                              "hyperlink",
-                              "footnoteRef",
-                              "endnoteRef",
-                              "crossRef",
-                              "indexEntry",
-                              "citation",
-                              "authorityEntry",
-                              "sequenceField",
-                              "tab",
-                              "lineBreak"
-                            ]
-                          },
-                          "type": {
-                            "const": "node",
-                            "description": "Must be 'node' for node type search."
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "description": "Filter: 'block' or 'inline'.",
+                                "enum": [
+                                  "block",
+                                  "inline"
+                                ]
+                              },
+                              "nodeType": {
+                                "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
+                                "enum": [
+                                  "paragraph",
+                                  "heading",
+                                  "listItem",
+                                  "table",
+                                  "tableRow",
+                                  "tableCell",
+                                  "tableOfContents",
+                                  "image",
+                                  "sdt",
+                                  "run",
+                                  "bookmark",
+                                  "comment",
+                                  "hyperlink",
+                                  "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
+                                  "tab",
+                                  "lineBreak"
+                                ]
+                              },
+                              "type": {
+                                "const": "node",
+                                "description": "Must be 'node' for node type search."
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "type"
-                        ],
-                        "type": "object"
+                        ]
+                      },
+                      "within": {
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
-                    ]
+                    },
+                    "required": [
+                      "by",
+                      "select",
+                      "require"
+                    ],
+                    "type": "object"
                   },
-                  "within": {
-                    "$ref": "#/$defs/BlockNodeAddress"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "ref",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "within": {
+                        "$ref": "#/$defs/BlockNodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "block",
+                        "type": "string"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": [
+                          "paragraph",
+                          "heading",
+                          "listItem",
+                          "table",
+                          "tableRow",
+                          "tableCell",
+                          "tableOfContents",
+                          "image",
+                          "sdt"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "nodeType",
+                      "nodeId"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "by",
-                  "select",
-                  "require"
-                ],
-                "type": "object"
+                ]
               }
             },
             "required": [
@@ -928,6 +1031,37 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                       "target"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "block",
+                        "type": "string"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": [
+                          "paragraph",
+                          "heading",
+                          "listItem",
+                          "table",
+                          "tableRow",
+                          "tableCell",
+                          "tableOfContents",
+                          "image",
+                          "sdt"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "nodeType",
+                      "nodeId"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -945,7 +1079,18 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
             "properties": {
               "args": {
                 "additionalProperties": false,
+                "minProperties": 1,
                 "properties": {
+                  "alignment": {
+                    "description": "Set paragraph alignment on the target block(s). Can be combined with inline formatting in the same step.",
+                    "enum": [
+                      "left",
+                      "center",
+                      "right",
+                      "justify"
+                    ],
+                    "type": "string"
+                  },
                   "inline": {
                     "additionalProperties": false,
                     "minProperties": 1,
@@ -1754,11 +1899,16 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                       }
                     },
                     "type": "object"
+                  },
+                  "scope": {
+                    "description": "When \"block\", inline formatting expands to cover the entire parent paragraph(s), not just the matched text. Use \"block\" after markdown inserts to format whole paragraphs with a short identifying pattern. Default: \"match\".",
+                    "enum": [
+                      "match",
+                      "block"
+                    ],
+                    "type": "string"
                   }
                 },
-                "required": [
-                  "inline"
-                ],
                 "type": "object"
               },
               "id": {
@@ -1909,6 +2059,37 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                     "required": [
                       "by",
                       "target"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "block",
+                        "type": "string"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": [
+                          "paragraph",
+                          "heading",
+                          "listItem",
+                          "table",
+                          "tableRow",
+                          "tableCell",
+                          "tableOfContents",
+                          "image",
+                          "sdt"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "nodeType",
+                      "nodeId"
                     ],
                     "type": "object"
                   }

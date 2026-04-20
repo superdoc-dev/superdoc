@@ -40,7 +40,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Install canvas system dependencies
         run: |
@@ -108,7 +108,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Install canvas system dependencies
         run: |
@@ -171,13 +171,13 @@ jobs:
         if: matrix.name == 'other-packages'
         run: pnpm test:slow
 
-      - name: Install Playwright for UMD smoke test
+      - name: Install Playwright for CDN smoke test
         if: matrix.name == 'other-packages'
-        run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
+        run: pnpm --filter @superdoc/cdn-smoke-test exec playwright install --with-deps chromium
 
-      - name: Run UMD smoke test
+      - name: Run CDN smoke test
         if: matrix.name == 'other-packages'
-        working-directory: packages/superdoc/tests/umd-smoke
+        working-directory: packages/superdoc/tests/cdn-smoke
         run: pnpm test
 
   cli-tests:
@@ -195,7 +195,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Install dependencies
         run: pnpm install
@@ -206,9 +206,34 @@ jobs:
       - name: Run CLI tests
         run: pnpm run test:cli
 
+  coverage:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install
+
+      - run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
+
+      - run: pnpm --filter superdoc exec vitest run --coverage
+
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: packages/superdoc/coverage/lcov.info
+          flags: superdoc
+
   validate:
     if: always()
-    needs: [build, unit-tests, cli-tests]
+    needs: [build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

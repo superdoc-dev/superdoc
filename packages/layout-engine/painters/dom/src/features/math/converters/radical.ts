@@ -21,12 +21,14 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
   const deg = elements.find((e) => e.name === 'm:deg');
   const radicand = elements.find((e) => e.name === 'm:e');
 
-  // m:degHide val defaults to false; presence with val="1" or "true" means hidden
+  // m:degHide is an ST_OnOff property: presence with no val (or val="1"/"true"/"on") means
+  // the degree is hidden; val="0"/"false"/"off" means it is shown. ECMA-376 §22.9.2.7.
   const degHideEl = radPr?.elements?.find((e) => e.name === 'm:degHide');
   const degHideVal = degHideEl?.attributes?.['m:val'];
-  const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false';
+  const degreeHidden = degHideEl !== undefined && degHideVal !== '0' && degHideVal !== 'false' && degHideVal !== 'off';
 
-  if (degreeHidden || !deg) {
+  // Use msqrt if degree is explicitly hidden OR if m:deg is missing/empty
+  if (degreeHidden || !deg || (deg.elements ?? []).length === 0) {
     const msqrt = doc.createElementNS(MATHML_NS, 'msqrt');
     const radicandRow = doc.createElementNS(MATHML_NS, 'mrow');
     radicandRow.appendChild(convertChildren(radicand?.elements ?? []));
@@ -36,6 +38,7 @@ export const convertRadical: MathObjectConverter = (node, doc, convertChildren) 
 
   const mroot = doc.createElementNS(MATHML_NS, 'mroot');
 
+  // MathML <mroot>: first child is base (radicand), second is index (degree)
   const radicandRow = doc.createElementNS(MATHML_NS, 'mrow');
   radicandRow.appendChild(convertChildren(radicand?.elements ?? []));
   mroot.appendChild(radicandRow);

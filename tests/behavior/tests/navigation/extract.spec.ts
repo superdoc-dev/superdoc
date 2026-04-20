@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { addCommentByText, replaceText, findFirstTextRange } from '../../helpers/document-api.js';
+import { addCommentByText, replaceText, findFirstSelectionTarget } from '../../helpers/document-api.js';
 
 test('@behavior SD-2525: doc.extract returns blocks with nodeIds and full text', async ({ superdoc }) => {
   await superdoc.type('Hello world');
@@ -37,7 +37,6 @@ test('@behavior SD-2525: doc.extract returns empty arrays when no comments or tr
 });
 
 test('@behavior SD-2525: doc.extract returns full text not truncated', async ({ superdoc }) => {
-  await superdoc.click();
   const longText =
     'This is a long paragraph that exceeds eighty characters to verify text is not truncated like textPreview is.';
   await superdoc.type(longText);
@@ -93,7 +92,7 @@ test('@behavior SD-2525: doc.extract returns comments with entityId and blockId'
 test('@behavior SD-2525: doc.extract returns tracked changes', async ({ superdoc }) => {
   await superdoc.type('Original text here');
 
-  const target = await findFirstTextRange(superdoc.page, 'Original');
+  const target = await findFirstSelectionTarget(superdoc.page, 'Original');
   if (!target) throw new Error('Could not find text range');
   await replaceText(superdoc.page, { target, text: 'Modified' }, { changeMode: 'tracked' });
 

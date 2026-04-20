@@ -35,6 +35,7 @@ import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-hel
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getRevision } from './revision-tracker.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
+import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -64,12 +65,76 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
   return text.slice(0, TEXT_PREVIEW_MAX_LENGTH);
 }
 
+function extractBlockText(node: ProseMirrorNode): string | null {
+  if (!node.isTextblock) return null;
+  return node.textContent;
+}
+
 const HEADING_PATTERN = /^Heading(\d)$/;
+
+/** OOXML implicit default font size when neither styles nor docDefaults specifies one. */
+const OOXML_DEFAULT_FONT_SIZE_PT = 10;
+
+/** Pre-built style context for fontSize resolution across all blocks in a list call. */
+interface StyleContext {
+  styles: Record<string, { runProperties?: { fontSize?: unknown }; basedOn?: string }>;
+  docDefaultsFontSizeHp: number | undefined;
+}
+
+function buildStyleContext(editor: Editor): StyleContext | null {
+  const styleProps = readTranslatedLinkedStyles(editor);
+  if (!styleProps) return null;
+  return {
+    styles: styleProps.styles ?? {},
+    docDefaultsFontSizeHp:
+      typeof styleProps.docDefaults?.runProperties?.fontSize === 'number'
+        ? styleProps.docDefaults.runProperties.fontSize
+        : undefined,
+  };
+}
+
+/**
+ * Resolve the effective font size (in points) for a block by walking its style chain.
+ * Cascade: inline mark → block's paragraph style → basedOn chain → Normal → docDefaults → 10pt.
+ * OOXML stores fontSize as half-points (w:sz val), so we divide by 2.
+ */
+function resolveBlockFontSizePt(styleCtx: StyleContext | null, styleId: string | null | undefined): number {
+  if (!styleCtx) return OOXML_DEFAULT_FONT_SIZE_PT;
+
+  // Walk the style's basedOn chain (limit depth to avoid infinite loops)
+  let currentId = styleId ?? 'Normal';
+  const visited = new Set<string>();
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const style = styleCtx.styles[currentId];
+    if (!style) break;
+    const fs = style.runProperties?.fontSize;
+    if (typeof fs === 'number') return fs / 2;
+    currentId = style.basedOn ?? '';
+  }
+
+  // Try Normal if we haven't already
+  if (!visited.has('Normal')) {
+    const normal = styleCtx.styles['Normal'];
+    const fs = normal?.runProperties?.fontSize;
+    if (typeof fs === 'number') return fs / 2;
+  }
+
+  // docDefaults
+  if (typeof styleCtx.docDefaultsFontSizeHp === 'number') return styleCtx.docDefaultsFontSizeHp / 2;
+
+  return OOXML_DEFAULT_FONT_SIZE_PT;
+}
 
 /**
  * Extract key formatting from a block node's first text run marks.
+ * When styleCtx is provided, resolves fontSize from the block's paragraph style
+ * chain when inline marks don't specify one (common for inherited styles).
  */
-function extractBlockFormatting(node: ProseMirrorNode): {
+function extractBlockFormatting(
+  node: ProseMirrorNode,
+  styleCtx?: StyleContext | null,
+): {
   styleId?: string | null;
   fontFamily?: string;
   fontSize?: number;
@@ -126,7 +191,11 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   return {
     ...(styleId ? { styleId } : {}),
     ...(fontFamily ? { fontFamily } : {}),
-    ...(fontSize !== undefined ? { fontSize } : {}),
+    ...(fontSize !== undefined
+      ? { fontSize }
+      : styleCtx
+        ? { fontSize: resolveBlockFontSizePt(styleCtx, styleId) }
+        : {}),
     ...(bold ? { bold } : {}),
     ...(underline ? { underline } : {}),
     ...(color ? { color } : {}),
@@ -240,8 +309,12 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
 
   const rev = getRevision(editor);
 
+  // Build style context once — used to resolve fontSize per-block via style chain
+  const styleCtx = buildStyleContext(editor);
+
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = computeTextContentLength(candidate.node);
+    const fullText = input?.includeText ? extractBlockText(candidate.node) : undefined;
     const ref =
       textLength > 0
         ? encodeV4Ref({
@@ -260,8 +333,9 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       nodeId: candidate.nodeId,
       nodeType: candidate.nodeType,
       textPreview: extractTextPreview(candidate.node),
+      ...(fullText !== undefined ? { text: fullText } : {}),
       isEmpty: textLength === 0,
-      ...extractBlockFormatting(candidate.node),
+      ...extractBlockFormatting(candidate.node, styleCtx),
       ...(ref ? { ref } : {}),
     };
   });

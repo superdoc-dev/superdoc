@@ -80,10 +80,63 @@ describe('parseCollaborationInput — websocket', () => {
     );
   });
 
-  test('rejects params field', () => {
-    expect(() => parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: {} })).toThrow(
-      'collaboration.params is not supported',
+  test('accepts params field with string values', () => {
+    const input = parseCollaborationInput({
+      providerType: 'y-websocket',
+      url: 'ws://x',
+      params: { customAttributions: 'agent_id:abc', region: 'us-east-1' },
+    });
+    expect(input).toMatchObject({
+      params: { customAttributions: 'agent_id:abc', region: 'us-east-1' },
+    });
+  });
+
+  test('omits params when not provided', () => {
+    const input = parseCollaborationInput({
+      providerType: 'y-websocket',
+      url: 'ws://x',
+    }) as WebSocketCollaborationInput;
+    expect(input.params).toBeUndefined();
+  });
+
+  test('rejects non-object params', () => {
+    expect(() =>
+      parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: 'not-an-object' }),
+    ).toThrow('collaboration.params must be an object of string key-value pairs');
+    expect(() => parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: ['a', 'b'] })).toThrow(
+      'collaboration.params must be an object of string key-value pairs',
     );
+  });
+
+  test('rejects non-string param values', () => {
+    expect(() =>
+      parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: { count: 42 } }),
+    ).toThrow('collaboration.params.count must be a string');
+    expect(() =>
+      parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: { flag: true } }),
+    ).toThrow('collaboration.params.flag must be a string');
+    expect(() =>
+      parseCollaborationInput({ providerType: 'y-websocket', url: 'ws://x', params: { nested: { a: 'b' } } }),
+    ).toThrow('collaboration.params.nested must be a string');
+  });
+
+  test('rejects reserved token key in params', () => {
+    expect(() =>
+      parseCollaborationInput({
+        providerType: 'y-websocket',
+        url: 'ws://x',
+        params: { token: 'secret' },
+      }),
+    ).toThrow('collaboration.params.token is reserved');
+  });
+
+  test('accepts params with hocuspocus provider', () => {
+    const input = parseCollaborationInput({
+      providerType: 'hocuspocus',
+      url: 'ws://x',
+      params: { workspaceId: 'ws_123' },
+    });
+    expect(input).toMatchObject({ providerType: 'hocuspocus', params: { workspaceId: 'ws_123' } });
   });
 
   test('rejects Liveblocks-only fields on websocket providers', () => {
@@ -236,6 +289,17 @@ describe('parseCollaborationInput — liveblocks', () => {
     ).toThrow('collaboration.headers is not supported');
   });
 
+  test('rejects params field', () => {
+    expect(() =>
+      parseCollaborationInput({
+        providerType: 'liveblocks',
+        roomId: 'room',
+        publicApiKey: 'pk_xxx',
+        params: { foo: 'bar' },
+      }),
+    ).toThrow('collaboration.params is not supported for Liveblocks');
+  });
+
   test('rejects unknown keys', () => {
     expect(() =>
       parseCollaborationInput({
@@ -272,6 +336,19 @@ describe('resolveCollaborationProfile', () => {
     expect(profile.documentId).toBe('explicit-doc');
   });
 
+  test('websocket: params pass through to profile', () => {
+    const input = parseCollaborationInput({
+      providerType: 'y-websocket',
+      url: 'ws://localhost:4000',
+      params: { customAttributions: 'agent_id:abc' },
+    });
+    const profile = resolveCollaborationProfile(input, 'session');
+    expect(profile).toMatchObject({
+      providerType: 'y-websocket',
+      params: { customAttributions: 'agent_id:abc' },
+    });
+  });
+
   test('liveblocks: roomId maps to documentId directly', () => {
     const input = parseCollaborationInput({
       providerType: 'liveblocks',
@@ -300,6 +377,16 @@ describe('toPublicCollaborationSummary', () => {
       documentId: 'doc-1',
       url: 'ws://localhost:4000',
     });
+  });
+
+  test('websocket: omits params (may contain identifying metadata)', () => {
+    const summary = toPublicCollaborationSummary({
+      providerType: 'y-websocket',
+      url: 'ws://localhost:4000',
+      documentId: 'doc-1',
+      params: { userId: 'secret-user-id' },
+    });
+    expect(summary).not.toHaveProperty('params');
   });
 
   test('liveblocks: excludes auth config', () => {

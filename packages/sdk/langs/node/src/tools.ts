@@ -39,8 +39,30 @@ type ToolCatalogEntry = {
   operations: OperationEntry[];
 };
 
+const STRIP_EMPTY_OPTIONAL_ARGS = new Set(['parentId', 'parentCommentId', 'id', 'status']);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
+}
+
+function isObviouslyCorruptedToolArgKey(key: string): boolean {
+  const trimmed = key.trim();
+  return trimmed.length === 0 || !/[\p{L}\p{N}]/u.test(trimmed);
+}
+
+function stripCorruptedToolArgKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripCorruptedToolArgKeys(item));
+  }
+
+  if (!isRecord(value)) return value;
+
+  const clean: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (isObviouslyCorruptedToolArgKey(key)) continue;
+    clean[key] = stripCorruptedToolArgKeys(entryValue);
+  }
+  return clean;
 }
 
 async function readJson<T>(fileName: string): Promise<T> {
@@ -277,6 +299,14 @@ export async function dispatchSuperDocTool(
     });
   }
 
+  const sanitizedArgs = stripCorruptedToolArgKeys(args);
+  if (!isRecord(sanitizedArgs)) {
+    throw new SuperDocCliError(`Tool arguments for ${toolName} must be an object.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { toolName },
+    });
+  }
+
   // Validate against the tool schema before dispatch.
   const catalog = await getCachedCatalog();
   const tool = catalog.tools.find((t) => t.toolName === toolName);
@@ -286,14 +316,13 @@ export async function dispatchSuperDocTool(
       details: { toolName },
     });
   }
-  validateToolArgs(toolName, args, tool);
+  validateToolArgs(toolName, sanitizedArgs, tool);
 
   // Strip empty strings for known optional ID/enum params that LLMs fill with ""
   // instead of omitting. Only target params where "" is never a valid value.
-  const STRIP_EMPTY = new Set(['parentId', 'parentCommentId', 'id', 'status']);
   const cleanArgs: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (value === '' && STRIP_EMPTY.has(key)) continue;
+  for (const [key, value] of Object.entries(sanitizedArgs)) {
+    if (value === '' && STRIP_EMPTY_OPTIONAL_ARGS.has(key)) continue;
     cleanArgs[key] = value;
   }
 
@@ -304,7 +333,11 @@ export async function dispatchSuperDocTool(
 }
 
 /**
- * Read the bundled system prompt for intent tools.
+ * Read the bundled SDK system prompt for intent tools.
+ *
+ * This prompt includes a persona preamble ("You are a document editing assistant…")
+ * suitable for embedded LLM usage (OpenAI, Anthropic, Vercel APIs).
+ * For MCP server instructions, use {@link getMcpPrompt} instead.
  */
 export async function getSystemPrompt(): Promise<string> {
   const promptPath = path.join(toolsDir, 'system-prompt.md');
@@ -312,6 +345,24 @@ export async function getSystemPrompt(): Promise<string> {
     return await readFile(promptPath, 'utf8');
   } catch {
     throw new SuperDocCliError('System prompt not found.', {
+      code: 'TOOLS_ASSET_NOT_FOUND',
+      details: { filePath: promptPath },
+    });
+  }
+}
+
+/**
+ * Read the bundled MCP system prompt for intent tools.
+ *
+ * This prompt omits the persona preamble and includes session lifecycle
+ * instructions (open/save/close) suitable for MCP server `instructions`.
+ */
+export async function getMcpPrompt(): Promise<string> {
+  const promptPath = path.join(toolsDir, 'system-prompt-mcp.md');
+  try {
+    return await readFile(promptPath, 'utf8');
+  } catch {
+    throw new SuperDocCliError('MCP system prompt not found.', {
       code: 'TOOLS_ASSET_NOT_FOUND',
       details: { filePath: promptPath },
     });

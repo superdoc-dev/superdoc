@@ -16,7 +16,6 @@ vi.mock('uuid', () => ({
 
 const toolbarUpdateSpy = vi.fn();
 const toolbarSetActiveSpy = vi.fn();
-const toolbarSetZoomSpy = vi.fn();
 
 class MockToolbar {
   constructor(config) {
@@ -24,6 +23,7 @@ class MockToolbar {
     this.listeners = {};
     this.activeEditor = null;
     this.updateToolbarState = toolbarUpdateSpy;
+    this.destroy = vi.fn();
   }
 
   on(event, handler) {
@@ -37,10 +37,6 @@ class MockToolbar {
   setActiveEditor(editor) {
     this.activeEditor = editor;
     toolbarSetActiveSpy(editor);
-  }
-
-  setZoom(percent) {
-    toolbarSetZoomSpy(percent);
   }
 }
 
@@ -178,7 +174,6 @@ describe('SuperDoc core', () => {
     vi.resetModules();
     toolbarUpdateSpy.mockClear();
     toolbarSetActiveSpy.mockClear();
-    toolbarSetZoomSpy.mockClear();
     createZipMock.mockClear();
     createDownloadMock.mockClear();
     cleanNameMock.mockClear();
@@ -1299,35 +1294,6 @@ describe('SuperDoc core', () => {
       expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
     });
 
-    it('setZoom updates toolbar zoom UI for programmatic calls', async () => {
-      const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
-
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
-      });
-      await flushMicrotasks();
-      toolbarSetZoomSpy.mockClear();
-
-      instance.setZoom(140);
-
-      expect(toolbarSetZoomSpy).toHaveBeenCalledWith(140);
-      expect(toolbarSetZoomSpy).toHaveBeenCalledTimes(1);
-    });
-
     it('setZoom warns and returns early for invalid values', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const { superdocStore } = createAppHarness();
@@ -1376,25 +1342,6 @@ describe('SuperDoc core', () => {
       expect(superdocStore.activeZoom).toBe(100);
 
       warnSpy.mockRestore();
-    });
-
-    it('setZoom is consistent with toolbar zoom command', async () => {
-      const { superdocStore } = createAppHarness();
-
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-      });
-      await flushMicrotasks();
-
-      // Programmatic API should update the same store property as the toolbar
-      instance.setZoom(150);
-      expect(superdocStore.activeZoom).toBe(150);
-
-      // Simulate toolbar zoom (same path)
-      instance.onToolbarCommand({ item: { command: 'setZoom' }, argument: 200 });
-      expect(superdocStore.activeZoom).toBe(200);
-      expect(instance.getZoom()).toBe(200);
     });
   });
 

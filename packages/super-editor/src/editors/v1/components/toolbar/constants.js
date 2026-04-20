@@ -53,3 +53,59 @@ export const TOOLBAR_FONT_SIZES = [
   { label: '72', key: '72pt', props: { 'data-item': 'btn-fontSize-option' } },
   { label: '96', key: '96pt', props: { 'data-item': 'btn-fontSize-option' } },
 ];
+
+export const HEADLESS_ITEM_MAP = {
+  undo: 'undo',
+  redo: 'redo',
+  bold: 'bold',
+  italic: 'italic',
+  underline: 'underline',
+  strike: 'strikethrough',
+  acceptTrackedChangeBySelection: 'track-changes-accept-selection',
+  rejectTrackedChangeOnSelection: 'track-changes-reject-selection',
+  ruler: 'ruler',
+  zoom: 'zoom',
+  documentMode: 'document-mode',
+  link: 'link',
+  fontFamily: 'font-family',
+  fontSize: 'font-size',
+  list: 'bullet-list',
+  numberedlist: 'numbered-list',
+  table: 'table-insert',
+  image: 'image',
+  color: 'text-color',
+  highlight: 'highlight-color',
+  textAlign: 'text-align',
+  lineHeight: 'line-height',
+  linkedStyles: 'linked-style',
+  indentleft: 'indent-decrease',
+  indentright: 'indent-increase',
+  clearFormatting: 'clear-formatting',
+  copyFormat: 'copy-format',
+};
+
+export const TABLE_ACTION_COMMAND_MAP = {
+  addRowBefore: 'table-add-row-before',
+  addRowAfter: 'table-add-row-after',
+  deleteRow: 'table-delete-row',
+  addColumnBefore: 'table-add-column-before',
+  addColumnAfter: 'table-add-column-after',
+  deleteColumn: 'table-delete-column',
+  deleteTable: 'table-delete',
+  deleteCellAndTableBorders: 'table-remove-borders',
+  mergeCells: 'table-merge-cells',
+  splitCell: 'table-split-cell',
+  fixTables: 'table-fix',
+};
+
+export const TABLE_ACTION_COMMAND_IDS = Object.values(TABLE_ACTION_COMMAND_MAP);
+
+export const HEADLESS_TOOLBAR_COMMANDS = [
+  ...new Set([...Object.values(HEADLESS_ITEM_MAP), ...TABLE_ACTION_COMMAND_IDS]),
+];
+
+const NON_HEADLESS_EXECUTE_ITEM_NAMES = new Set(['link']);
+
+export const HEADLESS_EXECUTE_ITEMS = new Set(
+  Object.keys(HEADLESS_ITEM_MAP).filter((itemName) => !NON_HEADLESS_EXECUTE_ITEM_NAMES.has(itemName)),
+);

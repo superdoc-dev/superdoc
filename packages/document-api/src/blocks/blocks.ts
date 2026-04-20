@@ -89,6 +89,12 @@ function validateBlocksListInput(input?: BlocksListInput): void {
       }
     }
   }
+
+  if (input.includeText != null && typeof input.includeText !== 'boolean') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.list includeText must be a boolean.', {
+      fields: ['includeText'],
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,25 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
 
+      // Collect keys the user (or accept/reject) explicitly removed in this batch so the
+      // SD-2517 lost-keys preservation below doesn't re-apply their stale run.runProperties.
+      // - standalone marks (bold, italic, …): the mark's type name is the key.
+      // - textStyle: each truthy attr on the removed mark is a key (fontFamily, color, …).
+      const removedKeys = new Set();
+      transactions.forEach((t) => {
+        t.steps.forEach((step) => {
+          const jsonStep = step.toJSON?.();
+          if (jsonStep?.stepType !== 'removeMark' || !jsonStep.mark?.type) return;
+          if (jsonStep.mark.type === 'textStyle') {
+            Object.entries(jsonStep.mark.attrs || {}).forEach(([key, value]) => {
+              if (value != null) removedKeys.add(key);
+            });
+          } else {
+            removedKeys.add(jsonStep.mark.type);
+          }
+        });
+      });
+
       const preservedDerivedKeys = new Set();
       const preferExistingKeys = new Set();
       transactions.forEach((transaction) => {
@@ -154,16 +173,23 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           // dropped some of those keys (e.g. fontFamily "matches" the style due to
           // mark round-trip comparison), preserve the original keys. The importer saw
           // explicit w:rPr in the XML and that decision is authoritative. (SD-2517)
+          //
+          // Skip per-key when this batch removed that exact key (toggleItalic off,
+          // reject of a fontFamily suggestion, etc.) — otherwise we'd re-apply a stale
+          // value the user just asked us to drop. Unrelated inline keys on the same run
+          // are left alone so imported w:rPr still survives accept/reject round-trips.
           if (hadInlineKeys) {
             const computedKeys = new Set(runProperties ? Object.keys(runProperties) : []);
             const lostKeys = existingInlineKeys.filter((k) => !computedKeys.has(k));
             if (lostKeys.length > 0) {
               if (!runProperties) runProperties = {};
               lostKeys.forEach((k) => {
+                if (removedKeys.has(k)) return;
                 if (runNode.attrs?.runProperties?.[k] !== undefined) {
                   runProperties[k] = runNode.attrs.runProperties[k];
                 }
               });
+              if (runProperties && Object.keys(runProperties).length === 0) runProperties = null;
             }
           }
           const { inlineKeys: newInlineKeys, overrideKeys: newOverrideKeys } = computeSegmentKeys(

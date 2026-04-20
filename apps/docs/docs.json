@@ -65,7 +65,8 @@
               },
               "getting-started/import-export",
               "getting-started/fonts",
-              "getting-started/theming"
+              "getting-started/theming",
+              "getting-started/ai"
             ]
           },
           {
@@ -114,17 +115,29 @@
                 "group": "SDKs",
                 "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
               },
-              "document-engine/cli",
+              "document-engine/cli"
+            ]
+          },
+          {
+            "group": "AI",
+            "tag": "NEW",
+            "pages": [
+              "ai/overview",
               {
-                "group": "AI Agents",
+                "group": "MCP",
+                "pages": ["ai/mcp/overview", "ai/mcp/how-to-use", "ai/mcp/debugging"]
+              },
+              {
+                "group": "Agents",
                 "pages": [
-                  "document-engine/ai-agents/llm-tools",
-                  "document-engine/ai-agents/integrations",
-                  "document-engine/ai-agents/best-practices",
-                  "document-engine/ai-agents/debugging",
-                  "document-engine/ai-agents/eval-results"
+                  "ai/agents/llm-tools",
+                  "ai/agents/integrations",
+                  "ai/agents/best-practices",
+                  "ai/agents/debugging",
+                  "ai/agents/eval-results"
                 ]
-              }
+              },
+              "ai/agents/skills"
             ]
           },
           {
@@ -283,20 +296,52 @@
       "destination": "/modules/toolbar/overview"
     },
     {
+      "source": "/getting-started/ai",
+      "destination": "/ai/overview"
+    },
+    {
       "source": "/getting-started/ai-agents",
-      "destination": "/document-engine/ai-agents/llm-tools"
+      "destination": "/ai/agents/llm-tools"
     },
     {
       "source": "/document-api/eval-results",
-      "destination": "/document-engine/ai-agents/eval-results"
+      "destination": "/ai/agents/eval-results"
     },
     {
       "source": "/document-engine/mcp",
-      "destination": "/document-engine/ai-agents/mcp-server"
+      "destination": "/ai/mcp/overview"
+    },
+    {
+      "source": "/document-engine/ai-agents/mcp-server",
+      "destination": "/ai/mcp/overview"
+    },
+    {
+      "source": "/document-engine/ai-agents/llm-tools",
+      "destination": "/ai/agents/llm-tools"
+    },
+    {
+      "source": "/document-engine/ai-agents/integrations",
+      "destination": "/ai/agents/integrations"
     },
     {
       "source": "/document-engine/ai-agents/providers",
-      "destination": "/document-engine/ai-agents/integrations"
+      "destination": "/ai/agents/integrations"
+    },
+    {
+      "source": "/document-engine/ai-agents/best-practices",
+      "destination": "/ai/agents/best-practices"
+    },
+    {
+      "source": "/document-engine/ai-agents/debugging",
+      "destination": "/ai/agents/debugging"
+    },
+    {
+      "source": "/document-engine/ai-agents/eval-results",
+      "destination": "/ai/agents/eval-results"
+    },
+    {
+      "source": "/document-engine/ai-agents/skills",
+      "destination": "/ai/agents/skills"
     },
     {
       "source": "/core/superdoc/properties",

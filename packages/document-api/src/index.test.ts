@@ -1454,10 +1454,23 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('rejects legacy insert with structural "placement" field', () => {
+    it('rejects plain text insert with structural "placement" field', () => {
       const api = makeApi();
       expect(() => api.insert({ value: 'hi', placement: 'before' } as any)).toThrow(
-        /"placement" is only valid with structural/,
+        /"placement" is only valid with structural content input or markdown\/html/,
+      );
+    });
+
+    it('accepts placement for markdown insert', () => {
+      const api = makeApi();
+      // Should not throw — markdown inserts route through the structural path
+      expect(() => api.insert({ value: '# Hello', type: 'markdown', placement: 'insideEnd' } as any)).not.toThrow();
+    });
+
+    it('rejects invalid placement value for markdown insert', () => {
+      const api = makeApi();
+      expect(() => api.insert({ value: '# Hello', type: 'markdown', placement: 'end' } as any)).toThrow(
+        /placement must be one of/,
       );
     });
 

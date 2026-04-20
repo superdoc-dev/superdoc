@@ -343,7 +343,7 @@ const messageHandlers = {
             // Use the mode from the message if available, otherwise use current mode
             const documentMode = message.mode || currentDocumentMode;
             
-            superdocInstance = new SuperDocLibrary.SuperDoc({
+            superdocInstance = new SuperDoc({
                 ...baseConfig, 
                 document: documentFile,
                 documentMode: documentMode
@@ -401,7 +401,7 @@ const messageHandlers = {
                     config.document = currentDocument;
                 }
                 
-                superdocInstance = new SuperDocLibrary.SuperDoc(config);
+                superdocInstance = new SuperDoc(config);
                 console.log('🔄 SuperDoc re-initialized with new mode', superdocInstance);
                 setTimeout(() => superdocInstance.toolbar.updateToolbarState(), 500);
 
@@ -425,7 +425,7 @@ async function loadDocumentFromServer() {
     
     if (!authToken) {
         console.error('❌ No auth token available');
-        superdocInstance = new SuperDocLibrary.SuperDoc(baseConfig);
+        superdocInstance = new SuperDoc(baseConfig);
         return;
     }
     
@@ -452,7 +452,7 @@ async function loadDocumentFromServer() {
                 type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             });
             
-            superdocInstance = new SuperDocLibrary.SuperDoc({
+            superdocInstance = new SuperDoc({
                 ...baseConfig, 
                 document: documentFile
             });
@@ -461,7 +461,7 @@ async function loadDocumentFromServer() {
             
             logMessage('SuperDoc initialized with document');
         } else {
-            superdocInstance = new SuperDocLibrary.SuperDoc(baseConfig);
+            superdocInstance = new SuperDoc(baseConfig);
             logMessage('SuperDoc initialized with empty document');
         }
     } catch (error) {
@@ -614,7 +614,7 @@ function setupModeDropdown() {
                         
                         const previousMode = currentDocumentMode;
                         
-                        superdocInstance = new SuperDocLibrary.SuperDoc(config);
+                        superdocInstance = new SuperDoc(config);
                         currentDocumentMode = newMode;
                         updateModeDropdown(newMode);
                         window.superdocInstance = superdocInstance;

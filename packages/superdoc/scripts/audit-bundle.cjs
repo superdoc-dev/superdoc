@@ -85,3 +85,35 @@ if (duplicateModules.length > 0) {
 }
 
 console.log('[audit-bundle] ✓ Verified single prosemirror-view copy per emitted file');
+
+// Size budgets (raw file size in bytes). Hard = fail the build, soft = warn.
+// Keep headroom above current sizes so legitimate growth doesn't break CI.
+// Missing files are skipped — some build phases (e.g. build:es) don't emit
+// every output. `build:cdn` fails loudly on its own if the CDN bundle is
+// broken, so a second gate here would double-count and break partial builds.
+const SIZE_BUDGETS = [
+  { file: 'superdoc.min.js', soft: 5_242_880, hard: 6_291_456 }, // 5 MB warn / 6 MB fail
+  { file: 'superdoc.es.js', soft: 3_145_728, hard: 4_194_304 }, // 3 MB warn / 4 MB fail
+  { file: 'style.css', soft: 153_600, hard: 204_800 }, // 150 KB warn / 200 KB fail
+];
+
+let sizeFailed = false;
+for (const { file, soft, hard } of SIZE_BUDGETS) {
+  const full = path.join(distRoot, file);
+  if (!fs.existsSync(full)) continue;
+  const size = fs.statSync(full).size;
+  const kb = (size / 1024).toFixed(0);
+  if (size > hard) {
+    console.error(`[audit-bundle] ✗ ${file} = ${kb} KB exceeds hard budget ${(hard / 1024).toFixed(0)} KB`);
+    sizeFailed = true;
+  } else if (size > soft) {
+    console.warn(`[audit-bundle] ⚠ ${file} = ${kb} KB exceeds soft budget ${(soft / 1024).toFixed(0)} KB`);
+  } else {
+    console.log(`[audit-bundle] ✓ ${file} = ${kb} KB within budget`);
+  }
+}
+
+if (sizeFailed) {
+  console.error('[audit-bundle] Size budget exceeded — investigate before merging.');
+  process.exit(1);
+}

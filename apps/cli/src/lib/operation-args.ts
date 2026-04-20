@@ -115,6 +115,37 @@ function extractConstValues(variants: CliTypeSpec[]): string[] {
   return values;
 }
 
+function isNestedValidationMessage(path: string, message: string): boolean {
+  return message.startsWith(`${path}.`) || message.startsWith(`${path}[`);
+}
+
+function selectRepeatedActionableOneOfError(path: string, errors: string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const error of errors) {
+    counts.set(error, (counts.get(error) ?? 0) + 1);
+  }
+
+  let bestMessage: string | null = null;
+  let bestScore = 0;
+
+  for (const [message, count] of counts.entries()) {
+    if (count < 2) continue;
+
+    const nested = isNestedValidationMessage(path, message);
+    const isShapeError = message.includes(' is not allowed by schema.') || message.includes(' is required.');
+
+    if (!nested && !isShapeError) continue;
+
+    const score = count * 10 + (nested ? 2 : 0) + (isShapeError ? 1 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMessage = message;
+    }
+  }
+
+  return bestMessage;
+}
+
 export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec, path: string): void {
   if ('const' in schema) {
     if (value !== schema.const) {
@@ -136,11 +167,12 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
     }
 
     const allowedValues = extractConstValues(variants);
+    const selectedError = selectRepeatedActionableOneOfError(path, errors);
     const message =
       allowedValues.length > 0
         ? `${path} must be one of: ${allowedValues.join(', ')}.`
-        : `${path} must match one of the allowed schema variants.`;
-    throw new CliError('VALIDATION_ERROR', message, { errors });
+        : (selectedError ?? `${path} must match one of the allowed schema variants.`);
+    throw new CliError('VALIDATION_ERROR', message, { errors, selectedError });
   }
 
   if (schema.type === 'json') return;
@@ -187,7 +219,7 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
       }
     }
 
-    const propertyEntries = Object.entries(schema.properties);
+    const propertyEntries = schema.properties ? Object.entries(schema.properties) : [];
     const shouldRestrictUnknownKeys = propertyEntries.length > 0 || required.length > 0;
 
     // If no object fields are declared, treat it as an unconstrained JSON object.
@@ -236,7 +268,11 @@ function validateResponseValueAgainstTypeSpec(value: unknown, schema: CliTypeSpe
         errors.push(error instanceof Error ? error.message : String(error));
       }
     }
-    throw new CliError('VALIDATION_ERROR', `${path} must match one of the allowed schema variants.`, { errors });
+    const selectedError = selectRepeatedActionableOneOfError(path, errors);
+    throw new CliError('VALIDATION_ERROR', selectedError ?? `${path} must match one of the allowed schema variants.`, {
+      errors,
+      selectedError,
+    });
   }
 
   if (schema.type === 'json') return;
@@ -272,7 +308,8 @@ function validateResponseValueAgainstTypeSpec(value: unknown, schema: CliTypeSpe
     }
 
     // Validate known properties but allow additional properties (JSON Schema default).
-    for (const [key, propSchema] of Object.entries(schema.properties)) {
+    const properties = schema.properties ?? {};
+    for (const [key, propSchema] of Object.entries(properties)) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
       validateResponseValueAgainstTypeSpec(value[key], propSchema, `${path}.${key}`);
     }

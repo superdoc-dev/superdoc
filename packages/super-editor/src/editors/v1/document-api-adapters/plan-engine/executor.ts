@@ -39,6 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -51,10 +52,43 @@ import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
+import { getWordChanges } from './word-diff.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
+
+// ---------------------------------------------------------------------------
+// Character-offset → document-position mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a character offset (within the text content of a range) to the
+ * corresponding ProseMirror document position.  Needed because inline
+ * node boundaries (run open/close) create gaps in the position space
+ * that `textBetween` hides.
+ */
+function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+  let count = 0;
+  let foundPos = -1;
+
+  doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+    if (foundPos >= 0) return false;
+    if (!node.isText) return true; // descend into non-text nodes
+
+    const textStart = Math.max(pos, rangeFrom);
+    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+    const textLen = textEnd - textStart;
+
+    if (count + textLen >= charOffset) {
+      foundPos = textStart + (charOffset - count);
+    }
+    count += textLen;
+    return false;
+  });
+
+  return foundPos >= 0 ? foundPos : rangeTo;
+}
 
 // ---------------------------------------------------------------------------
 // Style resolution helpers
@@ -803,8 +837,76 @@ export function executeTextRewrite(
     }
   }
 
-  const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
-  tr.replaceWith(absFrom, absTo, textNode);
+  // 1. Character-level prefix/suffix trim to narrow the replacement range.
+  //    This handles cases where only a few characters differ (e.g., a "(" added
+  //    before a URL, or "YoY" → "year over year") without replacing the full range.
+  const originalText = tr.doc.textBetween(absFrom, absTo, '', '');
+  const origLen = originalText.length;
+  const replLen = replacementText.length;
+
+  let prefix = 0;
+  while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
+    prefix++;
+  }
+  if (prefix === origLen && prefix === replLen) {
+    return { changed: false }; // texts are identical
+  }
+  let suffix = 0;
+  while (
+    suffix < origLen - prefix &&
+    suffix < replLen - prefix &&
+    originalText[origLen - 1 - suffix] === replacementText[replLen - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const trimmedFrom = charOffsetToDocPos(tr.doc, absFrom, absTo, prefix);
+  const trimmedTo = charOffsetToDocPos(tr.doc, absFrom, absTo, origLen - suffix);
+  const trimmedOld = originalText.slice(prefix, origLen - suffix);
+  const trimmedNew = replacementText.slice(prefix, replLen - suffix);
+
+  // 2. Word-level diff on the trimmed range for multi-word granularity.
+  const wordChanges = getWordChanges(trimmedOld, trimmedNew);
+
+  if (wordChanges.length > 1) {
+    // Multiple word-level changes: apply each granularly.
+    const doc = tr.doc;
+    const baseSteps = tr.steps.length;
+    const mapped = wordChanges.map((change) => {
+      if (change.type === 'insert') {
+        return { ...change, docPos: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.insertAt) };
+      }
+      return {
+        ...change,
+        docFrom: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldFrom),
+        docTo: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldTo),
+      };
+    });
+
+    for (let i = 0; i < mapped.length; i++) {
+      const change = mapped[i];
+      const remap = (pos: number) => {
+        for (let s = baseSteps; s < tr.steps.length; s++) {
+          pos = tr.steps[s].getMap().map(pos);
+        }
+        return pos;
+      };
+
+      if (change.type === 'delete') {
+        tr.delete(remap(change.docFrom), remap(change.docTo));
+      } else if (change.type === 'insert') {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.insert(remap(change.docPos), node);
+      } else {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.replaceWith(remap(change.docFrom), remap(change.docTo), node);
+      }
+    }
+  } else {
+    // 0 or 1 word change: replace just the trimmed range.
+    const textNode = editor.state.schema.text(trimmedNew, asProseMirrorMarks(marks));
+    tr.replaceWith(trimmedFrom, trimmedTo, textNode);
+  }
 
   return { changed: replacementText !== target.text };
 }
@@ -890,6 +992,60 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
+
+/**
+ * Applies alignment to the paragraph node(s) that contain the given range.
+ * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
+ * paragraphProperties.justification via tr.setNodeMarkup.
+ */
+function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
+  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
+  if (!justification) return false;
+
+  let changed = false;
+  const doc = tr.doc;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    // Only set alignment on textblock nodes (paragraphs, headings)
+    if (!node.isTextblock) return;
+
+    const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const currentJustification = existing?.justification;
+
+    if (currentJustification === justification) return;
+
+    const updated = { ...(existing ?? {}), justification };
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, paragraphProperties: updated });
+    changed = true;
+  });
+
+  return changed;
+}
+
+/**
+ * Expands a position range to cover the full content of all textblock nodes
+ * that overlap with it. Used when scope: "block" is set on a format.apply step.
+ */
+function expandToBlockBoundaries(
+  doc: import('prosemirror-model').Node,
+  from: number,
+  to: number,
+): { from: number; to: number } {
+  let expandedFrom = from;
+  let expandedTo = to;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return;
+    const blockContentStart = pos + 1;
+    const blockContentEnd = pos + node.nodeSize - 1;
+    expandedFrom = Math.min(expandedFrom, blockContentStart);
+    expandedTo = Math.max(expandedTo, blockContentEnd);
+  });
+
+  return { from: expandedFrom, to: expandedTo };
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -897,9 +1053,27 @@ export function executeStyleApply(
   step: StyleApplyStep,
   mapping: Mapping,
 ): { changed: boolean } {
-  const absFrom = mapping.map(target.absFrom);
-  const absTo = mapping.map(target.absTo);
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  let absFrom = mapping.map(target.absFrom);
+  let absTo = mapping.map(target.absTo);
+
+  // Expand to full block boundaries when scope is "block"
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,10 +1214,26 @@ export function executeSpanStyleApply(
   // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
-  const absFrom = mapping.map(firstSeg.absFrom, 1);
-  const absTo = mapping.map(lastSeg.absTo, -1);
+  let absFrom = mapping.map(firstSeg.absFrom, 1);
+  let absTo = mapping.map(lastSeg.absTo, -1);
 
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------

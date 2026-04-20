@@ -13,7 +13,12 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  computeLinePmRange as computeLinePmRangeUnified,
+  effectiveTableCellSpacing,
+  getFirstLineIndentOffset,
+} from '@superdoc/contracts';
 import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
@@ -579,18 +584,35 @@ export function selectionToRects(
           const blockAlignment = block.attrs?.alignment;
           const isJustified = blockAlignment === 'justify';
           const alignmentOverride = isListItemFlag && !isJustified ? 'left' : undefined;
-          const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride);
-          const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride);
+          const isFirstLine = index === fragment.fromLine && !fragment.continuesFromPrev;
+          const fragmentMarkerTextWidth = fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined;
+          const startX = mapPmToX(
+            block,
+            line,
+            charOffsetFrom,
+            fragment.width,
+            alignmentOverride,
+            isFirstLine,
+            fragmentMarkerTextWidth,
+          );
+          const endX = mapPmToX(
+            block,
+            line,
+            charOffsetTo,
+            fragment.width,
+            alignmentOverride,
+            isFirstLine,
+            fragmentMarkerTextWidth,
+          );
 
           // Calculate text indent using shared utility
           const indent = extractParagraphIndent(block.attrs?.indent);
           const wordLayout = getWordLayoutConfig(block);
-          const isFirstLine = index === fragment.fromLine;
           const indentAdjust = calculateTextStartIndent({
             isFirstLine,
             isListItem: isListItemFlag,
             markerWidth,
-            markerTextWidth: fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined,
+            markerTextWidth: fragmentMarkerTextWidth,
             paraIndentLeft: indent.left,
             firstLineIndent: indent.firstLine,
             hangingIndent: indent.hanging,
@@ -882,16 +904,33 @@ export function selectionToRects(
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
-                const startX = mapPmToX(info.block, line, charOffsetFrom, availableWidth, alignmentOverride);
-                const endX = mapPmToX(info.block, line, charOffsetTo, availableWidth, alignmentOverride);
+                const isFirstLine = index === 0;
+                const cellMarkerTextWidth = info.measure?.marker?.markerTextWidth ?? undefined;
+                const startX = mapPmToX(
+                  info.block,
+                  line,
+                  charOffsetFrom,
+                  availableWidth,
+                  alignmentOverride,
+                  isFirstLine,
+                  cellMarkerTextWidth,
+                );
+                const endX = mapPmToX(
+                  info.block,
+                  line,
+                  charOffsetTo,
+                  availableWidth,
+                  alignmentOverride,
+                  isFirstLine,
+                  cellMarkerTextWidth,
+                );
 
                 // Calculate text indent using shared utility
-                const isFirstLine = index === info.startLine;
                 const textIndentAdjust = calculateTextStartIndent({
                   isFirstLine,
                   isListItem: cellIsListItem,
                   markerWidth: paragraphMarkerWidth,
-                  markerTextWidth: info.measure?.marker?.markerTextWidth ?? undefined,
+                  markerTextWidth: cellMarkerTextWidth,
                   paraIndentLeft: cellIndent.left,
                   firstLineIndent: cellIndent.firstLine,
                   hangingIndent: cellIndent.hanging,
@@ -1331,6 +1370,16 @@ const mapPmToX = (
   offset: number,
   fragmentWidth: number,
   alignmentOverride?: string,
+  isFirstLine?: boolean,
+  /**
+   * Measured marker text width for the hit fragment (or cell measure).
+   * Mirrors the painter's `fragment.markerTextWidth` check at
+   * `renderer.ts:3210-3211` — a list paragraph whose marker metadata exists
+   * but renders to zero width (empty/vanished marker, continuation fragment)
+   * must still receive the first-line width adjustment, so we gate on
+   * measured width, not on raw `marker.markerText` attribute.
+   */
+  markerTextWidth?: number,
 ): number => {
   if (fragmentWidth <= 0 || line.width <= 0) return 0;
 
@@ -1338,14 +1387,16 @@ const mapPmToX = (
   let paraIndentLeft = 0;
   let paraIndentRight = 0;
   let effectiveLeft = 0;
+  let isListParagraph = false;
+  let wl: ReturnType<typeof getWordLayoutConfig> | undefined;
   if (block.kind === 'paragraph') {
     const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
     const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
     paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
     paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
     effectiveLeft = paraIndentLeft;
-    const wl = getWordLayoutConfig(block);
-    const isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
+    wl = getWordLayoutConfig(block);
+    isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
     if (isListParagraph) {
       const explicitTextStart =
         typeof wl?.marker?.textStartX === 'number' && Number.isFinite(wl.marker.textStartX)
@@ -1360,7 +1411,7 @@ const mapPmToX = (
   }
 
   const totalIndent = effectiveLeft + paraIndentRight;
-  const availableWidth = Math.max(0, fragmentWidth - totalIndent);
+  let availableWidth = Math.max(0, fragmentWidth - totalIndent);
 
   // Validation: Warn when indents exceed fragment width (potential layout issue)
   if (totalIndent > fragmentWidth) {
@@ -1369,6 +1420,17 @@ const mapPmToX = (
         `for block ${block.id}. This may indicate a layout miscalculation. ` +
         `Available width clamped to 0.`,
     );
+  }
+
+  // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+  // Skip for list-marker first lines — the renderer only skips when the marker is actually
+  // rendered with non-zero measured text width, so gate on `markerTextWidth`, not on the
+  // raw `marker.markerText` attribute (which can be truthy for markers that measure to zero).
+  const hasRenderedMarkerText = isListParagraph && (markerTextWidth ?? 0) > 0;
+  if (isFirstLine && block.kind === 'paragraph' && !hasRenderedMarkerText) {
+    const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+    const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
+    availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
   }
 
   // Use shared text measurement utility for pixel-perfect accuracy

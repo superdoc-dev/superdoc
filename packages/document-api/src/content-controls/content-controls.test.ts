@@ -606,6 +606,11 @@ describe('patchRawProperties validates patch op shapes', () => {
 
 describe('create.contentControl validation', () => {
   const createAdapter = { create: mock(noop) } as any;
+  const validAt = {
+    kind: 'selection' as const,
+    start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+    end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+  };
 
   it('rejects null input', () => {
     expect(() => executeCreateContentControl(createAdapter, null as any)).toThrow(/non-null object/);
@@ -649,6 +654,45 @@ describe('create.contentControl validation', () => {
       controlType: 'text',
       target: validTarget,
       content: 'hello',
+    });
+    expect(adapter.create).toHaveBeenCalled();
+  });
+
+  it('rejects at and target together', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        target: validTarget,
+        at: validAt,
+      } as any),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it('rejects invalid at (missing start)', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        at: { kind: 'selection', end: { kind: 'text', blockId: 'p1', offset: 5 } },
+      } as any),
+    ).toThrow(/valid SelectionTarget/);
+  });
+
+  it('rejects invalid at (wrong kind)', () => {
+    expect(() =>
+      executeCreateContentControl(createAdapter, {
+        kind: 'inline',
+        at: { ...validAt, kind: 'bogus' },
+      } as any),
+    ).toThrow(/valid SelectionTarget/);
+  });
+
+  it('accepts valid at (SelectionTarget)', () => {
+    const adapter = { create: mock(noop) } as any;
+    executeCreateContentControl(adapter, {
+      kind: 'inline',
+      at: validAt,
+      tag: 'name',
+      alias: 'Name',
     });
     expect(adapter.create).toHaveBeenCalled();
   });

@@ -473,5 +473,96 @@ describe('document-part-object', () => {
         expect(callArgs[1].tocInstruction).toBeUndefined();
       });
     });
+
+    // ==================== Pending section-break emission (SD-2557) ====================
+    describe('pending section break at SDT boundary', () => {
+      const sectionFixture = (startParagraphIndex: number) => ({
+        ranges: [
+          {
+            sectionIndex: 0,
+            startParagraphIndex: 0,
+            endParagraphIndex: 0,
+            sectPr: null,
+            margins: null,
+            headerRefs: {},
+            footerRefs: {},
+            type: 'nextPage',
+          },
+          {
+            sectionIndex: 1,
+            startParagraphIndex,
+            endParagraphIndex: 10,
+            sectPr: null,
+            margins: null,
+            headerRefs: {},
+            footerRefs: {},
+            type: 'nextPage',
+          },
+        ],
+        currentSectionIndex: 0,
+        currentParagraphIndex: startParagraphIndex,
+      });
+
+      it('emits a section break before the TOC when the SDT sits at a section boundary', () => {
+        // Repro for SD-2557: a nextPage section break on the empty paragraph
+        // immediately before a TOC docPartObj was dropped, keeping the TOC on
+        // the same page as the prior section's content.
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
+        };
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
+
+        // currentParagraphIndex === nextSection.startParagraphIndex → the next
+        // paragraph-flow entry would start section 1. The SDT IS that entry.
+        mockContext.sectionState = sectionFixture(3) as unknown as NodeHandlerContext['sectionState'];
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        const sectionBreak = mockContext.blocks.find((b) => b.kind === 'sectionBreak');
+        expect(sectionBreak).toBeDefined();
+        expect(mockContext.sectionState!.currentSectionIndex).toBe(1);
+      });
+
+      it('does not emit a section break when the SDT is not at a section boundary', () => {
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
+        };
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
+
+        // currentParagraphIndex (2) < startParagraphIndex (5): not at boundary yet.
+        const state = sectionFixture(5);
+        state.currentParagraphIndex = 2;
+        mockContext.sectionState = state as unknown as NodeHandlerContext['sectionState'];
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(mockContext.blocks.find((b) => b.kind === 'sectionBreak')).toBeUndefined();
+        expect(mockContext.sectionState!.currentSectionIndex).toBe(0);
+      });
+
+      it('is a no-op when sectionState is undefined', () => {
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Entry' }] }],
+        };
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
+
+        mockContext.sectionState = undefined;
+
+        expect(() => handleDocumentPartObjectNode(node, mockContext)).not.toThrow();
+        expect(mockContext.blocks.find((b) => b.kind === 'sectionBreak')).toBeUndefined();
+      });
+    });
   });
 });

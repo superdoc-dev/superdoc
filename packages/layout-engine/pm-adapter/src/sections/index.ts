@@ -41,4 +41,5 @@ export {
   isSectionBreakBlock,
   signaturesEqual,
   shallowObjectEquals,
+  emitPendingSectionBreakForParagraph,
 } from './breaks.js';

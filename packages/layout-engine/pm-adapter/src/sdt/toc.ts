@@ -17,6 +17,7 @@ import type {
   ConverterContext,
   ThemeColorPalette,
 } from '../types.js';
+import { emitPendingSectionBreakForParagraph } from '../sections/index.js';
 import { applySdtMetadataToParagraphBlocks, getNodeInstruction } from './metadata.js';
 
 /**
@@ -173,11 +174,16 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
+    sectionState,
     converters,
     converterContext,
     themeColors,
     enableComments,
   } = context;
+
+  // See handleDocumentPartObjectNode for rationale (SD-2557).
+  emitPendingSectionBreakForParagraph({ sectionState, nextBlockId, blocks, recordBlockKind });
+
   const tocInstruction = getNodeInstruction(node);
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 

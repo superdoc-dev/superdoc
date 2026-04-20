@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "name": "compare-rendering",
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

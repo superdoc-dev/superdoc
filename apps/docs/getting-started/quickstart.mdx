@@ -123,27 +123,41 @@ Done. Ask your agent to open a `.docx` file and make an edit.
       <Tab title="CDN">
         ```html
         <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" rel="stylesheet">
-        <script type="module">
-          import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
-        </script>
+        <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
         ```
+        `SuperDoc` becomes a global — use `new SuperDoc({...})` directly.
       </Tab>
     </Tabs>
   </Step>
 
   <Step title="Mount the editor">
-    ```html
-    <div id="editor" style="height: 100vh"></div>
+    <Tabs>
+      <Tab title="npm">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
 
-    <script type="module">
-      import { SuperDoc } from 'superdoc';
-      import 'superdoc/style.css';
+        <script type="module">
+          import { SuperDoc } from 'superdoc';
+          import 'superdoc/style.css';
 
-      const superdoc = new SuperDoc({
-        selector: '#editor',
-      });
-    </script>
-    ```
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+      <Tab title="CDN">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
+
+        <script>
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+    </Tabs>
     That's a blank editor. Now give it a file.
   </Step>
 

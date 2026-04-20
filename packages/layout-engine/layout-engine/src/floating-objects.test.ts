@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { createFloatingObjectManager } from './floating-objects.js';
-import type { ImageBlock, ImageMeasure } from '@superdoc/contracts';
+import { createFloatingObjectManager, computeTableAnchorX, computeTableAnchorY } from './floating-objects.js';
+import type { ImageBlock, ImageMeasure, TableAnchor } from '@superdoc/contracts';
 
 describe('FloatingObjectManager', () => {
   const mockColumns = { width: 600, gap: 20, count: 1 };
@@ -895,5 +895,336 @@ describe('FloatingObjectManager', () => {
 
       expect(manager.getAllFloatsForPage(1)).toHaveLength(3);
     });
+  });
+});
+
+// SD-2562 + GH#2800: computeTableAnchorX/Y honor hRelativeFrom/vRelativeFrom/alignH/alignV
+// per ECMA-376 §17.4.57 / §17.18.35 / §17.18.100. Regression tests cover the full matrix
+// verified against Microsoft Word's computed positions (Word COM API: Table.Rows.HorizontalPosition
+// and VerticalPosition).
+describe('computeTableAnchorX', () => {
+  // US Letter, 1" margins, single column. Page is 816px wide; content area 624px.
+  const columns = { width: 624, gap: 0, count: 1 };
+  const margins = { left: 96, right: 96 };
+  const pageWidth = 816;
+  const tableWidth = 192;
+
+  const anchor = (overrides: Partial<TableAnchor> = {}): TableAnchor => ({
+    isAnchored: true,
+    hRelativeFrom: 'page',
+    vRelativeFrom: 'paragraph',
+    offsetH: 0,
+    offsetV: 0,
+    ...overrides,
+  });
+
+  it('page-anchored tblpX measures from page edge (GH#2800)', () => {
+    // Reporter: horzAnchor="page" tblpX=7298 twips ≈ 486.53px → render at 486.53 from page left.
+    expect(
+      computeTableAnchorX(
+        anchor({ hRelativeFrom: 'page', offsetH: 486.53 }),
+        0,
+        columns,
+        tableWidth,
+        margins,
+        pageWidth,
+      ),
+    ).toBeCloseTo(486.53, 2);
+  });
+
+  it('margin-anchored tblpX measures from left margin, not page edge', () => {
+    // horzAnchor="margin" tblpX=96 → 96 + 96 margin = 192 from page left.
+    expect(
+      computeTableAnchorX(anchor({ hRelativeFrom: 'margin', offsetH: 96 }), 0, columns, tableWidth, margins, pageWidth),
+    ).toBe(192);
+  });
+
+  it('column-anchored tblpX measures from column baseline', () => {
+    expect(
+      computeTableAnchorX(anchor({ hRelativeFrom: 'column', offsetH: 48 }), 0, columns, tableWidth, margins, pageWidth),
+    ).toBe(144); // 96 margin + 0 column offset + 48 tblpX
+  });
+
+  it('alignH=right (tblpXSpec=right) on page-anchor positions at right edge', () => {
+    // tblpXSpec=right + horzAnchor=page → pageWidth - tableWidth = 624.
+    expect(
+      computeTableAnchorX(
+        anchor({ hRelativeFrom: 'page', alignH: 'right' }),
+        0,
+        columns,
+        tableWidth,
+        margins,
+        pageWidth,
+      ),
+    ).toBe(pageWidth - tableWidth);
+  });
+
+  it('alignH=center (tblpXSpec=center) on margin-anchor centers within content area', () => {
+    // tblpXSpec=center + horzAnchor=margin → marginLeft + (contentWidth - tableWidth)/2.
+    expect(
+      computeTableAnchorX(
+        anchor({ hRelativeFrom: 'margin', alignH: 'center' }),
+        0,
+        columns,
+        tableWidth,
+        margins,
+        pageWidth,
+      ),
+    ).toBe(96 + (624 - 192) / 2);
+  });
+
+  it('page-anchor treats single-column layouts consistently (no margin-injection)', () => {
+    // Regression: the previous implementation injected marginLeft when columns.count === 1,
+    // giving 96 + 486.53 = 582.53 instead of 486.53. GH#2800's symptom.
+    const result = computeTableAnchorX(
+      anchor({ hRelativeFrom: 'page', offsetH: 486.53 }),
+      0,
+      columns,
+      tableWidth,
+      margins,
+      pageWidth,
+    );
+    expect(result).not.toBe(582.53);
+    expect(result).toBeCloseTo(486.53, 2);
+  });
+
+  it('alignH="inside" behaves like "left"', () => {
+    expect(
+      computeTableAnchorX(
+        anchor({ hRelativeFrom: 'margin', alignH: 'inside' }),
+        0,
+        columns,
+        tableWidth,
+        margins,
+        pageWidth,
+      ),
+    ).toBe(96);
+  });
+
+  it('alignH="outside" behaves like "right"', () => {
+    expect(
+      computeTableAnchorX(
+        anchor({ hRelativeFrom: 'margin', alignH: 'outside' }),
+        0,
+        columns,
+        tableWidth,
+        margins,
+        pageWidth,
+      ),
+    ).toBe(96 + 624 - tableWidth);
+  });
+
+  it('defaults hRelativeFrom to "column" when absent (matches Word defaults)', () => {
+    const defaulted: TableAnchor = {
+      isAnchored: true,
+      vRelativeFrom: 'paragraph',
+      offsetH: 48,
+      offsetV: 0,
+      // hRelativeFrom absent
+    };
+    expect(computeTableAnchorX(defaulted, 0, columns, tableWidth, margins, pageWidth)).toBe(144);
+  });
+
+  it('zero tableWidth + alignH="right" still produces a finite coordinate', () => {
+    const result = computeTableAnchorX(
+      anchor({ hRelativeFrom: 'page', alignH: 'right' }),
+      0,
+      columns,
+      0,
+      margins,
+      pageWidth,
+    );
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBe(pageWidth); // right edge - 0 width
+  });
+});
+
+describe('computeTableAnchorY', () => {
+  // US Letter at 96dpi: 1056px tall, 1" margins. Content area: y=96..960.
+  const pageContentTop = 96;
+  const pageContentBottom = 960;
+  const pageHeight = 1056;
+
+  const anchor = (overrides: Partial<TableAnchor> = {}): TableAnchor => ({
+    isAnchored: true,
+    hRelativeFrom: 'page',
+    vRelativeFrom: 'paragraph',
+    offsetH: 0,
+    offsetV: 0,
+    ...overrides,
+  });
+
+  it('vRelativeFrom=paragraph uses paragraph baseline + offsetV', () => {
+    // Paragraph-anchored tables clamp to max(paragraphStartY, paragraphCursorY) + offsetV
+    // (legacy no-overlap heuristic). For a single-line paragraph where cursor has advanced
+    // past the start, cursorY wins.
+    const paragraphStartY = 169.6;
+    const paragraphCursorY = 188;
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'paragraph', offsetV: 0 }),
+        92,
+        paragraphStartY,
+        paragraphCursorY,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(paragraphCursorY);
+  });
+
+  it('vRelativeFrom=page uses page TOP + offsetV (SD-2562 core)', () => {
+    // SD-2562 repro: vertAnchor="page" tblpY=2880 twips = 192px → y=192 from page top,
+    // regardless of where the anchor paragraph ended.
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'page', offsetV: 192 }),
+        92,
+        /* paragraphStartY */ 200,
+        /* paragraphCursorY */ 400, // must be ignored for page-relative
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(192);
+  });
+
+  it('vRelativeFrom=margin uses margin TOP + offsetV', () => {
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'margin', offsetV: 96 }),
+        92,
+        /* paragraphStartY */ 200,
+        /* paragraphCursorY */ 400,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(pageContentTop + 96);
+  });
+
+  it('alignV=bottom on page anchor aligns to page bottom edge', () => {
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'page', alignV: 'bottom', offsetV: 0 }),
+        100,
+        /* paragraphStartY */ 500,
+        /* paragraphCursorY */ 500,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(pageHeight - 100); // pageHeight - tableHeight
+  });
+
+  it('alignV=center on margin anchor centers within content area', () => {
+    const tableHeight = 100;
+    const contentHeight = pageContentBottom - pageContentTop;
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'margin', alignV: 'center' }),
+        tableHeight,
+        500,
+        500,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(pageContentTop + (contentHeight - tableHeight) / 2);
+  });
+
+  it('paragraph anchor with multi-page paragraph respects cursorY floor', () => {
+    // Multi-page paragraph: paragraphStartY refers to page 1 (stale). cursorY is the
+    // current page position after layout. The clamp keeps the table from overlapping
+    // already-laid content on the current page.
+    const result = computeTableAnchorY(
+      anchor({ vRelativeFrom: 'paragraph', offsetV: 10 }),
+      30,
+      /* paragraphStartY */ 20, // page 1 top (stale)
+      /* paragraphCursorY */ 60, // page 2 current position
+      pageContentTop,
+      pageContentBottom,
+      pageHeight,
+    );
+    expect(result).toBe(70); // max(20, 60) + 10
+  });
+
+  it('vRelativeFrom=paragraph ignores alignV per ECMA-376 (tblpYSpec disallowed with vertAnchor=text)', () => {
+    const paragraphStartY = 169.6;
+    const paragraphCursorY = 188;
+    // Spec §17.4.57: "tblpYSpec … is ignored, unless vertAnchor is set to text, in which case any
+    // relative positioning is not allowed, and is itself ignored."
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'paragraph', alignV: 'center', offsetV: 0 }),
+        92,
+        paragraphStartY,
+        paragraphCursorY,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(paragraphCursorY);
+  });
+
+  it('alignV="center" on page anchor centers vertically on page', () => {
+    const tableHeight = 100;
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'page', alignV: 'center' }),
+        tableHeight,
+        0,
+        0,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe((pageHeight - tableHeight) / 2);
+  });
+
+  it('alignV="bottom" on margin anchor aligns to bottom margin', () => {
+    const tableHeight = 80;
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'margin', alignV: 'bottom' }),
+        tableHeight,
+        0,
+        0,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe(pageContentBottom - tableHeight);
+  });
+
+  it('alignV + offsetV are additive (matches Word behavior)', () => {
+    // Per Word: alignV chooses the reference edge/center, offsetV shifts from there.
+    // "center + 20" = centered then shifted 20px down.
+    const tableHeight = 100;
+    expect(
+      computeTableAnchorY(
+        anchor({ vRelativeFrom: 'page', alignV: 'center', offsetV: 20 }),
+        tableHeight,
+        0,
+        0,
+        pageContentTop,
+        pageContentBottom,
+        pageHeight,
+      ),
+    ).toBe((pageHeight - tableHeight) / 2 + 20);
+  });
+
+  it('defaults vRelativeFrom to "paragraph" when absent', () => {
+    const defaulted: TableAnchor = {
+      isAnchored: true,
+      hRelativeFrom: 'page',
+      offsetH: 0,
+      offsetV: 5,
+      // vRelativeFrom absent
+    };
+    const paragraphCursorY = 188;
+    expect(
+      computeTableAnchorY(defaulted, 80, 100, paragraphCursorY, pageContentTop, pageContentBottom, pageHeight),
+    ).toBe(paragraphCursorY + 5);
   });
 });

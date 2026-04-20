@@ -30,7 +30,12 @@ import type {
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
 import { normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
-import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
+import {
+  createFloatingObjectManager,
+  computeAnchorX,
+  computeTableAnchorX,
+  computeTableAnchorY,
+} from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
   scheduleSectionBreak as scheduleSectionBreakExport,
@@ -1511,39 +1516,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
     const contentBottom = state.contentBottom;
-    const contentHeight = Math.max(0, contentBottom - contentTop);
+    const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
     const tableHeight = measure.totalHeight ?? 0;
     const anchor = block.anchor;
-    const offsetV = anchor?.offsetV ?? 0;
-    const vRelativeFrom = anchor?.vRelativeFrom;
-    const alignV = anchor?.alignV;
+    if (!anchor) return contentTop;
 
-    if (vRelativeFrom === 'margin') {
-      if (alignV === 'bottom') {
-        return contentBottom - tableHeight + offsetV;
-      }
-      if (alignV === 'center') {
-        return contentTop + (contentHeight - tableHeight) / 2 + offsetV;
-      }
-      return contentTop + offsetV;
-    }
-
-    if (vRelativeFrom === 'page') {
-      if (alignV === 'bottom') {
-        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
-        return pageHeight - tableHeight + offsetV;
-      }
-      if (alignV === 'center') {
-        const pageHeight = contentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
-        return (pageHeight - tableHeight) / 2 + offsetV;
-      }
-      return offsetV;
-    }
-
-    // Paragraph-relative floating tables normally anchor to a body paragraph.
-    // When a document has no body paragraphs at all, fall back to the top of the
-    // content area so the table can still render on page 1.
-    return contentTop + offsetV;
+    // No body paragraph exists — paragraph-relative anchors fall back to content top
+    // (paragraphStartY and paragraphCursorY both collapse to contentTop).
+    return computeTableAnchorY(anchor, tableHeight, contentTop, contentTop, contentTop, contentBottom, pageHeight);
   };
 
   for (const entry of preRegisteredAnchors) {
@@ -2098,27 +2078,56 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : undefined,
       );
 
-      // Register and place anchored tables after the paragraph. Anchor base is paragraph-relative
-      // (OOXML-style), clamped to paragraph bottom to avoid overlap, then offsetV is applied.
+      // Register and place anchored (floating) tables for this paragraph.
+      // Anchor coordinates are resolved per OOXML w:tblpPr semantics (§17.4.57):
+      //   X = f(horzAnchor/tblpX/tblpXSpec, page/margin/column baseline)
+      //   Y = f(vertAnchor/tblpY/tblpYSpec, page/margin/paragraph baseline)
       // Full-width floating tables are treated as inline and laid out when we hit the table block.
-      // Only vRelativeFrom=paragraph is supported.
       if (tablesForPara) {
         const state = paginator.ensurePage();
         const columnWidthForTable = getCurrentColumnWidth();
+        const currentColumns = getCurrentColumns();
+        const pageMargins = {
+          left: activeLeftMargin,
+          right: activeRightMargin,
+          top: activeTopMargin,
+          bottom: activeBottomMargin,
+        };
         let tableBottomY = state.cursorY;
         for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
           if (placedAnchoredTableIds.has(tableBlock.id)) continue;
           const totalWidth = tableMeasure.totalWidth ?? 0;
+          const totalHeight = tableMeasure.totalHeight ?? 0;
           if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
 
-          // OOXML anchor base is paragraph-relative. Clamp to paragraph bottom so the table never overlaps
-          // paragraph text, then apply offsetV from that resolved anchor position.
-          const offsetV = tableBlock.anchor?.offsetV ?? 0;
-          const anchorBaseY = Math.max(paragraphStartY, state.cursorY);
-          const anchorY = anchorBaseY + offsetV;
-          floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+          const tableAnchor = tableBlock.anchor;
+          const pageContentTop = state.topMargin;
+          const pageContentBottom = state.contentBottom;
+          const pageHeight = pageContentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
 
-          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+          const anchorY = tableAnchor
+            ? computeTableAnchorY(
+                tableAnchor,
+                totalHeight,
+                paragraphStartY,
+                state.cursorY,
+                pageContentTop,
+                pageContentBottom,
+                pageHeight,
+              )
+            : paragraphStartY;
+          const anchorX = tableAnchor
+            ? computeTableAnchorX(
+                tableAnchor,
+                state.columnIndex,
+                currentColumns,
+                totalWidth,
+                pageMargins,
+                activePageSize.w,
+              )
+            : columnX(state.columnIndex);
+
+          floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
 
           const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
           state.page.fragments.push(tableFragment);
@@ -2342,7 +2351,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
-      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+      const anchorX = tableBlock.anchor
+        ? computeTableAnchorX(
+            tableBlock.anchor,
+            state.columnIndex,
+            getCurrentColumns(),
+            tableMeasure.totalWidth ?? 0,
+            { left: activeLeftMargin, right: activeRightMargin },
+            activePageSize.w,
+          )
+        : columnX(state.columnIndex);
 
       floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
       state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));

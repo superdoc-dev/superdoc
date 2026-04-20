@@ -825,6 +825,73 @@ describe('layoutDocument', () => {
     expect(anchoredTableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + paragraphMeasure.totalHeight);
   });
 
+  // SD-2562: vRelativeFrom="page" anchored tables must render at a page-relative Y,
+  // not at the anchor paragraph's Y. Verified against Word COM ground truth (hPos=288, vPos=192
+  // for a table with horzAnchor=page tblpX=4320 vertAnchor=page tblpY=2880 on US-Letter at 96dpi).
+  it('respects vRelativeFrom="page" for anchored tables (SD-2562)', () => {
+    const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'para-1', runs: [] };
+    const paragraphMeasure = makeMeasure([20]);
+
+    const pageAnchoredTable = makeTableBlock('sd-2562-page', 1, {
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        offsetH: 288,
+        offsetV: 192,
+      },
+      wrap: { type: 'Square' },
+    });
+    const tableMeasure = makeTableMeasure([192], [92]);
+
+    const layout = layoutDocument(
+      [paragraphBlock, pageAnchoredTable],
+      [paragraphMeasure, tableMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    const tableFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'table' && fragment.blockId === 'sd-2562-page',
+    ) as { x: number; y: number } | undefined;
+
+    expect(tableFragment).toBeTruthy();
+    // Page-relative: Y is 192 from page top, NOT (marginTop + paragraphHeight).
+    expect(tableFragment?.y).toBe(192);
+    expect(tableFragment?.x).toBe(288);
+  });
+
+  it('respects vRelativeFrom="margin" and hRelativeFrom="margin" for anchored tables', () => {
+    const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'para-1', runs: [] };
+    const paragraphMeasure = makeMeasure([20]);
+
+    const marginAnchoredTable = makeTableBlock('sd-2562-margin', 1, {
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'margin',
+        vRelativeFrom: 'margin',
+        offsetH: 96,
+        offsetV: 96,
+      },
+      wrap: { type: 'Square' },
+    });
+    const tableMeasure = makeTableMeasure([192], [92]);
+
+    const layout = layoutDocument(
+      [paragraphBlock, marginAnchoredTable],
+      [paragraphMeasure, tableMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    const tableFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'table' && fragment.blockId === 'sd-2562-margin',
+    ) as { x: number; y: number } | undefined;
+
+    expect(tableFragment).toBeTruthy();
+    // Margin-relative: both axes are marginLeft/marginTop + offset.
+    expect(tableFragment?.x).toBe(DEFAULT_OPTIONS.margins!.left + 96);
+    expect(tableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 96);
+  });
+
   it('renders a floating table when the document has no body paragraphs', () => {
     const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-only');
     const floatingOnlyMeasure = makeTableMeasure([220], [60]);

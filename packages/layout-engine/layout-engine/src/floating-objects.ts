@@ -171,8 +171,9 @@ export function createFloatingObjectManager(
       // Compute table X position based on anchor alignment
       const x = computeTableAnchorX(anchor, columnIndex, currentColumns, tableWidth, currentMargins, currentPageWidth);
 
-      // Compute table Y position (anchor Y + vertical offset)
-      const y = anchorY + (anchor.offsetV ?? 0);
+      // anchorY is the table's final top edge — already includes offsetV when resolved by
+      // computeTableAnchorY. Do not apply offsetV a second time here.
+      const y = anchorY;
 
       const zone: ExclusionZone = {
         imageBlockId: tableBlock.id, // Reusing imageBlockId field for table id
@@ -408,7 +409,7 @@ function computeWrapMode(wrap: ImageBlock['wrap'], _anchor: ImageBlock['anchor']
  * Compute horizontal position of anchored table based on alignment and offsets.
  * Similar to computeAnchorX but uses TableAnchor type.
  */
-function computeTableAnchorX(
+export function computeTableAnchorX(
   anchor: TableAnchor,
   columnIndex: number,
   columns: ColumnLayout,
@@ -428,17 +429,14 @@ function computeTableAnchorX(
 
   const relativeFrom = anchor.hRelativeFrom ?? 'column';
 
-  // Base origin and available width based on relativeFrom
+  // Base origin and available width based on relativeFrom.
+  // Word's page-relative origin is always the physical page edge (x=0),
+  // regardless of column count — anchors can extend into the margin.
   let baseX: number;
   let availableWidth: number;
   if (relativeFrom === 'page') {
-    if (columns.count === 1) {
-      baseX = contentLeft;
-      availableWidth = contentWidth;
-    } else {
-      baseX = 0;
-      availableWidth = pageWidth != null ? pageWidth : contentWidth;
-    }
+    baseX = 0;
+    availableWidth = pageWidth != null ? pageWidth : contentWidth + marginLeft + marginRight;
   } else if (relativeFrom === 'margin') {
     baseX = contentLeft;
     availableWidth = contentWidth;
@@ -463,6 +461,58 @@ function computeTableAnchorX(
           : baseX;
 
   return result;
+}
+
+/**
+ * Compute vertical position of an anchored table based on its vRelativeFrom / alignV / offsetV.
+ *
+ * Mirrors Word's `w:vertAnchor` semantics per ECMA-376 §17.4.57:
+ * - `page`   : position is relative to the physical page edge (y=0 is page top).
+ * - `margin` : position is relative to the content area (top margin line).
+ * - `paragraph` (OOXML `w:vertAnchor="text"`): position is relative to the anchor paragraph.
+ *
+ * `alignV` (from `w:tblpYSpec`) chooses the reference edge or center for `page` and `margin`
+ * anchors; `offsetV` is then applied on top of the chosen baseline (matches Word's behavior —
+ * e.g. "bottom + 10px" places the table 10px above the bottom edge). `alignV` is ignored for
+ * `paragraph` anchoring because the OOXML spec disallows `tblpYSpec` with `vertAnchor="text"`.
+ *
+ * For `paragraph` anchoring, the baseline is clamped to `max(paragraphStartY, paragraphCursorY)`
+ * to preserve SuperDoc's "no overlap" legacy behavior: the table never renders above the
+ * current cursor on the anchor's page (handling multi-page paragraph spans where
+ * `paragraphStartY` refers to a prior page). Strict spec behavior (table positioned at
+ * paragraph TOP, allowing overlap) is a separate feature tracked for follow-up.
+ */
+export function computeTableAnchorY(
+  anchor: TableAnchor,
+  tableHeight: number,
+  paragraphStartY: number,
+  paragraphCursorY: number,
+  pageContentTop: number,
+  pageContentBottom: number,
+  pageHeight: number,
+): number {
+  const offsetV = anchor.offsetV ?? 0;
+  const alignV = anchor.alignV;
+  const vRelativeFrom = anchor.vRelativeFrom ?? 'paragraph';
+
+  if (vRelativeFrom === 'page') {
+    if (alignV === 'bottom') return pageHeight - tableHeight + offsetV;
+    if (alignV === 'center') return (pageHeight - tableHeight) / 2 + offsetV;
+    // 'top', 'inside', 'outside' → top edge; 'inline' is meaningless for non-paragraph anchors
+    return offsetV;
+  }
+
+  if (vRelativeFrom === 'margin') {
+    const contentHeight = Math.max(0, pageContentBottom - pageContentTop);
+    if (alignV === 'bottom') return pageContentBottom - tableHeight + offsetV;
+    if (alignV === 'center') return pageContentTop + (contentHeight - tableHeight) / 2 + offsetV;
+    return pageContentTop + offsetV;
+  }
+
+  // 'paragraph' (OOXML "text"): clamp to current cursor so the table never overlaps
+  // already-laid paragraph content on the current page, then apply offsetV.
+  // Strict spec behavior (paragraph TOP with overlap permitted) is a follow-up.
+  return Math.max(paragraphStartY, paragraphCursorY) + offsetV;
 }
 
 /**

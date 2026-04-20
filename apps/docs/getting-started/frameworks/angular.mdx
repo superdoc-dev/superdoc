@@ -6,7 +6,7 @@ keywords: "angular docx editor, angular word component, superdoc angular, angula
 
 SuperDoc works with Angular through direct DOM manipulation. No wrapper needed.
 
-Examples use signal-based APIs (`viewChild()`, `input()`) introduced in Angular 17.1. For older Angular versions, swap to the decorator-based equivalents (`@ViewChild`, `@Input`).
+Requires Angular 17.2+. `viewChild()` and `input()` are stable from Angular 19; developer preview before that. On older versions, use `@ViewChild`, `@Input`, and `ngOnDestroy` in place of `inject(DestroyRef)`.
 
 ## Install
 
@@ -81,7 +81,7 @@ export class DocEditorComponent implements AfterViewInit {
       document: this.document(),
       documentMode: 'editing',
       user: this.user(),
-      onReady: () => console.log('Editor ready'),
+      onReady: () => console.log('Editor ready!'),
     });
   }
 

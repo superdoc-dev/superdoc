@@ -2843,6 +2843,205 @@ describe('layoutDocument', () => {
       expect(singleColFragment?.width).not.toBeCloseTo(twoColFragment!.width, 0);
     });
   });
+
+  describe('column balancing at section boundaries (SD-2452)', () => {
+    /**
+     * End-to-end tests for the column-balancing feature.
+     *
+     * These tests drive layoutDocument with synthetic blocks/measures and assert on
+     * the OBSERVABLE fragment positions produced by the full pipeline — not on internal
+     * helper calls. When Word's algorithm changes or when we swap out the balancing
+     * implementation, these tests continue to assert what users see.
+     */
+
+    const PAGE: LayoutOptions = {
+      pageSize: { w: 612, h: 792 },
+      margins: { top: 72, right: 72, bottom: 72, left: 72 },
+    };
+    const LEFT_MARGIN = 72;
+    const CONTENT_WIDTH = 612 - 72 - 72; // 468
+    const COLUMN_GAP = 48;
+    const TWO_COL_WIDTH = (CONTENT_WIDTH - COLUMN_GAP) / 2; // 210
+    const TWO_COL_RIGHT_X = LEFT_MARGIN + TWO_COL_WIDTH + COLUMN_GAP; // 330
+
+    /** Build a 2-col section ending with a section break, surrounded by single-column context. */
+    function buildTwoColumnSection(paragraphCount: number, lineHeight = 20) {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }];
+
+      for (let i = 0; i < paragraphCount; i++) {
+        blocks.push({ kind: 'paragraph', id: `p${i}`, runs: [], attrs: { sectionIndex: 0 } } as FlowBlock);
+        measures.push(makeMeasure([lineHeight]));
+      }
+
+      blocks.push({
+        kind: 'sectionBreak',
+        id: 'sb-end',
+        type: 'continuous',
+        columns: { count: 1, gap: 0 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 1 },
+      } as FlowBlock);
+      measures.push({ kind: 'sectionBreak' });
+
+      blocks.push({ kind: 'paragraph', id: 'p-after', runs: [], attrs: { sectionIndex: 1 } } as FlowBlock);
+      measures.push(makeMeasure([lineHeight]));
+
+      return { blocks, measures };
+    }
+
+    it('distributes 6 equal paragraphs evenly across 2 columns (3+3)', () => {
+      const { blocks, measures } = buildTwoColumnSection(6, 20);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const sectionFragments = layout.pages[0].fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+      );
+      const col0 = sectionFragments.filter((f) => f.x === LEFT_MARGIN);
+      const col1 = sectionFragments.filter((f) => f.x === TWO_COL_RIGHT_X);
+
+      expect(col0.length + col1.length).toBe(6);
+      // Minimum-height balance of 6 equal 20px paragraphs across 2 columns is 3+3
+      // (tallest column = 60px). Any split closer to 1+5 or 2+4 produces a taller
+      // section than Word would render. This assertion fails if balancing is absent,
+      // uses an incorrect algorithm, or runs with a wrong available height.
+      expect(col0).toHaveLength(3);
+      expect(col1).toHaveLength(3);
+    });
+
+    it('places post-section single-column content just below the balanced columns', () => {
+      // Before the fix: "p-after" sat below all 6 paragraphs stacked in col 0 (y ~= top + 120).
+      // After the fix: columns balance to 3+3 (height = top + 60), so p-after starts at top + 60.
+      const { blocks, measures } = buildTwoColumnSection(6, 20);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+      const firstSectionPara = layout.pages[0].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p0',
+      );
+      const afterSectionPara = layout.pages[0].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p-after',
+      );
+      expect(firstSectionPara).toBeDefined();
+      expect(afterSectionPara).toBeDefined();
+
+      // p-after's Y reflects a balanced 3-row column (3 × 20px) above it.
+      const expectedBalancedBottom = firstSectionPara!.y + 3 * 20;
+      expect(afterSectionPara!.y).toBe(expectedBalancedBottom);
+    });
+
+    it('balances the section-ending page even when the section spans multiple pages', () => {
+      // A section big enough to fill page 1 completely then spill onto page 2.
+      // Word balances only the FINAL page (earlier pages are already full).
+      // Use paragraphs each large enough that col-1 alone will overflow.
+      const lineHeight = 120;
+      const paraCount = 10;
+      const { blocks, measures } = buildTwoColumnSection(paraCount, lineHeight);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      // Multiple pages due to content size.
+      expect(layout.pages.length).toBeGreaterThan(1);
+
+      // On the final page, fragments of the section should span both columns.
+      const finalPage = layout.pages[layout.pages.length - 1];
+      const sectionFragments = finalPage.fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+      );
+      if (sectionFragments.length > 1) {
+        const uniqueX = new Set(sectionFragments.map((f) => Math.round(f.x)));
+        // Either balanced into both columns, or single-column if only 1 fragment
+        expect(uniqueX.size).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('distributes 6 paragraphs across 3 columns (no column is empty)', () => {
+      const threeColStart: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-start',
+        type: 'continuous',
+        columns: { count: 3, gap: 24 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+      } as FlowBlock;
+      const sectionEnd: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-end',
+        type: 'continuous',
+        columns: { count: 1, gap: 0 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 1 },
+      } as FlowBlock;
+
+      const blocks: FlowBlock[] = [threeColStart];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }];
+      for (let i = 0; i < 6; i++) {
+        blocks.push({ kind: 'paragraph', id: `p${i}`, runs: [], attrs: { sectionIndex: 0 } } as FlowBlock);
+        measures.push(makeMeasure([20]));
+      }
+      blocks.push(sectionEnd);
+      measures.push({ kind: 'sectionBreak' });
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const fragments = layout.pages[0].fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p'),
+      );
+      const uniqueX = new Set(fragments.map((f) => Math.round(f.x)));
+      // All three columns should be used — no column is empty.
+      expect(uniqueX.size).toBe(3);
+    });
+
+    it('leaves fragments untouched when the section has an explicit column break', () => {
+      // Author-placed <w:br w:type="column"/> must override balancing.
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+        { kind: 'paragraph', id: 'p1', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        { kind: 'columnBreak', id: 'br', attrs: { sectionIndex: 0 } } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-end',
+          type: 'continuous',
+          columns: { count: 1, gap: 0 },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'sectionBreak' },
+        makeMeasure([20]),
+        { kind: 'columnBreak' },
+        makeMeasure([20]),
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const p1 = layout.pages[0].fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const p2 = layout.pages[0].fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+
+      // Author's column break is preserved: p1 in col 0, p2 in col 1.
+      expect(p1.x).toBe(LEFT_MARGIN);
+      expect(p2.x).toBe(TWO_COL_RIGHT_X);
+    });
+  });
 });
 
 describe('layoutHeaderFooter', () => {

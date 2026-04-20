@@ -52,7 +52,7 @@ import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
-import { balancePageColumns } from './column-balancing.js';
+import { balanceSectionOnPage, type BalancingFragment, type MeasureData } from './column-balancing.js';
 import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
@@ -1488,6 +1488,43 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     );
   };
 
+  // Build shared maps for column balancing. These are consumed both mid-layout
+  // (at continuous section-break boundaries) and post-layout (per-section final
+  // page), so we construct them once here rather than rebuilding in each pass.
+  const balancingMeasureMap = new Map<string, MeasureData>();
+  const blockSectionMap = new Map<string, number>();
+  const sectionColumnsMap = new Map<number, ColumnLayout>();
+  const sectionHasExplicitColumnBreak = new Set<number>();
+  // Tracks sections already balanced mid-page — the post-layout pass skips these
+  // to avoid double-balancing, which would overlap fragments at the same x/y.
+  const alreadyBalancedSections = new Set<number>();
+  // Walk blocks in document order. sectionBreak blocks carry attrs.sectionIndex and
+  // are emitted BEFORE the first paragraph of their section (see pm-adapter). Every
+  // subsequent content block belongs to that section until the next sectionBreak,
+  // so we track currentSectionIdx and stamp it on each block. This is required because
+  // pm-adapter only sets attrs.sectionIndex on sectionBreak blocks, not paragraphs.
+  let currentSectionIdx: number | null = null;
+  blocks.forEach((block, idx) => {
+    const measure = measures[idx];
+    if (measure) {
+      balancingMeasureMap.set(block.id, measure as MeasureData);
+    }
+    const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
+    const attrSectionIdx = blockWithAttrs.attrs?.sectionIndex;
+    if (block.kind === 'sectionBreak' && typeof attrSectionIdx === 'number') {
+      currentSectionIdx = attrSectionIdx;
+      if (block.columns) {
+        sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+      }
+    }
+    if (currentSectionIdx !== null) {
+      blockSectionMap.set(block.id, currentSectionIdx);
+      if (block.kind === 'columnBreak') {
+        sectionHasExplicitColumnBreak.add(currentSectionIdx);
+      }
+    }
+  });
+
   // Collect anchored drawings mapped to their anchor paragraphs
   const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
   // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
@@ -1830,6 +1867,61 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // in the new layout, start a fresh page to avoid overwriting earlier columns
         if (columnIndexBefore >= newColumns.count) {
           state = paginator.startNewPage();
+        }
+
+        // Balance the ending section's fragments on this page BEFORE starting the
+        // new region. Word produces a minimum-height section, then places the next
+        // region just below the balanced columns. Without this, columns fill
+        // top-to-bottom and the next region starts far below where Word would place it.
+        //
+        // `activeSectionIndex` only updates at page boundaries, so for continuous
+        // mid-page section breaks it's stale. Instead, look at the current page's
+        // fragments and find the most recent section index — that's the section
+        // that's ending. Usually this is `metadataIndex - 1` (sections are sequential),
+        // but using blockSectionMap handles non-sequential indices too.
+        let endingSectionIndex: number | null = null;
+        for (let i = state.page.fragments.length - 1; i >= 0; i--) {
+          const mapped = blockSectionMap.get(state.page.fragments[i].blockId);
+          if (typeof mapped === 'number' && mapped !== metadataIndex) {
+            endingSectionIndex = mapped;
+            break;
+          }
+        }
+        const endingSectionColumns =
+          endingSectionIndex !== null ? sectionColumnsMap.get(endingSectionIndex) : undefined;
+        if (endingSectionIndex !== null && endingSectionColumns && endingSectionColumns.count > 1) {
+          // The current region starts at the last constraint boundary's Y, or at
+          // the page's top margin if no mid-page region change has happened yet.
+          const lastBoundary = state.constraintBoundaries[state.constraintBoundaries.length - 1];
+          const activeRegionTop = lastBoundary?.y ?? activeTopMargin;
+          const availableHeight = activePageSize.h - activeBottomMargin - activeRegionTop;
+          const contentWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
+          const normalized = normalizeColumns(endingSectionColumns, contentWidth);
+          const balanceResult = balanceSectionOnPage({
+            fragments: state.page.fragments as BalancingFragment[],
+            sectionIndex: endingSectionIndex,
+            sectionColumns: {
+              count: normalized.count,
+              gap: normalized.gap,
+              width: normalized.width,
+              widths: endingSectionColumns.widths,
+              equalWidth: endingSectionColumns.equalWidth,
+            },
+            sectionHasExplicitColumnBreak: sectionHasExplicitColumnBreak.has(endingSectionIndex),
+            blockSectionMap,
+            margins: { left: activeLeftMargin },
+            topMargin: activeRegionTop,
+            columnWidth: normalized.width,
+            availableHeight,
+            measureMap: balancingMeasureMap,
+          });
+          if (balanceResult) {
+            // Collapse both cursors to the balanced section bottom so the new
+            // region starts there, not below an unbalanced tallest column.
+            state.cursorY = balanceResult.maxY;
+            state.maxCursorY = balanceResult.maxY;
+            alreadyBalancedSections.add(endingSectionIndex);
+          }
         }
 
         startMidPageRegion(state, newColumns);
@@ -2438,109 +2530,53 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
-  // Apply column balancing to pages with multi-column layout.
-  // This redistributes fragments to achieve balanced column heights, matching Word's behavior.
-  if (activeColumns.count > 1) {
-    const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
-    const normalizedCols = normalizeColumns(activeColumns, contentWidth);
+  // Apply column balancing per section. For each section with a multi-column layout,
+  // find the final page that carries any of its fragments and balance those fragments.
+  // Earlier pages of a multi-page section are always fully filled (content overflowed
+  // to reach them), so balancing is a no-op there. This replaces the previous
+  // "last page of document" heuristic with proper per-section balancing — required
+  // to match Word's behavior when a document has multiple multi-column sections
+  // separated by continuous or next-page breaks.
+  //
+  // Mid-page continuous breaks are handled in the layout loop itself (see the
+  // forceMidPageRegion branch above). This post-layout pass handles sections that
+  // end at a page boundary or at document end.
+  const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
+  for (const [sectionIdx, sectionCols] of sectionColumnsMap) {
+    if (sectionCols.count <= 1) continue;
+    if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
+    if (alreadyBalancedSections.has(sectionIdx)) continue;
 
-    // Build measure map for fragment height calculation during balancing
-    const measureMap = new Map<string, { kind: string; lines?: Array<{ lineHeight: number }>; height?: number }>();
-    // Build blockId -> sectionIndex map to filter fragments by section
-    const blockSectionMap = new Map<string, number>();
-    const sectionColumnsMap = new Map<number, ColumnLayout>();
-    blocks.forEach((block, idx) => {
-      const measure = measures[idx];
-      if (measure) {
-        measureMap.set(block.id, measure as { kind: string; lines?: Array<{ lineHeight: number }>; height?: number });
-      }
-      // Track section index for each block (for filtering during balancing)
-      // Not all block types have attrs, so access it safely
-      const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
-      const sectionIdx = blockWithAttrs.attrs?.sectionIndex;
-      if (typeof sectionIdx === 'number') {
-        blockSectionMap.set(block.id, sectionIdx);
-        if (block.kind === 'sectionBreak' && block.columns) {
-          sectionColumnsMap.set(sectionIdx, cloneColumnLayout(block.columns));
-        }
-      }
-    });
-
-    for (const page of pages) {
-      // Balance the last page (section ends at document end).
-      // TODO: Track section boundaries and balance at each continuous section break.
-      if (page === pages[pages.length - 1] && page.fragments.length > 0) {
-        const finalSectionColumns = sectionColumnsMap.get(activeSectionIndex) ?? activeColumns;
-        // Word does not rebalance the final page for sections that use explicit
-        // per-column widths. Preserve the natural left-to-right fill order there.
-        const hasExplicitColumnWidths =
-          finalSectionColumns?.equalWidth === false &&
-          Array.isArray(finalSectionColumns.widths) &&
-          finalSectionColumns.widths.length > 0;
-
-        if (hasExplicitColumnWidths) {
-          continue;
-        }
-
-        // Skip balancing if fragments are already in multiple columns (e.g., explicit column breaks).
-        // Balancing should only apply when all content flows naturally in column 0.
-        const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
-        const hasExplicitColumnStructure = uniqueXPositions.size > 1;
-
-        if (hasExplicitColumnStructure) {
-          continue;
-        }
-
-        // Skip balancing if fragments have different widths (indicating different column configs
-        // from multiple sections). Balancing would incorrectly apply the final section's width to all.
-        const uniqueWidths = new Set(page.fragments.map((f) => Math.round(f.width)));
-        const hasMixedColumnWidths = uniqueWidths.size > 1;
-
-        if (hasMixedColumnWidths) {
-          continue;
-        }
-
-        // Check if page has content from multiple sections.
-        // If so, only balance fragments from the final multi-column section.
-        const fragmentSections = new Set<number>();
-        for (const f of page.fragments) {
-          const section = blockSectionMap.get(f.blockId);
-          if (section !== undefined) {
-            fragmentSections.add(section);
-          }
-        }
-
-        // Only balance fragments from the final section when there are mixed sections
-        const hasMixedSections = fragmentSections.size > 1;
-        const fragmentsToBalance = hasMixedSections
-          ? page.fragments.filter((f) => {
-              const fragSection = blockSectionMap.get(f.blockId);
-              return fragSection === activeSectionIndex;
-            })
-          : page.fragments;
-
-        if (fragmentsToBalance.length > 0) {
-          const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
-          balancePageColumns(
-            fragmentsToBalance as {
-              x: number;
-              y: number;
-              width: number;
-              kind: string;
-              blockId: string;
-              fromLine?: number;
-              toLine?: number;
-              height?: number;
-            }[],
-            normalizedCols,
-            { left: activeLeftMargin },
-            activeTopMargin,
-            availableHeight,
-            measureMap,
-          );
-        }
+    // Find the last page carrying any fragments from this section.
+    let lastPageForSection: (typeof pages)[number] | null = null;
+    for (const p of pages) {
+      if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
+        lastPageForSection = p;
       }
     }
+    if (!lastPageForSection) continue;
+
+    const normalized = normalizeColumns(sectionCols, contentWidth);
+    const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
+
+    balanceSectionOnPage({
+      fragments: lastPageForSection.fragments as BalancingFragment[],
+      sectionIndex: sectionIdx,
+      sectionColumns: {
+        count: normalized.count,
+        gap: normalized.gap,
+        width: normalized.width,
+        widths: sectionCols.widths,
+        equalWidth: sectionCols.equalWidth,
+      },
+      sectionHasExplicitColumnBreak: false, // already filtered above
+      blockSectionMap,
+      margins: { left: activeLeftMargin },
+      topMargin: activeTopMargin,
+      columnWidth: normalized.width,
+      availableHeight,
+      measureMap: balancingMeasureMap,
+    });
   }
 
   // Serialize constraint boundaries into page.columnRegions so DomPainter can

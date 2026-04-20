@@ -156,64 +156,58 @@ export function calculateBalancedColumnHeight(
     };
   }
 
-  // Calculate total content height
+  // Calculate total content height and block-height extremes
   const totalHeight = ctx.contentBlocks.reduce((sum, b) => sum + b.measuredHeight, 0);
+  const maxBlockHeight = ctx.contentBlocks.reduce((m, b) => Math.max(m, b.measuredHeight), 0);
 
   // Early exit: content is very small, no need to balance
   if (totalHeight < config.minColumnHeight * ctx.columnCount) {
     return createSingleColumnResult(ctx);
   }
 
-  // Initial target: evenly divide content
-  let targetHeight = Math.ceil(totalHeight / ctx.columnCount);
-
-  // Ensure target meets minimum column height
-  targetHeight = Math.max(targetHeight, config.minColumnHeight);
-
-  // Don't exceed available height
-  targetHeight = Math.min(targetHeight, ctx.availableHeight);
+  // Binary-search for the minimum column height H such that a greedy
+  // left-to-right fill places every block with every column ≤ H. This matches
+  // Word's observed behavior: left columns are filled as tightly as possible
+  // against the minimum viable height, leaving the last column shorter when
+  // content doesn't divide evenly (e.g. 7 blocks across 3 columns → 3+3+1,
+  // not 2+2+3). Both splits have the same max column height, but Word prefers
+  // left-heavy packing for visual rhythm.
+  let lo = Math.max(maxBlockHeight, config.minColumnHeight);
+  let hi = Math.min(totalHeight, ctx.availableHeight);
+  if (lo > hi) lo = hi;
 
   let bestResult: SimulationResult | null = null;
-  let bestScore = Infinity;
+  let bestH = hi;
+  let iterations = 0;
 
-  for (let i = 0; i < config.maxIterations; i++) {
-    const simulation = simulateBalancedLayout(ctx, targetHeight, config);
-
-    // Calculate balance score (lower is better)
-    const score = calculateBalanceScore(simulation.columnHeights, config.tolerance);
-
-    if (score < bestScore) {
-      bestScore = score;
-      bestResult = simulation;
+  while (lo <= hi) {
+    iterations++;
+    const mid = Math.floor((lo + hi) / 2);
+    const sim = simulateBalancedLayout(ctx, mid, config);
+    const maxCol = Math.max(...sim.columnHeights);
+    const placed = sim.assignments.size === ctx.contentBlocks.length;
+    if (placed && maxCol <= mid) {
+      bestResult = sim;
+      bestH = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
     }
-
-    // Check if we've achieved acceptable balance
-    if (isBalanced(simulation.columnHeights, config.tolerance)) {
-      return {
-        targetColumnHeight: targetHeight,
-        columnAssignments: simulation.assignments,
-        success: true,
-        iterations: i + 1,
-        blockBreakPoints: simulation.breakPoints.size > 0 ? simulation.breakPoints : undefined,
-      };
-    }
-
-    // Adjust target based on simulation results
-    targetHeight = adjustTargetHeight(simulation, targetHeight, ctx, config);
+    if (iterations >= config.maxIterations) break;
   }
 
-  // Use best result found
   if (bestResult) {
     return {
-      targetColumnHeight: targetHeight,
+      targetColumnHeight: bestH,
       columnAssignments: bestResult.assignments,
-      success: false, // Didn't converge within iterations
-      iterations: config.maxIterations,
+      success: true,
+      iterations,
       blockBreakPoints: bestResult.breakPoints.size > 0 ? bestResult.breakPoints : undefined,
     };
   }
 
-  // Fallback: simple sequential layout
+  // Fallback: simple sequential layout if binary search never found a valid H
+  // (e.g. availableHeight too small to fit content).
   return createSequentialResult(ctx);
 }
 
@@ -349,73 +343,6 @@ function calculateParagraphBreakPoint(
 
   // All content fits, no break needed
   return { breakAfterLine: lines.length - 1, canBreak: true };
-}
-
-/**
- * Check if column heights are balanced within tolerance.
- */
-function isBalanced(columnHeights: number[], tolerance: number): boolean {
-  if (columnHeights.length <= 1) return true;
-
-  const nonEmptyHeights = columnHeights.filter((h) => h > 0);
-  if (nonEmptyHeights.length <= 1) return true;
-
-  const maxHeight = Math.max(...nonEmptyHeights);
-  const minHeight = Math.min(...nonEmptyHeights);
-
-  return maxHeight - minHeight <= tolerance;
-}
-
-/**
- * Calculate a balance score (lower is better).
- * Used to track best result across iterations.
- */
-function calculateBalanceScore(columnHeights: number[], tolerance: number): number {
-  if (columnHeights.length <= 1) return 0;
-
-  const nonEmptyHeights = columnHeights.filter((h) => h > 0);
-  if (nonEmptyHeights.length <= 1) return 0;
-
-  // Score based on variance from mean
-  const mean = nonEmptyHeights.reduce((a, b) => a + b, 0) / nonEmptyHeights.length;
-  const variance = nonEmptyHeights.reduce((sum, h) => sum + Math.pow(h - mean, 2), 0);
-
-  // Penalize empty columns
-  const emptyPenalty = (columnHeights.length - nonEmptyHeights.length) * tolerance * 10;
-
-  return variance + emptyPenalty;
-}
-
-/**
- * Adjust target height based on simulation results.
- */
-function adjustTargetHeight(
-  simulation: SimulationResult,
-  currentTarget: number,
-  ctx: BalancingContext,
-  config: ColumnBalancingConfig,
-): number {
-  const heights = simulation.columnHeights;
-  const maxHeight = Math.max(...heights);
-  const minHeight = Math.min(...heights.filter((h) => h > 0));
-
-  // If last column is significantly taller, increase target
-  if (heights[heights.length - 1] > maxHeight * 0.9 && heights[heights.length - 1] > currentTarget) {
-    return Math.min(currentTarget + (maxHeight - currentTarget) / 2, ctx.availableHeight);
-  }
-
-  // If first columns are too tall and last is too short, decrease target
-  if (heights[0] > currentTarget && heights[heights.length - 1] < currentTarget * 0.5) {
-    return Math.max(currentTarget - (currentTarget - minHeight) / 2, config.minColumnHeight);
-  }
-
-  // Binary search style adjustment
-  const diff = maxHeight - minHeight;
-  if (maxHeight > currentTarget) {
-    return Math.min(currentTarget + diff / 4, ctx.availableHeight);
-  } else {
-    return Math.max(currentTarget - diff / 4, config.minColumnHeight);
-  }
 }
 
 // ============================================================================
@@ -562,7 +489,7 @@ export function shouldSkipBalancing(
  * Fragment with required properties for column balancing.
  * Represents a positioned content block that can be redistributed across columns.
  */
-interface BalancingFragment {
+export interface BalancingFragment {
   /** Horizontal position in pixels from left edge of page */
   x: number;
   /** Vertical position in pixels from top edge of page */
@@ -585,7 +512,7 @@ interface BalancingFragment {
  * Measure data used to calculate fragment heights.
  * Contains layout measurements from the measuring phase.
  */
-interface MeasureData {
+export interface MeasureData {
   /** Type of measure: 'paragraph', 'image', etc. */
   kind: string;
   /** Line measurements for paragraph content */
@@ -746,46 +673,180 @@ export function balancePageColumns(
     return;
   }
 
-  // Calculate target height per column for balanced distribution
-  const targetHeight = totalHeight / columns.count;
-
-  // Skip balancing if target height is below minimum threshold
-  if (targetHeight < DEFAULT_BALANCING_CONFIG.minColumnHeight) {
+  // Skip balancing if balanced height per column would be below minimum threshold
+  if (totalHeight / columns.count < DEFAULT_BALANCING_CONFIG.minColumnHeight) {
     return;
   }
 
-  // Distribute rows across columns using greedy algorithm.
-  // Each row is assigned to the current column until adding it would
-  // reach or exceed the target height, then we advance to the next column.
-  let currentColumn = 0;
-  let currentColumnHeight = 0;
-  let currentY = topMargin;
+  // Delegate to the binary-search algorithm to find the minimum section height
+  // where all content fits across N columns. This matches Word's behavior: Word
+  // finds the smallest max-column-height that keeps content within constraints,
+  // rather than greedily splitting at total/N (which can leave col1 barely
+  // populated when one paragraph is much taller than the rest).
+  const result = calculateBalancedColumnHeight(
+    {
+      columnCount: columns.count,
+      columnWidth: columns.width,
+      columnGap: columns.gap,
+      availableHeight,
+      contentBlocks,
+    },
+    DEFAULT_BALANCING_CONFIG,
+  );
 
-  for (const [, rowFragments] of sortedRows) {
-    const rowHeight = Math.max(...rowFragments.map((f) => f.height));
-
-    // Advance to next column when current column reaches target height.
-    // Uses >= to match Word's behavior: switch when target is reached, not just exceeded.
-    // This ensures balanced distribution where the first column doesn't exceed its share.
-    if (
-      currentColumnHeight > 0 &&
-      currentColumnHeight + rowHeight >= targetHeight &&
-      currentColumn < columns.count - 1
-    ) {
-      currentColumn++;
-      currentColumnHeight = 0;
-      currentY = topMargin;
-    }
-
-    // Position all fragments in this row within the current column
-    const colX = columnX(currentColumn);
+  // Apply the assignments to fragments: pack each column top-to-bottom from topMargin,
+  // indexing back into sortedRows via the same ordering used to build contentBlocks.
+  const colCursors = new Array<number>(columns.count).fill(topMargin);
+  for (let i = 0; i < sortedRows.length; i++) {
+    const [, rowFragments] = sortedRows[i];
+    const block = contentBlocks[i];
+    const col = result.columnAssignments.get(block.blockId) ?? 0;
+    const colX = columnX(col);
+    const rowHeight = block.measuredHeight;
     for (const info of rowFragments) {
       info.fragment.x = colX;
-      info.fragment.y = currentY;
+      info.fragment.y = colCursors[col];
       info.fragment.width = columns.width;
     }
-
-    currentColumnHeight += rowHeight;
-    currentY += rowHeight;
+    colCursors[col] += rowHeight;
   }
+}
+
+// ============================================================================
+// Section-scoped balancing (wraps balancePageColumns with per-section guards)
+// ============================================================================
+
+/**
+ * Column layout properties relevant to balancing decisions.
+ * Mirrors the subset of ColumnLayout that this module reads.
+ */
+export interface SectionColumnLayout {
+  count: number;
+  gap: number;
+  width?: number;
+  widths?: number[];
+  equalWidth?: boolean;
+}
+
+export interface BalanceSectionOnPageArgs {
+  /** All fragments on the target page. Only those belonging to sectionIndex are balanced (mutated in place). */
+  fragments: BalancingFragment[];
+  /** Section whose content ends on this page. */
+  sectionIndex: number;
+  /** Column layout of the ending section. */
+  sectionColumns: SectionColumnLayout;
+  /** True if the section contains an explicit <w:br w:type="column"/> — skip balancing to preserve author intent. */
+  sectionHasExplicitColumnBreak: boolean;
+  /** blockId -> sectionIndex map (built once per layout, shared across calls). */
+  blockSectionMap: Map<string, number>;
+  /** Left page margin, used to compute column X positions. */
+  margins: { left: number };
+  /** Y position where the section's region begins on this page. */
+  topMargin: number;
+  /** Column width — passed to balancePageColumns so it can resize fragments. */
+  columnWidth: number;
+  /** Available height from topMargin to content bottom. */
+  availableHeight: number;
+  /** Measurement data for fragments (built from measures array). */
+  measureMap: Map<string, MeasureData>;
+}
+
+/**
+ * Balance the fragments of one section on one page.
+ *
+ * Returns the tallest balanced column's bottom Y, or null if balancing was skipped.
+ * Callers can use the returned Y to update paginator cursors so subsequent content
+ * starts just below the balanced section rather than below an unbalanced maxCursorY.
+ *
+ * Guards (skip balancing when):
+ *   - Section has <= 1 column (nothing to balance)
+ *   - Section contains an explicit column break (author intent wins)
+ *   - Section uses unequal column widths (Word doesn't rebalance these)
+ *   - No fragments on this page belong to the section
+ */
+export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: number } | null {
+  const { sectionColumns, sectionHasExplicitColumnBreak, sectionIndex, blockSectionMap, fragments } = args;
+
+  if (sectionColumns.count <= 1) return null;
+  if (sectionHasExplicitColumnBreak) return null;
+  if (sectionColumns.equalWidth === false && Array.isArray(sectionColumns.widths) && sectionColumns.widths.length > 0) {
+    return null;
+  }
+
+  // Filter to fragments of the target section on this page.
+  const sectionFragments = fragments.filter((f) => blockSectionMap.get(f.blockId) === sectionIndex);
+  if (sectionFragments.length === 0) return null;
+
+  const columnCount = sectionColumns.count;
+  const columnGap = sectionColumns.gap;
+  const columnWidth = sectionColumns.width ?? 0;
+  if (columnWidth <= 0) return null;
+
+  // Use the minimum Y of the section's fragments as the balancing origin — the
+  // section may start mid-page (e.g. section 0 is single-column and section 1
+  // continues below it). Using topMargin unconditionally would stack balanced
+  // columns on top of earlier single-column content on the same page.
+  let sectionTopY = Number.POSITIVE_INFINITY;
+  for (const f of sectionFragments) {
+    if (f.y < sectionTopY) sectionTopY = f.y;
+  }
+  if (!Number.isFinite(sectionTopY)) sectionTopY = args.topMargin;
+
+  // Remaining height from the section's actual top to the page content bottom.
+  const remainingHeight = args.availableHeight - (sectionTopY - args.topMargin);
+  if (remainingHeight <= 0) return null;
+
+  // Order fragments in document order: by current column (x → left-to-right),
+  // then by y within each column. During unbalanced layout the paginator fills
+  // column 0 top-to-bottom, then column 1, etc. — so (x, y) preserves the
+  // original sequence.
+  const ordered = [...sectionFragments].sort((a, b) => {
+    if (a.x !== b.x) return a.x - b.x;
+    return a.y - b.y;
+  });
+
+  // Treat each fragment as its own block for binary-search balancing. Grouping
+  // by y (as balancePageColumns does) would collapse fragments from different
+  // source columns that happen to share a y coordinate into a single row and
+  // re-stack them at one position — producing overlap.
+  const contentBlocks: BalancingBlock[] = ordered.map((f, i) => ({
+    blockId: `${f.blockId}#${i}`,
+    measuredHeight: getFragmentHeight(f, args.measureMap),
+    canBreak: false,
+    keepWithNext: false,
+    keepTogether: true,
+  }));
+
+  if (
+    shouldSkipBalancing({
+      columnCount,
+      columnWidth,
+      columnGap,
+      availableHeight: remainingHeight,
+      contentBlocks,
+    })
+  ) {
+    return null;
+  }
+
+  const result = calculateBalancedColumnHeight(
+    { columnCount, columnWidth, columnGap, availableHeight: remainingHeight, contentBlocks },
+    DEFAULT_BALANCING_CONFIG,
+  );
+
+  const columnX = (columnIndex: number): number => args.margins.left + columnIndex * (columnWidth + columnGap);
+
+  const colCursors = new Array<number>(columnCount).fill(sectionTopY);
+  let maxY = sectionTopY;
+  for (let i = 0; i < ordered.length; i++) {
+    const f = ordered[i];
+    const block = contentBlocks[i];
+    const col = result.columnAssignments.get(block.blockId) ?? 0;
+    f.x = columnX(col);
+    f.y = colCursors[col];
+    f.width = columnWidth;
+    colCursors[col] += block.measuredHeight;
+    if (colCursors[col] > maxY) maxY = colCursors[col];
+  }
+  return { maxY };
 }

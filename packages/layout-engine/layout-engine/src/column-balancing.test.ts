@@ -335,13 +335,9 @@ function createMeasure(kind: string, lineHeights: number[]): { kind: string; lin
 
 describe('balancePageColumns', () => {
   describe('basic balancing', () => {
-    it('should distribute fragments across 2 columns based on target height', () => {
-      // 4 fragments, each 20px tall = 80px total, target = 40px per column
-      // With >= condition: switch when adding would reach/exceed 40px
-      // Block 1 (20px): column 0, height=20
-      // Block 2 (20px): 20+20=40 >= 40, switch! column 1, height=20
-      // Block 3, 4: stay in column 1
-      // Result: 1 in column 0, 3 in column 1
+    it('balances 4 equal blocks into 2+2 across 2 columns', () => {
+      // 4 fragments × 20px each in a 2-col section. Word minimizes section height by
+      // placing 2 per column (40px per col) rather than 1+3 (max 60px).
       const fragments = [
         createFragment('block-1', 96, 96, 624),
         createFragment('block-2', 96, 116, 624),
@@ -357,10 +353,9 @@ describe('balancePageColumns', () => {
 
       balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 40, measureMap);
 
-      // Block 1 stays in column 0
+      // First half in col 0, second half in col 1 — minimum section height.
       expect(fragments[0].x).toBe(96);
-      // Blocks 2, 3, 4 move to column 1
-      expect(fragments[1].x).toBe(432);
+      expect(fragments[1].x).toBe(96);
       expect(fragments[2].x).toBe(432);
       expect(fragments[3].x).toBe(432);
     });
@@ -556,5 +551,188 @@ describe('balancePageColumns', () => {
       const colXValues = new Set(fragments.map((f) => f.x));
       expect(colXValues.size).toBeLessThanOrEqual(3);
     });
+  });
+});
+
+// ============================================================================
+// balanceSectionOnPage Tests (Section-scoped balancing)
+// ============================================================================
+
+import { balanceSectionOnPage } from './column-balancing.js';
+
+describe('balanceSectionOnPage', () => {
+  type TestFragment = { blockId: string; x: number; y: number; width: number; kind: string };
+
+  /** Build a fragment + section mapping for section-scoped tests. */
+  function buildSectionFixture(
+    sectionIndex: number,
+    count: number,
+    height = 20,
+    startY = 96,
+  ): {
+    fragments: TestFragment[];
+    measureMap: Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>;
+    blockSectionMap: Map<string, number>;
+  } {
+    const fragments: TestFragment[] = [];
+    const measureMap = new Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>();
+    const blockSectionMap = new Map<string, number>();
+    for (let i = 0; i < count; i++) {
+      const id = `s${sectionIndex}-b${i}`;
+      fragments.push({ blockId: id, x: 96, y: startY + i * height, width: 624, kind: 'para' });
+      measureMap.set(id, createMeasure('paragraph', [height]));
+      blockSectionMap.set(id, sectionIndex);
+    }
+    return { fragments, measureMap, blockSectionMap };
+  }
+
+  it('balances the target section and returns the tallest balanced column bottom', () => {
+    // 6 equal paragraphs in a 2-col section → 3+3 balanced, tallest col ends at top + 3×20 = top + 60.
+    const top = 96;
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6, 20, top);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: top,
+      columnWidth: 288,
+      availableHeight: 60,
+      measureMap,
+    });
+
+    // Returned maxY is the bottom of the tallest balanced column.
+    expect(result).not.toBeNull();
+    expect(result!.maxY).toBe(top + 60);
+
+    // Observable outcome: fragments split evenly across two columns.
+    const col0 = fragments.filter((f) => f.x === 96).length;
+    const col1 = fragments.filter((f) => f.x === 96 + 288 + 48).length;
+    expect(col0).toBe(3);
+    expect(col1).toBe(3);
+  });
+
+  it('returns null and leaves fragments untouched when section has <= 1 column', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 3);
+    const snapshot = fragments.map((f) => ({ x: f.x, y: f.y }));
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 1, gap: 0, width: 624 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 624,
+      availableHeight: 720,
+      measureMap,
+    });
+
+    expect(result).toBeNull();
+    fragments.forEach((f, i) => {
+      expect(f.x).toBe(snapshot[i].x);
+      expect(f.y).toBe(snapshot[i].y);
+    });
+  });
+
+  it('returns null when section contains an explicit column break', () => {
+    // Author-placed column breaks override balancing — preserve their intent.
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6);
+    const snapshot = fragments.map((f) => f.x);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: true,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
+    });
+
+    expect(result).toBeNull();
+    fragments.forEach((f, i) => expect(f.x).toBe(snapshot[i]));
+  });
+
+  it('returns null when section has unequal explicit column widths', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 4);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288, equalWidth: false, widths: [200, 376] },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('only moves fragments of the target section when the page has mixed sections', () => {
+    // Page has 3 fragments in section 1 (already positioned in col 0) and 6 in section 2.
+    // Balancing section 2 must not touch section 1 fragments.
+    const sec1 = buildSectionFixture(1, 3, 20, 96);
+    const sec2 = buildSectionFixture(2, 6, 20, 160);
+    const fragments = [...sec1.fragments, ...sec2.fragments];
+    const measureMap = new Map([...sec1.measureMap, ...sec2.measureMap]);
+    const blockSectionMap = new Map([...sec1.blockSectionMap, ...sec2.blockSectionMap]);
+    const sec1Snapshot = sec1.fragments.map((f) => ({ id: f.blockId, x: f.x, y: f.y }));
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 160,
+      columnWidth: 288,
+      availableHeight: 60,
+      measureMap,
+    });
+
+    expect(result).not.toBeNull();
+
+    // Section 1 fragments unchanged.
+    for (const s of sec1Snapshot) {
+      const f = fragments.find((x) => x.blockId === s.id)!;
+      expect(f.x).toBe(s.x);
+      expect(f.y).toBe(s.y);
+    }
+
+    // Section 2 fragments now split across two columns.
+    const sec2Xs = new Set(sec2.fragments.map((f) => f.x));
+    expect(sec2Xs.size).toBe(2);
+  });
+
+  it('returns null when no fragments on the page belong to the target section', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(1, 3);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 99, // different section
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
+    });
+
+    expect(result).toBeNull();
   });
 });

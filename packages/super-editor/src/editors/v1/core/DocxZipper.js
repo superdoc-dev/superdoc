@@ -291,10 +291,18 @@ class DocxZipper {
     const hasFootnotes = types.elements?.some(
       (el) => el.name === 'Override' && el.attributes.PartName === '/word/footnotes.xml',
     );
+    const hasEndnotes = types.elements?.some(
+      (el) => el.name === 'Override' && el.attributes.PartName === '/word/endnotes.xml',
+    );
 
     if (hasFile('word/footnotes.xml')) {
       const footnotesDef = `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml" />`;
       if (!hasFootnotes) typesString += footnotesDef;
+    }
+
+    if (hasFile('word/endnotes.xml')) {
+      const endnotesDef = `<Override PartName="/word/endnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml" />`;
+      if (!hasEndnotes) typesString += endnotesDef;
     }
 
     // Update for managed document-level singleton parts (e.g., numbering)

@@ -912,9 +912,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   // so keep the same available width as body lines. For normal paragraphs we must honor
   // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, rawFirstLineOffset);
-  const hasNegativeIndent = indentLeft < 0 || indentRight < 0;
-  // Avoid widening the first line when negative indents already expand fragment width.
-  const allowNegativeFirstLineOffset = !isWordLayoutList && !hasNegativeIndent && rawFirstLineOffset < 0;
+  // Avoid widening the first line when a negative LEFT indent already expands the content area.
+  // Negative right indent doesn't cause this problem — it only extends rightward.
+  const hasNegativeLeftIndent = indentLeft < 0;
+  const allowNegativeFirstLineOffset = !isWordLayoutList && !hasNegativeLeftIndent && rawFirstLineOffset < 0;
   const firstLineOffset = isWordLayoutList
     ? 0
     : allowNegativeFirstLineOffset
@@ -1481,7 +1482,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1,
           width: 0,
-          maxFontSize: 12, // Default font size for tabs
+          maxFontSize: lastFontSize,
+          maxFontInfo: hasSeenTextRun ? undefined : fallbackFontInfo,
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [],
           spaceCount: 0,
@@ -1521,7 +1523,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
 
-      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, 12);
+      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lastFontSize);
       currentLine.toRun = runIndex;
       currentLine.toChar = 1; // tab is a single character
       let currentLeader: LeaderDecoration | null = null;

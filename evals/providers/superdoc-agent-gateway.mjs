@@ -25,7 +25,7 @@ import {
   readCache,
   resolveOutputPath,
   writeCache,
-} from './utils.mjs';
+} from '../shared/provider-utils.mjs';
 
 const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
 const STOP_CONDITION = stepCountIs(10);

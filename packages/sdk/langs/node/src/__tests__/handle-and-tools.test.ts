@@ -54,4 +54,49 @@ describe('dispatchSuperDocTool', () => {
       expect((error as SuperDocCliError).code).toBe('INVALID_ARGUMENT');
     }
   });
+
+  test('strips obviously corrupted nested keys before dispatch', async () => {
+    const calls: unknown[] = [];
+    const documentHandle = {
+      mutations: {
+        apply: async (args: unknown) => {
+          calls.push(args);
+          return { ok: true };
+        },
+      },
+    } as unknown as BoundDocApi;
+
+    const args = {
+      action: 'apply',
+      atomic: true,
+      changeMode: 'tracked',
+      steps: [
+        {
+          id: 'r1',
+          op: 'text.rewrite',
+          where: { by: 'block', nodeType: 'paragraph', nodeId: '6F228706' },
+          args: { replacement: { text: 'Replacement clause' } },
+          '},{': ':',
+        },
+      ],
+    };
+
+    const result = await dispatchSuperDocTool(documentHandle, 'superdoc_mutations', args);
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual([
+      {
+        atomic: true,
+        changeMode: 'tracked',
+        steps: [
+          {
+            id: 'r1',
+            op: 'text.rewrite',
+            where: { by: 'block', nodeType: 'paragraph', nodeId: '6F228706' },
+            args: { replacement: { text: 'Replacement clause' } },
+          },
+        ],
+      },
+    ]);
+  });
 });

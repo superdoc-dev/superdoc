@@ -14,7 +14,7 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
-import type { StructuredContentLockMode } from '@superdoc/contracts';
+import type { ImageHyperlink, StructuredContentLockMode } from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -512,7 +512,7 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   /** Decorative image flag. Maps to OOXML adec:decorative. */
   decorative?: boolean;
   /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
-  hyperlink?: { url: string; tooltip?: string } | null;
+  hyperlink?: ImageHyperlink | null;
 }
 
 // ============================================

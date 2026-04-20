@@ -54,6 +54,8 @@ export function dispatchIntentTool(
           return execute('doc.format.paragraph.setIndentation', rest);
         case 'set_spacing':
           return execute('doc.format.paragraph.setSpacing', rest);
+        case 'set_flow_options':
+          return execute('doc.format.paragraph.setFlowOptions', rest);
         case 'set_direction':
           return execute('doc.format.paragraph.setDirection', rest);
         default:
@@ -67,6 +69,8 @@ export function dispatchIntentTool(
           return execute('doc.create.paragraph', rest);
         case 'heading':
           return execute('doc.create.heading', rest);
+        case 'table':
+          return execute('doc.create.table', rest);
         default:
           throw new Error(`Unknown action for superdoc_create: ${action}`);
       }

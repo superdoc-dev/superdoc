@@ -402,6 +402,51 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(periodDeleteEntries[0]?.[1]).toBe('.');
   });
 
+  it('preserves sibling paragraphs for tracked multi-paragraph replacements of an entire paragraph', () => {
+    const before = schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('before')])]);
+    const targetParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('hello world')]),
+    ]);
+    const after = schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('after')])]);
+    let state = createState(schema.nodes.doc.create({}, [before, targetParagraph, after]));
+
+    const targetRange = getParagraphRange(state.doc, 1);
+    expect(targetRange).toBeTruthy();
+
+    const replacement = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('Alpha')])]),
+      schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('Beta')])]),
+    ]);
+
+    const tr = state.tr.replace(targetRange.from - 1, targetRange.to + 1, new Slice(replacement.content, 0, 0));
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    const paragraphTexts = [];
+    finalState.doc.forEach((node) => {
+      if (node.type.name === 'paragraph') {
+        paragraphTexts.push(node.textContent);
+      }
+    });
+
+    expect(paragraphTexts).toEqual(['before', 'hello world', 'Alpha', 'Beta', 'after']);
+
+    const deleteSpans = [];
+    const insertSpans = [];
+    finalState.doc.descendants((node) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks.some((mark) => mark.type.name === TrackDeleteMarkName)) {
+        deleteSpans.push(node.text);
+      }
+      if (node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertSpans.push(node.text);
+      }
+    });
+
+    expect(deleteSpans.join('')).toContain('hello world');
+    expect(insertSpans).toEqual(expect.arrayContaining(['Alpha', 'Beta']));
+  });
+
   it('keeps caret near deletion point after normalized broad replacement so consecutive backspace works', () => {
     const paragraph = schema.nodes.paragraph.create({}, [
       schema.nodes.run.create({}, [schema.text('Current sentence')]),

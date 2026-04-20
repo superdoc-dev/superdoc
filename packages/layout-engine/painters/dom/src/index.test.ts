@@ -5,6 +5,7 @@ import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
+  ImageHyperlink,
   Measure,
   Layout,
   Line,
@@ -1786,6 +1787,130 @@ describe('DomPainter', () => {
     const emptySpan = mount.querySelector('.superdoc-line span.superdoc-empty-run') as HTMLElement | null;
     expect(emptySpan?.dataset.pmStart).toBe('1');
     expect(emptySpan?.dataset.pmEnd).toBe('1');
+    // Empty-run must set explicit fontSize so it doesn't inherit fontSize:0 from the line
+    expect(emptySpan?.style.fontSize).toBe('18px');
+  });
+
+  it('sets fallback fontSize on field annotation without explicit fontSize', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-no-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'fa-no-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Must always set fontSize so it doesn't inherit fontSize:0 from the line.
+    // Falls back to 16px (browser default) when run has no explicit fontSize.
+    expect(annotation?.style.fontSize).toBe('16px');
+  });
+
+  it('converts numeric fontSize to pt on field annotation', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-numeric-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          fontSize: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'fa-numeric-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 },
+          ],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Numeric fontSize is converted to pt units.
+    expect(annotation?.style.fontSize).toBe('14pt');
+  });
+
+  it('sets explicit fontSize on math run wrapper', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'math-block',
+      runs: [
+        {
+          kind: 'math',
+          ommlJson: {},
+          textContent: 'x+1',
+          width: 40,
+          height: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 40, ascent: 10, descent: 4, lineHeight: 18 }],
+      totalHeight: 18,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'math-block', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const mathWrapper = mount.querySelector('.sd-math') as HTMLElement | null;
+    // Must set fontSize so fallback text doesn't inherit fontSize:0 from the line.
+    // Uses browser default (16px) rather than run.height, which would render tall
+    // expressions at 80–100px for the plain-text fallback path.
+    expect(mathWrapper?.style.fontSize).toBe('16px');
   });
 
   it('renders image fragments', () => {
@@ -1827,6 +1952,57 @@ describe('DomPainter', () => {
     expect(img).toBeTruthy();
     expect(img?.src).toContain('data:image/jpeg');
     expect((img?.parentElement as HTMLElement).style.left).toBe('20px');
+  });
+
+  it('preserves clip-path zoom while applying rotation on anchored image fragments', () => {
+    const clipPath = 'inset(10% 20% 30% 40%)';
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-block',
+      src: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/',
+      width: 150,
+      height: 100,
+      rotation: 15,
+      attrs: {
+        clipPath,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 150,
+      height: 100,
+    };
+    const imageLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'image',
+              blockId: 'img-block',
+              x: 20,
+              y: 30,
+              width: 150,
+              height: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+    painter.paint(imageLayout, mount);
+
+    const fragmentEl = mount.querySelector('.superdoc-image-fragment') as HTMLElement | null;
+    const img = fragmentEl?.querySelector('img') as HTMLElement | null;
+    expect(fragmentEl).toBeTruthy();
+    expect(img).toBeTruthy();
+    expect(fragmentEl?.style.overflow).toBe('hidden');
+    expect(fragmentEl?.style.transform).toContain('rotate(15deg)');
+    expect(img?.style.clipPath).toBe(clipPath);
+    expect(img?.style.transformOrigin).toBe('0 0');
+    expect(img?.style.transform).toMatch(/translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/);
   });
 
   it('annotates fragments and runs with SDT metadata', () => {
@@ -3526,6 +3702,136 @@ describe('DomPainter', () => {
     expect(foundBehindDoc).toBe(true);
   });
 
+  it('renders header WordArt watermarks behind page content even when behindDoc is false in OOXML', () => {
+    const watermarkBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-wordart-watermark',
+      drawingKind: 'vectorShape',
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+      textAlign: 'center',
+      textContent: {
+        parts: [{ text: 'AUTE', formatting: { fontFamily: 'Arial', fontSize: 24, color: 'C0C0C0' } }],
+      },
+      attrs: { isWordArt: true, isTextBox: true },
+    };
+    const watermarkMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 200,
+      height: 60,
+      scale: 1,
+      naturalWidth: 200,
+      naturalHeight: 60,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+    };
+    const watermarkFragment = {
+      kind: 'drawing' as const,
+      blockId: 'header-wordart-watermark',
+      drawingKind: 'vectorShape' as const,
+      x: 40,
+      y: 180,
+      width: 240,
+      height: 120,
+      geometry: { width: 200, height: 60, rotation: 320, flipH: false, flipV: false },
+      scale: 1,
+      isAnchored: true,
+      behindDoc: false,
+      zIndex: 251658241,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, watermarkBlock],
+      measures: [measure, watermarkMeasure],
+      headerProvider: () => ({
+        fragments: [watermarkFragment],
+        height: 40,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement | null;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    const behindDocWatermark = pageEl?.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-wordart-watermark"]',
+    ) as HTMLElement | null;
+    const watermarkInHeader = headerEl?.querySelector('[data-block-id="header-wordart-watermark"]');
+    const watermarkText = behindDocWatermark?.querySelector('.superdoc-wordart-text text') as SVGTextElement | null;
+
+    expect(behindDocWatermark).toBeTruthy();
+    expect(watermarkInHeader).toBeNull();
+    expect(behindDocWatermark?.style.zIndex).toBe('0');
+    expect(watermarkText).toBeTruthy();
+    expect(watermarkText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
+  });
+
+  it('keeps non-WordArt page-relative header media in the header container', () => {
+    const headerImageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-image',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
+    const headerImageMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const headerFragment = {
+      kind: 'image' as const,
+      blockId: 'header-image',
+      x: 0,
+      y: 40,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: false,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, headerImageBlock],
+      measures: [measure, headerImageMeasure],
+      headerProvider: () => ({
+        fragments: [headerFragment],
+        height: 100,
+        offset: 60,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
+    const behindDocImage = pageEl.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-image"]',
+    ) as HTMLElement | null;
+    const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
+
+    expect(behindDocImage).toBeNull();
+    expect(imageInHeader).toBeTruthy();
+  });
+
   it('cleans up behindDoc fragments on re-render (no accumulation)', () => {
     // This test verifies that behindDoc fragments don't accumulate across re-renders.
     // Since they're inserted directly on the page (not in header container), they must
@@ -4838,6 +5144,73 @@ describe('DomPainter', () => {
     expect(inlineDrawingEl.style.zIndex).toBe('');
   });
 
+  it('applies vector shape transforms to the shared drawing wrapper so text overlays rotate with the shape', () => {
+    const vectorShapeBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-with-text',
+      drawingKind: 'vectorShape',
+      geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textContent: {
+        parts: [
+          {
+            text: 'AUTE',
+            fontFamily: 'Arial',
+            fontSize: 32,
+            color: '#c0c0c0',
+          },
+        ],
+      },
+      textAlign: 'center',
+    };
+
+    const vectorShapeMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 100,
+      height: 50,
+      scale: 1,
+      naturalWidth: 100,
+      naturalHeight: 50,
+      geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+    };
+
+    const vectorShapeLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'drawing',
+              drawingKind: 'vectorShape',
+              blockId: 'drawing-with-text',
+              x: 30,
+              y: 40,
+              width: 100,
+              height: 50,
+              geometry: { width: 100, height: 50, rotation: 320, flipH: false, flipV: false },
+              scale: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [vectorShapeBlock], measures: [vectorShapeMeasure] });
+    painter.paint(vectorShapeLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
+    const svgEl = shapeEl?.querySelector('svg') as HTMLElement | null;
+
+    expect(shapeEl).toBeTruthy();
+    expect(drawingInner).toBeTruthy();
+    expect(drawingInner?.style.transform).toContain('rotate(320deg)');
+    expect(shapeEl?.textContent).toContain('AUTE');
+    expect(svgEl?.style.transform).toBe('');
+  });
+
   describe('resolved paragraph rendering', () => {
     it('renders resolved paragraph lines with precomputed indent styles', () => {
       const paragraphBlock: FlowBlock = {
@@ -6050,6 +6423,58 @@ describe('DomPainter', () => {
   });
 
   describe('renderImageRun (inline image runs)', () => {
+    const renderInlineImageRun = (
+      run: Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number],
+      lineWidth = 100,
+      lineHeight = 100,
+    ) => {
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [run],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: lineWidth,
+            ascent: lineHeight,
+            descent: 0,
+            lineHeight,
+          },
+        ],
+        totalHeight: lineHeight,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: lineWidth,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+    };
+
     it('renders img element with valid data URL', () => {
       const imageBlock: FlowBlock = {
         kind: 'paragraph',
@@ -6516,6 +6941,84 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('wraps linked inline image in anchor without clipPath', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 100,
+        title: 'Image',
+        hyperlink: { url: 'https://example.com/inline', tooltip: ' Inline tooltip ' },
+      });
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const img = anchor?.querySelector('img') as HTMLImageElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.href).toBe('https://example.com/inline');
+      expect(anchor?.title).toBe('Inline tooltip');
+      expect(img?.getAttribute('title')).toBeNull();
+      expect(anchor?.firstElementChild?.tagName).toBe('IMG');
+    });
+
+    it('falls back to hyperlink URL for linked inline image title', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 100,
+        title: 'Image',
+        hyperlink: { url: 'https://superdoc.dev' },
+      });
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const img = anchor?.querySelector('img') as HTMLImageElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.title).toBe('https://superdoc.dev');
+      expect(img?.getAttribute('title')).toBeNull();
+    });
+
+    it('wraps linked inline image clip wrapper in anchor when clipPath uses positive dimensions', () => {
+      renderInlineImageRun(
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          width: 80,
+          height: 60,
+          clipPath: 'inset(10% 20% 30% 40%)',
+          hyperlink: { url: 'https://example.com/clip-wrapper' },
+        },
+        80,
+        60,
+      );
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.querySelector('.superdoc-inline-image-clip-wrapper')).toBeTruthy();
+      expect(anchor?.querySelector('.superdoc-inline-image-clip-wrapper img')).toBeTruthy();
+    });
+
+    it('wraps linked inline image clip wrapper in anchor when clipPath falls back to wrapper return path', () => {
+      renderInlineImageRun(
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          width: 0,
+          height: 60,
+          clipPath: 'inset(10% 20% 30% 40%)',
+          hyperlink: { url: 'https://example.com/fallback-wrapper' },
+        },
+        1,
+        60,
+      );
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      const wrapper = anchor?.querySelector('.superdoc-inline-image-clip-wrapper') as HTMLElement | null;
+      expect(anchor).toBeTruthy();
+      expect(wrapper).toBeTruthy();
+      expect(wrapper?.style.width).toBe('0px');
+      expect(wrapper?.querySelector('img')).toBeTruthy();
     });
 
     it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
@@ -7559,6 +8062,123 @@ describe('ImageFragment (block-level images)', () => {
       // vmlWatermark: false should still have metadata (interactive)
       const metadataAttr = imageEl?.getAttribute('data-image-metadata');
       expect(metadataAttr).toBeTruthy();
+    });
+  });
+
+  describe('hyperlink (DrawingML a:hlinkClick)', () => {
+    const makePainter = (hyperlink?: ImageHyperlink) => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'linked-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        ...(hyperlink ? { hyperlink } : {}),
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      return createDomPainter({ blocks: [block], measures: [measure] });
+    };
+
+    it('wraps linked image in <a class="superdoc-link"> with correct href', () => {
+      const painter = makePainter({ url: 'https://example.com' });
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'image' as const,
+                blockId: 'linked-img',
+                x: 20,
+                y: 20,
+                width: 100,
+                height: 50,
+              },
+            ],
+          },
+        ],
+      };
+      painter.paint(layout, mount);
+
+      const fragmentEl = mount.querySelector('.superdoc-image-fragment');
+      expect(fragmentEl).toBeTruthy();
+
+      const anchor = fragmentEl?.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor).toBeTruthy();
+      expect(anchor?.href).toBe('https://example.com/');
+      expect(anchor?.target).toBe('_blank');
+      expect(anchor?.rel).toContain('noopener');
+      expect(anchor?.getAttribute('role')).toBe('link');
+    });
+
+    it('encodes tooltip before setting title attribute', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'tip-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        hyperlink: { url: 'https://example.com', tooltip: `  ${'x'.repeat(600)}  ` },
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'tip-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+      expect(anchor?.title).toBe('x'.repeat(500));
+    });
+
+    it('does NOT wrap unlinked image in anchor', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'plain-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'plain-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link');
+      expect(anchor).toBeNull();
+
+      // Image element should still be present
+      const img = mount.querySelector('.superdoc-image-fragment img');
+      expect(img).toBeTruthy();
+    });
+
+    it('does NOT wrap image when hyperlink URL fails sanitization', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'unsafe-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        width: 100,
+        height: 50,
+        hyperlink: { url: 'javascript:alert(1)' },
+      };
+      const measure: Measure = { kind: 'image', width: 100, height: 50 };
+      const fragment = { kind: 'image' as const, blockId: 'unsafe-img', x: 0, y: 0, width: 100, height: 50 };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 300 },
+        pages: [{ number: 1, fragments: [fragment] }],
+      };
+      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const anchor = mount.querySelector('a.superdoc-link');
+      expect(anchor).toBeNull();
     });
   });
 });

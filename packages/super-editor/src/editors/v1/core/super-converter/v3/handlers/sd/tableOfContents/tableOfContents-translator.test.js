@@ -135,6 +135,25 @@ describe('sd:tableOfContents translator', () => {
         content: [{ type: 'text', text: 'stray inline' }],
       });
     });
+
+    it('filters out null and typeless children when wrapping', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [null, { type: 'text', text: 'valid' }, undefined, {}]),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'sd:tableOfContents',
+            attributes: { instruction: 'TOC \\h' },
+            elements: [{ name: 'w:r', elements: [] }],
+          },
+        ],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.content).toEqual([{ type: 'paragraph', content: [{ type: 'text', text: 'valid' }] }]);
+    });
   });
 
   describe('decode', () => {

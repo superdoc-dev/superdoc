@@ -39,6 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -51,10 +52,43 @@ import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
+import { getWordChanges } from './word-diff.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
+
+// ---------------------------------------------------------------------------
+// Character-offset → document-position mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a character offset (within the text content of a range) to the
+ * corresponding ProseMirror document position.  Needed because inline
+ * node boundaries (run open/close) create gaps in the position space
+ * that `textBetween` hides.
+ */
+function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+  let count = 0;
+  let foundPos = -1;
+
+  doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+    if (foundPos >= 0) return false;
+    if (!node.isText) return true; // descend into non-text nodes
+
+    const textStart = Math.max(pos, rangeFrom);
+    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+    const textLen = textEnd - textStart;
+
+    if (count + textLen >= charOffset) {
+      foundPos = textStart + (charOffset - count);
+    }
+    count += textLen;
+    return false;
+  });
+
+  return foundPos >= 0 ? foundPos : rangeTo;
+}
 
 // ---------------------------------------------------------------------------
 // Style resolution helpers
@@ -66,6 +100,27 @@ const DEFAULT_INLINE_POLICY: import('@superdoc/document-api').InlineStylePolicy 
   onNonUniform: 'majority',
 };
 const CORE_SET_MARK_KEYS = ['bold', 'italic', 'underline', 'strike'] as const;
+const DEBUG_TEXT_REWRITE =
+  typeof process !== 'undefined' && typeof process.env?.SUPERDOC_DEBUG_TEXT_REWRITE === 'string'
+    ? process.env.SUPERDOC_DEBUG_TEXT_REWRITE === '1'
+    : false;
+
+function debugTextRewrite(message: string, details?: Record<string, unknown>): void {
+  if (!DEBUG_TEXT_REWRITE) return;
+  console.error('[text-rewrite]', message, details ?? {});
+}
+
+type StructuredTextPayload = {
+  blocks: string[];
+  splitBefore: boolean;
+  splitAfter: boolean;
+};
+
+type InlineWrapperSpec = {
+  type: NodeType;
+  attrs: Record<string, unknown>;
+  marks: readonly ProseMirrorMark[];
+};
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
@@ -746,9 +801,112 @@ export function executeTextRewrite(
 
   const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
+  const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
 
-  const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
-  tr.replaceWith(absFrom, absTo, textNode);
+  if (structuralRewrite) {
+    const slice = buildReplacementParagraphSlice(
+      editor,
+      structuralRewrite.replacementBlocks,
+      marks,
+      structuralRewrite.paragraphAttrs,
+      step.id,
+      structuralRewrite.leadingWrappers,
+      structuralRewrite.trailingWrappers,
+      structuralRewrite.openStart,
+      structuralRewrite.openEnd,
+    );
+    try {
+      // Validate the structural replace against the current document before
+      // mutating the transaction. This lets us fall back to inline rewrite in
+      // containers that cannot host sibling paragraph nodes.
+      tr.doc.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
+      tr.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
+      return { changed: replacementText !== target.text };
+    } catch (error) {
+      debugTextRewrite('structural rewrite fell back to inline replacement', {
+        replaceFrom: structuralRewrite.replaceFrom,
+        replaceTo: structuralRewrite.replaceTo,
+        openStart: structuralRewrite.openStart,
+        openEnd: structuralRewrite.openEnd,
+        replacementBlockCount: structuralRewrite.replacementBlocks.length,
+        stepId: step.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fall back to inline replacement when the surrounding content model
+      // cannot accept multiple paragraph siblings for this textblock.
+    }
+  }
+
+  // 1. Character-level prefix/suffix trim to narrow the replacement range.
+  //    This handles cases where only a few characters differ (e.g., a "(" added
+  //    before a URL, or "YoY" → "year over year") without replacing the full range.
+  const originalText = tr.doc.textBetween(absFrom, absTo, '', '');
+  const origLen = originalText.length;
+  const replLen = replacementText.length;
+
+  let prefix = 0;
+  while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
+    prefix++;
+  }
+  if (prefix === origLen && prefix === replLen) {
+    return { changed: false }; // texts are identical
+  }
+  let suffix = 0;
+  while (
+    suffix < origLen - prefix &&
+    suffix < replLen - prefix &&
+    originalText[origLen - 1 - suffix] === replacementText[replLen - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const trimmedFrom = charOffsetToDocPos(tr.doc, absFrom, absTo, prefix);
+  const trimmedTo = charOffsetToDocPos(tr.doc, absFrom, absTo, origLen - suffix);
+  const trimmedOld = originalText.slice(prefix, origLen - suffix);
+  const trimmedNew = replacementText.slice(prefix, replLen - suffix);
+
+  // 2. Word-level diff on the trimmed range for multi-word granularity.
+  const wordChanges = getWordChanges(trimmedOld, trimmedNew);
+
+  if (wordChanges.length > 1) {
+    // Multiple word-level changes: apply each granularly.
+    const doc = tr.doc;
+    const baseSteps = tr.steps.length;
+    const mapped = wordChanges.map((change) => {
+      if (change.type === 'insert') {
+        return { ...change, docPos: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.insertAt) };
+      }
+      return {
+        ...change,
+        docFrom: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldFrom),
+        docTo: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldTo),
+      };
+    });
+
+    for (let i = 0; i < mapped.length; i++) {
+      const change = mapped[i];
+      const remap = (pos: number) => {
+        for (let s = baseSteps; s < tr.steps.length; s++) {
+          pos = tr.steps[s].getMap().map(pos);
+        }
+        return pos;
+      };
+
+      if (change.type === 'delete') {
+        tr.delete(remap(change.docFrom), remap(change.docTo));
+      } else if (change.type === 'insert') {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.insert(remap(change.docPos), node);
+      } else {
+        const node = editor.state.schema.text(change.newText, asProseMirrorMarks(marks));
+        tr.replaceWith(remap(change.docFrom), remap(change.docTo), node);
+      }
+    }
+  } else {
+    // 0 or 1 word change: replace just the trimmed range.
+    const textNode = editor.state.schema.text(trimmedNew, asProseMirrorMarks(marks));
+    tr.replaceWith(trimmedFrom, trimmedTo, textNode);
+  }
 
   return { changed: replacementText !== target.text };
 }
@@ -782,6 +940,36 @@ export function executeTextInsert(
     marks = resolvedPos.marks();
   }
 
+  const structuralInsert = resolveStructuralTextInsert(tr.doc, absPos, step);
+  if (structuralInsert) {
+    const slice = buildReplacementParagraphSlice(
+      editor,
+      structuralInsert.replacementBlocks,
+      marks,
+      structuralInsert.paragraphAttrs,
+      step.id,
+      structuralInsert.leadingWrappers,
+      structuralInsert.trailingWrappers,
+      structuralInsert.openStart,
+      structuralInsert.openEnd,
+    );
+
+    try {
+      tr.doc.replace(structuralInsert.insertAt, structuralInsert.insertAt, slice);
+      tr.replace(structuralInsert.insertAt, structuralInsert.insertAt, slice);
+      return { changed: true };
+    } catch (error) {
+      debugTextRewrite('structural insert fell back to inline insertion', {
+        insertAt: structuralInsert.insertAt,
+        openStart: structuralInsert.openStart,
+        openEnd: structuralInsert.openEnd,
+        replacementBlockCount: structuralInsert.replacementBlocks.length,
+        stepId: step.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const textNode = editor.state.schema.text(text, marks);
   tr.insert(absPos, textNode);
 
@@ -804,6 +992,60 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
+
+/**
+ * Applies alignment to the paragraph node(s) that contain the given range.
+ * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
+ * paragraphProperties.justification via tr.setNodeMarkup.
+ */
+function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
+  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
+  if (!justification) return false;
+
+  let changed = false;
+  const doc = tr.doc;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    // Only set alignment on textblock nodes (paragraphs, headings)
+    if (!node.isTextblock) return;
+
+    const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const currentJustification = existing?.justification;
+
+    if (currentJustification === justification) return;
+
+    const updated = { ...(existing ?? {}), justification };
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, paragraphProperties: updated });
+    changed = true;
+  });
+
+  return changed;
+}
+
+/**
+ * Expands a position range to cover the full content of all textblock nodes
+ * that overlap with it. Used when scope: "block" is set on a format.apply step.
+ */
+function expandToBlockBoundaries(
+  doc: import('prosemirror-model').Node,
+  from: number,
+  to: number,
+): { from: number; to: number } {
+  let expandedFrom = from;
+  let expandedTo = to;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return;
+    const blockContentStart = pos + 1;
+    const blockContentEnd = pos + node.nodeSize - 1;
+    expandedFrom = Math.min(expandedFrom, blockContentStart);
+    expandedTo = Math.max(expandedTo, blockContentEnd);
+  });
+
+  return { from: expandedFrom, to: expandedTo };
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -811,9 +1053,27 @@ export function executeStyleApply(
   step: StyleApplyStep,
   mapping: Mapping,
 ): { changed: boolean } {
-  const absFrom = mapping.map(target.absFrom);
-  const absTo = mapping.map(target.absTo);
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  let absFrom = mapping.map(target.absFrom);
+  let absTo = mapping.map(target.absTo);
+
+  // Expand to full block boundaries when scope is "block"
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -954,10 +1214,26 @@ export function executeSpanStyleApply(
   // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
-  const absFrom = mapping.map(firstSeg.absFrom, 1);
-  const absTo = mapping.map(lastSeg.absTo, -1);
+  let absFrom = mapping.map(firstSeg.absFrom, 1);
+  let absTo = mapping.map(lastSeg.absTo, -1);
 
-  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
+  if (step.args.scope === 'block') {
+    const expanded = expandToBlockBoundaries(tr.doc, absFrom, absTo);
+    absFrom = expanded.from;
+    absTo = expanded.to;
+  }
+
+  let changed = false;
+
+  if (step.args.inline) {
+    changed = applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) || changed;
+  }
+
+  if (step.args.alignment) {
+    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+  }
+
+  return { changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -991,6 +1267,417 @@ function resolveReplacementBlocks(replacement: ReplacementPayload, stepId: strin
   return normalizeReplacementText(replacement.text, stepId);
 }
 
+function resolveStructuredTextPayload(text: string, stepId: string): StructuredTextPayload {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const splitBefore = normalized.startsWith('\n');
+  const splitAfter = normalized.endsWith('\n');
+  const coreText = splitBefore || splitAfter ? normalized.replace(/^\n+/, '').replace(/\n+$/, '') : normalized;
+  const blocks = coreText.length === 0 ? [''] : normalizeReplacementText(coreText, stepId);
+
+  return {
+    blocks,
+    splitBefore,
+    splitAfter,
+  };
+}
+
+function resolveStructuredReplacementPayload(replacement: ReplacementPayload, stepId: string): StructuredTextPayload {
+  if (replacement.blocks !== undefined) {
+    if (replacement.blocks.length === 0) {
+      throw planError('INVALID_INPUT', 'replacement.blocks must contain at least one entry', stepId);
+    }
+
+    return {
+      blocks: replacement.blocks.map((block) => block.text),
+      splitBefore: false,
+      splitAfter: false,
+    };
+  }
+
+  if (replacement.text == null) {
+    throw planError('INVALID_INPUT', 'replacement must specify either text or blocks', stepId);
+  }
+
+  return resolveStructuredTextPayload(replacement.text, stepId);
+}
+
+function payloadNeedsStructuralHandling(payload: StructuredTextPayload): boolean {
+  return payload.blocks.length > 1 || payload.splitBefore || payload.splitAfter;
+}
+
+function findSharedTextblockDepth(
+  $from: ReturnType<ProseMirrorNode['resolve']>,
+  $to: ReturnType<ProseMirrorNode['resolve']>,
+): number | null {
+  const maxDepth = Math.min($from.depth, $to.depth);
+  for (let depth = maxDepth; depth >= 0; depth -= 1) {
+    if ($from.node(depth) !== $to.node(depth)) {
+      continue;
+    }
+
+    if ($from.node(depth)?.isTextblock) {
+      return depth;
+    }
+  }
+
+  return null;
+}
+
+function findAddressableInlineRangeWithinTextblock(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): { from: number; to: number } | null {
+  let inlineFrom: number | null = null;
+  let inlineTo: number | null = null;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isInline) {
+      return;
+    }
+
+    if (node.isText && node.text) {
+      const nodeFrom = Math.max(from, pos);
+      const nodeTo = Math.min(to, pos + node.text.length);
+      if (nodeFrom >= nodeTo) {
+        return;
+      }
+
+      if (inlineFrom === null) {
+        inlineFrom = nodeFrom;
+      }
+      inlineTo = nodeTo;
+      return;
+    }
+
+    if (!node.isLeaf && !node.isAtom) {
+      return;
+    }
+
+    const nodeFrom = Math.max(from, pos);
+    const nodeTo = Math.min(to, pos + node.nodeSize);
+    if (nodeFrom >= nodeTo) {
+      return;
+    }
+
+    if (inlineFrom === null) {
+      inlineFrom = nodeFrom;
+    }
+    inlineTo = nodeTo;
+  });
+
+  return inlineFrom === null || inlineTo === null ? null : { from: inlineFrom, to: inlineTo };
+}
+
+function resolveInlineWrapperChainAt(doc: ProseMirrorNode, pos: number, textblockDepth: number): InlineWrapperSpec[] {
+  const $pos = doc.resolve(pos);
+  const chain: InlineWrapperSpec[] = [];
+
+  for (let depth = textblockDepth + 1; depth <= $pos.depth; depth += 1) {
+    const node = $pos.node(depth);
+    if (!node?.isInline || node.isText) {
+      continue;
+    }
+
+    chain.push({
+      type: node.type,
+      attrs: { ...(node.attrs ?? {}) },
+      marks: node.marks,
+    });
+  }
+
+  return chain;
+}
+
+/**
+ * Strips identity attributes that must not be copied to replacement paragraphs.
+ * Shared by both range and span replacement paths to avoid drift.
+ */
+function stripIdentityAttrs(attrs: Record<string, unknown>): Record<string, unknown> | null {
+  const cloned = { ...attrs };
+  delete cloned.paraId;
+  delete cloned.sdBlockId;
+  delete cloned.nodeId;
+  delete cloned.id;
+  delete cloned.blockId;
+  delete cloned.uuid;
+  return Object.keys(cloned).length > 0 ? cloned : null;
+}
+
+function resolveStructuralRangeRewrite(
+  doc: ProseMirrorNode,
+  absFrom: number,
+  absTo: number,
+  step: TextRewriteStep,
+): {
+  replacementBlocks: string[];
+  paragraphAttrs: Record<string, unknown> | null;
+  replaceFrom: number;
+  replaceTo: number;
+  openStart: number;
+  openEnd: number;
+  leadingWrappers: InlineWrapperSpec[];
+  trailingWrappers: InlineWrapperSpec[];
+} | null {
+  if (absFrom === absTo) {
+    return null;
+  }
+
+  const payload = resolveStructuredReplacementPayload(step.args.replacement, step.id);
+  if (!payloadNeedsStructuralHandling(payload)) {
+    return null;
+  }
+
+  const $from = doc.resolve(absFrom);
+  const $to = doc.resolve(absTo);
+  const textblockDepth = findSharedTextblockDepth($from, $to);
+  if (textblockDepth === null) {
+    debugTextRewrite('structural rewrite skipped: no shared textblock', { absFrom, absTo, stepId: step.id });
+    return null;
+  }
+
+  // A "whole paragraph" text rewrite needs to cover the full addressable inline
+  // content inside the textblock. We cannot use raw content boundaries here
+  // because real documents often wrap text in inline containers like `run`,
+  // which shifts text positions inward from the paragraph's content edges.
+  const textblockStart = $from.start(textblockDepth);
+  const textblockEnd = $from.end(textblockDepth);
+  const inlineRange = findAddressableInlineRangeWithinTextblock(doc, textblockStart, textblockEnd);
+  const replacesEntireTextblock = inlineRange !== null && absFrom <= inlineRange.from && absTo >= inlineRange.to;
+  const selectionStaysWithinTextblock = inlineRange !== null && absFrom >= inlineRange.from && absTo <= inlineRange.to;
+
+  if (!replacesEntireTextblock && !selectionStaysWithinTextblock) {
+    debugTextRewrite('structural rewrite skipped: selection does not cover full inline range', {
+      absFrom,
+      absTo,
+      textblockDepth,
+      textblockType: $from.node(textblockDepth).type.name,
+      textblockStart,
+      textblockEnd,
+      inlineRange,
+      stepId: step.id,
+    });
+    return null;
+  }
+
+  const effectiveBlocks = [...payload.blocks];
+  if (payload.splitBefore) {
+    effectiveBlocks.unshift('');
+  }
+  if (payload.splitAfter) {
+    effectiveBlocks.push('');
+  }
+
+  if (replacesEntireTextblock) {
+    if (effectiveBlocks.length <= 1) {
+      debugTextRewrite('structural rewrite skipped: whole-textblock rewrite resolved to one block', {
+        replacementBlocks: effectiveBlocks,
+        stepId: step.id,
+      });
+      return null;
+    }
+
+    const replaceFrom = $from.before(textblockDepth);
+    const replaceTo = $from.after(textblockDepth);
+    debugTextRewrite('structural rewrite enabled', {
+      absFrom,
+      absTo,
+      textblockDepth,
+      textblockType: $from.node(textblockDepth).type.name,
+      inlineRange,
+      replaceFrom,
+      replaceTo,
+      replacementBlockCount: effectiveBlocks.length,
+      openStart: 0,
+      openEnd: 0,
+      stepId: step.id,
+    });
+
+    return {
+      replacementBlocks: effectiveBlocks,
+      paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+      replaceFrom,
+      replaceTo,
+      openStart: 0,
+      openEnd: 0,
+      leadingWrappers: [],
+      trailingWrappers: [],
+    };
+  }
+
+  const leadingWrappers = resolveInlineWrapperChainAt(doc, absFrom, textblockDepth);
+  const trailingWrappers = resolveInlineWrapperChainAt(doc, absTo, textblockDepth);
+  const openStart = 1 + leadingWrappers.length;
+  const openEnd = 1 + trailingWrappers.length;
+  debugTextRewrite('structural rewrite enabled', {
+    absFrom,
+    absTo,
+    textblockDepth,
+    textblockType: $from.node(textblockDepth).type.name,
+    inlineRange,
+    replaceFrom: absFrom,
+    replaceTo: absTo,
+    replacementBlockCount: effectiveBlocks.length,
+    openStart,
+    openEnd,
+    leadingWrapperDepth: leadingWrappers.length,
+    trailingWrapperDepth: trailingWrappers.length,
+    stepId: step.id,
+  });
+
+  return {
+    replacementBlocks: effectiveBlocks,
+    paragraphAttrs: stripIdentityAttrs($from.node(textblockDepth).attrs as Record<string, unknown>),
+    replaceFrom: absFrom,
+    replaceTo: absTo,
+    openStart,
+    openEnd,
+    leadingWrappers,
+    trailingWrappers,
+  };
+}
+
+function resolveStructuralTextInsert(
+  doc: ProseMirrorNode,
+  absPos: number,
+  step: TextInsertStep,
+): {
+  replacementBlocks: string[];
+  paragraphAttrs: Record<string, unknown> | null;
+  insertAt: number;
+  openStart: number;
+  openEnd: number;
+  leadingWrappers: InlineWrapperSpec[];
+  trailingWrappers: InlineWrapperSpec[];
+} | null {
+  const text = step.args.content.text;
+  if (!text) {
+    return null;
+  }
+
+  const payload = resolveStructuredTextPayload(text, step.id);
+  if (!payloadNeedsStructuralHandling(payload)) {
+    return null;
+  }
+
+  const $pos = doc.resolve(absPos);
+  const textblockDepth = findSharedTextblockDepth($pos, $pos);
+  if (textblockDepth === null) {
+    debugTextRewrite('structural insert skipped: no shared textblock', { absPos, stepId: step.id });
+    return null;
+  }
+
+  const wrappers = resolveInlineWrapperChainAt(doc, absPos, textblockDepth);
+  const effectiveBlocks = [...payload.blocks];
+  if (payload.splitBefore) {
+    effectiveBlocks.unshift('');
+  }
+  if (payload.splitAfter) {
+    effectiveBlocks.push('');
+  }
+  const openStart = 1 + wrappers.length;
+  const openEnd = 1 + wrappers.length;
+  debugTextRewrite('structural insert enabled', {
+    absPos,
+    textblockDepth,
+    textblockType: $pos.node(textblockDepth).type.name,
+    replacementBlockCount: effectiveBlocks.length,
+    openStart,
+    openEnd,
+    wrapperDepth: wrappers.length,
+    stepId: step.id,
+  });
+
+  return {
+    replacementBlocks: effectiveBlocks,
+    paragraphAttrs: stripIdentityAttrs($pos.node(textblockDepth).attrs as Record<string, unknown>),
+    insertAt: absPos,
+    openStart,
+    openEnd,
+    leadingWrappers: wrappers,
+    trailingWrappers: wrappers,
+  };
+}
+
+function buildReplacementParagraphNodes(
+  editor: Editor,
+  replacementBlocks: string[],
+  marks: readonly unknown[],
+  paragraphAttrs: Record<string, unknown> | null,
+  stepId: string,
+  leadingWrappers: InlineWrapperSpec[],
+  trailingWrappers: InlineWrapperSpec[],
+): ProseMirrorNode[] {
+  const { schema } = editor.state;
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) {
+    throw planError('INVALID_INPUT', 'paragraph node type not in schema', stepId);
+  }
+
+  const wrapInlineContent = (contentNode: ProseMirrorNode | null, wrappers: InlineWrapperSpec[]): ProseMirrorNode => {
+    let content = contentNode;
+
+    for (let index = wrappers.length - 1; index >= 0; index -= 1) {
+      const wrapper = wrappers[index];
+      content =
+        wrapper.type.createAndFill(wrapper.attrs, content ?? undefined, wrapper.marks) ??
+        wrapper.type.create(wrapper.attrs, content ?? undefined, wrapper.marks);
+    }
+
+    if (!content) {
+      throw planError('INVALID_INPUT', 'could not build inline wrapper content', stepId);
+    }
+
+    return content;
+  };
+
+  const defaultWrappers = leadingWrappers.length > 0 ? leadingWrappers : trailingWrappers;
+
+  return replacementBlocks.map((text, index) => {
+    const textNode = text.length > 0 ? schema.text(text, asProseMirrorMarks(marks)) : null;
+    const wrappers =
+      index === 0
+        ? leadingWrappers.length > 0
+          ? leadingWrappers
+          : defaultWrappers
+        : index === replacementBlocks.length - 1
+          ? trailingWrappers.length > 0
+            ? trailingWrappers
+            : defaultWrappers
+          : defaultWrappers;
+    const content =
+      textNode == null
+        ? wrappers.length > 0
+          ? wrapInlineContent(null, wrappers)
+          : undefined
+        : wrapInlineContent(textNode, wrappers);
+    return paragraphType.createAndFill(paragraphAttrs, content) ?? paragraphType.create(paragraphAttrs, content);
+  });
+}
+
+function buildReplacementParagraphSlice(
+  editor: Editor,
+  replacementBlocks: string[],
+  marks: readonly unknown[],
+  paragraphAttrs: Record<string, unknown> | null,
+  stepId: string,
+  leadingWrappers: InlineWrapperSpec[],
+  trailingWrappers: InlineWrapperSpec[],
+  openStart: number,
+  openEnd: number,
+): Slice {
+  const nodes = buildReplacementParagraphNodes(
+    editor,
+    replacementBlocks,
+    marks,
+    paragraphAttrs,
+    stepId,
+    leadingWrappers,
+    trailingWrappers,
+  );
+  return new Slice(Fragment.from(nodes), openStart, openEnd);
+}
+
 function resolveInheritedParagraphAttrsForReplacement(
   editor: Editor,
   target: CompiledSpanTarget,
@@ -1005,15 +1692,7 @@ function resolveInheritedParagraphAttrsForReplacement(
     return null;
   }
 
-  const attrs = { ...(sourceAttrs as Record<string, unknown>) };
-  delete attrs.paraId;
-  delete attrs.sdBlockId;
-  delete attrs.nodeId;
-  delete attrs.id;
-  delete attrs.blockId;
-  delete attrs.uuid;
-
-  return Object.keys(attrs).length > 0 ? attrs : null;
+  return stripIdentityAttrs(sourceAttrs as Record<string, unknown>);
 }
 
 // ---------------------------------------------------------------------------

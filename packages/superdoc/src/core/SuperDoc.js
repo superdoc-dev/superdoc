@@ -1160,7 +1160,6 @@ export class SuperDoc extends EventEmitter {
 
     this.toolbar = new SuperToolbar(config);
 
-    this.toolbar.on('superdoc-command', this.onToolbarCommand.bind(this));
     this.toolbar.on('exception', this.config.onException);
     this.once('editorCreate', () => this.toolbar.updateToolbarState());
   }
@@ -1214,6 +1213,31 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Scroll to any document element by its ID.
+   *
+   * Pass any element ID — paragraph nodeId, comment entityId, or tracked
+   * change entityId. The method resolves the element type automatically
+   * and scrolls to it.
+   *
+   * @param {string} elementId - The element's stable ID.
+   * @returns {Promise<boolean>} Whether the element was found and scrolled to.
+   *
+   * @example
+   * // Navigate to a paragraph by its nodeId
+   * await superdoc.scrollToElement('5AF80E61');
+   *
+   * // Navigate to a comment by its entityId
+   * await superdoc.scrollToElement('imported-25def254');
+   */
+  async scrollToElement(elementId) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) return false;
+    const presentationEditor = storeDocs[0].getPresentationEditor?.();
+    if (!presentationEditor?.scrollToElement) return false;
+    return presentationEditor.scrollToElement(elementId);
+  }
+
+  /**
    * Toggle the custom context menu globally.
    * Updates both flow editors and PresentationEditor instances so downstream listeners can short-circuit early.
    * @param {boolean} disabled
@@ -1233,20 +1257,6 @@ export class SuperDoc extends EventEmitter {
         editor.setOptions({ disableContextMenu: nextValue });
       }
     });
-  }
-
-  /**
-   * Triggered when a toolbar command is executed
-   * @param {Object} param0
-   * @param {Object} param0.item The toolbar item that was clicked
-   * @param {string} param0.argument The argument passed to the command
-   */
-  onToolbarCommand({ item, argument }) {
-    if (item.command === 'setDocumentMode') {
-      this.setDocumentMode(argument);
-    } else if (item.command === 'setZoom') {
-      this.superdocStore.activeZoom = argument;
-    }
   }
 
   /**
@@ -1325,11 +1335,6 @@ export class SuperDoc extends EventEmitter {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'editing');
     });
-
-    if (this.toolbar) {
-      this.toolbar.documentMode = 'editing';
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #setModeSuggesting() {
@@ -1346,11 +1351,6 @@ export class SuperDoc extends EventEmitter {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'suggesting');
     });
-
-    if (this.toolbar) {
-      this.toolbar.documentMode = 'suggesting';
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #setModeViewing() {
@@ -1376,11 +1376,6 @@ export class SuperDoc extends EventEmitter {
       }
       this.#applyDocumentMode(doc, 'viewing');
     });
-
-    if (this.toolbar) {
-      this.toolbar.documentMode = 'viewing';
-      this.toolbar.updateToolbarState();
-    }
   }
 
   #syncViewingVisibility() {
@@ -1456,11 +1451,6 @@ export class SuperDoc extends EventEmitter {
     // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
     if (this.superdocStore) {
       this.superdocStore.activeZoom = percent;
-    }
-
-    // Update toolbar UI so the dropdown label reflects the new zoom level
-    if (this.toolbar && typeof this.toolbar.setZoom === 'function') {
-      this.toolbar.setZoom(percent);
     }
 
     this.emit('zoomChange', { zoom: percent });
@@ -1710,6 +1700,9 @@ export class SuperDoc extends EventEmitter {
     if (this.#surfaceManager) {
       this.#surfaceManager.destroy();
     }
+
+    this.toolbar?.destroy();
+
     // Unmount the app FIRST so editors are destroyed — this triggers each
     // extension's onDestroy() which cancels debounced Y.js writes and
     // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.

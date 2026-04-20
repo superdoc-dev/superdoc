@@ -1243,6 +1243,117 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('reuses a peer tracked-change thread during single-document replay even when fileId differs', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'shared-id-1' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'shared-id-1' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'shared-id-1',
+        trackedChange: true,
+        trackedChangeText: 'Existing peer text',
+        fileId: 'peer-doc-id',
+      },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    const matchingComments = store.commentsList.filter((comment) => comment.commentId === 'shared-id-1');
+    expect(matchingComments).toHaveLength(1);
+    expect(matchingComments[0]).toEqual(
+      expect.objectContaining({
+        commentId: 'shared-id-1',
+        trackedChange: true,
+        trackedChangeText: 'tracked-shared-id-1',
+        fileId: 'peer-doc-id',
+      }),
+    );
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(1);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('rebuilds peer replay tracked-change threads locally without rebroadcasting them', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'shared-id-1' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'shared-id-1' } } } }]);
+
+    store.commentsList = [];
+
+    store.syncTrackedChangeComments({ superdoc, editor, broadcastChanges: false });
+
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'shared-id-1',
+        trackedChange: true,
+        trackedChangeText: 'tracked-shared-id-1',
+        fileId: 'doc-1',
+      }),
+    ]);
+    expect(syncCommentsToClientsMock).not.toHaveBeenCalled();
+    expect(superdoc.emit).not.toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('prunes peer tracked-change threads during single-document replay even when fileId differs', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    groupChangesMock.mockReturnValue([]);
+
+    store.commentsList = [
+      { commentId: 'tc-peer', trackedChange: true, trackedChangeText: 'Peer text', fileId: 'peer-doc-id' },
+      { commentId: 'tc-peer-reply', parentCommentId: 'tc-peer', fileId: 'peer-doc-id' },
+    ];
+    store.activeComment = 'tc-peer-reply';
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toEqual([]);
+    expect(store.activeComment).toBeNull();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
   it('creates tracked-change comments for active document when another document has the same id', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };
@@ -1388,6 +1499,55 @@ describe('comments-store', () => {
     });
 
     expect(store.commentsList[0].createdTime).toBe(now);
+  });
+
+  it('loads imported comments without creatorName metadata', () => {
+    store.init({
+      readOnly: true,
+      allowResolve: false,
+      comments: [],
+    });
+
+    expect(() =>
+      store.processLoadedDocxComments({
+        superdoc: __mockSuperdoc,
+        editor: null,
+        comments: [
+          {
+            commentId: 'c-missing-author',
+            creatorEmail: 'imported@example.com',
+            createdTime: 123,
+            elements: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'run',
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Imported comment text',
+                        attrs: {
+                          type: 'element',
+                          attributes: {},
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        documentId: 'doc-1',
+      }),
+    ).not.toThrow();
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0].commentId).toBe('c-missing-author');
+    expect(store.commentsList[0].importedAuthor).toEqual({
+      email: 'imported@example.com',
+    });
   });
 
   describe('clearEditorCommentPositions', () => {

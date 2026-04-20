@@ -52,6 +52,35 @@ describe('layoutHeaderFooterWithCache', () => {
     expect(measureBlock).toHaveBeenCalledTimes(1);
   });
 
+  it('returns no layouts when the body layout has zero pages', async () => {
+    const sections = {
+      default: [
+        {
+          kind: 'paragraph',
+          id: 'page-token-footer',
+          runs: [
+            { text: 'Page ', fontFamily: 'Arial', fontSize: 16 },
+            { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 16 },
+          ],
+        } satisfies FlowBlock,
+      ],
+    };
+    const measureBlock = vi.fn(async () => makeMeasure(12));
+
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 300, height: 40 },
+      measureBlock,
+      undefined,
+      undefined,
+      () => ({ displayText: '1', totalPages: 0 }),
+      'footer',
+    );
+
+    expect(result).toEqual({});
+    expect(measureBlock).not.toHaveBeenCalled();
+  });
+
   describe('integration test', () => {
     it('full pipeline: PM JSON with page tokens → FlowBlocks → Measures → Layout', async () => {
       // 1. Create PM JSON with page number tokens (simulates header/footer from SuperConverter)

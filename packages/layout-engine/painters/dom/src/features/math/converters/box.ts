@@ -106,9 +106,17 @@ export const convertBorderBox: MathObjectConverter = (node, doc, convertChildren
     return mrow;
   }
 
+  // Wrap the content in an inner <mrow> before placing it inside <menclose>.
+  // MathML Core dropped <menclose>, so Chrome treats it as unknown and does
+  // not apply row layout — each child would render as its own `block math`
+  // line, stacking vertically. An inner <mrow> is a MathML Core element, so
+  // the row layout runs on its children and everything stays inline.
+  const innerMrow = doc.createElementNS(MATHML_NS, 'mrow');
+  innerMrow.appendChild(content);
+
   const menclose = doc.createElementNS(MATHML_NS, 'menclose');
   menclose.setAttribute('notation', notations.join(' '));
-  menclose.appendChild(content);
+  menclose.appendChild(innerMrow);
 
   return menclose;
 };

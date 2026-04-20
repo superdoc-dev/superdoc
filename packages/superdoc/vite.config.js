@@ -165,7 +165,7 @@ export default defineConfig(({ mode, command }) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
-        'tests/umd-smoke/**',
+        'tests/cdn-smoke/**',
       ],
       coverage: {
         provider: 'v8',

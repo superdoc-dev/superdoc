@@ -1411,7 +1411,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1,
           width: 0,
-          maxFontSize: 12, // Default font size for tabs
+          maxFontSize: lastFontSize,
+          maxFontInfo: hasSeenTextRun ? undefined : fallbackFontInfo,
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [],
           spaceCount: 0,
@@ -1432,7 +1433,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
 
-      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, 12);
+      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lastFontSize);
       currentLine.toRun = runIndex;
       currentLine.toChar = 1; // tab is a single character
       let currentLeader: LeaderDecoration | null = null;

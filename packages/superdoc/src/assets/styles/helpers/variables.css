@@ -295,4 +295,7 @@
   --sd-proofing-style-color: #805ad5;
   --sd-proofing-underline-thickness: 1.5px;
   --sd-proofing-underline-offset: 2px;
+
+  /* Math: rendered equation font */
+  --sd-math-font-family: 'Cambria Math', math;
 }

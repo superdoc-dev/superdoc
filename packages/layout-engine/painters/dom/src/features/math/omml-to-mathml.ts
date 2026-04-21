@@ -177,7 +177,10 @@ export function convertOmmlToMathml(ommlJson: unknown, doc: Document): Element |
 
   const root = ommlJson as OmmlJsonNode;
   const mathEl = doc.createElementNS(MATHML_NS, 'math');
-  mathEl.setAttribute('style', 'font-family: "Cambria Math", math');
+  // Fallback chain covers consumers that embed painter-dom without the
+  // superdoc stylesheet — the `var()` still resolves to Cambria Math then
+  // the generic `math` family.
+  mathEl.setAttribute('style', 'font-family: var(--sd-math-font-family, "Cambria Math", math)');
 
   if (root.name === 'm:oMathPara') {
     mathEl.setAttribute('display', 'block');

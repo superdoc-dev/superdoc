@@ -40,6 +40,19 @@ describe('convertOmmlToMathml', () => {
     expect(mi!.textContent).toBe('x');
   });
 
+  it('emits font-family via --sd-math-font-family with Cambria Math fallback (SD-2634)', () => {
+    // Consumers override the math font via the --sd-math-font-family CSS
+    // variable. When the variable is unset, the var() fallback resolves to
+    // Cambria Math so embedders of the painter without the superdoc
+    // stylesheet still render correctly.
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result!.getAttribute('style')).toBe('font-family: var(--sd-math-font-family, "Cambria Math", math)');
+  });
+
   it('classifies numbers as <mn>', () => {
     const omml = {
       name: 'm:oMath',

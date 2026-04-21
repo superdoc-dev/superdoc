@@ -451,7 +451,7 @@ describe('executeTextInsert: setMarks tri-state directives', () => {
 });
 
 // ---------------------------------------------------------------------------
-// executeTextInsert: tab character → tab node conversion (SD-2567)
+// executeTextInsert: tab character → tab node conversion
 // ---------------------------------------------------------------------------
 
 describe('executeTextInsert: tab character to tab node conversion', () => {
@@ -473,11 +473,11 @@ describe('executeTextInsert: tab character to tab node conversion', () => {
 
     expect(outcome).toEqual({ changed: true });
     expect(tabCreate).toHaveBeenCalledTimes(1);
-    // Should insert a Fragment, not a plain text node
+    // Inserted value should be a Fragment holding exactly one tab node.
     const inserted = tr.insert.mock.calls[0][1];
-    expect(
-      Array.isArray(inserted.content) || inserted.childCount !== undefined || inserted.type?.name === 'tab' || true,
-    ).toBe(true);
+    expect(typeof inserted.childCount).toBe('number');
+    expect(inserted.childCount).toBe(1);
+    expect(inserted.firstChild?.type?.name).toBe('tab');
     // schema.text should NOT have been called with '\t'
     const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
     const tabTextCalls = textCalls.filter(([t]: [string]) => t === '\t');
@@ -501,8 +501,13 @@ describe('executeTextInsert: tab character to tab node conversion', () => {
     const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
 
     expect(outcome).toEqual({ changed: true });
-    // One tab node created
+    // Fragment layout: text('hello'), tab, text('world').
     expect(tabCreate).toHaveBeenCalledTimes(1);
+    const inserted = tr.insert.mock.calls[0][1];
+    expect(inserted.childCount).toBe(3);
+    expect(inserted.child(0)?.text).toBe('hello');
+    expect(inserted.child(1)?.type?.name).toBe('tab');
+    expect(inserted.child(2)?.text).toBe('world');
     // schema.text called for 'hello' and 'world', but never for '\t'
     const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
     expect(textCalls.map(([t]: [string]) => t)).toEqual(['hello', 'world']);

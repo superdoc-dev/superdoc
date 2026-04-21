@@ -129,6 +129,9 @@ export function createStoryEditor(
   const inheritedExtensions = parentEditor.options.extensions?.length
     ? [...parentEditor.options.extensions]
     : undefined;
+  const inheritedTrackedChanges = parentEditor.options.trackedChanges
+    ? { ...parentEditor.options.trackedChanges }
+    : undefined;
   const StoryEditorClass = parentEditor.constructor as new (options: Partial<EditorOptions>) => Editor;
 
   const storyEditor = new StoryEditorClass({
@@ -145,6 +148,7 @@ export function createStoryEditor(
     mediaFiles: media,
     fonts: parentEditor.options.fonts,
     user: parentEditor.options.user,
+    trackedChanges: inheritedTrackedChanges,
     isHeaderOrFooter,
     isHeadless,
     pagination: false,
@@ -157,7 +161,9 @@ export function createStoryEditor(
     // Only set element when not headless
     ...(isHeadless ? {} : { element }),
 
-    // Disable collaboration, comments, and tracked changes for story editors
+    // Disable collaboration and comment threading for story editors.
+    // Tracked-change configuration is inherited from the parent editor so
+    // suggesting-mode story sessions honor the same replacement model.
     ydoc: null,
     collaborationProvider: null,
     isCommentsEnabled: false,

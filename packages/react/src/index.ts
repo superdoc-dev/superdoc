@@ -20,10 +20,10 @@ export type {
 
   // Callback event types
   Editor,
+  EditorSurface,
   SuperDocReadyEvent,
   SuperDocEditorCreateEvent,
   SuperDocEditorUpdateEvent,
-  SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
 } from './types';

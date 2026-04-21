@@ -5509,6 +5509,7 @@ export class DomPainter {
       // Position and z-index on the image only (not the line) so resize overlay can stack above.
       img.style.position = 'relative';
       img.style.zIndex = '1';
+      img.style.maxWidth = '100%';
     }
 
     // Apply rotation and flip transforms from OOXML a:xfrm

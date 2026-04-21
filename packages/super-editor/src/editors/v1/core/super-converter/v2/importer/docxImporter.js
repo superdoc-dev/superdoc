@@ -1241,7 +1241,7 @@ function getNumberingDefinitions(docx, converter) {
  * @param {Object} docx The parsed docx object
  * @returns {Boolean} True if the document has alternating headers and footers, false otherwise
  */
-const isAlternatingHeadersOddEven = (docx) => {
+export const isAlternatingHeadersOddEven = (docx) => {
   const settings = docx['word/settings.xml'];
   if (!settings || !settings.elements?.length) return false;
 

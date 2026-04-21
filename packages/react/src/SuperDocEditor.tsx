@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type ForwardedRef,
 } from 'react';
-import { useStableId } from './utils';
+import { useStableId, useMemoByValue } from './utils';
 import type {
   CallbackProps,
   DocumentMode,
@@ -50,8 +50,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onException,
     // Key props that trigger rebuild when changed
     document: documentProp,
-    user,
-    users,
+    user: userProp,
+    users: usersProp,
     modules,
     // All other props passed through
     ...restProps
@@ -60,6 +60,13 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   // Apply defaults
   const documentMode = props.documentMode ?? 'editing';
   const role = props.role ?? 'editor';
+
+  // `user` and `users` are memoized by value so inline literals don't
+  // trigger a rebuild. `modules` stays on reference identity — it can
+  // carry functions and live objects (e.g. `collaboration.provider`)
+  // that a consumer may intentionally swap. See SD-2635.
+  const user = useMemoByValue(userProp);
+  const users = useMemoByValue(usersProp);
 
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
@@ -223,8 +230,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       destroyed = true;
     };
     // Only these props trigger a full rebuild. Other props (rulers, etc.) are
-    // initial values - use getInstance() methods to change them at runtime.
-    // Note: restProps is intentionally excluded to avoid rebuilds on every render.
+    // initial values — use getInstance() methods to change them at runtime.
+    // restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
   }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
 

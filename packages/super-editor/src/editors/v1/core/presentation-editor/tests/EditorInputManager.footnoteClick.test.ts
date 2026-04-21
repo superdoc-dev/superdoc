@@ -92,6 +92,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         },
         selection: { $anchor: null },
         storedMarks: null,
+        comments$: { activeThreadId: null },
       },
       view: {
         dispatch: vi.fn(),
@@ -196,7 +197,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
-  it('prioritizes note activation over tracked-change highlight handling on footnote clicks', () => {
+  it('activates the note session and syncs the tracked-change bubble on footnote clicks', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
 
@@ -221,10 +222,10 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       { storyType: 'footnote', noteId: '1' },
       expect.objectContaining({ clientX: 12, clientY: 10 }),
     );
-    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+    expect(mockEditor.emit).toHaveBeenCalledWith(
       'commentsUpdate',
       expect.objectContaining({
-        type: expect.anything(),
+        activeCommentId: 'tc-1',
       }),
     );
   });
@@ -401,7 +402,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(activeNoteEditor.view.focus).toHaveBeenCalled();
   });
 
-  it('does not route tracked-change clicks through comment selection while a note is actively being edited', () => {
+  it('keeps note hit testing while syncing the tracked-change bubble during active note editing', () => {
     const activeNoteEditor = createActiveSessionEditor();
     (mockDeps.getActiveStorySession as Mock).mockReturnValue({
       kind: 'note',
@@ -439,10 +440,10 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(18, 16);
     expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
-    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+    expect(mockEditor.emit).toHaveBeenCalledWith(
       'commentsUpdate',
       expect.objectContaining({
-        type: expect.anything(),
+        activeCommentId: 'tc-1',
       }),
     );
   });
@@ -492,6 +493,83 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(resolvePointerPositionHit).not.toHaveBeenCalled();
     expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
     expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('syncs the tracked-change bubble for clicks inside the active header editor host', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const activeEditorHost = document.createElement('div');
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.className = 'track-insert';
+    trackedChangeEl.setAttribute('data-id', 'tc-header-1');
+    activeEditorHost.appendChild(trackedChangeEl);
+    viewportHost.appendChild(activeEditorHost);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+      overlayManager: { getActiveEditorHost: vi.fn(() => activeEditorHost) },
+    });
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 20,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: 'tc-header-1',
+      }),
+    );
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+  });
+
+  it('clears the active tracked-change bubble for plain clicks inside the active header editor host', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const activeEditorHost = document.createElement('div');
+    const plainTextEl = document.createElement('span');
+    plainTextEl.textContent = 'Generic content header';
+    activeEditorHost.appendChild(plainTextEl);
+    viewportHost.appendChild(activeEditorHost);
+
+    (mockEditor.state as typeof mockEditor.state & { comments$: { activeThreadId: string | null } }).comments$ = {
+      activeThreadId: 'tc-header-1',
+    };
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+      overlayManager: { getActiveEditorHost: vi.fn(() => activeEditorHost) },
+    });
+
+    const PointerEventImpl = getPointerEventImpl();
+    plainTextEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: null,
+      }),
+    );
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
   });
 
   it('resets multi-click state when the active editing target changes', () => {

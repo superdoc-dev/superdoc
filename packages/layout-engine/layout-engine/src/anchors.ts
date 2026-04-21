@@ -163,8 +163,45 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
 }
 
 /**
+ * Check if an anchored table should be pre-registered (before any paragraphs are laid out).
+ * Tables with vRelativeFrom='margin' or 'page' position themselves relative to the page,
+ * not relative to their anchor paragraph. These need to be registered first so ALL
+ * paragraphs can wrap around them.
+ */
+export function isPageRelativeTableAnchor(block: TableBlock): boolean {
+  const vRelativeFrom = block.anchor?.vRelativeFrom;
+  return vRelativeFrom === 'margin' || vRelativeFrom === 'page';
+}
+
+/**
+ * Collect anchored tables that should be pre-registered before the layout loop.
+ * These are tables with vRelativeFrom='margin' or 'page' that affect all paragraphs.
+ */
+export function collectPreRegisteredAnchoredTables(blocks: FlowBlock[], measures: Measure[]): AnchoredTable[] {
+  const result: AnchoredTable[] = [];
+  const len = Math.min(blocks.length, measures.length);
+
+  for (let i = 0; i < len; i += 1) {
+    const block = blocks[i];
+    const measure = measures[i];
+    if (block.kind !== 'table' || measure?.kind !== 'table') continue;
+    const tableBlock = block as TableBlock;
+    if (!tableBlock.anchor?.isAnchored) continue;
+    if (isPageRelativeTableAnchor(tableBlock)) {
+      result.push({ block: tableBlock, measure: measure as TableMeasure });
+    }
+  }
+
+  return result;
+}
+
+/**
  * Collect anchored/floating tables mapped to their anchor paragraph index.
  * Also returns anchored tables that have no paragraph to attach to.
+ *
+ * Tables with vRelativeFrom='margin' or 'page' are excluded here — they are handled
+ * by collectPreRegisteredAnchoredTables so earlier paragraphs on the page see their
+ * exclusion zone.
  */
 export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]): AnchoredTableCollection {
   const len = Math.min(blocks.length, measures.length);
@@ -183,6 +220,9 @@ export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]):
 
     // Check if the table is anchored/floating
     if (!tableBlock.anchor?.isAnchored) continue;
+
+    // Page/margin-relative tables are pre-registered — skip them here.
+    if (isPageRelativeTableAnchor(tableBlock)) continue;
 
     // Heuristic: anchor to explicit paragraph id, else nearest preceding paragraph, else nearest next paragraph
     const anchorParagraphId =

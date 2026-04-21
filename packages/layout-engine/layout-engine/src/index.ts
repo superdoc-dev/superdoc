@@ -51,6 +51,7 @@ import {
   collectAnchoredDrawings,
   collectAnchoredTables,
   collectPreRegisteredAnchors,
+  collectPreRegisteredAnchoredTables,
   isPageRelativeAnchor,
 } from './anchors.js';
 import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
@@ -1594,6 +1595,48 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
   }
 
+  // Pre-register page/margin-relative anchored TABLES (SD-2562).
+  // Mirrors the image pre-registration above so exclusion zones are active for ALL
+  // paragraphs on the page, not just those laid out after the anchor paragraph.
+  // Without this, a page-anchored table positioned above its anchor paragraph paints
+  // over already-laid earlier paragraphs instead of making them wrap around it.
+  const preRegisteredTables = collectPreRegisteredAnchoredTables(blocks, measures);
+  const preRegisteredTablePositions = new Map<string, { anchorX: number; anchorY: number }>();
+  for (const entry of preRegisteredTables) {
+    const state = paginator.ensurePage();
+    const anchor = entry.block.anchor;
+    if (!anchor) continue;
+
+    const tableWidth = entry.measure.totalWidth ?? 0;
+    const tableHeight = entry.measure.totalHeight ?? 0;
+    const pageContentTop = state.topMargin;
+    const pageContentBottom = state.contentBottom;
+    const pageHeight = pageContentBottom + (state.page.margins?.bottom ?? activeBottomMargin);
+
+    // For page/margin anchoring, paragraphStartY/paragraphCursorY don't apply —
+    // pass pageContentTop for both so any accidental paragraph-branch read is harmless.
+    const anchorY = computeTableAnchorY(
+      anchor,
+      tableHeight,
+      pageContentTop,
+      pageContentTop,
+      pageContentTop,
+      pageContentBottom,
+      pageHeight,
+    );
+    const anchorX = computeTableAnchorX(
+      anchor,
+      state.columnIndex,
+      getCurrentColumns(),
+      tableWidth,
+      { left: activeLeftMargin, right: activeRightMargin },
+      activePageSize.w,
+    );
+
+    floatManager.registerTable(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
+    preRegisteredTablePositions.set(entry.block.id, { anchorX, anchorY });
+  }
+
   // Pre-compute keepNext chains for correct pagination grouping.
   // Word treats consecutive paragraphs with keepNext=true as indivisible units.
   const keepNextChains = computeKeepNextChains(blocks);
@@ -2269,6 +2312,25 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'table') {
         throw new Error(`layoutDocument: expected table measure for block ${block.id}`);
       }
+
+      // Pre-registered page/margin-anchored tables: emit the fragment at the
+      // already-resolved position (exclusion zone was registered before PASS 2).
+      const preRegTablePos = preRegisteredTablePositions.get(block.id);
+      if (preRegTablePos && !placedAnchoredTableIds.has(block.id)) {
+        const state = paginator.ensurePage();
+        const tableBlock = block as TableBlock;
+        const tableMeasure = measure as TableMeasure;
+        const fragment = createAnchoredTableFragment(
+          tableBlock,
+          tableMeasure,
+          preRegTablePos.anchorX,
+          preRegTablePos.anchorY,
+        );
+        state.page.fragments.push(fragment);
+        placedAnchoredTableIds.add(tableBlock.id);
+        continue;
+      }
+
       layoutTableBlock({
         block: block as TableBlock,
         measure: measure as TableMeasure,

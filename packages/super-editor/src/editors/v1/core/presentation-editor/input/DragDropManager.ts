@@ -2,15 +2,24 @@
  * DragDropManager - Consolidated drag and drop handling for PresentationEditor.
  *
  * This manager handles all drag/drop events for:
- * - Field annotations (internal moves and external inserts)
+ * - Field annotations, structured content, and existing images (internal moves)
  * - Image files (drag from OS/other apps into the editor)
  * - Window-level fallback for drops on overlay elements
  */
 
 import { TextSelection } from 'prosemirror-state';
 import { DATASET_KEYS } from '@superdoc/dom-contract';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../Editor.js';
 import type { PositionHit } from '@superdoc/layout-bridge';
+import {
+  buildInternalObjectDragPayload,
+  INTERNAL_OBJECT_MIME_TYPE,
+  parseInternalObjectDragPayload,
+  type InternalObjectDragPayload,
+} from './internal-drag-payloads.js';
+import { canInsertNodeAtPosition, createInternalNodeMoveTransaction } from './internal-node-move.js';
+import { findStructuredContentBlockById, findStructuredContentInlineById } from './structured-content-resolution.js';
 
 // =============================================================================
 // Constants
@@ -27,7 +36,7 @@ export const FIELD_ANNOTATION_DATA_TYPE = 'fieldAnnotation' as const;
 // =============================================================================
 
 /** Classifies what kind of data a drag event carries. */
-export type DropPayloadKind = 'fieldAnnotation' | 'imageFiles' | 'none';
+export type DropPayloadKind = 'fieldAnnotation' | 'internalObject' | 'imageFiles' | 'none';
 
 /**
  * Attributes for a field annotation node.
@@ -173,6 +182,12 @@ function isInternalDrag(event: DragEvent): boolean {
   return event.dataTransfer?.types?.includes(INTERNAL_MIME_TYPE) ?? false;
 }
 
+function hasInternalObjectType(event: DragEvent): boolean {
+  if (!event.dataTransfer) return false;
+  const types = Array.from(event.dataTransfer.types ?? []).map((type) => type.toLowerCase());
+  return types.includes(INTERNAL_OBJECT_MIME_TYPE.toLowerCase());
+}
+
 /**
  * Extracts field annotation data from a drag event's dataTransfer.
  */
@@ -191,6 +206,35 @@ function extractDragData(event: DragEvent): FieldAnnotationDragData | null {
   } catch {
     return null;
   }
+}
+
+function resolveDragSourceElement(event: DragEvent): HTMLElement | null {
+  const target = event.target as HTMLElement | null;
+  return target?.closest?.('[data-drag-source-kind]') as HTMLElement | null;
+}
+
+function resolveInternalObjectSourceRange(
+  doc: ProseMirrorNode,
+  payload: InternalObjectDragPayload,
+): { sourceStart: number; sourceEnd: number } {
+  if (payload.kind === 'structuredContent') {
+    const resolved =
+      payload.nodeType === 'structuredContentBlock'
+        ? findStructuredContentBlockById(doc, payload.sdtId)
+        : findStructuredContentInlineById(doc, payload.sdtId);
+
+    if (resolved) {
+      return {
+        sourceStart: resolved.pos,
+        sourceEnd: resolved.pos + resolved.node.nodeSize,
+      };
+    }
+  }
+
+  return {
+    sourceStart: payload.sourceStart,
+    sourceEnd: payload.sourceEnd,
+  };
 }
 
 // =============================================================================
@@ -257,6 +301,7 @@ export function getDroppedImageFiles(event: DragEvent): File[] {
  */
 export function getDropPayloadKind(event: DragEvent): DropPayloadKind {
   if (hasFieldAnnotationData(event)) return 'fieldAnnotation';
+  if (hasInternalObjectType(event)) return 'internalObject';
   if (hasPossibleFiles(event)) return 'imageFiles';
   return 'none';
 }
@@ -269,6 +314,7 @@ export class DragDropManager {
   #deps: DragDropDependencies | null = null;
   #dragOverRaf: number | null = null;
   #pendingDragOver: { x: number; y: number } | null = null;
+  #activeInternalObjectPayload: InternalObjectDragPayload | null = null;
 
   // Bound handlers for cleanup
   #boundHandleDragStart: ((e: DragEvent) => void) | null = null;
@@ -356,6 +402,7 @@ export class DragDropManager {
 
   destroy(): void {
     this.#cancelPendingDragOverSelection();
+    this.#activeInternalObjectPayload = null;
     this.unbind();
     this.#deps = null;
   }
@@ -365,29 +412,48 @@ export class DragDropManager {
   // ==========================================================================
 
   /**
-   * Handle dragstart for internal field annotations.
+   * Handle dragstart for internal editor objects.
    */
   #handleDragStart(event: DragEvent): void {
-    const target = event.target as HTMLElement;
+    const target = event.target as HTMLElement | null;
+    const sourceElement = resolveDragSourceElement(event);
+    const fieldAnnotationElement = target?.closest?.(`[${DATASET_KEYS.DRAGGABLE}="true"]`) as HTMLElement | null;
 
-    // Only handle draggable field annotations
-    if (!target?.dataset?.[DATASET_KEYS.DRAGGABLE] || target.dataset[DATASET_KEYS.DRAGGABLE] !== 'true') {
+    if (!target) {
+      this.#activeInternalObjectPayload = null;
       return;
     }
 
-    const data = extractFieldAnnotationData(target);
+    const internalObjectPayload = sourceElement ? buildInternalObjectDragPayload(sourceElement) : null;
+    const isInternalObjectSource = internalObjectPayload !== null;
+    const isFieldAnnotation = fieldAnnotationElement != null;
+    this.#activeInternalObjectPayload = isInternalObjectSource ? internalObjectPayload : null;
+
+    if (!isFieldAnnotation && !isInternalObjectSource) {
+      this.#activeInternalObjectPayload = null;
+      return;
+    }
 
     if (event.dataTransfer) {
-      const jsonData = JSON.stringify({
-        attributes: data.attributes,
-        sourceField: data,
-      });
+      if (isInternalObjectSource && internalObjectPayload) {
+        const jsonData = JSON.stringify(internalObjectPayload);
+        event.dataTransfer.setData(INTERNAL_OBJECT_MIME_TYPE, jsonData);
+        event.dataTransfer.setData('text/plain', internalObjectPayload.label);
+        event.dataTransfer.setDragImage(sourceElement ?? target, 0, 0);
+      } else {
+        const draggableTarget = fieldAnnotationElement ?? target;
+        const data = extractFieldAnnotationData(draggableTarget);
+        const jsonData = JSON.stringify({
+          attributes: data.attributes,
+          sourceField: data,
+        });
 
-      // Set in both MIME types for compatibility
-      event.dataTransfer.setData(INTERNAL_MIME_TYPE, jsonData);
-      event.dataTransfer.setData(FIELD_ANNOTATION_DATA_TYPE, jsonData);
-      event.dataTransfer.setData('text/plain', data.displayLabel ?? 'Field Annotation');
-      event.dataTransfer.setDragImage(target, 0, 0);
+        // Set in both MIME types for compatibility
+        event.dataTransfer.setData(INTERNAL_MIME_TYPE, jsonData);
+        event.dataTransfer.setData(FIELD_ANNOTATION_DATA_TYPE, jsonData);
+        event.dataTransfer.setData('text/plain', data.displayLabel ?? 'Field Annotation');
+        event.dataTransfer.setDragImage(draggableTarget, 0, 0);
+      }
       event.dataTransfer.effectAllowed = 'move';
     }
   }
@@ -409,6 +475,8 @@ export class DragDropManager {
     if (event.dataTransfer) {
       if (kind === 'fieldAnnotation') {
         event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
+      } else if (kind === 'internalObject') {
+        event.dataTransfer.dropEffect = 'move';
       } else {
         event.dataTransfer.dropEffect = 'copy';
       }
@@ -439,7 +507,7 @@ export class DragDropManager {
       return;
     }
 
-    // Field annotation drop
+    // Internal editor object or field annotation drop
     const { state, view } = activeEditor;
     if (!state || !view) return;
 
@@ -447,6 +515,15 @@ export class DragDropManager {
     const fallbackPos = state.selection?.from ?? state.doc?.content.size ?? null;
     const dropPos = hit?.pos ?? fallbackPos;
     if (dropPos == null) return;
+
+    if (kind === 'internalObject') {
+      try {
+        this.#handleInternalObjectDrop(event, dropPos);
+      } finally {
+        this.#activeInternalObjectPayload = null;
+      }
+      return;
+    }
 
     if (isInternalDrag(event)) {
       this.#handleInternalDrop(event, dropPos);
@@ -458,6 +535,7 @@ export class DragDropManager {
 
   #handleDragEnd(_event: DragEvent): void {
     this.#cancelPendingDragOverSelection();
+    this.#activeInternalObjectPayload = null;
     this.#deps?.getPainterHost()?.classList.remove('drag-over');
   }
 
@@ -671,18 +749,54 @@ export class DragDropManager {
 
     if (sourceStart === null || sourceEnd === null || !sourceNode) return;
 
-    // Skip if dropping at same position
-    if (targetPos >= sourceStart && targetPos <= sourceEnd) return;
+    const result = createInternalNodeMoveTransaction(
+      { doc: state.doc, tr: state.tr },
+      {
+        sourceStart,
+        sourceEnd,
+        targetPos,
+        expectedNodeType: 'fieldAnnotation',
+        // Field-annotation moves currently allow any insertion point.
+        canInsertAt: () => true,
+      },
+    );
 
-    // Move: delete from source, insert at target
-    const tr = state.tr;
-    tr.delete(sourceStart, sourceEnd);
-    const mappedTarget = tr.mapping.map(targetPos);
-    if (mappedTarget < 0 || mappedTarget > tr.doc.content.size) return;
+    if (!result.ok) return;
+    view.dispatch(result.transaction);
+  }
 
-    tr.insert(mappedTarget, sourceNode);
-    tr.setMeta('uiEvent', 'drop');
-    view.dispatch(tr);
+  /**
+   * Handle internal structured-content / existing-image drops.
+   */
+  #handleInternalObjectDrop(event: DragEvent, targetPos: number): void {
+    if (!this.#deps) return;
+
+    const activeEditor = this.#deps.getActiveEditor();
+    const { state, view } = activeEditor;
+    if (!state || !view) return;
+
+    const dataTransferPayload = parseInternalObjectDragPayload(event);
+    const payload = dataTransferPayload ?? this.#activeInternalObjectPayload;
+    if (!payload) return;
+
+    const sourceRange = resolveInternalObjectSourceRange(state.doc, payload);
+    const { sourceStart, sourceEnd } = sourceRange;
+
+    const result = createInternalNodeMoveTransaction(
+      { doc: state.doc, tr: state.tr },
+      {
+        sourceStart,
+        sourceEnd,
+        targetPos,
+        expectedNodeType: payload.nodeType,
+        canInsertAt: canInsertNodeAtPosition,
+      },
+    );
+
+    if (!result.ok) return;
+    view.dispatch(result.transaction);
+    this.#focusEditor();
+    this.#deps.scheduleSelectionUpdate();
   }
 
   /**
@@ -751,6 +865,8 @@ export class DragDropManager {
     if (event.dataTransfer) {
       if (kind === 'fieldAnnotation') {
         event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
+      } else if (kind === 'internalObject') {
+        event.dataTransfer.dropEffect = 'move';
       } else {
         event.dataTransfer.dropEffect = 'copy';
       }

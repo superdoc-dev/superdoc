@@ -12,6 +12,16 @@ describe('PresentationPostPaintPipeline', () => {
         apply: vi.fn((layoutEpoch: number) => calls.push(`field:${layoutEpoch}`)),
         clear: vi.fn(),
       },
+      imageLayer: {
+        setContainer: vi.fn(),
+        apply: vi.fn((layoutEpoch: number) => calls.push(`image:${layoutEpoch}`)),
+        clear: vi.fn(),
+      },
+      structuredContentLayer: {
+        setContainer: vi.fn(),
+        apply: vi.fn((layoutEpoch: number) => calls.push(`structured:${layoutEpoch}`)),
+        clear: vi.fn(),
+      },
       commentHighlightDecorator: {
         setContainer: vi.fn(),
         setActiveComment: vi.fn(() => false),
@@ -47,7 +57,68 @@ describe('PresentationPostPaintPipeline', () => {
       reapplyStructuredContentHover: () => calls.push('hover'),
     });
 
-    expect(calls).toEqual(['field:42', 'rebuild', 'comments', 'decorations', 'proofing', 'rebuild', 'hover']);
+    expect(calls).toEqual([
+      'field:42',
+      'rebuild',
+      'image:42',
+      'structured:42',
+      'comments',
+      'decorations',
+      'proofing',
+      'rebuild',
+      'hover',
+    ]);
+  });
+
+  it('applies structured content interactions after the DOM position index rebuild', () => {
+    const calls: string[] = [];
+
+    const pipeline = new PresentationPostPaintPipeline({
+      fieldAnnotationLayer: {
+        setContainer: vi.fn(),
+        apply: vi.fn(() => calls.push('field')),
+        clear: vi.fn(),
+      },
+      structuredContentLayer: {
+        setContainer: vi.fn(),
+        apply: vi.fn(() => calls.push('structured')),
+        clear: vi.fn(),
+      },
+      commentHighlightDecorator: {
+        setContainer: vi.fn(),
+        setActiveComment: vi.fn(() => false),
+        apply: vi.fn(() => calls.push('comments')),
+        destroy: vi.fn(),
+      },
+      decorationBridge: {
+        recordTransaction: vi.fn(),
+        hasChanges: vi.fn(() => false),
+        collectDecorationRanges: vi.fn(() => []),
+        sync: vi.fn(() => {
+          calls.push('decorations');
+          return false;
+        }),
+        destroy: vi.fn(),
+      },
+      proofingDecorator: {
+        setContainer: vi.fn(),
+        applyAnnotations: vi.fn(() => {
+          calls.push('proofing');
+          return false;
+        }),
+        clear: vi.fn(() => false),
+      },
+    });
+
+    pipeline.refreshAfterPaint({
+      layoutEpoch: 8,
+      editorState: {} as never,
+      domPositionIndex: {} as never,
+      proofingAnnotations: [],
+      rebuildDomPositionIndex: () => calls.push('rebuild'),
+    });
+
+    expect(calls).toEqual(['field', 'rebuild', 'structured', 'comments', 'decorations', 'proofing']);
   });
 
   it('applies comment highlights before bridged decorations during inline style sync', () => {

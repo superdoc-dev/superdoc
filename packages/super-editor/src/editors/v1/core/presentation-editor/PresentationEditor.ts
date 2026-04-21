@@ -14,6 +14,10 @@ import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
 } from './input/ClickSelectionUtilities.js';
+import {
+  findStructuredContentBlockAtPos,
+  findStructuredContentInlineAtPos,
+} from './input/structured-content-resolution.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -128,6 +132,7 @@ import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
 import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
+  ensureEditorMovableObjectInteractionStyles,
 } from './dom/EditorStyleInjector.js';
 
 import type { ResolveRangeOutput, DocumentApi, NavigableAddress, BlockNavigationAddress } from '@superdoc/document-api';
@@ -494,6 +499,7 @@ export class PresentationEditor extends EventEmitter {
     // Inject editor-owned styles (idempotent, once per document)
     ensureEditorNativeSelectionStyles(doc);
     ensureEditorFieldAnnotationInteractionStyles(doc);
+    ensureEditorMovableObjectInteractionStyles(doc);
 
     // Add event listeners for structured content hover coordination
     this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
@@ -4688,6 +4694,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     let node: ProseMirrorNode | null = null;
+    let pos: number | null = null;
     let id: string | null = null;
 
     if (selection instanceof NodeSelection) {
@@ -4696,24 +4703,27 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
       node = selection.node;
+      pos = selection.from;
     } else {
-      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
-        .$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+      const editorDoc = this.#editor?.view?.state?.doc;
+      if (!editorDoc) {
         this.#clearSelectedStructuredContentBlockClass();
         return;
       }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContentBlock') {
-          node = candidate;
-          break;
-        }
-      }
-      if (!node) {
+
+      const resolved = findStructuredContentBlockAtPos(editorDoc, selection.from);
+      if (!resolved) {
         this.#clearSelectedStructuredContentBlockClass();
         return;
       }
+
+      node = resolved.node;
+      pos = resolved.pos;
+    }
+
+    if (pos == null) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
     }
 
     if (!this.#painterHost) {
@@ -4730,7 +4740,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (elements.length === 0) {
-      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
       const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
@@ -4903,31 +4913,20 @@ export class PresentationEditor extends EventEmitter {
       node = selection.node;
       pos = selection.from;
     } else {
-      const $pos = (
-        selection as Selection & {
-          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
-        }
-      ).$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+      const editorDoc = this.#editor?.view?.state?.doc;
+      if (!editorDoc) {
         this.#clearSelectedStructuredContentInlineClass();
         return;
       }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContent') {
-          if (typeof $pos.before !== 'function') {
-            this.#clearSelectedStructuredContentInlineClass();
-            return;
-          }
-          node = candidate;
-          pos = $pos.before(depth);
-          break;
-        }
-      }
-      if (!node || pos == null) {
+
+      const resolved = findStructuredContentInlineAtPos(editorDoc, selection.from);
+      if (!resolved) {
         this.#clearSelectedStructuredContentInlineClass();
         return;
       }
+
+      node = resolved.node;
+      pos = resolved.pos;
     }
 
     if (!this.#painterHost) {

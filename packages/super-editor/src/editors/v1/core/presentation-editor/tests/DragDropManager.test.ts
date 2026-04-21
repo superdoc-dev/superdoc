@@ -145,6 +145,107 @@ function createImageDragEvent(
 }
 
 /**
+ * Creates a mock DragEvent with an internal object payload.
+ */
+function createInternalObjectDragEvent(type: string, payload: Record<string, unknown>): DragEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn((mimeType: string) => {
+        if (mimeType === 'application/x-superdoc-internal-object') {
+          return JSON.stringify(payload);
+        }
+        return '';
+      }),
+      setData: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDragOverEvent(type: string): DragEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDragStartEvent(): DragEvent {
+  const event = new MouseEvent('dragstart', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: [],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDropEventWithEmptyDataTransfer(): DragEvent {
+  const event = new MouseEvent('drop', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      dropEffect: 'move' as DataTransferDropEffect,
+      effectAllowed: 'move' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+/**
  * Creates a mock DragEvent with no recognized payload.
  */
 function createEmptyDragEvent(type: string): DragEvent {
@@ -179,6 +280,12 @@ describe('Payload classification helpers', () => {
     it('returns "fieldAnnotation" for field annotation payloads', () => {
       const event = createFieldAnnotationDragEvent('dragover');
       expect(getDropPayloadKind(event)).toBe('fieldAnnotation');
+    });
+
+    it('returns "internalObject" for internal object dragover payloads even before JSON is readable', () => {
+      const event = createInternalObjectDragOverEvent('dragover');
+
+      expect(getDropPayloadKind(event)).toBe('internalObject');
     });
 
     it('returns "imageFiles" for image file payloads', () => {
@@ -279,7 +386,7 @@ describe('DragDropManager', () => {
     isEditable: boolean;
     options: Record<string, unknown>;
     state: {
-      doc: { content: { size: number }; nodeAt: Mock };
+      doc: { content: { size: number }; nodeAt: Mock; descendants: Mock };
       tr: { setSelection: Mock; setMeta: Mock };
       selection: { from: number; to: number };
     };
@@ -322,7 +429,7 @@ describe('DragDropManager', () => {
       isEditable: true,
       options: {},
       state: {
-        doc: { content: { size: 100 }, nodeAt: vi.fn() },
+        doc: { content: { size: 100 }, nodeAt: vi.fn(), descendants: vi.fn() },
         tr: mockTr,
         selection: { from: 0, to: 0 },
       },
@@ -540,6 +647,102 @@ describe('DragDropManager', () => {
       });
 
       expect(mockEditor.view.focus).toHaveBeenCalled();
+      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Internal Object Drop
+  // ==========================================================================
+
+  describe('internal object drop', () => {
+    it('uses the active drag payload when drop getData is empty', () => {
+      const sourceNode = {
+        type: { name: 'image' },
+        nodeSize: 1,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 100 },
+        resolve: vi.fn(() => ({
+          parent: {
+            canReplaceWith: vi.fn(() => true),
+          },
+          index: vi.fn(() => 0),
+        })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 20 ? sourceNode : null));
+
+      const sourceElement = document.createElement('img');
+      sourceElement.dataset.dragSourceKind = 'existingImage';
+      sourceElement.dataset.imageKind = 'inline';
+      sourceElement.dataset.nodeType = 'image';
+      sourceElement.dataset.pmStart = '20';
+      sourceElement.dataset.pmEnd = '21';
+      sourceElement.dataset.displayLabel = 'Picture 1';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
+      viewportHost.dispatchEvent(createInternalObjectDropEventWithEmptyDataTransfer());
+
+      expect(tr.delete).toHaveBeenCalledWith(20, 21);
+      expect(tr.insert).toHaveBeenCalledWith(50, sourceNode);
+      expect(mockEditor.view.dispatch).toHaveBeenCalledWith(tr);
+      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+
+    it('resolves structured content source nodes by SDT id before moving', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: '1140082372' },
+        nodeSize: 348,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({
+          parent: {
+            canReplaceWith: vi.fn(() => true),
+          },
+          index: vi.fn(() => 0),
+        })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 134) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 186 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((callback: (node: unknown, pos: number) => boolean) => {
+        callback(sourceNode, 186);
+      });
+
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: '1140082372',
+          label: 'Signature',
+          sourceStart: 187,
+          sourceEnd: 535,
+          lockMode: 'unlocked',
+        }),
+      );
+
+      expect(tr.delete).toHaveBeenCalledWith(186, 534);
+      expect(tr.insert).toHaveBeenCalledWith(134, sourceNode);
+      expect(mockEditor.view.dispatch).toHaveBeenCalledWith(tr);
       expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
     });
   });

@@ -342,6 +342,8 @@ export class PresentationEditor extends EventEmitter {
    * this unset so they don't fight the user's scroll position.
    */
   #shouldScrollSelectionIntoView = false;
+  /** PM position for transient drag/drop insertion preview, rendered even while editor focus is elsewhere. */
+  #dragDropIndicatorPos: number | null = null;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
   #htmlAnnotationHeights: Map<string, number> = new Map();
@@ -3693,11 +3695,28 @@ export class PresentationEditor extends EventEmitter {
       getActiveEditor: () => this.getActiveEditor(),
       hitTest: (clientX, clientY) => this.hitTest(clientX, clientY),
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
+      showDragDropIndicator: (pos) => this.#showDragDropIndicator(pos),
+      clearDragDropIndicator: () => this.#clearDragDropIndicator(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
       insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
+  }
+
+  #showDragDropIndicator(pos: number): void {
+    const docSize = this.getActiveEditor()?.state?.doc?.content.size;
+    if (!Number.isFinite(pos) || docSize == null) return;
+    const clampedPos = Math.min(Math.max(pos, 1), docSize);
+    if (this.#dragDropIndicatorPos === clampedPos) return;
+    this.#dragDropIndicatorPos = clampedPos;
+    this.#scheduleSelectionUpdate({ immediate: true });
+  }
+
+  #clearDragDropIndicator(): void {
+    if (this.#dragDropIndicatorPos == null) return;
+    this.#dragDropIndicatorPos = null;
+    this.#scheduleSelectionUpdate({ immediate: true });
   }
 
   /**
@@ -5031,8 +5050,9 @@ export class PresentationEditor extends EventEmitter {
     const isOnEditorUi = !!(activeEl as Element)?.closest?.(
       '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
     );
+    const isDragDropIndicatorActive = this.#dragDropIndicatorPos != null;
 
-    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi && !isDragDropIndicatorActive) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -5090,8 +5110,9 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    if (from === to) {
-      const caretLayout = this.#computeCaretLayoutRect(from);
+    if (from === to || isDragDropIndicatorActive) {
+      const caretPos = this.#dragDropIndicatorPos ?? from;
+      const caretLayout = this.#computeCaretLayoutRect(caretPos);
       if (!caretLayout) {
         // Keep existing cursor visible rather than clearing it
         return;
@@ -5110,7 +5131,7 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
-      if (shouldScrollIntoView) {
+      if (shouldScrollIntoView && !isDragDropIndicatorActive) {
         this.#scrollActiveEndIntoView(caretLayout.pageIndex);
       }
       return;

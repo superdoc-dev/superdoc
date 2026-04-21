@@ -398,6 +398,8 @@ describe('DragDropManager', () => {
   let mockDeps: DragDropDependencies;
   let hitTestMock: Mock;
   let scheduleSelectionUpdateMock: Mock;
+  let showDragDropIndicatorMock: Mock;
+  let clearDragDropIndicatorMock: Mock;
   let insertImageFileMock: Mock;
 
   beforeEach(() => {
@@ -447,12 +449,16 @@ describe('DragDropManager', () => {
 
     hitTestMock = vi.fn(() => ({ pos: 50 }));
     scheduleSelectionUpdateMock = vi.fn();
+    showDragDropIndicatorMock = vi.fn();
+    clearDragDropIndicatorMock = vi.fn();
     insertImageFileMock = vi.fn().mockResolvedValue('success');
 
     mockDeps = {
       getActiveEditor: vi.fn(() => mockEditor as unknown as ReturnType<DragDropDependencies['getActiveEditor']>),
       hitTest: hitTestMock,
       scheduleSelectionUpdate: scheduleSelectionUpdateMock,
+      showDragDropIndicator: showDragDropIndicatorMock,
+      clearDragDropIndicator: clearDragDropIndicatorMock,
       getViewportHost: vi.fn(() => viewportHost),
       getPainterHost: vi.fn(() => painterHost),
       insertImageFile: insertImageFileMock,
@@ -500,16 +506,17 @@ describe('DragDropManager', () => {
       expect(hitTestMock).toHaveBeenCalledWith(200, 300);
     });
 
-    it('should update selection when RAF fires', () => {
+    it('should update only the drag indicator when RAF fires', () => {
       viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
 
       expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
 
       rafScheduler.flush();
 
-      expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
-      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+      expect(scheduleSelectionUpdateMock).not.toHaveBeenCalled();
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
     });
 
     it('should allow scheduling new RAF after previous one fires', () => {
@@ -553,6 +560,7 @@ describe('DragDropManager', () => {
       rafScheduler.flush();
 
       expect(hitTestMock).toHaveBeenCalledWith(120, 220);
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
     });
 
     it('should not schedule RAF when editor is not editable', () => {
@@ -647,7 +655,33 @@ describe('DragDropManager', () => {
       });
 
       expect(mockEditor.view.focus).toHaveBeenCalled();
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
       expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('drag indicator cleanup', () => {
+    it('clears the drag indicator on dragleave when leaving the viewport', () => {
+      const event = createFieldAnnotationDragEvent('dragleave');
+      Object.defineProperty(event, 'relatedTarget', {
+        value: null,
+        configurable: true,
+      });
+
+      viewportHost.dispatchEvent(event);
+
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
+    });
+
+    it('clears the drag indicator on dragend', () => {
+      const event = new MouseEvent('dragend', {
+        bubbles: true,
+        cancelable: true,
+      }) as DragEvent;
+
+      painterHost.dispatchEvent(event);
+
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
     });
   });
 
@@ -835,6 +869,20 @@ describe('DragDropManager', () => {
       expect(hitTestMock).not.toHaveBeenCalled();
     });
 
+    it('keeps the original editor selection after a cancelled drag preview', () => {
+      mockEditor.state.selection = { from: 12, to: 12 } as unknown as typeof mockEditor.state.selection;
+      hitTestMock.mockReturnValue({ pos: 75 });
+
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+      rafScheduler.flush();
+      painterHost.dispatchEvent(createFieldAnnotationDragEvent('dragend'));
+
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+      expect(mockEditor.state.selection.from).toBe(12);
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
+    });
+
     it('should cancel pending RAF on dragleave with null relatedTarget', () => {
       viewportHost.dispatchEvent(createImageDragEvent('dragover'));
       expect(rafScheduler.hasPending()).toBe(true);
@@ -1016,7 +1064,7 @@ describe('DragDropManager', () => {
       expect(() => rafScheduler.flush()).not.toThrow();
     });
 
-    it('should skip selection update if position unchanged', () => {
+    it('should still compute drag preview when position matches current selection', () => {
       hitTestMock.mockReturnValue({ pos: 50 });
 
       mockEditor.state.selection = { from: 50, to: 50 } as unknown as typeof mockEditor.state.selection;
@@ -1025,6 +1073,8 @@ describe('DragDropManager', () => {
       rafScheduler.flush();
 
       expect(hitTestMock).toHaveBeenCalled();
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
     });
   });
 });

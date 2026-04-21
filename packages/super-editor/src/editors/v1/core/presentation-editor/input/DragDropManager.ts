@@ -100,6 +100,10 @@ export type DragDropDependencies = {
   hitTest: (clientX: number, clientY: number) => PositionHit | null;
   /** Schedule selection overlay update */
   scheduleSelectionUpdate: () => void;
+  /** Show a transient drag/drop insertion indicator at the given PM position */
+  showDragDropIndicator: (pos: number) => void;
+  /** Clear any transient drag/drop insertion indicator */
+  clearDragDropIndicator: () => void;
   /** The viewport host element (for event listeners) */
   getViewportHost: () => HTMLElement;
   /** The painter host element (for internal drag detection) */
@@ -403,6 +407,7 @@ export class DragDropManager {
   destroy(): void {
     this.#cancelPendingDragOverSelection();
     this.#activeInternalObjectPayload = null;
+    this.#deps?.clearDragDropIndicator();
     this.unbind();
     this.#deps = null;
   }
@@ -498,6 +503,7 @@ export class DragDropManager {
     event.preventDefault();
     event.stopPropagation();
     this.#cancelPendingDragOverSelection();
+    this.#deps.clearDragDropIndicator();
 
     const activeEditor = this.#deps.getActiveEditor();
     if (!activeEditor?.isEditable) return;
@@ -536,6 +542,7 @@ export class DragDropManager {
   #handleDragEnd(_event: DragEvent): void {
     this.#cancelPendingDragOverSelection();
     this.#activeInternalObjectPayload = null;
+    this.#deps?.clearDragDropIndicator();
     this.#deps?.getPainterHost()?.classList.remove('drag-over');
   }
 
@@ -549,6 +556,7 @@ export class DragDropManager {
     if (relatedTarget && viewportHost.contains(relatedTarget)) return;
 
     this.#cancelPendingDragOverSelection();
+    this.#deps?.clearDragDropIndicator();
     this.#deps?.getPainterHost()?.classList.remove('drag-over');
   }
 
@@ -586,21 +594,13 @@ export class DragDropManager {
 
     const hit = this.#deps.hitTest(clientX, clientY);
     const doc = activeEditor.state?.doc;
-    if (!hit || !doc) return;
-
-    const pos = Math.min(Math.max(hit.pos, 1), doc.content.size);
-    const currentSelection = activeEditor.state.selection;
-    if (currentSelection instanceof TextSelection && currentSelection.from === pos && currentSelection.to === pos) {
+    if (!hit || !doc) {
+      this.#deps.clearDragDropIndicator();
       return;
     }
 
-    try {
-      const tr = activeEditor.state.tr.setSelection(TextSelection.create(doc, pos)).setMeta('addToHistory', false);
-      activeEditor.view?.dispatch(tr);
-      this.#deps.scheduleSelectionUpdate();
-    } catch {
-      // Position may be invalid during layout updates
-    }
+    const pos = Math.min(Math.max(hit.pos, 1), doc.content.size);
+    this.#deps.showDragDropIndicator(pos);
   }
 
   // ==========================================================================

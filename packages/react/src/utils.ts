@@ -28,23 +28,38 @@ export const useStableId: () => string =
 
 /**
  * Returns a reference-stable version of `value` that only changes identity
- * when the structural content changes (compared via JSON.stringify).
+ * when the structural content changes (compared via `JSON.stringify`).
  *
  * Use for object/array props that feed into `useEffect` / `useMemo`
- * dependency arrays where the consumer is likely to pass inline object
- * literals. Without this, every parent re-render produces a fresh
- * reference and causes the effect to re-run even when the content is
- * identical.
+ * dependency arrays when the consumer is likely to pass inline literals.
+ * Without this, every parent re-render produces a fresh reference and
+ * causes the effect to re-run even when the content is identical.
  *
- * Limitations:
- * - Values containing functions, Dates, Maps, Sets, or circular references
- *   are compared imperfectly (functions are dropped by JSON.stringify;
- *   circular refs fall through to "different"). For config-shaped props
- *   (plain data) this is sufficient.
- * - The structural compare only runs when the incoming reference differs
- *   from the previous one, so steady-state cost is a single pointer check.
+ * **Intended only for plain-data values.** `JSON.stringify` has well-known
+ * limitations that make this hook unsuitable for values containing:
+ *
+ * - **Functions** — silently dropped during serialization, so a change
+ *   to a callback-valued property is treated as "equal" and ignored.
+ * - **Class instances / live objects** (e.g. Yjs Doc, DOM nodes, Maps,
+ *   Sets, Dates) — serialize to `{}` or to identical strings across
+ *   distinct instances, so swaps are missed.
+ * - **`undefined` property values** — dropped (`{a: undefined}` → `"{}"`),
+ *   so `{a: undefined, b: 1}` and `{b: 1}` compare equal.
+ * - **`NaN` / `Infinity` / `-Infinity`** — serialize to `null`, collapsing
+ *   distinct numeric values.
+ * - **Circular references** — throw; the hook falls back to adopting the
+ *   new reference (treated as "different").
+ * - **Key insertion order** — `JSON.stringify({a:1, b:2}) !==
+ *   JSON.stringify({b:2, a:1})`. Content-equal objects assembled via
+ *   spreads or conditional keys can still be classified as different
+ *   (false negative — triggers a rebuild that wasn't needed, no
+ *   correctness impact).
+ *
+ * The structural compare only runs when the incoming reference differs
+ * from the previous one, so the steady-state cost is a single pointer
+ * check.
  */
-export function useStableValue<T>(value: T): T {
+export function useStructuralMemo<T>(value: T): T {
   const lastRawRef = React.useRef<T>(value);
   const stableRef = React.useRef<T>(value);
 

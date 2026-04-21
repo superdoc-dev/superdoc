@@ -176,12 +176,14 @@ describe('SuperDocEditor', () => {
   });
 
   describe('prop stability (SD-2635)', () => {
-    it('does not destroy/re-init when user prop is passed as a new object literal with identical content', async () => {
+    it('does not destroy/re-init when user prop is a new object literal with identical content', async () => {
+      const ref = createRef<SuperDocRef>();
       const onReady = vi.fn();
       const onEditorDestroy = vi.fn();
 
       const { rerender } = render(
         <SuperDocEditor
+          ref={ref}
           user={{ name: 'Alex', email: 'alex@example.com' }}
           onReady={onReady}
           onEditorDestroy={onEditorDestroy}
@@ -189,32 +191,64 @@ describe('SuperDocEditor', () => {
       );
 
       await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const readyCallsAfterMount = onReady.mock.calls.length;
+      const instanceBefore = ref.current?.getInstance();
+      expect(instanceBefore).toBeTruthy();
 
       // Re-render with a *new* object literal carrying the same content —
       // this is the idiomatic React pattern that used to trigger a full
       // destroy + re-init loop before SD-2635.
       rerender(
         <SuperDocEditor
+          ref={ref}
           user={{ name: 'Alex', email: 'alex@example.com' }}
           onReady={onReady}
           onEditorDestroy={onEditorDestroy}
         />,
       );
 
-      // Give any spurious effects time to run
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
+      // Same underlying instance proves no destroy+rebuild happened.
+      expect(ref.current?.getInstance()).toBe(instanceBefore);
       expect(onEditorDestroy).not.toHaveBeenCalled();
-      expect(onReady.mock.calls.length).toBe(readyCallsAfterMount);
     });
 
-    it('rebuilds when user prop value actually changes', async () => {
+    it('does not destroy/re-init when users prop is a new array literal with identical content', async () => {
+      const ref = createRef<SuperDocRef>();
       const onReady = vi.fn();
       const onEditorDestroy = vi.fn();
 
       const { rerender } = render(
         <SuperDocEditor
+          ref={ref}
+          users={[{ name: 'Alex', email: 'alex@example.com' }]}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      const instanceBefore = ref.current?.getInstance();
+
+      rerender(
+        <SuperDocEditor
+          ref={ref}
+          users={[{ name: 'Alex', email: 'alex@example.com' }]}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      expect(ref.current?.getInstance()).toBe(instanceBefore);
+      expect(onEditorDestroy).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds and remounts a new instance when user prop value actually changes', async () => {
+      const ref = createRef<SuperDocRef>();
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+
+      const { rerender } = render(
+        <SuperDocEditor
+          ref={ref}
           user={{ name: 'Alex', email: 'alex@example.com' }}
           onReady={onReady}
           onEditorDestroy={onEditorDestroy}
@@ -222,16 +256,56 @@ describe('SuperDocEditor', () => {
       );
 
       await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      const instanceBefore = ref.current?.getInstance();
 
       rerender(
         <SuperDocEditor
+          ref={ref}
           user={{ name: 'Jamie', email: 'jamie@example.com' }}
           onReady={onReady}
           onEditorDestroy={onEditorDestroy}
         />,
       );
 
+      // Old instance torn down, new instance ready.
       await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      expect(ref.current?.getInstance()).not.toBe(instanceBefore);
+    });
+
+    it('stays stable under StrictMode double-invocation on rerender', async () => {
+      const ref = createRef<SuperDocRef>();
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+
+      const { rerender } = render(
+        <StrictMode>
+          <SuperDocEditor
+            ref={ref}
+            user={{ name: 'Alex', email: 'alex@example.com' }}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />
+        </StrictMode>,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      const instanceBefore = ref.current?.getInstance();
+      const destroysBefore = onEditorDestroy.mock.calls.length;
+
+      rerender(
+        <StrictMode>
+          <SuperDocEditor
+            ref={ref}
+            user={{ name: 'Alex', email: 'alex@example.com' }}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />
+        </StrictMode>,
+      );
+
+      expect(ref.current?.getInstance()).toBe(instanceBefore);
+      expect(onEditorDestroy.mock.calls.length).toBe(destroysBefore);
     });
   });
 

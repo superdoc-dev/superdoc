@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useStableValue } from './utils';
+import { useStructuralMemo } from './utils';
 
-describe('useStableValue', () => {
+describe('useStructuralMemo', () => {
   it('returns the same reference across renders when content is unchanged', () => {
     const initial = { name: 'Alex', email: 'alex@example.com' };
-    const { result, rerender } = renderHook(({ value }) => useStableValue(value), {
+    const { result, rerender } = renderHook(({ value }) => useStructuralMemo(value), {
       initialProps: { value: initial },
     });
 
@@ -22,7 +22,7 @@ describe('useStableValue', () => {
   });
 
   it('returns a new reference when the content actually changes', () => {
-    const { result, rerender } = renderHook(({ value }) => useStableValue(value), {
+    const { result, rerender } = renderHook(({ value }) => useStructuralMemo(value), {
       initialProps: { value: { name: 'Alex' } },
     });
 
@@ -33,7 +33,7 @@ describe('useStableValue', () => {
   });
 
   it('handles undefined and null stably', () => {
-    const { result, rerender } = renderHook(({ value }) => useStableValue(value as unknown), {
+    const { result, rerender } = renderHook(({ value }) => useStructuralMemo(value as unknown), {
       initialProps: { value: undefined },
     });
 
@@ -46,7 +46,7 @@ describe('useStableValue', () => {
   });
 
   it('stabilizes arrays the same way as objects', () => {
-    const { result, rerender } = renderHook(({ value }) => useStableValue(value), {
+    const { result, rerender } = renderHook(({ value }) => useStructuralMemo(value), {
       initialProps: { value: [{ id: 1 }, { id: 2 }] },
     });
 
@@ -62,7 +62,7 @@ describe('useStableValue', () => {
     const circularA: { self?: unknown; name: string } = { name: 'a' };
     circularA.self = circularA;
 
-    const { result, rerender } = renderHook(({ value }) => useStableValue(value), {
+    const { result, rerender } = renderHook(({ value }) => useStructuralMemo(value), {
       initialProps: { value: circularA },
     });
 

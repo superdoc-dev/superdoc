@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type ForwardedRef,
 } from 'react';
-import { useStableId, useStructuralMemo } from './utils';
+import { useStableId, useMemoByValue } from './utils';
 import type {
   CallbackProps,
   DocumentMode,
@@ -62,11 +62,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const role = props.role ?? 'editor';
 
   // `user` and `users` are memoized by value so inline literals don't
-  // rebuild. `modules` stays on reference identity — it can carry
-  // functions and live objects (e.g. `collaboration.provider`) that
-  // structural compare can't see through. See SD-2635.
-  const user = useStructuralMemo(userProp);
-  const users = useStructuralMemo(usersProp);
+  // trigger a rebuild. `modules` stays on reference identity — it can
+  // carry functions and live objects (e.g. `collaboration.provider`)
+  // that a consumer may intentionally swap. See SD-2635.
+  const user = useMemoByValue(userProp);
+  const users = useMemoByValue(usersProp);
 
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);

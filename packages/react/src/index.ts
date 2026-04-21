@@ -24,7 +24,6 @@ export type {
   SuperDocReadyEvent,
   SuperDocEditorCreateEvent,
   SuperDocEditorUpdateEvent,
-  SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
 } from './types';

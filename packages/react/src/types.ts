@@ -67,28 +67,6 @@ export interface SuperDocEditorUpdateEvent {
   sectionType?: string | null;
 }
 
-/** Event passed to onTransaction callback. Mirrors superdoc's EditorTransactionEvent. */
-export interface SuperDocTransactionEvent {
-  /** The primary editor associated with the transaction. For header/footer edits, this is the main body editor. */
-  editor: Editor;
-  /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
-  sourceEditor: Editor;
-  /**
-   * The ProseMirror transaction or transaction-like payload emitted by the source editor.
-   * Typed as `any` to match superdoc's upstream typedef and avoid narrowing existing consumers.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  transaction: any;
-  /** Time spent applying the transaction, in milliseconds. */
-  duration?: number;
-  /** The surface where the transaction originated. */
-  surface: EditorSurface;
-  /** Relationship ID for header/footer edits. */
-  headerId?: string | null;
-  /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
-  sectionType?: string | null;
-}
-
 /** Event passed to onContentError callback */
 export interface SuperDocContentErrorEvent {
   error: Error;

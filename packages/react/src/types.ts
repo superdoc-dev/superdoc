@@ -50,11 +50,43 @@ export interface SuperDocEditorCreateEvent {
   editor: Editor;
 }
 
-/** Event passed to onEditorUpdate callback */
-export type SuperDocEditorUpdateEvent = Parameters<NonNullable<SuperDocConstructorConfig['onEditorUpdate']>>[0];
+/** Surface where an editor event originated. Mirrors superdoc's EditorSurface. */
+export type EditorSurface = 'body' | 'header' | 'footer';
 
-/** Event passed to onTransaction callback */
-export type SuperDocTransactionEvent = Parameters<NonNullable<SuperDocConstructorConfig['onTransaction']>>[0];
+/**
+ * Event passed to onEditorUpdate callback.
+ * Mirrors superdoc's EditorUpdateEvent typedef — defined here explicitly so
+ * this package's types don't depend on JSDoc chain resolution across
+ * workspace packages (which is fragile across TypeScript versions).
+ */
+export interface SuperDocEditorUpdateEvent {
+  /** The primary editor associated with the update. For header/footer edits, this is the main body editor. */
+  editor: Editor;
+  /** The editor instance that emitted the update. For body edits, this matches `editor`. */
+  sourceEditor: Editor;
+  /** The surface where the edit originated. */
+  surface: EditorSurface;
+  /** Relationship ID for header/footer edits. */
+  headerId?: string | null;
+  /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
+  sectionType?: string | null;
+}
+
+/**
+ * Event passed to onTransaction callback.
+ * Mirrors superdoc's EditorTransactionEvent typedef — see note on SuperDocEditorUpdateEvent.
+ */
+export interface SuperDocTransactionEvent {
+  editor: Editor;
+  sourceEditor: Editor;
+  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
+  transaction: unknown;
+  /** Time spent applying the transaction, in milliseconds. */
+  duration?: number;
+  surface: EditorSurface;
+  headerId?: string | null;
+  sectionType?: string | null;
+}
 
 /** Event passed to onContentError callback */
 export interface SuperDocContentErrorEvent {

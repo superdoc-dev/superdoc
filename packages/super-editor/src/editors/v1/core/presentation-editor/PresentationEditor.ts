@@ -468,6 +468,7 @@ export class PresentationEditor extends EventEmitter {
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
+      showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -2014,6 +2015,24 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#painterAdapter.reset();
     this.#pageGeometryHelper = null;
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
+  }
+
+  /**
+   * Toggle the SD-2454 "Show bookmarks" bracket indicators at runtime.
+   *
+   * When enabled, the pm-adapter emits visible gray `[` / `]` marker runs at
+   * bookmarkStart / bookmarkEnd positions (mirroring Word's opt-in behavior).
+   * Because markers are real characters that participate in text measurement
+   * and line breaking, toggling invalidates the flow-block cache and triggers
+   * a full re-layout.
+   */
+  setShowBookmarks(showBookmarks: boolean): void {
+    const next = !!showBookmarks;
+    if (this.#layoutOptions.showBookmarks === next) return;
+    this.#layoutOptions.showBookmarks = next;
+    this.#flowBlockCache?.clear();
     this.#pendingDocChange = true;
     this.#scheduleRerender();
   }
@@ -4194,6 +4213,7 @@ export class PresentationEditor extends EventEmitter {
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
           flowBlockCache: this.#flowBlockCache,
+          showBookmarks: this.#layoutOptions.showBookmarks ?? false,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });

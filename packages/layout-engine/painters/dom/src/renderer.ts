@@ -5349,6 +5349,14 @@ export class DomPainter {
     elem.style.zIndex = '1';
     applyRunDataAttributes(elem as HTMLElement, (run as TextRun).dataAttrs);
 
+    // SD-2454: bookmark marker runs carry a data-bookmark-name attribute.
+    // Surface the bookmark name as a native `title` tooltip so hovering the
+    // opening bracket identifies which bookmark is being marked.
+    const bookmarkName = (run as TextRun).dataAttrs?.['data-bookmark-name'];
+    if (bookmarkName) {
+      (elem as HTMLElement).title = bookmarkName;
+    }
+
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'paragraph text run');
 

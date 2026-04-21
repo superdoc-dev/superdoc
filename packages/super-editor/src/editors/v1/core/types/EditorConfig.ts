@@ -365,6 +365,25 @@ export interface EditorOptions {
   /** Comment highlight configuration */
   comments?: CommentConfig;
 
+  /**
+   * Track-changes runtime configuration forwarded from the SuperDoc-level
+   * `modules.trackChanges` config. Read by the TrackChanges extension and
+   * by the SuperConverter during import. Fields are all optional; missing
+   * ones fall back to defaults resolved at SuperDoc construction time.
+   */
+  trackedChanges?: {
+    visible?: boolean;
+    mode?: 'review' | 'original' | 'final' | 'off';
+    enabled?: boolean;
+    /**
+     * How a tracked replacement (ins + del) surfaces in the UI and API.
+     * `'paired'` (default) groups both halves under one id and resolves them
+     * together. `'independent'` gives each half its own id, matching the
+     * Microsoft Word / ECMA-376 §17.13.5 revision model.
+     */
+    replacements?: 'paired' | 'independent';
+  };
+
   /** Whether this is a new file */
   isNewFile?: boolean;
 

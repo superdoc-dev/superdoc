@@ -152,7 +152,18 @@ const normalizeReplaceStepSingleCharDelete = ({ step, doc }) => {
  * @param {import('prosemirror-transform').ReplaceStep} options.originalStep Original step.
  * @param {number} options.originalStepIndex Original step index.
  */
-export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalStep, originalStepIndex }) => {
+export const replaceStep = ({
+  state,
+  tr,
+  step,
+  newTr,
+  map,
+  user,
+  date,
+  originalStep,
+  originalStepIndex,
+  replacements = 'paired',
+}) => {
   const originalRange = { from: step.from, to: step.to, sliceSize: step.slice.content.size };
   step = normalizeReplaceStepSingleCharDelete({ step, doc: newTr.doc });
   const stepWasNormalized =
@@ -310,7 +321,11 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
       to: step.to,
       user,
       date,
-      id: meta.insertedMark?.attrs?.id,
+      // SD-2607: in 'paired' mode (default), share the insertion's id so the
+      // two halves of a user-driven replacement resolve together. In
+      // 'independent' mode, pass undefined so markDeletion mints its own id
+      // — making the deletion an independent revision per ECMA-376 §17.13.5.
+      id: replacements === 'paired' ? meta.insertedMark?.attrs?.id : undefined,
     });
 
     meta.deletionNodes = deletionNodes;

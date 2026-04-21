@@ -2093,6 +2093,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
         isNewFile: this.options.isNewFile ?? false,
+        trackedChangesOptions: this.options.trackedChanges ?? null,
       });
     }
   }
@@ -2687,6 +2688,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
             tr: transactionToApply,
             state: prevState,
             user: this.options.user!,
+            replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
 

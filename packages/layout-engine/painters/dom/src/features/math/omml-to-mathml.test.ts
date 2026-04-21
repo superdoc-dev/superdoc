@@ -861,6 +861,43 @@ describe('m:func converter', () => {
     expect(mis[0]!.textContent).toBe('sin');
     expect(mis[1]!.textContent).toBe('cos');
   });
+
+  it('preserves explicit m:sty=i on function-name runs', () => {
+    // SD-2538 preserve branch: forceNormalMathVariant must NOT overwrite
+    // an existing mathvariant. When Word marks a function-name run with
+    // m:sty="i", convertMathRun already set mathvariant="italic" — the
+    // function-apply pass must leave it alone.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [
+                {
+                  name: 'm:r',
+                  elements: [
+                    { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'i' } }] },
+                    { name: 'm:t', elements: [{ type: 'text', text: 'L' }] },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const nameMi = result!.querySelectorAll('mi')[0];
+    expect(nameMi!.textContent).toBe('L');
+    expect(nameMi!.getAttribute('mathvariant')).toBe('italic');
+  });
 });
 
 describe('m:rad converter', () => {
@@ -2296,8 +2333,18 @@ describe('m:limLow converter', () => {
     const munder = result!.querySelector('munder');
     expect(munder).not.toBeNull();
     expect(munder!.children.length).toBe(2);
-    expect(munder!.children[0]!.textContent).toBe('lim');
-    expect(munder!.children[1]!.textContent).toBe('n');
+
+    // Base: "lim" — upright via m:sty=p on the run.
+    const limMi = munder!.children[0]!.querySelector('mi');
+    expect(limMi!.textContent).toBe('lim');
+    expect(limMi!.getAttribute('mathvariant')).toBe('normal');
+
+    // Limit expression: "n" — must stay italic (no mathvariant attribute set).
+    // SD-2538 regression: convertFunction used to recurse into the <munder>
+    // and force mathvariant="normal" on every <mi>, including this one.
+    const nMi = munder!.children[1]!.querySelector('mi');
+    expect(nMi!.textContent).toBe('n');
+    expect(nMi!.getAttribute('mathvariant')).toBeNull();
   });
 });
 
@@ -2565,8 +2612,17 @@ describe('m:limUpp converter', () => {
     const mover = result!.querySelector('mover');
     expect(mover).not.toBeNull();
     expect(mover!.children.length).toBe(2);
-    expect(mover!.children[0]!.textContent).toBe('lim');
-    expect(mover!.children[1]!.textContent).toBe('x');
+
+    // Base: "lim" — upright via m:sty=p. Limit variable "x" — italic default.
+    // Symmetric to the m:limLow-in-m:func case; pins the 'mover' entry of
+    // MATH_VARIANT_BOUNDARY_ELEMENTS.
+    const limMi = mover!.children[0]!.querySelector('mi');
+    expect(limMi!.textContent).toBe('lim');
+    expect(limMi!.getAttribute('mathvariant')).toBe('normal');
+
+    const xMi = mover!.children[1]!.querySelector('mi');
+    expect(xMi!.textContent).toBe('x');
+    expect(xMi!.getAttribute('mathvariant')).toBeNull();
   });
 });
 

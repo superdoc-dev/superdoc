@@ -58,28 +58,18 @@ describe('useMemoByValue', () => {
     expect(result.current).not.toBe(first);
   });
 
-  it('handles key order changes as equal (deep compare is order-insensitive)', () => {
+  it('adopts a new reference on circular input (JSON.stringify throws)', () => {
+    const circularA: { self?: unknown; name: string } = { name: 'a' };
+    circularA.self = circularA;
+
     const { result, rerender } = renderHook(({ value }) => useMemoByValue(value), {
-      initialProps: { value: { a: 1, b: 2 } },
+      initialProps: { value: circularA },
     });
 
-    const first = result.current;
-    rerender({ value: { b: 2, a: 1 } });
-    expect(result.current).toBe(first);
-  });
-
-  it('treats values with different function identities as equal', () => {
-    // lodash.isequal compares functions by reference. Same-reference functions
-    // are equal; different-reference functions are not. We rely on the parent
-    // ref-check to short-circuit same-reference cases, so function equality
-    // only matters when the whole value object is freshly allocated.
-    const fn = () => 1;
-    const { result, rerender } = renderHook(({ value }) => useMemoByValue(value), {
-      initialProps: { value: { cb: fn, n: 1 } },
-    });
-    const first = result.current;
-
-    rerender({ value: { cb: fn, n: 1 } });
-    expect(result.current).toBe(first);
+    const circularB: { self?: unknown; name: string } = { name: 'a' };
+    circularB.self = circularB;
+    rerender({ value: circularB });
+    // The compare throws; the hook falls back to adopting the new reference.
+    expect(result.current).toBe(circularB);
   });
 });

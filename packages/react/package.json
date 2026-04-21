@@ -35,7 +35,6 @@
   ],
   "license": "AGPL-3.0",
   "dependencies": {
-    "lodash.isequal": "^4.5.0",
     "superdoc": ">=1.0.0"
   },
   "peerDependencies": {
@@ -44,7 +43,6 @@
   },
   "devDependencies": {
     "@testing-library/react": "catalog:",
-    "@types/lodash.isequal": "^4.5.8",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

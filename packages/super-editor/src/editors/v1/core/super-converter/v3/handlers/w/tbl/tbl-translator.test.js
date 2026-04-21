@@ -215,6 +215,33 @@ describe('w:tbl translator', () => {
       expect(result.attrs.grid).toEqual([{ col: 2880 }, { col: 2880 }]);
     });
 
+    it('keeps promoted attrs aligned with tableProperties for imported fixed-layout dxa widths', () => {
+      const fixedWidthTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [
+              { name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } },
+              { name: 'w:tblW', attributes: { 'w:w': '1440', 'w:type': 'dxa' } },
+            ],
+          },
+          {
+            name: 'w:tblGrid',
+            elements: [{ name: 'w:gridCol', attributes: { 'w:w': '1440' } }],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [fixedWidthTable], docx: {} }, {});
+
+      expect(result.attrs.tableProperties.tableLayout).toBe('fixed');
+      expect(result.attrs.tableLayout).toBe('fixed');
+      expect(result.attrs.tableProperties.tableWidth).toEqual({ type: 'dxa', value: 1440 });
+      expect(result.attrs.tableWidth).toEqual({ width: 72, type: 'dxa' });
+      expect(result.attrs.grid).toEqual([{ col: 1440 }]);
+    });
+
     it('converts auto table width to 100% when no usable grid exists', () => {
       const autoWidthTable = {
         name: 'w:tbl',
@@ -315,6 +342,41 @@ describe('w:tbl translator', () => {
       expect(tblGrid.elements.length).toBe(2);
       expect(tblGrid.elements[0].attributes['w:w']).toBe('3000');
       expect(tblGrid.elements[1].attributes['w:w']).toBe('4000');
+    });
+
+    it('does not emit w:tblLayout when only top-level tableLayout is present', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          grid: [{ col: '2000' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeUndefined();
+    });
+
+    it('emits w:tblLayout when tableProperties.tableLayout is present', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: { tableLayout: 'fixed' },
+          grid: [{ col: '2000' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeDefined();
+      expect(tblPr.elements).toEqual([
+        expect.objectContaining({ name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } }),
+      ]);
     });
 
     describe('_preProcessVerticalMergeCells', () => {

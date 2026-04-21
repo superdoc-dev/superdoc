@@ -1679,6 +1679,62 @@ describe('table converter', () => {
       expect(tableBlock.columnWidths).toBeUndefined();
     });
 
+    it('Priority 3: should use only first-row colwidth values when grid is absent', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [100] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [150] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [999] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [888] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        12,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      );
+
+      expect(result).not.toBeNull();
+      const tableBlock = result as TableBlock;
+      expect(tableBlock.columnWidths).toEqual([100, 150]);
+    });
+
     it('should handle colspan cells with colwidth arrays', () => {
       const node: PMNode = {
         type: 'table',

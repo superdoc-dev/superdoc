@@ -307,6 +307,42 @@ describe('SuperDocEditor', () => {
       expect(ref.current?.getInstance()).toBe(instanceBefore);
       expect(onEditorDestroy.mock.calls.length).toBe(destroysBefore);
     });
+
+    it('rebuilds when a new modules object is passed, even if content looks equal', async () => {
+      // `modules` is intentionally kept on reference identity in the dep
+      // array because it can carry functions and live objects that a
+      // structural compare would miss. This test pins that contract —
+      // if a future refactor wraps `modules` in useStructuralMemo, this
+      // test will fail and flag the regression.
+      const ref = createRef<SuperDocRef>();
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+
+      const { rerender } = render(
+        <SuperDocEditor
+          ref={ref}
+          modules={{ comments: { visible: true } }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      const instanceBefore = ref.current?.getInstance();
+
+      rerender(
+        <SuperDocEditor
+          ref={ref}
+          modules={{ comments: { visible: true } }}
+          onReady={onReady}
+          onEditorDestroy={onEditorDestroy}
+        />,
+      );
+
+      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      expect(ref.current?.getInstance()).not.toBe(instanceBefore);
+    });
   });
 
   describe('unique IDs', () => {

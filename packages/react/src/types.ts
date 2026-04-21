@@ -50,15 +50,10 @@ export interface SuperDocEditorCreateEvent {
   editor: Editor;
 }
 
-/** Surface where an editor event originated. Mirrors superdoc's EditorSurface. */
+/** Surface where an editor event originated. */
 export type EditorSurface = 'body' | 'header' | 'footer';
 
-/**
- * Event passed to onEditorUpdate callback.
- * Mirrors superdoc's EditorUpdateEvent typedef — defined here explicitly so
- * this package's types don't depend on JSDoc chain resolution across
- * workspace packages (which is fragile across TypeScript versions).
- */
+/** Event passed to onEditorUpdate callback. Mirrors superdoc's EditorUpdateEvent. */
 export interface SuperDocEditorUpdateEvent {
   /** The primary editor associated with the update. For header/footer edits, this is the main body editor. */
   editor: Editor;
@@ -72,19 +67,25 @@ export interface SuperDocEditorUpdateEvent {
   sectionType?: string | null;
 }
 
-/**
- * Event passed to onTransaction callback.
- * Mirrors superdoc's EditorTransactionEvent typedef — see note on SuperDocEditorUpdateEvent.
- */
+/** Event passed to onTransaction callback. Mirrors superdoc's EditorTransactionEvent. */
 export interface SuperDocTransactionEvent {
+  /** The primary editor associated with the transaction. For header/footer edits, this is the main body editor. */
   editor: Editor;
+  /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
   sourceEditor: Editor;
-  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
-  transaction: unknown;
+  /**
+   * The ProseMirror transaction or transaction-like payload emitted by the source editor.
+   * Typed as `any` to match superdoc's upstream typedef and avoid narrowing existing consumers.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transaction: any;
   /** Time spent applying the transaction, in milliseconds. */
   duration?: number;
+  /** The surface where the transaction originated. */
   surface: EditorSurface;
+  /** Relationship ID for header/footer edits. */
   headerId?: string | null;
+  /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
   sectionType?: string | null;
 }
 

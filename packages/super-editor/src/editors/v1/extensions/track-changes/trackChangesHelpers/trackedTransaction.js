@@ -309,10 +309,10 @@ const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
 
 /**
  * Tracked transaction to track changes.
- * @param {{ tr: import('prosemirror-state').Transaction; state: import('prosemirror-state').EditorState; user: import('@core/types/EditorConfig.js').User }} params
+ * @param {{ tr: import('prosemirror-state').Transaction; state: import('prosemirror-state').EditorState; user: import('@core/types/EditorConfig.js').User; replacements?: 'paired' | 'independent' }} params
  * @returns {import('prosemirror-state').Transaction} Modified transaction.
  */
-export const trackedTransaction = ({ tr, state, user }) => {
+export const trackedTransaction = ({ tr, state, user, replacements = 'paired' }) => {
   const onlyInputTypeMeta = ['inputType', 'uiEvent', 'paste', 'pointer', 'composition'];
   const notAllowedMeta = ['historyUndo', 'historyRedo', 'acceptReject'];
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
@@ -361,6 +361,7 @@ export const trackedTransaction = ({ tr, state, user }) => {
         date,
         originalStep,
         originalStepIndex,
+        replacements,
       });
     } else if (step instanceof AddMarkStep) {
       addMarkStep({

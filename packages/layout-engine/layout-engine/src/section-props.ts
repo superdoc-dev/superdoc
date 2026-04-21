@@ -1,4 +1,8 @@
 import type { ColumnLayout, FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
+<<<<<<< HEAD
+=======
+import { cloneColumnLayout } from './column-utils.js';
+>>>>>>> origin/stable
 
 /**
  * Section-level formatting properties that control page layout.
@@ -19,6 +23,11 @@ export type SectionProps = {
   columns?: ColumnLayout;
   orientation?: 'portrait' | 'landscape';
   vAlign?: SectionVerticalAlign;
+};
+
+const snapshotColumns = (columns?: ColumnLayout): ColumnLayout | undefined => {
+  if (!columns) return undefined;
+  return cloneColumnLayout(columns);
 };
 
 /**
@@ -59,7 +68,11 @@ const _snapshotSectionProps = (block: FlowBlock): SectionProps | null => {
   }
   if (block.columns) {
     hasProps = true;
+<<<<<<< HEAD
     props.columns = { count: block.columns.count, gap: block.columns.gap, withSeparator: block.columns.withSeparator };
+=======
+    props.columns = snapshotColumns(block.columns);
+>>>>>>> origin/stable
   }
   if (block.orientation) {
     hasProps = true;
@@ -135,11 +148,15 @@ export function computeNextSectionPropsAtBreak(blocks: FlowBlock[]): Map<number,
       props.pageSize = { w: source.pageSize.w, h: source.pageSize.h };
     }
     if (source.columns) {
+<<<<<<< HEAD
       props.columns = {
         count: source.columns.count,
         gap: source.columns.gap,
         withSeparator: source.columns.withSeparator,
       };
+=======
+      props.columns = snapshotColumns(source.columns);
+>>>>>>> origin/stable
     }
     if (source.orientation) {
       props.orientation = source.orientation;

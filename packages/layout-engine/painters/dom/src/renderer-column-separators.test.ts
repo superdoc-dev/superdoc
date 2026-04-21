@@ -74,6 +74,22 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps.map((s) => s.style.left)).toEqual(['296px', '520px']);
     });
 
+<<<<<<< HEAD
+=======
+    it('uses explicit column widths when drawing separators for page.columns', () => {
+      const page = buildPage({
+        columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
+      });
+      paintOnce(buildLayout(page), mount);
+
+      const seps = querySeparators(mount);
+      expect(seps).toHaveLength(1);
+      // contentWidth=624, availableWidth=576. Explicit widths [200, 952] are
+      // normalized to [100, 476], so the separator belongs at 96 + 100 + 24 = 220.
+      expect(seps[0].style.left).toBe('220px');
+    });
+
+>>>>>>> origin/stable
     it('renders nothing when withSeparator is false', () => {
       const page = buildPage({ columns: { count: 2, gap: 48, withSeparator: false } });
       paintOnce(buildLayout(page), mount);
@@ -211,5 +227,27 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps[0].style.top).toBe('96px');
       expect(seps[0].style.height).toBe('864px');
     });
+<<<<<<< HEAD
+=======
+
+    it('uses explicit column widths when drawing separators for columnRegions', () => {
+      const page = buildPage({
+        columnRegions: [
+          {
+            yStart: 96,
+            yEnd: 500,
+            columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
+          },
+        ],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      const seps = querySeparators(mount);
+      expect(seps).toHaveLength(1);
+      expect(seps[0].style.top).toBe('96px');
+      expect(seps[0].style.height).toBe('404px');
+      expect(seps[0].style.left).toBe('220px');
+    });
+>>>>>>> origin/stable
   });
 });

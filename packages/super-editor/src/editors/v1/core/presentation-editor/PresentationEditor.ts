@@ -5839,8 +5839,24 @@ export class PresentationEditor extends EventEmitter {
       yPosition += pageHeight + virtualGap;
     }
 
-    // Scroll viewport to the calculated position
-    if (this.#visibleHost) {
+    // Scroll viewport to the calculated position.
+    //
+    // The authoritative scrollable ancestor is `#scrollContainer` — setting
+    // scrollTop on the visible host alone is a no-op when the host is
+    // `overflow: visible` (the standard layout). Without this, anchor
+    // navigation (TOC clicks, cross-reference click-to-navigate under
+    // SD-2495) silently does nothing whenever the target page is outside
+    // the current viewport.
+    //
+    // We also write to `#visibleHost` for backwards compatibility: legacy
+    // layouts may make the visible host itself scrollable, and tests mock
+    // scrollTop on the host element.
+    if (this.#scrollContainer instanceof Window) {
+      this.#scrollContainer.scrollTo({ top: yPosition });
+    } else if (this.#scrollContainer) {
+      this.#scrollContainer.scrollTop = yPosition;
+    }
+    if (this.#visibleHost && this.#visibleHost !== this.#scrollContainer) {
       this.#visibleHost.scrollTop = yPosition;
     }
   }

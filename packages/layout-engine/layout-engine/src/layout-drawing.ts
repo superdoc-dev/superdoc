@@ -140,4 +140,5 @@ export function layoutDrawingBlock({
 
   state.page.fragments.push(fragment);
   state.cursorY += requiredHeight;
+  state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
 }

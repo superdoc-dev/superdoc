@@ -25,3 +25,42 @@ function useIdPolyfill(): string {
  */
 export const useStableId: () => string =
   typeof (React as any).useId === 'function' ? (React as any).useId : useIdPolyfill;
+
+/**
+ * Returns a reference-stable version of `value` — identity only changes
+ * when the serialized content changes.
+ *
+ * Use for plain-data object/array props that feed into `useEffect` /
+ * `useMemo` dependency arrays when the consumer is likely to pass inline
+ * literals. Without this, every parent re-render produces a fresh
+ * reference and causes the effect to re-run even when the content is
+ * identical.
+ *
+ * Not suitable for values containing functions, class instances (Yjs
+ * Doc, Maps, Sets, Dates), or circular references — JSON.stringify
+ * drops or collapses those. The compare only runs when the incoming
+ * reference differs, so the steady-state cost is a single pointer check.
+ */
+export function useMemoByValue<T>(value: T): T {
+  const lastRawRef = React.useRef<T>(value);
+  const stableRef = React.useRef<T>(value);
+
+  if (lastRawRef.current !== value) {
+    if (!shallowJsonEqual(stableRef.current, value)) {
+      stableRef.current = value;
+    }
+    lastRawRef.current = value;
+  }
+
+  return stableRef.current;
+}
+
+function shallowJsonEqual<T>(a: T, b: T): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}

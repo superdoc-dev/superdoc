@@ -62,6 +62,7 @@ describe('layoutDrawingBlock', () => {
     constraintBoundaries: [];
     activeConstraintIndex: number;
     trailingSpacing: number;
+    maxCursorY: number;
   };
 
   const createMockPageState = (overrides: Record<string, unknown> = {}): MockPageState =>
@@ -76,6 +77,7 @@ describe('layoutDrawingBlock', () => {
       constraintBoundaries: [],
       activeConstraintIndex: -1,
       trailingSpacing: 0,
+      maxCursorY: 100,
       ...overrides,
     }) as MockPageState;
 

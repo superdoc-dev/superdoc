@@ -1787,6 +1787,130 @@ describe('DomPainter', () => {
     const emptySpan = mount.querySelector('.superdoc-line span.superdoc-empty-run') as HTMLElement | null;
     expect(emptySpan?.dataset.pmStart).toBe('1');
     expect(emptySpan?.dataset.pmEnd).toBe('1');
+    // Empty-run must set explicit fontSize so it doesn't inherit fontSize:0 from the line
+    expect(emptySpan?.style.fontSize).toBe('18px');
+  });
+
+  it('sets fallback fontSize on field annotation without explicit fontSize', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-no-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'fa-no-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Must always set fontSize so it doesn't inherit fontSize:0 from the line.
+    // Falls back to 16px (browser default) when run has no explicit fontSize.
+    expect(annotation?.style.fontSize).toBe('16px');
+  });
+
+  it('converts numeric fontSize to pt on field annotation', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-numeric-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          fontSize: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'fa-numeric-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 },
+          ],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Numeric fontSize is converted to pt units.
+    expect(annotation?.style.fontSize).toBe('14pt');
+  });
+
+  it('sets explicit fontSize on math run wrapper', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'math-block',
+      runs: [
+        {
+          kind: 'math',
+          ommlJson: {},
+          textContent: 'x+1',
+          width: 40,
+          height: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 40, ascent: 10, descent: 4, lineHeight: 18 }],
+      totalHeight: 18,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'math-block', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const mathWrapper = mount.querySelector('.sd-math') as HTMLElement | null;
+    // Must set fontSize so fallback text doesn't inherit fontSize:0 from the line.
+    // Uses browser default (16px) rather than run.height, which would render tall
+    // expressions at 80–100px for the plain-text fallback path.
+    expect(mathWrapper?.style.fontSize).toBe('16px');
   });
 
   it('renders image fragments', () => {

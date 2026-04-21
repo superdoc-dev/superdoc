@@ -20,6 +20,7 @@ import { Whiteboard } from './whiteboard/Whiteboard';
 import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 import { SurfaceManager } from './surface-manager.js';
 import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
+import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -136,7 +137,6 @@ export class SuperDoc extends EventEmitter {
     conversations: [],
     isInternal: false,
     comments: { visible: false },
-    trackChanges: { visible: false },
 
     // toolbar config
     toolbar: null, // Optional DOM element to render the toolbar in
@@ -221,11 +221,7 @@ export class SuperDoc extends EventEmitter {
     } else if (typeof this.config.comments.visible !== 'boolean') {
       this.config.comments.visible = false;
     }
-    if (!this.config.trackChanges || typeof this.config.trackChanges !== 'object') {
-      this.config.trackChanges = { visible: false };
-    } else if (typeof this.config.trackChanges.visible !== 'boolean') {
-      this.config.trackChanges.visible = false;
-    }
+    normalizeTrackChangesConfig(this.config);
 
     // Web layout behavior:
     // - Backward compatible default: web layout still uses PM rendering.
@@ -255,21 +251,6 @@ export class SuperDoc extends EventEmitter {
       if (!this.config.user.name) {
         this.config.user.name = DEFAULT_USER.name;
       }
-    }
-
-    // Initialize tracked changes defaults based on document mode
-    if (!this.config.layoutEngineOptions) {
-      this.config.layoutEngineOptions = {};
-    }
-    // Only set defaults if user didn't explicitly configure tracked changes
-    if (!this.config.layoutEngineOptions.trackedChanges) {
-      // Default: ON for editing/suggesting modes, OFF for viewing mode
-      const isViewingMode = this.config.documentMode === 'viewing';
-      const viewingTrackedChangesVisible = isViewingMode && this.config.trackChanges?.visible === true;
-      this.config.layoutEngineOptions.trackedChanges = {
-        mode: isViewingMode ? (viewingTrackedChangesVisible ? 'review' : 'original') : 'review',
-        enabled: true,
-      };
     }
 
     // Enable virtualization by default for better performance on large documents.

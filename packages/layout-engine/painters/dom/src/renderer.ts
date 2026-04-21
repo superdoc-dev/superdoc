@@ -84,12 +84,14 @@ import {
 import { assertFragmentPmPositions, assertPmPositions } from './pm-position-validation.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
+  BROWSER_DEFAULT_FONT_SIZE,
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
+  ensureMathMencloseStyles,
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -1674,6 +1676,7 @@ export class DomPainter {
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
+    ensureMathMencloseStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -2230,6 +2233,8 @@ export class DomPainter {
       );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, width, height);
+
     return el;
   }
 
@@ -2307,6 +2312,60 @@ export class DomPainter {
     } catch (error) {
       console.error(`[renderPageRuler] Failed to create ruler for page ${page.number}:`, error);
       return null;
+    }
+  }
+
+  private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
+    if (!this.doc) return;
+    if (!page.margins) return;
+
+    const leftMargin = page.margins.left ?? 0;
+    const rightMargin = page.margins.right ?? 0;
+    const topMargin = page.margins.top ?? 0;
+    const bottomMargin = page.margins.bottom ?? 0;
+    const contentWidth = pageWidth - leftMargin - rightMargin;
+
+    // Prefer columnRegions (per-region configs for pages with continuous
+    // section breaks that change column layout mid-page). Fall back to a
+    // single region derived from page.columns so pages without mid-page
+    // changes keep working unchanged.
+    const regions =
+      page.columnRegions ??
+      (page.columns
+        ? [
+            {
+              yStart: topMargin,
+              yEnd: pageHeight - bottomMargin,
+              columns: page.columns,
+            },
+          ]
+        : []);
+
+    for (const region of regions) {
+      const { columns, yStart, yEnd } = region;
+      if (!columns.withSeparator) continue;
+      if (columns.count <= 1) continue;
+
+      const columnWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+      // Given the separator will have 1px width, ensure column has a larger width.
+      if (columnWidth <= 1) continue;
+
+      const regionHeight = yEnd - yStart;
+      if (regionHeight <= 0) continue;
+
+      for (let i = 0; i < columns.count - 1; i++) {
+        const separatorX = leftMargin + (i + 1) * columnWidth + i * columns.gap + columns.gap / 2;
+        const separatorEl = this.doc.createElement('div');
+
+        separatorEl.style.position = 'absolute';
+        separatorEl.style.left = `${separatorX}px`;
+        separatorEl.style.top = `${yStart}px`;
+        separatorEl.style.height = `${regionHeight}px`;
+        separatorEl.style.width = '1px';
+        separatorEl.style.backgroundColor = '#000000';
+        separatorEl.style.pointerEvents = 'none';
+        pageEl.appendChild(separatorEl);
+      }
     }
   }
 
@@ -2816,6 +2875,8 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
+
     return { element: el, fragments: fragmentStates };
   }
 
@@ -5170,6 +5231,12 @@ export class DomPainter {
     // Let browser auto-size to MathML content; estimated dimensions are for layout only
     wrapper.style.minWidth = `${run.width}px`;
     wrapper.style.minHeight = `${run.height}px`;
+    // Restore font-size so the plain-text fallback renders at a reasonable size
+    // (the line container sets fontSize: 0 to eliminate the CSS strut). MathML
+    // has its own internal scaling, so this only matters for the textContent
+    // fallback path. run.height would make tall expressions (fractions, equation
+    // arrays) render at 80–100px — use the browser default instead.
+    wrapper.style.fontSize = BROWSER_DEFAULT_FONT_SIZE;
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch ?? 0);
 
     const mathEl = convertOmmlToMathml(run.ommlJson, this.doc);
@@ -5442,6 +5509,7 @@ export class DomPainter {
       // Position and z-index on the image only (not the line) so resize overlay can stack above.
       img.style.position = 'relative';
       img.style.zIndex = '1';
+      img.style.maxWidth = '100%';
     }
 
     // Apply rotation and flip transforms from OOXML a:xfrm
@@ -5666,12 +5734,20 @@ export class DomPainter {
       }
     }
 
-    // Apply typography to the annotation element
+    // Apply typography to the annotation element.
+    // Always set a font-size so the annotation never inherits fontSize: 0 from
+    // the line container (which zeroes it to eliminate the CSS strut). When the
+    // run has no explicit fontSize, fall back to BROWSER_DEFAULT_FONT_SIZE (the
+    // browser default that was previously inherited before the strut fix).
     if (run.fontFamily) {
       annotation.style.fontFamily = run.fontFamily;
     }
-    if (run.fontSize) {
-      const fontSize = typeof run.fontSize === 'number' ? `${run.fontSize}pt` : run.fontSize;
+    {
+      const fontSize = run.fontSize
+        ? typeof run.fontSize === 'number'
+          ? `${run.fontSize}pt`
+          : run.fontSize
+        : BROWSER_DEFAULT_FONT_SIZE;
       annotation.style.fontSize = fontSize;
     }
     if (run.textColor) {
@@ -5875,6 +5951,9 @@ export class DomPainter {
       if (lineRange.pmEnd != null) {
         span.dataset.pmEnd = String(lineRange.pmEnd);
       }
+      // Restore font-size so the &nbsp; remains a visible caret target
+      // (the line container sets fontSize: 0 to eliminate the CSS strut).
+      span.style.fontSize = `${line.lineHeight}px`;
       span.innerHTML = '&nbsp;';
       el.appendChild(span);
     }

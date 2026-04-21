@@ -3,6 +3,7 @@ import {
   collapseWhitespaceNextToInlinePassthrough,
   defaultNodeListHandler,
   filterOutRootInlineNodes,
+  isAlternatingHeadersOddEven,
   normalizeTableBookmarksInContent,
 } from './docxImporter.js';
 
@@ -482,5 +483,42 @@ describe('docPartObj paragraph import regression', () => {
     expect(result[0].type).toBe('paragraph');
     expect(result[0].content?.[0]?.type).toBe('run');
     expect(result[0].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'Header text' });
+  });
+});
+
+describe('isAlternatingHeadersOddEven', () => {
+  // Helper: build the same docx-object shape the XML parser produces
+  const makeSettingsDocx = (settingsChildren) => ({
+    'word/settings.xml': {
+      elements: [
+        {
+          type: 'element',
+          name: 'w:settings',
+          elements: settingsChildren,
+        },
+      ],
+    },
+  });
+
+  it('returns true when word/settings.xml contains <w:evenAndOddHeaders/>', () => {
+    const docx = makeSettingsDocx([{ type: 'element', name: 'w:evenAndOddHeaders' }]);
+    expect(isAlternatingHeadersOddEven(docx)).toBe(true);
+  });
+
+  it('returns false when <w:evenAndOddHeaders/> is absent', () => {
+    const docx = makeSettingsDocx([
+      { type: 'element', name: 'w:zoom', attributes: { 'w:percent': '100' } },
+      { type: 'element', name: 'w:defaultTabStop', attributes: { 'w:val': '720' } },
+    ]);
+    expect(isAlternatingHeadersOddEven(docx)).toBe(false);
+  });
+
+  it('returns false when word/settings.xml is missing', () => {
+    expect(isAlternatingHeadersOddEven({})).toBe(false);
+  });
+
+  it('returns false when settings has no elements', () => {
+    expect(isAlternatingHeadersOddEven({ 'word/settings.xml': { elements: [] } })).toBe(false);
+    expect(isAlternatingHeadersOddEven({ 'word/settings.xml': {} })).toBe(false);
   });
 });

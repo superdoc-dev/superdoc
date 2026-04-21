@@ -208,6 +208,14 @@ class SuperConverter {
 
     this.fonts = params?.fonts || {};
 
+    /**
+     * Track-changes options forwarded from the editor. Consumed during
+     * import (e.g. by `buildTrackedChangeIdMap`) so behaviors like
+     * `replacements` can be toggled per SuperDoc instance.
+     * @type {{ replacements?: 'paired' | 'independent' } | null}
+     */
+    this.trackedChangesOptions = params?.trackedChangesOptions || null;
+
     this.addedMedia = {};
     this.comments = [];
     this.footnotes = [];

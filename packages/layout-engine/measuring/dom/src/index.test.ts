@@ -1619,6 +1619,77 @@ describe('measureBlock', () => {
       }
     });
 
+    it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
+      const rightStopTwips = 10593;
+      const rightStopPx = rightStopTwips * (96 / 1440); // ~706px
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'toc-paragraph',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'Generalities', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 15, pmEnd: 16 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          indent: { left: 30, right: 0, firstLine: 0, hanging: 30 },
+          tabs: [{ val: 'end', leader: 'dot', pos: rightStopTwips }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines).toHaveLength(1);
+      const line = measure.lines[0];
+      expect(line.leaders).toBeDefined();
+      expect(line.leaders?.[0]?.style).toBe('dot');
+      // Leader must end right before the page number — within ~20px of the right stop
+      // (page number "5" is a few px wide, not 100+ px wide).
+      expect(line.leaders?.[0]?.to).toBeLessThanOrEqual(rightStopPx);
+      expect(line.leaders?.[0]?.to).toBeGreaterThan(rightStopPx - 20);
+      // Leader must start AFTER the title text, not at "1." — proves the first tab
+      // fell on the default 0.5" grid, not on the end stop.
+      expect(line.leaders?.[0]?.from).toBeGreaterThan(100);
+      const trailingTab = block.runs[3];
+      if (trailingTab.kind === 'tab') {
+        expect(trailingTab.width).toBeGreaterThan(50);
+      }
+    });
+
+    it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
+      const centerStopTwips = 5000;
+      const endStopTwips = 10000;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'asymmetric-tabs',
+        runs: [
+          { text: 'A', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 1, pmEnd: 2 },
+          { text: 'B', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 3, pmEnd: 4 },
+          { text: 'C', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 2, pmStart: 5, pmEnd: 6 },
+          { text: 'D', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          indent: { left: 0, right: 0, firstLine: 0, hanging: 0 },
+          tabs: [
+            { val: 'center', pos: centerStopTwips },
+            { val: 'end', pos: endStopTwips },
+          ],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines).toHaveLength(1);
+      // Three tabs, two alignment stops: last two tabs bind to center + end.
+      // The first tab must NOT bind to either alignment stop — it should fall on the
+      // default grid. The last tab ends near the end stop position.
+      const lineWidth = measure.lines[0].width;
+      const endStopPx = endStopTwips * (96 / 1440);
+      expect(lineWidth).toBeCloseTo(endStopPx, 0);
+    });
+
     it('handles multiple tabs in a row', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1880,6 +1951,91 @@ describe('measureBlock', () => {
           }
         }
       }
+    });
+
+    it('uses surrounding text font size for tab line height, not hardcoded 12', async () => {
+      // Regression: tab runs previously hardcoded maxFontSize=12, producing
+      // wrong line heights when the surrounding text used a larger font.
+      const largeFontBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-font-size-large',
+        runs: [
+          { text: 'Hello', fontFamily: 'Arial', fontSize: 24 },
+          { kind: 'tab', text: '\t', pmStart: 5, pmEnd: 6 },
+          { text: 'World', fontFamily: 'Arial', fontSize: 24 },
+        ],
+        attrs: {},
+      };
+
+      const smallFontBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-font-size-small',
+        runs: [
+          { text: 'Hello', fontFamily: 'Arial', fontSize: 10 },
+          { kind: 'tab', text: '\t', pmStart: 5, pmEnd: 6 },
+          { text: 'World', fontFamily: 'Arial', fontSize: 10 },
+        ],
+        attrs: {},
+      };
+
+      const largeMeasure = expectParagraphMeasure(await measureBlock(largeFontBlock, 1000));
+      const smallMeasure = expectParagraphMeasure(await measureBlock(smallFontBlock, 1000));
+
+      expect(largeMeasure.lines).toHaveLength(1);
+      expect(smallMeasure.lines).toHaveLength(1);
+
+      // The large-font paragraph must have a taller line than the small-font one.
+      // With the old hardcoded 12, both could collapse to similar heights.
+      expect(largeMeasure.lines[0].lineHeight).toBeGreaterThan(smallMeasure.lines[0].lineHeight);
+    });
+
+    it('uses fallback font size when tab is the first run (no preceding text)', async () => {
+      // When a tab starts a paragraph, lastFontSize should fall back to the
+      // first text run's font size, not a hardcoded default.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-first-run',
+        runs: [
+          { kind: 'tab', text: '\t', pmStart: 0, pmEnd: 1 },
+          { text: 'After tab', fontFamily: 'Arial', fontSize: 20 },
+        ],
+        attrs: {},
+      };
+
+      const refBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'no-tab-ref',
+        runs: [{ text: 'After tab', fontFamily: 'Arial', fontSize: 20 }],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+      const refMeasure = expectParagraphMeasure(await measureBlock(refBlock, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      // Line height should match or exceed the reference (same font size drives both)
+      expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(refMeasure.lines[0].lineHeight);
+    });
+
+    it('tab-only line inherits font size from following text run', async () => {
+      // A line that contains only a tab should derive its height from the
+      // paragraph's font size context, not from a hardcoded 12pt.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab-only-line',
+        runs: [{ kind: 'tab', text: '\t', pmStart: 0, pmEnd: 1 }],
+        attrs: {
+          // paragraph-level font size hint via a nearby run
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      // With the fallback font size (default 12 when no runs present),
+      // the line should still have a reasonable height
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
+      expect(measure.lines[0].maxFontSize).toBeGreaterThan(0);
     });
   });
 

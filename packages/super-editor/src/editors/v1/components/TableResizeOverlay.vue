@@ -54,6 +54,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { pixelsToTwips, twipsToPixels } from '@core/super-converter/helpers.js';
 import { measureCache } from '@superdoc/layout-bridge';
+import { buildWidthAuthoringTableAttrs } from '../document-api-adapters/helpers/table-attr-sync.js';
 
 /**
  * Props for the TableResizeOverlay component
@@ -989,13 +990,12 @@ function dispatchResizeTransaction(columnIndex, newWidths) {
     // Calculate total table width in twips for tableWidth attribute
     const totalWidthTwips = gridTwips.reduce((sum, w) => sum + w, 0);
 
-    // Update table node with new grid, tableWidth, and userEdited flag
-    const newAttrs = {
-      ...tableNode.attrs,
+    // Width drags are explicit authoring, so keep runtime attrs and DOCX
+    // export state aligned on fixed layout immediately.
+    const newAttrs = buildWidthAuthoringTableAttrs(tableNode.attrs, {
       grid: newGrid,
       tableWidth: totalWidthTwips,
-      userEdited: true,
-    };
+    });
 
     tr.setNodeMarkup(tablePos, null, newAttrs);
 

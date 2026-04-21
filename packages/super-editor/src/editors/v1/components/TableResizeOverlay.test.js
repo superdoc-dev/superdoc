@@ -32,7 +32,12 @@ function createMockEditor(overrides = {}) {
     doc: {
       nodeAt: vi.fn(() => ({
         type: { name: 'table' },
-        attrs: { grid: [], tableWidth: 1000 },
+        attrs: {
+          grid: [],
+          tableWidth: 1000,
+          tableLayout: 'autofit',
+          tableProperties: { tableLayout: 'autofit' },
+        },
         nodeSize: 100,
         descendants: vi.fn((callback) => {
           // Simulate table structure: tableRow -> tableCell
@@ -1037,6 +1042,33 @@ describe('TableResizeOverlay', () => {
       const style = wrapper.vm.getSegmentHandleStyle(boundary, segment);
 
       expect(style.transform).toBe('translateX(-4px)'); // RESIZE_HANDLE_OFFSET_PX
+
+      wrapper.unmount();
+    });
+  });
+
+  describe('dispatchResizeTransaction', () => {
+    it('syncs fixed table layout into both promoted and nested attrs after a drag resize', async () => {
+      const editor = createMockEditor();
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      const [tablePos, , tableAttrs] = editor.view.state.tr.setNodeMarkup.mock.calls[0];
+      expect(tablePos).toBe(10);
+      expect(tableAttrs.tableLayout).toBe('fixed');
+      expect(tableAttrs.tableProperties).toMatchObject({ tableLayout: 'fixed' });
+      expect(tableAttrs.grid).toEqual([{ col: 2100 }, { col: 1650 }, { col: 1500 }]);
+      expect(tableAttrs.userEdited).toBe(true);
 
       wrapper.unmount();
     });

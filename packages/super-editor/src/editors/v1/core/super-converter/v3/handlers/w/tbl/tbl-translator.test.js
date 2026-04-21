@@ -459,6 +459,26 @@ describe('w:tbl translator', () => {
       ]);
     });
 
+    it('emits w:tblLayout for width-authored table attrs that carry both promoted and nested fixed layout', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          tableProperties: { tableLayout: 'fixed' },
+          grid: [{ col: '2400' }, { col: '3600' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeDefined();
+      expect(tblPr.elements).toEqual([
+        expect.objectContaining({ name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } }),
+      ]);
+    });
+
     describe('_preProcessVerticalMergeCells', () => {
       it('should add placeholder cells for rowspan > 1', () => {
         const mockEditorSchema = {

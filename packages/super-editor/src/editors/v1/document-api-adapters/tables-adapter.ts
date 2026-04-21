@@ -90,7 +90,6 @@ import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js'
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
-import { twipsToPixels } from '../core/super-converter/helpers.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import { generateDocxHexId } from '../utils/generateDocxHexId.js';
 import {
@@ -104,6 +103,7 @@ import {
 import { readTranslatedLinkedStyles } from '../core/parts/adapters/styles-read.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import type { PartId } from '../core/parts/types.js';
+import { buildWidthAuthoringTableAttrs, syncExtractedTableAttrs } from './helpers/table-attr-sync.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -143,73 +143,6 @@ function buildTableSuccess(
     table: tableAddress,
     trackedChangeRefs,
   };
-}
-
-/**
- * Produces top-level node attrs that pm-adapter reads for rendering.
- * Mirrors the extraction logic in tbl-translator.js (lines 84-140).
- *
- * INVARIANT: every setter that writes tableProperties on a TABLE NODE
- * via setNodeMarkup MUST spread the return value into the attrs object.
- * This ensures layout/rendering sees updated values immediately.
- *
- * SCOPE: table nodes only. Do NOT call this for cell-node mutations
- * (those use tableCellProperties, not tableProperties).
- *
- * See also: tbl-translator.js lines 84-140 (import-time extraction).
- * If you change one, you must change the other.
- */
-function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, unknown> {
-  const extracted: Record<string, unknown> = {};
-
-  // Direct pass-through fields (importer lines 85-88)
-  extracted.tableStyleId = tp.tableStyleId ?? null;
-  extracted.justification = tp.justification ?? null;
-  extracted.tableLayout = tp.tableLayout ?? null;
-  extracted.borders = tp.borders ?? null;
-
-  // tableIndent — importer converts twips→pixels (line 89)
-  const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
-  if (indent?.value != null) {
-    extracted.tableIndent = {
-      width: twipsToPixels(indent.value),
-      type: indent.type,
-    };
-  } else {
-    extracted.tableIndent = null;
-  }
-
-  // tableCellSpacing + borderCollapse derivation (importer lines 90, 109-111)
-  const spacing = tp.tableCellSpacing as { value?: number; type?: string } | undefined;
-  if (spacing?.value != null) {
-    extracted.tableCellSpacing = {
-      w: String(spacing.value),
-      type: spacing.type ?? 'dxa',
-    };
-    extracted.borderCollapse = 'separate';
-  } else {
-    extracted.tableCellSpacing = null;
-    extracted.borderCollapse = null;
-  }
-
-  // tableWidth — importer handles pct vs dxa vs auto (lines 113-140)
-  const tw = tp.tableWidth as { value?: number; type?: string } | undefined;
-  if (tw) {
-    if (tw.type === 'pct' && typeof tw.value === 'number') {
-      extracted.tableWidth = { value: tw.value, type: 'pct' };
-    } else if (tw.type === 'auto') {
-      extracted.tableWidth = { width: 0, type: 'auto' };
-    } else if (tw.value != null) {
-      const widthPx = twipsToPixels(tw.value);
-      extracted.tableWidth = widthPx != null ? { width: widthPx, type: tw.type } : null;
-    } else {
-      extracted.tableWidth = null;
-    }
-  } else {
-    extracted.tableWidth = null;
-  }
-
-  return extracted;
 }
 
 function normalizeGridWidth(width: unknown): { col: number } {
@@ -1583,18 +1516,17 @@ export function tablesSetColumnWidthAdapter(
       tr.setNodeMarkup(tableStart + pos, null, { ...attrs, colwidth });
     }
 
-    // Also update the table grid if present.
     const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const tableAttrUpdates: Record<string, unknown> = {};
+
     if (normalizedGrid && columnIndex < normalizedGrid.columns.length) {
       const newColumns = normalizedGrid.columns.slice();
       newColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
-      tr.setNodeMarkup(tablePos, null, {
-        ...tableAttrs,
-        grid: serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns }),
-        userEdited: true,
-      });
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
     }
+
+    tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -1683,7 +1615,7 @@ export function tablesDistributeColumnsAdapter(
     // emits uniform <w:gridCol> values rather than stale grid widths.
     const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
-    const tableAttrUpdates: Record<string, unknown> = { ...tableAttrs, userEdited: true };
+    const tableAttrUpdates: Record<string, unknown> = {};
 
     if (normalizedGrid) {
       const newColumns = normalizedGrid.columns.slice();
@@ -1697,7 +1629,7 @@ export function tablesDistributeColumnsAdapter(
       tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
     }
 
-    tr.setNodeMarkup(tablePos, null, tableAttrUpdates);
+    tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -2663,6 +2595,12 @@ export function tablesSetCellPropertiesAdapter(
     };
 
     tr.setNodeMarkup(cellPos, null, newAttrs);
+
+    if (input.preferredWidthPt !== undefined) {
+      const tableAttrs = table.candidate.node.attrs as Record<string, unknown>;
+      tr.setNodeMarkup(table.candidate.pos, null, buildWidthAuthoringTableAttrs(tableAttrs));
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);

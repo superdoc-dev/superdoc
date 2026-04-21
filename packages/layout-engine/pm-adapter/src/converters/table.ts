@@ -903,16 +903,19 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  } else if (hydratedTableStyle?.tableIndent) {
+    tableAttrs.tableIndent = { ...hydratedTableStyle.tableIndent };
   }
 
   if (defaultCellPadding && typeof defaultCellPadding === 'object') {
     tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
-  // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {
     tableAttrs.tableLayout = tableLayout;
+  } else if (hydratedTableStyle?.tableLayout) {
+    tableAttrs.tableLayout = hydratedTableStyle.tableLayout;
   }
 
   // Preserve tableProperties for floating table detection and other OOXML metadata

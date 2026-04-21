@@ -133,13 +133,18 @@ describe('Cache Invalidation', () => {
           width: 500,
           height: 100,
           pageWidth: 600,
-          margins: { left: 50, right: 50 },
+          pageHeight: 900,
+          margins: { left: 50, right: 50, top: 72, bottom: 72, header: 36 },
         };
 
         const hash = computeConstraintsHash(constraints);
         expect(hash).toContain('pw:600');
+        expect(hash).toContain('ph:900');
         expect(hash).toContain('ml:50');
         expect(hash).toContain('mr:50');
+        expect(hash).toContain('mt:72');
+        expect(hash).toContain('mb:72');
+        expect(hash).toContain('mh:36');
       });
 
       it('should produce different hashes for different constraints', () => {
@@ -578,6 +583,42 @@ describe('Cache Invalidation', () => {
       invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints1, undefined);
 
       // Second call with changed overflowBaseHeight
+      invalidateSpy.mockClear();
+      invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints2, undefined);
+
+      expect(invalidateSpy).toHaveBeenCalled();
+      expect(invalidateSpy).toHaveBeenCalledWith(['p1']);
+    });
+
+    it('should invalidate cache when page-relative header measurement constraints change', () => {
+      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+
+      const blocks = {
+        default: [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: 'Hello' }],
+          } as ParagraphBlock,
+        ],
+      };
+
+      const constraints1: HeaderFooterConstraints = {
+        width: 500,
+        height: 100,
+        pageHeight: 900,
+        margins: { left: 50, right: 50, top: 72, bottom: 72, header: 36 },
+      };
+
+      const constraints2: HeaderFooterConstraints = {
+        width: 500,
+        height: 100,
+        pageHeight: 900,
+        margins: { left: 50, right: 50, top: 96, bottom: 72, header: 36 },
+      };
+
+      invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints1, undefined);
+
       invalidateSpy.mockClear();
       invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints2, undefined);
 

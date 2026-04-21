@@ -5410,12 +5410,17 @@ export class PresentationEditor extends EventEmitter {
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
+    const alternateHeaders = Boolean(
+      (this.#editor as EditorWithConverter | undefined)?.converter?.pageStyles?.alternateHeaders,
+    );
+
     return {
       flowMode: 'paginated',
       pageSize,
       margins: resolvedMargins,
       ...(columns ? { columns } : {}),
       sectionMetadata,
+      alternateHeaders,
     };
   }
 

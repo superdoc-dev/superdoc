@@ -1,6 +1,9 @@
 import type {
+  DrawingBlock,
   FlowBlock,
+  ImageBlock,
   ImageRun,
+  ListBlock,
   TableBlock,
   ParagraphBlock,
   ParagraphAttrs,
@@ -78,7 +81,176 @@ const hashParagraphFrame = (frame: ParagraphFrame): string => {
 };
 
 /**
- * Generates a cache key hash from a block's runs, incorporating content and formatting.
+ * Returns the content blocks stored in a table cell.
+ *
+ * Table cells support both the legacy `paragraph` field and the newer `blocks`
+ * collection. The cache must normalize those shapes the same way the renderer
+ * does so both sides respond to the same content changes.
+ *
+ * @param cell - The table cell to read blocks from
+ * @returns The cell's content blocks in render order
+ */
+const getTableCellBlocks = (cell: TableBlock['rows'][number]['cells'][number]): FlowBlock[] => {
+  return cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+};
+
+/**
+ * Reads a clip path from either the block itself or its attrs record.
+ *
+ * @param block - The image-like block
+ * @returns The clip path string, or an empty string when not present
+ */
+const readBlockClipPath = (block: { clipPath?: string; attrs?: Record<string, unknown> }): string => {
+  if (typeof block.clipPath === 'string') {
+    return block.clipPath;
+  }
+  if (typeof block.attrs?.clipPath === 'string') {
+    return block.attrs.clipPath;
+  }
+  return '';
+};
+
+/**
+ * Creates a compact geometry key for drawing blocks.
+ *
+ * @param geometry - The drawing geometry
+ * @returns A deterministic geometry signature
+ */
+const hashDrawingGeometry = (geometry: {
+  width: number;
+  height: number;
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+}): string => {
+  return [geometry.width, geometry.height, geometry.rotation ?? 0, geometry.flipH ? 1 : 0, geometry.flipV ? 1 : 0].join(
+    ':',
+  );
+};
+
+/**
+ * Hashes an image-like block using the visual properties that can affect
+ * measurement and rendering.
+ *
+ * @param block - The image or image drawing block
+ * @returns A deterministic hash fragment for the block
+ */
+const hashImageLikeBlock = (
+  block: Pick<
+    ImageBlock,
+    'src' | 'width' | 'height' | 'alt' | 'title' | 'objectFit' | 'rotation' | 'flipH' | 'flipV'
+  > & {
+    clipPath?: string;
+    attrs?: Record<string, unknown>;
+  },
+): string => {
+  return [
+    block.src.slice(0, 50),
+    block.width ?? '',
+    block.height ?? '',
+    block.alt ?? '',
+    block.title ?? '',
+    block.objectFit ?? '',
+    readBlockClipPath(block),
+    block.rotation ?? '',
+    block.flipH ? 1 : 0,
+    block.flipV ? 1 : 0,
+  ].join(':');
+};
+
+/**
+ * Hashes a list block by folding in each marker and paragraph item.
+ *
+ * @param block - The list block to hash
+ * @returns A deterministic list hash fragment
+ */
+const hashListBlock = (block: ListBlock): string => {
+  return block.items.map((item) => `${item.id}:${item.marker.text}:${hashRuns(item.paragraph)}`).join('|');
+};
+
+/**
+ * Hashes a drawing block using the fields that affect its rendered footprint.
+ *
+ * @param block - The drawing block to hash
+ * @returns A deterministic drawing hash fragment
+ */
+const hashDrawingBlock = (block: DrawingBlock): string => {
+  if (block.drawingKind === 'image') {
+    return `drawing:image:${hashImageLikeBlock(block)}`;
+  }
+
+  if (block.drawingKind === 'vectorShape') {
+    return [
+      'drawing:vector',
+      hashDrawingGeometry(block.geometry),
+      block.shapeKind ?? '',
+      JSON.stringify(block.fillColor ?? null),
+      JSON.stringify(block.strokeColor ?? null),
+      block.strokeWidth ?? '',
+      JSON.stringify(block.customGeometry ?? null),
+      JSON.stringify(block.lineEnds ?? null),
+      JSON.stringify(block.effectExtent ?? null),
+      JSON.stringify(block.textContent ?? null),
+      block.textAlign ?? '',
+      block.textVerticalAlign ?? '',
+      JSON.stringify(block.textInsets ?? null),
+    ].join(':');
+  }
+
+  if (block.drawingKind === 'shapeGroup') {
+    return [
+      'drawing:shapeGroup',
+      hashDrawingGeometry(block.geometry),
+      JSON.stringify(block.groupTransform ?? null),
+      JSON.stringify(block.shapes),
+      block.size?.width ?? '',
+      block.size?.height ?? '',
+    ].join(':');
+  }
+
+  return [
+    'drawing:chart',
+    hashDrawingGeometry(block.geometry),
+    block.chartData?.chartType ?? '',
+    block.chartData?.subType ?? '',
+    JSON.stringify(block.chartData?.series ?? []),
+    block.chartRelId ?? '',
+  ].join(':');
+};
+
+/**
+ * Hashes a non-paragraph block embedded inside a table cell.
+ *
+ * The renderer versions these blocks through `deriveBlockVersion()`. The
+ * measure cache must follow the same policy so parent-table repainting and
+ * remeasurement stay aligned when nested tables, images, or drawings change.
+ *
+ * @param block - The non-paragraph cell block
+ * @returns A deterministic hash fragment for the block
+ */
+const hashNonParagraphCellBlock = (block: Exclude<FlowBlock, ParagraphBlock>): string => {
+  if (block.kind === 'table') {
+    return `table:${hashRuns(block)}`;
+  }
+
+  if (block.kind === 'image') {
+    return `image:${hashImageLikeBlock(block)}`;
+  }
+
+  if (block.kind === 'drawing') {
+    return hashDrawingBlock(block);
+  }
+
+  if (block.kind === 'list') {
+    return `list:${hashListBlock(block)}`;
+  }
+
+  return `${block.kind}:${block.id}`;
+};
+
+/**
+ * Generates a cache key hash from a block's content, incorporating text,
+ * formatting, and embedded block data.
  *
  * Text content is preserved verbatim without whitespace normalization. Different
  * whitespace (multiple spaces, tabs, leading/trailing spaces) produces different
@@ -138,10 +310,15 @@ const hashRuns = (block: FlowBlock): string => {
         }
 
         // Support both new multi-block cells and legacy single paragraph cells
-        const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+        const cellBlocks = getTableCellBlocks(cell);
 
         for (const cellBlock of cellBlocks) {
-          const paragraphBlock = cellBlock as ParagraphBlock;
+          if (cellBlock.kind !== 'paragraph') {
+            cellHashes.push(`nb:${hashNonParagraphCellBlock(cellBlock)}`);
+            continue;
+          }
+
+          const paragraphBlock = cellBlock;
 
           // Safety: Check that runs array exists before iterating
           if (!paragraphBlock.runs) {

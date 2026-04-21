@@ -122,6 +122,7 @@ export type ResolvedLayoutOptions =
       margins: ResolvedMarginsBase;
       columns?: { count: number; gap: number };
       sectionMetadata: SectionMetadata[];
+      alternateHeaders?: boolean;
     }
   | {
       flowMode: 'semantic';

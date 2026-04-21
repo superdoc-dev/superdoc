@@ -165,8 +165,26 @@ export default defineConfig(({ mode, command }) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
-        'tests/umd-smoke/**',
+        'tests/cdn-smoke/**',
       ],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text-summary', 'lcov'],
+        include: ['src/**'],
+        exclude: [
+          'src/dev/**',
+          'src/index.js',
+          'src/main.js',
+          'src/types.ts',
+          'src/super-editor.js',
+          'src/headless-toolbar.js',
+          'src/headless-toolbar-react.js',
+          'src/headless-toolbar-vue.js',
+          // Pure JSDoc typedef files (body is `export {}`, no runtime code)
+          'src/core/types/**',
+          '**/types.js',
+        ],
+      },
     },
     build: {
       target: 'es2022',

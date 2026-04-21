@@ -756,7 +756,7 @@ describe('analysis', () => {
         footerPx: 50,
         pageSizePx: { w: 12240, h: 15840 },
         orientation: 'landscape',
-        columnsPx: { count: 2, gap: 100 },
+        columnsPx: { count: 2, gap: 100, withSeparator: false },
         headerRefs: { default: 'header1' },
         footerRefs: { default: 'footer1' },
         numbering: { format: 'decimal', start: 1 },
@@ -770,7 +770,7 @@ describe('analysis', () => {
         margins: { header: 100, footer: 50 },
         pageSize: { w: 12240, h: 15840 },
         orientation: 'landscape',
-        columns: { count: 2, gap: 100 },
+        columns: { count: 2, gap: 100, withSeparator: false },
         headerRefs: { default: 'header1' },
         footerRefs: { default: 'footer1' },
         numbering: { format: 'decimal', start: 1 },
@@ -960,6 +960,32 @@ describe('analysis', () => {
       expect(result!.headerRefs).toEqual({ default: 'header1', first: 'headerFirst' });
       expect(result!.footerRefs).toEqual({ default: 'footer1' });
       expect(result!.numbering).toEqual({ format: 'decimal', start: 5 });
+    });
+
+    it('should have column separator flag set to true when present in extracted data', () => {
+      const bodySectPr: SectPrElement = { type: 'element', name: 'w:sectPr' };
+
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        titlePg: false,
+        columnsPx: { count: 2, gap: 48, withSeparator: true },
+      });
+
+      const result = createFinalSectionFromBodySectPr(bodySectPr, 0, 10, 0);
+
+      expect(result!.columns).toEqual({ count: 2, gap: 48, withSeparator: true });
+    });
+
+    it('should have column separator flag set to false when present as "false" in extracted data', () => {
+      const bodySectPr: SectPrElement = { type: 'element', name: 'w:sectPr' };
+
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        titlePg: false,
+        columnsPx: { count: 2, gap: 48, withSeparator: false },
+      });
+
+      const result = createFinalSectionFromBodySectPr(bodySectPr, 0, 10, 0);
+
+      expect(result!.columns).toEqual({ count: 2, gap: 48, withSeparator: false });
     });
 
     it('should respect body section type from extracted data', () => {

@@ -17,6 +17,7 @@ import type {
   SuperDocReadyEvent,
   SuperDocEditorCreateEvent,
   SuperDocEditorUpdateEvent,
+  SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
 } from './types';
@@ -46,6 +47,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onEditorCreate,
     onEditorDestroy,
     onEditorUpdate,
+    onTransaction,
     onContentError,
     onException,
     // Key props that trigger rebuild when changed
@@ -85,6 +87,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onEditorCreate,
     onEditorDestroy,
     onEditorUpdate,
+    onTransaction,
     onContentError,
     onException,
   });
@@ -96,10 +99,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       onEditorCreate,
       onEditorDestroy,
       onEditorUpdate,
+      onTransaction,
       onContentError,
       onException,
     };
-  }, [onReady, onEditorCreate, onEditorDestroy, onEditorUpdate, onContentError, onException]);
+  }, [onReady, onEditorCreate, onEditorDestroy, onEditorUpdate, onTransaction, onContentError, onException]);
 
   // Queue mode changes that happen during init
   const pendingModeRef = useRef<DocumentMode | null>(null);
@@ -190,6 +194,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           onEditorUpdate: (event: SuperDocEditorUpdateEvent) => {
             if (!destroyed) {
               callbacksRef.current.onEditorUpdate?.(event);
+            }
+          },
+          onTransaction: (event: SuperDocTransactionEvent) => {
+            if (!destroyed) {
+              callbacksRef.current.onTransaction?.(event);
             }
           },
           onContentError: (event: SuperDocContentErrorEvent) => {

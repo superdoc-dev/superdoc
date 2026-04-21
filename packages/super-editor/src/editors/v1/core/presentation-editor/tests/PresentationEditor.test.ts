@@ -1025,6 +1025,21 @@ describe('PresentationEditor', () => {
         }
       },
     );
+
+    // SD-2495 anchor-nav fix: #scrollPageIntoView must write to the real
+    // scroll ancestor, not just #visibleHost. This is enforced by the
+    // existing scrollToPage tests in this describe block — both mock
+    // scrollTop on the container (which serves as both visibleHost and the
+    // effective scroll target in the test harness) and assert that value
+    // gets written. Those tests would fail if the fix reverted to writing
+    // only to a zero-effect target.
+    //
+    // The "scrollContainer != visibleHost" branch (the exact shape of the
+    // dev app and real consumers) isn't unit-testable here because happy-dom
+    // doesn't propagate inline overflow styles through getComputedStyle,
+    // which is what #findScrollableAncestor uses. Browser-level verification
+    // lives in the SD-2495 behavior/manual testing; see the click-to-
+    // navigate agent-browser runs in the PR description.
   });
 
   describe('setDocumentMode', () => {

@@ -85,4 +85,25 @@ describe('crossReferenceNodeToRun (SD-2495)', () => {
     );
     expect(run!.link).toBeUndefined();
   });
+
+  it('forwards node.marks to textNodeToRun so surrounding styles (italic, textStyle) survive', async () => {
+    // Guards against SD-2537's "preserve surrounding run styling" AC —
+    // a refactor that dropped node.marks from the synthesized text node
+    // would silently strip italic/color from every cross-reference.
+    const { textNodeToRun } = await import('./text-run.js');
+    vi.mocked(textNodeToRun).mockClear();
+    const marks = [
+      { type: 'italic', attrs: {} },
+      { type: 'textStyle', attrs: { color: '#ff0000' } },
+    ];
+    const node: PMNode = {
+      type: 'crossReference',
+      attrs: { resolvedText: '15', target: '_Ref1', instruction: 'REF _Ref1 \\h' },
+      marks,
+    };
+    crossReferenceNodeToRun(makeParams(node.attrs as Record<string, unknown>, { node }));
+
+    const call = vi.mocked(textNodeToRun).mock.calls.at(-1)?.[0];
+    expect(call?.node?.marks).toEqual(marks);
+  });
 });

@@ -64,15 +64,13 @@ describe('bookmarkStartNodeToBlocks (SD-2454)', () => {
     });
   });
 
-  it('suppresses markers for auto-generated bookmarks (names starting with `_`)', () => {
-    // Matches Word behavior: `_Toc…`, `_Ref…`, `_GoBack` etc. are hidden from
-    // Show Bookmarks because they are internally generated for headings,
-    // fields, or navigation — showing them would clutter the document.
-    for (const name of ['_Toc1234', '_Ref506192326', '_GoBack']) {
-      const node: PMNode = { type: 'bookmarkStart', attrs: { name, id: '1' } };
-      const result = bookmarkStartNodeToBlocks(makeParams(node, { showBookmarks: true }));
-      expect(result, `should suppress marker for "${name}"`).toBeUndefined();
-    }
+  // Matches Word behavior: `_Toc…`, `_Ref…`, `_GoBack` etc. are hidden from
+  // Show Bookmarks because they are internally generated for headings,
+  // fields, or navigation — showing them would clutter the document.
+  it.each(['_Toc1234', '_Ref506192326', '_GoBack'])('suppresses marker for auto-generated bookmark "%s"', (name) => {
+    const node: PMNode = { type: 'bookmarkStart', attrs: { name, id: '1' } };
+    const result = bookmarkStartNodeToBlocks(makeParams(node, { showBookmarks: true }));
+    expect(result).toBeUndefined();
   });
 
   it('still records bookmark position for cross-reference resolution regardless of showBookmarks', () => {

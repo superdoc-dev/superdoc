@@ -4,10 +4,6 @@ import type { Page } from '@playwright/test';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
-const IMAGE_SOURCE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80"><rect width="120" height="80" fill="#0f766e"/><text x="14" y="48" font-size="18" fill="#ffffff">Drag me</text></svg>',
-)}`;
-
 const IMAGE_ROOT_SELECTOR =
   '.superdoc-image-fragment[data-drag-source-kind="existingImage"], .superdoc-inline-image-clip-wrapper[data-drag-source-kind="existingImage"], .superdoc-inline-image[data-drag-source-kind="existingImage"]';
 const LINE = '.superdoc-line';
@@ -47,31 +43,39 @@ async function getLineByText(page: Page, text: string) {
 test.describe('existing rendered image drag and drop', () => {
   test('@behavior SD-2192: dragging an existing image repositions the image node', async ({ superdoc }) => {
     await superdoc.type('Intro paragraph with ');
-    await superdoc.executeCommand('setImage', {
-      src: IMAGE_SOURCE,
-      alt: 'Drag me',
-      size: { width: 120, height: 80 },
+    await superdoc.page.evaluate(() => {
+      (window as any).editor.commands.setImage({
+        src: 'assets/image-landscape.png',
+        alt: 'Drag me',
+        size: { width: 120, height: 80 },
+      });
     });
-    await superdoc.waitForStable();
+    await expect.poll(async () => getFirstNodePosByType(superdoc.page, 'image')).toBeGreaterThan(0);
     await superdoc.type(' in the first paragraph');
     await superdoc.newLine();
     await superdoc.type('Tail paragraph');
+    await superdoc.newLine();
+    await superdoc.type('Drop anchor');
     await superdoc.waitForStable();
 
     const sourceBefore = await getFirstNodePosByType(superdoc.page, 'image');
     const tailBefore = await superdoc.findTextPos('Tail paragraph');
+    const anchorBefore = await superdoc.findTextPos('Drop anchor');
     expect(sourceBefore).toBeLessThan(tailBefore);
+    expect(tailBefore).toBeLessThan(anchorBefore);
 
     const source = superdoc.page.locator(IMAGE_ROOT_SELECTOR).first();
-    const { line: target, box: targetBox } = await getLineByText(superdoc.page, 'Tail paragraph');
+    const { line: target } = await getLineByText(superdoc.page, 'Drop anchor');
 
-    await dragRenderedElement(source, target, { targetOffsetX: Math.max(4, targetBox.width - 4) });
+    await dragRenderedElement(source, target, { targetOffsetX: 4 });
     await superdoc.waitForStable();
 
     const sourceAfter = await getFirstNodePosByType(superdoc.page, 'image');
     const tailAfter = await superdoc.findTextPos('Tail paragraph');
+    const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Intro paragraph with');
   });

@@ -28,8 +28,17 @@ export async function dragRenderedElement(
   target: Locator,
   options: DragPointOptions = {},
 ): Promise<void> {
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
+  let sourceBox = await source.boundingBox();
+  if (!sourceBox) {
+    await source.scrollIntoViewIfNeeded();
+    sourceBox = await source.boundingBox();
+  }
+
+  let targetBox = await target.boundingBox();
+  if (!targetBox) {
+    await target.scrollIntoViewIfNeeded();
+    targetBox = await target.boundingBox();
+  }
   if (!sourceBox) {
     throw new Error('dragRenderedElement: source element is not visible');
   }

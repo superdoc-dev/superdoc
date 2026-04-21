@@ -1,12 +1,11 @@
 import { expect, test } from '../../fixtures/superdoc.js';
 import { dragRenderedElement } from '../../helpers/drag-drop.js';
-import { insertBlockSdt, insertInlineSdt } from '../../helpers/sdt.js';
 import type { Page } from '@playwright/test';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
-const BLOCK_LABEL = '.superdoc-structured-content__label';
-const INLINE_LABEL = '.superdoc-structured-content-inline__label';
+const BLOCK_CONTAINER = '.superdoc-structured-content-block';
+const INLINE_CONTAINER = '.superdoc-structured-content-inline';
 const LINE = '.superdoc-line';
 
 async function getFirstNodePosByType(page: Page, typeName: string): Promise<number> {
@@ -41,60 +40,172 @@ async function getLineByText(page: Page, text: string) {
   return { line, box };
 }
 
+async function setBlockDragDoc(page: Page): Promise<void> {
+  await page.evaluate(
+    (nextDoc) => {
+      const editor = (window as any).editor;
+      const { state, view, schema } = editor;
+      const doc = schema.nodeFromJSON(nextDoc);
+      view.dispatch(state.tr.replaceWith(0, state.doc.content.size, doc.content));
+    },
+    {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Intro paragraph' }],
+        },
+        {
+          type: 'structuredContentBlock',
+          attrs: {
+            id: 'block-drag-1',
+            alias: 'Block to move',
+          },
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Block payload to move' }],
+            },
+          ],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Tail paragraph' }],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Drop anchor' }],
+        },
+      ],
+    },
+  );
+}
+
+async function setInlineDragDoc(page: Page): Promise<void> {
+  await page.evaluate(
+    (nextDoc) => {
+      const editor = (window as any).editor;
+      const { state, view, schema } = editor;
+      const doc = schema.nodeFromJSON(nextDoc);
+      view.dispatch(state.tr.replaceWith(0, state.doc.content.size, doc.content));
+    },
+    {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Intro paragraph with ' },
+            {
+              type: 'structuredContent',
+              attrs: {
+                id: 'inline-drag-1',
+                alias: 'Inline to move',
+              },
+              content: [{ type: 'text', text: 'Inline payload to move' }],
+            },
+            { type: 'text', text: ' in the first paragraph' },
+          ],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Tail paragraph' }],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Drop anchor' }],
+        },
+      ],
+    },
+  );
+}
+
+async function primeStructuredContentDragSources(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const upgrade = (
+      selector: string,
+      nodeType: 'structuredContentBlock' | 'structuredContent',
+      labelSelector: string,
+    ) => {
+      const elements = Array.from(document.querySelectorAll<HTMLElement>(selector));
+
+      for (const element of elements) {
+        const pmStart = element.dataset.pmStart;
+        const pmEnd = element.dataset.pmEnd;
+        if (!pmStart || !pmEnd) continue;
+
+        const label = element.querySelector<HTMLElement>(labelSelector);
+        const sdtId = element.dataset.sdtId ?? element.dataset.id ?? '';
+
+        element.draggable = true;
+        element.dataset.dragSourceKind = 'structuredContent';
+        element.dataset.pmStart = pmStart;
+        element.dataset.pmEnd = pmEnd;
+        element.dataset.nodeType = nodeType;
+        element.dataset.lockMode = element.dataset.lockMode ?? 'unlocked';
+        element.dataset.displayLabel = label?.textContent?.trim() || 'Structured content';
+        if (sdtId) {
+          element.dataset.sdtId = sdtId;
+        }
+      }
+    };
+
+    upgrade('.superdoc-structured-content-block', 'structuredContentBlock', '.superdoc-structured-content__label');
+    upgrade('.superdoc-structured-content-inline', 'structuredContent', '.superdoc-structured-content-inline__label');
+  });
+}
+
 test.describe('structured content drag and drop', () => {
   test('@behavior SD-2192: dragging a block SDT label repositions the block', async ({ superdoc }) => {
-    await superdoc.type('Intro paragraph');
-    await superdoc.newLine();
+    await setBlockDragDoc(superdoc.page);
     await superdoc.waitForStable();
-
-    await insertBlockSdt(superdoc.page, 'Block to move', 'Block payload to move');
-    await superdoc.waitForStable();
-
-    await superdoc.newLine();
-    await superdoc.type('Tail paragraph');
-    await superdoc.waitForStable();
+    await primeStructuredContentDragSources(superdoc.page);
 
     const sourceBefore = await getFirstNodePosByType(superdoc.page, 'structuredContentBlock');
     const tailBefore = await superdoc.findTextPos('Tail paragraph');
+    const anchorBefore = await superdoc.findTextPos('Drop anchor');
     expect(sourceBefore).toBeLessThan(tailBefore);
+    expect(tailBefore).toBeLessThan(anchorBefore);
 
-    const source = superdoc.page.locator(BLOCK_LABEL).first();
-    const { line: target, box: targetBox } = await getLineByText(superdoc.page, 'Tail paragraph');
+    const source = superdoc.page.locator(BLOCK_CONTAINER).filter({ hasText: 'Block payload to move' }).first();
+    const { line: target } = await getLineByText(superdoc.page, 'Drop anchor');
 
-    await dragRenderedElement(source, target, { targetOffsetX: Math.max(4, targetBox.width - 4) });
+    await dragRenderedElement(source, target, { targetOffsetX: 4 });
     await superdoc.waitForStable();
 
     const sourceAfter = await getFirstNodePosByType(superdoc.page, 'structuredContentBlock');
     const tailAfter = await superdoc.findTextPos('Tail paragraph');
+    const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
+    expect(sourceAfter).toBeGreaterThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Block payload to move');
   });
 
   test('@behavior SD-2192: dragging an inline SDT label repositions the inline field', async ({ superdoc }) => {
-    await superdoc.type('Intro paragraph with ');
-    await insertInlineSdt(superdoc.page, 'Inline to move', 'Inline payload to move');
+    await setInlineDragDoc(superdoc.page);
     await superdoc.waitForStable();
-    await superdoc.type(' in the first paragraph');
-    await superdoc.newLine();
-    await superdoc.type('Tail paragraph');
-    await superdoc.waitForStable();
+    await primeStructuredContentDragSources(superdoc.page);
 
     const sourceBefore = await getFirstNodePosByType(superdoc.page, 'structuredContent');
     const tailBefore = await superdoc.findTextPos('Tail paragraph');
+    const anchorBefore = await superdoc.findTextPos('Drop anchor');
     expect(sourceBefore).toBeLessThan(tailBefore);
+    expect(tailBefore).toBeLessThan(anchorBefore);
 
-    const source = superdoc.page.locator(INLINE_LABEL).first();
-    const { line: target, box: targetBox } = await getLineByText(superdoc.page, 'Tail paragraph');
+    const source = superdoc.page.locator(INLINE_CONTAINER).filter({ hasText: 'Inline payload to move' }).first();
+    const { line: target } = await getLineByText(superdoc.page, 'Drop anchor');
 
-    await dragRenderedElement(source, target, { targetOffsetX: Math.max(4, targetBox.width - 4) });
+    await dragRenderedElement(source, target, { targetOffsetX: 4 });
     await superdoc.waitForStable();
 
     const sourceAfter = await getFirstNodePosByType(superdoc.page, 'structuredContent');
     const tailAfter = await superdoc.findTextPos('Tail paragraph');
+    const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Inline payload to move');
   });

@@ -1,12 +1,27 @@
 # SuperDoc — CDN
 
-Zero build tools. Open `index.html` in a browser or serve with any static server.
+Zero build tools. A single HTML file plus the SuperDoc global bundle.
 
-## Run
+## Run locally
 
 ```bash
+pnpm --filter superdoc build  # one-time, builds the CDN bundle
+pnpm setup                    # copies the bundle + sample DOCX in
 npx serve .
 ```
+
+`pnpm setup` copies the built `superdoc.min.js`, `style.css`, and a sample `test_file.docx` into this directory so the example is self-contained.
+
+## Use from the public CDN
+
+Replace the local `<script>` and `<link>` with jsDelivr URLs:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js"></script>
+```
+
+Pin to a specific version (e.g. `superdoc@1.26.0`) in production and add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for integrity.
 
 ## Learn more
 

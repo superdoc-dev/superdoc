@@ -178,8 +178,14 @@ describe('toCssFontFamily', () => {
       expect(toCssFontFamily('Arial')).toBe('Arial, sans-serif');
     });
 
-    it('should append default fallback to font with spaces', () => {
-      expect(toCssFontFamily('Times New Roman')).toBe('Times New Roman, sans-serif');
+    it('should use serif fallback for known serif-like fonts', () => {
+      expect(toCssFontFamily('Times New Roman')).toBe('Times New Roman, serif');
+      expect(toCssFontFamily('Cambria')).toBe('Cambria, serif');
+      expect(toCssFontFamily('Times')).toBe('Times, serif');
+      expect(toCssFontFamily('Cambria Math')).toBe('Cambria Math, serif');
+      expect(toCssFontFamily('Cochin')).toBe('Cochin, serif');
+      expect(toCssFontFamily('Hoefler Text')).toBe('Hoefler Text, serif');
+      expect(toCssFontFamily('Minion Pro')).toBe('Minion Pro, serif');
     });
 
     it('should append default fallback when options is empty object', () => {
@@ -201,7 +207,7 @@ describe('toCssFontFamily', () => {
     });
 
     it('should preserve internal whitespace in font names', () => {
-      expect(toCssFontFamily('Times New Roman')).toBe('Times New Roman, sans-serif');
+      expect(toCssFontFamily('Times New Roman')).toBe('Times New Roman, serif');
     });
   });
 

@@ -148,8 +148,10 @@ export interface TextStyleAttrs {
   position?: string | null;
   /** Font family (CSS font-family string) */
   fontFamily?: string | null;
-  /** East Asian font family override */
+  /** East Asian font family override (per-script font, ECMA-376 §17.3.2.26) */
   eastAsiaFontFamily?: string | null;
+  /** Complex Script font family override (per-script font, ECMA-376 §17.3.2.26) */
+  csFontFamily?: string | null;
   /** Text color (hex/CSS color) */
   color?: string | null;
   /** Background color (CSS color) */

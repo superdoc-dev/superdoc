@@ -1,3 +1,4 @@
+artifacts/
 results/
 .promptfoo/
 node_modules/
@@ -5,4 +6,7 @@ node_modules/
 .env.local
 __*
 fixtures/.state*
+fixtures/docs/.state*
 fixtures/tmp-*
+fixtures/docs/tmp-*
+.DS_Store

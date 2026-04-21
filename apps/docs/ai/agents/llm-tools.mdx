@@ -1,0 +1,388 @@
+---
+title: AI Agents
+sidebarTitle: Overview
+description: Document tools that plug into any LLM provider — what they do and how they work
+keywords: "llm tools, ai document editing, openai tools, anthropic tools, tool use, function calling, superdoc sdk, document automation"
+---
+
+The SuperDoc SDK ships tool definitions that give LLMs structured access to document operations. They cover reading, searching, editing, formatting, lists, comments, tracked changes, and batched mutations. Pick a provider format, pass the tools to your model, dispatch the calls, and the SDK handles schema formatting, argument validation, and execution.
+
+## Quick start
+
+Install the SDK, create a client, open a document, and wire up an agentic loop.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk openai
+    ```
+
+    ```typescript
+    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+    import OpenAI from 'openai';
+
+    const client = createSuperDocClient();
+    await client.connect();
+    const doc = await client.open({ doc: './contract.docx' });
+
+    const { tools } = await chooseTools({ provider: 'openai' });
+    const openai = new OpenAI();
+
+    const messages = [
+      { role: 'system', content: 'You edit documents using the provided tools.' },
+      { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+    ];
+
+    while (true) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5.4',
+        messages,
+        tools,
+      });
+
+      const message = response.choices[0].message;
+      messages.push(message);
+
+      if (!message.tool_calls?.length) break;
+
+      for (const call of message.tool_calls) {
+        const result = await dispatchSuperDocTool(
+          doc,
+          call.function.name,
+          JSON.parse(call.function.arguments),
+        );
+        messages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+
+    await doc.save({ inPlace: true });
+    await doc.close();
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk openai
+    ```
+
+    ```python
+    import json
+    import openai
+    from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+
+    client = SuperDocClient()
+    client.connect()
+    doc = client.open({"doc": "./contract.docx"})
+
+    result = choose_tools({"provider": "openai"})
+    tools = result["tools"]
+
+    messages = [
+        {"role": "system", "content": "You edit documents using the provided tools."},
+        {"role": "user", "content": "Find the termination clause and rewrite it to allow 30-day notice."},
+    ]
+
+    while True:
+        response = openai.chat.completions.create(
+            model="gpt-5.4", messages=messages, tools=tools
+        )
+        message = response.choices[0].message
+        messages.append(message)
+
+        if not message.tool_calls:
+            break
+
+        for call in message.tool_calls:
+            result = dispatch_superdoc_tool(
+                doc, call.function.name, json.loads(call.function.arguments)
+            )
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": json.dumps(result),
+            })
+
+    doc.save({"inPlace": True})
+    doc.close({})
+    client.dispose()
+    ```
+  </Tab>
+</Tabs>
+
+## Tool selection
+
+`chooseTools()` returns provider-formatted tool definitions ready to pass to your LLM.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { chooseTools } from '@superdoc-dev/sdk';
+
+    const { tools, meta } = await chooseTools({
+      provider: 'openai',   // 'openai' | 'anthropic' | 'vercel' | 'generic'
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import choose_tools
+
+    result = choose_tools({"provider": "openai"})
+    tools = result["tools"]
+    ```
+  </Tab>
+</Tabs>
+
+The current SDK returns the full grouped intent tool set for the selected provider. Group filtering and meta-discovery are not part of the shipped public API here.
+
+## Tool catalog
+
+The generated catalog currently contains 9 grouped intent tools. Most tools use an `action` argument to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
+
+| Tool | Actions | What it does |
+| --- | --- | --- |
+| `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
+| `superdoc_search` | _(single action)_ | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing`, `set_direction`, `set_flow_options` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading`, `table` | Create structural block elements |
+| `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
+| `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
+| `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
+| `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
+
+<Note>
+Built-in tools cover the core operations. For tables, images, hyperlinks, and anything else, [create custom tools](#creating-custom-tools) that call any `doc.*` operation today.
+</Note>
+
+## Dispatching tool calls
+
+`dispatchSuperDocTool()` resolves a tool name to the correct SDK method, validates arguments, and executes the call against a bound document handle.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+    const result = await dispatchSuperDocTool(doc, toolName, args);
+    ```
+  </Tab>
+  <Tab title="Python (sync)">
+    ```python
+    from superdoc import dispatch_superdoc_tool
+
+    result = dispatch_superdoc_tool(doc, tool_name, args)
+    ```
+  </Tab>
+  <Tab title="Python (async)">
+    ```python
+    from superdoc import dispatch_superdoc_tool_async
+
+    result = await dispatch_superdoc_tool_async(doc, tool_name, args)
+    ```
+  </Tab>
+</Tabs>
+
+The dispatcher validates required parameters, checks that arguments are compatible, and throws descriptive errors the LLM can act on.
+
+## System prompt
+
+`getSystemPrompt()` returns a default prompt that teaches the model the tool workflow: targeting, search-before-edit, and common patterns. It's optional. You can use it as-is, extend it with your own instructions, or write a completely custom prompt.
+
+```typescript
+import { getSystemPrompt } from '@superdoc-dev/sdk';
+
+const systemPrompt = await getSystemPrompt();
+```
+
+## Provider formats
+
+Each provider gets tool definitions in its native format.
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'openai' });
+    // [{ type: 'function', function: { name, description, parameters } }]
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'anthropic' });
+    // [{ name, description, input_schema }]
+    ```
+  </Tab>
+  <Tab title="Vercel AI">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'vercel' });
+    // [{ type: 'function', function: { name, description, parameters } }]
+    ```
+  </Tab>
+  <Tab title="Generic">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'generic' });
+    // [{ name, description, parameters, returns, metadata }]
+    ```
+  </Tab>
+</Tabs>
+
+## Creating custom tools
+
+The built-in tools cover core editing operations. For advanced features like tables, images, hyperlinks, footnotes, and citations, create custom tools that call `doc.*` methods directly.
+
+| Step | What you do |
+| --- | --- |
+| 1. Pick operations | Browse `doc.*` to find the methods you need |
+| 2. Define the schema | Write a function tool definition for your provider |
+| 3. Write a dispatcher | Map tool actions to `doc.*` calls |
+| 4. Merge and use | Combine with SDK tools in your agentic loop |
+
+### Step 1: Pick your operations
+
+Every `doc.*` namespace maps to a group of [Document API](/document-api/overview) operations:
+
+```text
+doc.hyperlinks   → list, get, wrap, insert, patch, remove
+doc.tables       → get, insertRow, deleteRow, mergeCells, ...
+doc.images       → list, get, setSize, rotate, crop, ...
+doc.footnotes    → list, get, create, delete, update, ...
+doc.bookmarks    → list, get, create, delete, ...
+```
+
+### Step 2: Define the tool schema
+
+Group related operations under a single tool using an `action` enum. This matches the pattern the built-in tools use.
+
+```typescript
+import type { ChatCompletionTool } from 'openai/resources/chat/completions';
+
+const hyperlinkTool: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'superdoc_hyperlink',
+    description:
+      'Create, read, update, or remove hyperlinks in the document.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'get', 'wrap', 'insert', 'patch', 'remove'],
+        },
+        target: {
+          description: 'Target address from superdoc_search results.',
+        },
+        text: { type: 'string', description: 'Display text (insert only).' },
+        href: { type: 'string', description: 'URL destination.' },
+        tooltip: { type: 'string', description: 'Hover tooltip text.' },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+};
+```
+
+<Note>
+- Keep descriptions short. The model reads every tool definition on each turn.
+- Use `additionalProperties: false` to prevent hallucinated parameters.
+- Reference `superdoc_search` in descriptions so the model knows how to get targets.
+</Note>
+
+### Step 3: Write a dispatcher
+
+Map each action to the corresponding `doc.*` call:
+
+```typescript
+import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+async function dispatchToolCall(doc, toolName, args) {
+  // Built-in tools: delegate to the SDK
+  if (toolName !== 'superdoc_hyperlink') {
+    return dispatchSuperDocTool(doc, toolName, args);
+  }
+
+  // Custom tool: call doc.* directly
+  const { action, target, text, href, tooltip } = args;
+
+  switch (action) {
+    case 'list':
+      return doc.hyperlinks.list({});
+    case 'get':
+      return doc.hyperlinks.get({ target });
+    case 'wrap':
+      return doc.hyperlinks.wrap({
+        target,
+        link: { destination: { href }, ...(tooltip && { tooltip }) },
+      });
+    case 'insert':
+      return doc.hyperlinks.insert({
+        text,
+        link: { destination: { href }, ...(tooltip && { tooltip }) },
+        ...(target && { target }),
+      });
+    case 'patch':
+      return doc.hyperlinks.patch({
+        target,
+        patch: { ...(href && { href }), ...(tooltip && { tooltip }) },
+      });
+    case 'remove':
+      return doc.hyperlinks.remove({ target });
+    default:
+      throw new Error(`Unknown action: "${action}"`);
+  }
+}
+```
+
+### Step 4: Merge and use
+
+Combine your custom tool with the SDK tools and use your dispatcher in the agentic loop:
+
+```typescript
+const { tools: sdkTools } = await chooseTools({ provider: 'openai' });
+const allTools = [...sdkTools, hyperlinkTool];
+
+// In your agentic loop, use your dispatcher instead of dispatchSuperDocTool:
+// OpenAI chat completions store the tool name on function.name.
+const toolName = toolCall.function.name;
+const result = await dispatchToolCall(doc, toolName, args);
+```
+
+### Extending the system prompt
+
+For custom tools, append usage instructions to the SDK system prompt so the model knows how to use them:
+
+```typescript
+const systemPrompt = await getSystemPrompt();
+
+const customInstructions = `
+## superdoc_hyperlink
+
+Use this tool to manage hyperlinks. First use superdoc_search to find
+text you want to link, then pass the handle as target to the wrap action.
+`;
+
+const fullPrompt = systemPrompt + '\n' + customInstructions;
+```
+
+## SDK functions
+
+| Function | Description |
+| --- | --- |
+| `chooseTools(input)` | Load grouped tool definitions for a provider |
+| `dispatchSuperDocTool(doc, name, args)` | Execute a tool call against a bound document handle |
+| `listTools(provider)` | List all tool definitions for a provider |
+| `getToolCatalog()` | Load the full tool catalog with metadata |
+| `getSystemPrompt()` | Read the bundled system prompt for intent tools |
+
+## Related
+
+- [How to use](/ai/agents/integrations) — step-by-step integration guide with copy-pasteable code
+- [Best practices](/ai/agents/best-practices) — prompting, workflow tips, and tested prompt examples
+- [Debugging](/ai/agents/debugging) — troubleshoot tool call failures
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
+- [Document API](/document-api/overview) — the operation set behind the tools

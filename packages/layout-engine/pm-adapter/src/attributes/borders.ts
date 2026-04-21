@@ -324,6 +324,11 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
 export const normalizeParagraphBorders = (value: unknown): ParagraphAttrs['borders'] | undefined => {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as Record<string, unknown>;
+  // Note: w:bar is intentionally not in this list. We tested in Word and it
+  // never draws w:bar on screen — it just keeps the value in the file when
+  // saving. The spec lets apps skip it, and Word does. SuperDoc does too, by
+  // default. If you have a real document where bar needs to be drawn, open
+  // an issue with the use case before adding 'bar' here.
   const sides: Array<'top' | 'right' | 'bottom' | 'left' | 'between'> = ['top', 'right', 'bottom', 'left', 'between'];
   const borders: ParagraphAttrs['borders'] = {};
 

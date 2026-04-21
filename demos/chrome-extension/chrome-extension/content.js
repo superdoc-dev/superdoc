@@ -49,8 +49,8 @@ async function loadSuperDoc() {
   document.head.appendChild(cssLink);
   
   // Check if SuperDoc library is available
-  if (!window.SuperDocLibrary) {
-    throw new Error('SuperDocLibrary not found - should be loaded via content script');
+  if (!window.SuperDoc) {
+    throw new Error('SuperDoc not found - should be loaded via content script');
   }
 }
 
@@ -163,15 +163,15 @@ async function initSuperdocWithDOCX(data) {
   console.log('Initializing SuperDoc in modal');
   
   try {
-    if (!window.SuperDocLibrary?.SuperDoc) {
-      console.error('SuperDocLibrary not available');
+    if (!window.SuperDoc) {
+      console.error('SuperDoc not available');
       showFallback(data);
       return;
     }
     
     const file = new File([data.blob], data.filename, { type: data.mimeType });
     const fileUrl = URL.createObjectURL(file);
-    const superdocFile = await SuperDocLibrary.getFileObject(fileUrl, data.filename, data.mimeType);
+    const superdocFile = await SuperDoc.getFileObject(fileUrl, data.filename, data.mimeType);
     
     const config = {
       selector: `#${ID_PREFIX}docx-viewer`,
@@ -184,7 +184,7 @@ async function initSuperdocWithDOCX(data) {
       onEditorCreate: () => console.log('Editor created in modal')
     };
     
-    superdoc = new SuperDocLibrary.SuperDoc(config);
+    superdoc = new SuperDoc(config);
     // unhide selector
     const viewerElement = modalContainer.querySelector(`#${ID_PREFIX}docx-viewer`);
     if (viewerElement) {
@@ -288,8 +288,8 @@ async function initSuperdocWithHTML(data) {
   console.log('Initializing SuperDoc with HTML content');
   
   try {
-    if (!window.SuperDocLibrary?.SuperDoc) {
-      console.error('SuperDocLibrary not available');
+    if (!window.SuperDoc) {
+      console.error('SuperDoc not available');
       showMarkdownFallback(data);
       return;
     }
@@ -325,11 +325,11 @@ async function initSuperdocWithHTML(data) {
       content: htmlContent,
       onReady: () => console.log('SuperDoc ready with HTML content'),
       onEditorCreate: () => console.log('Editor created with HTML content'),
-      converter: SuperDocLibrary.SuperConverter
+      converter: SuperDoc.SuperConverter
     };
     
-    superdoc = new SuperDocLibrary.Editor(config);
-    superdoc.converter = new SuperDocLibrary.SuperConverter();
+    superdoc = new SuperDoc.Editor(config);
+    superdoc.converter = new SuperDoc.SuperConverter();
     // unhide selector
     const viewerElement = modalContainer.querySelector(`#${ID_PREFIX}markdown-viewer`);
     if (viewerElement) {
@@ -337,7 +337,7 @@ async function initSuperdocWithHTML(data) {
     }
     console.log('SuperDoc initialized with HTML content');
 
-    const toolbar = new SuperDocLibrary.SuperToolbar({ element: `${ID_PREFIX}toolbar`, editor: superdoc, isDev: true, pagination: true, });
+    const toolbar = new SuperDoc.SuperToolbar({ element: `${ID_PREFIX}toolbar`, editor: superdoc, isDev: true, pagination: true, });
     
   } catch (error) {
     console.error('Error initializing SuperDoc with HTML:', error.message);

@@ -46,7 +46,7 @@ const isLaravel = example === 'laravel';
 // Start command
 const isCdn = example === 'cdn';
 const command = isCdn
-  ? `npx serve ${examplePath} -l ${port}`
+  ? `node ${examplePath}/setup.mjs && npx serve ${examplePath} -l ${port}`
   : isLaravel
     ? `${run} start`
     : useConcurrently.includes(example)

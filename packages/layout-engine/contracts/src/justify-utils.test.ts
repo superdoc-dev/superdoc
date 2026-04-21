@@ -3,6 +3,8 @@ import {
   SPACE_CHARS,
   shouldApplyJustify,
   calculateJustifySpacing,
+  getFirstLineIndentOffset,
+  adjustAvailableWidthForTextIndent,
   type ShouldApplyJustifyParams,
   type CalculateJustifySpacingParams,
 } from './justify-utils.js';
@@ -305,5 +307,58 @@ describe('calculateJustifySpacing', () => {
       shouldJustify: false,
     };
     expect(calculateJustifySpacing(params)).toBe(0);
+  });
+});
+
+describe('getFirstLineIndentOffset', () => {
+  it('returns firstLine minus hanging', () => {
+    expect(getFirstLineIndentOffset({ firstLine: 72, hanging: 0 }, false)).toBe(72);
+  });
+
+  it('returns negative offset for hanging indent', () => {
+    expect(getFirstLineIndentOffset({ firstLine: 0, hanging: 160 }, false)).toBe(-160);
+  });
+
+  it('returns combined offset when both set', () => {
+    expect(getFirstLineIndentOffset({ firstLine: 36, hanging: 72 }, false)).toBe(-36);
+  });
+
+  it('returns 0 when suppressFirstLineIndent is true', () => {
+    expect(getFirstLineIndentOffset({ firstLine: 72, hanging: 0 }, true)).toBe(0);
+  });
+
+  it('returns 0 for undefined indent', () => {
+    expect(getFirstLineIndentOffset(undefined, false)).toBe(0);
+  });
+
+  it('returns 0 for empty indent object', () => {
+    expect(getFirstLineIndentOffset({}, false)).toBe(0);
+  });
+});
+
+describe('adjustAvailableWidthForTextIndent', () => {
+  it('widens for negative offset (hanging indent) regardless of maxWidth', () => {
+    // offset=-160 means hanging indent: availableWidth should increase
+    expect(adjustAvailableWidthForTextIndent(308, -160, 468)).toBe(468);
+  });
+
+  it('narrows for positive offset when maxWidth is null (fallback path)', () => {
+    expect(adjustAvailableWidthForTextIndent(432, 72, null)).toBe(360);
+  });
+
+  it('narrows for positive offset when maxWidth is undefined (fallback path)', () => {
+    expect(adjustAvailableWidthForTextIndent(432, 72, undefined)).toBe(360);
+  });
+
+  it('does not adjust for positive offset when maxWidth is set (measurer already accounted)', () => {
+    expect(adjustAvailableWidthForTextIndent(360, 72, 360)).toBe(360);
+  });
+
+  it('returns original width when offset is 0', () => {
+    expect(adjustAvailableWidthForTextIndent(468, 0, null)).toBe(468);
+  });
+
+  it('clamps to 0 when adjustment would go negative', () => {
+    expect(adjustAvailableWidthForTextIndent(50, 100, null)).toBe(0);
   });
 });

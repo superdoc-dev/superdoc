@@ -162,6 +162,11 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').ProofingStatus} ProofingStatus
  * @typedef {import('@superdoc/super-editor').ProofingError} ProofingError
  * @typedef {import('@superdoc/super-editor').PageStyles} PageStyles
+ *
+ * @typedef {import('./core/types/index.js').ContextMenuContext} ContextMenuContext
+ * @typedef {import('./core/types/index.js').ContextMenuItem} ContextMenuItem
+ * @typedef {import('./core/types/index.js').ContextMenuSection} ContextMenuSection
+ * @typedef {import('./core/types/index.js').ContextMenuConfig} ContextMenuConfig
  */
 
 // Public exports

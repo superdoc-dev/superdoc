@@ -35,6 +35,8 @@ import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
 import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
+import type { ExtractInput } from '../extract/extract.js';
+import type { ExtractResult } from '../types/extract.types.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
@@ -527,6 +529,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   getHtml: { input: GetHtmlInput; options: never; output: string };
   markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
+  extract: { input: ExtractInput; options: never; output: ExtractResult };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };

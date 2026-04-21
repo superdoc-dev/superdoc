@@ -24,6 +24,20 @@ pnpm corpus:update-registry
 
 `pnpm corpus:pull` now tolerates missing keys and prunes stale `registry.json` entries automatically.
 `pnpm corpus:pull` does not remove local files that no longer exist in R2; use `pnpm corpus:delete` when you want the shared corpus and local copy removed together.
+
+### Worktrees: seeding from the primary repo
+
+When `pnpm corpus:pull` runs inside a git worktree it first hardlinks anything
+the primary repo already has on disk, then only goes to R2 for the rest. The
+primary's bytes are already local so this is effectively instant for a fresh
+worktree.
+
+- Hardlinks (not copies) — zero disk overhead, both worktrees see the same
+  inode. Falls back to copy automatically when the two checkouts live on
+  different filesystems.
+- `--force` still re-downloads from R2. Destinations are unlinked before each
+  R2 write, so the primary's files are never clobbered.
+- Pass `--no-seed` to skip the hardlink step and go straight to R2.
 `pnpm corpus:push` runs `superdoc-benchmark baseline <uploaded-key> --force` by default after upload.
 Set `SUPERDOC_CORPUS_SKIP_WORD_BASELINE=1` (or pass `--no-word-baseline`) to disable this behavior.
 

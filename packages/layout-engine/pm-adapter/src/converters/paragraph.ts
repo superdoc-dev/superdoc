@@ -665,6 +665,33 @@ export function paragraphToFlowBlocks({
     blockWithAttrs.attrs.anchorParagraphId = anchorParagraphId;
     return blockWithAttrs;
   };
+  const attachInlineShapeGroupAlignment = <T extends FlowBlock>(block: T): T => {
+    if (block.kind !== 'drawing') {
+      return block;
+    }
+    const drawingBlock = block as T & {
+      drawingKind?: string;
+      attrs?: Record<string, unknown>;
+    };
+    const rawWrap = drawingBlock.attrs?.wrap as { type?: unknown } | undefined;
+    if (drawingBlock.drawingKind !== 'shapeGroup' || rawWrap?.type !== 'Inline') {
+      return block;
+    }
+    // w:jc="distribute" distributes remaining space equally around inline content,
+    // which visually centers a sole inline drawing. normalizeAlignment collapses
+    // 'distribute' to 'justify', so we check the raw justification value to distinguish
+    // it from 'both' (which only stretches inter-word spacing and does not center).
+    const isDistribute = resolvedParagraphProperties.justification === 'distribute';
+    const effectiveAlignment = isDistribute ? 'center' : paragraphAttrs.alignment;
+    if (effectiveAlignment === 'center' || effectiveAlignment === 'right') {
+      if (!drawingBlock.attrs) drawingBlock.attrs = {};
+      drawingBlock.attrs.inlineParagraphAlignment = effectiveAlignment;
+      const indent = paragraphAttrs.indent;
+      if (typeof indent?.left === 'number') drawingBlock.attrs.paragraphIndentLeft = indent.left;
+      if (typeof indent?.right === 'number') drawingBlock.attrs.paragraphIndentRight = indent.right;
+    }
+    return block;
+  };
 
   const flushParagraph = () => {
     if (currentRuns.length === 0) {
@@ -757,11 +784,13 @@ export function paragraphToFlowBlocks({
             const block = blockConverter(node, { ...blockOptions, blocks: newBlocks });
             if (block) {
               attachAnchorParagraphId(block, anchorParagraphId);
+              attachInlineShapeGroupAlignment(block);
               blocks.push(block);
             } else if (newBlocks.length > 0) {
               // Some block converters may push multiple blocks to the provided array
               newBlocks.forEach((b) => {
                 attachAnchorParagraphId(b, anchorParagraphId);
+                attachInlineShapeGroupAlignment(b);
                 blocks.push(b);
               });
             }
@@ -779,6 +808,7 @@ export function paragraphToFlowBlocks({
       const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
       const drawingBlock = converter(node, stableNextBlockId, positions);
       if (drawingBlock) {
+        attachInlineShapeGroupAlignment(drawingBlock);
         blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;

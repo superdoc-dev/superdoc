@@ -987,6 +987,12 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
                   description: 'Room/document identifier. Defaults to session ID if omitted.',
                 },
                 tokenEnv: { type: 'string', description: 'Environment variable name containing the auth token.' },
+                params: {
+                  type: 'object',
+                  description:
+                    'Custom query parameters appended to the WebSocket URL. Values must be strings. Reserved keys: token.',
+                  additionalProperties: { type: 'string' },
+                },
                 syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
                 onMissing: {
                   type: 'string',

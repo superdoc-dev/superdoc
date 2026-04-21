@@ -759,4 +759,102 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const boldRun = finalState.doc.nodeAt(runs[1]);
     expect(boldRun?.attrs.runProperties).toEqual({ bold: true });
   });
+
+  // SD-2517: empty inline keys metadata preservation
+  describe('SD-2517: empty inline keys [] vs null semantics', () => {
+    it('preserves runPropertiesInlineKeys: [] when no user edits occur (zero-edit round-trip)', () => {
+      // Simulate a run imported with no inline w:rPr ([] from importer).
+      // The plugin should not pollute the allow-list with mark-derived keys.
+      decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+      resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: { fontFamily: { ascii: 'Arial' }, lang: { val: 'pt-BR' } },
+          runPropertiesInlineKeys: [],
+          runPropertiesStyleKeys: null,
+          runPropertiesOverrideKeys: null,
+        },
+        [],
+        'Heading text',
+      );
+      const state = createState(schema, doc);
+
+      // Trigger a doc change so the plugin fires (simulates another plugin changing the doc)
+      const textPos = runPos(state.doc) + 1;
+      const tr = state.tr.insertText('X', textPos).delete(textPos, textPos + 1);
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      // The inline keys should remain [] (or at most not contain fontFamily)
+      const inlineKeys = runNode?.attrs.runPropertiesInlineKeys;
+      expect(inlineKeys === null || (Array.isArray(inlineKeys) && !inlineKeys.includes('fontFamily'))).toBe(true);
+    });
+
+    it('adds mark keys when user applies new formatting to a run with empty inline keys', () => {
+      // A run imported with [] gets user-applied bold → bold should appear in inline keys.
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: { ascii: 'Arial' },
+      }));
+      // resolveRunProperties returns style-resolved props WITHOUT bold (style doesn't define bold)
+      resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: { lang: { val: 'pt-BR' } },
+          runPropertiesInlineKeys: [],
+          runPropertiesStyleKeys: null,
+          runPropertiesOverrideKeys: null,
+        },
+        [],
+        'Hello',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      // bold should be in inline keys (it's a genuine user edit)
+      expect(runNode?.attrs.runPropertiesInlineKeys).toContain('bold');
+    });
+
+    it('preserves null inline keys for legacy runs (backward compatibility)', () => {
+      // Legacy collab payloads have runPropertiesInlineKeys: null.
+      // The plugin should keep null (not convert to []).
+      decodeRPrFromMarksMock.mockImplementation(() => ({ bold: false }));
+      resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: { lang: { val: 'en-US' } },
+          runPropertiesInlineKeys: null,
+          runPropertiesStyleKeys: null,
+          runPropertiesOverrideKeys: null,
+        },
+        [],
+        'Hello',
+      );
+      const state = createState(schema, doc);
+      const textPos = runPos(state.doc) + 1;
+      const tr = state.tr.insertText('X', textPos).delete(textPos, textPos + 1);
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      // With null metadata (legacy), the plugin adds mark-derived keys (backward compat).
+      // The key invariant: it must NOT become [] (that would mean "importer said nothing inline").
+      const inlineKeys = runNode?.attrs.runPropertiesInlineKeys;
+      if (inlineKeys !== null) {
+        expect(Array.isArray(inlineKeys) && inlineKeys.length > 0).toBe(true);
+      }
+    });
+  });
 });

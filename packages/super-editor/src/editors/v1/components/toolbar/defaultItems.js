@@ -1,6 +1,7 @@
 import { h, ref } from 'vue';
 
 import { sanitizeNumber } from './helpers';
+import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
@@ -44,7 +45,7 @@ export const makeDefaultItems = ({
   });
 
   // font
-  const fontOptions = [...(toolbarFonts ? toolbarFonts : TOOLBAR_FONTS)];
+  const fontOptions = (toolbarFonts ?? TOOLBAR_FONTS).map(normalizeFontOption);
   const fontButton = useToolbarItem({
     type: 'dropdown',
     name: 'fontFamily',
@@ -697,14 +698,6 @@ export const makeDefaultItems = ({
     },
   });
 
-  // const overflowOptions = useToolbarItem({
-  //   type: 'options',
-  //   name: 'overflowOptions',
-  //   preCommand(self, argument) {
-  //     self.parentItem.active = false;
-  //   },
-  // });
-
   // zoom
   const zoom = useToolbarItem({
     type: 'dropdown',
@@ -767,20 +760,6 @@ export const makeDefaultItems = ({
     },
   });
 
-  // Track changes test buttons
-  const toggleTrackChanges = useToolbarItem({
-    type: 'button',
-    disabled: false,
-    name: 'toggleTrackChanges',
-    tooltip: toolbarTexts.trackChanges,
-    command: 'toggleTrackChanges',
-    icon: toolbarIcons.trackChanges,
-    group: 'left',
-    attributes: {
-      ariaLabel: 'Track changes',
-    },
-  });
-
   const acceptTrackedChangeBySelection = useToolbarItem({
     type: 'button',
     disabled: false,
@@ -804,32 +783,6 @@ export const makeDefaultItems = ({
     group: 'left',
     attributes: {
       ariaLabel: 'Reject tracked changes',
-    },
-  });
-
-  const toggleTrackChangesOriginal = useToolbarItem({
-    type: 'button',
-    disabled: false,
-    name: 'toggleTrackChangesShowOriginal',
-    tooltip: toolbarTexts.trackChangesOriginal,
-    command: 'toggleTrackChangesShowOriginal',
-    icon: toolbarIcons.trackChangesOriginal,
-    group: 'left',
-    attributes: {
-      ariaLabel: 'Toggle tracked changes show original',
-    },
-  });
-
-  const toggleTrackChangesFinal = useToolbarItem({
-    type: 'button',
-    disabled: false,
-    name: 'toggleTrackChangesShowFinal',
-    tooltip: toolbarTexts.trackChangesFinal,
-    command: 'toggleTrackChangesShowFinal',
-    icon: toolbarIcons.trackChangesFinal,
-    group: 'left',
-    attributes: {
-      ariaLabel: 'Toggle tracked changes show final',
     },
   });
 
@@ -1059,13 +1012,8 @@ export const makeDefaultItems = ({
   let toolbarItems = [
     undo,
     redo,
-
-    // Dev - tracked changes
-    // toggleTrackChanges,
     acceptTrackedChangeBySelection,
     rejectTrackedChangeOnSelection,
-    // toggleTrackChangesOriginal,
-    // toggleTrackChangesFinal,
 
     zoom,
     fontButton,
@@ -1119,8 +1067,8 @@ export const makeDefaultItems = ({
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 
-  // Track changes test buttons
-  const devItems = [toggleTrackChanges, toggleTrackChangesOriginal, toggleTrackChangesFinal];
+  // Track changes accept/reject are hidden outside dev mode for viewers.
+  const devItems = [];
   if (!isDev) {
     if (role === 'viewer') {
       devItems.push(...[acceptTrackedChangeBySelection, rejectTrackedChangeOnSelection]);

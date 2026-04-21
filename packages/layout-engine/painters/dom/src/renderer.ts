@@ -1,5 +1,6 @@
 import type {
   ChartDrawing,
+  ColumnLayout,
   CustomGeometryData,
   DrawingBlock,
   DrawingFragment,
@@ -61,6 +62,7 @@ import {
   calculateJustifySpacing,
   computeLinePmRange,
   getCellSpacingPx,
+  normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
   shouldApplyJustify,
@@ -2346,15 +2348,13 @@ export class DomPainter {
       if (!columns.withSeparator) continue;
       if (columns.count <= 1) continue;
 
-      const columnWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
-      // Given the separator will have 1px width, ensure column has a larger width.
-      if (columnWidth <= 1) continue;
-
       const regionHeight = yEnd - yStart;
       if (regionHeight <= 0) continue;
 
-      for (let i = 0; i < columns.count - 1; i++) {
-        const separatorX = leftMargin + (i + 1) * columnWidth + i * columns.gap + columns.gap / 2;
+      const separatorPositions = this.getColumnSeparatorPositions(columns, leftMargin, contentWidth);
+      if (separatorPositions.length === 0) continue;
+
+      for (const separatorX of separatorPositions) {
         const separatorEl = this.doc.createElement('div');
 
         separatorEl.style.position = 'absolute';
@@ -2367,6 +2367,40 @@ export class DomPainter {
         pageEl.appendChild(separatorEl);
       }
     }
+  }
+
+  private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
+    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
+
+    if (!hasExplicitWidths) {
+      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+      if (equalWidth <= 1) return [];
+
+      const separatorPositions: number[] = [];
+      for (let index = 0; index < columns.count - 1; index += 1) {
+        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
+      }
+      return separatorPositions;
+    }
+
+    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
+    if (normalizedColumns.count <= 1) return [];
+
+    const columnWidths =
+      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
+    // A 1px separator only makes sense when every participating column is wider than the separator itself.
+    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
+
+    const separatorPositions: number[] = [];
+    let cursorX = leftMargin;
+
+    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
+      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
+      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
+      cursorX += currentColumnWidth + normalizedColumns.gap;
+    }
+
+    return separatorPositions;
   }
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {

@@ -1099,7 +1099,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
 
     if (activeColumns.count > 1) {
-      page.columns = { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator };
+      page.columns = cloneColumnLayout(activeColumns);
     }
 
     // Set vertical alignment from active section state
@@ -2604,10 +2604,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns:
-      activeColumns.count > 1
-        ? { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator }
-        : undefined,
+    columns: activeColumns.count > 1 ? cloneColumnLayout(activeColumns) : undefined,
   };
 }
 

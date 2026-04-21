@@ -259,6 +259,86 @@ describe('w:tbl translator', () => {
       // No usable grid → table defaults to 100% width (fill page)
       expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
     });
+
+    it('derives fallback logical columns from raw row skips when tblGrid is missing', () => {
+      const skippedColumnsTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:trPr',
+                elements: [
+                  { name: 'w:gridBefore', attributes: { 'w:val': '1' } },
+                  { name: 'w:gridAfter', attributes: { 'w:val': '2' } },
+                ],
+              },
+              { name: 'w:tc', elements: [] },
+            ],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [skippedColumnsTable], docx: {} }, {});
+
+      expect(result.attrs.grid).toHaveLength(4);
+      expect(trTranslator.encode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            totalColumns: 4,
+            columnWidths: expect.arrayContaining([
+              expect.any(Number),
+              expect.any(Number),
+              expect.any(Number),
+              expect.any(Number),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('seeds fallback skipped-column widths from wBefore and wAfter when tblGrid is missing', () => {
+      const skippedWidthTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [{ name: 'w:tblW', attributes: { 'w:w': '4800', 'w:type': 'dxa' } }],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:trPr',
+                elements: [
+                  { name: 'w:gridBefore', attributes: { 'w:val': '1' } },
+                  { name: 'w:gridAfter', attributes: { 'w:val': '2' } },
+                  { name: 'w:wBefore', attributes: { 'w:w': '1440', 'w:type': 'dxa' } },
+                  { name: 'w:wAfter', attributes: { 'w:w': '2880', 'w:type': 'dxa' } },
+                ],
+              },
+              { name: 'w:tc', elements: [] },
+            ],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [skippedWidthTable], docx: {} }, {});
+
+      expect(result.attrs.grid).toHaveLength(4);
+      expect(result.attrs.grid[0]).toEqual({ col: 1440 });
+      expect(result.attrs.grid[2]).toEqual({ col: 1440 });
+      expect(result.attrs.grid[3]).toEqual({ col: 1440 });
+      expect(trTranslator.encode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            columnWidths: expect.arrayContaining([72, 72, 72]),
+            totalColumns: 4,
+          }),
+        }),
+      );
+    });
   });
 
   describe('decode', () => {

@@ -1034,6 +1034,29 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
+   * Bootstrap tracked-change comment threads after a DOCX import finishes.
+   *
+   * Initial import historically rebuilt only body tracked-change threads so
+   * resolved imported body comments stayed resolved. Header/footer and note
+   * tracked changes live outside the body PM state, so they need an additional
+   * story-aware bootstrap pass here.
+   *
+   * We intentionally keep the existing body-only rebuild instead of switching
+   * to the broader syncTrackedChangeComments() path so imported resolved body
+   * tracked-change threads preserve their initial resolved state.
+   *
+   * @param {Object | null | undefined} editor
+   * @param {Object | null | undefined} superdoc
+   * @returns {void}
+   */
+  const bootstrapImportedTrackedChangeComments = (editor, superdoc) => {
+    if (!editor || !superdoc) return;
+
+    createCommentForTrackChanges(editor, superdoc);
+    syncStoryTrackedChangeComments({ superdoc, editor });
+  };
+
+  /**
    * Initialize loaded comments into SuperDoc by mapping the imported
    * comment data to SuperDoc useComment objects.
    *
@@ -1096,9 +1119,9 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     setTimeout(() => {
-      // do not block the first rendering of the doc
-      // and create comments asynchronously.
-      createCommentForTrackChanges(editor, superdoc);
+      // Do not block the first rendering of the doc. Rebuild tracked-change
+      // threads asynchronously once the editor is ready for comment sync.
+      bootstrapImportedTrackedChangeComments(editor, superdoc);
     }, 0);
   };
 

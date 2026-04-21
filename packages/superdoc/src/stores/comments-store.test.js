@@ -1581,6 +1581,94 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('bootstraps story tracked-change comments during initial DOCX load', async () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: { doc: { type: 'body-doc' } },
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const storyState = { doc: { type: 'header-doc' } };
+    const snapshot = {
+      type: 'insert',
+      excerpt: 'header test',
+      anchorKey: 'tc::hf:part:rId9::raw-hf-1',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorImage: null,
+      date: 123,
+      story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId9' },
+      storyKind: 'headerFooter',
+      storyLabel: 'Header',
+      runtimeRef: { rawId: 'raw-hf-1' },
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+
+    trackChangesHelpersMock.getTrackChanges.mockImplementation((state, id) => {
+      if (state === storyState && id === 'raw-hf-1') {
+        return [{ mark: { type: { name: 'trackInsert' }, attrs: { id: 'raw-hf-1' } } }];
+      }
+      return [];
+    });
+    groupChangesMock.mockReturnValue([]);
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => [snapshot]),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+    resolveTrackedChangeInStoryMock.mockReturnValue({
+      editor: { state: storyState },
+      story: snapshot.story,
+      runtimeRef: { storyKey: 'hf:part:rId9', rawId: 'raw-hf-1' },
+      change: { rawId: 'raw-hf-1' },
+    });
+    createOrUpdateTrackedChangeCommentMock.mockReturnValue({
+      event: 'add',
+      changeId: 'raw-hf-1',
+      trackedChangeType: 'insert',
+      trackedChangeDisplayType: 'insert',
+      trackedChangeText: 'header test',
+      deletedText: null,
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      documentId: 'doc-1',
+      coords: {},
+    });
+
+    store.processLoadedDocxComments({
+      superdoc: __mockSuperdoc,
+      editor,
+      comments: [],
+      documentId: 'doc-1',
+    });
+
+    vi.runAllTimers();
+    await nextTick();
+
+    expect(resolveTrackedChangeInStoryMock).toHaveBeenCalledWith(editor, {
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'raw-hf-1',
+      story: snapshot.story,
+    });
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'raw-hf-1',
+        trackedChange: true,
+        trackedChangeText: 'header test',
+        trackedChangeStoryKind: 'headerFooter',
+        trackedChangeAnchorKey: 'tc::hf:part:rId9::raw-hf-1',
+      }),
+    ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
   it('should load comments with correct created time', () => {
     store.init({
       readOnly: true,

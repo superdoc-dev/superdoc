@@ -1326,15 +1326,36 @@ export async function incrementalLayout(
         for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
           const baseReserve = Number.isFinite(baseReserves?.[pageIndex]) ? Math.max(0, baseReserves[pageIndex]) : 0;
           const maxReserve = computeMaxFootnoteReserve(layoutForPages, pageIndex, baseReserve);
-          // SD-1680: cap placement to the band actually reserved by the body layout.
-          // When baseReserve > 0, the body was laid out assuming a specific footnote band
-          // of that height — placing more footnote content than that would overflow the
-          // reserved area and render past the bottom margin. On the initial pass
-          // (baseReserve === 0), fall back to maxReserve so we can seed a meaningful
-          // reserve for subsequent passes.
-          const placementCeiling = baseReserve > 0 ? baseReserve : maxReserve;
           const columns = pageColumns.get(pageIndex);
           const columnCount = Math.max(1, Math.floor(columns?.count ?? 1));
+
+          // SD-1680: cap placement to the footnote demand on this page (capped by maxReserve).
+          // Demand = sum of measured heights of all footnote refs anchored here, plus the
+          // separator/padding/gap overhead they would incur when stacked. Capping placement
+          // at `min(demand, maxReserve)` (rather than `baseReserve`) decouples the plan's
+          // placement from the body's prior-pass reserve: the plan reports how much band
+          // the footnotes actually need, the body grows its reserve to match on the next
+          // pass, and placement never exceeds maxReserve so footnotes cannot render past
+          // the page's bottom margin.
+          let demand = 0;
+          for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+            const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
+            let columnDemand = 0;
+            ids.forEach((id, idx) => {
+              const ranges = rangesByFootnoteId.get(id) ?? [];
+              let rangesHeight = 0;
+              ranges.forEach((range) => {
+                const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                rangesHeight += range.height + spacingAfter;
+              });
+              columnDemand += rangesHeight + (idx > 0 ? safeGap : 0);
+            });
+            if (columnDemand > 0) {
+              columnDemand += safeSeparatorSpacingBefore + safeDividerHeight + safeTopPadding;
+            }
+            if (columnDemand > demand) demand = columnDemand;
+          }
+          const placementCeiling = demand > 0 ? Math.min(Math.ceil(demand), maxReserve) : maxReserve;
 
           const pendingForPage = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
           pendingByColumn.forEach((entries, columnIndex) => {
@@ -1762,38 +1783,57 @@ export async function incrementalLayout(
 
       // Relayout with footnote reserves and iterate until reserves and page count stabilize,
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
-      //
-      // SD-1680: reserves merge monotonically element-wise (max of prior and new) across
-      // passes. Combined with the placement cap in `computeFootnoteLayoutPlan`, this makes
-      // the iteration guaranteed to converge. Rationale: placement is bounded by baseReserve,
-      // so the plan's new reserves are always <= baseReserve per page. Taking element-wise
-      // max means reserves only grow (or stay), eliminating the old oscillation pattern
-      // ([247] ↔ [394] as body refs moved between pages) that left body layout and plan
-      // inconsistent. Over-reserving a few pixels on a page where footnote refs moved off
-      // is harmless; under-reserving causes footnotes to render past the page edge.
       if (reserves.some((h) => h > 0)) {
         let reservesStabilized = false;
+        const seenReserveVectors: number[][] = [reserves.slice()];
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
           layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
           ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
           plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
           const nextReserves = plan.reserves;
-          const mergedLength = Math.max(reserves.length, nextReserves.length);
-          const merged = new Array<number>(mergedLength);
-          let changed = false;
-          for (let i = 0; i < mergedLength; i += 1) {
-            const prev = reserves[i] ?? 0;
-            const next = nextReserves[i] ?? 0;
-            merged[i] = Math.max(prev, next);
-            if (merged[i] !== prev) changed = true;
-          }
-          if (!changed) {
-            reserves = merged;
+          const reservesStable =
+            nextReserves.length === reserves.length &&
+            nextReserves.every((h, i) => (reserves[i] ?? 0) === h) &&
+            reserves.every((h, i) => (nextReserves[i] ?? 0) === h);
+          if (reservesStable) {
+            reserves = nextReserves;
             reservesStabilized = true;
             break;
           }
-          reserves = merged;
+          // SD-1680: when reserves oscillate (typically between a state where all footnotes
+          // fit and a state where body packs tighter with some footnotes pushed off the
+          // page), prefer the element-wise max across all seen states. This matches Word's
+          // bias toward keeping footnotes on their ref's page rather than tight body
+          // packing, and avoids overflow from the body reserving less than the plan places.
+          const nextKey = nextReserves.join(',');
+          const seen = seenReserveVectors.some((v) => v.join(',') === nextKey);
+          if (seen) {
+            const allVectors = [...seenReserveVectors, nextReserves];
+            const mergedLength = Math.max(...allVectors.map((v) => v.length));
+            const merged = new Array<number>(mergedLength).fill(0);
+            for (const vec of allVectors) {
+              for (let i = 0; i < mergedLength; i += 1) {
+                if ((vec[i] ?? 0) > merged[i]) merged[i] = vec[i];
+              }
+            }
+            reserves = merged;
+            // Relayout with merged reserves so post-loop sees a layout consistent with the
+            // reserves we're about to apply — otherwise pages may collapse to the layout
+            // built with the smaller oscillating reserve.
+            layout = relayout(reserves);
+            ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+            ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+            plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
+            break;
+          }
+          seenReserveVectors.push(nextReserves.slice());
+          // Only update reserves when we will do another layout pass; otherwise layout
+          // would be built with the previous reserves while reserves would be nextReserves,
+          // and the plan/injection phase could place footnotes in the wrong band.
+          if (pass < MAX_FOOTNOTE_LAYOUT_PASSES - 1) {
+            reserves = nextReserves;
+          }
         }
         if (!reservesStabilized) {
           console.warn(
@@ -1801,22 +1841,54 @@ export async function incrementalLayout(
           );
         }
 
-        const { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
-        const { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+        let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
+        let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
           collectFootnoteIdsByColumn(finalIdsByColumn),
         );
-        const finalPlan = computeFootnoteLayoutPlan(
+        let finalPlan = computeFootnoteLayoutPlan(
           layout,
           finalIdsByColumn,
           finalMeasuresById,
           reserves,
           finalPageColumns,
         );
-        // SD-1680: with monotonic reserves + bounded placement, finalPlan's slices are
-        // always bounded by `reserves`. Skipping the post-loop relayout avoids
-        // introducing a fresh inconsistency (where relayouting with smaller reserves
-        // would grow body, shift refs, and break the body/footnote agreement again).
-        const reservesAppliedToLayout = reserves;
+        let reservesAppliedToLayout = reserves;
+        // SD-1680: the post-loop can still mismatch the body reserve and plan placement when
+        // relayouting with finalPlan.reserves shifts footnote refs between pages (the newly
+        // relaxed page now holds refs the old reserves didn't account for). Iterate a few
+        // times, each step taking the element-wise max of current reserves and the new plan's
+        // reserves, so the final layout's reservation on every page is at least as large as
+        // the demand from the final ref assignment. This guarantees placements stay inside
+        // the band and cannot render past the page's bottom margin.
+        const MAX_POST_PASSES = 3;
+        for (let postPass = 0; postPass < MAX_POST_PASSES; postPass += 1) {
+          const target = reservesAppliedToLayout.slice();
+          const planReserves = finalPlan.reserves;
+          const len = Math.max(target.length, planReserves.length);
+          let needsRelayout = false;
+          for (let i = 0; i < len; i += 1) {
+            const applied = target[i] ?? 0;
+            const needed = planReserves[i] ?? 0;
+            if (needed > applied) {
+              target[i] = needed;
+              needsRelayout = true;
+            }
+          }
+          if (!needsRelayout) break;
+          layout = relayout(target);
+          reservesAppliedToLayout = target;
+          ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
+          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+            collectFootnoteIdsByColumn(finalIdsByColumn),
+          ));
+          finalPlan = computeFootnoteLayoutPlan(
+            layout,
+            finalIdsByColumn,
+            finalMeasuresById,
+            reservesAppliedToLayout,
+            finalPageColumns,
+          );
+        }
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {
           blockById.set(block.id, block);

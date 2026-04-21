@@ -1532,9 +1532,12 @@ export class EditorInputManager {
   #handleLinkClick(event: MouseEvent, linkEl: HTMLAnchorElement): void {
     const href = linkEl.getAttribute('href') ?? '';
     const isAnchorLink = href.startsWith('#') && href.length > 1;
-    const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;
 
-    if (isAnchorLink && isTocLink) {
+    // SD-2495: route any internal-anchor click (`#<bookmark>`) to in-document
+    // navigation. Covers TOC entries, heading/bookmark cross-references
+    // (REF fields with `\h`), and any other internal-hyperlink case — they all
+    // should scroll to the bookmark target instead of navigating the browser.
+    if (isAnchorLink) {
       event.preventDefault();
       event.stopPropagation();
       this.#callbacks.goToAnchor?.(href);

@@ -67,6 +67,24 @@ export interface SuperDocEditorUpdateEvent {
   sectionType?: string | null;
 }
 
+/** Event passed to onTransaction callback. Mirrors superdoc's EditorTransactionEvent. */
+export interface SuperDocTransactionEvent {
+  /** The primary editor associated with the transaction. For header/footer edits, this is the main body editor. */
+  editor: Editor;
+  /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
+  sourceEditor: Editor;
+  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
+  transaction: any;
+  /** Time spent applying the transaction, in milliseconds. */
+  duration?: number;
+  /** The surface where the transaction originated. */
+  surface: EditorSurface;
+  /** Relationship ID for header/footer edits. */
+  headerId?: string | null;
+  /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
+  sectionType?: string | null;
+}
+
 /** Event passed to onContentError callback */
 export interface SuperDocContentErrorEvent {
   error: Error;
@@ -107,6 +125,7 @@ type ExplicitCallbackProps =
   | 'onEditorCreate'
   | 'onEditorDestroy'
   | 'onEditorUpdate'
+  | 'onTransaction'
   | 'onContentError'
   | 'onException';
 
@@ -126,6 +145,9 @@ export interface CallbackProps {
 
   /** Callback when document content is updated */
   onEditorUpdate?: (event: SuperDocEditorUpdateEvent) => void;
+
+  /** Callback when a transaction is emitted */
+  onTransaction?: (event: SuperDocTransactionEvent) => void;
 
   /** Callback when there is a content parsing error */
   onContentError?: (event: SuperDocContentErrorEvent) => void;

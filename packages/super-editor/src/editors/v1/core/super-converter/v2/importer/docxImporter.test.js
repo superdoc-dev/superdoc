@@ -505,6 +505,16 @@ describe('isAlternatingHeadersOddEven', () => {
     expect(isAlternatingHeadersOddEven(docx)).toBe(true);
   });
 
+  it.each([['1'], ['true'], ['on']])('returns true when <w:evenAndOddHeaders> uses truthy w:val=%s', (value) => {
+    const docx = makeSettingsDocx([{ type: 'element', name: 'w:evenAndOddHeaders', attributes: { 'w:val': value } }]);
+    expect(isAlternatingHeadersOddEven(docx)).toBe(true);
+  });
+
+  it.each([['0'], ['false'], ['off']])('returns false when <w:evenAndOddHeaders> uses falsy w:val=%s', (value) => {
+    const docx = makeSettingsDocx([{ type: 'element', name: 'w:evenAndOddHeaders', attributes: { 'w:val': value } }]);
+    expect(isAlternatingHeadersOddEven(docx)).toBe(false);
+  });
+
   it('returns false when <w:evenAndOddHeaders/> is absent', () => {
     const docx = makeSettingsDocx([
       { type: 'element', name: 'w:zoom', attributes: { 'w:percent': '100' } },

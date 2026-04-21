@@ -241,6 +241,31 @@ describe('layoutDocument', () => {
     expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
   });
 
+  it('preserves explicit column widths on page-level column metadata', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, widths: [100, 400], equalWidth: false, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({
+      count: 2,
+      gap: 20,
+      widths: [100, 400],
+      equalWidth: false,
+      withSeparator: true,
+    });
+    expect(layout.columns).toEqual({
+      count: 2,
+      gap: 20,
+      widths: [100, 400],
+      equalWidth: false,
+      withSeparator: true,
+    });
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

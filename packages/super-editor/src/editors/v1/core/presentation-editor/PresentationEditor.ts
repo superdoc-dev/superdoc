@@ -27,6 +27,10 @@ import {
   computeSelectionRectsFromDom as computeSelectionRectsFromDomFromDom,
 } from '../../dom-observer/DomSelectionGeometry.js';
 import {
+  readLayoutEpochFromDom as readLayoutEpochFromDomFromDom,
+  resolvePositionWithinFragmentDom as resolvePositionWithinFragmentDomFromDom,
+} from '../../dom-observer/index.js';
+import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
   getPageOffsetY as getPageOffsetYFromTransform,
@@ -76,6 +80,7 @@ import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionM
 import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { BODY_STORY_KEY, buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { createHeaderFooterEditor } from '../../extensions/pagination/pagination-helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
@@ -142,6 +147,11 @@ type NoteLayoutContext = {
   hostWidthPx: number;
 };
 
+type RenderedNoteFragmentHit = {
+  fragmentElement: HTMLElement;
+  pageIndex: number;
+};
+
 function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
   if (typeof blockId !== 'string' || blockId.length === 0) {
     return null;
@@ -166,10 +176,19 @@ import {
   ensureEditorFieldAnnotationInteractionStyles,
 } from './dom/EditorStyleInjector.js';
 
-import type { ResolveRangeOutput, DocumentApi, NavigableAddress, BlockNavigationAddress } from '@superdoc/document-api';
+import type {
+  ResolveRangeOutput,
+  DocumentApi,
+  NavigableAddress,
+  BlockNavigationAddress,
+  StoryLocator,
+} from '@superdoc/document-api';
+import { isStoryLocator } from '@superdoc/document-api';
 import { getBlockIndex } from '../../document-api-adapters/helpers/index-cache.js';
 import { findBlockByNodeIdOnly, findBlockById } from '../../document-api-adapters/helpers/node-address-resolver.js';
 import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
+import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
+import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
@@ -408,11 +427,12 @@ export class PresentationEditor extends EventEmitter {
   // Header/footer session management
   #headerFooterSession: HeaderFooterSessionManager | null = null;
   /**
-   * Generic story-backed presentation-session manager. Only constructed when
-   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} is true.
-   * When active, interactive editing of story-backed parts (headers, footers,
-   * future notes) runs through this manager instead of the visible-PM
-   * overlay owned by {@link HeaderFooterSessionManager}.
+   * Generic story-backed presentation-session manager.
+   *
+   * Header/footer editing uses this manager only when
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} is enabled.
+   * Note/endnote editing creates it lazily on first activation because notes
+   * have no legacy visible-PM overlay fallback.
    */
   #storySessionManager: StoryPresentationSessionManager | null = null;
   #hoverOverlay: HTMLElement | null = null;
@@ -424,6 +444,7 @@ export class PresentationEditor extends EventEmitter {
   #headerFooterSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #headerFooterEditor: Editor | null = null;
   #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
+  #storySessionTransactionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionEditor: Editor | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
@@ -721,7 +742,7 @@ export class PresentationEditor extends EventEmitter {
         editorProps: normalizedEditorProps,
         documentMode: this.#documentMode,
       });
-      this.#wrapHiddenEditorFocus();
+      this.#wrapOffscreenEditorFocus(this.#editor);
       // Set bidirectional reference for renderer-neutral helpers
       // Type assertion is safe here as we control both Editor and PresentationEditor
       (this.#editor as Editor & { presentationEditor?: PresentationEditor | null }).presentationEditor = this;
@@ -769,25 +790,33 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Wraps the hidden editor's focus method to prevent unwanted scrolling when it receives focus.
+   * Wraps an off-screen editor's focus method to preserve selection and avoid scroll jumps.
    *
-   * The hidden ProseMirror editor is positioned off-screen but must remain focusable for
-   * accessibility. When it receives focus, browsers may attempt to scroll it into view,
-   * disrupting the user's viewport position. This method wraps the view's focus function
-   * to prevent that scroll behavior using multiple fallback strategies.
+   * PresentationEditor keeps the body editor and hidden-host story-session editors
+   * mounted off-screen. These editors must stay focusable for accessibility and
+   * input routing, but a raw focus call can do two harmful things:
+   *
+   * 1. Scroll the page toward the off-screen contenteditable.
+   * 2. Let the browser's stale DOM selection overwrite the ProseMirror selection
+   *    before the active story has a chance to re-apply its real caret position.
+   *
+   * This wrapper installs the same focus contract on any off-screen editor we own:
+   * focus without scrolling, suppress transient selectionchange drift, then let
+   * ProseMirror re-synchronize its DOM selection.
    *
    * @remarks
    * **Why this exists:**
-   * - The hidden editor provides semantic document structure for screen readers
-   * - It must be focusable, but is positioned off-screen with `left: -9999px`
+   * - Hidden editors provide semantic document structure for screen readers
+   * - They must be focusable, but are positioned off-screen with `left: -9999px`
    * - Some browsers scroll to bring focused elements into view, breaking the user experience
-   * - This wrapper prevents that scroll while maintaining focus behavior
+   * - Story sessions can temporarily lose native focus to the body editor or a UI surface
+   * - Restoring focus must preserve the active story selection, not restart at position 1
    *
-   * **Fallback strategies (in order):**
+   * **Focus strategies (in order):**
    * 1. Try `view.dom.focus({ preventScroll: true })` - the standard approach
    * 2. If that fails, try `view.dom.focus()` without options and restore scroll position
-   * 3. If both fail, call the original ProseMirror focus method as last resort
-   * 4. Always restore scroll position if it changed during any focus attempt
+   * 3. Always run the original ProseMirror focus logic so `selectionToDOM()` replays
+   * 4. Restore scroll position if any focus attempt changed it
    *
    * **Idempotency:**
    * - Safe to call multiple times - checks `__sdPreventScrollFocus` flag to avoid re-wrapping
@@ -797,8 +826,8 @@ export class PresentationEditor extends EventEmitter {
    * - Skips wrapping if the focus function has a `mock` property (Vitest/Jest mocks)
    * - Prevents interference with test assertions and mock function tracking
    */
-  #wrapHiddenEditorFocus(): void {
-    const view = this.#editor?.view;
+  #wrapOffscreenEditorFocus(editor: Editor | null | undefined): void {
+    const view = editor?.view;
     if (!view || !view.dom || typeof view.focus !== 'function') {
       return;
     }
@@ -835,52 +864,58 @@ export class PresentationEditor extends EventEmitter {
       const beforeX = win.scrollX;
       const beforeY = win.scrollY;
       const alreadyFocused = view.hasFocus();
-      let focused = false;
+
+      if (!alreadyFocused) {
+        // When focus jumps back into an off-screen editor, browsers can emit a
+        // transient DOM selection at the document start before ProseMirror has
+        // re-applied the current PM selection. Suppress that drift first.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (view as any).domObserver.suppressSelectionUpdates();
+      }
+
+      let domFocused = false;
 
       // Strategy 1: Try focus with preventScroll option (modern browsers)
       try {
         view.dom.focus({ preventScroll: true });
-        focused = true;
+        domFocused = true;
       } catch (error) {
-        debugLog('warn', 'Hidden editor focus: preventScroll failed', {
+        debugLog('warn', 'Off-screen editor focus: preventScroll failed', {
           error: String(error),
           strategy: 'preventScroll',
         });
       }
 
       // Strategy 2: Fall back to focus without options
-      if (!focused) {
+      if (!domFocused) {
         try {
           view.dom.focus();
-          focused = true;
+          domFocused = true;
         } catch (error) {
-          debugLog('warn', 'Hidden editor focus: standard focus failed', {
+          debugLog('warn', 'Off-screen editor focus: standard focus failed', {
             error: String(error),
             strategy: 'standard',
           });
         }
       }
 
-      // Strategy 3: Last resort - call original ProseMirror focus
-      if (!focused) {
-        try {
-          originalFocus();
-        } catch (error) {
-          debugLog('error', 'Hidden editor focus: all strategies failed', {
+      // Always let ProseMirror replay its own focus logic after the native DOM
+      // focus step. This is what writes the current PM selection back into the
+      // hidden contenteditable, which is critical for story-session carets.
+      try {
+        originalFocus();
+      } catch (error) {
+        if (!domFocused) {
+          debugLog('error', 'Off-screen editor focus: all strategies failed', {
+            error: String(error),
+            strategy: 'original',
+          });
+        } else {
+          debugLog('warn', 'Off-screen editor focus: ProseMirror selection sync failed', {
             error: String(error),
             strategy: 'original',
           });
         }
-      }
-
-      // When the editor was not focused before, the browser places the DOM selection
-      // at an arbitrary position inside the off-screen contenteditable. ProseMirror's
-      // DOMObserver would read this stale position via a selectionchange event and
-      // overwrite PM state, causing the cursor to jump. Suppress selection updates
-      // for the next 50ms so PM re-applies its own selection to the DOM instead.
-      if (!alreadyFocused) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (view as any).domObserver.suppressSelectionUpdates();
       }
 
       // Restore scroll position if any focus attempt changed it
@@ -1135,8 +1170,8 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   getActiveEditor(): Editor {
-    // Story-session path (behind useHiddenHostForStoryParts) takes
-    // precedence over the legacy header/footer overlay.
+    // An active story session (header/footer in hidden-host mode, or a note
+    // session) always owns the editable surface.
     const storySession = this.#storySessionManager?.getActiveSession();
     if (storySession) return storySession.editor;
 
@@ -1163,12 +1198,41 @@ export class PresentationEditor extends EventEmitter {
     return session;
   }
 
+  #getActiveTrackedChangeStorySurface(): { storyKey: string; editor: Editor } | null {
+    const storySession = this.#getActiveStorySession();
+    if (storySession) {
+      return {
+        storyKey: buildStoryKey(storySession.locator),
+        editor: storySession.editor,
+      };
+    }
+
+    const headerFooterSession = this.#headerFooterSession?.session;
+    const activeHeaderFooterEditor = this.#headerFooterSession?.activeEditor;
+    const headerFooterRefId =
+      headerFooterSession && headerFooterSession.mode !== 'body' ? headerFooterSession.headerFooterRefId : null;
+
+    if (!headerFooterRefId || !activeHeaderFooterEditor) {
+      return null;
+    }
+
+    return {
+      storyKey: buildStoryKey({
+        kind: 'story',
+        storyType: 'headerFooterPart',
+        refId: headerFooterRefId,
+      }),
+      editor: activeHeaderFooterEditor,
+    };
+  }
+
   /**
-   * Access the generic story-session manager when the
-   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} rollout
-   * flag is enabled. Returns `null` when the flag is off — in that case
-   * story-backed interactive editing still runs through the legacy
-   * `HeaderFooterSessionManager` / visible-PM overlay path.
+   * Access the generic story-session manager.
+   *
+   * Header/footer consumers should still treat
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} as the
+   * rollout gate for hidden-host header/footer editing. Note sessions may
+   * create the manager lazily even when that flag is off.
    *
    * This is a transitional surface exposed so tests and opt-in callers
    * can drive activation while the full Phase 3/4 geometry/pointer
@@ -1461,6 +1525,7 @@ export class PresentationEditor extends EventEmitter {
     this.#documentMode = mode;
     this.#editor.setDocumentMode(mode);
     this.#headerFooterSession?.setDocumentMode(mode);
+    this.#syncActiveStorySessionDocumentMode(this.#storySessionManager?.getActiveSession() ?? null);
     this.#syncDocumentModeClass();
     this.#syncHiddenEditorA11yAttributes();
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
@@ -1842,6 +1907,19 @@ export class PresentationEditor extends EventEmitter {
         remapped[threadId] = data;
         return;
       }
+
+      const storyTrackedBounds = this.#getStoryTrackedChangeBounds(data, relativeTo);
+      if (storyTrackedBounds) {
+        hasUpdates = true;
+        remapped[threadId] = {
+          ...data,
+          bounds: storyTrackedBounds.bounds,
+          rects: storyTrackedBounds.rects,
+          pageIndex: storyTrackedBounds.pageIndex,
+        };
+        return;
+      }
+
       const start = data.start ?? data.pos;
       const end = data.end ?? start;
       if (!Number.isFinite(start) || !Number.isFinite(end)) {
@@ -1878,11 +1956,251 @@ export class PresentationEditor extends EventEmitter {
    *
    * @returns Map of threadId -> { threadId, start, end }
    */
-  #collectCommentPositions(): Record<string, { threadId: string; start: number; end: number }> {
-    return collectCommentPositionsFromHelper(this.#editor?.state?.doc ?? null, {
-      commentMarkName: CommentMarkName,
-      trackChangeMarkNames: [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName],
+  #collectCommentPositions(): Record<
+    string,
+    {
+      threadId: string;
+      start?: number;
+      end?: number;
+      key?: string;
+      storyKey?: string;
+      kind?: 'trackedChange' | 'comment';
+    }
+  > {
+    return {
+      ...collectCommentPositionsFromHelper(this.#editor?.state?.doc ?? null, {
+        commentMarkName: CommentMarkName,
+        trackChangeMarkNames: [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName],
+        storyKey: BODY_STORY_KEY,
+      }),
+      ...this.#collectIndexedTrackedChangePositions(),
+      ...this.#collectRenderedTrackedChangePositions(),
+    };
+  }
+
+  #collectIndexedTrackedChangePositions(): Record<
+    string,
+    {
+      threadId: string;
+      key: string;
+      storyKey: string;
+      kind: 'trackedChange';
+      start?: number;
+      end?: number;
+    }
+  > {
+    const positions: Record<
+      string,
+      {
+        threadId: string;
+        key: string;
+        storyKey: string;
+        kind: 'trackedChange';
+        start?: number;
+        end?: number;
+      }
+    > = {};
+
+    let snapshots: ReadonlyArray<{
+      anchorKey?: unknown;
+      runtimeRef?: { rawId?: unknown; storyKey?: unknown };
+      range?: { from?: unknown; to?: unknown };
+    }> = [];
+
+    try {
+      snapshots = getTrackedChangeIndex(this.#editor).getAll();
+    } catch {
+      return positions;
+    }
+
+    snapshots.forEach((snapshot) => {
+      const key = typeof snapshot?.anchorKey === 'string' ? snapshot.anchorKey : null;
+      const storyKey = typeof snapshot?.runtimeRef?.storyKey === 'string' ? snapshot.runtimeRef.storyKey : null;
+      const rawId = snapshot?.runtimeRef?.rawId;
+      const threadId = rawId == null ? null : String(rawId);
+
+      if (!key || !storyKey || !threadId || storyKey === BODY_STORY_KEY || positions[key]) {
+        return;
+      }
+
+      const start = Number.isFinite(snapshot?.range?.from) ? Number(snapshot.range.from) : undefined;
+      const end = Number.isFinite(snapshot?.range?.to) ? Number(snapshot.range.to) : undefined;
+
+      positions[key] = {
+        threadId,
+        key,
+        storyKey,
+        kind: 'trackedChange',
+        ...(start !== undefined ? { start } : {}),
+        ...(end !== undefined ? { end } : {}),
+      };
     });
+
+    return positions;
+  }
+
+  #collectRenderedTrackedChangePositions(): Record<
+    string,
+    {
+      threadId: string;
+      key: string;
+      storyKey: string;
+      kind: 'trackedChange';
+    }
+  > {
+    const positions: Record<
+      string,
+      {
+        threadId: string;
+        key: string;
+        storyKey: string;
+        kind: 'trackedChange';
+      }
+    > = {};
+    const host = this.#visibleHost;
+
+    if (!host) {
+      return positions;
+    }
+
+    const elements = host.querySelectorAll<HTMLElement>('[data-track-change-id][data-story-key]');
+    elements.forEach((element) => {
+      const storyKey = element.dataset.storyKey?.trim();
+      const rawId = element.dataset.trackChangeId?.trim();
+      if (!storyKey || !rawId || storyKey === BODY_STORY_KEY) {
+        return;
+      }
+
+      const key = makeTrackedChangeAnchorKey({ storyKey, rawId });
+      if (positions[key]) {
+        return;
+      }
+
+      positions[key] = {
+        threadId: rawId,
+        key,
+        storyKey,
+        kind: 'trackedChange',
+      };
+    });
+
+    return positions;
+  }
+
+  #getStoryTrackedChangeBounds(
+    data: { threadId?: unknown; storyKey?: unknown; kind?: unknown; start?: unknown; end?: unknown },
+    relativeTo?: HTMLElement,
+  ): {
+    bounds: { top: number; left: number; bottom: number; right: number; width: number; height: number };
+    rects: RangeRect[];
+    pageIndex: number;
+  } | null {
+    if (data?.kind !== 'trackedChange') {
+      return null;
+    }
+
+    const storyKey = typeof data.storyKey === 'string' ? data.storyKey : null;
+    if (!storyKey || storyKey === BODY_STORY_KEY) {
+      return null;
+    }
+
+    const activeSurface = this.#getActiveTrackedChangeStorySurface();
+    if (!activeSurface || activeSurface.storyKey !== storyKey) {
+      return this.#getRenderedTrackedChangeBounds(data, relativeTo);
+    }
+
+    const start = Number.isFinite(data.start) ? Number(data.start) : undefined;
+    const end = Number.isFinite(data.end) ? Number(data.end) : start;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return this.#getRenderedTrackedChangeBounds(data, relativeTo);
+    }
+
+    const rects = this.getRangeRects(start!, end!, relativeTo);
+    if (!rects.length) {
+      return this.#getRenderedTrackedChangeBounds(data, relativeTo);
+    }
+
+    const bounds = this.#aggregateLayoutBounds(rects);
+    if (!bounds) {
+      return this.#getRenderedTrackedChangeBounds(data, relativeTo);
+    }
+
+    return {
+      bounds,
+      rects,
+      pageIndex: rects[0]?.pageIndex ?? 0,
+    };
+  }
+
+  #getRenderedTrackedChangeBounds(
+    data: { threadId?: unknown; storyKey?: unknown; kind?: unknown },
+    relativeTo?: HTMLElement,
+  ): {
+    bounds: { top: number; left: number; bottom: number; right: number; width: number; height: number };
+    rects: RangeRect[];
+    pageIndex: number;
+  } | null {
+    if (data?.kind !== 'trackedChange') {
+      return null;
+    }
+
+    const storyKey = typeof data.storyKey === 'string' ? data.storyKey : null;
+    const rawId = typeof data.threadId === 'string' ? data.threadId : null;
+    if (!storyKey || !rawId || storyKey === BODY_STORY_KEY) {
+      return null;
+    }
+
+    const elements = this.#findRenderedTrackedChangeElements(rawId, storyKey);
+    if (!elements.length) {
+      return null;
+    }
+
+    const relativeRect = relativeTo?.getBoundingClientRect?.();
+    const rects = elements
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        if (![rect.top, rect.left, rect.right, rect.bottom, rect.width, rect.height].every(Number.isFinite)) {
+          return null;
+        }
+
+        const pageIndex = Number(element.closest<HTMLElement>('.superdoc-page')?.dataset?.pageIndex ?? 0);
+        return {
+          pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
+          left: rect.left - (relativeRect?.left ?? 0),
+          top: rect.top - (relativeRect?.top ?? 0),
+          right: rect.right - (relativeRect?.left ?? 0),
+          bottom: rect.bottom - (relativeRect?.top ?? 0),
+          width: rect.width,
+          height: rect.height,
+        } satisfies RangeRect;
+      })
+      .filter((rect): rect is RangeRect => Boolean(rect));
+
+    if (!rects.length) {
+      return null;
+    }
+
+    const bounds = this.#aggregateLayoutBounds(rects);
+    if (!bounds) {
+      return null;
+    }
+
+    return {
+      bounds,
+      rects,
+      pageIndex: rects[0]?.pageIndex ?? 0,
+    };
+  }
+
+  #findRenderedTrackedChangeElements(rawId: string, storyKey?: string): HTMLElement[] {
+    const host = this.#visibleHost;
+    if (!host) {
+      return [];
+    }
+
+    const baseSelector = `[data-track-change-id="${escapeAttrValue(rawId)}"]`;
+    const selector = storyKey ? `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]` : baseSelector;
+    return Array.from(host.querySelectorAll<HTMLElement>(selector));
   }
 
   /**
@@ -2140,22 +2458,28 @@ export class PresentationEditor extends EventEmitter {
         y: headerPageIndex * headerPageHeight + (localY - headerPageIndex * headerPageHeight),
       };
       const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      return hit;
+      if (!hit) {
+        return null;
+      }
+
+      const doc = this.getActiveEditor().state?.doc;
+      if (!doc) {
+        return hit;
+      }
+
+      return {
+        ...hit,
+        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
+      };
     }
 
     const noteContext = this.#buildActiveNoteLayoutContext();
     if (noteContext) {
       const rawHit =
-        resolvePointerPositionHit({
-          layout: this.#layoutState.layout,
-          blocks: noteContext.blocks,
-          measures: noteContext.measures,
-          containerPoint: normalized,
-          domContainer: this.#viewportHost,
-          clientX,
-          clientY,
+        this.#resolveNoteDomHit(noteContext, clientX, clientY) ??
+        clickToPositionGeometry(this.#layoutState.layout, noteContext.blocks, noteContext.measures, normalized, {
           geometryHelper: this.#pageGeometryHelper ?? undefined,
-        }) ?? null;
+        });
       if (!rawHit) {
         return null;
       }
@@ -2560,7 +2884,7 @@ export class PresentationEditor extends EventEmitter {
     options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
   ): boolean {
     // Cancel any pending focus-scroll RAF so this intentional scroll is not undone
-    // by the wrapHiddenEditorFocus safety net (e.g. search navigation after focus).
+    // by the wrapOffscreenEditorFocus safety net (e.g. search navigation after focus).
     if (this.#focusScrollRafId != null) {
       const win = this.#visibleHost.ownerDocument?.defaultView;
       if (win) win.cancelAnimationFrame(this.#focusScrollRafId);
@@ -2650,12 +2974,16 @@ export class PresentationEditor extends EventEmitter {
   #buildThreadAnchorScrollPlan(threadId: string, targetClientY: number): ThreadAnchorScrollPlan | null {
     if (!threadId || !Number.isFinite(targetClientY)) return null;
 
-    const threadPosition = this.#collectCommentPositions()[threadId];
+    const threadPosition = this.#resolveCommentPositionEntry(threadId);
     if (!threadPosition) return null;
 
-    const selectionBounds = this.getSelectionBounds(threadPosition.start, threadPosition.end);
-    const currentTop = selectionBounds?.bounds?.top;
-    if (!Number.isFinite(currentTop)) return null;
+    const boundedEntry = this.getCommentBounds({ [threadId]: threadPosition })[threadId] ?? threadPosition;
+    const currentTopValue =
+      typeof boundedEntry?.bounds === 'object' && boundedEntry?.bounds != null
+        ? (boundedEntry.bounds as { top?: unknown }).top
+        : undefined;
+    if (!Number.isFinite(currentTopValue)) return null;
+    const currentTop = Number(currentTopValue);
 
     const requestedScrollDelta = currentTop - targetClientY;
     const scrollTarget = this.#scrollContainer ?? this.#visibleHost;
@@ -2669,6 +2997,24 @@ export class PresentationEditor extends EventEmitter {
     }
 
     return null;
+  }
+
+  #resolveCommentPositionEntry(threadId: string): {
+    threadId: string;
+    start?: number;
+    end?: number;
+    pos?: number;
+    key?: string;
+    storyKey?: string;
+    kind?: 'trackedChange' | 'comment';
+  } | null {
+    const positions = this.#collectCommentPositions();
+    const directMatch = positions[threadId];
+    if (directMatch) {
+      return directMatch;
+    }
+
+    return Object.values(positions).find((entry) => entry?.key === threadId || entry?.threadId === threadId) ?? null;
   }
 
   #buildWindowThreadAnchorScrollPlan(
@@ -3503,6 +3849,7 @@ export class PresentationEditor extends EventEmitter {
     // These modify the OOXML part and derived cache but don't change the PM document,
     // so the normal 'update' event won't trigger a layout refresh.
     const handleNotesPartChanged = () => {
+      this.#flowBlockCache.setHasExternalChanges(true);
       this.#pendingDocChange = true;
       this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
@@ -3722,6 +4069,7 @@ export class PresentationEditor extends EventEmitter {
       updateSelectionDebugHud: () => this.#updateSelectionDebugHud(),
       clearHoverRegion: () => this.#clearHoverRegion(),
       renderHoverRegion: (region) => this.#renderHoverRegion(region),
+      hitTest: (clientX: number, clientY: number) => this.hitTest(clientX, clientY),
       focusEditorAfterImageSelection: () => this.#focusEditorAfterImageSelection(),
       resolveInlineImageElementByPmStart: (pmStart) => this.#painterAdapter.getInlineImageElementByPmStart(pmStart),
       resolveImageFragmentElementByPmStart: (pmStart) => this.#painterAdapter.getImageFragmentElementByPmStart(pmStart),
@@ -3937,6 +4285,11 @@ export class PresentationEditor extends EventEmitter {
       this.#visibleHost,
       () => this.#getActiveDomTarget(),
       () => !this.#isViewLocked(),
+      () => this.#editorInputManager?.notifyTargetChanged(),
+      {
+        useWindowFallback: true,
+        getTargetEditor: () => this.getActiveEditor(),
+      },
     );
     this.#inputBridge.bind();
   }
@@ -3965,7 +4318,8 @@ export class PresentationEditor extends EventEmitter {
         this.#pendingDocChange = true;
       },
       getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
-      getStorySessionManager: () => this.#storySessionManager,
+      getStorySessionManager: () =>
+        this.#options.useHiddenHostForStoryParts ? this.#ensureStorySessionManager() : null,
     });
 
     // Set up callbacks
@@ -4058,11 +4412,17 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #teardownStorySessionEventBridge(): void {
-    if (this.#storySessionEditor && this.#storySessionSelectionHandler) {
-      this.#storySessionEditor.off?.('selectionUpdate', this.#storySessionSelectionHandler);
+    if (this.#storySessionEditor) {
+      if (this.#storySessionSelectionHandler) {
+        this.#storySessionEditor.off?.('selectionUpdate', this.#storySessionSelectionHandler);
+      }
+      if (this.#storySessionTransactionHandler) {
+        this.#storySessionEditor.off?.('transaction', this.#storySessionTransactionHandler);
+      }
     }
     this.#storySessionEditor = null;
     this.#storySessionSelectionHandler = null;
+    this.#storySessionTransactionHandler = null;
   }
 
   #syncStorySessionEventBridge(session: StoryPresentationSession | null): void {
@@ -4077,23 +4437,47 @@ export class PresentationEditor extends EventEmitter {
       this.#scheduleSelectionUpdate();
       this.#scheduleA11ySelectionAnnouncement();
     };
+    const transactionHandler = ({ transaction }: { transaction?: { docChanged?: boolean } }) => {
+      if (!transaction?.docChanged) {
+        return;
+      }
+      this.#flowBlockCache.setHasExternalChanges(true);
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
 
     session.editor.on?.('selectionUpdate', handler);
+    session.editor.on?.('transaction', transactionHandler);
     this.#storySessionEditor = session.editor;
     this.#storySessionSelectionHandler = handler;
+    this.#storySessionTransactionHandler = transactionHandler;
     this.#scheduleSelectionUpdate({ immediate: true });
     this.#scheduleA11ySelectionAnnouncement({ immediate: true });
   }
 
-  /**
-   * Set up the generic story-session manager.
-   *
-   * Instantiated by default. Passing
-   * {@link PresentationEditorOptions.useHiddenHostForStoryParts} as `false`
-   * opts out and keeps the legacy visible header/footer overlay path active.
-   */
-  #setupStorySessionManager() {
-    if (this.#options.useHiddenHostForStoryParts === false) return;
+  #syncActiveStorySessionDocumentMode(session: StoryPresentationSession | null): void {
+    if (!session || session.kind !== 'note') {
+      return;
+    }
+
+    // Story editors default to viewing mode at construction time. When a note
+    // session becomes the active presentation surface, it must inherit the
+    // current document mode so double-clicking produces an actually editable
+    // footnote/endnote surface.
+    if (typeof session.editor.setDocumentMode === 'function') {
+      session.editor.setDocumentMode(this.#documentMode);
+      return;
+    }
+
+    session.editor.setEditable?.(this.#documentMode !== 'viewing');
+    session.editor.setOptions?.({ documentMode: this.#documentMode });
+  }
+
+  #ensureStorySessionManager(): StoryPresentationSessionManager {
+    if (this.#storySessionManager) {
+      return this.#storySessionManager;
+    }
 
     this.#storySessionManager = new StoryPresentationSessionManager({
       resolveRuntime: (locator) => resolveStoryRuntime(this.#editor, locator, { intent: 'write' }),
@@ -4149,10 +4533,29 @@ export class PresentationEditor extends EventEmitter {
         };
       },
       onActiveSessionChanged: () => {
-        this.#syncStorySessionEventBridge(this.#storySessionManager?.getActiveSession() ?? null);
+        const activeSession = this.#storySessionManager?.getActiveSession() ?? null;
+        if (activeSession?.hostWrapper) {
+          this.#wrapOffscreenEditorFocus(activeSession.editor);
+        }
+        this.#syncActiveStorySessionDocumentMode(activeSession);
+        this.#syncStorySessionEventBridge(activeSession);
         this.#inputBridge?.notifyTargetChanged();
       },
     });
+
+    return this.#storySessionManager;
+  }
+
+  /**
+   * Set up the generic story-session manager.
+   *
+   * Header/footer hidden-host editing still rolls out behind
+   * {@link PresentationEditorOptions.useHiddenHostForStoryParts}. Note
+   * sessions call {@link #ensureStorySessionManager} lazily when activated.
+   */
+  #setupStorySessionManager() {
+    if (!this.#options.useHiddenHostForStoryParts) return;
+    this.#ensureStorySessionManager();
   }
 
   /**
@@ -5272,11 +5675,11 @@ export class PresentationEditor extends EventEmitter {
 
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      this.#updateHeaderFooterSelection();
+      this.#updateHeaderFooterSelection(shouldScrollIntoView);
       return;
     }
     if (this.#getActiveNoteStorySession()) {
-      this.#updateNoteSelection();
+      this.#updateNoteSelection(shouldScrollIntoView);
       return;
     }
 
@@ -5968,14 +6371,135 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #collectNoteBlockIds(context: NoteLayoutContext): Set<string> {
+    return new Set(
+      context.blocks
+        .map((block) => (typeof block?.id === 'string' ? block.id : null))
+        .filter((blockId): blockId is string => !!blockId),
+    );
+  }
+
+  #resolveRenderedPageIndexForElement(element: HTMLElement): number {
+    const pageElement = element.closest<HTMLElement>('[data-page-index]');
+    const pageIndex = Number(pageElement?.dataset.pageIndex ?? 'NaN');
+    if (Number.isFinite(pageIndex) && pageIndex >= 0) {
+      return pageIndex;
+    }
+
+    const blockId = element.getAttribute('data-block-id') ?? '';
+    const layout = this.#layoutState.layout;
+    if (!blockId || !layout) {
+      return 0;
+    }
+
+    for (let index = 0; index < layout.pages.length; index += 1) {
+      if (layout.pages[index]?.fragments?.some((fragment) => fragment.blockId === blockId)) {
+        return index;
+      }
+    }
+
+    return 0;
+  }
+
+  #findRenderedNoteFragmentAtPoint(
+    noteBlockIds: ReadonlySet<string>,
+    clientX: number,
+    clientY: number,
+  ): RenderedNoteFragmentHit | null {
+    const doc = this.#viewportHost.ownerDocument ?? document;
+    const elementsFromPoint = typeof doc.elementsFromPoint === 'function' ? doc.elementsFromPoint.bind(doc) : null;
+
+    const toFragmentHit = (element: Element | null): RenderedNoteFragmentHit | null => {
+      const fragmentElement = element instanceof HTMLElement ? element.closest<HTMLElement>('[data-block-id]') : null;
+      const blockId = fragmentElement?.getAttribute('data-block-id') ?? '';
+      if (!fragmentElement || !noteBlockIds.has(blockId)) {
+        return null;
+      }
+
+      return {
+        fragmentElement,
+        pageIndex: this.#resolveRenderedPageIndexForElement(fragmentElement),
+      };
+    };
+
+    if (elementsFromPoint) {
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        const fragmentHit = toFragmentHit(element);
+        if (fragmentHit) {
+          return fragmentHit;
+        }
+      }
+    }
+
+    const renderedFragments = Array.from(this.#viewportHost.querySelectorAll<HTMLElement>('[data-block-id]'));
+    for (const fragmentElement of renderedFragments) {
+      const blockId = fragmentElement.getAttribute('data-block-id') ?? '';
+      if (!noteBlockIds.has(blockId)) {
+        continue;
+      }
+
+      const rect = fragmentElement.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        continue;
+      }
+
+      return {
+        fragmentElement,
+        pageIndex: this.#resolveRenderedPageIndexForElement(fragmentElement),
+      };
+    }
+
+    return null;
+  }
+
+  #resolveNoteDomHit(context: NoteLayoutContext, clientX: number, clientY: number): PositionHit | null {
+    const layout = this.#layoutState.layout;
+    if (!layout) {
+      return null;
+    }
+
+    const noteBlockIds = this.#collectNoteBlockIds(context);
+    if (noteBlockIds.size === 0) {
+      return null;
+    }
+
+    const fragmentHit = this.#findRenderedNoteFragmentAtPoint(noteBlockIds, clientX, clientY);
+    if (!fragmentHit) {
+      return null;
+    }
+
+    const pos = resolvePositionWithinFragmentDomFromDom(fragmentHit.fragmentElement, clientX, clientY);
+    if (pos == null) {
+      return null;
+    }
+
+    return {
+      pos,
+      layoutEpoch:
+        readLayoutEpochFromDomFromDom(fragmentHit.fragmentElement, clientX, clientY) ?? layout.layoutEpoch ?? 0,
+      blockId: fragmentHit.fragmentElement.getAttribute('data-block-id') ?? '',
+      pageIndex: fragmentHit.pageIndex,
+      column: 0,
+      lineIndex: -1,
+    };
+  }
+
+  #createCollapsedSelectionNearInlineContent(doc: ProseMirrorNode, pos: number): Selection {
+    const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
+    const directSelection = TextSelection.create(doc, clampedPos);
+    if (directSelection.$from.parent.inlineContent) {
+      return directSelection;
+    }
+
+    const bias = clampedPos >= doc.content.size ? -1 : 1;
+    return Selection.near(doc.resolve(clampedPos), bias);
+  }
+
   #activateRenderedNoteSession(
     target: RenderedNoteTarget,
     options: { clientX: number; clientY: number; pageIndex?: number },
   ): boolean {
-    const storySessionManager = this.#storySessionManager;
-    if (!storySessionManager) {
-      return false;
-    }
+    const storySessionManager = this.#ensureStorySessionManager();
 
     if (target.storyType !== 'footnote' && target.storyType !== 'endnote') {
       return false;
@@ -5992,7 +6516,9 @@ export class PresentationEditor extends EventEmitter {
         noteId: target.noteId,
       },
       {
-        commitPolicy: 'onExit',
+        // Notes need to repaint while the user types; otherwise the hidden-host
+        // editor is active but the rendered footnote appears frozen until exit.
+        commitPolicy: 'continuous',
         preferHiddenHost: true,
         hostWidthPx: targetContext?.hostWidthPx ?? this.#visibleHost.clientWidth ?? 1,
         editorContext: {
@@ -6006,9 +6532,9 @@ export class PresentationEditor extends EventEmitter {
     const hit = this.hitTest(options.clientX, options.clientY);
     const doc = session.editor.state?.doc;
     if (hit && doc) {
-      const clampedPos = Math.max(0, Math.min(hit.pos, doc.content.size));
       try {
-        const tr = session.editor.state.tr.setSelection(TextSelection.create(doc, clampedPos));
+        const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
+        const tr = session.editor.state.tr.setSelection(selection);
         session.editor.view?.dispatch(tr);
       } catch {
         // Ignore stale pointer hits during activation races.
@@ -6034,9 +6560,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #getActiveDomTarget(): HTMLElement | null {
-    // Story-session path (behind useHiddenHostForStoryParts) takes
-    // precedence: while a hidden-host story session is active, the
-    // active DOM target is the story editor's DOM, not the body's.
+    // While a story session is active, forwarded input targets the session
+    // editor's DOM rather than the body's hidden editor DOM.
     const storyTarget = this.#storySessionManager?.getActiveEditorDomTarget();
     if (storyTarget) return storyTarget;
 
@@ -6327,7 +6852,7 @@ export class PresentationEditor extends EventEmitter {
           return await this.#navigateToComment(target.entityId);
         }
         if (target.entityType === 'trackedChange') {
-          return await this.#navigateToTrackedChange(target.entityId);
+          return await this.#navigateToTrackedChange(target.entityId, resolveStoryKeyFromAddress(target.story));
         }
       }
 
@@ -6409,9 +6934,17 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #navigateToTrackedChange(entityId: string): Promise<boolean> {
+  async #navigateToTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
+
+    if (storyKey && storyKey !== BODY_STORY_KEY) {
+      if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
+        return true;
+      }
+
+      return this.#scrollToRenderedTrackedChange(entityId, storyKey);
+    }
 
     const setCursorById = editor.commands?.setCursorById;
 
@@ -6423,7 +6956,9 @@ export class PresentationEditor extends EventEmitter {
 
     // Fall back to resolving the tracked change position and scrolling.
     const resolved = resolveTrackedChange(editor, entityId);
-    if (!resolved) return false;
+    if (!resolved) {
+      return this.#scrollToRenderedTrackedChange(entityId);
+    }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
     if (typeof setCursorById === 'function' && resolved.rawId !== entityId) {
@@ -6443,6 +6978,57 @@ export class PresentationEditor extends EventEmitter {
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;
+  }
+
+  #navigateToActiveStoryTrackedChange(entityId: string, storyKey: string): boolean {
+    const activeSurface = this.#getActiveTrackedChangeStorySurface();
+    if (!activeSurface || activeSurface.storyKey !== storyKey) {
+      return false;
+    }
+
+    const sessionEditor = activeSurface.editor;
+    const setCursorById = sessionEditor.commands?.setCursorById;
+
+    if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
+      this.#focusAndRevealActiveStorySelection(sessionEditor);
+      return true;
+    }
+
+    const resolved = resolveTrackedChange(sessionEditor, entityId);
+    if (!resolved) {
+      return false;
+    }
+
+    if (typeof setCursorById === 'function' && resolved.rawId !== entityId) {
+      if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
+        this.#focusAndRevealActiveStorySelection(sessionEditor);
+        return true;
+      }
+    }
+
+    sessionEditor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
+    this.#focusAndRevealActiveStorySelection(sessionEditor);
+    return true;
+  }
+
+  #focusAndRevealActiveStorySelection(editor: Editor): void {
+    editor.view?.focus?.();
+    this.#shouldScrollSelectionIntoView = true;
+    this.#scheduleSelectionUpdate({ immediate: true });
+  }
+
+  async #scrollToRenderedTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+    const candidates = this.#findRenderedTrackedChangeElements(entityId, storyKey);
+    if (!candidates.length) {
+      return false;
+    }
+
+    try {
+      candidates[0]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -6658,11 +7244,97 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
+  #computeNoteDomCaretRect(context: NoteLayoutContext, pos: number): LayoutRect | null {
+    const layout = this.#layoutState.layout;
+    const pageCount = layout?.pages?.length ?? 0;
+    if (pageCount === 0) {
+      return null;
+    }
+
+    const noteBlockIds = this.#collectNoteBlockIds(context);
+    if (noteBlockIds.size === 0) {
+      return null;
+    }
+
+    const zoom =
+      typeof this.#layoutOptions.zoom === 'number' &&
+      Number.isFinite(this.#layoutOptions.zoom) &&
+      this.#layoutOptions.zoom > 0
+        ? this.#layoutOptions.zoom
+        : 1;
+    const pageStride = this.#getBodyPageHeight() + (layout?.pageGap ?? 0);
+
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      const pageElement = this.#getPageElement(pageIndex);
+      if (!pageElement) {
+        continue;
+      }
+
+      const pageRect = pageElement.getBoundingClientRect();
+      const noteFragments = Array.from(pageElement.querySelectorAll<HTMLElement>('[data-block-id]')).filter((element) =>
+        noteBlockIds.has(element.getAttribute('data-block-id') ?? ''),
+      );
+
+      for (const fragmentElement of noteFragments) {
+        const textRuns = fragmentElement.querySelectorAll<HTMLElement>('[data-pm-start][data-pm-end]');
+        for (const runElement of Array.from(textRuns)) {
+          const pmStart = Number(runElement.dataset.pmStart);
+          const pmEnd = Number(runElement.dataset.pmEnd);
+          if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd) || pos < pmStart || pos > pmEnd) {
+            continue;
+          }
+
+          const textNode = Array.from(runElement.childNodes).find(
+            (node): node is Text => node.nodeType === Node.TEXT_NODE,
+          );
+          if (!textNode) {
+            continue;
+          }
+
+          const charIndex = Math.max(0, Math.min(textNode.length, pos - pmStart));
+          const range = runElement.ownerDocument?.createRange();
+          if (!range) {
+            continue;
+          }
+
+          range.setStart(textNode, charIndex);
+          range.setEnd(textNode, charIndex);
+          const rect = range.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) {
+            continue;
+          }
+
+          const localX = (rect.left - pageRect.left) / zoom;
+          const localY = (rect.top - pageRect.top) / zoom;
+          const height = Math.max(1, rect.height / zoom);
+          if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+            continue;
+          }
+
+          return {
+            pageIndex,
+            x: localX,
+            y: pageIndex * pageStride + localY,
+            width: 1,
+            height,
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   #computeNoteCaretRect(pos: number): LayoutRect | null {
     const context = this.#buildActiveNoteLayoutContext();
     const layout = this.#layoutState.layout;
     if (!context || !layout) {
       return null;
+    }
+
+    const domRect = this.#computeNoteDomCaretRect(context, pos);
+    if (domRect) {
+      return domRect;
     }
 
     const geometry = computeCaretLayoutRectGeometryFromHelper(
@@ -6678,7 +7350,18 @@ export class PresentationEditor extends EventEmitter {
       pos,
       true,
     );
-    return geometry ? { ...geometry, width: 1 } : null;
+    if (!geometry) {
+      return null;
+    }
+
+    const pageStride = this.#getBodyPageHeight() + (layout.pageGap ?? 0);
+    return {
+      pageIndex: geometry.pageIndex,
+      x: geometry.x,
+      y: geometry.pageIndex * pageStride + geometry.y,
+      width: 1,
+      height: geometry.height,
+    };
   }
 
   #syncTrackedChangesPreferences(): boolean {
@@ -7314,7 +7997,7 @@ export class PresentationEditor extends EventEmitter {
    * In hidden-host mode this also renders the caret from the active story
    * editor's hidden DOM geometry.
    */
-  #updateHeaderFooterSelection() {
+  #updateHeaderFooterSelection(shouldScrollIntoView = false) {
     this.#clearSelectedFieldAnnotationClass();
 
     if (!this.#localSelectionLayer) {
@@ -7358,6 +8041,9 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render header/footer caret:', error);
         }
       }
+      if (shouldScrollIntoView) {
+        this.#scrollActiveEndIntoView(caretRect.pageIndex);
+      }
       return;
     }
 
@@ -7387,9 +8073,18 @@ export class PresentationEditor extends EventEmitter {
         console.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
       }
     }
+
+    if (shouldScrollIntoView) {
+      const selectionHead = activeEditor?.state?.selection?.head ?? to;
+      const headCaretRect = this.#computeHeaderFooterCaretRect(selectionHead);
+      const headPageIndex = headCaretRect?.pageIndex ?? rects.at(-1)?.pageIndex ?? rects[0]?.pageIndex;
+      if (Number.isFinite(headPageIndex)) {
+        this.#scrollActiveEndIntoView(headPageIndex!);
+      }
+    }
   }
 
-  #updateNoteSelection() {
+  #updateNoteSelection(shouldScrollIntoView = false) {
     this.#clearSelectedFieldAnnotationClass();
 
     if (!this.#localSelectionLayer) {
@@ -7435,6 +8130,9 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render note caret:', error);
         }
       }
+      if (shouldScrollIntoView) {
+        this.#scrollActiveEndIntoView(caretRect.pageIndex);
+      }
       return;
     }
 
@@ -7455,6 +8153,15 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.warn('[PresentationEditor] Failed to render note selection rects:', error);
+      }
+    }
+
+    if (shouldScrollIntoView) {
+      const selectionHead = activeEditor?.state?.selection?.head ?? to;
+      const headCaretRect = this.#computeNoteCaretRect(selectionHead);
+      const headPageIndex = headCaretRect?.pageIndex ?? rects.at(-1)?.pageIndex ?? rects[0]?.pageIndex;
+      if (Number.isFinite(headPageIndex)) {
+        this.#scrollActiveEndIntoView(headPageIndex!);
       }
     }
   }
@@ -7492,5 +8199,30 @@ export class PresentationEditor extends EventEmitter {
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
     return this.#documentMode === 'viewing';
+  }
+}
+
+function escapeAttrValue(value: string): string {
+  const cssApi =
+    typeof globalThis === 'object' && globalThis && 'CSS' in globalThis
+      ? (globalThis.CSS as { escape?: (input: string) => string } | undefined)
+      : undefined;
+
+  if (typeof cssApi?.escape === 'function') {
+    return cssApi.escape(value);
+  }
+
+  return value.replace(/["\\]/g, (char) => `\\${char}`);
+}
+
+function resolveStoryKeyFromAddress(story: StoryLocator | unknown): string | undefined {
+  if (!isStoryLocator(story)) {
+    return undefined;
+  }
+
+  try {
+    return buildStoryKey(story);
+  } catch {
+    return undefined;
   }
 }

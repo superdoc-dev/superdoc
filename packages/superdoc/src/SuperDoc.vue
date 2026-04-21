@@ -30,7 +30,7 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
-import { SuperEditor, AIWriter, PresentationEditor } from '@superdoc/super-editor';
+import { SuperEditor, AIWriter, PresentationEditor, getTrackedChangeIndex } from '@superdoc/super-editor';
 import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
@@ -357,6 +357,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     if (doc.password) doc.password = undefined;
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
+  getTrackedChangeIndex(editor);
 
   // Listen for fresh comment positions from the layout engine.
   // PresentationEditor emits this after every layout with PM positions collected
@@ -380,6 +381,15 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     if (!hasInitializedLocations.value) {
       hasInitializedLocations.value = true;
     }
+  });
+
+  editor.on?.('tracked-changes-changed', ({ editor: sourceEditor, source }) => {
+    if (source === 'body-edit') return;
+    if (!shouldRenderCommentsInViewing.value) {
+      commentsStore.clearEditorCommentPositions?.();
+      return;
+    }
+    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: sourceEditor ?? editor });
   });
 
   presentationEditor.on('paginationUpdate', ({ layout }) => {

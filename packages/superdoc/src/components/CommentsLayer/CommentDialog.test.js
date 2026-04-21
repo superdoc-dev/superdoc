@@ -146,6 +146,7 @@ const mountDialog = async ({
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
     clearInstantSidebarAlignment: vi.fn(),
+    decideTrackedChangeFromSidebar: vi.fn(() => ({ ok: true, success: true })),
     getCommentDocumentId: vi.fn(
       (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
     ),
@@ -158,7 +159,7 @@ const mountDialog = async ({
               (item) => item.commentId === commentOrId || item.importedId === commentOrId,
             );
 
-      return [rawId, comment?.commentId, comment?.importedId].filter(Boolean);
+      return [rawId, comment?.trackedChangeAnchorKey, comment?.commentId, comment?.importedId].filter(Boolean);
     }),
     resolveCommentPositionEntry: vi.fn((commentOrId) => {
       const positions = commentsStoreStub.editorCommentPositions.value ?? {};
@@ -293,6 +294,7 @@ describe('CommentDialog.vue', () => {
     const presentation = {
       getReachableThreadAnchorClientY: vi.fn().mockReturnValue(165),
       scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+      navigateTo: vi.fn().mockResolvedValue(true),
     };
     PresentationEditor.getInstance.mockReturnValue(presentation);
 
@@ -307,16 +309,16 @@ describe('CommentDialog.vue', () => {
       },
     });
 
-    expect(presentation.getReachableThreadAnchorClientY).toHaveBeenCalledWith(
-      'imported-tracked-change-1',
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-1',
+    });
+    expect(presentation.getReachableThreadAnchorClientY).not.toHaveBeenCalled();
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
       expect.any(Number),
+      'tracked-change-1',
     );
-    expect(presentation.scrollThreadAnchorToClientY).toHaveBeenCalledWith(
-      'imported-tracked-change-1',
-      expect.any(Number),
-      { behavior: 'auto' },
-    );
-    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(165, 'tracked-change-1');
   });
 
   it('prefers the actual visible highlight top after the scroll attempt', async () => {
@@ -378,6 +380,7 @@ describe('CommentDialog.vue', () => {
     const presentation = {
       getReachableThreadAnchorClientY: vi.fn().mockReturnValue(456),
       scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+      navigateTo: vi.fn().mockResolvedValue(true),
     };
     PresentationEditor.getInstance.mockReturnValue(presentation);
 
@@ -421,7 +424,15 @@ describe('CommentDialog.vue', () => {
 
     await wrapper.trigger('click');
 
-    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(456, 'tracked-change-1');
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-3f15df8f',
+    });
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
+      expect.any(Number),
+      'tracked-change-1',
+    );
   });
 
   it('does not ask the presentation layer to scroll when the bubble is already aligned', async () => {
@@ -554,7 +565,9 @@ describe('CommentDialog.vue', () => {
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
     await nextTick();
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalledWith({
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
@@ -564,7 +577,9 @@ describe('CommentDialog.vue', () => {
 
     header.vm.$emit('reject');
     await nextTick();
-    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'reject' }),
+    );
     expect(superdocStub.focus).toHaveBeenCalledTimes(2);
   });
 
@@ -681,8 +696,9 @@ describe('CommentDialog.vue', () => {
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
 
-    // Default behavior should be called
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalled();
   });
 
@@ -703,12 +719,16 @@ describe('CommentDialog.vue', () => {
 
     // Test accept
     header.vm.$emit('resolve');
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Test reject
     header.vm.$emit('reject');
-    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'reject' }),
+    );
   });
 
   it('still runs cleanup when custom handler does nothing (no-op)', async () => {

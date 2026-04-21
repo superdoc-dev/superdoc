@@ -521,6 +521,31 @@ describe('HeaderFooterLayoutAdapter', () => {
     expect(options?.mediaFiles).toEqual(manager.rootEditor.converter.media);
   });
 
+  it('stamps header/footer FlowBlocks with the part story key', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+
+    const [, options] = mockToFlowBlocks.mock.calls[0] || [];
+    expect(options?.storyKey).toBe('hf:part:rId-header-default');
+  });
+
   it('returns undefined when no descriptors have FlowBlocks', () => {
     const manager = {
       getDescriptors: () => [{ id: 'missing', kind: 'header', variant: 'default' }],

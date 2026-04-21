@@ -144,6 +144,7 @@ export function createStoryEditor(
     media,
     mediaFiles: media,
     fonts: parentEditor.options.fonts,
+    user: parentEditor.options.user,
     isHeaderOrFooter,
     isHeadless,
     pagination: false,

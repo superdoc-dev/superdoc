@@ -4,6 +4,10 @@ import { StoryPresentationSessionManager } from './StoryPresentationSessionManag
 import type { StoryRuntime } from '../../../document-api-adapters/story-runtime/story-types.js';
 import type { Editor } from '../../Editor.js';
 import type { StoryLocator } from '@superdoc/document-api';
+import {
+  getLiveStorySessionCount,
+  resolveLiveStorySessionRuntime,
+} from '../../../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -51,6 +55,10 @@ function makeStubRuntime(editor: StubEditor, overrides: Partial<StoryRuntime> = 
     kind: 'headerFooter',
     ...overrides,
   };
+}
+
+function makeHostEditor(): Editor {
+  return { state: { doc: { content: { size: 10 } } } } as unknown as Editor;
 }
 
 describe('StoryPresentationSessionManager', () => {
@@ -310,5 +318,37 @@ describe('StoryPresentationSessionManager', () => {
     expect(session.editor).toBe(runtime.editor);
     expect(session.hostWrapper).toBeNull();
     expect(session.domTarget).toBe(dom);
+  });
+
+  it('registers the active session editor as the live story runtime and unregisters it on exit', () => {
+    const hostEditor = makeHostEditor();
+    const runtimeEditor = makeStubEditor(document.createElement('div'));
+    runtimeEditor.options = { parentEditor: hostEditor as unknown as StubEditor };
+
+    const sessionEditor = makeStubEditor(document.createElement('div'));
+    sessionEditor.options = { parentEditor: hostEditor as unknown as StubEditor };
+
+    const runtime = makeStubRuntime(runtimeEditor, {
+      locator: { kind: 'story', storyType: 'footnote', noteId: '8' },
+      storyKey: 'fn:8',
+      kind: 'note',
+    });
+
+    const manager = new StoryPresentationSessionManager({
+      resolveRuntime: () => runtime,
+      getMountContainer: () => container,
+      editorFactory: () => ({ editor: sessionEditor as unknown as Editor }),
+    });
+
+    manager.activate(runtime.locator);
+
+    const liveRuntime = resolveLiveStorySessionRuntime(hostEditor, 'fn:8');
+    expect(liveRuntime?.editor).toBe(sessionEditor);
+    expect(getLiveStorySessionCount(hostEditor)).toBe(1);
+
+    manager.exit();
+
+    expect(resolveLiveStorySessionRuntime(hostEditor, 'fn:8')).toBeNull();
+    expect(getLiveStorySessionCount(hostEditor)).toBe(0);
   });
 });

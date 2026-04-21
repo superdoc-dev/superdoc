@@ -19,6 +19,7 @@ import {
   ensureFootnoteRefRun,
   updateNoteElement,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
+import { normalizeNotePmJson } from '../helpers/note-pm-json.js';
 
 type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
 
@@ -184,20 +185,20 @@ function extractNotePmJson(converter: any, isFootnote: boolean, noteId: string):
   // Empty arrays represent blank notes (e.g., after the reference marker is stripped)
   // and are valid — they produce a minimal doc with an empty paragraph.
   if (Array.isArray(note.content)) {
-    return {
+    return normalizeNotePmJson({
       type: 'doc',
       content: note.content.length > 0 ? note.content : [{ type: 'paragraph' }],
-    };
+    });
   }
 
   // If the note has a `doc` field (pre-built PM JSON), return it directly
   if (note.doc && typeof note.doc === 'object') {
-    return note.doc;
+    return normalizeNotePmJson(note.doc);
   }
 
   // If the note itself looks like PM JSON (has a `type` field)
   if (note.type === 'doc' || note.type === 'footnoteBody' || note.type === 'endnoteBody') {
-    return note;
+    return normalizeNotePmJson(note);
   }
 
   return null;

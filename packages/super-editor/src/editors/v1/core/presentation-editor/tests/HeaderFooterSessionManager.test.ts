@@ -43,6 +43,10 @@ function createHeaderFooterEditorStub(editorDom: HTMLElement): Editor {
     setOptions: vi.fn(),
     commands: {
       setTextSelection: vi.fn(),
+      enableTrackChanges: vi.fn(),
+      disableTrackChanges: vi.fn(),
+      enableTrackChangesShowOriginal: vi.fn(),
+      disableTrackChangesShowOriginal: vi.fn(),
     },
     state: {
       doc: {
@@ -92,7 +96,10 @@ describe('HeaderFooterSessionManager', () => {
    * and the editor host is at (100, 50) with size 600x120. The header region is
    * at localX=40, localY=30 on page 1 with bodyPageHeight=800.
    */
-  async function setupWithZoom(zoom: number | undefined): Promise<HeaderFooterSessionManager> {
+  async function setupWithZoom(
+    zoom: number | undefined,
+    documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing',
+  ): Promise<HeaderFooterSessionManager> {
     const pageElement = document.createElement('div');
     pageElement.dataset.pageIndex = '1';
     painterHost.appendChild(pageElement);
@@ -171,6 +178,7 @@ describe('HeaderFooterSessionManager', () => {
 
     manager.setDependencies(deps);
     manager.initialize();
+    manager.setDocumentMode(documentMode);
     manager.setLayoutResults(
       [
         {
@@ -325,6 +333,7 @@ describe('HeaderFooterSessionManager', () => {
     });
 
     manager.initialize();
+    manager.setDocumentMode('suggesting');
 
     const region = {
       kind: 'header' as const,
@@ -345,6 +354,9 @@ describe('HeaderFooterSessionManager', () => {
     await vi.waitFor(() => expect(manager.activeEditor).toBe(storyEditor));
 
     expect(overlayManager.showEditingOverlay).not.toHaveBeenCalled();
+    expect(storyEditor.commands.disableTrackChangesShowOriginal).toHaveBeenCalledTimes(1);
+    expect(storyEditor.commands.enableTrackChanges).toHaveBeenCalledTimes(1);
+    expect(storyEditor.setOptions).toHaveBeenCalledWith({ documentMode: 'suggesting' });
     expect(activate).toHaveBeenCalledWith(
       {
         kind: 'story',
@@ -364,6 +376,54 @@ describe('HeaderFooterSessionManager', () => {
         }),
       }),
     );
+  });
+
+  it('enters header edit mode in suggesting mode and enables tracked changes', async () => {
+    await setupWithZoom(1, 'suggesting');
+
+    const activeEditor = manager.activeEditor as unknown as {
+      commands: {
+        disableTrackChangesShowOriginal: ReturnType<typeof vi.fn>;
+        enableTrackChanges: ReturnType<typeof vi.fn>;
+      };
+      setOptions: ReturnType<typeof vi.fn>;
+      setEditable: ReturnType<typeof vi.fn>;
+      view: { dom: HTMLElement };
+    };
+
+    expect(activeEditor.commands.disableTrackChangesShowOriginal).toHaveBeenCalledTimes(1);
+    expect(activeEditor.commands.enableTrackChanges).toHaveBeenCalledTimes(1);
+    expect(activeEditor.setOptions).toHaveBeenCalledWith({ documentMode: 'suggesting' });
+    expect(activeEditor.setEditable).toHaveBeenCalledWith(true);
+    expect(activeEditor.view.dom.getAttribute('documentmode')).toBe('suggesting');
+    expect(activeEditor.view.dom.getAttribute('aria-readonly')).toBe('false');
+  });
+
+  it('updates the active header editor when the document mode changes to suggesting', async () => {
+    await setupWithZoom(1);
+
+    const activeEditor = manager.activeEditor as unknown as {
+      commands: {
+        disableTrackChangesShowOriginal: ReturnType<typeof vi.fn>;
+        enableTrackChanges: ReturnType<typeof vi.fn>;
+      };
+      setOptions: ReturnType<typeof vi.fn>;
+      setEditable: ReturnType<typeof vi.fn>;
+      view: { dom: HTMLElement };
+    };
+
+    activeEditor.commands.disableTrackChangesShowOriginal.mockClear();
+    activeEditor.commands.enableTrackChanges.mockClear();
+    activeEditor.setOptions.mockClear();
+    activeEditor.setEditable.mockClear();
+
+    manager.setDocumentMode('suggesting');
+
+    expect(activeEditor.commands.disableTrackChangesShowOriginal).toHaveBeenCalledTimes(1);
+    expect(activeEditor.commands.enableTrackChanges).toHaveBeenCalledTimes(1);
+    expect(activeEditor.setOptions).toHaveBeenCalledWith({ documentMode: 'suggesting' });
+    expect(activeEditor.setEditable).toHaveBeenCalledWith(true);
+    expect(activeEditor.view.dom.getAttribute('documentmode')).toBe('suggesting');
   });
 
   it('exits the active story session when leaving header/footer mode', async () => {

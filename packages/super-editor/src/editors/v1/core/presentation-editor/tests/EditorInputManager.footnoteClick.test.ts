@@ -28,15 +28,14 @@ vi.mock('@superdoc/layout-bridge', () => ({
 
 vi.mock('prosemirror-state', async (importOriginal) => {
   const original = await importOriginal<typeof import('prosemirror-state')>();
+  class MockTextSelection {
+    empty = true;
+    $from = { parent: { inlineContent: true } };
+    static create = vi.fn(() => new MockTextSelection());
+  }
   return {
     ...original,
-    TextSelection: {
-      ...original.TextSelection,
-      create: vi.fn(() => ({
-        empty: true,
-        $from: { parent: { inlineContent: true } },
-      })),
-    },
+    TextSelection: MockTextSelection,
   };
 });
 
@@ -152,6 +151,24 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     );
   }
 
+  function createActiveSessionEditor(docSize = 50) {
+    return {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: { ...mockEditor.state.doc, content: { size: docSize } },
+        tr: {
+          setSelection: vi.fn().mockReturnThis(),
+          setStoredMarks: vi.fn().mockReturnThis(),
+        },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+      },
+    };
+  }
+
   it('activates a note session on direct footnote fragment click', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
@@ -177,6 +194,39 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     );
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes note activation over tracked-change highlight handling on footnote clicks', () => {
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.setAttribute('data-track-change-id', 'tc-1');
+    fragmentEl.appendChild(trackedChangeEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 12,
+        clientY: 10,
+      } as PointerEventInit),
+    );
+
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'footnote', noteId: '1' },
+      expect.objectContaining({ clientX: 12, clientY: 10 }),
+    );
+    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: expect.anything(),
+      }),
+    );
   });
 
   it('keeps legacy read-only behavior for stale footnote hits without a rendered footnote target', () => {
@@ -259,6 +309,32 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(mockEditor.view.focus).toHaveBeenCalled();
   });
 
+  it('does not reactivate the same note session on double-click inside the active note', () => {
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: createActiveSessionEditor(),
+    });
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    nestedEl.dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: 12,
+        clientY: 14,
+      }),
+    );
+
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+  });
+
   it('does not activate a note session on semantic footnotes heading click', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 
@@ -282,5 +358,189 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     expect(activateRenderedNoteSession).not.toHaveBeenCalled();
     expect(mockEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('uses story-surface hit testing for active note clicks', () => {
+    const activeNoteEditor = createActiveSessionEditor();
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 41,
+      layoutEpoch: 7,
+      pageIndex: 0,
+      blockId: 'footnote-1-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 16,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(18, 16);
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(activeNoteEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('does not route tracked-change clicks through comment selection while a note is actively being edited', () => {
+    const activeNoteEditor = createActiveSessionEditor();
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 21,
+      layoutEpoch: 7,
+      pageIndex: 0,
+      blockId: 'footnote-1-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.setAttribute('data-track-change-id', 'tc-1');
+    fragmentEl.appendChild(trackedChangeEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 16,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(18, 16);
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: expect.anything(),
+      }),
+    );
+  });
+
+  it('uses story-surface hit testing for active header clicks', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+      overlayManager: { getActiveEditorHost: vi.fn(() => null) },
+    });
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'header-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 200,
+      height: 40,
+    }));
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(24, 12);
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('resets multi-click state when the active editing target changes', () => {
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const selectWordAt = vi.fn(() => true);
+    mockCallbacks.selectWordAt = selectWordAt;
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+    viewportHost.dispatchEvent(
+      new PointerEventImpl('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+
+    manager.notifyTargetChanged();
+
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 2,
+      } as PointerEventInit),
+    );
+
+    expect(selectWordAt).not.toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalledTimes(2);
   });
 });

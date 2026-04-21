@@ -249,7 +249,10 @@ const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined
 
 // Paragraph-mark revisions are stored in paragraphProperties.runProperties (pPr/rPr), not inline text marks.
 // Convert them into mark-like metadata so tracked-change filtering can reuse the same projection pipeline.
-const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
+const getParagraphMarkTrackedChange = (
+  paragraphProperties: ParagraphProperties,
+  storyKey?: string,
+): TrackedChangeMeta | undefined => {
   const runProperties =
     paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
       ? (paragraphProperties.runProperties as Record<string, unknown>)
@@ -271,7 +274,7 @@ const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties)
   if (trackDeleteAttrs) {
     marks.push({ type: 'trackDelete', attrs: trackDeleteAttrs });
   }
-  return collectTrackedChangeFromMarks(marks);
+  return collectTrackedChangeFromMarks(marks, storyKey);
 };
 
 const isEmptyTextRun = (run: Run): boolean => {
@@ -509,6 +512,7 @@ export function paragraphToFlowBlocks({
   para,
   nextBlockId,
   positions,
+  storyKey,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -572,7 +576,7 @@ export function paragraphToFlowBlocks({
     if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
-    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps);
+    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps, storyKey);
     // Get the PM position of the empty paragraph for caret rendering
     const paraPos = positions.get(para);
     const emptyRun: TextRun = {
@@ -619,6 +623,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
 
     // Ghost list artifact suppression only applies in markup/review modes.
@@ -726,6 +731,7 @@ export function paragraphToFlowBlocks({
     const inlineConverterParams = {
       node: node,
       positions,
+      storyKey,
       defaultFont,
       defaultSize,
       inheritedMarks: inheritedMarks ?? [],
@@ -748,6 +754,7 @@ export function paragraphToFlowBlocks({
       nextBlockId: stableNextBlockId,
       nextId,
       positions,
+      storyKey,
       trackedChangesConfig,
       defaultFont,
       defaultSize,
@@ -862,6 +869,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
     if (trackedChangesConfig.enabled && filteredRuns.length === 0) {
       return;
@@ -1082,6 +1090,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       para: node,
       nextBlockId,
       positions,
+      storyKey: context.storyKey,
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
@@ -1110,6 +1119,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     para: node,
     nextBlockId,
     positions,
+    storyKey: context.storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

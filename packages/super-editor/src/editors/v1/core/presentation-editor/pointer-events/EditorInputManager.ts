@@ -103,6 +103,17 @@ function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
   return null;
 }
 
+function isSameRenderedNoteTarget(
+  left: RenderedNoteTarget | null | undefined,
+  right: RenderedNoteTarget | null | undefined,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.storyType === right.storyType && left.noteId === right.noteId;
+}
+
 function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
   if (!(target instanceof Element)) {
     return [];
@@ -393,6 +404,8 @@ export type EditorInputCallbacks = {
   notifyDragSelectionEnded?: () => void;
   /** Hit test table at coordinates */
   hitTestTable?: (x: number, y: number) => TableHitResult | null;
+  /** Hit test the currently active editing surface */
+  hitTest?: (clientX: number, clientY: number) => PositionHit | null;
   /** Activate a rendered note session from a visible note block click */
   activateRenderedNoteSession?: (
     target: RenderedNoteTarget,
@@ -638,6 +651,18 @@ export class EditorInputManager {
     return this.#lastSelectedImageBlockId;
   }
 
+  /**
+   * Resets click-derived interaction state when the active editing surface
+   * changes (for example body -> footnote or footnote -> header).
+   *
+   * Without this, a single click in the previous surface can be mistaken for
+   * the first click of a double/triple click in the next surface.
+   */
+  notifyTargetChanged(): void {
+    this.#resetMultiClickTracking();
+    this.#pendingMarginClick = null;
+  }
+
   /** Drag anchor page index */
   get dragAnchorPageIndex(): number | null {
     return this.#dragAnchorPageIndex;
@@ -692,6 +717,12 @@ export class EditorInputManager {
     this.#cellDragMode = 'none';
   }
 
+  #resetMultiClickTracking(): void {
+    this.#clickCount = 0;
+    this.#lastClickTime = 0;
+    this.#lastClickPosition = null;
+  }
+
   #registerPointerClick(event: MouseEvent): number {
     const nextState = registerPointerClickFromHelper(
       event,
@@ -715,8 +746,84 @@ export class EditorInputManager {
   }
 
   #getFirstTextPosition(): number {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     return getFirstTextPositionFromHelper(editor?.state?.doc ?? null);
+  }
+
+  #resolveBodyPointerHit(
+    layoutState: ReturnType<EditorInputDependencies['getLayoutState']>,
+    normalized: { x: number; y: number },
+    clientX: number,
+    clientY: number,
+  ): PositionHit | null {
+    const viewportHost = this.#deps?.getViewportHost();
+    const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
+    if (!viewportHost) {
+      return null;
+    }
+
+    return (
+      resolvePointerPositionHit({
+        layout: layoutState.layout,
+        blocks: layoutState.blocks,
+        measures: layoutState.measures,
+        containerPoint: normalized,
+        domContainer: viewportHost,
+        clientX,
+        clientY,
+        geometryHelper: pageGeometryHelper ?? undefined,
+      }) ?? null
+    );
+  }
+
+  #resolveSelectionPointerHit(options: {
+    layoutState: ReturnType<EditorInputDependencies['getLayoutState']>;
+    normalized: { x: number; y: number };
+    clientX: number;
+    clientY: number;
+    editor: Editor;
+    useActiveSurfaceHitTest: boolean;
+  }): { rawHit: PositionHit | null; hit: PositionHit | null } {
+    const { layoutState, normalized, clientX, clientY, editor, useActiveSurfaceHitTest } = options;
+    const doc = editor.state?.doc;
+    const rawHit =
+      useActiveSurfaceHitTest && this.#callbacks.hitTest
+        ? this.#callbacks.hitTest(clientX, clientY)
+        : this.#resolveBodyPointerHit(layoutState, normalized, clientX, clientY);
+
+    if (!rawHit || !doc) {
+      return { rawHit, hit: null };
+    }
+
+    if (useActiveSurfaceHitTest) {
+      return {
+        rawHit,
+        hit: {
+          ...rawHit,
+          pos: clamp(rawHit.pos, 0, doc.content.size),
+        },
+      };
+    }
+
+    const epochMapper = this.#deps?.getEpochMapper();
+    if (!epochMapper) {
+      return { rawHit, hit: null };
+    }
+
+    const mapped = epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
+    if (!mapped.ok) {
+      debugLog('warn', 'pointer mapping failed', mapped);
+      return { rawHit, hit: null };
+    }
+
+    return {
+      rawHit,
+      hit: {
+        ...rawHit,
+        pos: clamp(mapped.pos, 0, doc.content.size),
+        layoutEpoch: mapped.toEpoch,
+      },
+    };
   }
 
   #calculateExtendedSelection(
@@ -1095,16 +1202,46 @@ export class EditorInputManager {
     }
 
     const bodyEditor = this.#deps.getEditor();
-    if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
-      return;
-    }
-
-    if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
-      return;
-    }
-
     const layoutState = this.#deps.getLayoutState();
+    const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
+
+    // Check header/footer session state
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    let activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+    let activeNoteSession = activeStorySession?.kind === 'note' ? activeStorySession : null;
+    const activeNoteTarget = this.#getActiveRenderedNoteTarget();
+
     if (!layoutState.layout) {
+      if (clickedNoteTarget && !isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget)) {
+        if (!isDraggableAnnotation) {
+          event.preventDefault();
+        }
+        const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+        if (activated) {
+          return;
+        }
+        this.#focusEditor();
+        return;
+      }
+
+      if (!clickedNoteTarget && activeNoteSession) {
+        this.#callbacks.exitActiveStorySession?.();
+      }
+
+      const isActiveStorySurface = sessionMode !== 'body' || activeNoteSession != null;
+      if (!isActiveStorySurface) {
+        if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
+          return;
+        }
+
+        if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
+          return;
+        }
+      }
+
       this.#handleClickWithoutLayout(event, isDraggableAnnotation);
       return;
     }
@@ -1115,27 +1252,8 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
-    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
-    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
-    const clickedNoteTarget = parseRenderedNoteTarget(clickedBlockId);
-
-    // Check header/footer session state
-    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
-    const activeNoteSession = activeStorySession?.kind === 'note' ? activeStorySession : null;
-    const activeNoteTarget =
-      activeNoteSession &&
-      (activeNoteSession.locator.storyType === 'footnote' || activeNoteSession.locator.storyType === 'endnote')
-        ? {
-            storyType: activeNoteSession.locator.storyType,
-            noteId: activeNoteSession.locator.noteId,
-          }
-        : null;
-
     if (clickedNoteTarget) {
-      const isSameActiveNote =
-        activeNoteTarget?.storyType === clickedNoteTarget.storyType &&
-        activeNoteTarget.noteId === clickedNoteTarget.noteId;
+      const isSameActiveNote = isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget);
       if (!isSameActiveNote) {
         if (!isDraggableAnnotation) event.preventDefault();
         const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
@@ -1151,9 +1269,23 @@ export class EditorInputManager {
       }
     } else if (activeNoteSession) {
       this.#callbacks.exitActiveStorySession?.();
+      activeStorySession = null;
+      activeNoteSession = null;
+    }
+
+    const isActiveStorySurface = sessionMode !== 'body' || activeStorySession != null;
+    if (!isActiveStorySurface) {
+      if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
+        return;
+      }
+
+      if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
+        return;
+      }
     }
 
     const isNoteEditing = activeNoteSession != null;
+    const useActiveSurfaceHitTest = sessionMode !== 'body' || activeStorySession != null;
     const editor = sessionMode === 'body' && !isNoteEditing ? bodyEditor : this.#deps.getActiveEditor();
     if (sessionMode !== 'body') {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
@@ -1174,39 +1306,15 @@ export class EditorInputManager {
       }
     }
 
-    // Get hit position
-    const viewportHost = this.#deps.getViewportHost();
-    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
-    const rawHit = resolvePointerPositionHit({
-      layout: layoutState.layout,
-      blocks: layoutState.blocks,
-      measures: layoutState.measures,
-      containerPoint: { x, y },
-      domContainer: viewportHost,
+    const { rawHit, hit } = this.#resolveSelectionPointerHit({
+      layoutState,
+      normalized: { x, y },
       clientX: event.clientX,
       clientY: event.clientY,
-      geometryHelper: pageGeometryHelper ?? undefined,
+      editor,
+      useActiveSurfaceHitTest,
     });
-
     const doc = editor.state?.doc;
-    const epochMapper = this.#deps.getEpochMapper();
-    const mapped =
-      rawHit && doc && !isNoteEditing
-        ? epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1)
-        : null;
-
-    if (mapped && !mapped.ok) {
-      debugLog('warn', 'pointerdown mapping failed', mapped);
-    }
-
-    const hit =
-      rawHit && doc
-        ? isNoteEditing
-          ? { ...rawHit, pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)), layoutEpoch: rawHit.layoutEpoch }
-          : mapped?.ok
-            ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
-            : null
-        : null;
 
     this.#debugLastHit = hit
       ? { source: 'dom', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: hit.pos }
@@ -1285,11 +1393,16 @@ export class EditorInputManager {
     }
 
     // Check for image/fragment hit
-    const fragmentHit = getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
+    const fragmentHit = useActiveSurfaceHitTest
+      ? null
+      : getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
 
     // Handle inline image click
     const targetImg = (event.target as HTMLElement | null)?.closest?.('img') as HTMLImageElement | null;
-    if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
+    if (!useActiveSurfaceHitTest) {
+      const epochMapper = this.#deps.getEpochMapper();
+      if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
+    }
 
     // Handle atomic fragment (image/drawing) click
     if (this.#handleFragmentClick(event, fragmentHit, hit, doc)) return;
@@ -1355,6 +1468,7 @@ export class EditorInputManager {
     }
 
     // Capture pointer for reliable drag tracking
+    const viewportHost = this.#deps.getViewportHost();
     if (typeof viewportHost.setPointerCapture === 'function') {
       viewportHost.setPointerCapture(event.pointerId);
     }
@@ -1549,10 +1663,23 @@ export class EditorInputManager {
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
 
-    const targetBlockId =
-      (target?.closest?.('[data-block-id]') as HTMLElement | null)?.getAttribute?.('data-block-id') ?? '';
-    const clickedNoteTarget = parseRenderedNoteTarget(targetBlockId);
+    const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
     if (clickedNoteTarget) {
+      if (isSameRenderedNoteTarget(this.#getActiveRenderedNoteTarget(), clickedNoteTarget)) {
+        // Pointerdown already updated selection inside the live note session.
+        // Re-activating the same note here would remount the hidden editor and
+        // wipe out the word/paragraph selection that the multi-click logic just set.
+        //
+        // The activation gesture itself only registers one click inside the live
+        // note, so its trailing dblclick can leave a stale single-click marker
+        // behind. Clear only that activation residue and preserve genuine active
+        // multi-click state for triple-click paragraph selection.
+        if (this.#clickCount <= 1) {
+          this.#resetMultiClickTracking();
+        }
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
       this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
@@ -2038,7 +2165,7 @@ export class EditorInputManager {
   }
 
   #handleShiftClick(event: PointerEvent, headPos: number): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     if (!editor) return;
 
     const anchor = editor.state.selection.anchor;
@@ -2067,26 +2194,26 @@ export class EditorInputManager {
     this.#pendingMarginClick = null;
     this.#dragLastPointer = { clientX, clientY, x: normalized.x, y: normalized.y };
 
-    const viewportHost = this.#deps.getViewportHost();
-    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
-
-    const rawHit = resolvePointerPositionHit({
-      layout: layoutState.layout,
-      blocks: layoutState.blocks,
-      measures: layoutState.measures,
-      containerPoint: { x: normalized.x, y: normalized.y },
-      domContainer: viewportHost,
+    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const useActiveSurfaceHitTest = sessionMode !== 'body' || activeStorySession != null;
+    const editor = useActiveSurfaceHitTest
+      ? this.#deps.getActiveEditor()
+      : (this.#deps.getEditor() as ReturnType<EditorInputDependencies['getEditor']>);
+    const { rawHit, hit } = this.#resolveSelectionPointerHit({
+      layoutState,
+      normalized: { x: normalized.x, y: normalized.y },
       clientX,
       clientY,
-      geometryHelper: pageGeometryHelper ?? undefined,
+      editor,
+      useActiveSurfaceHitTest,
     });
 
-    if (!rawHit) return;
+    if (!rawHit || !hit) return;
 
-    // Don't extend selection into footnote lines
-    if (isFootnoteBlockId(rawHit.blockId)) return;
+    // Don't extend a body selection into read-only footnote content.
+    if (!useActiveSurfaceHitTest && isFootnoteBlockId(rawHit.blockId)) return;
 
-    const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;
     if (!doc) return;
 
@@ -2099,21 +2226,8 @@ export class EditorInputManager {
 
     this.#callbacks.updateSelectionVirtualizationPins?.({ includeDragBuffer: true, extraPages: [rawHit.pageIndex] });
 
-    const epochMapper = this.#deps.getEpochMapper();
-    const mappedHead = epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
-    if (!mappedHead.ok) {
-      debugLog('warn', 'drag mapping failed', mappedHead);
-      return;
-    }
-
-    const hit = {
-      ...rawHit,
-      pos: Math.max(0, Math.min(mappedHead.pos, doc.content.size)),
-      layoutEpoch: mappedHead.toEpoch,
-    };
-
     this.#debugLastHit = {
-      source: pageMounted ? 'dom' : 'geometry',
+      source: useActiveSurfaceHitTest || pageMounted ? 'dom' : 'geometry',
       pos: rawHit.pos,
       layoutEpoch: rawHit.layoutEpoch,
       mappedPos: hit.pos,
@@ -2121,7 +2235,7 @@ export class EditorInputManager {
     this.#callbacks.updateSelectionDebugHud?.();
 
     // Check for cell selection
-    const currentTableHit = this.#hitTestTable(normalized.x, normalized.y);
+    const currentTableHit = useActiveSurfaceHitTest ? null : this.#hitTestTable(normalized.x, normalized.y);
     const shouldUseCellSel = this.#shouldUseCellSelection(currentTableHit);
 
     if (shouldUseCellSel && this.#cellAnchor) {
@@ -2342,8 +2456,56 @@ export class EditorInputManager {
     this.#callbacks.activateHeaderFooterRegion?.(region);
   }
 
+  #getActiveRenderedNoteTarget(): RenderedNoteTarget | null {
+    const activeStorySession = this.#deps?.getActiveStorySession?.() ?? null;
+    if (activeStorySession?.kind !== 'note') {
+      return null;
+    }
+
+    const locator = activeStorySession.locator;
+    if (locator.storyType !== 'footnote' && locator.storyType !== 'endnote') {
+      return null;
+    }
+
+    return {
+      storyType: locator.storyType,
+      noteId: locator.noteId,
+    };
+  }
+
+  #resolveRenderedNoteTargetAtPointer(
+    target: HTMLElement | null,
+    clientX: number,
+    clientY: number,
+  ): RenderedNoteTarget | null {
+    const blockIdFromTarget = target?.closest?.('[data-block-id]')?.getAttribute?.('data-block-id') ?? '';
+    const parsedFromTarget = parseRenderedNoteTarget(blockIdFromTarget);
+    if (parsedFromTarget) {
+      return parsedFromTarget;
+    }
+
+    const doc = this.#deps?.getViewportHost()?.ownerDocument ?? document;
+    if (typeof doc.elementsFromPoint !== 'function') {
+      return null;
+    }
+
+    for (const element of doc.elementsFromPoint(clientX, clientY)) {
+      if (!(element instanceof HTMLElement)) {
+        continue;
+      }
+
+      const blockId = element.closest('[data-block-id]')?.getAttribute('data-block-id') ?? '';
+      const parsed = parseRenderedNoteTarget(blockId);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
   #focusEditorAtFirstPosition(): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     const editorDom = editor?.view?.dom as HTMLElement | undefined;
     if (!editorDom) return;
 

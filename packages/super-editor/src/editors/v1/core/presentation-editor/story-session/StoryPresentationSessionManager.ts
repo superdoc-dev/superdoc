@@ -31,6 +31,7 @@ import type { Editor } from '../../Editor.js';
 import type { StoryRuntime } from '../../../document-api-adapters/story-runtime/story-types.js';
 import type { StoryPresentationSession, ActivateStorySessionOptions, StoryCommitPolicy } from './types.js';
 import { createStoryHiddenHost } from './createStoryHiddenHost.js';
+import { registerLiveStorySessionRuntime } from '../../../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 /**
  * Creates (or returns) the ProseMirror editor that should back an active
@@ -176,6 +177,8 @@ export class StoryPresentationSessionManager {
     }
 
     const domTarget = (editor.view?.dom as HTMLElement | undefined) ?? hostWrapper ?? null;
+    const hostEditor = resolveSessionHostEditor(editor, runtime);
+    const unregisterRuntime = registerLiveStorySessionRuntime(hostEditor, runtime, editor);
 
     const session = new MutableStorySession({
       locator,
@@ -187,6 +190,7 @@ export class StoryPresentationSessionManager {
       commitPolicy,
       shouldDisposeRuntime: runtime.cacheable === false,
       beforeDispose: sessionBeforeDispose,
+      unregisterRuntime,
       teardown: () => {
         try {
           factoryDispose?.();
@@ -242,6 +246,7 @@ interface MutableStorySessionInit {
   shouldDisposeRuntime: boolean;
   afterActivate?: () => void;
   beforeDispose?: () => void;
+  unregisterRuntime: () => void;
   teardown: () => void;
 }
 
@@ -257,6 +262,7 @@ class MutableStorySession implements StoryPresentationSession {
   #disposed = false;
   #shouldDisposeRuntime: boolean;
   #beforeDispose?: () => void;
+  #unregisterRuntime: () => void;
   #teardown: () => void;
 
   constructor(init: MutableStorySessionInit) {
@@ -269,6 +275,7 @@ class MutableStorySession implements StoryPresentationSession {
     this.commitPolicy = init.commitPolicy;
     this.#shouldDisposeRuntime = init.shouldDisposeRuntime;
     this.#beforeDispose = init.beforeDispose;
+    this.#unregisterRuntime = init.unregisterRuntime;
     this.#teardown = init.teardown;
     init.afterActivate?.();
   }
@@ -297,11 +304,15 @@ class MutableStorySession implements StoryPresentationSession {
         this.#beforeDispose?.();
       } finally {
         try {
-          if (this.#shouldDisposeRuntime) {
-            this.runtime.dispose?.();
-          }
+          this.#unregisterRuntime();
         } finally {
-          this.#teardown();
+          try {
+            if (this.#shouldDisposeRuntime) {
+              this.runtime.dispose?.();
+            }
+          } finally {
+            this.#teardown();
+          }
         }
       }
     }
@@ -319,4 +330,8 @@ class MutableStorySession implements StoryPresentationSession {
 function getHostEditor(editor: Editor): Editor | null {
   const options = editor.options as Partial<{ parentEditor: Editor }>;
   return options?.parentEditor ?? null;
+}
+
+function resolveSessionHostEditor(editor: Editor, runtime: StoryRuntime): Editor {
+  return getHostEditor(editor) ?? getHostEditor(runtime.editor) ?? runtime.editor;
 }

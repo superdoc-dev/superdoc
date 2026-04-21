@@ -6,6 +6,7 @@ import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -1186,6 +1187,7 @@ export class HeaderFooterLayoutAdapter {
       converterContext,
       defaultFont,
       defaultSize,
+      storyKey: buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId: descriptor.id }),
       ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
     });
     const blocks = result.blocks;

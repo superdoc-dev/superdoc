@@ -26,6 +26,7 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator \\| `"all"` | no | One of: StoryLocator, `"all"` |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
 | `type` | enum | no | `"insert"`, `"delete"`, `"format"` |
@@ -61,7 +62,11 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
       "address": {
         "entityId": "entity-789",
         "entityType": "trackedChange",
-        "kind": "entity"
+        "kind": "entity",
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
       },
       "author": "Jane Doe",
       "handle": {
@@ -101,6 +106,17 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "description": "Story scope. Omit for body only, pass a StoryLocator for a single story, or 'all' for body + every revision-capable non-body story.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StoryLocator"
+        },
+        {
+          "const": "all"
+        }
+      ]
+    },
     "limit": {
       "description": "Maximum number of tracked changes to return.",
       "type": "integer"

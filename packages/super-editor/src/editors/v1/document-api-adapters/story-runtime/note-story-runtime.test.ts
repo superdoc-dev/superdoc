@@ -95,6 +95,47 @@ describe('resolveNoteRuntime — empty note content', () => {
     );
   });
 
+  it('normalizes empty footnote reference runs out of the editable note story', () => {
+    const hostEditor = makeHostEditor([
+      {
+        id: '1',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'run', content: [], attrs: { runProperties: { styleId: 'FootnoteReference' } } },
+              {
+                type: 'run',
+                content: [{ type: 'text', text: 'Hello' }],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    resolveNoteRuntime(hostEditor, footnoteLocator);
+
+    expect(mockCreateStoryEditor).toHaveBeenCalledWith(
+      hostEditor,
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'run',
+                content: [{ type: 'text', text: 'Hello' }],
+              },
+            ],
+          },
+        ],
+      },
+      expect.any(Object),
+    );
+  });
+
   it('resolves an endnote with content: [] as a valid empty story', () => {
     const hostEditor = makeHostEditor([], [{ id: '1', content: [] }]);
 

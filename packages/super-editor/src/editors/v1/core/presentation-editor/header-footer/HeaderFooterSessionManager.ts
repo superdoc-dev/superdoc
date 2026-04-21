@@ -426,6 +426,9 @@ export class HeaderFooterSessionManager {
    */
   setDocumentMode(mode: 'editing' | 'viewing' | 'suggesting'): void {
     this.#documentMode = mode;
+    if (this.#activeEditor) {
+      this.#applyChildEditorDocumentMode(this.#activeEditor, mode);
+    }
   }
 
   /**
@@ -734,8 +737,7 @@ export class HeaderFooterSessionManager {
     const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
 
     if (this.#activeEditor) {
-      this.#activeEditor.setEditable(false);
-      this.#activeEditor.setOptions({ documentMode: 'viewing' });
+      this.#applyChildEditorDocumentMode(this.#activeEditor, 'viewing');
     }
     this.#teardownActiveEditorEventBridge();
 
@@ -815,8 +817,7 @@ export class HeaderFooterSessionManager {
       // Clean up previous session if switching between pages while in editing mode
       if (this.#session.mode !== 'body') {
         if (this.#activeEditor) {
-          this.#activeEditor.setEditable(false);
-          this.#activeEditor.setOptions({ documentMode: 'viewing' });
+          this.#applyChildEditorDocumentMode(this.#activeEditor, 'viewing');
         }
         this.#teardownActiveEditorEventBridge();
         this.#overlayManager.hideEditingOverlay();
@@ -967,8 +968,7 @@ export class HeaderFooterSessionManager {
       }
 
       try {
-        editor.setEditable(true);
-        editor.setOptions({ documentMode: 'editing' });
+        this.#applyChildEditorDocumentMode(editor, this.#documentMode);
 
         // Move caret to end of content
         try {
@@ -1035,6 +1035,32 @@ export class HeaderFooterSessionManager {
         error,
         context: 'enterMode',
       });
+    }
+  }
+
+  #applyChildEditorDocumentMode(editor: Editor, mode: 'editing' | 'viewing' | 'suggesting'): void {
+    const pm = editor.view?.dom ?? null;
+
+    if (mode === 'viewing') {
+      editor.commands?.enableTrackChangesShowOriginal?.();
+      editor.setOptions?.({ documentMode: 'viewing' });
+      editor.setEditable?.(false);
+    } else if (mode === 'suggesting') {
+      editor.commands?.disableTrackChangesShowOriginal?.();
+      editor.commands?.enableTrackChanges?.();
+      editor.setOptions?.({ documentMode: 'suggesting' });
+      editor.setEditable?.(true);
+    } else {
+      editor.commands?.disableTrackChangesShowOriginal?.();
+      editor.commands?.disableTrackChanges?.();
+      editor.setOptions?.({ documentMode: 'editing' });
+      editor.setEditable?.(true);
+    }
+
+    if (pm instanceof HTMLElement) {
+      pm.setAttribute('aria-readonly', mode === 'viewing' ? 'true' : 'false');
+      pm.setAttribute('documentmode', mode);
+      pm.classList.toggle('view-mode', mode === 'viewing');
     }
   }
 

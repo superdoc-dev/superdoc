@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     if (locator.storyType === 'footnote') return `fn:${locator.noteId}`;
     if (locator.storyType === 'endnote') return `en:${locator.noteId}`;
     if (locator.storyType === 'body') return 'body';
+    if (locator.storyType === 'headerFooterPart') return `hf:part:${locator.refId}`;
     return `unknown:${JSON.stringify(locator)}`;
   }),
   resolveNoteRuntime: vi.fn(),
@@ -65,6 +66,10 @@ vi.mock('./story-revision-store.js', () => ({
 }));
 
 import { resolveStoryRuntime, invalidateStoryRuntime } from './resolve-story-runtime.js';
+import {
+  registerLiveStorySessionRuntime,
+  unregisterLiveStorySessionRuntime,
+} from './live-story-session-runtime-registry.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,6 +121,7 @@ beforeEach(() => {
     if (locator.storyType === 'footnote') return `fn:${locator.noteId}`;
     if (locator.storyType === 'endnote') return `en:${locator.noteId}`;
     if (locator.storyType === 'body') return 'body';
+    if (locator.storyType === 'headerFooterPart') return `hf:part:${locator.refId}`;
     return `unknown:${JSON.stringify(locator)}`;
   });
   mocks.isHeaderFooterPartId.mockImplementation((partId: string) => /^word\/(header|footer)\d+\.xml$/.test(partId));
@@ -356,5 +362,78 @@ describe('invalidateStoryRuntime', () => {
     const hostEditor = makeHostEditor();
     const result = invalidateStoryRuntime(hostEditor, 'fn:1');
     expect(result).toBe(false);
+  });
+});
+
+describe('resolveStoryRuntime — active story sessions', () => {
+  it('prefers the active session editor over the cached runtime editor', () => {
+    const hostEditor = makeHostEditor();
+    const cachedRuntime = {
+      locator: { kind: 'story', storyType: 'footnote', noteId: '3' },
+      storyKey: 'fn:3',
+      editor: { id: 'cached-editor', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any,
+      kind: 'note' as const,
+      commitEditor: vi.fn(),
+    };
+    const activeSessionEditor = { id: 'session-editor', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any;
+
+    mocks.resolveNoteRuntime.mockReturnValue(cachedRuntime);
+
+    const cached = resolveStoryRuntime(hostEditor, {
+      kind: 'story',
+      storyType: 'footnote',
+      noteId: '3',
+    });
+    expect(cached.editor).toBe(cachedRuntime.editor);
+
+    const unregister = registerLiveStorySessionRuntime(hostEditor, cachedRuntime, activeSessionEditor);
+
+    const live = resolveStoryRuntime(hostEditor, {
+      kind: 'story',
+      storyType: 'footnote',
+      noteId: '3',
+    });
+
+    expect(live.editor).toBe(activeSessionEditor);
+    live.commit?.(hostEditor);
+    expect(cachedRuntime.commitEditor).toHaveBeenCalledWith(hostEditor, activeSessionEditor);
+
+    unregister();
+
+    const afterExit = resolveStoryRuntime(hostEditor, {
+      kind: 'story',
+      storyType: 'footnote',
+      noteId: '3',
+    });
+
+    expect(afterExit).toBe(cached);
+  });
+
+  it('ignores stale unregister callbacks when a newer session replaces the same story', () => {
+    const hostEditor = makeHostEditor();
+    const runtime = {
+      locator: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId11' },
+      storyKey: 'hf:part:rId11',
+      editor: { id: 'cached-editor', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any,
+      kind: 'headerFooter' as const,
+      commitEditor: vi.fn(),
+    };
+    const firstSessionEditor = { id: 'session-1', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any;
+    const secondSessionEditor = { id: 'session-2', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any;
+
+    const unregisterFirst = registerLiveStorySessionRuntime(hostEditor, runtime, firstSessionEditor);
+    registerLiveStorySessionRuntime(hostEditor, runtime, secondSessionEditor);
+
+    unregisterFirst();
+
+    const live = resolveStoryRuntime(hostEditor, {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: 'rId11',
+    } as any);
+
+    expect(live.editor).toBe(secondSessionEditor);
+
+    unregisterLiveStorySessionRuntime(hostEditor, 'hf:part:rId11', secondSessionEditor);
   });
 });

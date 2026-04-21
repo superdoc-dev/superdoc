@@ -202,11 +202,13 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    */
   allowSelectionInViewMode?: boolean;
   /**
-   * Route interactive story-backed part editing (headers, footers, and future
-   * story parts such as notes) through the body-style presentation editing
-   * architecture: a hidden off-screen ProseMirror host plus layout-engine
-   * rendering. When `false`, header/footer editing continues to mount a
-   * visible child PM overlay via {@link EditorOverlayManager}.
+   * Route interactive header/footer editing through the body-style
+   * presentation editing architecture: a hidden off-screen ProseMirror host
+   * plus layout-engine rendering. When `false`, header/footer editing
+   * continues to mount a visible child PM overlay via
+   * {@link EditorOverlayManager}. Notes/endnotes still use story-backed
+   * presentation sessions when activated because they have no legacy overlay
+   * editing surface.
    *
    * This is a transitional flag governing the rollout of the story-backed
    * parts presentation editing refactor. See
@@ -441,7 +443,7 @@ export type PendingMarginClick =
  * to prevent unwanted scroll behavior when the hidden editor receives focus.
  *
  * @remarks
- * This flag is set by {@link PresentationEditor#wrapHiddenEditorFocus} to ensure
+ * This flag is set by {@link PresentationEditor#wrapOffscreenEditorFocus} to ensure
  * the wrapping is idempotent (applied only once per view instance).
  */
 export interface EditorViewWithScrollFlag {

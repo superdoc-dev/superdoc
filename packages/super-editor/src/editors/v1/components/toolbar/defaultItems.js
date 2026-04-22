@@ -1,6 +1,7 @@
 import { h, ref } from 'vue';
 
 import { sanitizeNumber } from './helpers';
+import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
@@ -44,7 +45,7 @@ export const makeDefaultItems = ({
   });
 
   // font
-  const fontOptions = [...(toolbarFonts ? toolbarFonts : TOOLBAR_FONTS)];
+  const fontOptions = (toolbarFonts ?? TOOLBAR_FONTS).map(normalizeFontOption);
   const fontButton = useToolbarItem({
     type: 'dropdown',
     name: 'fontFamily',

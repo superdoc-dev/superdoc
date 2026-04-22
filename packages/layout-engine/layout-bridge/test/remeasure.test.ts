@@ -445,6 +445,27 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].segments?.length).toBeGreaterThan(0);
     });
 
+    it('aligns trailing TOC-style tab to explicit right stop with leader', () => {
+      const rightStopPx = 300;
+      const block = createBlock(
+        [textRun('1.'), tabRun({ tabIndex: 0 }), textRun('Generalities'), tabRun({ tabIndex: 1 }), textRun('5')],
+        {
+          tabs: [{ pos: pxToTwips(rightStopPx), val: 'end', leader: 'dot' }],
+          indent: { left: 30, hanging: 30 },
+          tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+        },
+      );
+
+      const measure = remeasureParagraph(block, 800);
+      expect(measure.lines).toHaveLength(1);
+      const leaders = measure.lines[0].leaders;
+      expect(leaders).toBeDefined();
+      expect(leaders?.length).toBe(1);
+      const leader = leaders![0];
+      expect(leader.style).toBe('dot');
+      expect(leader.to).toBeCloseTo(rightStopPx - CHAR_WIDTH, 0);
+    });
+
     it('handles tab at various positions within text', () => {
       // Tab after some text should advance to next stop after current position
       const tabStop: TabStop = { pos: 720, val: 'start' }; // 48px
@@ -481,7 +502,6 @@ describe('remeasureParagraph', () => {
       const tabStop: TabStop = { pos: 1440, val: 'start' };
       const block = createBlock([textRun('A'), tabRun(), textRun('B')], { tabs: [tabStop] });
       const measure = remeasureParagraph(block, 200);
-
       expect(measure.lines).toHaveLength(1);
       // Tab should advance to 96px (1 inch)
       expect(measure.lines[0].width).toBeGreaterThan(96);

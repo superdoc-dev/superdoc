@@ -105,7 +105,6 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
           });
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
-        sourceLayout: layout,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -4711,6 +4710,7 @@ describe('DomPainter', () => {
               fragmentIndex: 0,
               block: listBlock as import('@superdoc/contracts').ListBlock,
               measure: listMeasure as import('@superdoc/contracts').ListMeasure,
+              fragment: initialLayout.pages[0].fragments[0] as import('@superdoc/contracts').ListItemFragment,
             },
           ],
         },
@@ -4742,6 +4742,7 @@ describe('DomPainter', () => {
               fragmentIndex: 0,
               block: listBlock as import('@superdoc/contracts').ListBlock,
               measure: listMeasure as import('@superdoc/contracts').ListMeasure,
+              fragment: updatedLayout.pages[0].fragments[0] as import('@superdoc/contracts').ListItemFragment,
             },
           ],
         },
@@ -4857,6 +4858,7 @@ describe('DomPainter', () => {
               blockId: 'drawing-anchored',
               fragmentIndex: 0,
               block: anchoredDrawingBlock as import('@superdoc/contracts').DrawingBlock,
+              fragment: drawingLayout.pages[0].fragments[0] as import('@superdoc/contracts').DrawingFragment,
             },
             {
               kind: 'fragment',
@@ -4871,6 +4873,7 @@ describe('DomPainter', () => {
               blockId: 'drawing-inline',
               fragmentIndex: 1,
               block: inlineDrawingBlock as import('@superdoc/contracts').DrawingBlock,
+              fragment: drawingLayout.pages[0].fragments[1] as import('@superdoc/contracts').DrawingFragment,
             },
           ],
         },
@@ -4944,6 +4947,7 @@ describe('DomPainter', () => {
         fragmentIndex: 0,
         block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
         measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
+        fragment: paragraphLayout.pages[0].fragments[0] as import('@superdoc/contracts').ParaFragment,
         content: {
           lines: [
             {
@@ -5039,6 +5043,7 @@ describe('DomPainter', () => {
         fragmentIndex: 0,
         block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
         measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
+        fragment: paragraphLayout.pages[0].fragments[0] as import('@superdoc/contracts').ParaFragment,
         content: {
           lines: [
             {
@@ -5134,6 +5139,7 @@ describe('DomPainter', () => {
         fragmentIndex: 0,
         block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
         measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
+        fragment: paragraphLayout.pages[0].fragments[0] as import('@superdoc/contracts').ParaFragment,
         content: {
           lines: [
             {

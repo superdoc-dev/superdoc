@@ -31,11 +31,11 @@ const resolvedLayout = resolveLayout({
   measures,    // Measures (parallel to blocks)
 });
 
-painter.paint({ resolvedLayout, sourceLayout: layout }, mountElement);
+painter.paint({ resolvedLayout }, mountElement);
 painter.setProviders(newHeader, newFooter); // optional helper for provider changes
 ```
 
 Notes:
-- The painter takes a pre-computed `DomPainterInput` (`{ resolvedLayout, sourceLayout }`). Callers run `resolveLayout` (from `@superdoc/layout-resolved`) to convert a raw `Layout` + blocks/measures into the resolved form before painting.
+- The painter takes a pre-computed `DomPainterInput` (`{ resolvedLayout }`). Callers run `resolveLayout` (from `@superdoc/layout-resolved`) to convert a raw `Layout` + blocks/measures into the resolved form before painting.
 - Virtualization is opt-in and only supported in vertical mode (windowed pages with spacers).
 - Renderer is read-only: no editing/input handling is included here.

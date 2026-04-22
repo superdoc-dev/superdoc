@@ -2,10 +2,10 @@
  * Test-only bridge around `createDomPainter`.
  *
  * The production painter accepts a pre-computed `DomPainterInput`
- * (`{ resolvedLayout, sourceLayout }`). Most tests, however, still express
- * their fixtures as `{ blocks, measures }` plus a raw `Layout`. This helper
- * lets those tests keep that shape by running `resolveLayout` internally
- * on every `paint(layout, mount)` call.
+ * (`{ resolvedLayout }`). Most tests, however, still express their fixtures
+ * as `{ blocks, measures }` plus a raw `Layout`. This helper lets those tests
+ * keep that shape by running `resolveLayout` internally on every
+ * `paint(layout, mount)` call.
  *
  * Use this in tests only. Production code must call `createDomPainter`
  * directly with a `DomPainterInput`.
@@ -54,7 +54,6 @@ export function createTestPainter(opts: TestPainterOptions): TestPainterHandle {
                     blocks: currentBlocks,
                     measures: currentMeasures,
                   }),
-            sourceLayout: input,
           };
       painter.paint(resolvedInput, mount, mapping);
     },
@@ -72,5 +71,5 @@ export function createTestPainter(opts: TestPainterOptions): TestPainterHandle {
 }
 
 function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
-  return typeof value === 'object' && value !== null && 'resolvedLayout' in value && 'sourceLayout' in value;
+  return typeof value === 'object' && value !== null && 'resolvedLayout' in value;
 }

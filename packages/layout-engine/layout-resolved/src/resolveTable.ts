@@ -41,6 +41,7 @@ export function resolveTableItem(
     measure,
     cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
     effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+    fragment,
   };
   if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
   if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;

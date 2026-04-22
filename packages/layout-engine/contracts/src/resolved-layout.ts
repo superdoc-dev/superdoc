@@ -1,18 +1,23 @@
 import type {
   DrawingBlock,
+  DrawingFragment,
   FlowMode,
   Fragment,
   ImageBlock,
+  ImageFragment,
   ImageFragmentMetadata,
   Line,
   ListBlock,
+  ListItemFragment,
   ListMeasure,
   PageMargins,
+  ParaFragment,
   ParagraphBlock,
   ParagraphBorders,
   ParagraphMeasure,
   SectionVerticalAlign,
   TableBlock,
+  TableFragment,
   TableMeasure,
 } from './index.js';
 
@@ -135,6 +140,8 @@ export type ResolvedFragmentItem = {
   block?: ParagraphBlock | ListBlock;
   /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
   measure?: ParagraphMeasure | ListMeasure;
+  /** Back-pointer to source Fragment. Painter render methods consume Fragment shape. */
+  fragment: ParaFragment | ListItemFragment;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -253,6 +260,8 @@ export type ResolvedTableItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Back-pointer to source Fragment. Painter render methods consume Fragment shape. */
+  fragment: TableFragment;
 };
 
 /**
@@ -293,6 +302,8 @@ export type ResolvedImageItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Back-pointer to source Fragment. Painter render methods consume Fragment shape. */
+  fragment: ImageFragment;
 };
 
 /**
@@ -331,6 +342,8 @@ export type ResolvedDrawingItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Back-pointer to source Fragment. Painter render methods consume Fragment shape. */
+  fragment: DrawingFragment;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */

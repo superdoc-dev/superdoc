@@ -1,6 +1,5 @@
-# Auto-releases on push to:
-# - main (@next channel)
-# - stable (@latest channel)
+# Auto-releases on push to main (@next channel).
+# Stable releases are orchestrated centrally by release-stable.yml.
 # Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
@@ -8,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - stable
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
@@ -16,6 +14,7 @@ on:
       - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
+      - 'shared/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:
@@ -31,7 +30,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:

@@ -275,7 +275,6 @@ function hasGitHubReleaseContext() {
 
 async function githubJsonRequest(pathname, options = {}) {
   const { method = 'GET', body, allow404 = false } = options;
-  const repository = getOriginRepository();
   const response = await fetch(`https://api.github.com${pathname}`, {
     method,
     headers: {

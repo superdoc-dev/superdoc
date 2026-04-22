@@ -44,6 +44,9 @@ const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
 const useWebLayout = ref(urlParams.get('view') === 'web');
+// Tracked-change replacement model. 'paired' groups ins+del into one change
+// (Google Docs model); 'independent' keeps each as its own revision (Word / ECMA-376).
+const trackChangesReplacements = ref(urlParams.get('replacements') === 'independent' ? 'independent' : 'paired');
 const useCollaboration = urlParams.get('collab') === '1';
 const collabRoom = urlParams.get('room') || 'superdoc-dev-room';
 const collabUrl = 'ws://localhost:8081/v1/collaboration';
@@ -676,9 +679,6 @@ const init = async () => {
     comments: {
       visible: true,
     },
-    trackChanges: {
-      visible: true,
-    },
     toolbarGroups: ['left', 'center', 'right'],
     pagination: useLayoutEngine.value && !useWebLayout.value,
     viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
@@ -720,6 +720,10 @@ const init = async () => {
         // useInternalExternalComments: true,
         // suppressInternalExternal: true,
         permissionResolver: commentPermissionResolver,
+      },
+      trackChanges: {
+        visible: true,
+        replacements: trackChangesReplacements.value,
       },
       toolbar: {
         selector: 'toolbar',
@@ -1207,6 +1211,21 @@ const toggleViewLayout = () => {
   window.location.href = url.toString();
 };
 
+// Switching replacement model requires SuperDoc to re-mount so the
+// importer and runtime both pick up the new mode. Reload with ?replacements=…
+// so the change is deep-linkable too.
+const setReplacementsMode = (mode) => {
+  if (mode !== 'paired' && mode !== 'independent') return;
+  if (mode === trackChangesReplacements.value) return;
+  const url = new URL(window.location.href);
+  if (mode === 'paired') {
+    url.searchParams.delete('replacements');
+  } else {
+    url.searchParams.set('replacements', mode);
+  }
+  window.location.href = url.toString();
+};
+
 const currentZoom = ref(100);
 const ZOOM_STEP = 10;
 const ZOOM_MIN = 25;
@@ -1377,6 +1396,17 @@ if (scrollTestMode.value) {
                 <option value="word">Word</option>
                 <option value="blueprint">Blueprint</option>
                 <option value="neon-night">Neon Night</option>
+              </select>
+            </label>
+            <label class="dev-app__theme-control" title="Tracked replacement model (reloads on change)">
+              <span>Tracked replacements</span>
+              <select
+                :value="trackChangesReplacements"
+                class="dev-app__theme-select"
+                @change="setReplacementsMode($event.target.value)"
+              >
+                <option value="paired">Paired (Google Docs)</option>
+                <option value="independent">Independent (Word)</option>
               </select>
             </label>
             <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">

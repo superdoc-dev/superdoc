@@ -17,6 +17,7 @@ import type { Mark as ProseMirrorMark, Node as ProseMirrorNode, Schema } from 'p
 import type { SDFragment, SDContentNode } from '@superdoc/document-api';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
+import { buildTextWithTabs } from '../helpers/text-with-tabs.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -842,16 +843,26 @@ function materializeInlineNode(
 // ---------------------------------------------------------------------------
 
 /** Materializes an SDM/1 run node: `{ kind: 'run', run: { text, styleRef?, props? } }` */
-function materializeRun(schema: Schema, node: any): ProseMirrorNode {
+function materializeRun(schema: Schema, node: any): ProseMirrorNode | ProseMirrorNode[] {
   const payload = resolvePayload(node, 'run');
   const marks = buildMarksFromRunPayload(schema, payload);
-  return schema.text(payload.text, marks.length > 0 ? marks : undefined);
+  return toMaterializedInlines(buildTextWithTabs(schema, payload.text, marks.length > 0 ? marks : undefined));
 }
 
 /** Materializes a legacy text node: `{ type: 'text', text, bold?, italic?, ... }` */
-function materializeTextRun(schema: Schema, node: any): ProseMirrorNode {
+function materializeTextRun(schema: Schema, node: any): ProseMirrorNode | ProseMirrorNode[] {
   const marks = buildMarksFromLegacyRun(schema, node);
-  return schema.text(node.text, marks.length > 0 ? marks : undefined);
+  return toMaterializedInlines(buildTextWithTabs(schema, node.text, marks.length > 0 ? marks : undefined));
+}
+
+/** Flattens a buildTextWithTabs result into the Node | Node[] shape expected by materializeInlineContent. */
+function toMaterializedInlines(content: ProseMirrorNode | Fragment): ProseMirrorNode | ProseMirrorNode[] {
+  if (content instanceof Fragment) {
+    const out: ProseMirrorNode[] = [];
+    content.forEach((child) => out.push(child));
+    return out;
+  }
+  return content;
 }
 
 function materializeHyperlink(
@@ -942,10 +953,10 @@ function materializeNoteRef(schema: Schema, node: any, kind: string): ProseMirro
   return nodeType.create(attrs);
 }
 
-function materializeInlineFallback(schema: Schema, node: any): ProseMirrorNode {
+function materializeInlineFallback(schema: Schema, node: any): ProseMirrorNode | ProseMirrorNode[] {
   // Best-effort: render as text if the node has text content
   const payload = node[resolveKind(node)] ?? node;
-  if (payload.text) return schema.text(payload.text);
+  if (payload.text) return toMaterializedInlines(buildTextWithTabs(schema, payload.text, undefined));
   return schema.text('\ufffc');
 }
 

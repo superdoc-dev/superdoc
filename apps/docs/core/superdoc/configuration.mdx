@@ -112,7 +112,7 @@ new SuperDoc({
     - `viewing` - Read-only display
     - `suggesting` - Track changes enabled
   </Expandable>
-  <Info>See the [Track Changes extension](/extensions/track-changes) for accept/reject commands, and the [runnable example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/track-changes) for a complete workflow.</Info>
+  <Info>See the [Track Changes module](/modules/track-changes) for accept/reject commands, the Document API, and configuration. The [runnable example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/track-changes) shows a complete workflow.</Info>
 </ParamField>
 
 <ParamField path="comments" type="Object">
@@ -124,11 +124,11 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
-<ParamField path="trackChanges" type="Object">
-  Viewing-mode visibility controls for tracked changes
+<ParamField path="trackChanges" type="Object" deprecated>
+  <Warning>**Deprecated** — Use [`modules.trackChanges`](#track-changes-module) instead. This top-level key remains supported as an alias and will emit a one-time console warning.</Warning>
   <Expandable title="properties" defaultOpen>
     <ParamField path="trackChanges.visible" type="boolean" default="false">
-      Show tracked-change markup and threads when `documentMode` is `viewing`
+      Show tracked-change markup and threads when `documentMode` is `viewing`.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -195,6 +195,56 @@ new SuperDoc({
     </ParamField>
   </Expandable>
 </ParamField>
+
+### Track changes module
+
+<ParamField path="modules.trackChanges" type="Object">
+  Track changes configuration. Supersedes the top-level `trackChanges` and `layoutEngineOptions.trackedChanges` keys, which remain supported as deprecated aliases.
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="modules.trackChanges.visible" type="boolean" default="false">
+      Show tracked-change markup and threads when `documentMode` is `viewing`.
+    </ParamField>
+    <ParamField path="modules.trackChanges.mode" type="'review' | 'original' | 'final' | 'off'">
+      Rendering mode for tracked changes.
+      - `'review'`: show insertions and deletions inline (default for editing/suggesting).
+      - `'original'`: show the document as it existed before tracked changes (default for viewing when `visible` is `false`).
+      - `'final'`: show the document with changes applied.
+      - `'off'`: disable tracked-change rendering.
+    </ParamField>
+    <ParamField path="modules.trackChanges.enabled" type="boolean" default="true">
+      Whether the layout engine treats tracked changes as active.
+    </ParamField>
+    <ParamField path="modules.trackChanges.replacements" type="'paired' | 'independent'" default="'paired'">
+      How a tracked replacement (adjacent insertion + deletion created by typing over selected text) surfaces in the UI and API.
+      - `'paired'` (default, Google Docs model): the two halves share one id and resolve together with a single accept/reject click.
+      - `'independent'` (Microsoft Word / ECMA-376 §17.13.5 model): each insertion and each deletion has its own id, is addressable on its own, and resolves independently.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  documentMode: 'viewing',
+  modules: {
+    trackChanges: { visible: true, mode: 'review' },
+  },
+});
+```
+
+Opt into Microsoft Word / ECMA-376-style independent revisions, where each insertion and each deletion has its own id and resolves on its own:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    trackChanges: { replacements: 'independent' },
+  },
+});
+```
 
 ### Toolbar module
 

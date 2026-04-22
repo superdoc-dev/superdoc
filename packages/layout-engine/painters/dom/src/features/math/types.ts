@@ -43,4 +43,4 @@ export type MathObjectConverter = (
   node: OmmlJsonNode,
   doc: Document,
   convertChildren: (children: OmmlJsonNode[]) => DocumentFragment,
-) => Element | null;
+) => Node | null;

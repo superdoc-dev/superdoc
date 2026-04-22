@@ -80,6 +80,7 @@ export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
 import { computeAutoFitColumnWidths } from './autofit-columns.js';
+import type { AutoFitRowInput } from './autofit-columns.js';
 import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './autofit-normalize.js';
 import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import {
@@ -2828,7 +2829,7 @@ async function buildMeasuredAutoFitRows(
   block: TableBlock,
   workingInput: WorkingTableGridInput,
 ): Promise<{
-  rows: NonNullable<Parameters<typeof computeAutoFitColumnWidths>[0]['rows']>;
+  rows: AutoFitRowInput[];
   cellMetricKeys: string[];
 }> {
   const { rows, cellMetricKeys } = await measureTableAutoFitContentMetrics(block, workingInput, measureBlock);

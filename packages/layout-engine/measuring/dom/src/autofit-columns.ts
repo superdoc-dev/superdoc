@@ -1,8 +1,12 @@
+import type { WorkingTableGridInput } from './autofit-normalize.js';
+import { computeFixedTableColumnWidths, type FixedLayoutResult } from './fixed-table-columns.js';
+
 /**
  * AutoFit column width resolution for table measurement.
  *
  * Central invariant:
- * - input widths are preferred widths
+ * - authored widths and `tcW` values are preferred widths
+ * - fixed-pass widths are the baseline for AutoFit
  * - output widths are final runtime widths
  *
  * This module is pure and pixel-based end to end. Callers must provide all
@@ -11,9 +15,6 @@
 
 /**
  * Table layout modes relevant to runtime column resolution.
- *
- * - `fixed`: preserve preferred grid widths as the primary source of truth
- * - `autofit`: allow content metrics and preferred widths to reshape the grid
  */
 export type AutoFitLayoutMode = 'fixed' | 'autofit';
 
@@ -47,10 +48,10 @@ export type AutoFitCellInput = {
 };
 
 /**
- * One logical row of AutoFit inputs.
+ * One logical row of legacy AutoFit inputs.
  *
- * Rows can include skipped leading/trailing columns so the algorithm can operate
- * on a logical grid without depending on placeholder cells.
+ * This shape is kept as a compatibility surface while the runtime path is
+ * migrated to the explicit fixed-pass-driven contract in Commit 7.
  */
 export type AutoFitRowInput = {
   /** Skipped columns before the first concrete cell in the row. */
@@ -62,12 +63,57 @@ export type AutoFitRowInput = {
 };
 
 /**
- * Pure AutoFit solver input.
- *
- * The caller is responsible for converting imported/runtime table data into
- * this model and for supplying content metrics in pixels.
+ * One measured concrete AutoFit cell aligned to a normalized working row.
  */
-export type AutoFitInput = {
+export type AutoFitContentMetricsCell = {
+  /** Physical cell index within the source row. */
+  cellIndex: number;
+  /** Logical span width in grid columns. */
+  span: number;
+  /** Preferred width metadata carried into the metrics layer. */
+  preferredWidth?: number;
+  /** Minimum outer cell width, in pixels. */
+  minContentWidth: number;
+  /** Maximum outer cell width, in pixels. */
+  maxContentWidth: number;
+};
+
+/**
+ * One measured AutoFit row aligned to the normalized working-grid structure.
+ */
+export type AutoFitContentMetricsRow = {
+  /** Source row index in document order. */
+  rowIndex: number;
+  /** Concrete measured cells in physical document order. */
+  cells: AutoFitContentMetricsCell[];
+};
+
+/**
+ * Stable content-metrics contract for the pure AutoFit solver.
+ */
+export type AutoFitContentMetricsInput = {
+  /** Row/cell-indexed intrinsic width metrics. */
+  rowMetrics: AutoFitContentMetricsRow[];
+};
+
+/**
+ * Explicit fixed-pass-driven AutoFit input.
+ */
+export type ExplicitAutoFitInput = {
+  /** Normalized working-grid input for the table. */
+  workingInput: WorkingTableGridInput;
+  /** Fixed-pass result computed from the same working-grid input. */
+  fixedLayout: FixedLayoutResult;
+  /** Content metrics measured against the fixed-pass baseline. */
+  contentMetrics: AutoFitContentMetricsInput;
+  /** Minimum fallback width assigned only to degenerate fallback outputs. */
+  minColumnWidth?: number;
+};
+
+/**
+ * Legacy AutoFit input shape preserved temporarily for compatibility.
+ */
+export type LegacyAutoFitInput = {
   /** Raw layout mode hint. Any non-`fixed` value is treated as AutoFit. */
   tableLayout?: string | null;
   /** Maximum runtime width available to the table, in pixels. */
@@ -78,9 +124,18 @@ export type AutoFitInput = {
   preferredColumnWidths?: number[];
   /** Logical row inputs used for content-driven redistribution. */
   rows?: AutoFitRowInput[];
-  /** Minimum fallback width assigned to any output column, in pixels. */
+  /** Minimum fallback width assigned only to degenerate fallback outputs. */
   minColumnWidth?: number;
 };
+
+/**
+ * Public AutoFit solver input.
+ *
+ * The explicit fixed-pass-driven shape is the target contract. The legacy shape
+ * is still accepted temporarily so existing call sites can compile until the
+ * runtime path is switched in the next commit.
+ */
+export type AutoFitInput = ExplicitAutoFitInput | LegacyAutoFitInput;
 
 /**
  * Final runtime output from the pure AutoFit solver.
@@ -104,6 +159,7 @@ type NormalizedSkippedColumn = {
 };
 
 type NormalizedCell = {
+  cellIndex: number;
   startColumn: number;
   span: number;
   preferredWidth?: number;
@@ -117,95 +173,158 @@ type NormalizedRow = {
   logicalColumnCount: number;
 };
 
+type AutoFitContext = {
+  workingInput: WorkingTableGridInput;
+  fixedLayout: FixedLayoutResult;
+  rowMetrics: AutoFitContentMetricsRow[];
+  minColumnWidth: number;
+};
+
 const DEFAULT_MIN_COLUMN_WIDTH = 8;
 
 /**
  * Resolve final runtime column widths for a table.
  *
- * The solver follows a simplified Word/ECMA-style process:
- * 1. Resolve layout mode.
- * 2. Build a logical working grid from preferred widths and row structure.
- * 3. Seed fixed/preferred widths.
- * 4. Accumulate single-span minimum/maximum content widths.
- * 5. Expand multi-span cells to satisfy minimum and maximum requirements.
- * 6. Apply preferred-width overrides.
- * 7. Distribute toward a preferred table width, if present.
- * 8. Clamp the result to the section/container width.
+ * The solver follows the ECMA AutoFit guidance as closely as possible while
+ * making the hybrid policy choices codified in the rework spec:
+ * 1. start from the fixed-pass result
+ * 2. derive min/max bounds from content metrics and preferred widths
+ * 3. detect whether any cell minimum exceeds the current fixed width
+ * 4. if so, shrink other columns toward minima and, when needed, grow the table
+ * 5. if slack remains under `tblW`, redistribute it across remaining max ranges
  *
- * @param input - Pure pixel-based AutoFit inputs.
+ * @param input - Explicit fixed-pass-driven input, or the temporary legacy shape.
  * @returns Final runtime width vector and aggregate table width.
  */
 export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
-  const layoutMode = resolveLayoutMode(input.tableLayout);
-  const minColumnWidth = sanitizeWidth(input.minColumnWidth, DEFAULT_MIN_COLUMN_WIDTH);
-  const maxTableWidth = Math.max(minColumnWidth, sanitizeWidth(input.maxTableWidth, minColumnWidth));
-  const preferredTableWidth = sanitizeOptionalWidth(input.preferredTableWidth);
+  const context = resolveAutoFitContext(input);
+  const { workingInput, fixedLayout, rowMetrics, minColumnWidth } = context;
 
-  const normalizedRows = normalizeRows(input.rows ?? []);
-  const gridColumnCount = determineGridColumnCount(input.preferredColumnWidths ?? [], normalizedRows);
-
-  if (gridColumnCount === 0) {
-    return buildFallbackResult(layoutMode, minColumnWidth);
+  if (workingInput.layoutMode === 'fixed') {
+    return finalizeResult('fixed', fixedLayout.columnWidths, minColumnWidth);
   }
 
-  const workingColumnWidths = buildWorkingGrid(input.preferredColumnWidths ?? [], gridColumnCount);
-  const singleSpanMin = new Array<number>(gridColumnCount).fill(0);
-  const singleSpanMax = new Array<number>(gridColumnCount).fill(0);
+  const gridColumnCount = fixedLayout.gridColumnCount;
+  if (gridColumnCount === 0) {
+    return buildFallbackResult(workingInput.layoutMode, minColumnWidth);
+  }
+
+  const normalizedRows = buildNormalizedRows(workingInput, rowMetrics);
+  const currentWidths = fixedLayout.columnWidths.slice(0, gridColumnCount);
+  const minBounds = new Array<number>(gridColumnCount).fill(0);
+  const maxBounds = new Array<number>(gridColumnCount).fill(0);
   const preferredOverrides = new Array<number | undefined>(gridColumnCount).fill(undefined);
   const multiSpanCells: NormalizedCell[] = [];
 
   accumulateBounds({
     rows: normalizedRows,
-    singleSpanMin,
-    singleSpanMax,
+    minBounds,
+    maxBounds,
     preferredOverrides,
     multiSpanCells,
   });
 
-  if (layoutMode === 'fixed') {
-    let fixedWidths = [...workingColumnWidths];
-    fixedWidths = applySingleSpanPreferredOverrides(fixedWidths, preferredOverrides);
-    fixedWidths = applyMultiSpanPreferredWidths(fixedWidths, multiSpanCells);
-    fixedWidths = ensureNonZeroWidthFloor(fixedWidths, minColumnWidth);
-    fixedWidths = scaleToTargetWidth(fixedWidths, preferredTableWidth);
-    fixedWidths = clampToWidth(fixedWidths, maxTableWidth, new Array<number>(fixedWidths.length).fill(minColumnWidth));
-    return finalizeResult(layoutMode, fixedWidths, minColumnWidth);
+  applyMultiSpanMinimums(minBounds, multiSpanCells);
+  applySingleSpanPreferredOverrides(maxBounds, minBounds, preferredOverrides);
+  applyMultiSpanMaximums(maxBounds, minBounds, multiSpanCells, currentWidths);
+
+  const triggerCells = collectTriggerCells(currentWidths, multiSpanCells, normalizedRows);
+  const postTriggerGrowableColumns =
+    triggerCells.length > 0 ? collectNonProtectedColumns(triggerCells, gridColumnCount) : undefined;
+  let resolvedWidths = currentWidths.slice();
+  let targetTableWidth = sanitizeOptionalWidth(workingInput.preferredTableWidth) ?? fixedLayout.totalWidth;
+
+  if (triggerCells.length > 0) {
+    resolvedWidths = raiseToMinimums(resolvedWidths, minBounds);
+    resolvedWidths = expandTriggersWithinCurrentTable(resolvedWidths, triggerCells, minBounds, maxBounds);
+    resolvedWidths = expandTriggersByGrowingTable(resolvedWidths, triggerCells, maxBounds, workingInput.maxTableWidth);
+    targetTableWidth = Math.max(targetTableWidth, sumWidths(resolvedWidths));
+    targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
+  } else {
+    targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
   }
 
-  const minWidths = singleSpanMin.map((value) => Math.max(value, 0));
-  let maxWidths = singleSpanMax.map((value, index) => Math.max(value, workingColumnWidths[index], minWidths[index]));
+  resolvedWidths = shrinkToTargetWidth(resolvedWidths, targetTableWidth, minBounds);
+  resolvedWidths = growToTargetWidth(resolvedWidths, targetTableWidth, maxBounds, postTriggerGrowableColumns);
 
-  applyMultiSpanMinimums(minWidths, multiSpanCells);
-  applyMultiSpanMaximums(maxWidths, multiSpanCells, minWidths);
-  maxWidths = applySingleSpanPreferredOverrides(maxWidths, preferredOverrides);
-  maxWidths = applyMultiSpanPreferredWidths(maxWidths, multiSpanCells);
-
-  /**
-   * AutoFit uses the authored/preferred grid as its baseline seed, then applies
-   * content minima/maxima and preferred-width overrides in the same solver pass.
-   *
-   * This intentionally does not run a separate "fixed baseline first" pass and
-   * then feed that intermediate vector back into AutoFit. For the current
-   * implementation, `workingColumnWidths` remains the fixed-style seed and the
-   * later preferred-width / table-width resolution stages reconcile conflicts.
-   *
-   * A dedicated conflict-case test locks this behavior so future changes can
-   * make the equivalence question explicit instead of changing it accidentally.
-   */
-  let resolvedWidths = maxWidths.map((value, index) =>
-    Math.max(value, minWidths[index], workingColumnWidths[index], 0),
-  );
-  resolvedWidths = ensureNonZeroWidthFloor(resolvedWidths, minColumnWidth);
-
-  const runtimeMinWidths = minWidths.map((value) => Math.max(value, minColumnWidth));
-
-  if (preferredTableWidth != null) {
-    const target = Math.min(preferredTableWidth, maxTableWidth);
-    resolvedWidths = resolvePreferredTableWidth(resolvedWidths, target, runtimeMinWidths, minColumnWidth);
+  if (sumWidths(resolvedWidths) < targetTableWidth) {
+    resolvedWidths = distributeRemainingSlack(resolvedWidths, targetTableWidth, postTriggerGrowableColumns);
   }
 
-  resolvedWidths = clampToWidth(resolvedWidths, maxTableWidth, runtimeMinWidths);
-  return finalizeResult(layoutMode, resolvedWidths, minColumnWidth);
+  if (triggerCells.length > 0) {
+    resolvedWidths = clampTriggeredSpansToTargets(resolvedWidths, triggerCells, minBounds, maxBounds, currentWidths);
+  }
+
+  if (sumWidths(resolvedWidths) > workingInput.maxTableWidth) {
+    resolvedWidths = shrinkToTargetWidth(resolvedWidths, workingInput.maxTableWidth, minBounds);
+  }
+
+  return finalizeResult(workingInput.layoutMode, resolvedWidths, minColumnWidth);
+}
+
+/**
+ * Convert public input into the explicit fixed-pass-driven solver context.
+ */
+function resolveAutoFitContext(input: AutoFitInput): AutoFitContext {
+  const minColumnWidth = sanitizeWidth(input.minColumnWidth, DEFAULT_MIN_COLUMN_WIDTH);
+
+  if (isExplicitInput(input)) {
+    return {
+      workingInput: input.workingInput,
+      fixedLayout: input.fixedLayout,
+      rowMetrics: input.contentMetrics.rowMetrics,
+      minColumnWidth,
+    };
+  }
+
+  const layoutMode = resolveLayoutMode(input.tableLayout);
+  const normalizedRows = normalizeLegacyRows(input.rows ?? []);
+  const gridColumnCount = determineGridColumnCount(input.preferredColumnWidths ?? [], normalizedRows);
+  const workingInput: WorkingTableGridInput = {
+    layoutMode,
+    maxTableWidth: Math.max(minColumnWidth, sanitizeWidth(input.maxTableWidth, minColumnWidth)),
+    preferredTableWidth: sanitizeOptionalWidth(input.preferredTableWidth),
+    preferredColumnWidths: (input.preferredColumnWidths ?? []).map((width) => Math.max(0, width)),
+    gridColumnCount,
+    rows: normalizedRows.map((row) => ({
+      skippedBefore: row.skippedColumns.filter((column) => column.columnIndex < firstCellStart(row)),
+      skippedAfter: row.skippedColumns.filter((column) => column.columnIndex >= lastCellEnd(row)),
+      skippedColumns: row.skippedColumns,
+      cells: row.cells.map((cell) => ({
+        cellId: undefined,
+        startColumn: cell.startColumn,
+        span: cell.span,
+        preferredWidth: cell.preferredWidth,
+      })),
+      logicalColumnCount: row.logicalColumnCount,
+    })),
+  };
+
+  const fixedLayout = computeFixedTableColumnWidths(workingInput);
+  const rowMetrics: AutoFitContentMetricsRow[] = normalizedRows.map((row, rowIndex) => ({
+    rowIndex,
+    cells: row.cells.map((cell) => ({
+      cellIndex: cell.cellIndex,
+      span: cell.span,
+      preferredWidth: cell.preferredWidth,
+      minContentWidth: cell.minContentWidth,
+      maxContentWidth: cell.maxContentWidth,
+    })),
+  }));
+
+  return {
+    workingInput,
+    fixedLayout,
+    rowMetrics,
+    minColumnWidth,
+  };
+}
+
+/**
+ * True when the explicit fixed-pass-driven solver input is being used.
+ */
+function isExplicitInput(input: AutoFitInput): input is ExplicitAutoFitInput {
+  return 'workingInput' in input && 'fixedLayout' in input && 'contentMetrics' in input;
 }
 
 function resolveLayoutMode(tableLayout: string | null | undefined): AutoFitLayoutMode {
@@ -213,26 +332,9 @@ function resolveLayoutMode(tableLayout: string | null | undefined): AutoFitLayou
 }
 
 /**
- * Normalize a required width-like value, falling back when the input is absent,
- * non-finite, or non-positive.
+ * Convert legacy rows into normalized logical-grid rows with explicit starts.
  */
-function sanitizeWidth(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-/**
- * Normalize an optional width-like value, returning `undefined` when the input
- * is absent, non-finite, or non-positive.
- */
-function sanitizeOptionalWidth(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-/**
- * Convert row input into a logical-grid representation with explicit start
- * columns for cells and skipped columns.
- */
-function normalizeRows(rows: AutoFitRowInput[]): NormalizedRow[] {
+function normalizeLegacyRows(rows: AutoFitRowInput[]): NormalizedRow[] {
   return rows.map((row) => {
     let columnIndex = 0;
     const skippedColumns: NormalizedSkippedColumn[] = [];
@@ -243,9 +345,12 @@ function normalizeRows(rows: AutoFitRowInput[]): NormalizedRow[] {
       columnIndex += 1;
     }
 
-    for (const cell of row.cells ?? []) {
+    for (let cellIndex = 0; cellIndex < (row.cells ?? []).length; cellIndex++) {
+      const cell = row.cells?.[cellIndex];
+      if (!cell) continue;
       const span = Math.max(1, Math.floor(cell.span ?? 1));
       cells.push({
+        cellIndex,
         startColumn: columnIndex,
         span,
         preferredWidth: sanitizeOptionalWidth(cell.preferredWidth),
@@ -278,48 +383,54 @@ function normalizeSkippedColumn(skipped: AutoFitSkippedColumnInput, columnIndex:
 }
 
 /**
- * Determine the logical grid width needed to evaluate the table.
- *
- * The result is the maximum of the authored grid length and every normalized row
- * width after accounting for skipped columns and spans.
+ * Align measured row/cell metrics to the normalized working-grid placement.
  */
-function determineGridColumnCount(preferredColumnWidths: number[], rows: NormalizedRow[]): number {
-  return Math.max(preferredColumnWidths.length, ...rows.map((row) => row.logicalColumnCount), 0);
+function buildNormalizedRows(
+  workingInput: WorkingTableGridInput,
+  rowMetrics: AutoFitContentMetricsRow[],
+): NormalizedRow[] {
+  return workingInput.rows.map((workingRow, rowIndex) => {
+    const metricsRow = rowMetrics[rowIndex];
+    return {
+      cells: (workingRow.cells ?? []).map((cell, cellIndex) => {
+        const metrics = metricsRow?.cells[cellIndex];
+        const placedCell = cell as { startColumn: number; span?: number; preferredWidth?: number };
+        return {
+          cellIndex: metrics?.cellIndex ?? cellIndex,
+          startColumn: placedCell.startColumn,
+          span: Math.max(1, placedCell.span ?? metrics?.span ?? 1),
+          preferredWidth: sanitizeOptionalWidth(metrics?.preferredWidth ?? placedCell.preferredWidth),
+          minContentWidth: Math.max(0, metrics?.minContentWidth ?? 0),
+          maxContentWidth: Math.max(0, metrics?.maxContentWidth ?? metrics?.minContentWidth ?? 0),
+        };
+      }),
+      skippedColumns: (workingRow.skippedColumns ?? []).map((skipped) => ({
+        columnIndex: skipped.columnIndex,
+        preferredWidth: sanitizeOptionalWidth(skipped.preferredWidth),
+        minContentWidth: Math.max(0, skipped.minContentWidth ?? 0),
+        maxContentWidth: Math.max(0, skipped.maxContentWidth ?? skipped.minContentWidth ?? 0),
+      })),
+      logicalColumnCount: workingRow.logicalColumnCount,
+    };
+  });
 }
 
 /**
- * Build the mutable working grid used by the solver.
- *
- * Any missing authored columns are extended with zero-width placeholders so later
- * algorithm stages can grow them from content constraints.
- */
-function buildWorkingGrid(preferredColumnWidths: number[], gridColumnCount: number): number[] {
-  const widths = preferredColumnWidths.slice(0, gridColumnCount).map((width) => Math.max(0, width));
-  while (widths.length < gridColumnCount) {
-    widths.push(0);
-  }
-  return widths;
-}
-
-/**
- * Gather single-span bounds and preferred-width overrides from normalized rows.
- *
- * Multi-span cells are collected separately because they need redistribution
- * across multiple logical columns.
+ * Gather per-column min/max bounds and first preferred overrides.
  */
 function accumulateBounds(args: {
   rows: NormalizedRow[];
-  singleSpanMin: number[];
-  singleSpanMax: number[];
+  minBounds: number[];
+  maxBounds: number[];
   preferredOverrides: Array<number | undefined>;
   multiSpanCells: NormalizedCell[];
 }): void {
-  const { rows, singleSpanMin, singleSpanMax, preferredOverrides, multiSpanCells } = args;
+  const { rows, minBounds, maxBounds, preferredOverrides, multiSpanCells } = args;
 
   for (const row of rows) {
     for (const skipped of row.skippedColumns) {
-      singleSpanMin[skipped.columnIndex] = Math.max(singleSpanMin[skipped.columnIndex], skipped.minContentWidth);
-      singleSpanMax[skipped.columnIndex] = Math.max(singleSpanMax[skipped.columnIndex], skipped.maxContentWidth);
+      minBounds[skipped.columnIndex] = Math.max(minBounds[skipped.columnIndex], skipped.minContentWidth);
+      maxBounds[skipped.columnIndex] = Math.max(maxBounds[skipped.columnIndex], skipped.maxContentWidth);
       if (preferredOverrides[skipped.columnIndex] == null && skipped.preferredWidth != null) {
         preferredOverrides[skipped.columnIndex] = skipped.preferredWidth;
       }
@@ -327,8 +438,8 @@ function accumulateBounds(args: {
 
     for (const cell of row.cells) {
       if (cell.span === 1) {
-        singleSpanMin[cell.startColumn] = Math.max(singleSpanMin[cell.startColumn], cell.minContentWidth);
-        singleSpanMax[cell.startColumn] = Math.max(singleSpanMax[cell.startColumn], cell.maxContentWidth);
+        minBounds[cell.startColumn] = Math.max(minBounds[cell.startColumn], cell.minContentWidth);
+        maxBounds[cell.startColumn] = Math.max(maxBounds[cell.startColumn], cell.maxContentWidth);
         if (preferredOverrides[cell.startColumn] == null && cell.preferredWidth != null) {
           preferredOverrides[cell.startColumn] = cell.preferredWidth;
         }
@@ -340,71 +451,558 @@ function accumulateBounds(args: {
 }
 
 /**
- * Expand spanned columns until every multi-span cell can satisfy its minimum
- * content width.
+ * Enforce multi-span minimum content widths by enlarging the participating
+ * column minima until each spanned minimum is satisfied.
  */
-function applyMultiSpanMinimums(widths: number[], cells: NormalizedCell[]): void {
+function applyMultiSpanMinimums(minBounds: number[], cells: NormalizedCell[]): void {
   for (const cell of cells) {
-    distributeDeficit(widths, cell.startColumn, cell.span, cell.minContentWidth);
+    growSpanTotal(minBounds, cell.startColumn, cell.span, cell.minContentWidth);
   }
 }
 
 /**
- * Expand spanned columns until every multi-span cell can satisfy its maximum
- * content width, while respecting already-established minima.
+ * Apply first-wins preferred overrides for single-span cells and skipped columns.
  */
-function applyMultiSpanMaximums(widths: number[], cells: NormalizedCell[], minima: number[]): void {
-  for (const cell of cells) {
-    const target = Math.max(cell.maxContentWidth, sumSpan(minima, cell.startColumn, cell.span));
-    distributeDeficit(widths, cell.startColumn, cell.span, target);
+function applySingleSpanPreferredOverrides(
+  maxBounds: number[],
+  minBounds: number[],
+  preferredOverrides: Array<number | undefined>,
+): void {
+  for (let index = 0; index < maxBounds.length; index++) {
+    const currentMax = Math.max(maxBounds[index], minBounds[index]);
+    maxBounds[index] = preferredOverrides[index] ?? currentMax;
+    maxBounds[index] = Math.max(maxBounds[index], minBounds[index]);
   }
 }
 
 /**
- * Apply first-wins preferred-width overrides gathered from single-span inputs.
+ * Apply multi-span maximum and preferred-width semantics.
+ *
+ * Preferred widths act as preferred total span maxima in both directions:
+ * - if the preferred total is larger than the current span maximum, the span grows
+ * - if the preferred total is smaller, reducible range is removed proportionally
  */
-function applySingleSpanPreferredOverrides(widths: number[], preferredOverrides: Array<number | undefined>): number[] {
-  return widths.map((width, index) => Math.max(width, preferredOverrides[index] ?? 0));
+function applyMultiSpanMaximums(
+  maxBounds: number[],
+  minBounds: number[],
+  cells: NormalizedCell[],
+  fixedWidths: number[],
+): void {
+  for (const cell of cells) {
+    const targetTotal =
+      cell.preferredWidth != null
+        ? Math.max(cell.preferredWidth, sumSpan(minBounds, cell.startColumn, cell.span))
+        : Math.max(cell.maxContentWidth, sumSpan(minBounds, cell.startColumn, cell.span));
+
+    setSpanTotal(maxBounds, minBounds, fixedWidths, cell.startColumn, cell.span, targetTotal);
+  }
 }
 
 /**
- * Apply preferred-width requests from multi-span cells by growing the covered
- * span until it reaches the requested width.
+ * Collect every cell whose minimum width exceeds the current fixed-pass width.
  */
-function applyMultiSpanPreferredWidths(widths: number[], cells: NormalizedCell[]): number[] {
-  const next = [...widths];
-  for (const cell of cells) {
-    if (cell.preferredWidth != null) {
-      distributeDeficit(next, cell.startColumn, cell.span, cell.preferredWidth);
+function collectTriggerCells(
+  currentWidths: number[],
+  multiSpanCells: NormalizedCell[],
+  rows: NormalizedRow[],
+): NormalizedCell[] {
+  const triggers: NormalizedCell[] = [];
+
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (sumSpan(currentWidths, cell.startColumn, cell.span) < cell.minContentWidth) {
+        triggers.push(cell);
+      }
     }
   }
-  return next;
+
+  for (const cell of multiSpanCells) {
+    if (sumSpan(currentWidths, cell.startColumn, cell.span) < cell.minContentWidth) {
+      triggers.push(cell);
+    }
+  }
+
+  return dedupeCells(triggers);
 }
 
 /**
- * Grow a span proportionally enough to satisfy a target width.
- *
- * The current implementation distributes deficit evenly across the covered span.
+ * Reduce a span total by distributing reduction across reducible column ranges
+ * or grow it by distributing extra across the span proportionally to fixed-pass
+ * widths.
  */
-function distributeDeficit(widths: number[], startColumn: number, span: number, targetWidth: number): void {
-  if (span <= 0 || targetWidth <= 0) return;
-  const currentWidth = sumSpan(widths, startColumn, span);
-  const deficit = targetWidth - currentWidth;
+function setSpanTotal(
+  widths: number[],
+  minBounds: number[],
+  fixedWidths: number[],
+  startColumn: number,
+  span: number,
+  targetTotal: number,
+): void {
+  const currentTotal = sumSpan(widths, startColumn, span);
+  const minTotal = sumSpan(minBounds, startColumn, span);
+  const boundedTarget = Math.max(targetTotal, minTotal);
+
+  if (currentTotal < boundedTarget) {
+    growSpanTotal(widths, startColumn, span, boundedTarget, fixedWidths);
+    return;
+  }
+
+  if (currentTotal === boundedTarget) {
+    return;
+  }
+
+  const reducibleRanges = collectSpanRanges(widths, minBounds, startColumn, span);
+  const totalReducible = reducibleRanges.reduce((sum, range) => sum + range.amount, 0);
+  if (totalReducible <= 0) {
+    return;
+  }
+
+  const reduction = currentTotal - boundedTarget;
+  let applied = 0;
+  for (let rangeIndex = 0; rangeIndex < reducibleRanges.length; rangeIndex++) {
+    const range = reducibleRanges[rangeIndex];
+    const portion =
+      rangeIndex === reducibleRanges.length - 1 ? reduction - applied : reduction * (range.amount / totalReducible);
+    widths[range.index] = Math.max(minBounds[range.index], widths[range.index] - portion);
+    applied += portion;
+  }
+}
+
+/**
+ * Grow a span total by distributing extra width across the covered columns.
+ *
+ * Fixed-pass widths are used as the primary weighting so the AutoFit growth
+ * stays anchored to the fixed baseline. When the fixed baseline carries no
+ * weight, growth falls back to equal distribution.
+ */
+function growSpanTotal(
+  widths: number[],
+  startColumn: number,
+  span: number,
+  targetTotal: number,
+  fixedWidths?: number[],
+): void {
+  const currentTotal = sumSpan(widths, startColumn, span);
+  const deficit = targetTotal - currentTotal;
   if (deficit <= 0) return;
 
-  const baseIncrement = deficit / span;
+  const weights = Array.from({ length: span }, (_, offset) => {
+    const index = startColumn + offset;
+    return Math.max(fixedWidths?.[index] ?? 0, widths[index] ?? 0, 1);
+  });
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+
   let applied = 0;
   for (let offset = 0; offset < span; offset++) {
     const index = startColumn + offset;
-    const increment = offset === span - 1 ? deficit - applied : baseIncrement;
-    widths[index] = Math.max(0, widths[index] + increment);
+    const increment = offset === span - 1 ? deficit - applied : deficit * (weights[offset] / totalWeight);
+    widths[index] = Math.max(0, (widths[index] ?? 0) + increment);
     applied += increment;
   }
 }
 
 /**
- * Compute the summed width of a contiguous logical span.
+ * Shrink the current width vector toward a target using shrink-capacity-based
+ * proportional reduction.
  */
+function shrinkToTargetWidth(widths: number[], targetWidth: number, minBounds: number[]): number[] {
+  const currentTotal = sumWidths(widths);
+  if (currentTotal <= targetWidth) {
+    return widths;
+  }
+
+  const minTotal = sumWidths(minBounds);
+  if (targetWidth <= 0) {
+    return widths;
+  }
+
+  if (targetWidth < minTotal) {
+    return scaleToTargetWidth(widths, targetWidth);
+  }
+
+  const capacities = widths.map((width, index) => Math.max(0, width - minBounds[index]));
+  const totalCapacity = capacities.reduce((sum, capacity) => sum + capacity, 0);
+  if (totalCapacity <= 0) {
+    return widths;
+  }
+
+  const excess = currentTotal - targetWidth;
+  return widths.map((width, index) => {
+    const shrink = excess * (capacities[index] / totalCapacity);
+    return Math.max(minBounds[index], width - shrink);
+  });
+}
+
+/**
+ * Grow the current width vector toward a target using remaining `(max-current)`
+ * range as the proportional basis.
+ */
+function growToTargetWidth(
+  widths: number[],
+  targetWidth: number,
+  maxBounds: number[],
+  growableColumns?: Set<number>,
+): number[] {
+  const currentTotal = sumWidths(widths);
+  if (currentTotal >= targetWidth) {
+    return widths;
+  }
+
+  const ranges = widths.map((width, index) =>
+    growableColumns == null || growableColumns.has(index) ? Math.max(0, maxBounds[index] - width) : 0,
+  );
+  const totalRange = ranges.reduce((sum, range) => sum + range, 0);
+  if (totalRange <= 0) {
+    return widths;
+  }
+
+  const slack = targetWidth - currentTotal;
+  return widths.map((width, index) => width + slack * (ranges[index] / totalRange));
+}
+
+/**
+ * Distribute any remaining slack proportionally across all columns.
+ *
+ * This is the hybrid follow-up step that keeps the table at `tblW` when the
+ * initial trigger handling leaves the width vector underfilled.
+ */
+function distributeRemainingSlack(widths: number[], targetWidth: number, growableColumns?: Set<number>): number[] {
+  const currentTotal = sumWidths(widths);
+  if (currentTotal >= targetWidth) {
+    return widths;
+  }
+
+  const basis = widths.reduce((sum, width, index) => {
+    if (growableColumns != null && !growableColumns.has(index)) {
+      return sum;
+    }
+    return sum + Math.max(width, 1);
+  }, 0);
+  const slack = targetWidth - currentTotal;
+  if (basis <= 0) {
+    return widths.map(() => targetWidth / widths.length);
+  }
+
+  return widths.map((width, index) => {
+    if (growableColumns != null && !growableColumns.has(index)) {
+      return width;
+    }
+    return width + slack * (Math.max(width, 1) / basis);
+  });
+}
+
+/**
+ * Raise any columns below their minimum by borrowing width from columns that
+ * still have shrink capacity above their own minimum.
+ *
+ * This is the first step of the ECMA override flow for constrained cells:
+ * before the table grows wider, other columns are reduced toward their minima.
+ */
+function raiseToMinimums(widths: number[], minBounds: number[]): number[] {
+  const next = widths.slice();
+  const deficits = next.map((width, index) => Math.max(0, minBounds[index] - width));
+  const totalDeficit = deficits.reduce((sum, deficit) => sum + deficit, 0);
+  if (totalDeficit <= 0) {
+    return next;
+  }
+
+  const capacities = next.map((width, index) => Math.max(0, width - minBounds[index]));
+  const totalCapacity = capacities.reduce((sum, capacity) => sum + capacity, 0);
+  const borrowAmount = Math.min(totalDeficit, totalCapacity);
+
+  if (borrowAmount > 0 && totalCapacity > 0) {
+    let borrowed = 0;
+    for (let index = 0; index < next.length; index++) {
+      const reduction =
+        index === next.length - 1 ? borrowAmount - borrowed : borrowAmount * (capacities[index] / totalCapacity);
+      next[index] = Math.max(minBounds[index], next[index] - reduction);
+      borrowed += reduction;
+    }
+  }
+
+  for (let index = 0; index < next.length; index++) {
+    next[index] = Math.max(next[index], Math.min(minBounds[index], widths[index] + deficits[index]));
+  }
+
+  return next;
+}
+
+/**
+ * Continue the ECMA override flow after minimum satisfaction by shrinking
+ * non-trigger columns toward their minima so constrained spans can move toward
+ * their maximum widths while staying within the current table width.
+ */
+function expandTriggersWithinCurrentTable(
+  widths: number[],
+  triggerCells: NormalizedCell[],
+  minBounds: number[],
+  maxBounds: number[],
+): number[] {
+  const next = widths.slice();
+  const protectedColumns = collectProtectedColumns(triggerCells);
+
+  for (let iteration = 0; iteration < 8; iteration++) {
+    const headrooms = collectTriggerHeadrooms(next, triggerCells, maxBounds);
+    const totalHeadroom = headrooms.reduce((sum, headroom) => sum + headroom, 0);
+    if (totalHeadroom <= 0.001) {
+      break;
+    }
+
+    const donorCapacities = next.map((width, index) =>
+      protectedColumns.has(index) ? 0 : Math.max(0, width - minBounds[index]),
+    );
+    const totalDonorCapacity = donorCapacities.reduce((sum, capacity) => sum + capacity, 0);
+    if (totalDonorCapacity <= 0.001) {
+      break;
+    }
+
+    const borrowedWidth = Math.min(totalHeadroom, totalDonorCapacity);
+    shrinkColumnsByCapacity(next, donorCapacities, minBounds, borrowedWidth);
+    applyTriggerGrowth(next, triggerCells, maxBounds, borrowedWidth);
+  }
+
+  return next;
+}
+
+/**
+ * When constrained spans still have headroom after all non-trigger shrink
+ * capacity has been consumed, grow the table itself up to the available page
+ * width and allocate that extra width to the triggered spans.
+ */
+function expandTriggersByGrowingTable(
+  widths: number[],
+  triggerCells: NormalizedCell[],
+  maxBounds: number[],
+  maxTableWidth: number,
+): number[] {
+  const next = widths.slice();
+
+  for (let iteration = 0; iteration < 8; iteration++) {
+    const headrooms = collectTriggerHeadrooms(next, triggerCells, maxBounds);
+    const totalHeadroom = headrooms.reduce((sum, headroom) => sum + headroom, 0);
+    if (totalHeadroom <= 0.001) {
+      break;
+    }
+
+    const remainingTableGrowth = Math.max(0, maxTableWidth - sumWidths(next));
+    if (remainingTableGrowth <= 0.001) {
+      break;
+    }
+
+    const growth = Math.min(totalHeadroom, remainingTableGrowth);
+    applyTriggerGrowth(next, triggerCells, maxBounds, growth);
+  }
+
+  return next;
+}
+
+/**
+ * Measure remaining trigger-span headroom against the current width vector.
+ */
+function collectTriggerHeadrooms(widths: number[], triggerCells: NormalizedCell[], maxBounds: number[]): number[] {
+  return triggerCells.map((cell) => {
+    const currentTotal = sumSpan(widths, cell.startColumn, cell.span);
+    const targetTotal = resolveTriggerTargetTotal(cell, maxBounds);
+    return Math.max(0, targetTotal - currentTotal);
+  });
+}
+
+/**
+ * Resolve the ECMA "grow between minimum and maximum width" target for a
+ * triggered cell.
+ *
+ * Single-span cells use the column-level maximum after preferred-width
+ * overrides. Multi-span cells grow toward their own preferred-total or content
+ * maximum, rather than the sum of overlapping per-column maxima.
+ */
+function resolveTriggerTargetTotal(cell: NormalizedCell, maxBounds: number[]): number {
+  if (cell.span === 1) {
+    return maxBounds[cell.startColumn] ?? cell.maxContentWidth;
+  }
+
+  return cell.preferredWidth != null
+    ? Math.max(cell.preferredWidth, cell.minContentWidth)
+    : Math.max(cell.maxContentWidth, cell.minContentWidth);
+}
+
+/**
+ * Track every logical column covered by a triggered span so only "other"
+ * columns are used as donors during the intra-table shrink phase.
+ */
+function collectProtectedColumns(cells: NormalizedCell[]): Set<number> {
+  const protectedColumns = new Set<number>();
+  for (const cell of cells) {
+    for (let offset = 0; offset < cell.span; offset++) {
+      protectedColumns.add(cell.startColumn + offset);
+    }
+  }
+  return protectedColumns;
+}
+
+/**
+ * Columns outside every triggered span remain eligible for post-trigger slack
+ * redistribution. Triggered columns have already been resolved explicitly and
+ * should not receive additional blind growth.
+ */
+function collectNonProtectedColumns(cells: NormalizedCell[], columnCount: number): Set<number> {
+  const protectedColumns = collectProtectedColumns(cells);
+  const growableColumns = new Set<number>();
+  for (let index = 0; index < columnCount; index++) {
+    if (!protectedColumns.has(index)) {
+      growableColumns.add(index);
+    }
+  }
+  return growableColumns;
+}
+
+/**
+ * Shrink donor columns proportionally to their remaining shrink capacity.
+ */
+function shrinkColumnsByCapacity(
+  widths: number[],
+  capacities: number[],
+  minBounds: number[],
+  shrinkAmount: number,
+): void {
+  const totalCapacity = capacities.reduce((sum, capacity) => sum + capacity, 0);
+  if (totalCapacity <= 0 || shrinkAmount <= 0) {
+    return;
+  }
+
+  let applied = 0;
+  for (let index = 0; index < widths.length; index++) {
+    const reduction =
+      index === widths.length - 1 ? shrinkAmount - applied : shrinkAmount * (capacities[index] / totalCapacity);
+    widths[index] = Math.max(minBounds[index], widths[index] - reduction);
+    applied += reduction;
+  }
+}
+
+/**
+ * Grow triggered spans proportionally to their remaining headroom.
+ *
+ * Headroom is recomputed after each allocation round so overlapping spans do
+ * not double-spend shared-column growth from a stale snapshot.
+ */
+function applyTriggerGrowth(
+  widths: number[],
+  triggerCells: NormalizedCell[],
+  maxBounds: number[],
+  growthAmount: number,
+): void {
+  let remainingGrowth = growthAmount;
+  for (let iteration = 0; iteration < 16 && remainingGrowth > 0.001; iteration++) {
+    const headrooms = collectTriggerHeadrooms(widths, triggerCells, maxBounds);
+    const totalHeadroom = headrooms.reduce((sum, headroom) => sum + headroom, 0);
+    if (totalHeadroom <= 0.001) {
+      break;
+    }
+
+    const stepGrowth = Math.min(remainingGrowth, totalHeadroom);
+    const activeIndexes = headrooms
+      .map((headroom, index) => ({ headroom, index }))
+      .filter((entry) => entry.headroom > 0.001);
+
+    let appliedThisRound = 0;
+    for (let activeIndex = 0; activeIndex < activeIndexes.length; activeIndex++) {
+      const { index, headroom } = activeIndexes[activeIndex];
+      const cell = triggerCells[index];
+      const proportionalGrowth =
+        activeIndex === activeIndexes.length - 1
+          ? stepGrowth - appliedThisRound
+          : stepGrowth * (headroom / totalHeadroom);
+      const boundedGrowth = Math.min(headroom, proportionalGrowth);
+      if (boundedGrowth <= 0) {
+        continue;
+      }
+
+      growSpanTotal(widths, cell.startColumn, cell.span, sumSpan(widths, cell.startColumn, cell.span) + boundedGrowth);
+      appliedThisRound += boundedGrowth;
+    }
+
+    if (appliedThisRound <= 0.001) {
+      break;
+    }
+
+    remainingGrowth -= appliedThisRound;
+  }
+}
+
+/**
+ * Re-clamp triggered spans to their resolved cell-level maximum targets.
+ *
+ * Overlapping triggered spans can accumulate later redistribution noise even
+ * after iterative growth. This pass keeps the final vector bounded by each
+ * trigger cell's own maximum target before the result is returned.
+ */
+function clampTriggeredSpansToTargets(
+  widths: number[],
+  triggerCells: NormalizedCell[],
+  minBounds: number[],
+  maxBounds: number[],
+  fixedWidths: number[],
+): number[] {
+  const next = widths.slice();
+
+  for (let iteration = 0; iteration < 8; iteration++) {
+    let changed = false;
+    for (const cell of triggerCells) {
+      const currentTotal = sumSpan(next, cell.startColumn, cell.span);
+      const targetTotal = resolveTriggerTargetTotal(cell, maxBounds);
+      if (currentTotal > targetTotal + 0.001) {
+        setSpanTotal(next, minBounds, fixedWidths, cell.startColumn, cell.span, targetTotal);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return next;
+}
+
+function collectSpanRanges(
+  widths: number[],
+  minBounds: number[],
+  startColumn: number,
+  span: number,
+): Array<{ index: number; amount: number }> {
+  const ranges: Array<{ index: number; amount: number }> = [];
+  for (let offset = 0; offset < span; offset++) {
+    const index = startColumn + offset;
+    const amount = Math.max(0, widths[index] - minBounds[index]);
+    if (amount > 0) {
+      ranges.push({ index, amount });
+    }
+  }
+  return ranges;
+}
+
+function dedupeCells(cells: NormalizedCell[]): NormalizedCell[] {
+  const seen = new Set<string>();
+  return cells.filter((cell) => {
+    const key = `${cell.startColumn}:${cell.span}:${cell.cellIndex}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function determineGridColumnCount(preferredColumnWidths: number[], rows: NormalizedRow[]): number {
+  return Math.max(preferredColumnWidths.length, ...rows.map((row) => row.logicalColumnCount), 0);
+}
+
+function firstCellStart(row: NormalizedRow): number {
+  return row.cells[0]?.startColumn ?? row.logicalColumnCount;
+}
+
+function lastCellEnd(row: NormalizedRow): number {
+  const lastCell = row.cells[row.cells.length - 1];
+  return lastCell ? lastCell.startColumn + lastCell.span : 0;
+}
+
 function sumSpan(widths: number[], startColumn: number, span: number): number {
   let total = 0;
   for (let offset = 0; offset < span; offset++) {
@@ -413,139 +1011,28 @@ function sumSpan(widths: number[], startColumn: number, span: number): number {
   return total;
 }
 
-/**
- * Scale a width vector to an exact preferred table width.
- */
-function scaleToTargetWidth(widths: number[], preferredTableWidth: number | undefined): number[] {
-  if (preferredTableWidth == null || preferredTableWidth <= 0) return widths;
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (totalWidth <= 0) return widths;
-  return normalizeRounding(
-    widths.map((width) => width * (preferredTableWidth / totalWidth)),
-    preferredTableWidth,
-  );
+function sumWidths(widths: number[]): number {
+  return widths.reduce((sum, width) => sum + Math.max(0, width), 0);
 }
 
-/**
- * Distribute spare width toward a preferred table width target while keeping the
- * existing width ratios biased by current widths and minima.
- */
-function distributeToTargetWidth(
-  widths: number[],
-  targetWidth: number,
-  minWidths: number[],
-  minColumnWidth: number,
-): number[] {
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (targetWidth <= 0 || totalWidth >= targetWidth) {
+function scaleToTargetWidth(widths: number[], targetWidth: number): number[] {
+  const currentTotal = sumWidths(widths);
+  if (currentTotal <= 0 || targetWidth <= 0) {
     return widths;
   }
 
-  const extra = targetWidth - totalWidth;
-  const basis = widths.reduce((sum, width) => sum + Math.max(width, minColumnWidth), 0);
-  if (basis <= 0) {
-    return normalizeRounding(
-      widths.map(() => targetWidth / widths.length),
-      targetWidth,
-    );
-  }
-
-  const distributed = widths.map((width, index) => {
-    const weight = Math.max(width, minWidths[index], minColumnWidth);
-    return width + extra * (weight / basis);
-  });
-  return normalizeRounding(distributed, targetWidth);
+  const scale = targetWidth / currentTotal;
+  return widths.map((width) => Math.max(0, width * scale));
 }
 
-/**
- * Honor a preferred table width when it can be satisfied without violating
- * runtime minimum widths.
- *
- * AutoFit starts from a content/preference-expanded width vector. If the
- * preferred table width lies between the current minimum and current total, we
- * shrink back toward the preferred width before allowing the table to grow
- * toward the maximum available width.
- */
-function resolvePreferredTableWidth(
-  widths: number[],
-  targetWidth: number,
-  minWidths: number[],
-  minColumnWidth: number,
-): number[] {
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
-  const totalMinWidth = minWidths.reduce((sum, width) => sum + Math.max(width, minColumnWidth), 0);
-
-  if (targetWidth <= 0) {
-    return widths;
-  }
-
-  if (targetWidth < totalMinWidth) {
-    return widths;
-  }
-
-  if (targetWidth < totalWidth) {
-    return clampToWidth(widths, targetWidth, minWidths);
-  }
-
-  if (targetWidth > totalWidth) {
-    return distributeToTargetWidth(widths, targetWidth, minWidths, minColumnWidth);
-  }
-
-  return widths;
+function sanitizeWidth(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-/**
- * Clamp a width vector down to a maximum table width without shrinking any
- * column below its minimum.
- */
-function clampToWidth(widths: number[], maxWidth: number, minWidths: number[]): number[] {
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (totalWidth <= maxWidth) return widths;
-
-  const capacities = widths.map((width, index) => Math.max(0, width - Math.max(0, minWidths[index] ?? 0)));
-  const totalCapacity = capacities.reduce((sum, value) => sum + value, 0);
-  if (totalCapacity <= 0) {
-    return normalizeRounding(
-      widths.map((width) => width * (maxWidth / totalWidth)),
-      maxWidth,
-    );
-  }
-
-  const excess = totalWidth - maxWidth;
-  const clamped = widths.map((width, index) => {
-    const shrink = excess * (capacities[index] / totalCapacity);
-    return Math.max(minWidths[index] ?? 0, width - shrink);
-  });
-  return normalizeRounding(clamped, maxWidth);
+function sanitizeOptionalWidth(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-/**
- * Ensure every output column remains visible and that empty/pathological inputs
- * still produce a measurable table width.
- */
-function ensureNonZeroWidthFloor(widths: number[], minColumnWidth: number): number[] {
-  const sanitized = widths.length > 0 ? widths : [minColumnWidth];
-  return sanitized.map((width) => Math.max(minColumnWidth, width));
-}
-
-/**
- * Round widths to integer pixels and normalize the last column so the final sum
- * matches the requested target total.
- */
-function normalizeRounding(widths: number[], targetTotal: number): number[] {
-  const rounded = widths.map((width) => Math.max(1, Math.round(width)));
-  const roundedTotal = rounded.reduce((sum, width) => sum + width, 0);
-  const diff = Math.round(targetTotal) - roundedTotal;
-  if (diff !== 0 && rounded.length > 0) {
-    rounded[rounded.length - 1] = Math.max(1, rounded[rounded.length - 1] + diff);
-  }
-  return rounded;
-}
-
-/**
- * Build a minimal non-zero fallback result for degenerate inputs with no logical
- * columns after normalization.
- */
 function buildFallbackResult(layoutMode: AutoFitLayoutMode, minColumnWidth: number): AutoFitResult {
   return {
     layoutMode,
@@ -555,15 +1042,15 @@ function buildFallbackResult(layoutMode: AutoFitLayoutMode, minColumnWidth: numb
   };
 }
 
-/**
- * Finalize the result object after all solver stages have run.
- */
 function finalizeResult(layoutMode: AutoFitLayoutMode, widths: number[], minColumnWidth: number): AutoFitResult {
-  const normalizedWidths = ensureNonZeroWidthFloor(widths, minColumnWidth);
+  if (widths.length === 0) {
+    return buildFallbackResult(layoutMode, minColumnWidth);
+  }
+
   return {
     layoutMode,
-    columnWidths: normalizedWidths,
-    totalWidth: normalizedWidths.reduce((sum, width) => sum + width, 0),
-    gridColumnCount: normalizedWidths.length,
+    columnWidths: widths,
+    totalWidth: sumWidths(widths),
+    gridColumnCount: widths.length,
   };
 }

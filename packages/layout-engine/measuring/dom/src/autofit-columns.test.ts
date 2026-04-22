@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { AutoFitContentMetricsInput, ExplicitAutoFitInput } from './autofit-columns.js';
 import { computeAutoFitColumnWidths } from './autofit-columns.js';
+import type { WorkingTableGridInput } from './autofit-normalize.js';
+import type { FixedLayoutResult } from './fixed-table-columns.js';
 
 describe('computeAutoFitColumnWidths', () => {
-  it('defaults omitted layout mode to autofit', () => {
+  it('defaults omitted layout mode to autofit on the legacy compatibility path', () => {
     const result = computeAutoFitColumnWidths({
       maxTableWidth: 500,
       preferredColumnWidths: [100, 100],
@@ -17,294 +20,399 @@ describe('computeAutoFitColumnWidths', () => {
     });
 
     expect(result.layoutMode).toBe('autofit');
-    expect(result.columnWidths).toEqual([100, 220]);
-    expect(result.totalWidth).toBe(320);
   });
 
-  it('treats the literal auto layout mode as autofit', () => {
+  it('preserves fixed-layout results unchanged', () => {
     const result = computeAutoFitColumnWidths({
-      tableLayout: 'auto',
-      maxTableWidth: 500,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 40, maxContentWidth: 80 },
-            { span: 1, minContentWidth: 120, maxContentWidth: 220 },
-          ],
-        },
-      ],
-    });
-
-    expect(result.layoutMode).toBe('autofit');
-    expect(result.columnWidths).toEqual([100, 220]);
-    expect(result.totalWidth).toBe(320);
-  });
-
-  it('preserves fixed-layout preferred widths', () => {
-    const result = computeAutoFitColumnWidths({
-      tableLayout: 'fixed',
-      maxTableWidth: 500,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 80, maxContentWidth: 180 },
-            { span: 1, minContentWidth: 90, maxContentWidth: 240 },
-          ],
-        },
-      ],
+      workingInput: buildWorkingInput({
+        layoutMode: 'fixed',
+      }),
+      fixedLayout: {
+        columnWidths: [120, 180],
+        totalWidth: 300,
+        gridColumnCount: 2,
+        preferredTableWidth: 300,
+      },
+      contentMetrics: buildContentMetrics([
+        [
+          { min: 40, max: 40 },
+          { min: 40, max: 40 },
+        ],
+      ]),
     });
 
     expect(result.layoutMode).toBe('fixed');
-    expect(result.columnWidths).toEqual([100, 100]);
+    expect(result.columnWidths).toEqual([120, 180]);
+    expect(result.totalWidth).toBe(300);
   });
 
-  it('widens uneven equal-grid columns from content', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 60, maxContentWidth: 60 },
-            { span: 1, minContentWidth: 200, maxContentWidth: 200 },
-          ],
+  it('does not keep authored grid widths as an autofit floor', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 200,
+          maxTableWidth: 200,
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100],
+          totalWidth: 200,
+          gridColumnCount: 2,
+          preferredTableWidth: 200,
         },
-      ],
-    });
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 60 },
+            { min: 120, max: 200 },
+          ],
+        ]),
+      }),
+    );
 
-    expect(result.columnWidths).toEqual([100, 200]);
+    expect(result.columnWidths[0]).toBeLessThan(100);
+    expect(result.columnWidths[1]).toBeGreaterThan(result.columnWidths[0]);
+    expect(result.totalWidth).toBe(200);
   });
 
-  it('currently treats authored grid widths as an autofit floor', () => {
-    // Characterization for the rework: the first column content only needs 60px,
-    // but the current solver keeps the authored 100px grid width as a floor.
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 40, maxContentWidth: 60 },
-            { span: 1, minContentWidth: 120, maxContentWidth: 200 },
-          ],
+  it('keeps content-fitting tables at tblW instead of shrinking to content maxima', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 400,
+          maxTableWidth: 500,
+        }),
+        fixedLayout: {
+          columnWidths: [200, 200],
+          totalWidth: 400,
+          gridColumnCount: 2,
+          preferredTableWidth: 400,
         },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([100, 200]);
-  });
-
-  it('distributes up to the preferred table width target', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredTableWidth: 400,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 50, maxContentWidth: 50 },
-            { span: 1, minContentWidth: 50, maxContentWidth: 50 },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 50, max: 80 },
+            { min: 50, max: 80 },
           ],
-        },
-      ],
-    });
+        ]),
+      }),
+    );
 
     expect(result.columnWidths).toEqual([200, 200]);
     expect(result.totalWidth).toBe(400);
   });
 
-  it('shrinks back to the preferred table width when it falls between total min and total max', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredTableWidth: 300,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 50, maxContentWidth: 100 },
-            { span: 1, minContentWidth: 50, maxContentWidth: 400 },
+  it('lets single-span preferred widths override content maxima downward', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 300,
+          maxTableWidth: 500,
+          preferredColumnWidths: [300],
+          gridColumnCount: 1,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 1,
+              cells: [{ startColumn: 0, span: 1, preferredWidth: 150 }],
+            },
           ],
+        }),
+        fixedLayout: {
+          columnWidths: [300],
+          totalWidth: 300,
+          gridColumnCount: 1,
+          preferredTableWidth: 300,
         },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([75, 225]);
-    expect(result.totalWidth).toBe(300);
-  });
-
-  it('keeps autofit stable when preferred cell widths conflict with the authored grid and table width', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredTableWidth: 320,
-      preferredColumnWidths: [80, 240],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 60, maxContentWidth: 90, preferredWidth: 140 },
-            { span: 1, minContentWidth: 70, maxContentWidth: 180, preferredWidth: 220 },
-          ],
-        },
-      ],
-    });
-
-    expect(result.layoutMode).toBe('autofit');
-    expect(result.totalWidth).toBe(320);
-    expect(result.columnWidths).toEqual([121, 199]);
-  });
-
-  it('lets preferred cell widths override a column max width', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [100],
-      rows: [
-        {
-          cells: [{ span: 1, minContentWidth: 50, maxContentWidth: 70, preferredWidth: 150 }],
-        },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([150]);
-  });
-
-  it('currently treats single-span preferred widths as grow-only floors', () => {
-    // Characterization for the rework: the preferred width is 150px, but the
-    // current solver preserves the larger 300px content max instead of letting
-    // tcW override it downward.
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [100],
-      rows: [
-        {
-          cells: [{ span: 1, minContentWidth: 50, maxContentWidth: 300, preferredWidth: 150 }],
-        },
-      ],
-    });
+        contentMetrics: buildContentMetrics([[{ min: 50, max: 300, preferredWidth: 150 }]]),
+      }),
+    );
 
     expect(result.columnWidths).toEqual([300]);
-  });
-
-  it('expands multi-span cells to satisfy minimum content width', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [50, 50],
-      rows: [
-        {
-          cells: [{ span: 2, minContentWidth: 130, maxContentWidth: 130 }],
-        },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([65, 65]);
-    expect(result.totalWidth).toBe(130);
-  });
-
-  it('expands multi-span cells to satisfy maximum content width', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [40, 40, 40],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 40, maxContentWidth: 40 },
-            { span: 2, minContentWidth: 80, maxContentWidth: 150 },
-          ],
-        },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([40, 75, 75]);
-  });
-
-  it('currently treats multi-span preferred widths as grow-only floors', () => {
-    // Characterization for the rework: the span has a preferred total width of
-    // 200px, but the current solver preserves the larger 280px content max.
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [140, 140],
-      rows: [
-        {
-          cells: [{ span: 2, minContentWidth: 100, maxContentWidth: 280, preferredWidth: 200 }],
-        },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([140, 140]);
-    expect(result.totalWidth).toBe(280);
-  });
-
-  it('clamps the final width vector to the section width', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 300,
-      preferredColumnWidths: [100, 100],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 60, maxContentWidth: 200 },
-            { span: 1, minContentWidth: 60, maxContentWidth: 200 },
-          ],
-        },
-      ],
-    });
-
-    expect(result.columnWidths).toEqual([150, 150]);
     expect(result.totalWidth).toBe(300);
   });
 
-  it('currently clamps fixed tables to maxTableWidth', () => {
-    // Characterization for the rework: fixed tables are currently forced back to
-    // the available width instead of being allowed to overflow.
-    const result = computeAutoFitColumnWidths({
-      tableLayout: 'fixed',
-      maxTableWidth: 500,
-      preferredColumnWidths: [300, 300],
-      rows: [
-        {
-          cells: [
-            { span: 1, minContentWidth: 300, maxContentWidth: 300 },
-            { span: 1, minContentWidth: 300, maxContentWidth: 300 },
+  it('enforces multi-span preferred widths in both shrink and grow directions', () => {
+    const shrinkResult = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 280,
+          maxTableWidth: 500,
+          preferredColumnWidths: [140, 140],
+          gridColumnCount: 2,
+        }),
+        fixedLayout: {
+          columnWidths: [140, 140],
+          totalWidth: 280,
+          gridColumnCount: 2,
+          preferredTableWidth: 280,
+        },
+        contentMetrics: buildContentMetrics([[{ span: 2, min: 100, max: 280, preferredWidth: 200 }]]),
+      }),
+    );
+
+    const growResult = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        fixedLayout: {
+          columnWidths: [80, 80],
+          totalWidth: 160,
+          gridColumnCount: 2,
+          preferredTableWidth: 240,
+        },
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 240,
+          maxTableWidth: 500,
+        }),
+        contentMetrics: buildContentMetrics([[{ span: 2, min: 100, max: 120, preferredWidth: 240 }]]),
+      }),
+    );
+
+    expect(shrinkResult.totalWidth).toBe(280);
+    expect(shrinkResult.columnWidths[0] + shrinkResult.columnWidths[1]).toBe(280);
+    expect(growResult.columnWidths[0] + growResult.columnWidths[1]).toBe(240);
+  });
+
+  it('uses shrink-capacity-based proportional shrink when triggers fire', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 260,
+          maxTableWidth: 260,
+          preferredColumnWidths: [140, 60, 60],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+              ],
+            },
           ],
+        }),
+        fixedLayout: {
+          columnWidths: [140, 60, 60],
+          totalWidth: 260,
+          gridColumnCount: 3,
+          preferredTableWidth: 260,
         },
-      ],
-    });
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 80, max: 100 },
+            { min: 50, max: 80 },
+            { min: 120, max: 220 },
+          ],
+        ]),
+      }),
+    );
 
-    expect(result.layoutMode).toBe('fixed');
-    expect(result.columnWidths).toEqual([250, 250]);
-    expect(result.totalWidth).toBe(500);
+    expect(result.totalWidth).toBe(260);
+    expect(result.columnWidths[2]).toBeGreaterThan(60);
+    expect(result.columnWidths[0]).toBeLessThan(140);
+    expect(result.columnWidths[1]).toBeGreaterThanOrEqual(50);
   });
 
-  it('extends the working grid when spans exceed the initial grid length', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 500,
-      preferredColumnWidths: [100],
-      rows: [
-        {
-          cells: [{ span: 3, minContentWidth: 180, maxContentWidth: 180 }],
+  it('resolves multiple constrained columns jointly without order dependence', () => {
+    const first = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 360,
+          maxTableWidth: 360,
+          preferredColumnWidths: [120, 120, 120],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [120, 120, 120],
+          totalWidth: 360,
+          gridColumnCount: 3,
+          preferredTableWidth: 360,
         },
-      ],
-    });
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 140, max: 200 },
+            { min: 60, max: 80 },
+            { min: 130, max: 180 },
+          ],
+        ]),
+      }),
+    );
 
-    expect(result.gridColumnCount).toBe(3);
-    expect(result.columnWidths).toHaveLength(3);
-    expect(result.columnWidths[0]).toBeGreaterThanOrEqual(100);
-    expect(result.columnWidths.reduce((sum, width) => sum + width, 0)).toBeGreaterThanOrEqual(180);
+    const reversed = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 360,
+          maxTableWidth: 360,
+          preferredColumnWidths: [120, 120, 120],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [120, 120, 120],
+          totalWidth: 360,
+          gridColumnCount: 3,
+          preferredTableWidth: 360,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 130, max: 180 },
+            { min: 60, max: 80 },
+            { min: 140, max: 200 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(first.totalWidth).toBe(360);
+    expect(reversed.totalWidth).toBe(360);
+    expect(first.columnWidths.slice().sort((a, b) => a - b)).toEqual(
+      reversed.columnWidths.slice().sort((a, b) => a - b),
+    );
   });
 
-  it('accounts for skipped leading and trailing columns in the working grid', () => {
-    const result = computeAutoFitColumnWidths({
-      maxTableWidth: 400,
-      rows: [
-        {
-          skippedBefore: [{ preferredWidth: 80 }],
-          cells: [{ span: 1, minContentWidth: 10, maxContentWidth: 10 }],
-          skippedAfter: [{ preferredWidth: 120 }],
+  it('recomputes overlapping trigger headroom so shared columns do not overshoot span maxima', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 300,
+          maxTableWidth: 360,
+          preferredColumnWidths: [100, 100, 100],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [{ startColumn: 0, span: 2, preferredWidth: undefined }],
+            },
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [{ startColumn: 1, span: 1, preferredWidth: undefined }],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100, 100],
+          totalWidth: 300,
+          gridColumnCount: 3,
+          preferredTableWidth: 300,
         },
-      ],
-    });
+        contentMetrics: buildContentMetrics([[{ span: 2, min: 201, max: 240 }], [{ min: 101, max: 140 }]]),
+      }),
+    );
 
-    expect(result.gridColumnCount).toBe(3);
-    expect(result.columnWidths).toEqual([80, 10, 120]);
+    expect(result.columnWidths[0] + result.columnWidths[1]).toBeLessThanOrEqual(240.001);
+  });
+
+  it('redistributes remaining slack back to tblW after trigger handling', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 320,
+          maxTableWidth: 500,
+        }),
+        fixedLayout: {
+          columnWidths: [120, 120, 80],
+          totalWidth: 320,
+          gridColumnCount: 3,
+          preferredTableWidth: 320,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 150, max: 200 },
+            { min: 40, max: 80 },
+            { min: 40, max: 80 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBe(320);
+  });
+
+  it('targets content max for trigger columns where possible', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 200,
+          maxTableWidth: 200,
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100],
+          totalWidth: 200,
+          gridColumnCount: 2,
+          preferredTableWidth: 200,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 140, max: 220 },
+            { min: 20, max: 40 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths[0]).toBeCloseTo(180, 3);
+    expect(result.columnWidths[1]).toBeCloseTo(20, 3);
+    expect(result.totalWidth).toBe(200);
+  });
+
+  it('grows the table beyond tblW up to page width when triggers still have headroom', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 200,
+          maxTableWidth: 500,
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100],
+          totalWidth: 200,
+          gridColumnCount: 2,
+          preferredTableWidth: 200,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 140, max: 220 },
+            { min: 20, max: 40 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths[0]).toBeCloseTo(220, 3);
+    expect(result.columnWidths[1]).toBeCloseTo(20, 3);
+    expect(result.totalWidth).toBeCloseTo(240, 3);
   });
 
   it('keeps pathological empty input at a non-zero width floor', () => {
@@ -318,3 +426,69 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBe(8);
   });
 });
+
+function buildExplicitInput(overrides: Partial<ExplicitAutoFitInput>): ExplicitAutoFitInput {
+  const workingInput = overrides.workingInput ?? buildWorkingInput();
+  const fixedLayout =
+    overrides.fixedLayout ??
+    ({
+      columnWidths: [100, 100],
+      totalWidth: 200,
+      gridColumnCount: 2,
+      preferredTableWidth: workingInput.preferredTableWidth,
+    } satisfies FixedLayoutResult);
+
+  return {
+    workingInput,
+    fixedLayout,
+    contentMetrics:
+      overrides.contentMetrics ??
+      buildContentMetrics([
+        [
+          { min: 40, max: 40 },
+          { min: 40, max: 40 },
+        ],
+      ]),
+    minColumnWidth: overrides.minColumnWidth,
+  };
+}
+
+function buildWorkingInput(overrides: Partial<WorkingTableGridInput> = {}): WorkingTableGridInput {
+  return {
+    layoutMode: 'autofit',
+    maxTableWidth: 500,
+    preferredTableWidth: 200,
+    preferredColumnWidths: [100, 100],
+    gridColumnCount: 2,
+    rows: [
+      {
+        skippedBefore: [],
+        skippedAfter: [],
+        skippedColumns: [],
+        logicalColumnCount: 2,
+        cells: [
+          { startColumn: 0, span: 1, preferredWidth: undefined },
+          { startColumn: 1, span: 1, preferredWidth: undefined },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function buildContentMetrics(
+  rows: Array<Array<{ span?: number; min: number; max: number; preferredWidth?: number }>>,
+): AutoFitContentMetricsInput {
+  return {
+    rowMetrics: rows.map((row, rowIndex) => ({
+      rowIndex,
+      cells: row.map((cell, cellIndex) => ({
+        cellIndex,
+        span: cell.span ?? 1,
+        preferredWidth: cell.preferredWidth,
+        minContentWidth: cell.min,
+        maxContentWidth: cell.max,
+      })),
+    })),
+  };
+}

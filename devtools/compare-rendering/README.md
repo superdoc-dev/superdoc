@@ -87,12 +87,12 @@ Makes it CI-usable later without rework.
 - Auto-fix generation.
 - Publishing as a package.
 
-## Milestones (revised after M1 corpus-batch insights)
+## Milestones
 
-- **M1** ✅ — CLI works end-to-end on paragraph-only docs. 4 categories (`text`, `pagination`, `structure`, `unsupported`). JSON + markdown output. Word-extraction cache. Ad-hoc `scripts/batch.ts` runner for whole-corpus sweeps.
-- **M2** — Baseline + delta reporting. Snapshot findings against a pinned SuperDoc sha, emit only `resolved` / `new` since baseline. This is what makes the tool **agent-usable**: signal becomes "my change fixed N, broke M" instead of "here are 367 absolute findings." Pin a `main`-branch baseline at `test-corpus/.baseline.json`.
+- **M1** ✅ — CLI on paragraph-only docs. 4 categories (`text`, `pagination`, `structure`, `unsupported`). Word-extraction cache.
+- **M2** ✅ — Baseline + delta reporting (`--input-dir`, `--save-baseline`, `--baseline`). Findings get a stable `fingerprint` (`category:paragraphOrdinal`). Delta mode emits only `resolved` / `new` / `unchanged` vs baseline; exits `2` on any new finding. This is what makes the tool **agent-usable** — signal is "my change fixed N, broke M" instead of absolute findings.
 - **M3** — LLM screenshot judge for docs where schema diff is silent or near-silent. Catches rendering divergences that don't surface in layout data at all (e.g. `w:val="wave"` border styles rendered as plain lines, font substitution, painter-level overflow).
-- **M4** — Populate `NormalizedParagraph.resolved` on SuperDoc side. Taxonomy extends to `style`, `indent`, `font`, `color`, `alignment`, `spacing`, `numbering`. Safe to add once M2 absorbs the "new field adds findings everywhere" noise.
+- **M4** — Populate `NormalizedParagraph.resolved` on SuperDoc side. Taxonomy extends to `style`, `indent`, `font`, `color`, `alignment`, `spacing`, `numbering`. Safe to add now that M2 absorbs the "new field adds findings everywhere" noise.
 - **M5** — Table support. Non-trivial; needs parallel table walks on both sides.
 
 ## Insights from M1 corpus batch (75 docs, April 2026)
@@ -101,11 +101,21 @@ Makes it CI-usable later without rework.
 - **Schema diff has real false negatives.** `sd-1741` reports 0 text/style findings, but visually SuperDoc renders every border-between style (`wave`, `doubleWave`, `dashDotStroked`, `triple`, …) as a plain line while Word renders each correctly. Schema-level comparison will never catch this class without the M3 screenshot judge.
 - **~27 % of the corpus is in M1 scope.** 13 / 75 docs are short-circuited for tables/shapes/comments/revisions; the rest yield meaningful findings. Real-world DOCX coverage unlocks at M5 (tables).
 
-## Corpus sweep
+## Corpus sweep + baselines
 
-Ad-hoc batch runner at `scripts/batch.ts` — iterates every `.docx` under a directory, writes per-doc JSON reports plus a `_summary.json`, and prints a one-line status per doc. Graduates to a proper `--input-dir` flag in M2 alongside baseline support.
+Pass `--input-dir` to run a whole directory of docs. Combine with `--save-baseline` to snapshot the current findings, and `--baseline` to diff a later run against that snapshot.
 
 ```bash
-WORD_API_URL=... WORD_API_TOKEN=... \
-  bun devtools/compare-rendering/scripts/batch.ts test-corpus/rendering
+# Snapshot current state as the main-branch baseline (once, on main).
+pnpm compare-rendering -- \
+  --input-dir test-corpus/rendering \
+  --save-baseline test-corpus/.baseline.json
+
+# On a feature branch: what did my change actually affect?
+pnpm compare-rendering -- \
+  --input-dir test-corpus/rendering \
+  --baseline test-corpus/.baseline.json \
+  --format md
 ```
+
+Delta output names the docs with `resolved` (baseline had it, current doesn't → you fixed it) and `new` (current has it, baseline didn't → you introduced or didn't fix it). `unchanged` is counted but not listed. Exit `2` when any new finding shows up — CI-friendly gate.

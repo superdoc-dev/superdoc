@@ -1,11 +1,21 @@
-import type { Finding, NormalizedParagraph } from './types.ts';
+import type { Finding, FindingCategory, NormalizedParagraph } from './types.ts';
 import { codeAreaFor, specRefFor } from './taxonomy.ts';
+
+/**
+ * A finding's stable key across runs. Same paragraph + same category =
+ * same fingerprint, even if the value (e.g. y-offset) drifts. This is
+ * what baseline diffing keys on.
+ */
+export function fingerprintOf(category: FindingCategory, paragraphOrdinal: number): string {
+  return `${category}:${paragraphOrdinal}`;
+}
 
 export function diffParagraphs(word: NormalizedParagraph[], superdoc: NormalizedParagraph[]): Finding[] {
   const findings: Finding[] = [];
 
   if (word.length !== superdoc.length) {
     findings.push({
+      fingerprint: fingerprintOf('structure', 0),
       category: 'structure',
       severity: 'blocking',
       paragraphOrdinal: 0,
@@ -26,6 +36,7 @@ export function diffParagraphs(word: NormalizedParagraph[], superdoc: Normalized
 
     if (!textsMatch(w.text, s.text)) {
       findings.push({
+        fingerprint: fingerprintOf('text', w.ordinal),
         category: 'text',
         severity: 'blocking',
         paragraphOrdinal: w.ordinal,
@@ -39,6 +50,7 @@ export function diffParagraphs(word: NormalizedParagraph[], superdoc: Normalized
 
     if (w.page !== s.page) {
       findings.push({
+        fingerprint: fingerprintOf('pagination', w.ordinal),
         category: 'pagination',
         severity: 'visible',
         paragraphOrdinal: w.ordinal,

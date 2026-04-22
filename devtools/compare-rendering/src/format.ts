@@ -1,4 +1,4 @@
-import type { CompareReport } from './types.ts';
+import type { CompareReport, DeltaReport } from './types.ts';
 
 export function formatJson(report: CompareReport): string {
   return `${JSON.stringify(report, null, 2)}\n`;
@@ -39,6 +39,52 @@ export function formatMarkdown(report: CompareReport): string {
     }
   }
   lines.push('');
+  return lines.join('\n');
+}
+
+export function formatDeltaJson(delta: DeltaReport): string {
+  return `${JSON.stringify(delta, null, 2)}\n`;
+}
+
+export function formatDeltaMarkdown(delta: DeltaReport): string {
+  const lines: string[] = [];
+  const { resolved, new: fresh, unchanged } = delta.totals;
+  lines.push(`# compare-rendering: delta vs baseline`);
+  lines.push('');
+  lines.push(`Baseline captured: ${delta.baselineCapturedAt}`);
+  lines.push('');
+  lines.push(`**Resolved**: ${resolved} · **New**: ${fresh} · **Unchanged**: ${unchanged}`);
+  lines.push('');
+
+  const withResolved = delta.docs.filter((d) => d.resolved.length);
+  const withNew = delta.docs.filter((d) => d.new.length);
+
+  if (withResolved.length) {
+    lines.push(`## Resolved (${resolved}) — your change fixed these`);
+    for (const d of withResolved) {
+      lines.push(`- ${d.file} (${d.resolved.length})`);
+      for (const f of d.resolved) lines.push(`  - [${f.severity}] ${f.message}`);
+    }
+    lines.push('');
+  }
+
+  if (withNew.length) {
+    lines.push(`## New (${fresh}) — your change introduced these or didn't fix them`);
+    for (const d of withNew) {
+      lines.push(`- ${d.file} (${d.new.length})`);
+      for (const f of d.new) {
+        lines.push(`  - [${f.severity}] ${f.message}`);
+        if (f.codeAreaHint) lines.push(`    - code: \`${f.codeAreaHint}\``);
+      }
+    }
+    lines.push('');
+  }
+
+  if (!withResolved.length && !withNew.length) {
+    lines.push('No change vs baseline — nothing fixed, nothing broken.');
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 

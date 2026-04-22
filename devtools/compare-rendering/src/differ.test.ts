@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { diffParagraphs } from './differ.ts';
+import { diffParagraphs, fingerprintOf } from './differ.ts';
 import { oleToHex, pxToPt, wordAlignment, wordTri } from './normalize.ts';
 import { codeAreaFor, specRefFor } from './taxonomy.ts';
-import type { NormalizedParagraph } from './types.ts';
+import { diffAgainstBaseline } from './baseline.ts';
+import type { Baseline, CompareReport, NormalizedParagraph } from './types.ts';
 
 const para = (overrides: Partial<NormalizedParagraph> = {}): NormalizedParagraph => ({
   ordinal: 1,
@@ -116,5 +117,92 @@ describe('taxonomy', () => {
     expect(codeAreaFor('structure')).toBeDefined();
     expect(specRefFor('text')).toMatch(/ECMA-376/);
     expect(specRefFor('pagination')).toMatch(/ECMA-376/);
+  });
+});
+
+describe('fingerprintOf', () => {
+  it('is stable and collision-free per (category, ordinal)', () => {
+    expect(fingerprintOf('pagination', 39)).toBe('pagination:39');
+    expect(fingerprintOf('text', 39)).not.toBe(fingerprintOf('pagination', 39));
+    expect(fingerprintOf('pagination', 39)).toBe(fingerprintOf('pagination', 39));
+  });
+
+  it('is set on every finding emitted by diffParagraphs', () => {
+    const w = [para({ text: 'a', page: 1 }), para({ ordinal: 2, text: 'b', page: 2 })];
+    const s = [para({ text: 'a', page: 1 }), para({ ordinal: 2, text: 'DIFFERENT', page: 1 })];
+    for (const f of diffParagraphs(w, s)) {
+      expect(f.fingerprint).toBeTruthy();
+      expect(f.fingerprint).toBe(`${f.category}:${f.paragraphOrdinal}`);
+    }
+  });
+});
+
+describe('diffAgainstBaseline', () => {
+  const makeReport = (
+    file: string,
+    findings: NormalizedParagraph[] extends unknown ? number[] : never = [],
+  ): CompareReport => {
+    // findings argument not used below; we construct findings explicitly per test
+    void findings;
+    return {
+      docxPath: `/abs/path/${file}`,
+      docxSha: 'sha',
+      wordSupported: true,
+      counts: { wordParagraphs: 0, superdocParagraphs: 0, wordPages: 1, superdocPages: 1 },
+      findings: [],
+    };
+  };
+
+  const mkFinding = (cat: 'pagination' | 'text', ordinal: number) => ({
+    fingerprint: fingerprintOf(cat, ordinal),
+    category: cat,
+    severity: 'visible' as const,
+    paragraphOrdinal: ordinal,
+    word: null,
+    superdoc: null,
+    message: `${cat} at #${ordinal}`,
+  });
+
+  it('classifies findings as resolved / new / unchanged', () => {
+    const baseline: Baseline = {
+      schemaVersion: 1,
+      capturedAt: '2026-01-01T00:00:00Z',
+      docs: {
+        'memo.docx': {
+          docxSha: 'sha',
+          findings: [mkFinding('pagination', 39), mkFinding('pagination', 80)],
+        },
+      },
+    };
+    const report = makeReport('memo.docx');
+    report.findings = [mkFinding('pagination', 39), mkFinding('text', 42)];
+    const delta = diffAgainstBaseline([report], baseline);
+
+    expect(delta.totals).toEqual({ resolved: 1, new: 1, unchanged: 1 });
+    expect(delta.docs).toHaveLength(1);
+    expect(delta.docs[0]!.resolved.map((f) => f.fingerprint)).toEqual(['pagination:80']);
+    expect(delta.docs[0]!.new.map((f) => f.fingerprint)).toEqual(['text:42']);
+    expect(delta.docs[0]!.unchangedCount).toBe(1);
+  });
+
+  it('treats docs not in baseline as all-new', () => {
+    const baseline: Baseline = { schemaVersion: 1, capturedAt: 'x', docs: {} };
+    const report = makeReport('new-doc.docx');
+    report.findings = [mkFinding('pagination', 5)];
+    const delta = diffAgainstBaseline([report], baseline);
+    expect(delta.totals.new).toBe(1);
+    expect(delta.totals.resolved).toBe(0);
+  });
+
+  it('emits empty delta when nothing changed', () => {
+    const baseline: Baseline = {
+      schemaVersion: 1,
+      capturedAt: 'x',
+      docs: { 'x.docx': { docxSha: 's', findings: [mkFinding('pagination', 1)] } },
+    };
+    const report = makeReport('x.docx');
+    report.findings = [mkFinding('pagination', 1)];
+    const delta = diffAgainstBaseline([report], baseline);
+    expect(delta.totals).toEqual({ resolved: 0, new: 0, unchanged: 1 });
   });
 });

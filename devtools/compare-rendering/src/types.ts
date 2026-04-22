@@ -39,6 +39,7 @@ export type FindingCategory =
   | 'unknown';
 
 export type Finding = {
+  fingerprint: string;
   category: FindingCategory;
   severity: Severity;
   paragraphOrdinal: number;
@@ -86,4 +87,30 @@ export type CompareReport = {
     superdocPages: number;
   };
   findings: Finding[];
+};
+
+/**
+ * A frozen snapshot of findings for a whole corpus run. Written by
+ * `--save-baseline`, read by `--baseline` to compute deltas.
+ */
+export type Baseline = {
+  schemaVersion: 1;
+  capturedAt: string;
+  docs: Record<string, { docxSha: string; findings: Finding[] }>;
+};
+
+/**
+ * Per-doc delta vs a baseline. Same fingerprint → unchanged; fingerprint
+ * only in baseline → resolved (your change fixed it); fingerprint only in
+ * current → new (your change introduced it or didn't fix it).
+ */
+export type DeltaReport = {
+  baselineCapturedAt: string;
+  totals: { resolved: number; new: number; unchanged: number };
+  docs: Array<{
+    file: string;
+    resolved: Finding[];
+    new: Finding[];
+    unchangedCount: number;
+  }>;
 };

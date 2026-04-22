@@ -49,13 +49,16 @@ test('toolbar buttons stay inside the container when it narrows (SD-2328)', asyn
       })
       // Skip zero-width items (collapsed / hidden by the overflow pipeline).
       .filter((entry) => entry.width > 0 && entry.right > containerRect.right + 1);
-    const leftGroup = container.querySelector('.superdoc-toolbar-group-side .button-group');
-    const leftGroupMinWidth = leftGroup ? getComputedStyle(leftGroup as Element).minWidth : null;
+    // The side-position class is applied to the ButtonGroup root (which is
+    // also the `.button-group` element), so the two classes land on the same
+    // node - use a compound selector, not a descendant one.
+    const sideGroups = Array.from(container.querySelectorAll('.button-group.superdoc-toolbar-group-side'));
+    const sideGroupMinWidths = sideGroups.map((el) => getComputedStyle(el as Element).minWidth);
     return {
       containerRight: containerRect.right,
       containerWidth: containerRect.width,
       overflowing,
-      leftGroupMinWidth,
+      sideGroupMinWidths,
     };
   });
 
@@ -65,8 +68,12 @@ test('toolbar buttons stay inside the container when it narrows (SD-2328)', asyn
     result!.overflowing,
     `buttons must not extend past the toolbar container's right edge (container right = ${result!.containerRight}px)`,
   ).toEqual([]);
-  // At 1100px (≤ lg = 1280) side groups must drop their 120px min-width so the
-  // center group has room for the overflow menu. A 120px value here would mean
-  // the container-width compaction path never ran.
-  expect(result!.leftGroupMinWidth, 'side groups should compact at ≤ lg breakpoint').not.toBe('120px');
+  // At 1100px (≤ lg = 1280) every side group must drop its 120px min-width so
+  // the center group has room for the overflow menu. Assert both sides: the
+  // `compactSideGroups` prop is threaded through left, center, and right group
+  // instances, so one-sided coverage would miss a per-position regression.
+  expect(result!.sideGroupMinWidths.length, 'expected left and right side groups').toBeGreaterThanOrEqual(2);
+  for (const minWidth of result!.sideGroupMinWidths) {
+    expect(minWidth, 'side groups should compact at ≤ lg breakpoint').not.toBe('120px');
+  }
 });

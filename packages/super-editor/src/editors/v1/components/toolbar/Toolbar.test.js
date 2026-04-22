@@ -32,6 +32,7 @@ function createMockToolbar() {
 describe('Toolbar', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('removes resize and keydown listeners on unmount (not only on KeepAlive deactivate)', () => {
@@ -140,6 +141,38 @@ describe('Toolbar', () => {
     expect(observe).not.toHaveBeenCalled();
 
     wrapper.unmount();
-    vi.unstubAllGlobals();
+  });
+
+  it('attaches ResizeObserver to the container when responsiveToContainer is enabled', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const container = document.createElement('div');
+    const mockToolbar = {
+      ...createMockToolbar(),
+      config: { ...createMockToolbar().config, responsiveToContainer: true },
+      toolbarContainer: container,
+    };
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: true },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    expect(ResizeObserverMock).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledWith(container);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });

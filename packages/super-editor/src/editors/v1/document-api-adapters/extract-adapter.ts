@@ -6,7 +6,6 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { TableMap } from 'prosemirror-tables';
 import type { Editor } from '../core/Editor.js';
 import type {
   ExtractInput,
@@ -21,14 +20,6 @@ import { getHeadingLevel, mapBlockNodeType, resolveBlockNodeId } from './helpers
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { trackChangesListWrapper } from './plan-engine/track-changes-wrappers.js';
-
-/**
- * Block-level node types that wrap other blocks without introducing their own
- * navigable content (structured document tags / content controls). Recurse
- * through these transparently so their inner paragraphs are emitted with the
- * enclosing cell's tableContext.
- */
-const TRANSPARENT_WRAPPER_TYPES: ReadonlySet<string> = new Set(['sdt', 'structuredContentBlock']);
 
 function buildBlock(
   node: ProseMirrorNode,
@@ -50,115 +41,54 @@ function buildBlock(
 }
 
 /**
- * Emit every block-level child of `container` into `blocks`. Paragraph-like
- * children become their own ExtractBlock (tagged with `tableContext` when
- * passed). Nested tables re-enter `collectFromTable` with their own
- * coordinates. SDT/content-control wrappers are transparent and do not reset
- * `tableContext`.
- */
-function emitFromContainer(
-  container: ProseMirrorNode,
-  containerPos: number,
-  containerPath: readonly number[],
-  tableContext: ExtractTableContext | undefined,
-  blocks: ExtractBlock[],
-): void {
-  let childOffset = 0;
-  container.forEach((childNode, _unusedOffset, childIndex) => {
-    const childPos = containerPos + 1 + childOffset;
-    const childPath = [...containerPath, childIndex];
-    const childType = mapBlockNodeType(childNode);
-
-    if (!childType) {
-      childOffset += childNode.nodeSize;
-      return;
-    }
-
-    if (childType === 'table') {
-      const nestedNodeId = resolveBlockNodeId(childNode, childPos, 'table', childPath);
-      if (nestedNodeId) {
-        collectFromTable(childNode, childPos, childPath, nestedNodeId, blocks);
-      }
-      childOffset += childNode.nodeSize;
-      return;
-    }
-
-    if (TRANSPARENT_WRAPPER_TYPES.has(childType)) {
-      emitFromContainer(childNode, childPos, childPath, tableContext, blocks);
-      childOffset += childNode.nodeSize;
-      return;
-    }
-
-    const childId = resolveBlockNodeId(childNode, childPos, childType, childPath);
-    if (childId) {
-      blocks.push(buildBlock(childNode, childId, childType, tableContext));
-    }
-    childOffset += childNode.nodeSize;
-  });
-}
-
-/**
  * Walk a table and emit each cell's block-level children as their own blocks,
  * tagged with `{ tableNodeId, rowIndex, colIndex }`. Table cells have no
  * spec-stable ID (w14:paraId is defined on w:p, not w:tc) but the paragraphs
  * inside every cell do, so we expose those.
  *
- * `colIndex` is the cell's logical column in the table grid — computed from
- * `TableMap` so that `gridSpan` / merged cells produce correct coordinates.
+ * Nested tables recurse with their own coordinates — a nested table would
+ * otherwise hit the same "cells concatenated into one string" bug the fix
+ * targets, just one level deeper.
  */
-function collectFromTable(
+function emitTable(
   tableNode: ProseMirrorNode,
   tablePos: number,
   tablePath: readonly number[],
   tableNodeId: string,
   blocks: ExtractBlock[],
 ): void {
-  let tableMap: TableMap | undefined;
-  try {
-    tableMap = TableMap.get(tableNode);
-  } catch {
-    // Fall through to ordinal-based colIndex for malformed tables.
-  }
-
   let rowOffset = 0;
   tableNode.forEach((rowNode, _unusedRowOffset, rowIndex) => {
     const rowPos = tablePos + 1 + rowOffset;
-    const rowPath = [...tablePath, rowIndex];
+    rowOffset += rowNode.nodeSize;
 
     let cellOffset = 0;
-    rowNode.forEach((cellNode, _unusedCellOffset, cellChildIndex) => {
+    rowNode.forEach((cellNode, _unusedCellOffset, colIndex) => {
       const cellPos = rowPos + 1 + cellOffset;
-      const cellPath = [...rowPath, cellChildIndex];
-
-      // Logical column from the table grid. TableMap.map is a flat
-      // [cellPos0, cellPos1, ...] indexed by rowIndex * width + colIndex;
-      // each merged cell appears at every covered slot. indexOf() finds the
-      // first (origin) slot the cell occupies — i.e. its logical column.
-      let colIndex = cellChildIndex;
-      if (tableMap) {
-        const cellPosRelativeToTableContent = cellPos - tablePos - 1;
-        const flatIdx = tableMap.map.indexOf(cellPosRelativeToTableContent);
-        if (flatIdx >= 0) colIndex = flatIdx % tableMap.width;
-      }
-
-      // Surface merge coordinates when a cell spans more than its origin slot.
-      // Consumers need these to reconstruct a row ("A (spans 2) | B") or to
-      // detect "missing because merged" vs "missing because empty".
-      const cellAttrs = cellNode.attrs as Record<string, unknown>;
-      const rawColspan = typeof cellAttrs.colspan === 'number' ? cellAttrs.colspan : 1;
-      const rawRowspan = typeof cellAttrs.rowspan === 'number' ? cellAttrs.rowspan : 1;
-      const colspan = rawColspan > 1 ? rawColspan : undefined;
-      const rowspan = rawRowspan > 1 ? rawRowspan : undefined;
+      cellOffset += cellNode.nodeSize;
 
       const tableContext: ExtractTableContext = { tableNodeId, rowIndex, colIndex };
-      if (colspan !== undefined) tableContext.colspan = colspan;
-      if (rowspan !== undefined) tableContext.rowspan = rowspan;
 
-      emitFromContainer(cellNode, cellPos, cellPath, tableContext, blocks);
+      let childOffset = 0;
+      cellNode.forEach((childNode, _unusedChildOffset, childIndex) => {
+        const childPos = cellPos + 1 + childOffset;
+        childOffset += childNode.nodeSize;
 
-      cellOffset += cellNode.nodeSize;
+        const childType = mapBlockNodeType(childNode);
+        if (!childType) return;
+
+        const childPath = [...tablePath, rowIndex, colIndex, childIndex];
+
+        if (childType === 'table') {
+          const nestedId = resolveBlockNodeId(childNode, childPos, 'table', childPath);
+          if (nestedId) emitTable(childNode, childPos, childPath, nestedId, blocks);
+          return;
+        }
+
+        const childId = resolveBlockNodeId(childNode, childPos, childType, childPath);
+        if (childId) blocks.push(buildBlock(childNode, childId, childType, tableContext));
+      });
     });
-    rowOffset += rowNode.nodeSize;
   });
 }
 
@@ -166,11 +96,10 @@ function collectBlocks(editor: Editor): ExtractBlock[] {
   const blocks: ExtractBlock[] = [];
   const doc = editor.state.doc;
 
-  // Walk the doc directly (not via collectTopLevelBlocks) so the traversal
-  // path we thread into resolveBlockNodeId matches the canonical PM child
-  // index used by buildBlockIndex. If an unsupported node precedes a table
-  // (e.g. passthroughBlock), a filtered index would diverge from the real
-  // PM index and fallback IDs would be hashed from the wrong path.
+  // Walk doc children directly so the traversal path we thread into
+  // resolveBlockNodeId matches the canonical PM child index used by
+  // buildBlockIndex (a filtered index would diverge when unsupported
+  // top-level nodes precede a table).
   let offset = 0;
   for (let i = 0; i < doc.childCount; i++) {
     const child = doc.child(i);
@@ -182,14 +111,7 @@ function collectBlocks(editor: Editor): ExtractBlock[] {
 
     if (nodeType === 'table') {
       const tableNodeId = resolveBlockNodeId(child, pos, 'table', [i]);
-      if (tableNodeId) collectFromTable(child, pos, [i], tableNodeId, blocks);
-      continue;
-    }
-
-    if (TRANSPARENT_WRAPPER_TYPES.has(nodeType)) {
-      // Content-control wrapper: recurse transparently. No tableContext here
-      // (tables nested inside the wrapper carry their own coordinates).
-      emitFromContainer(child, pos, [i], undefined, blocks);
+      if (tableNodeId) emitTable(child, pos, [i], tableNodeId, blocks);
       continue;
     }
 

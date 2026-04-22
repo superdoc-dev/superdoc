@@ -31,22 +31,8 @@ export interface ExtractTableContext {
   tableNodeId: string;
   /** Zero-based row index within `tableNodeId`. */
   rowIndex: number;
-  /**
-   * Zero-based logical column index within `tableNodeId`. Accounts for
-   * column merges (`gridSpan`): a cell that follows a `colspan=2` cell starts
-   * at `colIndex: 2`. For merged cells, `colIndex` is the origin column.
-   */
+  /** Zero-based column index within the row. */
   colIndex: number;
-  /**
-   * Number of columns the containing cell spans. Only present when greater
-   * than 1. Use together with `colIndex` to reconstruct row layout or tell
-   * "absent because merged" apart from "absent because empty".
-   */
-  colspan?: number;
-  /**
-   * Number of rows the containing cell spans. Only present when greater than 1.
-   */
-  rowspan?: number;
 }
 
 export interface ExtractComment {

@@ -51,9 +51,7 @@ _No fields._
       "nodeId": "node-def456",
       "tableContext": {
         "colIndex": 1,
-        "colspan": 1,
         "rowIndex": 1,
-        "rowspan": 1,
         "tableNodeId": "example"
       },
       "text": "Hello, world.",
@@ -121,19 +119,11 @@ _No fields._
             "additionalProperties": false,
             "properties": {
               "colIndex": {
-                "description": "Zero-based logical column index. Accounts for column merges (gridSpan); for merged cells, reports the origin column.",
-                "type": "integer"
-              },
-              "colspan": {
-                "description": "Number of columns the containing cell spans. Only present when greater than 1.",
+                "description": "Zero-based column index within the row.",
                 "type": "integer"
               },
               "rowIndex": {
                 "description": "Zero-based row index within tableNodeId.",
-                "type": "integer"
-              },
-              "rowspan": {
-                "description": "Number of rows the containing cell spans. Only present when greater than 1.",
                 "type": "integer"
               },
               "tableNodeId": {

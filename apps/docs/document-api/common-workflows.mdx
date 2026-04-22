@@ -340,7 +340,7 @@ Tables are expanded into their constituent paragraphs — one block per paragrap
 ```ts
 for (const block of content.blocks) {
   if (!block.tableContext) continue;
-  const { tableNodeId, rowIndex, colIndex, colspan, rowspan } = block.tableContext;
+  const { tableNodeId, rowIndex, colIndex } = block.tableContext;
   console.log(`${tableNodeId} r${rowIndex}c${colIndex}:`, block.text);
   // → 'table-1 r0c0: Shape'
   // → 'table-1 r1c0: Cone'
@@ -349,8 +349,6 @@ for (const block of content.blocks) {
 ```
 
 - `tableNodeId` groups blocks that belong to the same table (useful for multiple or nested tables).
-- `colIndex` is the **logical** column, so a cell after a `colspan=2` reports `colIndex: 2`.
-- `colspan` / `rowspan` are only present when greater than 1 — use them to reconstruct row layout.
 - Cells can hold multiple paragraphs; each emits its own block with the same `tableContext` coordinates and a distinct `nodeId`.
 
 Group cells into row-level chunks for better RAG retrieval:

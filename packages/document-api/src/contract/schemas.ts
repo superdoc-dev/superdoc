@@ -2977,19 +2977,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
                       'Stable ID of the table containing this block. Distinguishes blocks across adjacent or nested tables.',
                   },
                   rowIndex: { type: 'integer', description: 'Zero-based row index within tableNodeId.' },
-                  colIndex: {
-                    type: 'integer',
-                    description:
-                      'Zero-based logical column index. Accounts for column merges (gridSpan); for merged cells, reports the origin column.',
-                  },
-                  colspan: {
-                    type: 'integer',
-                    description: 'Number of columns the containing cell spans. Only present when greater than 1.',
-                  },
-                  rowspan: {
-                    type: 'integer',
-                    description: 'Number of rows the containing cell spans. Only present when greater than 1.',
-                  },
+                  colIndex: { type: 'integer', description: 'Zero-based column index within the row.' },
                 },
                 ['tableNodeId', 'rowIndex', 'colIndex'],
               ),

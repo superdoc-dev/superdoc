@@ -298,46 +298,6 @@ test('@behavior SD-2653: nested tables emit paragraphs scoped to the inner table
   expect(coords).toEqual(['r0c0', 'r1c0']);
 });
 
-test('@behavior SD-2653: top-level content-control wrappers are transparent', async ({ superdoc }) => {
-  // Insert a structured-content-block at the document root wrapping two paragraphs.
-  await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.insertStructuredContentBlock({
-      attrs: { alias: 'wrapped-section' },
-      json: {
-        type: 'structuredContentBlock',
-        content: [
-          { type: 'paragraph', content: [{ type: 'text', text: 'wrapped first paragraph' }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'wrapped second paragraph' }] },
-        ],
-      },
-    });
-  });
-  await superdoc.waitForStable();
-
-  const result = await superdoc.page.evaluate(() => (window as any).editor.doc.extract({}));
-
-  // Pre-fix: the whole SDT came back as one opaque block whose text concatenated
-  // both paragraphs with no separator. Post-fix: the wrapper is transparent and
-  // its inner paragraphs are emitted as their own blocks with stable IDs.
-  const wrapped = result.blocks.filter(
-    (b: any) => b.text === 'wrapped first paragraph' || b.text === 'wrapped second paragraph',
-  );
-  expect(wrapped.length).toBe(2);
-
-  for (const block of wrapped) {
-    expect(block.type).toBe('paragraph');
-    expect(typeof block.nodeId).toBe('string');
-    expect(block.nodeId.length).toBeGreaterThan(0);
-    expect(block.tableContext).toBeUndefined();
-  }
-
-  // And no opaque `sdt` / `structuredContentBlock` block with concatenated text.
-  const opaque = result.blocks.find(
-    (b: any) => b.type === 'sdt' && /wrapped first paragraphwrapped second paragraph/.test(b.text),
-  );
-  expect(opaque).toBeUndefined();
-});
-
 test.describe('@behavior SD-2653: DOCX-imported table', () => {
   test.skip(!fs.existsSync(TRIVIAL_REPORT_FIXTURE), 'fixture missing');
 

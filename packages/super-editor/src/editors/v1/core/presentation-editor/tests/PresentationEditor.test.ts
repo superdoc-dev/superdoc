@@ -1026,20 +1026,102 @@ describe('PresentationEditor', () => {
       },
     );
 
-    // SD-2495 anchor-nav fix: #scrollPageIntoView must write to the real
-    // scroll ancestor, not just #visibleHost. This is enforced by the
-    // existing scrollToPage tests in this describe block — both mock
-    // scrollTop on the container (which serves as both visibleHost and the
-    // effective scroll target in the test harness) and assert that value
-    // gets written. Those tests would fail if the fix reverted to writing
-    // only to a zero-effect target.
-    //
-    // The "scrollContainer != visibleHost" branch (the exact shape of the
-    // dev app and real consumers) isn't unit-testable here because happy-dom
-    // doesn't propagate inline overflow styles through getComputedStyle,
-    // which is what #findScrollableAncestor uses. Browser-level verification
-    // lives in the SD-2495 behavior/manual testing; see the click-to-
-    // navigate agent-browser runs in the PR description.
+    // SD-2495 anchor-nav fix: when the scrollable ancestor differs from the
+    // visible host (the real-world shape - the host is overflow:visible and
+    // a parent constrains height), scrollTop must land on the ancestor, not
+    // just the host. Happy-dom doesn't propagate inline overflow through
+    // getComputedStyle, so we stub it to mark a wrapper as scrollable.
+    it('writes scrollTop to both the scrollable ancestor and the visibleHost when they differ', async () => {
+      const scrollableWrapper = document.createElement('div');
+      document.body.removeChild(container);
+      scrollableWrapper.appendChild(container);
+      document.body.appendChild(scrollableWrapper);
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const getComputedStyleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el: Element, pseudo?: string | null) => {
+          if (el === scrollableWrapper) {
+            return { overflowY: 'auto' } as CSSStyleDeclaration;
+          }
+          return originalGetComputedStyle(el, pseudo ?? null);
+        });
+
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-multi-target',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const expectedPageTop = 600 + 10 + 1200 + 10;
+
+      let wrapperScrollTop = 0;
+      let hostScrollTop = 0;
+      let mountedPageEl: HTMLElement | null = null;
+      const mountPageIfScrolled = (value: number) => {
+        if (!mountedPageEl && Math.abs(value - expectedPageTop) < 0.5) {
+          mountedPageEl = document.createElement('div');
+          mountedPageEl.setAttribute('data-page-index', '2');
+          Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+            value: vi.fn(),
+            configurable: true,
+          });
+          pagesHost.appendChild(mountedPageEl);
+        }
+      };
+      Object.defineProperty(scrollableWrapper, 'scrollTop', {
+        get: () => wrapperScrollTop,
+        set: (next) => {
+          wrapperScrollTop = Number(next);
+          mountPageIfScrolled(wrapperScrollTop);
+        },
+        configurable: true,
+      });
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => hostScrollTop,
+        set: (next) => {
+          hostScrollTop = Number(next);
+          mountPageIfScrolled(hostScrollTop);
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        // Both writes must land: the ancestor (real scrollable) AND the host
+        // (back-compat for layouts where the host itself is scrollable).
+        expect(wrapperScrollTop).toBe(expectedPageTop);
+        expect(hostScrollTop).toBe(expectedPageTop);
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+        getComputedStyleSpy.mockRestore();
+        // Restore DOM layout so the outer afterEach can clean up normally.
+        if (scrollableWrapper.parentNode) {
+          document.body.removeChild(scrollableWrapper);
+        }
+        document.body.appendChild(container);
+      }
+    });
   });
 
   describe('setDocumentMode', () => {

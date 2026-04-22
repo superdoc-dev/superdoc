@@ -101,11 +101,13 @@ export const createRulerExecute =
 export const createZoomExecute =
   () =>
   ({ superdoc, payload }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
-    if (typeof payload !== 'number' || payload <= 0) {
+    const normalizedPayload = Number.parseInt(String(payload), 10);
+
+    if (!Number.isFinite(normalizedPayload) || normalizedPayload <= 0) {
       return false;
     }
 
-    superdoc.setZoom?.(payload);
+    superdoc.setZoom?.(normalizedPayload);
     return true;
   };
 
@@ -113,16 +115,17 @@ export const createDocumentModeExecute =
   () =>
   ({ superdoc, payload }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
     const validModes = ['editing', 'suggesting', 'viewing'];
+    const normalizedPayload = typeof payload === 'string' ? payload.toLowerCase() : payload;
 
     if (
       typeof superdoc?.setDocumentMode !== 'function' ||
-      typeof payload !== 'string' ||
-      !validModes.includes(payload)
+      typeof normalizedPayload !== 'string' ||
+      !validModes.includes(normalizedPayload)
     ) {
       return false;
     }
 
-    superdoc.setDocumentMode(payload);
+    superdoc.setDocumentMode(normalizedPayload);
 
     return true;
   };

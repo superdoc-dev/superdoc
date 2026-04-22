@@ -139,6 +139,7 @@ describe('updateToolbarState', () => {
         activate: vi.fn(),
         deactivate: vi.fn(),
         setDisabled: vi.fn(),
+        label: { value: '' },
         allowWithoutEditor: { value: false },
       },
       {
@@ -206,7 +207,11 @@ describe('updateToolbarState', () => {
     ];
 
     toolbar.activeEditor = mockEditor;
-    toolbar.documentMode = 'editing';
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+      },
+    };
   });
 
   afterEach(() => {
@@ -230,7 +235,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should sync to suggesting mode', () => {
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -240,7 +245,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should sync to editing mode', () => {
-      toolbar.documentMode = 'editing';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'editing' } } };
 
       toolbar.updateToolbarState();
 
@@ -250,7 +255,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should sync to viewing mode', () => {
-      toolbar.documentMode = 'viewing';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'viewing' } } };
 
       toolbar.updateToolbarState();
 
@@ -260,7 +265,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should default to editing when documentMode is null', () => {
-      toolbar.documentMode = null;
+      toolbar.snapshot = { commands: { 'document-mode': { value: null } } };
 
       toolbar.updateToolbarState();
 
@@ -269,7 +274,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should default to editing when documentMode is undefined', () => {
-      toolbar.documentMode = undefined;
+      toolbar.snapshot = { commands: { 'document-mode': { value: undefined } } };
 
       toolbar.updateToolbarState();
 
@@ -278,7 +283,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should default to editing when documentMode is an unknown value', () => {
-      toolbar.documentMode = 'unknown-mode';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'unknown-mode' } } };
 
       toolbar.updateToolbarState();
 
@@ -287,7 +292,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should handle uppercase mode values via toLowerCase', () => {
-      toolbar.documentMode = 'SUGGESTING';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'SUGGESTING' } } };
 
       toolbar.updateToolbarState();
 
@@ -296,7 +301,7 @@ describe('updateToolbarState', () => {
     });
 
     it('should handle mixed case mode values', () => {
-      toolbar.documentMode = 'Viewing';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'Viewing' } } };
 
       toolbar.updateToolbarState();
 
@@ -306,7 +311,7 @@ describe('updateToolbarState', () => {
 
     it('should use custom config.texts labels when provided', () => {
       toolbar.config.texts.documentSuggestingMode = 'Custom Suggesting Label';
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -319,7 +324,7 @@ describe('updateToolbarState', () => {
       documentModeItem.icon.value = originalIcon;
       toolbar.config.icons.documentSuggestingMode = undefined;
       toolbar.config.icons.documentMode = undefined;
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -331,7 +336,7 @@ describe('updateToolbarState', () => {
       const fallbackIcon = { type: 'fallback-icon' };
       toolbar.config.icons.documentEditingMode = undefined;
       toolbar.config.icons.documentMode = fallbackIcon;
-      toolbar.documentMode = 'editing';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'editing' } } };
 
       toolbar.updateToolbarState();
 
@@ -340,14 +345,14 @@ describe('updateToolbarState', () => {
 
     it('should not throw when documentModeItem is missing from toolbar', () => {
       toolbar.toolbarItems = [];
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       expect(() => toolbar.updateToolbarState()).not.toThrow();
     });
 
     it('should not update label when label.value is undefined', () => {
       documentModeItem.label = {};
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -357,7 +362,7 @@ describe('updateToolbarState', () => {
 
     it('should not update defaultLabel when defaultLabel.value is undefined', () => {
       documentModeItem.defaultLabel = {};
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -367,7 +372,7 @@ describe('updateToolbarState', () => {
 
     it('should not update icon when icon.value is undefined', () => {
       documentModeItem.icon = {};
-      toolbar.documentMode = 'suggesting';
+      toolbar.snapshot = { commands: { 'document-mode': { value: 'suggesting' } } };
 
       toolbar.updateToolbarState();
 
@@ -375,30 +380,31 @@ describe('updateToolbarState', () => {
     });
   });
 
-  it('should update toolbar state with active formatting marks', () => {
-    mockGetActiveFormatting.mockReturnValue([
-      { name: 'bold', attrs: {} },
-      { name: 'italic', attrs: {} },
-    ]);
-
-    mockIsInTable.mockReturnValue(false);
-    mockGetQuickFormatList.mockReturnValue(['style1', 'style2']);
+  it('should update toolbar state from headless command state', () => {
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        bold: { active: true, disabled: false },
+        italic: { active: true, disabled: false },
+      },
+    };
 
     toolbar.updateToolbarState();
 
     expect(toolbar.toolbarItems[0].resetDisabled).toHaveBeenCalled();
-    expect(toolbar.toolbarItems[0].activate).toHaveBeenCalledWith({}); // bold
+    expect(toolbar.toolbarItems[0].activate).toHaveBeenCalledWith(); // bold
     expect(toolbar.toolbarItems[1].resetDisabled).toHaveBeenCalled();
-    expect(toolbar.toolbarItems[1].activate).toHaveBeenCalledWith({}); // italic
-
-    expect(mockGetActiveFormatting).toHaveBeenCalledWith(mockEditor);
+    expect(toolbar.toolbarItems[1].activate).toHaveBeenCalledWith(); // italic
   });
 
-  it('should keep toggles inactive when negation marks are active', () => {
-    mockGetActiveFormatting.mockReturnValue([
-      { name: 'bold', attrs: { value: '0' } },
-      { name: 'underline', attrs: { underlineType: 'none' } },
-    ]);
+  it('should keep toggles inactive when commands are inactive', () => {
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        bold: { active: false, disabled: false },
+        underline: { active: false, disabled: false },
+      },
+    };
 
     toolbar.updateToolbarState();
 
@@ -411,34 +417,31 @@ describe('updateToolbarState', () => {
     expect(underlineItem.deactivate).toHaveBeenCalled();
   });
 
-  it('should not reactivate via linked styles when a negation mark is present', () => {
-    mockGetActiveFormatting.mockReturnValue([
-      { name: 'bold', attrs: { value: '0' } },
-      { name: 'styleId', attrs: { styleId: 'style-1' } },
-    ]);
-
-    mockEditor.converter.linkedStyles = [
-      {
-        id: 'style-1',
-        definition: { styles: { bold: { value: true } } },
+  it('should reset linked styles label when there is no active linked style', () => {
+    const linkedStylesItem = toolbar.toolbarItems.find((item) => item.name.value === 'linkedStyles');
+    linkedStylesItem.label.value = 'Some Style';
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'linked-style': { value: null, disabled: false },
       },
-    ];
+    };
 
     toolbar.updateToolbarState();
 
-    const boldItem = toolbar.toolbarItems.find((item) => item.name.value === 'bold');
-    expect(boldItem.activate).not.toHaveBeenCalled();
-    expect(boldItem.deactivate).toHaveBeenCalled();
+    expect(linkedStylesItem.label.value).toBe(toolbar.config.texts?.formatText || 'Format text');
   });
 
-  it('disables tracked change buttons when permission resolver denies access', () => {
-    mockGetActiveFormatting.mockReturnValue([]);
-    mockCollectTrackedChanges.mockReturnValue([{ id: 'change-1', attrs: { authorEmail: 'author@example.com' } }]);
-    mockIsTrackedChangeActionAllowed.mockImplementation(({ action }) => action === 'reject');
+  it('disables tracked change buttons from headless command state', () => {
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'track-changes-accept-selection': { active: false, disabled: true },
+        'track-changes-reject-selection': { active: false, disabled: false },
+      },
+    };
 
     toolbar.updateToolbarState();
-
-    expect(mockCollectTrackedChanges).toHaveBeenCalled();
 
     const acceptItem = toolbar.toolbarItems.find((item) => item.name.value === 'acceptTrackedChangeBySelection');
     const rejectItem = toolbar.toolbarItems.find((item) => item.name.value === 'rejectTrackedChangeOnSelection');
@@ -447,9 +450,14 @@ describe('updateToolbarState', () => {
     expect(rejectItem.setDisabled).toHaveBeenCalledWith(false);
   });
 
-  it('disables tracked change buttons when there are no tracked changes in selection', () => {
-    mockGetActiveFormatting.mockReturnValue([]);
-    mockCollectTrackedChanges.mockReturnValue([]);
+  it('disables both tracked change buttons when both headless commands are disabled', () => {
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'track-changes-accept-selection': { active: false, disabled: true },
+        'track-changes-reject-selection': { active: false, disabled: true },
+      },
+    };
 
     toolbar.updateToolbarState();
 
@@ -460,11 +468,14 @@ describe('updateToolbarState', () => {
     expect(rejectItem.setDisabled).toHaveBeenCalledWith(true);
   });
 
-  it('keeps tracked change buttons enabled for collapsed selection within change', () => {
-    mockEditor.state.selection.from = 5;
-    mockEditor.state.selection.to = 5;
-    mockCollectTrackedChanges.mockReturnValue([{ id: 'change-1', attrs: { authorEmail: 'author@example.com' } }]);
-    mockGetActiveFormatting.mockReturnValue([]);
+  it('keeps tracked change buttons enabled when headless commands are enabled', () => {
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'track-changes-accept-selection': { active: false, disabled: false },
+        'track-changes-reject-selection': { active: false, disabled: false },
+      },
+    };
 
     toolbar.updateToolbarState();
 
@@ -486,7 +497,7 @@ describe('updateToolbarState', () => {
   });
 
   it('should deactivate toolbar items when in viewing mode', () => {
-    toolbar.documentMode = 'viewing';
+    toolbar.snapshot = { commands: { 'document-mode': { value: 'viewing' } } };
 
     toolbar.updateToolbarState();
 
@@ -507,17 +518,12 @@ describe('updateToolbarState', () => {
   });
 
   it('should prioritize active mark over linked styles (font family)', () => {
-    mockGetActiveFormatting.mockReturnValue([
-      { name: 'fontFamily', attrs: { fontFamily: 'Roboto' } },
-      { name: 'styleId', attrs: { styleId: 'test-style' } },
-    ]);
-
-    mockEditor.converter.linkedStyles = [
-      {
-        id: 'test-style',
-        definition: { styles: { 'font-family': 'Arial' } },
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'font-family': { value: 'Roboto', disabled: false },
       },
-    ];
+    };
 
     toolbar.updateToolbarState();
 
@@ -540,7 +546,7 @@ describe('updateToolbarState', () => {
     mockCalculateResolvedParagraphProperties.mockReturnValue({
       runProperties: { fontFamily: { 'w:ascii': paragraphFontFamily } },
     });
-    mockGetActiveFormatting.mockReturnValue([]);
+    toolbar.snapshot = { commands: { 'document-mode': { value: 'editing' } } };
 
     toolbar.updateToolbarState();
 
@@ -562,7 +568,7 @@ describe('updateToolbarState', () => {
     mockCalculateResolvedParagraphProperties.mockReturnValue({
       runProperties: { fontFamily: { 'w:ascii': 'Never Used' } },
     });
-    mockGetActiveFormatting.mockReturnValue([]);
+    toolbar.snapshot = { commands: { 'document-mode': { value: 'editing' } } };
 
     toolbar.updateToolbarState();
 
@@ -584,13 +590,12 @@ describe('updateToolbarState', () => {
       styleId: 'test-style',
       runProperties: { fontFamily: { 'w:ascii': 'Paragraph Font, serif' } },
     });
-    mockEditor.converter.linkedStyles = [
-      {
-        id: 'test-style',
-        definition: { styles: { 'font-family': 'Linked Style Font' } },
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'font-family': { value: 'Linked Style Font', disabled: false },
       },
-    ];
-    mockGetActiveFormatting.mockReturnValue([]);
+    };
 
     toolbar.updateToolbarState();
 
@@ -600,31 +605,21 @@ describe('updateToolbarState', () => {
   });
 
   it('should prioritize active mark over linked styles (font size)', () => {
-    mockGetActiveFormatting.mockReturnValue([
-      { name: 'fontSize', attrs: { fontSize: '20pt' } },
-      { name: 'styleId', attrs: { styleId: 'test-style' } },
-    ]);
-
-    mockEditor.converter.linkedStyles = [
-      {
-        id: 'test-style',
-        definition: { styles: { 'font-size': '14pt' } },
+    toolbar.snapshot = {
+      commands: {
+        'document-mode': { value: 'editing' },
+        'font-size': { value: '20pt', disabled: false },
       },
-    ];
+    };
 
     toolbar.updateToolbarState();
 
     const fontSizeItem = toolbar.toolbarItems.find((item) => item.name.value === 'fontSize');
-    expect(fontSizeItem.activate).toHaveBeenCalledWith({ fontSize: '20pt' }, false);
-    expect(fontSizeItem.activate).not.toHaveBeenCalledWith({ fontSize: '14pt' });
+    expect(fontSizeItem.activate).toHaveBeenCalledWith({ fontSize: '20pt' });
   });
 
   describe('undo/redo button state', () => {
-    it('should disable undo button when undoDepth is 0', async () => {
-      const { undoDepth: mockUndoDepth, redoDepth: mockRedoDepth } = await import('prosemirror-history');
-      mockUndoDepth.mockReturnValue(0);
-      mockRedoDepth.mockReturnValue(0);
-
+    it('should disable undo button when undo command is disabled', () => {
       const undoItem = {
         name: { value: 'undo' },
         resetDisabled: vi.fn(),
@@ -636,18 +631,19 @@ describe('updateToolbarState', () => {
 
       toolbar.toolbarItems = [undoItem];
       toolbar.activeEditor = mockEditor;
-      mockGetActiveFormatting.mockReturnValue([]);
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          undo: { active: false, disabled: true },
+        },
+      };
 
       toolbar.updateToolbarState();
 
       expect(undoItem.setDisabled).toHaveBeenCalledWith(true);
     });
 
-    it('should enable undo button when undoDepth is greater than 0', async () => {
-      const { undoDepth: mockUndoDepth, redoDepth: mockRedoDepth } = await import('prosemirror-history');
-      mockUndoDepth.mockReturnValue(3);
-      mockRedoDepth.mockReturnValue(0);
-
+    it('should enable undo button when undo command is enabled', () => {
       const undoItem = {
         name: { value: 'undo' },
         resetDisabled: vi.fn(),
@@ -659,18 +655,19 @@ describe('updateToolbarState', () => {
 
       toolbar.toolbarItems = [undoItem];
       toolbar.activeEditor = mockEditor;
-      mockGetActiveFormatting.mockReturnValue([]);
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          undo: { active: false, disabled: false },
+        },
+      };
 
       toolbar.updateToolbarState();
 
       expect(undoItem.setDisabled).toHaveBeenCalledWith(false);
     });
 
-    it('should disable redo button when redoDepth is 0', async () => {
-      const { undoDepth: mockUndoDepth, redoDepth: mockRedoDepth } = await import('prosemirror-history');
-      mockUndoDepth.mockReturnValue(0);
-      mockRedoDepth.mockReturnValue(0);
-
+    it('should disable redo button when redo command is disabled', () => {
       const redoItem = {
         name: { value: 'redo' },
         resetDisabled: vi.fn(),
@@ -682,18 +679,19 @@ describe('updateToolbarState', () => {
 
       toolbar.toolbarItems = [redoItem];
       toolbar.activeEditor = mockEditor;
-      mockGetActiveFormatting.mockReturnValue([]);
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          redo: { active: false, disabled: true },
+        },
+      };
 
       toolbar.updateToolbarState();
 
       expect(redoItem.setDisabled).toHaveBeenCalledWith(true);
     });
 
-    it('should enable redo button when redoDepth is greater than 0', async () => {
-      const { undoDepth: mockUndoDepth, redoDepth: mockRedoDepth } = await import('prosemirror-history');
-      mockUndoDepth.mockReturnValue(0);
-      mockRedoDepth.mockReturnValue(2);
-
+    it('should enable redo button when redo command is enabled', () => {
       const redoItem = {
         name: { value: 'redo' },
         resetDisabled: vi.fn(),
@@ -705,18 +703,19 @@ describe('updateToolbarState', () => {
 
       toolbar.toolbarItems = [redoItem];
       toolbar.activeEditor = mockEditor;
-      mockGetActiveFormatting.mockReturnValue([]);
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          redo: { active: false, disabled: false },
+        },
+      };
 
       toolbar.updateToolbarState();
 
       expect(redoItem.setDisabled).toHaveBeenCalledWith(false);
     });
 
-    it('should update both undo and redo buttons correctly', async () => {
-      const { undoDepth: mockUndoDepth, redoDepth: mockRedoDepth } = await import('prosemirror-history');
-      mockUndoDepth.mockReturnValue(5);
-      mockRedoDepth.mockReturnValue(0);
-
+    it('should update both undo and redo buttons correctly from snapshot', () => {
       const undoItem = {
         name: { value: 'undo' },
         resetDisabled: vi.fn(),
@@ -737,12 +736,185 @@ describe('updateToolbarState', () => {
 
       toolbar.toolbarItems = [undoItem, redoItem];
       toolbar.activeEditor = mockEditor;
-      mockGetActiveFormatting.mockReturnValue([]);
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          undo: { active: false, disabled: false },
+          redo: { active: false, disabled: true },
+        },
+      };
 
       toolbar.updateToolbarState();
 
       expect(undoItem.setDisabled).toHaveBeenCalledWith(false);
       expect(redoItem.setDisabled).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('headless state adapter branches', () => {
+    const buildItem = (name, extras = {}) => ({
+      name: { value: name },
+      resetDisabled: vi.fn(),
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      setDisabled: vi.fn(),
+      allowWithoutEditor: { value: false },
+      ...extras,
+    });
+
+    it('activates textAlign with snapshot value and deactivates when null', () => {
+      const item = buildItem('textAlign');
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-align': { value: 'center', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ textAlign: 'center' });
+
+      item.activate.mockClear();
+      item.deactivate.mockClear();
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-align': { value: null, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).not.toHaveBeenCalled();
+      expect(item.deactivate).toHaveBeenCalled();
+    });
+
+    it('sets lineHeight selectedValue from snapshot value', () => {
+      const item = buildItem('lineHeight', { selectedValue: { value: '' } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'line-height': { value: '1.5', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.selectedValue.value).toBe('1.5');
+    });
+
+    it('formats numeric zoom value as a percentage string for the dropdown', () => {
+      const item = buildItem('zoom', { onActivate: vi.fn() });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          zoom: { value: 150, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.onActivate).toHaveBeenCalledWith({ zoom: '150%' });
+    });
+
+    it('sets link active and href attributes from snapshot', () => {
+      const item = buildItem('link', {
+        active: { value: false },
+        attributes: { value: {} },
+      });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          link: { active: true, value: 'https://example.com', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.active.value).toBe(true);
+      expect(item.attributes.value).toEqual({ href: 'https://example.com' });
+    });
+
+    it('activates color with snapshot value and deactivates when null', () => {
+      const item = buildItem('color');
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'text-color': { value: '#ff0000', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ color: '#ff0000' });
+    });
+
+    it('activates highlight with snapshot value and deactivates when null', () => {
+      const item = buildItem('highlight', { nestedOptions: { value: [] } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'highlight-color': { value: '#ffff00', disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({ color: '#ffff00' });
+    });
+
+    it('activates fontSize with isMultiple flag when snapshot reports active without a value (mixed selection)', () => {
+      const item = buildItem('fontSize', { defaultLabel: { value: '' } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'font-size': { active: true, value: null, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({}, true);
+    });
+
+    it('disables tableActions when every table command is disabled', () => {
+      const item = buildItem('tableActions', { disabled: { value: false } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'table-add-row-before': { disabled: true },
+          'table-add-row-after': { disabled: true },
+          'table-delete-row': { disabled: true },
+          'table-add-column-before': { disabled: true },
+          'table-add-column-after': { disabled: true },
+          'table-delete-column': { disabled: true },
+          'table-delete': { disabled: true },
+          'table-remove-borders': { disabled: true },
+          'table-merge-cells': { disabled: true },
+          'table-split-cell': { disabled: true },
+          'table-fix': { disabled: true },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.setDisabled).toHaveBeenCalledWith(true);
+    });
+
+    it('enables tableActions when at least one table command is enabled', () => {
+      const item = buildItem('tableActions', { disabled: { value: false } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'table-add-row-before': { disabled: true },
+          'table-add-row-after': { disabled: false },
+          'table-delete-row': { disabled: true },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.setDisabled).toHaveBeenCalledWith(false);
     });
   });
 });

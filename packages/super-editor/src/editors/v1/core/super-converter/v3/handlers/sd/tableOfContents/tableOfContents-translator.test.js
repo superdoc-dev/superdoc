@@ -114,29 +114,26 @@ describe('sd:tableOfContents translator', () => {
       });
     });
 
-    it('does not wrap when content already contains paragraph blocks', () => {
+    it('wraps mixed paragraph and inline children so every child is a paragraph', () => {
       const mockNodeListHandler = {
         handler: vi.fn(() => [
-          { type: 'paragraph', content: [{ type: 'text', text: 'Para' }] },
-          { type: 'text', text: 'trailing inline' },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Entry 1' }] },
+          { type: 'text', text: 'stray inline' },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Entry 2' }] },
         ]),
       };
       const params = {
-        nodes: [
-          {
-            name: 'sd:tableOfContents',
-            attributes: { instruction: 'TOC \\o "1-3"' },
-            elements: [{ name: 'w:p', elements: [] }],
-          },
-        ],
+        nodes: [{ name: 'sd:tableOfContents', attributes: { instruction: 'TOC' }, elements: [{ name: 'w:r' }] }],
         nodeListHandler: mockNodeListHandler,
       };
 
       const result = config.encode(params);
-      expect(result.content).toEqual([
-        { type: 'paragraph', content: [{ type: 'text', text: 'Para' }] },
-        { type: 'text', text: 'trailing inline' },
-      ]);
+      expect(result.content).toHaveLength(3);
+      expect(result.content.every((child) => child.type === 'paragraph')).toBe(true);
+      expect(result.content[1]).toEqual({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'stray inline' }],
+      });
     });
 
     it('filters out null and typeless children when wrapping', () => {

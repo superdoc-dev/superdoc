@@ -5,6 +5,7 @@
 [![Documentation](https://img.shields.io/badge/docs-available-1355ff.svg)](https://docs.superdoc.dev/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![npm version](https://img.shields.io/npm/v/superdoc.svg?color=1355ff)](https://www.npmjs.com/package/superdoc)
+[![codecov](https://codecov.io/gh/superdoc-dev/superdoc/branch/main/graph/badge.svg)](https://codecov.io/gh/superdoc-dev/superdoc)
 [![Discord](https://img.shields.io/badge/discord-join-1355ff)](https://discord.com/invite/b9UuaZRyaB)
 
 SuperDoc renders and edits DOCX files in the browser. Built on OOXML — not bolted onto HTML. As you type, you write directly to the XML. Import a document, edit it, export it. Nothing lost.

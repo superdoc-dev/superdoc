@@ -1,0 +1,5 @@
+name = "superdoc-document-styling"
+pages_build_output_dir = "dist"
+
+[env.production]
+name = "superdoc-document-styling"

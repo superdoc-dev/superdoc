@@ -19,6 +19,8 @@ import type {
   SectionMetadata,
   Fragment,
   ResolvedHeaderFooterLayout,
+  ResolvedLayout,
+  ResolvedPage,
 } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
@@ -234,6 +236,9 @@ export class HeaderFooterSessionManager {
   // Decoration providers
   #headerDecorationProvider: PageDecorationProvider | undefined;
   #footerDecorationProvider: PageDecorationProvider | undefined;
+
+  // Cached resolved layout (used to supply ResolvedPage to providers & regions)
+  #currentResolvedLayout: ResolvedLayout | null = null;
 
   // Region tracking
   #headerRegions: Map<number, HeaderFooterRegion> = new Map();
@@ -548,21 +553,28 @@ export class HeaderFooterSessionManager {
     const defaultMargins = this.#options.defaultMargins;
 
     layout.pages.forEach((page, pageIndex) => {
+      const resolvedPage = this.#currentResolvedLayout?.pages[pageIndex] ?? null;
       const margins = page.margins ?? layoutOptions.margins ?? defaultMargins;
-      const actualPageHeight = page.size?.h ?? pageHeight;
+      const actualPageHeight = resolvedPage?.height ?? page.size?.h ?? pageHeight;
       const sectionIndex = page.sectionIndex ?? 0;
       const sectionId = sectionIdBySectionIndex.get(sectionIndex) ?? `section-${sectionIndex}`;
 
       // Header region
-      const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
+      const headerPayload = this.#headerDecorationProvider?.(page.number, margins, resolvedPage ?? undefined);
       const headerBox = this.#computeDecorationBox('header', margins, actualPageHeight);
       const displayPageNumber = page.numberText ?? String(page.number);
+
+      // Minimal ResolvedPage for sectionType helper when a matching resolved
+      // page is unavailable (falls back to values from the Layout Page).
+      const resolvedForSectionType: ResolvedPage =
+        resolvedPage ?? ({ number: page.number, sectionIndex: page.sectionIndex } as ResolvedPage);
 
       this.#headerRegions.set(pageIndex, {
         kind: 'header',
         headerFooterRefId: headerPayload?.headerFooterRefId,
         sectionType:
-          headerPayload?.sectionType ?? this.#computeExpectedSectionType('header', page, sectionFirstPageNumbers),
+          headerPayload?.sectionType ??
+          this.#computeExpectedSectionType('header', resolvedForSectionType, sectionFirstPageNumbers),
         sectionId,
         sectionIndex,
         pageIndex,
@@ -575,14 +587,15 @@ export class HeaderFooterSessionManager {
       });
 
       // Footer region
-      const footerPayload = this.#footerDecorationProvider?.(page.number, margins, page);
-      const footerBoxMargins = this.#stripFootnoteReserveFromBottomMargin(margins, page);
+      const footerPayload = this.#footerDecorationProvider?.(page.number, margins, resolvedPage ?? undefined);
+      const footerBoxMargins = this.#stripFootnoteReserveFromBottomMargin(margins, resolvedPage);
       const footerBox = this.#computeDecorationBox('footer', footerBoxMargins, actualPageHeight);
       this.#footerRegions.set(pageIndex, {
         kind: 'footer',
         headerFooterRefId: footerPayload?.headerFooterRefId,
         sectionType:
-          footerPayload?.sectionType ?? this.#computeExpectedSectionType('footer', page, sectionFirstPageNumbers),
+          footerPayload?.sectionType ??
+          this.#computeExpectedSectionType('footer', resolvedForSectionType, sectionFirstPageNumbers),
         sectionId,
         sectionIndex,
         pageIndex,
@@ -1370,11 +1383,11 @@ export class HeaderFooterSessionManager {
 
   #computeExpectedSectionType(
     kind: 'header' | 'footer',
-    page: Page,
+    resolvedPage: ResolvedPage,
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
-    const pageNumber = page.number;
-    const sectionIndex = page.sectionIndex ?? 0;
+    const pageNumber = resolvedPage.number;
+    const sectionIndex = resolvedPage.sectionIndex ?? 0;
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
 
@@ -1392,17 +1405,17 @@ export class HeaderFooterSessionManager {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      return page.number % 2 === 0 ? 'even' : 'odd';
+      return pageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
 
   #stripFootnoteReserveFromBottomMargin(
     margins: HeaderFooterLayoutOptions['margins'],
-    page: Page,
+    resolvedPage: ResolvedPage | null,
   ): HeaderFooterLayoutOptions['margins'] {
     // Note: property is 'footnoteReserved' (with 'd') as defined in @superdoc/contracts
-    const footnoteReserved = page.footnoteReserved ?? 0;
+    const footnoteReserved = resolvedPage?.footnoteReserved ?? 0;
     if (footnoteReserved <= 0) return margins;
 
     const currentBottom = margins?.bottom ?? this.#options.defaultMargins.bottom ?? 0;
@@ -1608,7 +1621,8 @@ export class HeaderFooterSessionManager {
    * Update decoration providers for header and footer.
    * Creates new providers based on layout results and sets them on this manager.
    */
-  updateDecorationProviders(layout: Layout): void {
+  updateDecorationProviders(layout: Layout, resolvedLayout: ResolvedLayout): void {
+    this.#currentResolvedLayout = resolvedLayout;
     this.#headerDecorationProvider = this.createDecorationProvider('header', layout);
     this.#footerDecorationProvider = this.createDecorationProvider('footer', layout);
     this.rebuildRegions(layout);
@@ -1645,8 +1659,8 @@ export class HeaderFooterSessionManager {
       }
     }
 
-    return (pageNumber, pageMargins, page) => {
-      const sectionIndex = page?.sectionIndex ?? 0;
+    return (pageNumber, pageMargins, resolvedPage) => {
+      const sectionIndex = resolvedPage?.sectionIndex ?? 0;
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
@@ -1656,23 +1670,25 @@ export class HeaderFooterSessionManager {
 
       // Resolve section-specific rId using Word's OOXML inheritance model
       let sectionRId: string | undefined;
-      if (page?.sectionRefs && kind === 'header') {
-        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
+      if (resolvedPage?.sectionRefs && kind === 'header') {
+        sectionRId =
+          resolvedPage.sectionRefs.headerRefs?.[headerFooterType as keyof typeof resolvedPage.sectionRefs.headerRefs];
         if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
         if (!sectionRId && headerFooterType !== 'default') {
-          sectionRId = page.sectionRefs.headerRefs?.default;
+          sectionRId = resolvedPage.sectionRefs.headerRefs?.default;
         }
-      } else if (page?.sectionRefs && kind === 'footer') {
-        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
+      } else if (resolvedPage?.sectionRefs && kind === 'footer') {
+        sectionRId =
+          resolvedPage.sectionRefs.footerRefs?.[headerFooterType as keyof typeof resolvedPage.sectionRefs.footerRefs];
         if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
         if (!sectionRId && headerFooterType !== 'default') {
-          sectionRId = page.sectionRefs.footerRefs?.default;
+          sectionRId = resolvedPage.sectionRefs.footerRefs?.default;
         }
       }
 
@@ -1705,10 +1721,11 @@ export class HeaderFooterSessionManager {
               );
             }
             const alignedItems = resolvedItems && resolvedItems.length === fragments.length ? resolvedItems : undefined;
-            const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+            const pageHeight =
+              resolvedPage?.height ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
-              kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
+              kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, resolvedPage ?? null) : margins;
             const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
 
             // When a table grid width exceeds the section content width, the layout
@@ -1768,10 +1785,10 @@ export class HeaderFooterSessionManager {
       const alignedVariantItems =
         resolvedVariantItems && resolvedVariantItems.length === fragments.length ? resolvedVariantItems : undefined;
 
-      const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+      const pageHeight = resolvedPage?.height ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
       const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
       const decorationMargins =
-        kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
+        kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, resolvedPage ?? null) : margins;
       const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
 
       const rawLayoutHeight = variant.layout.height ?? 0;

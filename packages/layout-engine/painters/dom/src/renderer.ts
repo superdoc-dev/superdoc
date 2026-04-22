@@ -271,13 +271,13 @@ export type PageDecorationPayload = {
  *
  * @param {number} pageNumber - The page number (1-indexed)
  * @param {PageMargins} [pageMargins] - Page margin configuration
- * @param {Page} [page] - Full page object from the layout
+ * @param {ResolvedPage} [resolvedPage] - Resolved page from the layout
  * @returns {PageDecorationPayload | null} Decoration payload containing fragments and layout info, or null if no decoration
  */
 export type PageDecorationProvider = (
   pageNumber: number,
   pageMargins?: PageMargins,
-  page?: Page,
+  resolvedPage?: ResolvedPage,
 ) => PageDecorationPayload | null;
 
 /**
@@ -2307,8 +2307,9 @@ export class DomPainter {
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
     const existing = pageEl.querySelector(`.${className}`);
-    // Provider still receives legacy page — its signature is not changed in this PR
-    const data = provider ? provider(page.number, page.margins, page) : null;
+    const data = provider
+      ? provider(resolvedPage?.number ?? page.number, resolvedPage?.margins ?? page.margins, resolvedPage ?? undefined)
+      : null;
 
     if (!data || data.fragments.length === 0) {
       existing?.remove();

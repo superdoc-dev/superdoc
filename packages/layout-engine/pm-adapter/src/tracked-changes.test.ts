@@ -745,7 +745,15 @@ describe('tracked-changes', () => {
       const applyMarksToRun = vi.fn();
 
       applyFormatChangeMarks(run, config, hyperlinkConfig, applyMarksToRun);
-      expect(applyMarksToRun).toHaveBeenCalledWith(run, beforeMarks, hyperlinkConfig, undefined, undefined, true);
+      expect(applyMarksToRun).toHaveBeenCalledWith(
+        run,
+        beforeMarks,
+        hyperlinkConfig,
+        undefined,
+        undefined,
+        true,
+        undefined,
+      );
     });
 
     it('should handle errors in applyMarksToRun by resetting formatting', () => {

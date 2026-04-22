@@ -321,6 +321,105 @@ describe('CommentDialog.vue', () => {
     );
   });
 
+  it('navigates tracked changes with story metadata through PresentationEditor', async () => {
+    const presentation = {
+      navigateTo: vi.fn().mockResolvedValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const trackedChangeStory = { kind: 'story', storyType: 'footnote', noteId: '1' };
+
+    await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tracked-change-story-1',
+        importedId: 'imported-tracked-change-story-1',
+        trackedChange: true,
+        trackedChangeStory,
+      },
+    });
+
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-story-1',
+      story: trackedChangeStory,
+    });
+  });
+
+  it('falls back to setCursorById for resolved tracked changes when PresentationEditor navigation is unavailable', async () => {
+    PresentationEditor.getInstance.mockReturnValue({});
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-resolved-1',
+        importedId: 'imported-tracked-change-resolved-1',
+        trackedChange: true,
+        resolvedTime: Date.now(),
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith('tracked-change-resolved-1');
+    expect(superdocStub.activeEditor.commands.setActiveComment).not.toHaveBeenCalled();
+  });
+
+  it('activates the tracked-change bubble when cursor placement fallback fails', async () => {
+    PresentationEditor.getInstance.mockReturnValue({});
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-fallback-1',
+        importedId: 'imported-tracked-change-fallback-1',
+        trackedChange: true,
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockReturnValue(false);
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    superdocStub.activeEditor.commands.setActiveComment.mockClear();
+
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(
+      'imported-tracked-change-fallback-1',
+      {
+        activeCommentId: 'tracked-change-fallback-1',
+      },
+    );
+    expect(superdocStub.activeEditor.commands.setActiveComment).toHaveBeenCalledWith({
+      commentId: 'tracked-change-fallback-1',
+    });
+  });
+
+  it('activates the comment thread when non-tracked cursor placement fallback fails', async () => {
+    PresentationEditor.getInstance.mockReturnValue(null);
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'comment-fallback-1',
+        trackedChange: false,
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockReturnValue(false);
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    superdocStub.activeEditor.commands.setActiveComment.mockClear();
+
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith('comment-fallback-1', {
+      activeCommentId: 'comment-fallback-1',
+    });
+    expect(superdocStub.activeEditor.commands.setActiveComment).toHaveBeenCalledWith({
+      commentId: 'comment-fallback-1',
+    });
+  });
+
   it('prefers the actual visible highlight top after the scroll attempt', async () => {
     const presentation = {
       getReachableThreadAnchorClientY: vi.fn().mockReturnValue(274),

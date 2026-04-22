@@ -51,6 +51,23 @@ describe('SuperComments', () => {
     expect(instance.app.config.globalProperties.$pinia).toBe(pinia);
   });
 
+  it('inherits parent app provides when mounting inside an existing SuperDoc app', () => {
+    const parentProvides = { theme: 'shared-theme' };
+    const instance = new SuperComments(
+      { element },
+      {
+        ...superdocStub,
+        app: {
+          _context: {
+            provides: parentProvides,
+          },
+        },
+      },
+    );
+
+    expect(Object.getPrototypeOf(instance.app._context.provides)).toBe(parentProvides);
+  });
+
   it('resolves element via selector when no element is provided', () => {
     const el = document.createElement('div');
     el.id = 'my-comments-host';

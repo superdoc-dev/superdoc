@@ -239,6 +239,31 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
   });
 
   describe('stale hidden-editor rerouting', () => {
+    it('does not double-forward layout-surface composing beforeinput when window fallback is enabled', () => {
+      const event = new InputEvent('beforeinput', {
+        data: 'e',
+        inputType: 'insertCompositionText',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'isComposing', { value: true, writable: false });
+
+      const forwardedEvents: string[] = [];
+      targetDom.addEventListener('beforeinput', () => {
+        forwardedEvents.push('beforeinput');
+      });
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      layoutSurface.dispatchEvent(event);
+
+      expect(forwardedEvents).toEqual(['beforeinput']);
+    });
+
     it('reroutes beforeinput from a stale hidden editor to the active target when window fallback is enabled', () => {
       const staleBodyEditor = document.createElement('div');
       staleBodyEditor.className = 'ProseMirror';

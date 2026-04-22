@@ -88,6 +88,9 @@ describe('tokenNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      true,
+      undefined,
     );
   });
 
@@ -106,6 +109,9 @@ describe('tokenNodeToRun', () => {
       {
         enableRichHyperlinks: false,
       },
+      undefined,
+      undefined,
+      true,
       undefined,
     );
   });
@@ -128,6 +134,9 @@ describe('tokenNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      true,
+      undefined,
     );
   });
 
@@ -145,6 +154,9 @@ describe('tokenNodeToRun', () => {
       expect.any(Object),
       expect.any(Array),
       hyperlinkConfig,
+      undefined,
+      undefined,
+      true,
       undefined,
     );
   });
@@ -198,6 +210,9 @@ describe('tokenNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      true,
+      undefined,
     );
   });
 
@@ -213,6 +228,9 @@ describe('tokenNodeToRun', () => {
       expect.any(Object),
       [],
       { enableRichHyperlinks: false },
+      undefined,
+      undefined,
+      true,
       undefined,
     );
   });
@@ -231,6 +249,9 @@ describe('tokenNodeToRun', () => {
       {
         enableRichHyperlinks: false,
       },
+      undefined,
+      undefined,
+      true,
       undefined,
     );
   });
@@ -260,6 +281,9 @@ describe('tokenNodeToRun', () => {
       expect.any(Object),
       [],
       { enableRichHyperlinks: false },
+      undefined,
+      undefined,
+      true,
       undefined,
     );
   });

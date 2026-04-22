@@ -694,6 +694,17 @@ describe('SuperDoc.vue', () => {
     expect(options.layoutEngineOptions.flowMode).toBe('paginated');
   });
 
+  it('passes useHiddenHostForStoryParts through to SuperEditor options', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.useHiddenHostForStoryParts = true;
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.useHiddenHostForStoryParts).toBe(true);
+  });
+
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -1300,6 +1311,78 @@ describe('SuperDoc.vue', () => {
     expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
     expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
     expect(getTrackedChangeIndexMock).toHaveBeenCalledWith(editor);
+  });
+
+  it('resyncs tracked-change comments from non-body tracked-changes-changed events', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+    const sourceEditor = { options: { documentId: 'header-doc' } };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'story-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: sourceEditor,
+    });
+
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'body-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('clears tracked-change positions for non-body tracked-change updates when viewing-mode comments are hidden', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ source: 'story-edit' });
+    expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('forwards header/footer presentation events through the public update callbacks', async () => {

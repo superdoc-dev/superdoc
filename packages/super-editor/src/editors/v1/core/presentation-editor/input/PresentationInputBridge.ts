@@ -1,6 +1,8 @@
 import { isInRegisteredSurface } from '../utils/uiSurfaceRegistry.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from '../../../components/context-menu/event-flags.js';
 
+const BRIDGE_FORWARDED_FLAG = Symbol('presentation-input-bridge-forwarded');
+
 export class PresentationInputBridge {
   #windowRoot: Window;
   #layoutSurfaces: Set<EventTarget>;
@@ -275,6 +277,9 @@ export class PresentationInputBridge {
    * @param event - The keyboard event from the layout surface
    */
   #forwardKeyboardEvent(event: KeyboardEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -290,6 +295,7 @@ export class PresentationInputBridge {
     if (this.#isPlainCharacterKey(event)) {
       return;
     }
+    this.#markForwardedByBridge(event);
 
     // Dispatch synchronously so browser defaults can still be prevented
     const synthetic = new KeyboardEvent(event.type, {
@@ -355,6 +361,9 @@ export class PresentationInputBridge {
    * @param event - The input event from the layout surface
    */
   #forwardTextEvent(event: InputEvent | TextEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -364,6 +373,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
+    this.#markForwardedByBridge(event);
 
     const dispatchSyntheticEvent = () => {
       // Only re-check mutable state - surface check was already done
@@ -435,6 +445,9 @@ export class PresentationInputBridge {
    * @param event - The composition event from the layout surface
    */
   #forwardCompositionEvent(event: CompositionEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -444,6 +457,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
+    this.#markForwardedByBridge(event);
 
     let synthetic: Event;
     if (typeof CompositionEvent !== 'undefined') {
@@ -505,6 +519,9 @@ export class PresentationInputBridge {
     if (handledByContextMenu) {
       return;
     }
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -514,6 +531,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
+    this.#markForwardedByBridge(event);
     const synthetic = new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
@@ -590,6 +608,14 @@ export class PresentationInputBridge {
     }
     const origin = event.target as EventTarget | null;
     return origin ? this.#layoutSurfaces.has(origin) : false;
+  }
+
+  #wasForwardedByBridge(event: Event): boolean {
+    return Boolean((event as Event & { [BRIDGE_FORWARDED_FLAG]?: boolean })[BRIDGE_FORWARDED_FLAG]);
+  }
+
+  #markForwardedByBridge(event: Event) {
+    (event as Event & { [BRIDGE_FORWARDED_FLAG]?: boolean })[BRIDGE_FORWARDED_FLAG] = true;
   }
 
   /**

@@ -206,6 +206,27 @@ describe('comments-store', () => {
     expect(store.getComment(undefined)).toBeNull();
   });
 
+  it('prefers tracked-change anchor keys for position lookup and alias resolution', () => {
+    const comment = {
+      commentId: 'tc-1',
+      importedId: 'import-1',
+      trackedChange: true,
+      trackedChangeAnchorKey: 'tc::body::tc-1',
+    };
+    store.commentsList = [comment];
+    store.editorCommentPositions = {
+      'tc::body::tc-1': { start: 10, end: 12 },
+    };
+
+    expect(store.getCommentPositionKey('tc-1')).toBe('tc::body::tc-1');
+    expect(store.getCommentPositionKey(comment)).toBe('tc::body::tc-1');
+    expect(store.getCommentAliasIds('tc-1')).toEqual(expect.arrayContaining(['tc-1', 'import-1', 'tc::body::tc-1']));
+
+    store.editorCommentPositions = {};
+    expect(store.getCommentPositionKey('tc-1')).toBe('tc::body::tc-1');
+    expect(store.getCommentPositionKey(comment)).toBe('tc::body::tc-1');
+  });
+
   it('sets active comment and updates the editor', () => {
     const setActiveCommentSpy = vi.fn();
     const superdoc = {
@@ -638,6 +659,91 @@ describe('comments-store', () => {
     expect(store.commentsList).toHaveLength(1);
     expect(store.commentsList[0].selection.source).toBe('super-editor');
     expect(store.commentsList[0].trackedChangeDisplayType).toBe('hyperlinkAdded');
+  });
+
+  it('applies story tracked-change metadata to created tracked-change comments', () => {
+    const superdoc = {
+      emit: vi.fn(),
+      config: { isInternal: false },
+    };
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'story-change-1',
+        trackedChangeText: 'Inserted text',
+        trackedChangeType: 'trackInsert',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: Date.now(),
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: { top: 10, left: 10, right: 20, bottom: 20 },
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId1' },
+        trackedChangeStoryKind: 'headerFooter',
+        trackedChangeStoryLabel: 'Header',
+        trackedChangeAnchorKey: 'tc::hf:part:rId1::story-change-1',
+      },
+    });
+
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'story-change-1',
+        trackedChangeStoryKind: 'headerFooter',
+        trackedChangeStoryLabel: 'Header',
+        trackedChangeAnchorKey: 'tc::hf:part:rId1::story-change-1',
+      }),
+    ]);
+    expect(store.getCommentAliasIds('story-change-1')).toEqual(
+      expect.arrayContaining(['story-change-1', 'tc::hf:part:rId1::story-change-1']),
+    );
+  });
+
+  it('applies story tracked-change label and anchor metadata when updating an existing thread', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'story-change-2',
+      trackedChange: true,
+      trackedChangeText: 'Old text',
+      trackedChangeType: 'trackInsert',
+      deletedText: null,
+      getValues: vi.fn(() => ({ commentId: 'story-change-2' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'story-change-2',
+        trackedChangeText: 'Updated text',
+        trackedChangeType: 'trackInsert',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: Date.now(),
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: { top: 10, left: 10, right: 20, bottom: 20 },
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId2' },
+        trackedChangeStoryKind: 'headerFooter',
+        trackedChangeStoryLabel: 'Footer',
+        trackedChangeAnchorKey: 'tc::hf:part:rId2::story-change-2',
+      },
+    });
+
+    expect(existingComment).toEqual(
+      expect.objectContaining({
+        trackedChangeText: 'Updated text',
+        trackedChangeStoryKind: 'headerFooter',
+        trackedChangeStoryLabel: 'Footer',
+        trackedChangeAnchorKey: 'tc::hf:part:rId2::story-change-2',
+      }),
+    );
   });
 
   it('clears stale tracked-change positions when editor sends empty positions', async () => {
@@ -1581,6 +1687,365 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('falls back to snapshot story data when resolving a story tracked change throws', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: { doc: { type: 'body-doc' } },
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+    const snapshot = {
+      type: 'delete',
+      excerpt: 'header text',
+      anchorKey: 'tc::hf:part:rId6::raw-fallback',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorImage: null,
+      date: 123,
+      story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId6' },
+      storyKind: 'headerFooter',
+      storyLabel: 'Header',
+      runtimeRef: { rawId: 'raw-fallback' },
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => [snapshot]),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+    resolveTrackedChangeInStoryMock.mockImplementation(() => {
+      throw new Error('boom');
+    });
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'raw-fallback',
+        trackedChangeText: '',
+        deletedText: 'header text',
+        trackedChangeType: 'delete',
+        trackedChangeStoryLabel: 'Header',
+        trackedChangeAnchorKey: 'tc::hf:part:rId6::raw-fallback',
+      }),
+    ]);
+  });
+
+  it('falls back to snapshot story data when story mark lookup throws', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const storyState = { doc: { type: 'story-doc' } };
+    const editor = {
+      state: { doc: { type: 'body-doc' } },
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+    const snapshot = {
+      type: 'insert',
+      excerpt: 'footnote text',
+      anchorKey: 'tc::fn:1::raw-fallback-2',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorImage: null,
+      date: 123,
+      story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      storyKind: 'footnote',
+      storyLabel: 'Footnote 1',
+      runtimeRef: { rawId: 'raw-fallback-2' },
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => [snapshot]),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+    resolveTrackedChangeInStoryMock.mockReturnValue({
+      editor: { state: storyState },
+      story: snapshot.story,
+      runtimeRef: { storyKey: 'fn:1', rawId: 'raw-fallback-2' },
+      change: { rawId: 'raw-fallback-2' },
+    });
+    trackChangesHelpersMock.getTrackChanges.mockImplementation((state, id) => {
+      if (state === storyState && id === 'raw-fallback-2') {
+        throw new Error('story lookup failed');
+      }
+      return [];
+    });
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'raw-fallback-2',
+        trackedChangeText: 'footnote text',
+        deletedText: null,
+        trackedChangeType: 'insert',
+        trackedChangeStoryLabel: 'Footnote 1',
+        trackedChangeAnchorKey: 'tc::fn:1::raw-fallback-2',
+      }),
+    ]);
+  });
+
+  it('updates an existing story tracked-change thread by anchor key', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: { doc: { type: 'body-doc' } },
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+    const snapshot = {
+      type: 'insert',
+      excerpt: 'new header text',
+      anchorKey: 'tc::hf:part:rId6::raw-anchor',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorImage: null,
+      date: 123,
+      story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId6' },
+      storyKind: 'headerFooter',
+      storyLabel: 'Header',
+      runtimeRef: { rawId: 'raw-anchor' },
+    };
+    const existingComment = {
+      commentId: 'different-runtime-id',
+      trackedChange: true,
+      trackedChangeText: 'old header text',
+      trackedChangeType: 'trackInsert',
+      trackedChangeStoryLabel: 'Old Header',
+      trackedChangeAnchorKey: 'tc::hf:part:rId6::raw-anchor',
+      getValues: vi.fn(() => ({ commentId: 'different-runtime-id' })),
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => [snapshot]),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+    store.commentsList = [existingComment];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(existingComment).toEqual(
+      expect.objectContaining({
+        trackedChangeText: 'new header text',
+        trackedChangeStoryLabel: 'Header',
+        trackedChangeAnchorKey: 'tc::hf:part:rId6::raw-anchor',
+      }),
+    );
+  });
+
+  it('updates an existing story tracked-change thread by raw id when no anchor key exists', async () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: { doc: { type: 'body-doc' } },
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const snapshot = {
+      type: 'insert',
+      excerpt: 'note text',
+      anchorKey: null,
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorImage: null,
+      date: 123,
+      story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      storyKind: 'footnote',
+      storyLabel: 'Footnote 1',
+      runtimeRef: { rawId: 'raw-no-anchor' },
+    };
+    const existingComment = {
+      commentId: 'other-id',
+      importedId: 'raw-no-anchor',
+      trackedChange: true,
+      trackedChangeText: 'old note text',
+      trackedChangeType: 'trackInsert',
+      getValues: vi.fn(() => ({ commentId: 'other-id' })),
+    };
+
+    __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => [snapshot]),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+    store.commentsList = [existingComment];
+
+    store.processLoadedDocxComments({
+      superdoc: __mockSuperdoc,
+      editor,
+      comments: [],
+      documentId: 'doc-1',
+    });
+    vi.runAllTimers();
+    await nextTick();
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(existingComment.trackedChangeText).toBe('note text');
+  });
+
+  it('ignores story tracked-change bootstrap when the index snapshot lookup throws during DOCX load', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: vi.fn(() => {
+        throw new Error('index unavailable');
+      }),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    });
+
+    expect(() =>
+      store.processLoadedDocxComments({
+        superdoc: __mockSuperdoc,
+        editor,
+        comments: [],
+        documentId: 'doc-1',
+      }),
+    ).not.toThrow();
+  });
+
+  describe('decideTrackedChangeFromSidebar', () => {
+    it('returns { ok: false } when the comment, editor, or id is missing', () => {
+      expect(store.decideTrackedChangeFromSidebar({ superdoc: {}, comment: null, decision: 'accept' })).toEqual({
+        ok: false,
+      });
+
+      expect(
+        store.decideTrackedChangeFromSidebar({
+          superdoc: {},
+          comment: { commentId: 'tc-1', trackedChange: true },
+          decision: 'accept',
+        }),
+      ).toEqual({ ok: false });
+
+      expect(
+        store.decideTrackedChangeFromSidebar({
+          superdoc: { activeEditor: {} },
+          comment: { trackedChange: true },
+          decision: 'accept',
+        }),
+      ).toEqual({ ok: false });
+    });
+
+    it('uses the document API for story tracked changes when available', () => {
+      const story = { kind: 'story', storyType: 'footnote', noteId: '1' };
+      const decide = vi.fn(() => ({ success: true }));
+
+      const result = store.decideTrackedChangeFromSidebar({
+        superdoc: {
+          activeEditor: {
+            doc: { trackChanges: { decide } },
+          },
+        },
+        comment: {
+          commentId: 'tc-story-1',
+          trackedChange: true,
+          trackedChangeStory: story,
+        },
+        decision: 'accept',
+      });
+
+      expect(decide).toHaveBeenCalledWith({
+        decision: 'accept',
+        target: { id: 'tc-story-1', story },
+      });
+      expect(result).toEqual({ ok: true, success: true });
+    });
+
+    it('returns the document API error for story tracked changes when decide throws', () => {
+      const error = new Error('story decide failed');
+
+      const result = store.decideTrackedChangeFromSidebar({
+        superdoc: {
+          activeEditor: {
+            doc: {
+              trackChanges: {
+                decide: vi.fn(() => {
+                  throw error;
+                }),
+              },
+            },
+          },
+        },
+        comment: {
+          commentId: 'tc-story-2',
+          trackedChange: true,
+          trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId6' },
+        },
+        decision: 'reject',
+      });
+
+      expect(result).toEqual({ ok: false, error });
+    });
+
+    it('falls back to editor commands for body tracked changes when document-api decide is unavailable', () => {
+      const rejectTrackedChangeById = vi.fn(() => true);
+
+      const result = store.decideTrackedChangeFromSidebar({
+        superdoc: {
+          activeEditor: {
+            doc: {
+              trackChanges: {
+                decide: vi.fn(() => {
+                  throw new Error('body decide failed');
+                }),
+              },
+            },
+            commands: {
+              rejectTrackedChangeById,
+            },
+          },
+        },
+        comment: {
+          importedId: 'tc-body-1',
+          trackedChange: true,
+        },
+        decision: 'reject',
+      });
+
+      expect(rejectTrackedChangeById).toHaveBeenCalledWith('tc-body-1');
+      expect(result).toEqual({ ok: true, success: true });
+    });
+  });
+
   it('bootstraps story tracked-change comments during initial DOCX load', async () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };
@@ -1888,6 +2353,27 @@ describe('comments-store', () => {
         'tc-1': { from: 1, to: 5 },
       });
     });
+
+    it('adds raw body tracked-change ids and canonical keys as lookup aliases', () => {
+      const entry = {
+        kind: 'trackedChange',
+        storyKey: 'body',
+        threadId: 'tc-raw-1',
+        key: 'tc::body::tc-raw-1',
+        start: 5,
+        end: 8,
+      };
+
+      store.handleEditorLocationsUpdate({
+        generated: entry,
+      });
+
+      expect(store.editorCommentPositions).toEqual({
+        generated: entry,
+        'tc-raw-1': entry,
+        'tc::body::tc-raw-1': entry,
+      });
+    });
   });
 
   describe('viewing visibility filters', () => {
@@ -2078,6 +2564,21 @@ describe('comments-store', () => {
 
       const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
       expect(ordered).toEqual(['c-1', null, undefined]);
+    });
+
+    it('uses page index and bounds top when range offsets are unavailable', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 2 },
+        { commentId: 'c-2', createdTime: 1 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { pageIndex: 1, bounds: { top: 10 } },
+        'c-2': { pageIndex: 0, bounds: { top: 50 } },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
     });
   });
 

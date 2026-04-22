@@ -61,11 +61,15 @@ async function runPowerShell(script: string, timeoutSeconds: number): Promise<st
 
 function parseExtractionOutput(output: string): WordExtraction {
   const begin = output.indexOf('JSON_BEGIN');
-  const end = output.indexOf('JSON_END');
-  if (begin === -1 || end === -1) {
-    throw new Error(`extract-layout.ps1: missing JSON markers\n${output.slice(0, 800)}`);
+  if (begin === -1) {
+    throw new Error(`extract-layout.ps1: missing JSON_BEGIN marker\n${output.slice(0, 800)}`);
   }
-  const json = output.slice(begin + 'JSON_BEGIN'.length, end).trim();
+  const payloadStart = begin + 'JSON_BEGIN'.length;
+  const end = output.indexOf('JSON_END', payloadStart);
+  if (end === -1) {
+    throw new Error(`extract-layout.ps1: missing JSON_END marker\n${output.slice(0, 800)}`);
+  }
+  const json = output.slice(payloadStart, end).trim();
   return JSON.parse(json) as WordExtraction;
 }
 

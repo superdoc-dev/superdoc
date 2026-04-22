@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type SuperDocSnapshot = {
   layoutSnapshot: {
@@ -29,7 +30,7 @@ export type SuperDocExtraction = {
   pageCount: number;
 };
 
-const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 export async function extractSuperDoc(
   docxPath: string,

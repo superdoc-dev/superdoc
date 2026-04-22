@@ -73,7 +73,9 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
     // When the PAGEREF instruction carries the `\h` switch, render as an
     // internal hyperlink pointing at `#<bookmarkId>` so clicks navigate to
     // the target bookmark via the existing anchor-link navigation path.
-    if (/\\h\b/.test(instruction)) {
+    // Field switches in Word field instructions are case-insensitive, so
+    // `\h` and `\H` should both produce the hyperlink.
+    if (/\\h\b/i.test(instruction)) {
       const synthesized = buildFlowRunLink({ anchor: bookmarkId });
       if (synthesized) {
         (tokenRun as TextRun).link = (tokenRun as TextRun).link

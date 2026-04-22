@@ -88,4 +88,11 @@ describe('pageReferenceNodeToBlock', () => {
     expect(run!.pageRefMetadata?.bookmarkId).toBe('_Toc123');
     expect(run!.link?.anchor).toBe('_Toc123');
   });
+
+  it('matches the \\h switch case-insensitively', () => {
+    // Word field switches are case-insensitive — `\H` should produce a link
+    // just like `\h`.
+    const run = pageReferenceNodeToBlock(makeParams({ instruction: 'PAGEREF _Toc123 \\H' })) as TextRun | undefined;
+    expect(run!.link?.anchor).toBe('_Toc123');
+  });
 });

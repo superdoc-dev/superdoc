@@ -772,6 +772,64 @@ describe('PresentationEditor', () => {
     });
   });
 
+  describe('alternateHeaders threading (paginated flow)', () => {
+    it('forwards converter.pageStyles.alternateHeaders=true to incrementalLayout', async () => {
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: true };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-true-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockIncrementalLayout).toHaveBeenCalled();
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        flowMode?: string;
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.flowMode).toBe('paginated');
+      expect(layoutOptions.alternateHeaders).toBe(true);
+    });
+
+    it('forwards alternateHeaders=false when converter.pageStyles.alternateHeaders is unset', async () => {
+      // converter has no pageStyles.alternateHeaders by default
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-default-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        flowMode?: string;
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.flowMode).toBe('paginated');
+      expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+
+    it('coerces falsy but non-boolean pageStyles.alternateHeaders values to false', async () => {
+      // Defensive check: if a converter emits undefined/null/0/'', we still want a clean boolean
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: 0 };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-coerce-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+  });
+
   describe('scrollToPage', () => {
     const buildMixedPageLayout = () => ({
       layout: {

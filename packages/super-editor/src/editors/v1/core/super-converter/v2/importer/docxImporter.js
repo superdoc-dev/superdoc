@@ -152,7 +152,9 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx);
+    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, {
+      replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
+    });
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -1239,11 +1241,22 @@ function getNumberingDefinitions(docx, converter) {
  * @param {Object} docx The parsed docx object
  * @returns {Boolean} True if the document has alternating headers and footers, false otherwise
  */
-const isAlternatingHeadersOddEven = (docx) => {
+const ST_ON_OFF_TRUE_VALUES = new Set(['1', 'true', 'on']);
+
+const isStOnOffEnabled = (element) => {
+  if (!element) return false;
+
+  const rawValue = element.attributes?.['w:val'];
+  if (rawValue == null) return true;
+
+  return ST_ON_OFF_TRUE_VALUES.has(String(rawValue).trim().toLowerCase());
+};
+
+export const isAlternatingHeadersOddEven = (docx) => {
   const settings = docx['word/settings.xml'];
   if (!settings || !settings.elements?.length) return false;
 
   const { elements = [] } = settings.elements[0];
   const evenOdd = elements.find((el) => el.name === 'w:evenAndOddHeaders');
-  return !!evenOdd;
+  return isStOnOffEnabled(evenOdd);
 };

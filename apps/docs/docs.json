@@ -154,6 +154,7 @@
                 ]
               },
               "modules/comments",
+              "modules/track-changes",
               {
                 "group": "Toolbar",
                 "tag": "NEW",
@@ -454,6 +455,10 @@
     {
       "source": "/extensions/slash-menu",
       "destination": "/extensions/context-menu"
+    },
+    {
+      "source": "/extensions/track-changes",
+      "destination": "/modules/track-changes"
     },
     {
       "source": "/guides/breaking-changes-v1",

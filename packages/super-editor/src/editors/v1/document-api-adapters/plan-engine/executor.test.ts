@@ -451,6 +451,106 @@ describe('executeTextInsert: setMarks tri-state directives', () => {
 });
 
 // ---------------------------------------------------------------------------
+// executeTextInsert: tab character → tab node conversion
+// ---------------------------------------------------------------------------
+
+describe('executeTextInsert: tab character to tab node conversion', () => {
+  it('converts a lone \\t into a tab node instead of a text node', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-tab',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: '\t' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tabCreate).toHaveBeenCalledTimes(1);
+    // Inserted value should be a Fragment holding exactly one tab node.
+    const inserted = tr.insert.mock.calls[0][1];
+    expect(typeof inserted.childCount).toBe('number');
+    expect(inserted.childCount).toBe(1);
+    expect(inserted.firstChild?.type?.name).toBe('tab');
+    // schema.text should NOT have been called with '\t'
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    const tabTextCalls = textCalls.filter(([t]: [string]) => t === '\t');
+    expect(tabTextCalls).toHaveLength(0);
+  });
+
+  it('splits mixed text-and-tab input into text nodes and tab nodes', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-mixed',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: 'hello\tworld' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    // Fragment layout: text('hello'), tab, text('world').
+    expect(tabCreate).toHaveBeenCalledTimes(1);
+    const inserted = tr.insert.mock.calls[0][1];
+    expect(inserted.childCount).toBe(3);
+    expect(inserted.child(0)?.text).toBe('hello');
+    expect(inserted.child(1)?.type?.name).toBe('tab');
+    expect(inserted.child(2)?.text).toBe('world');
+    // schema.text called for 'hello' and 'world', but never for '\t'
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    expect(textCalls.map(([t]: [string]) => t)).toEqual(['hello', 'world']);
+  });
+
+  it('falls back to a raw text node when the parent disallows tab nodes', () => {
+    const { editor, tr } = makeEditor();
+
+    const tabCreate = vi.fn(() => ({ type: { name: 'tab' }, nodeSize: 1 }));
+    (editor.state.schema as any).nodes = { tab: { create: tabCreate } };
+
+    // Simulate a restrictive parent (e.g. total-page-number with content: 'text*')
+    // by having contentMatch.matchType reject the tab node type.
+    const matchType = vi.fn(() => null);
+    (tr as any).doc.resolve = () => ({
+      marks: () => [],
+      parent: { type: { contentMatch: { matchType } } },
+    });
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-tab-restrictive',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: 'a\tb' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(matchType).toHaveBeenCalled();
+    // No tab node created — parent only allows text.
+    expect(tabCreate).not.toHaveBeenCalled();
+    // Single schema.text call with the raw '\t' preserved in the text.
+    const textCalls = (editor.state.schema.text as ReturnType<typeof vi.fn>).mock.calls;
+    expect(textCalls).toHaveLength(1);
+    expect(textCalls[0][0]).toBe('a\tb');
+    // Exactly one insert (the raw text node), not a fragment with a tab child.
+    expect(tr.insert).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // text.rewrite — style preservation behavioral tests
 // ---------------------------------------------------------------------------
 

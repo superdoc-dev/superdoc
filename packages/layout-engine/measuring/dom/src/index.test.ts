@@ -1619,6 +1619,77 @@ describe('measureBlock', () => {
       }
     });
 
+    it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
+      const rightStopTwips = 10593;
+      const rightStopPx = rightStopTwips * (96 / 1440); // ~706px
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'toc-paragraph',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'Generalities', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 15, pmEnd: 16 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          indent: { left: 30, right: 0, firstLine: 0, hanging: 30 },
+          tabs: [{ val: 'end', leader: 'dot', pos: rightStopTwips }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines).toHaveLength(1);
+      const line = measure.lines[0];
+      expect(line.leaders).toBeDefined();
+      expect(line.leaders?.[0]?.style).toBe('dot');
+      // Leader must end right before the page number — within ~20px of the right stop
+      // (page number "5" is a few px wide, not 100+ px wide).
+      expect(line.leaders?.[0]?.to).toBeLessThanOrEqual(rightStopPx);
+      expect(line.leaders?.[0]?.to).toBeGreaterThan(rightStopPx - 20);
+      // Leader must start AFTER the title text, not at "1." — proves the first tab
+      // fell on the default 0.5" grid, not on the end stop.
+      expect(line.leaders?.[0]?.from).toBeGreaterThan(100);
+      const trailingTab = block.runs[3];
+      if (trailingTab.kind === 'tab') {
+        expect(trailingTab.width).toBeGreaterThan(50);
+      }
+    });
+
+    it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
+      const centerStopTwips = 5000;
+      const endStopTwips = 10000;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'asymmetric-tabs',
+        runs: [
+          { text: 'A', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 1, pmEnd: 2 },
+          { text: 'B', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 3, pmEnd: 4 },
+          { text: 'C', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 2, pmStart: 5, pmEnd: 6 },
+          { text: 'D', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          indent: { left: 0, right: 0, firstLine: 0, hanging: 0 },
+          tabs: [
+            { val: 'center', pos: centerStopTwips },
+            { val: 'end', pos: endStopTwips },
+          ],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines).toHaveLength(1);
+      // Three tabs, two alignment stops: last two tabs bind to center + end.
+      // The first tab must NOT bind to either alignment stop — it should fall on the
+      // default grid. The last tab ends near the end stop position.
+      const lineWidth = measure.lines[0].width;
+      const endStopPx = endStopTwips * (96 / 1440);
+      expect(lineWidth).toBeCloseTo(endStopPx, 0);
+    });
+
     it('handles multiple tabs in a row', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

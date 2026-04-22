@@ -528,6 +528,17 @@ export type LayoutOptions = {
    * behavior for paragraph-free overlays.
    */
   allowSectionBreakOnlyPageFallback?: boolean;
+  /**
+   * Whether the document has odd/even header/footer differentiation enabled.
+   * Corresponds to the w:evenAndOddHeaders element in OOXML settings.xml.
+   * When true, odd pages use the 'odd' variant and even pages use the 'even' variant.
+   * When false or omitted, all pages use the 'default' variant.
+   *
+   * Must stay in sync with `getHeaderFooterTypeForSection` in
+   * `layout-bridge/src/headerFooterUtils.ts` — both sides read this value
+   * and must agree on variant selection.
+   */
+  alternateHeaders?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -669,23 +680,29 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   /**
    * Determines the header/footer variant type for a given page based on section settings.
    *
-   * @param sectionPageNumber - The page number within the current section (1-indexed)
+   * Takes a params object because the two page-number fields have very similar
+   * names and types — a positional call site is easy to get wrong.
+   *
+   * @param sectionPageNumber - The page number within the current section (1-indexed), used for titlePg
+   * @param documentPageNumber - The absolute document page number (1-indexed), used for even/odd
    * @param titlePgEnabled - Whether the section has "different first page" enabled
-   * @param alternateHeaders - Whether the section has odd/even differentiation enabled
+   * @param alternateHeaders - Whether the document has odd/even differentiation enabled
    * @returns The variant type: 'first', 'even', 'odd', or 'default'
    */
-  const getVariantTypeForPage = (
-    sectionPageNumber: number,
-    titlePgEnabled: boolean,
-    alternateHeaders: boolean,
-  ): 'default' | 'first' | 'even' | 'odd' => {
+  const getVariantTypeForPage = (args: {
+    sectionPageNumber: number;
+    documentPageNumber: number;
+    titlePgEnabled: boolean;
+    alternateHeaders: boolean;
+  }): 'default' | 'first' | 'even' | 'odd' => {
     // First page of section with titlePg enabled uses 'first' variant
-    if (sectionPageNumber === 1 && titlePgEnabled) {
+    if (args.sectionPageNumber === 1 && args.titlePgEnabled) {
       return 'first';
     }
-    // Alternate headers (even/odd differentiation)
-    if (alternateHeaders) {
-      return sectionPageNumber % 2 === 0 ? 'even' : 'odd';
+    // Alternate headers: even/odd based on document page number, matching
+    // the rendering side (getHeaderFooterTypeForSection in headerFooterUtils.ts)
+    if (args.alternateHeaders) {
+      return args.documentPageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   };
@@ -1082,7 +1099,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
 
     if (activeColumns.count > 1) {
-      page.columns = { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator };
+      page.columns = cloneColumnLayout(activeColumns);
     }
 
     // Set vertical alignment from active section state
@@ -1295,11 +1312,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Get section metadata for titlePg setting
         const sectionMetadata = sectionMetadataList[activeSectionIndex];
         const titlePgEnabled = sectionMetadata?.titlePg ?? false;
-        // TODO: Support alternateHeaders (odd/even) when needed
-        const alternateHeaders = false;
+        const alternateHeaders = options.alternateHeaders ?? false;
 
         // Determine which header/footer variant applies to this page
-        const variantType = getVariantTypeForPage(sectionPageNumber, titlePgEnabled, alternateHeaders);
+        const variantType = getVariantTypeForPage({
+          sectionPageNumber,
+          documentPageNumber: newPageNumber,
+          titlePgEnabled,
+          alternateHeaders,
+        });
 
         // Resolve header/footer refs for margin calculation using OOXML inheritance model.
         // This must match the rendering logic in PresentationEditor to ensure margins
@@ -2583,10 +2604,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns:
-      activeColumns.count > 1
-        ? { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator }
-        : undefined,
+    columns: activeColumns.count > 1 ? cloneColumnLayout(activeColumns) : undefined,
   };
 }
 

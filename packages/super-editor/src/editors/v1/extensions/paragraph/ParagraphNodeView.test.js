@@ -218,6 +218,30 @@ describe('ParagraphNodeView', () => {
     expect(() => nodeView.update(nextNode, [])).not.toThrow();
   });
 
+  it('does not try to style a text-node separator when switching to null listRendering', () => {
+    // Regression: when transitioning from a 'space'/'nothing' suffix (which
+    // creates a text-node separator) to `listRendering: null`, the null-guarded
+    // path must not fall back to the 'tab' branch, since writing
+    // `this.separator.style.cssText` on a Text node throws.
+    isList.mockReturnValue(true);
+    const spaceAttrs = {
+      ...createNode().attrs,
+      listRendering: { suffix: 'space', justification: 'left', markerText: '1.' },
+    };
+    const { nodeView } = mountNodeView({ attrs: spaceAttrs });
+    // The separator should be a Text node under the 'space' suffix.
+    expect(nodeView.separator?.nodeType).toBe(Node.TEXT_NODE);
+    const textSeparator = nodeView.separator;
+
+    const nullNode = createNode({
+      attrs: { ...spaceAttrs, listRendering: null },
+    });
+
+    expect(() => nodeView.update(nullNode, [])).not.toThrow();
+    // The text-node separator must be left alone (not replaced, not styled).
+    expect(nodeView.separator).toBe(textSeparator);
+  });
+
   it('uses hanging indent width for right-justified tabs and skips tab helper', () => {
     isList.mockReturnValue(true);
     const attrs = {

@@ -232,7 +232,16 @@ export class ParagraphNodeView {
    * @returns {boolean}
    */
   #updateListStyles() {
-    let { suffix, justification } = this.node.attrs.listRendering ?? {};
+    const listRendering = this.node.attrs.listRendering;
+    // When listRendering is null (can happen transiently during certain
+    // transactions, e.g. after a setDocAttribute + paragraph delete), leave
+    // the existing marker/separator untouched. Forcing a default `suffix` here
+    // would risk writing tab-style CSS onto a text-node separator created by
+    // a prior 'space'/'nothing' suffix and scheduled RAF pass.
+    if (!listRendering) {
+      return true;
+    }
+    let { suffix, justification } = listRendering;
     suffix = suffix ?? 'tab';
     this.#calculateMarkerStyle(justification);
     if (suffix === 'tab') {
@@ -283,8 +292,14 @@ export class ParagraphNodeView {
    * @param {{ markerText: string, suffix?: string }} listRendering
    */
   #initList(listRendering) {
-    this.#createMarker(listRendering?.markerText);
-    this.#createSeparator(listRendering?.suffix);
+    // See #updateListStyles: when listRendering is null the previous marker/
+    // separator are left in place; avoid invoking the create helpers with
+    // undefined values.
+    if (!listRendering) {
+      return;
+    }
+    this.#createMarker(listRendering.markerText);
+    this.#createSeparator(listRendering.suffix);
   }
 
   #checkIsList() {

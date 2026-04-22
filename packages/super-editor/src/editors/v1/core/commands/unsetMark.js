@@ -1,5 +1,6 @@
 import { getMarkRange } from '../helpers/getMarkRange.js';
 import { getMarkType } from '../helpers/getMarkType.js';
+import { resolveHeaderFooterSelection } from './helpers/resolveHeaderFooterSelection.js';
 import { removeParagraphRunProperty } from '../helpers/syncParagraphRunProperties.js';
 
 /**
@@ -8,12 +9,9 @@ import { removeParagraphRunProperty } from '../helpers/syncParagraphRunPropertie
  * @param options.extendEmptyMarkRange Removes the mark even across the current selection.
  */
 //prettier-ignore
-export const unsetMark = (typeOrName, options = {}) => ({ tr, state, dispatch, editor }) => {
+export const unsetMark = (typeOrName, options = {}) => ({ tr, state, dispatch }) => {
   const { extendEmptyMarkRange = false } = options;
-  let { selection } = tr;
-  if (editor.options.isHeaderOrFooter) {
-    selection = editor.options.lastSelection;
-  }
+  const selection = resolveHeaderFooterSelection({ tr });
   const type = getMarkType(typeOrName, state.schema);
   const { $from, empty, ranges } = selection;
 

@@ -1,6 +1,5 @@
 <script setup>
-import { storeToRefs } from 'pinia';
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, toRef } from 'vue';
 import { useCommentsStore } from '@stores/comments-store';
 import CommentDialog from '../CommentDialog.vue';
 
@@ -16,7 +15,8 @@ const props = defineProps({
 });
 
 const commentsStore = useCommentsStore();
-const { getGroupedComments, isCommentsListVisible } = storeToRefs(commentsStore);
+const getGroupedComments = computed(() => commentsStore.getGroupedComments);
+const isCommentsListVisible = toRef(commentsStore, 'isCommentsListVisible');
 
 const shouldShowResolvedComments = computed(() => {
   return props.showResolvedComments && getGroupedComments.value?.resolvedComments?.length > 0;

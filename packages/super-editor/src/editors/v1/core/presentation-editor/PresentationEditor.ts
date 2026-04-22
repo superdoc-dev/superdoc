@@ -80,9 +80,10 @@ import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionM
 import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
-import { BODY_STORY_KEY, buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
+import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { createHeaderFooterEditor } from '../../extensions/pagination/pagination-helpers.js';
+import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -182,6 +183,11 @@ function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
   if (blockId.startsWith('__sd_semantic_footnote-')) {
     const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
     return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('endnote-')) {
+    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'endnote', noteId } : null;
   }
 
   return null;
@@ -4985,7 +4991,16 @@ export class PresentationEditor extends EventEmitter {
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
         : [];
-      const blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
+      const endnoteBlocks = buildEndnoteBlocks(
+        this.#editor?.state,
+        (this.#editor as EditorWithConverter)?.converter,
+        converterContext,
+        this.#editor?.converter?.themeColors ?? undefined,
+      );
+      const blocksForLayout =
+        semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0
+          ? [...blocks, ...semanticFootnoteBlocks, ...endnoteBlocks]
+          : blocks;
       const layoutOptions =
         !isSemanticFlow && footnotesLayoutInput
           ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
@@ -7016,6 +7031,12 @@ export class PresentationEditor extends EventEmitter {
         return true;
       }
 
+      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey)) {
+        if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
+          return true;
+        }
+      }
+
       return this.#scrollToRenderedTrackedChange(entityId, storyKey);
     }
 
@@ -7051,6 +7072,77 @@ export class PresentationEditor extends EventEmitter {
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;
+  }
+
+  async #activateTrackedChangeStorySurface(entityId: string, storyKey: string): Promise<boolean> {
+    let locator: StoryLocator | null = null;
+    try {
+      locator = parseStoryKey(storyKey);
+    } catch {
+      return false;
+    }
+
+    if (!locator || locator.storyType === 'body') {
+      return false;
+    }
+
+    const candidate = this.#findRenderedTrackedChangeElements(entityId, storyKey)[0] ?? null;
+    if (!candidate) {
+      return false;
+    }
+
+    const rect = candidate.getBoundingClientRect();
+    const clientX = rect.left + Math.max(rect.width / 2, 1);
+    const clientY = rect.top + Math.max(rect.height / 2, 1);
+    const pageIndex = this.#resolveRenderedPageIndexForElement(candidate);
+
+    if (locator.storyType === 'footnote' || locator.storyType === 'endnote') {
+      try {
+        if (
+          !this.#activateRenderedNoteSession(
+            {
+              storyType: locator.storyType,
+              noteId: locator.noteId,
+            },
+            { clientX, clientY, pageIndex },
+          )
+        ) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+
+      return this.#waitForTrackedChangeStorySurface(storyKey);
+    }
+
+    if (locator.storyType !== 'headerFooterPart') {
+      return false;
+    }
+
+    const pageElement = candidate.closest<HTMLElement>('.superdoc-page');
+    const pageRect = pageElement?.getBoundingClientRect();
+    const pageLocalY = pageRect ? clientY - pageRect.top : undefined;
+    const region = this.#hitTestHeaderFooterRegion(clientX, clientY, pageIndex, pageLocalY);
+    if (!region) {
+      return false;
+    }
+
+    this.#activateHeaderFooterRegion(region);
+    return this.#waitForTrackedChangeStorySurface(storyKey);
+  }
+
+  async #waitForTrackedChangeStorySurface(storyKey: string, timeoutMs = 500): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if (this.#getActiveTrackedChangeStorySurface()?.storyKey === storyKey) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+
+    return this.#getActiveTrackedChangeStorySurface()?.storyKey === storyKey;
   }
 
   #navigateToActiveStoryTrackedChange(entityId: string, storyKey: string): boolean {

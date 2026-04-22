@@ -197,6 +197,33 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
+  it('activates a note session on direct endnote fragment click', () => {
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'endnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 16,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'endnote', noteId: '1' },
+      expect.objectContaining({ clientX: 16, clientY: 12 }),
+    );
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+  });
+
   it('activates the note session and syncs the tracked-change bubble on footnote clicks', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');

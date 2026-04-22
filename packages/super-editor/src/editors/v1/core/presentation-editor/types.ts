@@ -361,6 +361,10 @@ export interface EditorWithConverter extends Editor {
       id: string;
       content?: unknown[];
     }>;
+    endnotes?: Array<{
+      id: string;
+      content?: unknown[];
+    }>;
   };
 }
 

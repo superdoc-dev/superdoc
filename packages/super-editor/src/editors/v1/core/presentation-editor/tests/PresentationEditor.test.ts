@@ -98,6 +98,7 @@ const {
       setOptions: vi.fn(),
       commands: {
         setTextSelection: vi.fn(),
+        setCursorById: vi.fn(() => true),
       },
       state: {
         doc: {
@@ -2735,6 +2736,77 @@ describe('PresentationEditor', () => {
       };
     };
 
+    const prepareEndnoteEditor = async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            },
+          ],
+        },
+        measures: [],
+      });
+
+      mockEditorConverterStore.current = {
+        ...mockEditorConverterStore.current,
+        endnotes: [
+          {
+            id: '1',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lazy endnote session' }] }],
+          },
+        ],
+        convertedXml: {
+          'word/endnotes.xml': {
+            elements: [
+              {
+                name: 'w:endnotes',
+                elements: [
+                  {
+                    name: 'w:endnote',
+                    attributes: { 'w:id': '1' },
+                    elements: [{ name: 'w:p', elements: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'endnote-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const endnoteFragment = document.createElement('span');
+      endnoteFragment.setAttribute('data-block-id', 'endnote-1-0');
+      viewport.appendChild(endnoteFragment);
+
+      return { viewport, endnoteFragment };
+    };
+
     it('activates a note editing session without enabling hidden-host header/footer rollout', async () => {
       const { sessionEditor } = await activateFootnoteSession();
 
@@ -2793,6 +2865,48 @@ describe('PresentationEditor', () => {
         block: 'center',
         inline: 'nearest',
       });
+    });
+
+    it('activates an inactive endnote story before routing tracked-change navigation', async () => {
+      const { viewport } = await prepareEndnoteEditor();
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-endnote-1';
+      renderedChange.dataset.storyKey = 'en:1';
+      renderedChange.scrollIntoView = vi.fn();
+      vi.spyOn(renderedChange, 'getBoundingClientRect').mockReturnValue({
+        left: 140,
+        top: 720,
+        width: 20,
+        height: 12,
+        right: 160,
+        bottom: 732,
+        x: 140,
+        y: 720,
+        toJSON: () => ({}),
+      } as DOMRect);
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(2));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setCursorById).toHaveBeenCalledWith('tc-endnote-1', {
+        preferredActiveThreadId: 'tc-endnote-1',
+      });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+      expect(renderedChange.scrollIntoView).not.toHaveBeenCalled();
     });
   });
 

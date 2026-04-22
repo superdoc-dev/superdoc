@@ -73,12 +73,15 @@ type CommentThreadHit = {
 };
 
 /**
- * Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder).
+ * Block IDs for note content use `footnote-{id}-` / `endnote-{id}-` prefixes.
  * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
  * shared constants — it matches both heading and body footnote block IDs.
  */
-function isFootnoteBlockId(blockId: string): boolean {
-  return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
+function isRenderedNoteBlockId(blockId: string): boolean {
+  return (
+    typeof blockId === 'string' &&
+    (blockId.startsWith('footnote-') || blockId.startsWith('endnote-') || isSemanticFootnoteBlockId(blockId))
+  );
 }
 
 type RenderedNoteTarget = {
@@ -99,6 +102,11 @@ function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
   if (blockId.startsWith('__sd_semantic_footnote-')) {
     const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
     return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('endnote-')) {
+    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'endnote', noteId } : null;
   }
 
   return null;
@@ -1390,7 +1398,7 @@ export class EditorInputManager {
     }
 
     // Disallow entering read-only note content unless it has been activated into a story session.
-    if (isFootnoteBlockId(rawHit.blockId) && !isNoteEditing) {
+    if (isRenderedNoteBlockId(rawHit.blockId) && !isNoteEditing) {
       this.#focusEditor();
       return;
     }
@@ -2224,7 +2232,7 @@ export class EditorInputManager {
     if (!rawHit || !hit) return;
 
     // Don't extend a body selection into read-only footnote content.
-    if (!useActiveSurfaceHitTest && isFootnoteBlockId(rawHit.blockId)) return;
+    if (!useActiveSurfaceHitTest && isRenderedNoteBlockId(rawHit.blockId)) return;
 
     const doc = editor.state?.doc;
     if (!doc) return;

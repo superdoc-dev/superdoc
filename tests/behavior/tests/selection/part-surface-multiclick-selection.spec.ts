@@ -1,15 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HEADER_DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
-const FOOTNOTE_DOC_PATH = path.resolve(
-  __dirname,
-  '../../../../packages/super-editor/src/editors/v1/tests/data/basic-footnotes.docx',
-);
+import {
+  BASIC_ENDNOTES_DOC_PATH as ENDNOTE_DOC_PATH,
+  BASIC_FOOTNOTES_DOC_PATH as FOOTNOTE_DOC_PATH,
+  LONGER_HEADER_SIGN_AREA_DOC_PATH as HEADER_DOC_PATH,
+} from '../../helpers/story-fixtures.js';
 
 test.use({
   config: {
@@ -194,8 +189,6 @@ test('body surface selection does not leak into visible footnotes', async ({ sup
   expect(selectionRects).toHaveLength(1);
 });
 
-test.skip(!fs.existsSync(HEADER_DOC_PATH), 'Header/footer test document not available — run pnpm corpus:pull');
-
 test('active header supports double-click word selection and triple-click paragraph selection', async ({
   superdoc,
 }) => {
@@ -227,8 +220,6 @@ test('active header supports double-click word selection and triple-click paragr
   await superdoc.waitForStable();
   await expectParagraphSelection(superdoc.page, activeParagraphText, word.length);
 });
-
-test.skip(!fs.existsSync(HEADER_DOC_PATH), 'Header/footer test document not available — run pnpm corpus:pull');
 
 test('active footer supports double-click word selection and triple-click paragraph selection', async ({
   superdoc,
@@ -299,4 +290,42 @@ test('active footnote supports double-click word selection and triple-click para
   await superdoc.page.mouse.click(point.x, point.y, { clickCount: 3 });
   await superdoc.waitForStable();
   await expectParagraphSelection(superdoc.page, activeParagraphText, 'footnote'.length);
+});
+
+test('active endnote supports double-click word selection and triple-click paragraph selection', async ({
+  superdoc,
+  browserName,
+}) => {
+  test.fixme(
+    browserName === 'firefox',
+    'Headless Firefox does not yet persist hidden-host endnote edits through the behavior harness.',
+  );
+
+  await superdoc.loadDocument(ENDNOTE_DOC_PATH);
+  await superdoc.waitForStable();
+
+  const endnote = superdoc.page.locator('[data-block-id^="endnote-1-"]').first();
+  await endnote.scrollIntoViewIfNeeded();
+  await endnote.waitFor({ state: 'visible', timeout: 15_000 });
+
+  const endnoteBox = await endnote.boundingBox();
+  expect(endnoteBox).toBeTruthy();
+  await superdoc.page.mouse.dblclick(endnoteBox!.x + endnoteBox!.width / 2, endnoteBox!.y + endnoteBox!.height / 2);
+  await superdoc.waitForStable();
+
+  const activeParagraphText = await getActiveEditorText(superdoc.page);
+  expect(activeParagraphText).toBe('This is a simple endnote');
+
+  const point = await getWordClickPoint(endnote, 'endnote');
+  await superdoc.page.waitForTimeout(MULTI_CLICK_RESET_MS);
+
+  await superdoc.page.mouse.dblclick(point.x, point.y);
+  await superdoc.waitForStable();
+  await expectWordSelection(superdoc.page, 'endnote');
+
+  await superdoc.page.waitForTimeout(MULTI_CLICK_RESET_MS);
+
+  await superdoc.page.mouse.click(point.x, point.y, { clickCount: 3 });
+  await superdoc.waitForStable();
+  await expectParagraphSelection(superdoc.page, activeParagraphText, 'endnote'.length);
 });

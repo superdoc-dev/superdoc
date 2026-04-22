@@ -1,12 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
+import { H_F_NORMAL_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
 test.use({ config: { useHiddenHostForStoryParts: true, showCaret: true, showSelection: true } });
 
 test('header editor uses line-height 1, not the default 1.2', async ({ superdoc }) => {

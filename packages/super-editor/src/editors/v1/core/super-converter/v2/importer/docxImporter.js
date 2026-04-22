@@ -25,6 +25,7 @@ import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
+import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
@@ -242,6 +243,7 @@ export const defaultNodeListHandler = () => {
     trackChangeNodeHandlerEntity,
     tableNodeHandlerEntity,
     footnoteReferenceHandlerEntity,
+    endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,

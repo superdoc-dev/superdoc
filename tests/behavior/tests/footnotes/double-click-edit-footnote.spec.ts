@@ -1,13 +1,6 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOC_PATH = path.resolve(
-  __dirname,
-  '../../../../packages/super-editor/src/editors/v1/tests/data/basic-footnotes.docx',
-);
+import { BASIC_FOOTNOTES_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
 
 test.use({ config: { showCaret: true, showSelection: true } });
 
@@ -464,7 +457,7 @@ test('footnote caret placement supports inserts at the note start, inside a word
   await expectStoryText(superdoc.page, 'XThis is a simple footanote');
   await expect(footnote).toContainText('XThis is a simple footanote');
 
-  await superdoc.page.keyboard.press('End');
+  await expectCaretAtClickBoundary(superdoc.page, footnote, 'footanote', 'footanote'.length);
   await superdoc.page.keyboard.insertText('!');
   await superdoc.waitForStable();
   await expectStoryText(superdoc.page, 'XThis is a simple footanote!');

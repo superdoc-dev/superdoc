@@ -104,10 +104,22 @@ const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 
+const createTrackedChangeIndexStub = () => ({
+  subscribe: vi.fn(() => () => {}),
+  getAll: vi.fn(() => []),
+  get: vi.fn(() => []),
+  invalidate: vi.fn(),
+  invalidateAll: vi.fn(),
+  dispose: vi.fn(),
+});
+
+const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
+
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
+  getTrackedChangeIndex: getTrackedChangeIndexMock,
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -387,6 +399,8 @@ describe('SuperDoc.vue', () => {
     useSelectionMock.mockClear();
     useAiMock.mockClear();
     useSelectedTextMock.mockClear();
+    getTrackedChangeIndexMock.mockClear();
+    getTrackedChangeIndexMock.mockImplementation(() => createTrackedChangeIndexStub());
     mockState.instances.clear();
 
     // Make RAF synchronous in tests — jsdom has no rendering loop, and
@@ -1285,6 +1299,7 @@ describe('SuperDoc.vue', () => {
     expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
     expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
     expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
+    expect(getTrackedChangeIndexMock).toHaveBeenCalledWith(editor);
   });
 
   it('forwards header/footer presentation events through the public update callbacks', async () => {

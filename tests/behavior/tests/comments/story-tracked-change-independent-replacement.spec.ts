@@ -1,17 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page } from '../../fixtures/superdoc.js';
+import {
+  BASIC_FOOTNOTES_DOC_PATH,
+  LONGER_HEADER_SIGN_AREA_DOC_PATH as HEADER_DOC_PATH,
+} from '../../helpers/story-fixtures.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HEADER_DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
-const FOOTNOTE_DOC_PATH = path.resolve(
-  __dirname,
-  '../../../../packages/super-editor/src/editors/v1/tests/data/basic-footnotes.docx',
-);
-
-test.skip(!fs.existsSync(HEADER_DOC_PATH), 'Header/footer test document not available — run pnpm corpus:pull');
-test.skip(!fs.existsSync(FOOTNOTE_DOC_PATH), 'Footnote test document not available');
+const FOOTNOTE_DOC_PATH = BASIC_FOOTNOTES_DOC_PATH;
 
 test.use({
   config: {

@@ -210,29 +210,14 @@ const logClickStage = (_level: 'log' | 'warn' | 'error', _stage: string, _payloa
   // No-op in production. Enable for debugging click-to-position mapping.
 };
 
-const readSelectionDebugEnabled = (): boolean => {
-  if (typeof globalThis === 'undefined') return false;
-  return (globalThis as { __sdSelectionDebug?: boolean }).__sdSelectionDebug === true;
-};
-
 const SELECTION_DEBUG_ENABLED = false;
 const logSelectionDebug = (payload: Record<string, unknown>): void => {
-  const enabled = SELECTION_DEBUG_ENABLED || readSelectionDebugEnabled();
-  if (!enabled) return;
+  if (!SELECTION_DEBUG_ENABLED) return;
   try {
     console.log('[SELECTION-DEBUG]', JSON.stringify(payload));
   } catch {
     console.log('[SELECTION-DEBUG]', payload);
   }
-};
-
-const pushSelectionDebugSnapshot = (payload: Record<string, unknown>): void => {
-  if (typeof globalThis === 'undefined') return;
-  const target = globalThis as { __sdSelectionDebugLog?: Record<string, unknown>[] };
-  if (!Array.isArray(target.__sdSelectionDebugLog)) {
-    target.__sdSelectionDebugLog = [];
-  }
-  target.__sdSelectionDebugLog.push(payload);
 };
 
 /**
@@ -651,8 +636,7 @@ export function selectionToRects(
             pageIndex,
           });
 
-          const selectionDebugEnabled = SELECTION_DEBUG_ENABLED || readSelectionDebugEnabled();
-          if (selectionDebugEnabled) {
+          if (SELECTION_DEBUG_ENABLED) {
             const runs = block.runs.slice(line.fromRun, line.toRun + 1).map((run: Run, idx: number) => {
               const isAtomic =
                 'src' in run ||
@@ -673,7 +657,7 @@ export function selectionToRects(
               };
             });
 
-            const debugEntry = {
+            debugEntries.push({
               pageIndex,
               blockId: block.id,
               lineIndex: index,
@@ -715,9 +699,7 @@ export function selectionToRects(
               lineSpaceCount: (line as { spaceCount?: unknown }).spaceCount,
               lineNaturalWidth: (line as { naturalWidth?: unknown }).naturalWidth,
               lineMaxWidth: (line as { maxWidth?: unknown }).maxWidth,
-            };
-            debugEntries.push(debugEntry);
-            pushSelectionDebugSnapshot(debugEntry);
+            });
           }
         });
         return;

@@ -19,7 +19,6 @@ import type {
 } from '@superdoc/document-api';
 import { getHeadingLevel, mapBlockNodeType, resolveBlockNodeId } from './helpers/node-address-resolver.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
-import { collectTopLevelBlocks } from './plan-engine/blocks-wrappers.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { trackChangesListWrapper } from './plan-engine/track-changes-wrappers.js';
 
@@ -164,24 +163,38 @@ function collectFromTable(
 }
 
 function collectBlocks(editor: Editor): ExtractBlock[] {
-  const candidates = collectTopLevelBlocks(editor);
   const blocks: ExtractBlock[] = [];
+  const doc = editor.state.doc;
 
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i];
-    if (candidate.nodeType === 'table') {
-      collectFromTable(candidate.node, candidate.pos, [i], candidate.nodeId, blocks);
+  // Walk the doc directly (not via collectTopLevelBlocks) so the traversal
+  // path we thread into resolveBlockNodeId matches the canonical PM child
+  // index used by buildBlockIndex. If an unsupported node precedes a table
+  // (e.g. passthroughBlock), a filtered index would diverge from the real
+  // PM index and fallback IDs would be hashed from the wrong path.
+  let offset = 0;
+  for (let i = 0; i < doc.childCount; i++) {
+    const child = doc.child(i);
+    const nodeType = mapBlockNodeType(child);
+    const pos = offset;
+    offset += child.nodeSize;
+
+    if (!nodeType) continue;
+
+    if (nodeType === 'table') {
+      const tableNodeId = resolveBlockNodeId(child, pos, 'table', [i]);
+      if (tableNodeId) collectFromTable(child, pos, [i], tableNodeId, blocks);
       continue;
     }
-    // SDT / content-control wrappers at the document root are transparent —
-    // recurse so their inner paragraphs are emitted with stable IDs instead of
-    // collapsing the entire wrapped subtree into one opaque block via
-    // textContent. Matches the in-cell wrapper behavior.
-    if (TRANSPARENT_WRAPPER_TYPES.has(candidate.nodeType)) {
-      emitFromContainer(candidate.node, candidate.pos, [i], undefined, blocks);
+
+    if (TRANSPARENT_WRAPPER_TYPES.has(nodeType)) {
+      // Content-control wrapper: recurse transparently. No tableContext here
+      // (tables nested inside the wrapper carry their own coordinates).
+      emitFromContainer(child, pos, [i], undefined, blocks);
       continue;
     }
-    blocks.push(buildBlock(candidate.node, candidate.nodeId, candidate.nodeType));
+
+    const nodeId = resolveBlockNodeId(child, pos, nodeType, [i]);
+    if (nodeId) blocks.push(buildBlock(child, nodeId, nodeType));
   }
 
   return blocks;

@@ -3,6 +3,7 @@ import type { TableCell } from '@superdoc/contracts';
 import type { TableBlock } from '@superdoc/contracts';
 import { measureBlock } from './index.js';
 import { buildAutoFitWorkingGridInput } from './autofit-normalize.js';
+import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import {
   clearTableAutoFitMeasurementCaches,
   measureTableAutoFitContentMetrics,
@@ -349,7 +350,8 @@ describe('table-autofit-metrics', () => {
     };
 
     const workingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
-    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, measureBlock);
+    const fixedLayout = computeFixedTableColumnWidths(workingInput);
+    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, fixedLayout, measureBlock);
 
     expect(metrics.rowMetrics).toHaveLength(1);
     expect(metrics.rowMetrics[0].rowIndex).toBe(0);
@@ -409,11 +411,87 @@ describe('table-autofit-metrics', () => {
     };
 
     const workingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
-    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, measureBlock);
+    const fixedLayout = computeFixedTableColumnWidths(workingInput);
+    const fixedPassContentWidth = fixedLayout.totalWidth - 8;
+    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, fixedLayout, measureBlock);
+    const directMetrics = await measureTableCellContentMetrics(table.rows[0].cells[0], {
+      maxWidth: fixedPassContentWidth,
+      measureBlock,
+    });
 
-    expect(metrics.rowMetrics[0].cells[0].minContentWidth).toBe(204);
-    expect(metrics.rowMetrics[0].cells[0].maxContentWidth).toBe(204);
-    expect(metrics.rows[0].cells[0].minContentWidth).toBe(204);
-    expect(metrics.rows[0].cells[0].maxContentWidth).toBe(204);
+    expect(fixedLayout.totalWidth).toBe(200);
+    expect(metrics.rowMetrics[0].cells[0].minContentWidth).toBe(directMetrics.minWidthPx);
+    expect(metrics.rowMetrics[0].cells[0].maxContentWidth).toBe(directMetrics.maxWidthPx);
+    expect(metrics.rows[0].cells[0].minContentWidth).toBe(directMetrics.minWidthPx);
+    expect(metrics.rows[0].cells[0].maxContentWidth).toBe(directMetrics.maxWidthPx);
+  });
+
+  it('uses the fixed-pass cell width basis for nested percentage tables when tblW is omitted', async () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 'table-nested-pct-fixed-basis',
+      columnWidths: [120],
+      rows: [
+        {
+          id: 'row-fixed-basis-0',
+          cells: [
+            {
+              id: 'cell-fixed-basis-0-0',
+              attrs: {
+                padding: { left: 0, right: 0, top: 0, bottom: 0 },
+              },
+              blocks: [
+                {
+                  kind: 'table',
+                  id: 'nested-table-fixed-basis',
+                  attrs: {
+                    tableWidth: { value: 2500, type: 'pct' },
+                  },
+                  columnWidths: [30],
+                  rows: [
+                    {
+                      id: 'nested-row-fixed-basis-0',
+                      cells: [
+                        {
+                          id: 'nested-cell-fixed-basis-0-0',
+                          attrs: {
+                            padding: { left: 0, right: 0, top: 0, bottom: 0 },
+                          },
+                          blocks: [
+                            {
+                              kind: 'paragraph',
+                              id: 'nested-para-fixed-basis',
+                              runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 12 }],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const workingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
+    const fixedLayout = computeFixedTableColumnWidths(workingInput);
+    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, fixedLayout, measureBlock);
+    const directFixedBasisMetrics = await measureTableCellContentMetrics(table.rows[0].cells[0], {
+      maxWidth: fixedLayout.totalWidth,
+      measureBlock,
+    });
+    const directPageBasisMetrics = await measureTableCellContentMetrics(table.rows[0].cells[0], {
+      maxWidth: 400,
+      measureBlock,
+    });
+
+    expect(workingInput.preferredTableWidth).toBeUndefined();
+    expect(fixedLayout.totalWidth).toBe(120);
+    expect(metrics.rowMetrics[0].cells[0].minContentWidth).toBe(directFixedBasisMetrics.minWidthPx);
+    expect(metrics.rowMetrics[0].cells[0].maxContentWidth).toBe(directFixedBasisMetrics.maxWidthPx);
+    expect(directPageBasisMetrics.maxWidthPx).toBeGreaterThanOrEqual(directFixedBasisMetrics.maxWidthPx);
   });
 });

@@ -15,6 +15,7 @@ import type {
 import { toCssFontFamily } from '@superdoc/font-utils';
 import type { AutoFitRowInput } from './autofit-columns.js';
 import type { WorkingTableGridInput } from './autofit-normalize.js';
+import type { FixedLayoutResult } from './fixed-table-columns.js';
 import { getMeasuredTextWidth } from './measurementCache.js';
 
 const DEFAULT_CELL_PADDING = { top: 0, right: 4, bottom: 0, left: 4 };
@@ -359,9 +360,10 @@ export async function measureTableCellContentMetrics(
 export async function measureTableAutoFitContentMetrics(
   table: TableBlock,
   workingInput: WorkingTableGridInput,
+  fixedLayout: FixedLayoutResult,
   measureBlock: AutoFitMeasureBlock,
 ): Promise<TableAutoFitContentMetricsResult> {
-  const tableMeasurementBasis = workingInput.preferredTableWidth ?? workingInput.maxTableWidth;
+  const tableMeasurementBasis = Math.max(1, fixedLayout.totalWidth);
   const cellMetricKeys: string[] = [];
 
   const rowMetrics = await Promise.all(
@@ -373,8 +375,9 @@ export async function measureTableAutoFitContentMetrics(
           const span = normalizedCell?.span ?? cell.colSpan ?? 1;
           const measurementMaxWidth = resolveAutoFitCellMeasurementMaxWidth(
             cell,
-            normalizedCell?.preferredWidth,
+            normalizedCell,
             span,
+            fixedLayout,
             tableMeasurementBasis,
             workingInput.gridColumnCount,
           );
@@ -588,19 +591,60 @@ function getIntrinsicAtomicBlockWidth(block: ImageBlock | DrawingBlock): number 
  */
 function resolveAutoFitCellMeasurementMaxWidth(
   cell: TableCell,
-  preferredWidth: number | undefined,
+  normalizedCell:
+    | {
+        startColumn?: number;
+        span?: number;
+        preferredWidth?: number;
+      }
+    | undefined,
   span: number,
+  fixedLayout: FixedLayoutResult,
   tableWidthBasis: number,
   gridColumnCount: number,
 ): number {
+  const fixedPassOuterWidth = resolveFixedPassCellOuterWidth(normalizedCell, span, fixedLayout);
   const outerWidth =
-    preferredWidth ?? Math.max(1, tableWidthBasis * (Math.max(1, span) / Math.max(1, gridColumnCount || span || 1)));
+    fixedPassOuterWidth ??
+    normalizedCell?.preferredWidth ??
+    Math.max(1, tableWidthBasis * (Math.max(1, span) / Math.max(1, gridColumnCount || span || 1)));
   const padding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
   const leftPadding = padding.left ?? DEFAULT_CELL_PADDING.left;
   const rightPadding = padding.right ?? DEFAULT_CELL_PADDING.right;
   const leftBorder = getCellBorderWidthPx(cell.attrs?.borders?.left);
   const rightBorder = getCellBorderWidthPx(cell.attrs?.borders?.right);
   return Math.max(1, outerWidth - leftPadding - rightPadding - leftBorder - rightBorder);
+}
+
+/**
+ * Resolve the actual fixed-pass outer width for a normalized cell when that
+ * placement information is available.
+ *
+ * AutoFit content measurement must use the fixed-pass cell width basis so
+ * nested percentage tables resolve against the containing cell's actual width,
+ * not the page width fallback.
+ */
+function resolveFixedPassCellOuterWidth(
+  normalizedCell:
+    | {
+        startColumn?: number;
+        span?: number;
+      }
+    | undefined,
+  fallbackSpan: number,
+  fixedLayout: FixedLayoutResult,
+): number | undefined {
+  if (normalizedCell?.startColumn == null) {
+    return undefined;
+  }
+
+  const span = Math.max(1, normalizedCell.span ?? fallbackSpan);
+  let width = 0;
+  for (let offset = 0; offset < span; offset++) {
+    width += fixedLayout.columnWidths[normalizedCell.startColumn + offset] ?? 0;
+  }
+
+  return width > 0 ? width : undefined;
 }
 
 /**

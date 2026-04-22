@@ -80,13 +80,14 @@ export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
 import { computeAutoFitColumnWidths } from './autofit-columns.js';
-import type { AutoFitRowInput } from './autofit-columns.js';
 import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './autofit-normalize.js';
 import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
+import type { FixedLayoutResult } from './fixed-table-columns.js';
 import {
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
   getCachedAutoFitTableResult,
+  type TableAutoFitContentMetricsResult,
   measureTableAutoFitContentMetrics,
   setCachedAutoFitTableResult,
 } from './table-autofit-metrics.js';
@@ -2569,10 +2570,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       const colspan = cell.colSpan ?? 1;
       const rowspan = cell.rowSpan ?? 1;
       const normalizedCell = normalizedRow?.cells?.[cellIndex];
-      const preferredStartColumn =
-        workingInput.layoutMode === 'fixed' && normalizedCell?.startColumn != null
-          ? normalizedCell.startColumn
-          : gridColIndex;
+      const preferredStartColumn = normalizedCell?.startColumn ?? gridColIndex;
 
       // Skip grid columns that are occupied by rowspans from previous rows
       // and advance to the fixed-layout logical start column before processing this cell.
@@ -2789,11 +2787,12 @@ async function resolveRuntimeTableColumnWidths(
   block: TableBlock,
   workingInput: WorkingTableGridInput,
 ): Promise<number[]> {
+  const fixedLayout = computeFixedTableColumnWidths(workingInput);
   if (workingInput.layoutMode === 'fixed') {
-    return computeFixedTableColumnWidths(workingInput).columnWidths;
+    return fixedLayout.columnWidths;
   }
 
-  const { rows, cellMetricKeys } = await buildMeasuredAutoFitRows(block, workingInput);
+  const { contentMetrics, cellMetricKeys } = await buildMeasuredAutoFitContentMetrics(block, workingInput, fixedLayout);
   const cacheKey = buildAutoFitTableResultCacheKey(block, {
     maxWidth: workingInput.maxTableWidth,
     cellMetricKeys,
@@ -2804,11 +2803,11 @@ async function resolveRuntimeTableColumnWidths(
   }
 
   const result = computeAutoFitColumnWidths({
-    tableLayout: workingInput.layoutMode,
-    maxTableWidth: workingInput.maxTableWidth,
-    preferredTableWidth: workingInput.preferredTableWidth,
-    preferredColumnWidths: workingInput.preferredColumnWidths,
-    rows,
+    workingInput,
+    fixedLayout,
+    contentMetrics: {
+      rowMetrics: contentMetrics.rowMetrics,
+    },
   });
 
   setCachedAutoFitTableResult(cacheKey, {
@@ -2825,15 +2824,19 @@ async function resolveRuntimeTableColumnWidths(
  * preferred widths. This helper supplies the remaining content metrics required
  * by the pure AutoFit solver.
  */
-async function buildMeasuredAutoFitRows(
+async function buildMeasuredAutoFitContentMetrics(
   block: TableBlock,
   workingInput: WorkingTableGridInput,
+  fixedLayout: FixedLayoutResult,
 ): Promise<{
-  rows: AutoFitRowInput[];
+  contentMetrics: TableAutoFitContentMetricsResult;
   cellMetricKeys: string[];
 }> {
-  const { rows, cellMetricKeys } = await measureTableAutoFitContentMetrics(block, workingInput, measureBlock);
-  return { rows, cellMetricKeys };
+  const contentMetrics = await measureTableAutoFitContentMetrics(block, workingInput, fixedLayout, measureBlock);
+  return {
+    contentMetrics,
+    cellMetricKeys: contentMetrics.cellMetricKeys,
+  };
 }
 
 /**

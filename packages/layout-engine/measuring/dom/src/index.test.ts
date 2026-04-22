@@ -3234,8 +3234,12 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      // Auto layout preserves explicit w:tblGrid widths (no scale-up)
-      expect(measure.columnWidths).toEqual([100, 150, 200]);
+      // AutoFit uses authored grid widths as the fixed-pass baseline, but the
+      // final runtime vector may still rebalance them based on content.
+      expect(measure.columnWidths).toHaveLength(3);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      expect(measure.columnWidths[2]).toBeGreaterThan(measure.columnWidths[1]);
       expect(measure.totalWidth).toBe(450);
     });
 
@@ -3427,9 +3431,13 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(3);
-      expect(measure.columnWidths[0]).toBe(100);
-      expect(measure.columnWidths[1]).toBe(150);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
       expect(measure.columnWidths[2]).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeCloseTo(
+        measure.columnWidths.reduce((sum, width) => sum + width, 0),
+        3,
+      );
     });
 
     it('preserves authored logical columns even when rows use fewer physical cells', async () => {
@@ -3748,13 +3756,12 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // All 4 column widths should be preserved (not truncated to 3)
-      // Auto-layout preserves explicit widths (no scale-up)
+      // All 4 logical columns must survive normalization and runtime AutoFit.
       expect(measure.columnWidths).toHaveLength(4);
-      expect(measure.columnWidths[0]).toBe(172);
-      expect(measure.columnWidths[2]).toBe(128);
-      expect(measure.columnWidths[3]).toBe(310);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
       expect(measure.columnWidths[1]).toBeGreaterThan(0);
+      expect(measure.columnWidths[2]).toBeGreaterThan(0);
+      expect(measure.columnWidths[3]).toBeGreaterThan(measure.columnWidths[2]);
       expect(measure.totalWidth).toBe(measure.columnWidths.reduce((sum, width) => sum + width, 0));
 
       // Row 0: 2 cells spanning 3+1 = both cells measured
@@ -3801,16 +3808,15 @@ describe('measureBlock', () => {
       expect(measure.rows[0].cells).toHaveLength(2);
       expect(measure.rows[1].cells).toHaveLength(2);
 
-      // Cell widths sum their spanned columns (auto-layout preserves widths, no scale-up)
-      // Columns: [100, 50, 100, 300]
-      // Row 0 cell 0: cols 0+1 = 100+50 = 150
-      expect(measure.rows[0].cells[0].width).toBe(150);
-      // Row 0 cell 1: cols 2+3 = 100+300 = 400
-      expect(measure.rows[0].cells[1].width).toBe(400);
-      // Row 1 cell 0: cols 0+1+2 = 100+50+100 = 250
-      expect(measure.rows[1].cells[0].width).toBe(250);
-      // Row 1 cell 1: col 3 = 300
-      expect(measure.rows[1].cells[1].width).toBe(300);
+      // Cell widths should still be derived from the preserved logical runtime
+      // columns, even though AutoFit may rebalance the final vector.
+      expect(measure.rows[0].cells[0].width).toBeCloseTo(measure.columnWidths[0] + measure.columnWidths[1], 3);
+      expect(measure.rows[0].cells[1].width).toBeCloseTo(measure.columnWidths[2] + measure.columnWidths[3], 3);
+      expect(measure.rows[1].cells[0].width).toBeCloseTo(
+        measure.columnWidths[0] + measure.columnWidths[1] + measure.columnWidths[2],
+        3,
+      );
+      expect(measure.rows[1].cells[1].width).toBeCloseTo(measure.columnWidths[3], 3);
     });
 
     it('handles single-cell full-span row correctly', async () => {
@@ -4486,12 +4492,14 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should scale to 400px maintaining 1:2:1 ratio
-      // 50 * 2 = 100, 100 * 2 = 200, 50 * 2 = 100
+      // AutoFit honors the preferred table width target, but the final runtime
+      // vector may rebalance away from the authored 1:2:1 ratio.
       expect(measure.totalWidth).toBe(400);
-      expect(measure.columnWidths[0]).toBe(100);
-      expect(measure.columnWidths[1]).toBe(200);
-      expect(measure.columnWidths[2]).toBe(100);
+      expect(measure.columnWidths).toHaveLength(3);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[2]);
+      expect(measure.columnWidths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(400, 3);
     });
 
     it('handles explicit pixel width (type: px)', async () => {
@@ -5516,10 +5524,11 @@ describe('measureBlock', () => {
 
       // All 4 grid columns must be preserved (not truncated to 3 based on max physical cell count)
       expect(tableMeasure.columnWidths).toHaveLength(4);
-      expect(tableMeasure.columnWidths[0]).toBe(170);
-      expect(tableMeasure.columnWidths[1]).toBe(15);
-      expect(tableMeasure.columnWidths[2]).toBe(130);
-      expect(tableMeasure.columnWidths[3]).toBe(310);
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[1]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[2]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[3]).toBeGreaterThan(tableMeasure.columnWidths[2]);
+      expect(tableMeasure.columnWidths[2]).toBeGreaterThan(tableMeasure.columnWidths[1]);
 
       // Total width should match page width
       const totalWidth = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);

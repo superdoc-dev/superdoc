@@ -139,6 +139,23 @@ type RenderedNoteTarget = {
   noteId: string;
 };
 
+type NoteStorySession = StoryPresentationSession & {
+  locator: Extract<StoryLocator, { kind: 'story'; storyType: 'footnote' | 'endnote' }>;
+};
+
+type BoundedCommentPositionEntry = {
+  threadId: string;
+  start?: number;
+  end?: number;
+  pos?: number;
+  key?: string;
+  storyKey?: string;
+  kind?: 'trackedChange' | 'comment';
+  bounds?: unknown;
+  rects?: unknown;
+  pageIndex?: number;
+};
+
 type NoteLayoutContext = {
   target: RenderedNoteTarget;
   blocks: FlowBlock[];
@@ -1187,7 +1204,7 @@ export class PresentationEditor extends EventEmitter {
     return this.#storySessionManager?.getActiveSession() ?? null;
   }
 
-  #getActiveNoteStorySession(): StoryPresentationSession | null {
+  #getActiveNoteStorySession(): NoteStorySession | null {
     const session = this.#getActiveStorySession();
     if (!session || session.kind !== 'note') {
       return null;
@@ -1195,7 +1212,7 @@ export class PresentationEditor extends EventEmitter {
     if (session.locator.storyType !== 'footnote' && session.locator.storyType !== 'endnote') {
       return null;
     }
-    return session;
+    return session as NoteStorySession;
   }
 
   #getActiveTrackedChangeStorySurface(): { storyKey: string; editor: Editor } | null {
@@ -3022,9 +3039,10 @@ export class PresentationEditor extends EventEmitter {
     const threadPosition = this.#resolveCommentPositionEntry(threadId);
     if (!threadPosition) return null;
 
-    const boundedEntry = this.getCommentBounds({ [threadId]: threadPosition })[threadId] ?? threadPosition;
+    const boundedEntry = (this.getCommentBounds({ [threadId]: threadPosition })[threadId] ??
+      threadPosition) as BoundedCommentPositionEntry;
     const currentTopValue =
-      typeof boundedEntry?.bounds === 'object' && boundedEntry?.bounds != null
+      typeof boundedEntry.bounds === 'object' && boundedEntry.bounds != null
         ? (boundedEntry.bounds as { top?: unknown }).top
         : undefined;
     if (!Number.isFinite(currentTopValue)) return null;
@@ -3044,15 +3062,7 @@ export class PresentationEditor extends EventEmitter {
     return null;
   }
 
-  #resolveCommentPositionEntry(threadId: string): {
-    threadId: string;
-    start?: number;
-    end?: number;
-    pos?: number;
-    key?: string;
-    storyKey?: string;
-    kind?: 'trackedChange' | 'comment';
-  } | null {
+  #resolveCommentPositionEntry(threadId: string): BoundedCommentPositionEntry | null {
     const positions = this.#collectCommentPositions();
     const directMatch = positions[threadId];
     if (directMatch) {
@@ -4440,7 +4450,9 @@ export class PresentationEditor extends EventEmitter {
         });
       },
       onSurfaceTransaction: ({ sourceEditor, surface, headerId, sectionType, transaction, duration }) => {
-        if (transaction?.docChanged && headerId) {
+        const documentTransaction =
+          transaction && typeof transaction === 'object' ? (transaction as { docChanged?: boolean }) : null;
+        if (documentTransaction?.docChanged && headerId) {
           this.#invalidateTrackedChangesForStory({
             kind: 'story',
             storyType: 'headerFooterPart',

@@ -77,6 +77,25 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths).toEqual([100, 200]);
   });
 
+  it('currently treats authored grid widths as an autofit floor', () => {
+    // Characterization for the rework: the first column content only needs 60px,
+    // but the current solver keeps the authored 100px grid width as a floor.
+    const result = computeAutoFitColumnWidths({
+      maxTableWidth: 500,
+      preferredColumnWidths: [100, 100],
+      rows: [
+        {
+          cells: [
+            { span: 1, minContentWidth: 40, maxContentWidth: 60 },
+            { span: 1, minContentWidth: 120, maxContentWidth: 200 },
+          ],
+        },
+      ],
+    });
+
+    expect(result.columnWidths).toEqual([100, 200]);
+  });
+
   it('distributes up to the preferred table width target', () => {
     const result = computeAutoFitColumnWidths({
       maxTableWidth: 500,
@@ -149,6 +168,23 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths).toEqual([150]);
   });
 
+  it('currently treats single-span preferred widths as grow-only floors', () => {
+    // Characterization for the rework: the preferred width is 150px, but the
+    // current solver preserves the larger 300px content max instead of letting
+    // tcW override it downward.
+    const result = computeAutoFitColumnWidths({
+      maxTableWidth: 500,
+      preferredColumnWidths: [100],
+      rows: [
+        {
+          cells: [{ span: 1, minContentWidth: 50, maxContentWidth: 300, preferredWidth: 150 }],
+        },
+      ],
+    });
+
+    expect(result.columnWidths).toEqual([300]);
+  });
+
   it('expands multi-span cells to satisfy minimum content width', () => {
     const result = computeAutoFitColumnWidths({
       maxTableWidth: 500,
@@ -181,6 +217,23 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths).toEqual([40, 75, 75]);
   });
 
+  it('currently treats multi-span preferred widths as grow-only floors', () => {
+    // Characterization for the rework: the span has a preferred total width of
+    // 200px, but the current solver preserves the larger 280px content max.
+    const result = computeAutoFitColumnWidths({
+      maxTableWidth: 500,
+      preferredColumnWidths: [140, 140],
+      rows: [
+        {
+          cells: [{ span: 2, minContentWidth: 100, maxContentWidth: 280, preferredWidth: 200 }],
+        },
+      ],
+    });
+
+    expect(result.columnWidths).toEqual([140, 140]);
+    expect(result.totalWidth).toBe(280);
+  });
+
   it('clamps the final width vector to the section width', () => {
     const result = computeAutoFitColumnWidths({
       maxTableWidth: 300,
@@ -197,6 +250,28 @@ describe('computeAutoFitColumnWidths', () => {
 
     expect(result.columnWidths).toEqual([150, 150]);
     expect(result.totalWidth).toBe(300);
+  });
+
+  it('currently clamps fixed tables to maxTableWidth', () => {
+    // Characterization for the rework: fixed tables are currently forced back to
+    // the available width instead of being allowed to overflow.
+    const result = computeAutoFitColumnWidths({
+      tableLayout: 'fixed',
+      maxTableWidth: 500,
+      preferredColumnWidths: [300, 300],
+      rows: [
+        {
+          cells: [
+            { span: 1, minContentWidth: 300, maxContentWidth: 300 },
+            { span: 1, minContentWidth: 300, maxContentWidth: 300 },
+          ],
+        },
+      ],
+    });
+
+    expect(result.layoutMode).toBe('fixed');
+    expect(result.columnWidths).toEqual([250, 250]);
+    expect(result.totalWidth).toBe(500);
   });
 
   it('extends the working grid when spans exceed the initial grid length', () => {

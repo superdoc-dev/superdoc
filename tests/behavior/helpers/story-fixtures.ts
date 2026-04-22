@@ -101,6 +101,32 @@ function complexFootnoteMappingDocumentXml(): string {
 `;
 }
 
+function multiPageHeaderFooterDocumentXml(): string {
+  const paragraphs = Array.from({ length: 48 }, (_, index) => {
+    const number = index + 1;
+    return `
+    <w:p>
+      <w:r><w:t>Multipage footer coverage paragraph ${number}. This filler text keeps the same default header and footer story flowing onto later pages.</w:t></w:r>
+    </w:p>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    ${paragraphs}
+    <w:sectPr>
+      <w:headerReference w:type="default" r:id="rId8"/>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
 function complexFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -280,6 +306,13 @@ export const BASIC_ENDNOTES_DOC_PATH = ensureGeneratedFixture('basic-endnotes.do
   'word/document.xml': documentXmlWithEndnotes(),
   'word/endnotes.xml': endnotesXml(),
 });
+export const MULTI_PAGE_HEADER_FOOTER_DOC_PATH = ensureGeneratedFixture(
+  'multi-page-header-footer.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': multiPageHeaderFooterDocumentXml(),
+  },
+);
 export const STORY_ONLY_TRACKED_CHANGES_DOC_PATH = ensureGeneratedFixture(
   'story-only-tracked-changes.docx',
   'h_f-normal.docx',

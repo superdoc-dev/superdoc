@@ -186,6 +186,13 @@ export async function waitForActiveStory(
   await expect.poll(() => getActiveStorySession(page)).toEqual(expect.objectContaining(expected));
 }
 
+export async function exitActiveStory(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as any).editor?.presentationEditor?.getStorySessionManager?.()?.exit?.();
+  });
+  await waitForActiveStory(page, null);
+}
+
 export async function getActiveStoryText(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const harness = (window as any).behaviorHarness;

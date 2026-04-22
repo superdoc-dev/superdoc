@@ -1912,7 +1912,7 @@ describe('comments-store', () => {
     expect(existingComment.trackedChangeText).toBe('note text');
   });
 
-  it('ignores story tracked-change bootstrap when the index snapshot lookup throws during DOCX load', () => {
+  it('ignores story tracked-change bootstrap when the index snapshot lookup throws during DOCX load', async () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };
     const editor = {
@@ -1940,6 +1940,12 @@ describe('comments-store', () => {
         documentId: 'doc-1',
       }),
     ).not.toThrow();
+
+    expect(() => {
+      vi.runAllTimers();
+    }).not.toThrow();
+
+    await nextTick();
   });
 
   describe('decideTrackedChangeFromSidebar', () => {

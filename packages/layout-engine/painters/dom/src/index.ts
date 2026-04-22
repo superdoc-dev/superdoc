@@ -1,10 +1,7 @@
-import type { FlowBlock, Layout, Measure, PageMargins, ResolvedLayout, Page } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
-import { resolveLayout } from '@superdoc/layout-resolved';
 import type { PageStyles } from './styles.js';
 import type {
   DomPainterInput,
-  PageDecorationPayload,
   PageDecorationProvider,
   PaintSnapshot,
   PositionMapping,
@@ -67,16 +64,6 @@ export type { FlowMode } from './renderer.js';
 export type { PageDecorationPayload, PageDecorationProvider } from './renderer.js';
 
 export type DomPainterOptions = {
-  /**
-   * Legacy compatibility: initial body block data.
-   * New callers should pass block data through `paint(input, mount)`.
-   */
-  blocks?: FlowBlock[];
-  /**
-   * Legacy compatibility: initial body measures.
-   * New callers should pass measure data through `paint(input, mount)`.
-   */
-  measures?: Measure[];
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
   flowMode?: FlowMode;
@@ -113,24 +100,8 @@ export type DomPainterOptions = {
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
 };
 
-type LegacyDomPainterState = {
-  blocks: FlowBlock[];
-  measures: Measure[];
-  resolvedLayout: ResolvedLayout | null;
-};
-
 export type DomPainterHandle = {
-  paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping): void;
-  /**
-   * Legacy compatibility API.
-   * New callers should pass block/measure data via `paint(input, mount)`.
-   */
-  setData(blocks: FlowBlock[], measures: Measure[]): void;
-  /**
-   * Legacy compatibility API.
-   * New callers should pass resolved data via `paint(input, mount)`.
-   */
-  setResolvedLayout(resolvedLayout: ResolvedLayout | null): void;
+  paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void;
   setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void;
   setVirtualizationPins(pageIndices: number[] | null | undefined): void;
   getMountedPageIndices(): number[];
@@ -139,59 +110,7 @@ export type DomPainterHandle = {
   setScrollContainer(el: HTMLElement | null): void;
 };
 
-function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], measures: Measure[]): void {
-  if (blocks.length !== measures.length) {
-    throw new Error(`${label} blocks and measures must have the same length.`);
-  }
-}
-
-function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: number | undefined): ResolvedLayout {
-  return {
-    version: 1,
-    flowMode: flowMode ?? 'paginated',
-    pageGap: pageGap ?? 0,
-    pages: [],
-  };
-}
-
-function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
-  return 'resolvedLayout' in value && 'sourceLayout' in value;
-}
-
-function buildLegacyPaintInput(
-  layout: Layout,
-  legacyState: LegacyDomPainterState,
-  flowMode: FlowMode | undefined,
-  pageGap: number | undefined,
-): DomPainterInput {
-  // Derive a resolved layout from the legacy block/measure state when the caller
-  // has not supplied one via `setResolvedLayout`. The painter now reads all body
-  // fragment data from the resolved layout, so an empty resolved layout would
-  // produce a blank render.
-  let resolvedLayout: ResolvedLayout;
-  if (legacyState.resolvedLayout) {
-    resolvedLayout = legacyState.resolvedLayout;
-  } else if (legacyState.blocks.length === 0 && legacyState.measures.length === 0) {
-    resolvedLayout = createEmptyResolvedLayout(flowMode, pageGap);
-  } else {
-    resolvedLayout = resolveLayout({
-      layout,
-      flowMode: flowMode ?? 'paginated',
-      blocks: legacyState.blocks,
-      measures: legacyState.measures,
-    });
-  }
-  return {
-    resolvedLayout,
-    sourceLayout: layout,
-  };
-}
-
 export const createDomPainter = (options: DomPainterOptions): DomPainterHandle => {
-  if ((options.blocks ?? []).length !== (options.measures ?? []).length) {
-    throw new Error('DomPainter requires the same number of blocks and measures');
-  }
-
   const painter = new DomPainter({
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
@@ -204,26 +123,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     onPaintSnapshot: options.onPaintSnapshot,
   });
 
-  const legacyState: LegacyDomPainterState = {
-    blocks: options.blocks ?? [],
-    measures: options.measures ?? [],
-    resolvedLayout: null,
-  };
-
   return {
-    paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping) {
-      const normalizedInput = isDomPainterInput(input)
-        ? input
-        : buildLegacyPaintInput(input, legacyState, options.flowMode, options.pageGap);
-      painter.paint(normalizedInput, mount, mapping);
-    },
-    setData(blocks: FlowBlock[], measures: Measure[]) {
-      assertRequiredBlockMeasurePair('body', blocks, measures);
-      legacyState.blocks = blocks;
-      legacyState.measures = measures;
-    },
-    setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
-      legacyState.resolvedLayout = resolvedLayout;
+    paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping) {
+      painter.paint(input, mount, mapping);
     },
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
       painter.setProviders(header, footer);

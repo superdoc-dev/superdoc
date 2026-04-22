@@ -3,6 +3,7 @@ import type { FlowBlock, Layout, ParagraphBlock, ParagraphMeasure, Run } from '@
 import type { LayoutOptions } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { createDomPainter } from '@superdoc/painter-dom';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { incrementalLayout, measureCache, resolveMeasurementConstraints } from '../incrementalLayout';
 
@@ -88,11 +89,14 @@ export async function runBenchmarkScenario(config: BenchmarkConfig): Promise<Ben
   const initialDuration = performance.now() - startFull;
 
   const mount = ensureBenchmarkMount();
-  const painter = createDomPainter({
+  const painter = createDomPainter({});
+  const initialResolved = resolveLayout({
+    layout: initial.layout,
+    flowMode: 'paginated',
     blocks: doc.blocks,
     measures: initial.measures,
   });
-  painter.paint(initial.layout, mount);
+  painter.paint({ resolvedLayout: initialResolved, sourceLayout: initial.layout }, mount);
 
   previousBlocks = doc.blocks;
   previousLayout = initial.layout;
@@ -111,8 +115,13 @@ export async function runBenchmarkScenario(config: BenchmarkConfig): Promise<Ben
     const start = performance.now();
 
     const result = await incrementalLayout(previousBlocks, previousLayout, nextBlocks, layoutOptions, measure);
-    painter.setData?.(nextBlocks, result.measures);
-    painter.paint(result.layout, mount);
+    const resolved = resolveLayout({
+      layout: result.layout,
+      flowMode: 'paginated',
+      blocks: nextBlocks,
+      measures: result.measures,
+    });
+    painter.paint({ resolvedLayout: resolved, sourceLayout: result.layout }, mount);
     const duration = performance.now() - start;
     durations.push(duration);
 

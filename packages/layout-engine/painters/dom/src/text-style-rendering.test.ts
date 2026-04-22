@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 
 const expectCssColor = (actual: string, expectedHex: string): void => {
@@ -105,7 +105,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-1');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -132,7 +132,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-2');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -159,7 +159,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-3');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -186,7 +186,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-4');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -212,7 +212,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-5');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -270,7 +270,7 @@ describe('DomPainter text style CSS rendering', () => {
 
       const layout = createParagraphLayout('para-6');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -307,7 +307,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-7');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -337,7 +337,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-1');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -366,7 +366,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-2');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -395,7 +395,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-3');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -422,7 +422,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-4');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -450,7 +450,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-5');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -479,7 +479,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-5-zero');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -507,7 +507,7 @@ describe('DomPainter text style CSS rendering', () => {
       const measure = createParagraphMeasure();
       const layout = createParagraphLayout('para-va-6');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -550,7 +550,7 @@ describe('DomPainter text style CSS rendering', () => {
 
       const layout = createParagraphLayout('para-8');
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });

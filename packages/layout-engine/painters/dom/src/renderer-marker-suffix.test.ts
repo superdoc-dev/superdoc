@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, WordParagraphLayoutOutput } from '@superdoc/contracts';
 
 describe('DomPainter marker suffix rendering', () => {
@@ -110,7 +110,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -139,7 +139,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -159,7 +159,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -180,7 +180,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -201,7 +201,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -222,7 +222,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -245,7 +245,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -269,7 +269,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -292,7 +292,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -317,7 +317,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -358,7 +358,7 @@ describe('DomPainter marker suffix rendering', () => {
       const measure = createListMeasure();
       const layout = createListLayout(blockId, 24);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -433,7 +433,7 @@ describe('DomPainter marker suffix rendering', () => {
         ],
       };
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });

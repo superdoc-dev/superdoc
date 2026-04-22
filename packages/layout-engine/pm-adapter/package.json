@@ -36,6 +36,7 @@
   "devDependencies": {
     "vitest": "catalog:",
     "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
     "@superdoc/painter-dom": "workspace:*"
   },
   "dependencies": {

@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter } from './test-utils/test-painter.js';
 import type { FlowBlock, Measure, Layout, WordParagraphLayoutOutput } from '@superdoc/contracts';
 
 describe('DomPainter markerTextWidth feature', () => {
@@ -124,7 +124,7 @@ describe('DomPainter markerTextWidth feature', () => {
       // markerTextWidth is undefined
       const layout = createListLayout(blockId, markerBoxWidth, undefined);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -146,7 +146,7 @@ describe('DomPainter markerTextWidth feature', () => {
       // @ts-expect-error Testing null case explicitly
       const layout = createListLayout(blockId, markerBoxWidth, null);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -170,7 +170,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 18; // Actual text is narrower
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -196,7 +196,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 15; // Significantly narrower than box
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -223,7 +223,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerGutter = 12;
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth, markerGutter);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -248,7 +248,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 0; // Zero width text
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -268,7 +268,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerGutter = 16;
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth, markerGutter);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -289,7 +289,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = -10; // Invalid negative value
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -315,7 +315,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = Infinity; // Invalid infinite value
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -339,7 +339,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = NaN; // Invalid NaN value
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -360,7 +360,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 18;
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -382,7 +382,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 18;
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -405,7 +405,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 20;
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -430,7 +430,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 45; // Text is narrower
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -460,7 +460,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 8; // Bullet is very narrow
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });
@@ -486,7 +486,7 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerTextWidth = 22; // Same as box width
       const layout = createListLayout(blockId, markerBoxWidth, markerTextWidth);
 
-      const painter = createDomPainter({
+      const painter = createTestPainter({
         blocks: [block],
         measures: [measure],
       });

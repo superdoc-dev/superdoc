@@ -37,6 +37,16 @@ export interface ExtractTableContext {
    * at `colIndex: 2`. For merged cells, `colIndex` is the origin column.
    */
   colIndex: number;
+  /**
+   * Number of columns the containing cell spans. Only present when greater
+   * than 1. Use together with `colIndex` to reconstruct row layout or tell
+   * "absent because merged" apart from "absent because empty".
+   */
+  colspan?: number;
+  /**
+   * Number of rows the containing cell spans. Only present when greater than 1.
+   */
+  rowspan?: number;
 }
 
 export interface ExtractComment {

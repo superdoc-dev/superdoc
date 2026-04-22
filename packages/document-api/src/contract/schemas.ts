@@ -2962,9 +2962,37 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
-              type: { type: 'string', description: 'Block type: paragraph, heading, listItem, table, image, etc.' },
+              type: {
+                type: 'string',
+                description:
+                  'Block type: paragraph, heading, listItem, image, etc. Tables are expanded into their constituent paragraphs; no top-level "table" blocks are emitted.',
+              },
               text: { type: 'string', description: 'Full plain text content of the block.' },
               headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              tableContext: objectSchema(
+                {
+                  tableNodeId: {
+                    type: 'string',
+                    description:
+                      'Stable ID of the table containing this block. Distinguishes blocks across adjacent or nested tables.',
+                  },
+                  rowIndex: { type: 'integer', description: 'Zero-based row index within tableNodeId.' },
+                  colIndex: {
+                    type: 'integer',
+                    description:
+                      'Zero-based logical column index. Accounts for column merges (gridSpan); for merged cells, reports the origin column.',
+                  },
+                  colspan: {
+                    type: 'integer',
+                    description: 'Number of columns the containing cell spans. Only present when greater than 1.',
+                  },
+                  rowspan: {
+                    type: 'integer',
+                    description: 'Number of rows the containing cell spans. Only present when greater than 1.',
+                  },
+                },
+                ['tableNodeId', 'rowIndex', 'colIndex'],
+              ),
             },
             ['nodeId', 'type', 'text'],
           ),

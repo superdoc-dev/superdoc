@@ -700,9 +700,9 @@ export const OPERATION_DEFINITIONS = {
   extract: {
     memberPath: 'extract',
     description:
-      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). Tables are expanded into their constituent paragraphs; each cell paragraph carries a tableContext with its table ID and row/column coordinates.',
     expectedResult:
-      'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
+      'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel, tableContext for cell-paragraphs), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'extract.mdx',

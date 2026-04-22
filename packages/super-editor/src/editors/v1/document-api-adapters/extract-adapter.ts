@@ -142,7 +142,20 @@ function collectFromTable(
         if (flatIdx >= 0) colIndex = flatIdx % tableMap.width;
       }
 
-      emitFromContainer(cellNode, cellPos, cellPath, { tableNodeId, rowIndex, colIndex }, blocks);
+      // Surface merge coordinates when a cell spans more than its origin slot.
+      // Consumers need these to reconstruct a row ("A (spans 2) | B") or to
+      // detect "missing because merged" vs "missing because empty".
+      const cellAttrs = cellNode.attrs as Record<string, unknown>;
+      const rawColspan = typeof cellAttrs.colspan === 'number' ? cellAttrs.colspan : 1;
+      const rawRowspan = typeof cellAttrs.rowspan === 'number' ? cellAttrs.rowspan : 1;
+      const colspan = rawColspan > 1 ? rawColspan : undefined;
+      const rowspan = rawRowspan > 1 ? rawRowspan : undefined;
+
+      const tableContext: ExtractTableContext = { tableNodeId, rowIndex, colIndex };
+      if (colspan !== undefined) tableContext.colspan = colspan;
+      if (rowspan !== undefined) tableContext.rowspan = rowspan;
+
+      emitFromContainer(cellNode, cellPos, cellPath, tableContext, blocks);
 
       cellOffset += cellNode.nodeSize;
     });
@@ -158,6 +171,14 @@ function collectBlocks(editor: Editor): ExtractBlock[] {
     const candidate = candidates[i];
     if (candidate.nodeType === 'table') {
       collectFromTable(candidate.node, candidate.pos, [i], candidate.nodeId, blocks);
+      continue;
+    }
+    // SDT / content-control wrappers at the document root are transparent —
+    // recurse so their inner paragraphs are emitted with stable IDs instead of
+    // collapsing the entire wrapped subtree into one opaque block via
+    // textContent. Matches the in-cell wrapper behavior.
+    if (TRANSPARENT_WRAPPER_TYPES.has(candidate.nodeType)) {
+      emitFromContainer(candidate.node, candidate.pos, [i], undefined, blocks);
       continue;
     }
     blocks.push(buildBlock(candidate.node, candidate.nodeId, candidate.nodeType));

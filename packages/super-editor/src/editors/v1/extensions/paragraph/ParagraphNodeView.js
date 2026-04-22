@@ -289,7 +289,7 @@ export class ParagraphNodeView {
   }
 
   /**
-   * @param {{ markerText: string, suffix?: string }} listRendering
+   * @param {{ markerText: string, suffix?: string } | null} listRendering
    */
   #initList(listRendering) {
     // See #updateListStyles: when listRendering is null the previous marker/

@@ -242,6 +242,39 @@ describe('ParagraphNodeView', () => {
     expect(nodeView.separator).toBe(textSeparator);
   });
 
+  it('does not throw when mounted with listRendering null', () => {
+    // Regression: the null guards in #initList and #updateListStyles must also
+    // cover the constructor path — mounting a paragraph whose listRendering is
+    // already null previously threw before update() ever ran.
+    isList.mockReturnValue(true);
+    const nullAttrs = { ...createNode().attrs, listRendering: null };
+    expect(() => mountNodeView({ attrs: nullAttrs })).not.toThrow();
+  });
+
+  it('recovers marker/separator when listRendering returns from null to tab', () => {
+    // Regression: the null-guarded path leaves the existing marker/separator in
+    // place. When listRendering clears and later returns with a different suffix
+    // (here: space → null → tab), the separator has to swap from a text node
+    // back to a span element — #createSeparator handles this only if the
+    // recovery path actually runs, so exercise it end-to-end.
+    isList.mockReturnValue(true);
+    const spaceAttrs = {
+      ...createNode().attrs,
+      listRendering: { suffix: 'space', justification: 'left', markerText: '1.' },
+    };
+    const { nodeView } = mountNodeView({ attrs: spaceAttrs });
+
+    nodeView.update(createNode({ attrs: { ...spaceAttrs, listRendering: null } }), []);
+
+    const tabNode = createNode({
+      attrs: { ...spaceAttrs, listRendering: { suffix: 'tab', justification: 'left', markerText: '2.' } },
+    });
+    nodeView.update(tabNode, []);
+
+    expect(nodeView.marker?.textContent).toBe('2.');
+    expect(nodeView.separator?.tagName?.toLowerCase()).toBe('span');
+  });
+
   it('uses hanging indent width for right-justified tabs and skips tab helper', () => {
     isList.mockReturnValue(true);
     const attrs = {

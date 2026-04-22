@@ -527,7 +527,7 @@
  * @property {Object} [links] Link click popover configuration
  * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
  * @property {ContextMenuConfig} [contextMenu] Context menu module configuration
- * @property {Object} [slashMenu] @deprecated Use contextMenu instead
+ * @property {Object} [slashMenu] Deprecated. Use contextMenu instead.
  * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  * @property {TrackChangesModuleConfig} [trackChanges] Track changes module configuration
  */
@@ -615,6 +615,29 @@
  */
 
 /**
+ * @typedef {Object} SuperDocLayoutEngineOptions
+ * @property {'paginated' | 'semantic'} [flowMode='paginated'] Layout engine flow mode.
+ *   - 'paginated': standard page-first layout (default)
+ *   - 'semantic': continuous semantic flow without visible pagination boundaries
+ * @property {Object} [semanticOptions] Internal-only semantic mode tuning options.
+ *   This shape is intentionally not a stable public API in v1.
+ * @property {Object} [trackedChanges] Deprecated. Use `modules.trackChanges` instead. Optional override for paginated track-changes rendering (e.g., `{ mode: 'original' }` or `{ enabled: false }`).
+ */
+
+/**
+ * @typedef {Object} ViewingVisibilityConfig
+ * @property {boolean} [visible]
+ */
+
+/**
+ * @typedef {Object} SuperDocTelemetryConfig
+ * @property {boolean} enabled
+ * @property {string} [endpoint]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string} [licenseKey]
+ */
+
+/**
  * @typedef {Object} Config
  * @property {string} [superdocId] The ID of the SuperDoc
  * @property {string | HTMLElement} selector The selector or element to mount the SuperDoc into
@@ -649,13 +672,7 @@
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
  * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
- * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
- * @property {'paginated' | 'semantic'} [layoutEngineOptions.flowMode='paginated'] Layout engine flow mode.
- *   - 'paginated': standard page-first layout (default)
- *   - 'semantic': continuous semantic flow without visible pagination boundaries
- * @property {Object} [layoutEngineOptions.semanticOptions] Internal-only semantic mode tuning options.
- *   This shape is intentionally not a stable public API in v1.
- * @property {Object} [layoutEngineOptions.trackedChanges] @deprecated Use `modules.trackChanges` instead. Optional override for paginated track-changes rendering (e.g., `{ mode: 'original' }` or `{ enabled: false }`).
+ * @property {SuperDocLayoutEngineOptions} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created
  * @property {(params: EditorTransactionEvent) => void} [onTransaction] Callback when a transaction is made
@@ -678,8 +695,8 @@
  * @property {boolean} [isInternal] Whether the SuperDoc is internal
  * @property {string} [title] The title of the SuperDoc
  * @property {Object[]} [conversations] The conversations to load
- * @property {{ visible?: boolean }} [comments] Toggle comment visibility when `documentMode` is `viewing` (default: false)
- * @property {{ visible?: boolean }} [trackChanges] @deprecated Use `modules.trackChanges.visible` instead. Toggle tracked-change visibility when `documentMode` is `viewing` (default: false).
+ * @property {ViewingVisibilityConfig} [comments] Toggle comment visibility when `documentMode` is `viewing` (default: false)
+ * @property {ViewingVisibilityConfig} [trackChanges] Deprecated. Use `modules.trackChanges.visible` instead. Toggle tracked-change visibility when `documentMode` is `viewing` (default: false).
  * @property {boolean} [isLocked] Whether the SuperDoc is locked
  * @property {function(File): Promise<string>} [handleImageUpload] The function to handle image uploads
  * @property {User} [lockedBy] The user who locked the SuperDoc
@@ -699,7 +716,7 @@
  *   Default behavior (false) lets the document expand to its natural height.
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  * @property {string} [licenseKey] License key for organization identification
- * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
+ * @property {SuperDocTelemetryConfig} [telemetry] Telemetry configuration
  * @property {ProofingConfig} [proofing] Proofing / spellcheck configuration
  */
 

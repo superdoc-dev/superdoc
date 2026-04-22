@@ -5,7 +5,7 @@ permissions:
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, stable]
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'

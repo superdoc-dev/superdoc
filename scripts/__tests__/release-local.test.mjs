@@ -175,6 +175,20 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
   );
 });
 
+test('stable dry runs skip incomplete-release recovery side effects', async () => {
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes('if (!isDryRun) {'),
+    'scripts/release-local-stable.mjs: dry runs must gate recovery behind !isDryRun',
+  );
+  assertOrder(
+    content,
+    '  if (!isDryRun) {',
+    '      recoveredRelease = await maybeRecoverIncompleteRelease(pkg, branchRef);',
+    'scripts/release-local-stable.mjs',
+  );
+});
+
 test('stable workflow publishes recovered SDK Python snapshots before any head-tag SDK publish', async () => {
   const content = await readRepoFile('.github/workflows/release-stable.yml');
   assertOrder(

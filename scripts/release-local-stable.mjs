@@ -797,13 +797,15 @@ for (let index = 0; index < packages.length; index += 1) {
   refreshRemoteState(expectedBranch);
 
   let recoveredRelease = null;
-  try {
-    recoveredRelease = await maybeRecoverIncompleteRelease(pkg, branchRef);
-  } catch (error) {
-    console.error(`\n${pkg.name} recovery failed:\n${error.message || error}`);
-    results.set(pkg.name, { status: 'FAILED', newTags: [] });
-    hasFailed = true;
-    continue;
+  if (!isDryRun) {
+    try {
+      recoveredRelease = await maybeRecoverIncompleteRelease(pkg, branchRef);
+    } catch (error) {
+      console.error(`\n${pkg.name} recovery failed:\n${error.message || error}`);
+      results.set(pkg.name, { status: 'FAILED', newTags: [] });
+      hasFailed = true;
+      continue;
+    }
   }
 
   try {

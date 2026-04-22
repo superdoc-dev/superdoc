@@ -17,6 +17,7 @@ import type {
   TableLookProperties,
   TableCellProperties,
 } from './styles-types.ts';
+import { getBuiltInStyleDefinition } from './built-in-styles.js';
 
 export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
@@ -35,6 +36,7 @@ export {
   resolvePreferredNewTableStyleId,
 } from './table-style-selection.js';
 export type { ResolvedStyle, ResolvedStyleSource } from './table-style-selection.js';
+export { getBuiltInStyleDefinition, listBuiltInStyleIds } from './built-in-styles.js';
 
 export interface OoxmlResolverParams {
   translatedNumbering: NumberingProperties | null | undefined;
@@ -272,6 +274,15 @@ export function resolveParagraphProperties(
   return finalProps;
 }
 
+/**
+ * Look up a style definition by id, preferring the document's own styles and
+ * falling back to Word's built-in latent style defaults (e.g. Heading1..Heading9
+ * when the generator omitted them, see #2805 / ECMA-376 §17.7.4.9).
+ */
+function lookupStyleDefinition(params: OoxmlResolverParams, styleId: string): StyleDefinition | undefined {
+  return params.translatedLinkedStyles?.styles?.[styleId] ?? getBuiltInStyleDefinition(styleId);
+}
+
 export function resolveStyleChain<T extends PropertyObject>(
   propertyType: 'paragraphProperties' | 'runProperties' | 'tableProperties',
   params: OoxmlResolverParams,
@@ -280,7 +291,7 @@ export function resolveStyleChain<T extends PropertyObject>(
 ): T {
   if (!styleId) return {} as T;
 
-  const styleDef = params.translatedLinkedStyles?.styles?.[styleId];
+  const styleDef = lookupStyleDefinition(params, styleId);
   if (!styleDef) return {} as T;
 
   const styleProps = (styleDef[propertyType as keyof typeof styleDef] ?? {}) as T;
@@ -294,7 +305,7 @@ export function resolveStyleChain<T extends PropertyObject>(
       break;
     }
     seenStyles.add(nextBasedOn as string);
-    const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
+    const basedOnStyleDef = lookupStyleDefinition(params, nextBasedOn);
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
     if (basedOnProps && Object.keys(basedOnProps).length) {

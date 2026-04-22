@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
   DEFAULT_TBL_LOOK,
+  getBuiltInStyleDefinition,
+  listBuiltInStyleIds,
   resolveStyleChain,
   getNumberingProperties,
   resolveDocxFontFamily,
@@ -59,6 +61,104 @@ describe('ooxml - resolveStyleChain', () => {
     const params = buildParams();
     const result = resolveStyleChain('runProperties', params, 'MissingStyle');
     expect(result).toEqual({});
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Built-in (latent) style fallback — issue #2805
+//
+// python-docx, pandoc and similar generators reference Heading1..Heading9
+// without writing the matching <w:style> blocks. ECMA-376 §17.7.4.9 expects
+// readers to fall back to Word's built-in defaults; without the fallback,
+// SuperDoc rendered those headings as plain body text.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - built-in heading style fallback (#2805)', () => {
+  it('falls back to built-in Heading1 run props when styles.xml has no Heading1 entry', () => {
+    const params = buildParams();
+    const runProps = resolveStyleChain('runProperties', params, 'Heading1');
+    // Word's default Heading 1 is a 14pt bold blue heading.
+    expect(runProps.bold).toBe(true);
+    expect(runProps.fontSize).toBe(28); // half-points = 14pt
+    expect(runProps.color).toEqual({ val: '2F5496' });
+  });
+
+  it('falls back to built-in Heading1 paragraph props (spacing, outline, keep-together)', () => {
+    const params = buildParams();
+    const pPr = resolveStyleChain('paragraphProperties', params, 'Heading1');
+    expect(pPr.keepNext).toBe(true);
+    expect(pPr.keepLines).toBe(true);
+    expect(pPr.outlineLvl).toBe(0);
+    expect(pPr.spacing?.before).toBe(240); // 12pt in twips
+  });
+
+  it('provides defaults for every Heading1..Heading9', () => {
+    const params = buildParams();
+    for (let level = 1; level <= 9; level++) {
+      const styleId = `Heading${level}`;
+      const pPr = resolveStyleChain('paragraphProperties', params, styleId);
+      const rPr = resolveStyleChain('runProperties', params, styleId);
+      expect(pPr.outlineLvl, `${styleId} outlineLvl`).toBe(level - 1);
+      expect(rPr.fontSize, `${styleId} fontSize`).toBeGreaterThan(0);
+    }
+  });
+
+  it('document-defined Heading1 still wins over the built-in default', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          Heading1: { runProperties: { fontSize: 99, color: { val: 'FF00FF' } } },
+        },
+      },
+    });
+    const result = resolveStyleChain('runProperties', params, 'Heading1');
+    // Document override takes priority — no leakage of the 28/2F5496 defaults.
+    expect(result.fontSize).toBe(99);
+    expect(result.color).toEqual({ val: 'FF00FF' });
+    expect(result.bold).toBeUndefined();
+  });
+
+  it('still returns empty object for unknown styleIds (no false positives)', () => {
+    const params = buildParams();
+    expect(resolveStyleChain('runProperties', params, 'NotAHeading')).toEqual({});
+    expect(resolveStyleChain('runProperties', params, 'Heading10')).toEqual({});
+    expect(resolveStyleChain('runProperties', params, 'heading1')).toEqual({}); // case-sensitive
+  });
+
+  it('built-in basedOn=Normal still picks up document Normal properties', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          Normal: { default: true, runProperties: { fontFamily: { ascii: 'Calibri' } } },
+        },
+      },
+    });
+    // Heading1 isn't defined, but its built-in basedOn='Normal' chains into the
+    // document's Normal so the heading inherits the project font.
+    const result = resolveStyleChain('runProperties', params, 'Heading1');
+    expect(result.bold).toBe(true);
+    expect(result.fontSize).toBe(28);
+    expect(result.fontFamily).toEqual({ ascii: 'Calibri' });
+  });
+
+  it('rendering as a paragraph: built-in Heading1 produces visible heading formatting end-to-end', () => {
+    // Reproduces the python-docx scenario from #2805: a paragraph references
+    // Heading1 by styleId only, and styles.xml has no Heading1 block.
+    const params = buildParams();
+    const result = resolveParagraphProperties(params, { styleId: 'Heading1' }, null);
+    expect(result.outlineLvl).toBe(0);
+    expect(result.spacing?.before).toBe(240);
+    expect(result.keepNext).toBe(true);
+  });
+
+  it('exposes the built-in catalog via the public helper', () => {
+    expect(getBuiltInStyleDefinition('Heading1')?.styleId).toBe('Heading1');
+    expect(getBuiltInStyleDefinition('NotAHeading')).toBeUndefined();
+    expect(getBuiltInStyleDefinition(undefined)).toBeUndefined();
+    expect(listBuiltInStyleIds()).toContain('Heading1');
+    expect(listBuiltInStyleIds()).toContain('Heading9');
   });
 });
 

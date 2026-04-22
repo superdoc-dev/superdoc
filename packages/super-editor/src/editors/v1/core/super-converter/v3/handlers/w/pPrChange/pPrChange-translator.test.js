@@ -390,5 +390,26 @@ describe('w:pPrChange translator', () => {
 
       expect(encoded).toEqual(initialChange);
     });
+
+    it('maintains consistency for a pPrChange with sectPr alongside other properties', () => {
+      const initialChange = {
+        id: '12',
+        author: 'Mixed Round Trip',
+        date: '2026-01-07T00:00:00Z',
+        paragraphProperties: {
+          justification: 'center',
+          indent: { hanging: 360 },
+          sectPr: {
+            name: 'w:sectPr',
+            elements: [{ name: 'w:type', attributes: { 'w:val': 'nextPage' } }],
+          },
+        },
+      };
+
+      const decoded = translator.decode({ node: { attrs: { change: initialChange } } });
+      const encoded = translator.encode({ nodes: [decoded] });
+
+      expect(encoded).toEqual(initialChange);
+    });
   });
 });

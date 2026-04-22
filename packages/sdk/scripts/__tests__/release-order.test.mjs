@@ -94,15 +94,21 @@ test('release-sdk auto workflow resumes releases from sdk-v tags at HEAD', async
   );
 });
 
-test('release-sdk auto workflow runs on stable and main', async () => {
+test('release-sdk auto workflow stays on main while stable uses the central orchestrator', async () => {
   const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  const stableWorkflow = await readRepoFile('.github/workflows/release-stable.yml');
   assert.ok(
     content.includes('      - main'),
     '.github/workflows/release-sdk.yml: auto-release must continue to run on main',
   );
-  assert.ok(
+  assert.equal(
     content.includes('      - stable'),
-    '.github/workflows/release-sdk.yml: auto-release must run on stable',
+    false,
+    '.github/workflows/release-sdk.yml: stable releases should be handled by release-stable.yml',
+  );
+  assert.ok(
+    stableWorkflow.includes('      - stable'),
+    '.github/workflows/release-stable.yml: the central stable orchestrator must run on stable',
   );
 });
 

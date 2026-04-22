@@ -17,7 +17,9 @@ function collectImageRoots(container: HTMLElement): HTMLElement[] {
   };
 
   for (const fragment of Array.from(container.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`))) {
-    if (fragment.querySelector?.(`[data-image-metadata]`) == null) continue;
+    if (!fragment.hasAttribute('data-image-metadata') && fragment.querySelector?.(`[data-image-metadata]`) == null) {
+      continue;
+    }
     add(fragment);
   }
 

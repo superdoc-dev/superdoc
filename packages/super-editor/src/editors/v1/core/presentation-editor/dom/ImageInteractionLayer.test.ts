@@ -19,8 +19,14 @@ describe('ImageInteractionLayer', () => {
 
   it('marks rendered image roots as draggable move sources', () => {
     container.innerHTML = `
-      <div class="superdoc-image-fragment" data-pm-start="10" data-pm-end="16" data-block-id="image-block">
-        <img data-image-metadata='{"width":100}' alt="Block image" />
+      <div
+        class="superdoc-image-fragment"
+        data-pm-start="10"
+        data-pm-end="16"
+        data-block-id="image-block"
+        data-image-metadata='{"width":100}'
+      >
+        <img alt="Block image" />
       </div>
       <span class="superdoc-inline-image-clip-wrapper" data-pm-start="20" data-pm-end="24">
         <img class="superdoc-inline-image" data-image-metadata='{"width":50}' alt="Inline image" />
@@ -48,6 +54,27 @@ describe('ImageInteractionLayer', () => {
     expect(loose.draggable).toBe(true);
     expect(loose.dataset.imageKind).toBe('inline');
     expect(loose.dataset.displayLabel).toBe('Loose inline image');
+  });
+
+  it('marks block image fragments when metadata is on the fragment root', () => {
+    container.innerHTML = `
+      <div
+        class="superdoc-image-fragment"
+        data-pm-start="10"
+        data-pm-end="16"
+        data-image-metadata='{"width":100}'
+      >
+        <img alt="Block image" />
+      </div>
+    `;
+
+    layer.apply(3);
+
+    const block = container.querySelector(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`) as HTMLElement;
+    expect(block.draggable).toBe(true);
+    expect(block.dataset.dragSourceKind).toBe('existingImage');
+    expect(block.dataset.imageKind).toBe('block');
+    expect(block.dataset.displayLabel).toBe('Block image');
   });
 
   it('skips elements without PM position metadata', () => {

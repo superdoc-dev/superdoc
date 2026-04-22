@@ -230,7 +230,14 @@ export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
         result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
         cursor += segment.length;
         if (idx !== segments.length - 1) {
-          result.push({ kind: 'break', breakType: 'line', pmStart: cursor, pmEnd: cursor + 1, sdt: textRun.sdt });
+          result.push({
+            kind: 'break',
+            breakType: 'line',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            sdt: textRun.sdt,
+            trackedChange: textRun.trackedChange,
+          });
           cursor += 1;
         }
       });

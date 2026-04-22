@@ -5947,6 +5947,7 @@ export class DomPainter {
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
+   * @param preExpandedRuns - Optional runs to use instead of expanding the block runs for inline newlines
    * @returns The rendered line element
    */
   private renderLine(

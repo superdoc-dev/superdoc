@@ -121,14 +121,13 @@ import {
 import {
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-  getParagraphBorderBox,
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
+import { isTextRun } from '@superdoc/pm-adapter';
+import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -5932,7 +5931,8 @@ export class DomPainter {
     }
 
     const lineRange = computeLinePmRange(block, line);
-    let runsForLine = sliceRunsForLine(block, line);
+    const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs as Run[]) };
+    let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
@@ -7939,31 +7939,16 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
 
 /**
- * Extracts and slices text runs that belong to a specific line within a paragraph block.
- * Handles partial runs at line boundaries by creating sliced copies with correct character ranges.
+ * Expands text runs that contain inline newlines into multiple runs.
  *
- * @param {ParagraphBlock} block - The paragraph block containing runs
- * @param {Line} line - The line definition with fromRun/toRun and fromChar/toChar ranges
- * @returns {Run[]} Array of runs (or sliced run portions) that comprise the line
- *
- * @remarks
- * - Preserves run styling and metadata (pmStart, pmEnd positions) in sliced runs
- * - Tab runs are only included if the slice contains the actual tab character
- * - Text runs are sliced to match exact character boundaries of the line
- * - Returns empty array if no valid runs are found within the line range
- *
- * @example
- * ```typescript
- * const line = { fromRun: 0, toRun: 2, fromChar: 5, toChar: 10 };
- * const runs = sliceRunsForLine(paragraphBlock, line);
- * // Returns runs or run slices that fall within the specified character range
- * ```
+ * @param {Run[]} runs - The runs to expand
+ * @returns {Run[]} The expanded runs
  */
 const expandRunsForInlineNewlines = (runs: Run[]): Run[] => {
   const expanded: Run[] = [];
 
   for (const run of runs) {
-    if ((run as TextRun).text && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\n')) {
+    if (isTextRun(run) && run.text.includes('\n')) {
       const textRun = run as TextRun;
       const segments = textRun.text.split('\n');
       let cursor = textRun.pmStart ?? 0;
@@ -7995,89 +7980,6 @@ const expandRunsForInlineNewlines = (runs: Run[]): Run[] => {
   }
 
   return expanded;
-};
-
-export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
-  const runs = expandRunsForInlineNewlines(block.runs as Run[]);
-  const result: Run[] = [];
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = runs[runIndex];
-    if (!run) continue;
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if (run.kind === 'image') {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks don't have text content and are handled
-    // by the measurer creating new lines. Include them for PM position tracking.
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - similar to LineBreakRun
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // TabRun handling - tabs don't need slicing
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units like images
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units like images
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    // At this point, run must be TextRun (has .text property)
-    if (!('text' in run)) {
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-    const runLength = text.length;
-    const runPmStart = run.pmStart ?? null;
-    const fallbackPmEnd = runPmStart != null && run.pmEnd == null ? runPmStart + runLength : (run.pmEnd ?? null);
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      if (!slice) continue;
-
-      const pmSliceStart = runPmStart != null ? runPmStart + start : undefined;
-      const pmSliceEnd = runPmStart != null ? runPmStart + end : (fallbackPmEnd ?? undefined);
-
-      // TextRun: return a sliced TextRun preserving styles
-      const sliced: TextRun = {
-        ...(run as TextRun),
-        text: slice,
-        pmStart: pmSliceStart,
-        pmEnd: pmSliceEnd,
-        comments: (run as TextRun).comments ? [...(run as TextRun).comments!] : undefined,
-      };
-      result.push(sliced);
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
 };
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {

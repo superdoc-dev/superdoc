@@ -90,7 +90,7 @@ const isHiddenShape = (node: PMNode): boolean => {
 /**
  * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => {
+export const isTextRun = (run: Run): run is TextRun => {
   const kind = (run as { kind?: string }).kind;
   return (kind === undefined || kind === 'text') && 'text' in run;
 };

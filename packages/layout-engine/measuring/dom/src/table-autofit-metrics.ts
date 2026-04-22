@@ -13,6 +13,8 @@ import type {
   TableCell,
 } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
+import type { AutoFitRowInput } from './autofit-columns.js';
+import type { WorkingTableGridInput } from './autofit-normalize.js';
 import { getMeasuredTextWidth } from './measurementCache.js';
 
 const DEFAULT_CELL_PADDING = { top: 0, right: 4, bottom: 0, left: 4 };
@@ -111,6 +113,53 @@ export type AutoFitTableResultKeyOptions = {
   maxWidth: number;
   cellMetricKeys: string[];
   layoutEpoch?: number | string;
+};
+
+/**
+ * Measured intrinsic width metrics for one concrete AutoFit cell.
+ *
+ * The shape is indexed by row and cell position so downstream code can:
+ * - keep content metrics separate from final width resolution
+ * - join the metrics back to normalized row placement deterministically
+ * - cache the table result using the participating cell metric keys
+ */
+export type TableAutoFitCellMetrics = {
+  /** Physical cell index within its source row. */
+  cellIndex: number;
+  /** Logical span width in grid columns. */
+  span: number;
+  /** Preferred cell width contributed by normalization, in pixels. */
+  preferredWidth?: number;
+  /** Measured minimum outer cell width, in pixels. */
+  minContentWidth: number;
+  /** Measured maximum outer cell width, in pixels. */
+  maxContentWidth: number;
+};
+
+/**
+ * Measured intrinsic width metrics for one AutoFit row.
+ */
+export type TableAutoFitRowMetrics = {
+  /** Physical row index within the source table. */
+  rowIndex: number;
+  /** Concrete measured cells in physical document order. */
+  cells: TableAutoFitCellMetrics[];
+};
+
+/**
+ * Stable AutoFit content-metrics contract produced by the measurement layer.
+ *
+ * `rowMetrics` is the durable row/cell-indexed shape for the rework.
+ * `rows` is the current solver-facing compatibility projection used until the
+ * pure AutoFit solver consumes `rowMetrics` directly in later commits.
+ */
+export type TableAutoFitContentMetricsResult = {
+  /** Stable row/cell-indexed intrinsic width metrics. */
+  rowMetrics: TableAutoFitRowMetrics[];
+  /** Current solver-facing projection that preserves skipped-column metadata. */
+  rows: AutoFitRowInput[];
+  /** Cache keys for each participating cell metrics entry. */
+  cellMetricKeys: string[];
 };
 
 type LruEntry<T> = {
@@ -293,6 +342,91 @@ export async function measureTableCellContentMetrics(
 }
 
 /**
+ * Measure all concrete cells in a normalized AutoFit table and return a stable
+ * row/cell-indexed metrics shape plus the current solver-facing projection.
+ *
+ * This helper keeps content measurement separate from width resolution:
+ * - it does not decide final column widths
+ * - it does not mutate the working grid
+ * - it preserves the nested-table percentage denominator behavior by using the
+ *   fixed-pass table width basis supplied by normalization/runtime
+ *
+ * @param table - Runtime table block being measured.
+ * @param workingInput - Normalized working-grid input for the table.
+ * @param measureBlock - Existing block measurer reused for intrinsic widths.
+ * @returns Row/cell-indexed content metrics plus compatibility rows.
+ */
+export async function measureTableAutoFitContentMetrics(
+  table: TableBlock,
+  workingInput: WorkingTableGridInput,
+  measureBlock: AutoFitMeasureBlock,
+): Promise<TableAutoFitContentMetricsResult> {
+  const tableMeasurementBasis = workingInput.preferredTableWidth ?? workingInput.maxTableWidth;
+  const cellMetricKeys: string[] = [];
+
+  const rowMetrics = await Promise.all(
+    table.rows.map(async (row, rowIndex) => {
+      const normalizedRow = workingInput.rows[rowIndex] ?? {};
+      const cells = await Promise.all(
+        row.cells.map(async (cell, cellIndex) => {
+          const normalizedCell = normalizedRow.cells?.[cellIndex];
+          const span = normalizedCell?.span ?? cell.colSpan ?? 1;
+          const measurementMaxWidth = resolveAutoFitCellMeasurementMaxWidth(
+            cell,
+            normalizedCell?.preferredWidth,
+            span,
+            tableMeasurementBasis,
+            workingInput.gridColumnCount,
+          );
+
+          cellMetricKeys.push(
+            buildTableCellContentMetricsCacheKey(cell, {
+              maxWidth: measurementMaxWidth,
+            }),
+          );
+
+          const metrics = await measureTableCellContentMetrics(cell, {
+            maxWidth: measurementMaxWidth,
+            measureBlock,
+          });
+
+          return {
+            cellIndex,
+            span,
+            preferredWidth: normalizedCell?.preferredWidth,
+            minContentWidth: metrics.minWidthPx,
+            maxContentWidth: metrics.maxWidthPx,
+          };
+        }),
+      );
+
+      return {
+        rowIndex,
+        cells,
+      };
+    }),
+  );
+
+  return {
+    rowMetrics,
+    rows: rowMetrics.map((rowMetrics, rowIndex) => {
+      const normalizedRow = workingInput.rows[rowIndex] ?? {};
+      return {
+        skippedBefore: normalizedRow.skippedBefore ?? [],
+        cells: rowMetrics.cells.map((cellMetrics) => ({
+          span: cellMetrics.span,
+          preferredWidth: cellMetrics.preferredWidth,
+          minContentWidth: cellMetrics.minContentWidth,
+          maxContentWidth: cellMetrics.maxContentWidth,
+        })),
+        skippedAfter: normalizedRow.skippedAfter ?? [],
+      };
+    }),
+    cellMetricKeys,
+  };
+}
+
+/**
  * Resolves intrinsic width metrics for a single flow block inside a table cell.
  */
 async function measureIntrinsicBlockWidthMetrics(
@@ -442,6 +576,31 @@ function getIntrinsicAtomicBlockWidth(block: ImageBlock | DrawingBlock): number 
   }
 
   return block.geometry.width;
+}
+
+/**
+ * Estimate the content-box width basis used for recursive intrinsic
+ * measurement inside one AutoFit cell.
+ *
+ * This is intentionally not the final runtime cell width. It is only the
+ * measurement basis for recursive content such as nested percentage tables
+ * while the outer table's AutoFit width resolution is still pending.
+ */
+function resolveAutoFitCellMeasurementMaxWidth(
+  cell: TableCell,
+  preferredWidth: number | undefined,
+  span: number,
+  tableWidthBasis: number,
+  gridColumnCount: number,
+): number {
+  const outerWidth =
+    preferredWidth ?? Math.max(1, tableWidthBasis * (Math.max(1, span) / Math.max(1, gridColumnCount || span || 1)));
+  const padding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
+  const leftPadding = padding.left ?? DEFAULT_CELL_PADDING.left;
+  const rightPadding = padding.right ?? DEFAULT_CELL_PADDING.right;
+  const leftBorder = getCellBorderWidthPx(cell.attrs?.borders?.left);
+  const rightBorder = getCellBorderWidthPx(cell.attrs?.borders?.right);
+  return Math.max(1, outerWidth - leftPadding - rightPadding - leftBorder - rightBorder);
 }
 
 /**

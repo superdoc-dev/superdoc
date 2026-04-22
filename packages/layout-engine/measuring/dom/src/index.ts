@@ -86,7 +86,7 @@ import {
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
   getCachedAutoFitTableResult,
-  measureTableCellContentMetrics,
+  measureTableAutoFitContentMetrics,
   setCachedAutoFitTableResult,
 } from './table-autofit-metrics.js';
 
@@ -2831,78 +2831,8 @@ async function buildMeasuredAutoFitRows(
   rows: NonNullable<Parameters<typeof computeAutoFitColumnWidths>[0]['rows']>;
   cellMetricKeys: string[];
 }> {
-  const tableMeasurementBasis = workingInput.preferredTableWidth ?? workingInput.maxTableWidth;
-  const cellMetricKeys: string[] = [];
-
-  const rows = await Promise.all(
-    block.rows.map(async (row, rowIndex) => {
-      const normalizedRow = workingInput.rows[rowIndex] ?? {};
-      const cells = await Promise.all(
-        row.cells.map(async (cell, cellIndex) => {
-          const normalizedCell = normalizedRow.cells?.[cellIndex];
-          const span = normalizedCell?.span ?? cell.colSpan ?? 1;
-          const measurementMaxWidth = resolveAutoFitCellMeasurementMaxWidth(
-            cell,
-            normalizedCell?.preferredWidth,
-            span,
-            tableMeasurementBasis,
-            workingInput.gridColumnCount,
-          );
-
-          cellMetricKeys.push(
-            buildTableCellContentMetricsCacheKey(cell, {
-              maxWidth: measurementMaxWidth,
-            }),
-          );
-
-          const metrics = await measureTableCellContentMetrics(cell, {
-            maxWidth: measurementMaxWidth,
-            measureBlock,
-          });
-
-          return {
-            span,
-            preferredWidth: normalizedCell?.preferredWidth,
-            minContentWidth: metrics.minWidthPx,
-            maxContentWidth: metrics.maxWidthPx,
-          };
-        }),
-      );
-
-      return {
-        skippedBefore: normalizedRow.skippedBefore ?? [],
-        cells,
-        skippedAfter: normalizedRow.skippedAfter ?? [],
-      };
-    }),
-  );
-
+  const { rows, cellMetricKeys } = await measureTableAutoFitContentMetrics(block, workingInput, measureBlock);
   return { rows, cellMetricKeys };
-}
-
-/**
- * Estimate the content-box width basis used for recursive intrinsic
- * measurement inside a table cell.
- *
- * This is not the final runtime width. It is only the measurement basis for
- * nested percentage tables and other recursive content while AutoFit is still
- * resolving the table's final width vector.
- */
-function resolveAutoFitCellMeasurementMaxWidth(
-  cell: TableBlock['rows'][number]['cells'][number],
-  preferredWidth: number | undefined,
-  span: number,
-  tableWidthBasis: number,
-  gridColumnCount: number,
-): number {
-  const outerWidth =
-    preferredWidth ?? Math.max(1, tableWidthBasis * (Math.max(1, span) / Math.max(1, gridColumnCount || span || 1)));
-  const padding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
-  const leftPadding = padding.left ?? DEFAULT_CELL_PADDING.left;
-  const rightPadding = padding.right ?? DEFAULT_CELL_PADDING.right;
-  const leftBorder = getMeasuredCellBorderWidthPx(cell.attrs?.borders?.left);
-  const rightBorder = getMeasuredCellBorderWidthPx(cell.attrs?.borders?.right);
-  return Math.max(1, outerWidth - leftPadding - rightPadding - leftBorder - rightBorder);
 }
 
 /**

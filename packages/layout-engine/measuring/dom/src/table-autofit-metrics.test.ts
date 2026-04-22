@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TableCell } from '@superdoc/contracts';
+import type { TableBlock } from '@superdoc/contracts';
 import { measureBlock } from './index.js';
-import { clearTableAutoFitMeasurementCaches, measureTableCellContentMetrics } from './table-autofit-metrics.js';
+import { buildAutoFitWorkingGridInput } from './autofit-normalize.js';
+import {
+  clearTableAutoFitMeasurementCaches,
+  measureTableAutoFitContentMetrics,
+  measureTableCellContentMetrics,
+} from './table-autofit-metrics.js';
 
 describe('table-autofit-metrics', () => {
   beforeEach(() => {
@@ -303,5 +309,111 @@ describe('table-autofit-metrics', () => {
     await measureTableCellContentMetrics(cell, { maxWidth: 800, measureBlock: measuringSpy });
 
     expect(measuringSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it('returns a stable row/cell-indexed metrics shape for normalized tables', async () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 'table-row-metrics',
+      attrs: {
+        tableWidth: { value: 400, type: 'px' },
+      },
+      columnWidths: [120, 120],
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0-0',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'para-0-0',
+                  runs: [{ text: 'Short', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+            {
+              id: 'cell-0-1',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'para-0-1',
+                  runs: [{ text: 'Longer cell content', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const workingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
+    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, measureBlock);
+
+    expect(metrics.rowMetrics).toHaveLength(1);
+    expect(metrics.rowMetrics[0].rowIndex).toBe(0);
+    expect(metrics.rowMetrics[0].cells.map((cell) => cell.cellIndex)).toEqual([0, 1]);
+    expect(metrics.rowMetrics[0].cells[0].span).toBe(1);
+    expect(metrics.rowMetrics[0].cells[1].span).toBe(1);
+    expect(metrics.rows).toHaveLength(1);
+    expect(metrics.rows[0].cells).toHaveLength(2);
+    expect(metrics.cellMetricKeys).toHaveLength(2);
+  });
+
+  it('preserves nested percentage width measurement through the table-level metrics helper', async () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 'table-nested-pct-helper',
+      attrs: {
+        tableWidth: { value: 400, type: 'px' },
+      },
+      columnWidths: [200],
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0-0',
+              blocks: [
+                {
+                  kind: 'table',
+                  id: 'nested-table-helper',
+                  attrs: {
+                    tableWidth: { value: 2500, type: 'pct' },
+                  },
+                  columnWidths: [100],
+                  rows: [
+                    {
+                      id: 'nested-row-0',
+                      cells: [
+                        {
+                          id: 'nested-cell-0-0',
+                          blocks: [
+                            {
+                              kind: 'paragraph',
+                              id: 'nested-para-helper',
+                              runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 12 }],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const workingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
+    const metrics = await measureTableAutoFitContentMetrics(table, workingInput, measureBlock);
+
+    expect(metrics.rowMetrics[0].cells[0].minContentWidth).toBe(204);
+    expect(metrics.rowMetrics[0].cells[0].maxContentWidth).toBe(204);
+    expect(metrics.rows[0].cells[0].minContentWidth).toBe(204);
+    expect(metrics.rows[0].cells[0].maxContentWidth).toBe(204);
   });
 });

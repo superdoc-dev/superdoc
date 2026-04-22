@@ -1315,7 +1315,7 @@ export class EditorInputManager {
         if (sdtBlock && !insideTableInSdt) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
-          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hit.pos) : null;
+          const inlineSdt = clickDepth === 1 ? findStructuredContentInlineAtPos(doc, hit.pos) : null;
           if (inlineSdt && hit.pos >= inlineSdt.end) {
             const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
             inlineSdtBoundaryPos = afterInlineSdt;

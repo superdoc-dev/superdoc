@@ -65,6 +65,13 @@ export const FeatureFlags = {
   BODY_PAGE_TOKENS: isEnabled('SD_BODY_PAGE_TOKENS', true),
 
   /**
+   * Enable PAGEREF token resolution so TOC entries and other cross-reference
+   * page numbers refresh after edits that change pagination. When disabled,
+   * PAGEREF runs render the text Word baked in at DOCX export time.
+   */
+  BODY_PAGEREFS: isEnabled('SD_BODY_PAGEREFS', true),
+
+  /**
    * Enable header/footer page token resolution.
    * When disabled, headers/footers use painter-time token rendering fallback.
    */

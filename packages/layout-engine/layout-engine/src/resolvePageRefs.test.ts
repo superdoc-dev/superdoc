@@ -174,16 +174,23 @@ describe('resolvePageRefTokens', () => {
 
     const anchorMap = new Map([['_Toc1', 5]]);
 
-    const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
 
     expect(affectedBlockIds.size).toBe(1);
     expect(affectedBlockIds.has('0-paragraph')).toBe(true);
-    const block = blocks[0];
-    if (block.kind === 'paragraph') {
-      expect((block.runs[1] as { text?: string }).text).toBe('5');
-      // Verify token metadata is cleared after resolution
-      expect((block.runs[1] as { token?: string }).token).toBeUndefined();
-      expect((block.runs[1] as { pageRefMetadata?: unknown }).pageRefMetadata).toBeUndefined();
+    // Original block should not be mutated.
+    const original = blocks[0];
+    if (original.kind === 'paragraph') {
+      expect((original.runs[1] as { text?: string }).text).toBe('??');
+      expect((original.runs[1] as { token?: string }).token).toBe('pageReference');
+    }
+    // Updated (cloned) block has the resolved text + stripped token metadata.
+    const updated = updatedBlocks.get('0-paragraph');
+    expect(updated).toBeDefined();
+    if (updated && updated.kind === 'paragraph') {
+      expect((updated.runs[1] as { text?: string }).text).toBe('5');
+      expect((updated.runs[1] as { token?: string }).token).toBeUndefined();
+      expect((updated.runs[1] as { pageRefMetadata?: unknown }).pageRefMetadata).toBeUndefined();
     }
   });
 
@@ -232,13 +239,14 @@ describe('resolvePageRefTokens', () => {
       ['_Toc2', 7],
     ]);
 
-    const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
 
     expect(affectedBlockIds.size).toBe(1);
-    const block = blocks[0];
-    if (block.kind === 'paragraph') {
-      expect((block.runs[1] as { text?: string }).text).toBe('3');
-      expect((block.runs[3] as { text?: string }).text).toBe('7');
+    const updated = updatedBlocks.get('0-paragraph');
+    expect(updated).toBeDefined();
+    if (updated && updated.kind === 'paragraph') {
+      expect((updated.runs[1] as { text?: string }).text).toBe('3');
+      expect((updated.runs[3] as { text?: string }).text).toBe('7');
     }
   });
 
@@ -264,10 +272,11 @@ describe('resolvePageRefTokens', () => {
 
     const anchorMap = new Map([['_TocOther', 5]]);
 
-    const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
 
     // Block not affected since token wasn't resolved
     expect(affectedBlockIds.size).toBe(0);
+    expect(updatedBlocks.size).toBe(0);
     const block = blocks[0];
     if (block.kind === 'paragraph') {
       expect((block.runs[0] as { text?: string }).text).toBe('??'); // Unchanged
@@ -287,9 +296,10 @@ describe('resolvePageRefTokens', () => {
 
     const anchorMap = new Map();
 
-    const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
 
     expect(affectedBlockIds.size).toBe(0);
+    expect(updatedBlocks.size).toBe(0);
   });
 
   it('skips runs without pageReference token', () => {
@@ -315,9 +325,41 @@ describe('resolvePageRefTokens', () => {
 
     const anchorMap = new Map();
 
-    const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
 
     expect(affectedBlockIds.size).toBe(0);
+    expect(updatedBlocks.size).toBe(0);
+  });
+
+  it('is a no-op when resolved page already matches existing text', () => {
+    // Idempotence: if a previous iteration resolved _Toc1 to "5" and the next
+    // iteration sees the same anchor page, the block is not flagged affected
+    // and is not re-cloned. Keeps the convergence loop from running forever.
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            text: '5',
+            fontFamily: 'Arial',
+            fontSize: 12,
+            token: 'pageReference',
+            pageRefMetadata: {
+              bookmarkId: '_Toc1',
+              instruction: 'PAGEREF _Toc1 \\h',
+            },
+          },
+        ],
+      },
+    ];
+
+    const anchorMap = new Map([['_Toc1', 5]]);
+
+    const { affectedBlockIds, updatedBlocks } = resolvePageRefTokens(blocks, anchorMap);
+
+    expect(affectedBlockIds.size).toBe(0);
+    expect(updatedBlocks.size).toBe(0);
   });
 });
 

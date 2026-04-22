@@ -4273,6 +4273,7 @@ export class PresentationEditor extends EventEmitter {
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
           previousMeasures,
+          bookmarks,
         );
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);

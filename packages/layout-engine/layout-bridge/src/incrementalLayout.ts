@@ -17,6 +17,8 @@ import {
   type HeaderFooterConstraints,
   computeDisplayPageNumber,
   resolvePageNumberTokens,
+  buildAnchorMap,
+  resolvePageRefTokens,
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
   SINGLE_COLUMN_DEFAULT,
@@ -749,6 +751,7 @@ export async function incrementalLayout(
     measure?: HeaderFooterMeasureFn;
   },
   previousMeasures?: Measure[] | null,
+  bookmarks?: Map<string, number>,
 ): Promise<IncrementalLayoutResult> {
   const isSemanticFlow = options.flowMode === 'semantic';
 
@@ -1120,8 +1123,11 @@ export async function incrementalLayout(
   let totalRelayoutTime = 0;
   let converged = true;
 
-  // Only run token resolution if feature flag is enabled
-  if (!isSemanticFlow && FeatureFlags.BODY_PAGE_TOKENS) {
+  // Only run token resolution if at least one resolver is enabled.
+  const runPageTokens = !isSemanticFlow && FeatureFlags.BODY_PAGE_TOKENS;
+  const runPageRefs = !isSemanticFlow && FeatureFlags.BODY_PAGEREFS && !!bookmarks && bookmarks.size > 0;
+
+  if (runPageTokens || runPageRefs) {
     while (iteration < maxIterations) {
       // Build numbering context from current layout
       const sections = options.sectionMetadata ?? [];
@@ -1130,28 +1136,48 @@ export async function incrementalLayout(
       // Log iteration start
       PageTokenLogger.logIterationStart(iteration, layout.pages.length);
 
-      // Resolve page number tokens
-      const tokenResult = resolvePageNumberTokens(layout, currentBlocks, currentMeasures, numberingCtx);
+      // Resolve page number tokens (PAGE/NUMPAGES)
+      const tokenResult = runPageTokens
+        ? resolvePageNumberTokens(layout, currentBlocks, currentMeasures, numberingCtx)
+        : { affectedBlockIds: new Set<string>(), updatedBlocks: new Map<string, FlowBlock>() };
+
+      // Resolve PAGEREF tokens (cross-references to bookmarks) using the same
+      // convergence loop: changes in either resolver kind can shift page counts
+      // and require another round of re-measure + re-layout before stability.
+      const pageRefResult = runPageRefs
+        ? resolvePageRefTokens(currentBlocks, buildAnchorMap(bookmarks!, layout))
+        : { affectedBlockIds: new Set<string>(), updatedBlocks: new Map<string, FlowBlock>() };
+
+      const affectedBlockIds = new Set<string>([...tokenResult.affectedBlockIds, ...pageRefResult.affectedBlockIds]);
 
       // Check for convergence
-      if (tokenResult.affectedBlockIds.size === 0) {
+      if (affectedBlockIds.size === 0) {
         perfLog(`[Perf] 4.3 Page token resolution converged after ${iteration} iterations`);
         break;
       }
 
-      perfLog(`[Perf] 4.3.${iteration + 1} Page tokens resolved: ${tokenResult.affectedBlockIds.size} blocks affected`);
+      perfLog(
+        `[Perf] 4.3.${iteration + 1} Page tokens resolved: ${tokenResult.affectedBlockIds.size} PAGE + ${pageRefResult.affectedBlockIds.size} PAGEREF blocks affected`,
+      );
 
       // Log affected blocks
-      const blockSamples = Array.from(tokenResult.affectedBlockIds).slice(0, 5) as string[];
-      PageTokenLogger.logAffectedBlocks(iteration, tokenResult.affectedBlockIds, blockSamples);
+      const blockSamples = Array.from(affectedBlockIds).slice(0, 5) as string[];
+      PageTokenLogger.logAffectedBlocks(iteration, affectedBlockIds, blockSamples);
 
-      totalAffectedBlocks += tokenResult.affectedBlockIds.size;
+      totalAffectedBlocks += affectedBlockIds.size;
 
-      // Apply updated blocks
-      currentBlocks = currentBlocks.map((block) => tokenResult.updatedBlocks.get(block.id) ?? block);
+      // Apply updated blocks. A single block may be updated by both resolvers
+      // (e.g. a header containing both a PAGE token and a PAGEREF) — merge
+      // their run changes so neither overwrites the other.
+      currentBlocks = currentBlocks.map((block) => {
+        const tokenClone = tokenResult.updatedBlocks.get(block.id);
+        const pageRefClone = pageRefResult.updatedBlocks.get(block.id);
+        if (tokenClone && pageRefClone) return mergeRunUpdates(block, tokenClone, pageRefClone);
+        return tokenClone ?? pageRefClone ?? block;
+      });
 
       // Invalidate cache for affected blocks
-      measureCache.invalidate(Array.from(tokenResult.affectedBlockIds));
+      measureCache.invalidate(Array.from(affectedBlockIds));
 
       // Re-measure affected blocks using per-section constraints
       const remeasureStart = performance.now();
@@ -1159,7 +1185,7 @@ export async function incrementalLayout(
       currentMeasures = await remeasureAffectedBlocks(
         currentBlocks,
         currentMeasures,
-        tokenResult.affectedBlockIds,
+        affectedBlockIds,
         currentPerSectionConstraints,
         measureBlock,
         measureCache,
@@ -1168,7 +1194,7 @@ export async function incrementalLayout(
       const remeasureTime = remeasureEnd - remeasureStart;
       totalRemeasureTime += remeasureTime;
       perfLog(`[Perf] 4.3.${iteration + 1}.1 Re-measure: ${remeasureTime.toFixed(2)}ms`);
-      PageTokenLogger.logRemeasure(tokenResult.affectedBlockIds.size, remeasureTime);
+      PageTokenLogger.logRemeasure(affectedBlockIds.size, remeasureTime);
 
       // Check if page count has stabilized
       const oldPageCount = layout.pages.length;
@@ -2315,4 +2341,29 @@ async function remeasureAffectedBlocks(
   }
 
   return updatedMeasures;
+}
+
+/**
+ * Merge two clones of the same block produced by independent token resolvers
+ * (resolvePageNumberTokens + resolvePageRefTokens). Each resolver clones the
+ * block but only modifies runs it understood, so a paragraph containing BOTH
+ * a PAGE token and a PAGEREF token would lose one of the two updates if we
+ * picked a single clone.
+ *
+ * Strategy: take the original block's run array and, for each run, prefer the
+ * version from whichever clone actually changed it (identified by !== run).
+ * Falls back to the first clone's run when neither is distinguishable.
+ */
+function mergeRunUpdates(original: FlowBlock, a: FlowBlock, b: FlowBlock): FlowBlock {
+  if (original.kind !== 'paragraph' || a.kind !== 'paragraph' || b.kind !== 'paragraph') {
+    return a;
+  }
+  const runs = original.runs.map((origRun, i) => {
+    const aRun = a.runs[i];
+    const bRun = b.runs[i];
+    if (aRun !== origRun) return aRun;
+    if (bRun !== origRun) return bRun;
+    return origRun;
+  });
+  return { ...a, runs };
 }

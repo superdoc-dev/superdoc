@@ -80,6 +80,40 @@ test.describe("trackedChanges.replacements='independent'", () => {
     expect(uniqueIds.size).toBe(allIds.length);
   });
 
+  test('body replacement sidebar shows separate added and deleted bubbles', async ({ superdoc }) => {
+    await assertDocumentApiReady(superdoc.page);
+
+    await superdoc.type('Replace ME now');
+    await superdoc.waitForStable();
+    await superdoc.setDocumentMode('suggesting');
+    await superdoc.waitForStable();
+
+    await superdoc.tripleClickLine(0);
+    await superdoc.waitForStable();
+    await superdoc.type('Replace it now');
+    await superdoc.waitForStable();
+
+    await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(2);
+
+    const dialogs = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+      has: superdoc.page.locator('.tracked-change-text'),
+    });
+    await expect(dialogs).toHaveCount(2);
+    await expect(
+      superdoc.page.locator('.comment-placeholder .comments-dialog .change-type', { hasText: 'Replaced' }),
+    ).toHaveCount(0);
+
+    const deletedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+      has: superdoc.page.locator('.tracked-change-text.is-deleted', { hasText: 'ME' }),
+    });
+    const insertedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+      has: superdoc.page.locator('.tracked-change-text.is-inserted', { hasText: 'it' }),
+    });
+
+    await expect(deletedDialog).toHaveCount(1);
+    await expect(insertedDialog).toHaveCount(1);
+  });
+
   test('accepting the insertion leaves the deletion addressable on its own', async ({ superdoc }) => {
     await assertDocumentApiReady(superdoc.page);
 

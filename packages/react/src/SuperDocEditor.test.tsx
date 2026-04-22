@@ -117,6 +117,46 @@ describe('SuperDocEditor', () => {
         { timeout: 5000 },
       );
     });
+
+    it('should route onTransaction through the latest callback after rerender', async () => {
+      const ref = createRef<SuperDocRef>();
+      const onReady = vi.fn();
+      const firstOnTransaction = vi.fn();
+      const secondOnTransaction = vi.fn();
+
+      const { rerender } = render(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={firstOnTransaction} />);
+
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+
+      const instance = ref.current?.getInstance();
+      expect(instance).toBeTruthy();
+
+      const transactionEvent = {
+        editor: {},
+        sourceEditor: {},
+        transaction: { docChanged: true },
+        surface: 'body',
+      };
+
+      const firstCallCountBeforeManualDispatch = firstOnTransaction.mock.calls.length;
+      (instance as any).config.onTransaction(transactionEvent);
+
+      expect(firstOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
+      expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeManualDispatch + 1);
+      expect(secondOnTransaction).not.toHaveBeenCalled();
+
+      rerender(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={secondOnTransaction} />);
+
+      expect(ref.current?.getInstance()).toBe(instance);
+
+      const firstCallCountBeforeRerenderDispatch = firstOnTransaction.mock.calls.length;
+      const secondCallCountBeforeManualDispatch = secondOnTransaction.mock.calls.length;
+      (instance as any).config.onTransaction(transactionEvent);
+
+      expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeRerenderDispatch);
+      expect(secondOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
+      expect(secondOnTransaction).toHaveBeenCalledTimes(secondCallCountBeforeManualDispatch + 1);
+    });
   });
 
   describe('onEditorDestroy', () => {

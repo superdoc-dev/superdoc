@@ -119,7 +119,7 @@ import {
 const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
 const DEFAULT_TEST_FONT_FAMILY = 'Arial, sans-serif';
 const DEFAULT_TEST_FONT_SIZE_PX = (16 * 96) / 72;
-const FALLBACK_FONT_FAMILY = 'Times New Roman, sans-serif';
+const FALLBACK_FONT_FAMILY = 'Times New Roman, serif';
 const FALLBACK_FONT_SIZE_PX = 12;
 let defaultConverterContext: ConverterContext = {
   translatedNumbering: {},

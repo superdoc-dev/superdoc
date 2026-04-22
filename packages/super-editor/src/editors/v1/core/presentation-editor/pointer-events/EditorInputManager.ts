@@ -39,6 +39,7 @@ import {
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
+import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
@@ -62,7 +63,6 @@ const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]
   [0, -COMMENT_THREAD_HIT_TOLERANCE_PX],
   [0, COMMENT_THREAD_HIT_TOLERANCE_PX],
 ];
-
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
 type CommentThreadHit = {
@@ -99,6 +99,11 @@ function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
 
 function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean {
   return getCommentHighlightThreadIds(target).length === 1;
+}
+
+function isDirectTrackedChangeHit(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest(TRACK_CHANGE_SELECTOR) != null;
 }
 
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
@@ -220,11 +225,11 @@ function shouldIgnoreRepeatClickOnActiveComment(
     return false;
   }
 
-  // Direct clicks on commented text should place a caret at the clicked
-  // position and let the comments plugin infer the active thread from the
-  // resulting selection. Only preserve the pointerdown short-circuit for
-  // nearby non-text surfaces, such as split-run gaps.
-  if (isDirectSingleCommentHighlightHit(target)) {
+  // Direct clicks on single-thread comment text or tracked-change text should
+  // place a caret at the clicked position and let comment/thread activation be
+  // inferred from the resulting selection. Only preserve the pointerdown
+  // short-circuit for nearby non-text surfaces, such as split-run gaps.
+  if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
     return false;
   }
 
@@ -1294,17 +1299,35 @@ export class EditorInputManager {
         // selection so caret placement/editing inside table cells works.
         const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
+        let inlineSdtBoundaryPos: number | null = null;
+        let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
         const insideTableInSdt =
           !!sdtBlock && this.#isInsideTableWithinStructuredContentBlock(doc, hit.pos, sdtBlock.pos);
         if (sdtBlock && !insideTableInSdt) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
-          nextSelection = TextSelection.create(doc, hit.pos);
+          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hit.pos) : null;
+          if (inlineSdt && hit.pos >= inlineSdt.end) {
+            const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
+            inlineSdtBoundaryPos = afterInlineSdt;
+            inlineSdtBoundaryDirection = 'after';
+            nextSelection = TextSelection.create(doc, afterInlineSdt);
+          } else if (inlineSdt && hit.pos <= inlineSdt.start) {
+            inlineSdtBoundaryPos = inlineSdt.pos;
+            inlineSdtBoundaryDirection = 'before';
+            nextSelection = TextSelection.create(doc, inlineSdt.pos);
+          } else {
+            nextSelection = TextSelection.create(doc, hit.pos);
+          }
           if (!nextSelection.$from.parent.inlineContent) {
             nextSelection = Selection.near(doc.resolve(hit.pos), 1);
           }
         }
-        const tr = editor.state.tr.setSelection(nextSelection);
+        let tr = editor.state.tr.setSelection(nextSelection);
+        if (inlineSdtBoundaryPos != null && inlineSdtBoundaryDirection) {
+          tr = applyEditableSlotAtInlineBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
+          nextSelection = tr.selection;
+        }
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
         if (nextSelection instanceof TextSelection && nextSelection.empty && editor.state.storedMarks) {
           tr.setStoredMarks(editor.state.storedMarks);
@@ -2274,7 +2297,9 @@ export class EditorInputManager {
   }
 
   #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
-    if (isDirectSingleCommentHighlightHit(target)) {
+    // Direct hits on inline annotated text should not be intercepted here.
+    // Let generic click-to-position place the caret at the clicked pixel.
+    if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
       return false;
     }
 

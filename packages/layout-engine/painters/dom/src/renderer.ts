@@ -126,7 +126,7 @@ import {
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
-import { isTextRun } from '@superdoc/pm-adapter';
+import { isTextRun, expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
 import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
@@ -5930,8 +5930,8 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
-    const lineRange = computeLinePmRange(block, line);
     const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
+    const lineRange = computeLinePmRange(expandedBlock, line);
     let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');
@@ -7937,50 +7937,6 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
 };
 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
-
-/**
- * Expands text runs that contain inline newlines into multiple runs.
- *
- * @param {Run[]} runs - The runs to expand
- * @returns {Run[]} The expanded runs
- */
-const expandRunsForInlineNewlines = (runs: Run[]): Run[] => {
-  const expanded: Run[] = [];
-
-  for (const run of runs) {
-    if (isTextRun(run) && run.text.includes('\n')) {
-      const textRun = run as TextRun;
-      const segments = textRun.text.split('\n');
-      let cursor = textRun.pmStart ?? 0;
-
-      segments.forEach((segment, idx) => {
-        expanded.push({
-          ...textRun,
-          text: segment,
-          pmStart: cursor,
-          pmEnd: cursor + segment.length,
-        });
-        cursor += segment.length;
-
-        if (idx !== segments.length - 1) {
-          expanded.push({
-            kind: 'break',
-            breakType: 'line',
-            pmStart: cursor,
-            pmEnd: cursor + 1,
-            sdt: textRun.sdt,
-          });
-          cursor += 1;
-        }
-      });
-      continue;
-    }
-
-    expanded.push(run);
-  }
-
-  return expanded;
-};
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

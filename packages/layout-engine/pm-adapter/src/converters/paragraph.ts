@@ -214,6 +214,34 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
 }
 
 /**
+ * Expands text runs that contain inline newlines into multiple runs.
+ *
+ * @param {Run[]} runs - The runs to expand
+ * @returns {Run[]} The expanded runs
+ */
+export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
+  const result: Run[] = [];
+  for (const run of runs) {
+    const textRun = run as TextRun;
+    if ('text' in run && typeof textRun.text === 'string' && textRun.text.includes('\n')) {
+      const segments = textRun.text.split('\n');
+      let cursor = textRun.pmStart ?? 0;
+      segments.forEach((segment, idx) => {
+        result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
+        cursor += segment.length;
+        if (idx !== segments.length - 1) {
+          result.push({ kind: 'break', breakType: 'line', pmStart: cursor, pmEnd: cursor + 1, sdt: textRun.sdt });
+          cursor += 1;
+        }
+      });
+    } else {
+      result.push(run);
+    }
+  }
+  return result;
+}
+
+/**
  * Extracts the default font family and size from paragraph properties.
  * Used for creating default runs in empty paragraphs.
  * @param converterContext - Converter context with document styles
@@ -850,6 +878,21 @@ export function paragraphToFlowBlocks({
     if (block.kind === 'paragraph' && block.runs.length > 1) {
       block.runs = mergeAdjacentRuns(block.runs);
       // Silent optimization: no console noise in tests/production
+    }
+  });
+
+  // Expand text runs containing inline '\n' into separate text + break runs.
+  // The measurer does the same expansion locally and emits fromRun/toRun indices
+  // relative to the expanded array. By expanding here, all downstream consumers
+  // (measurer, renderer, computeLinePmRange, selectionToRects) see consistent indices.
+  blocks.forEach((block) => {
+    if (
+      block.kind === 'paragraph' &&
+      block.runs.some(
+        (r) => 'text' in r && typeof (r as TextRun).text === 'string' && (r as TextRun).text.includes('\n'),
+      )
+    ) {
+      block.runs = expandRunsForInlineNewlines(block.runs);
     }
   });
 

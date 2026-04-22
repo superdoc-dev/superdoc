@@ -232,7 +232,7 @@ export class ParagraphNodeView {
    * @returns {boolean}
    */
   #updateListStyles() {
-    let { suffix, justification } = this.node.attrs.listRendering;
+    let { suffix, justification } = this.node.attrs.listRendering ?? {};
     suffix = suffix ?? 'tab';
     this.#calculateMarkerStyle(justification);
     if (suffix === 'tab') {
@@ -283,8 +283,8 @@ export class ParagraphNodeView {
    * @param {{ markerText: string, suffix?: string }} listRendering
    */
   #initList(listRendering) {
-    this.#createMarker(listRendering.markerText);
-    this.#createSeparator(listRendering.suffix);
+    this.#createMarker(listRendering?.markerText);
+    this.#createSeparator(listRendering?.suffix);
   }
 
   #checkIsList() {

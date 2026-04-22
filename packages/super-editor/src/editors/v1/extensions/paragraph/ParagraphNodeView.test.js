@@ -199,6 +199,25 @@ describe('ParagraphNodeView', () => {
     expect(nodeView.separator.textContent).toBe('\u00A0');
   });
 
+  it('does not throw when listRendering is null', () => {
+    // Regression: #updateListStyles destructured `{ suffix, justification }`
+    // from `this.node.attrs.listRendering` without a null-check, throwing
+    // `TypeError: Cannot destructure property 'suffix' of ... as it is null`
+    // whenever a paragraph node carried `listRendering: null`.
+    isList.mockReturnValue(true);
+    const baseAttrs = createNode().attrs;
+    const { nodeView } = mountNodeView({ attrs: { ...baseAttrs } });
+
+    const nextNode = createNode({
+      attrs: {
+        ...baseAttrs,
+        listRendering: null,
+      },
+    });
+
+    expect(() => nodeView.update(nextNode, [])).not.toThrow();
+  });
+
   it('uses hanging indent width for right-justified tabs and skips tab helper', () => {
     isList.mockReturnValue(true);
     const attrs = {

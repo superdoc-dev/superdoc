@@ -15,6 +15,7 @@ on:
       - 'packages/preset-geometry/**'
       - 'tests/behavior/**'
       - 'shared/**'
+      - '.github/workflows/ci-behavior.yml'
       - '!**/*.md'
   merge_group:
   workflow_dispatch:

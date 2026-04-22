@@ -3113,9 +3113,9 @@ export class DomPainter {
             resolvedLine.availableWidth,
             resolvedLine.lineIndex,
             resolvedLine.skipJustify,
+            expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
-            expandedRunsForBlock,
           );
 
           // Apply pre-computed indent values
@@ -3315,9 +3315,8 @@ export class DomPainter {
             availableWidthOverride,
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
-            shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
-            undefined,
             expandedRunsForBlock,
+            shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
 
           if (!isListFirstLine) {
@@ -3652,8 +3651,6 @@ export class DomPainter {
           fragment.width,
           fragment.fromLine + idx,
           true,
-          undefined,
-          undefined,
           expandedRunsForList,
         );
         this.capturePaintSnapshotLine(lineEl, context, {
@@ -4940,9 +4937,8 @@ export class DomPainter {
           undefined,
           lineIndex,
           shouldSkipJustify,
-          resolvedListTextStartPx,
-          undefined,
           expandedRuns,
+          resolvedListTextStartPx,
         );
       };
 
@@ -5945,9 +5941,9 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
-   * @param preExpandedRuns - Optional runs to use instead of expanding the block runs for inline newlines
    * @returns The rendered line element
    */
   private renderLine(
@@ -5957,9 +5953,9 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
-    preExpandedRuns?: Run[],
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');

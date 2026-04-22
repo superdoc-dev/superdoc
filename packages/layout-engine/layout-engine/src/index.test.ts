@@ -5849,6 +5849,25 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[1].margins?.top).toBeCloseTo(90, 0);
   });
 
+  it('prefers section-aware header heights over the plain rId fallback', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rIdSharedHeader' } }],
+      headerContentHeightsByRId: new Map([['rIdSharedHeader', 40]]),
+      headerContentHeightsBySectionRef: new Map([['rIdSharedHeader::s0', 100]]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const pageOneFragment = layout.pages[0].fragments.find((fragment) => fragment.blockId === 'p1');
+    expect(pageOneFragment).toBeDefined();
+    expect(pageOneFragment!.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
   it('multi-section + titlePg + alternateHeaders: first page of section 2 lands on an even doc-page', () => {
     // Most realistic mixed case. Section 1 has 3 pages (docPN 1-3). Section 2
     // has titlePg=true and starts on docPN=4.

@@ -56,6 +56,18 @@ export {
 export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
+export {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionContentWidth,
+  buildEffectiveHeaderFooterRefsBySection,
+  collectReferencedHeaderFooterRIds,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
+export type {
+  HeaderFooterSectionKind,
+  HeaderFooterRefs,
+  SectionAwareHeaderFooterMeasurementGroup,
+} from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
 export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering

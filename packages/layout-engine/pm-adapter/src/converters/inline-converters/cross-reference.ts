@@ -28,7 +28,8 @@ export function crossReferenceNodeToRun(params: InlineConverterParams): TextRun 
     node: { type: 'text', text: resolvedText, marks: [...(node.marks ?? [])] } as PMNode,
   });
 
-  if (target && /\\h\b/.test(instruction)) {
+  // \h switch - case-insensitive per ECMA-376 §17.16.1.
+  if (target && /\\h\b/i.test(instruction)) {
     const synthesized = buildFlowRunLink({ anchor: target });
     if (synthesized) {
       run.link = run.link ? { ...run.link, ...synthesized, anchor: target } : synthesized;

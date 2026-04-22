@@ -86,6 +86,13 @@ describe('crossReferenceNodeToRun (SD-2495)', () => {
     expect(run!.link).toBeUndefined();
   });
 
+  it('matches the \\H switch case-insensitively per ECMA-376 §17.16.1', () => {
+    const run = crossReferenceNodeToRun(
+      makeParams({ resolvedText: '15', target: '_Ref506192326', instruction: 'REF _Ref506192326 \\H' }),
+    );
+    expect(run!.link?.anchor).toBe('_Ref506192326');
+  });
+
   it('forwards node.marks to textNodeToRun so surrounding styles (italic, textStyle) survive', async () => {
     // Guards against SD-2537's "preserve surrounding run styling" AC —
     // a refactor that dropped node.marks from the synthesized text node

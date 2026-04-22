@@ -61,26 +61,20 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
 
     // Copy PM positions from parent pageReference node
     if (pageRefPos) {
-      (tokenRun as TextRun).pmStart = pageRefPos.start;
-      (tokenRun as TextRun).pmEnd = pageRefPos.end;
+      tokenRun.pmStart = pageRefPos.start;
+      tokenRun.pmEnd = pageRefPos.end;
     }
-    (tokenRun as TextRun).token = 'pageReference';
-    (tokenRun as TextRun).pageRefMetadata = {
+    tokenRun.token = 'pageReference';
+    tokenRun.pageRefMetadata = {
       bookmarkId,
       instruction,
     };
 
-    // When the PAGEREF instruction carries the `\h` switch, render as an
-    // internal hyperlink pointing at `#<bookmarkId>` so clicks navigate to
-    // the target bookmark via the existing anchor-link navigation path.
-    // Field switches in Word field instructions are case-insensitive, so
-    // `\h` and `\H` should both produce the hyperlink.
+    // \h switch - case-insensitive per ECMA-376 §17.16.1.
     if (/\\h\b/i.test(instruction)) {
       const synthesized = buildFlowRunLink({ anchor: bookmarkId });
       if (synthesized) {
-        (tokenRun as TextRun).link = (tokenRun as TextRun).link
-          ? { ...(tokenRun as TextRun).link, ...synthesized, anchor: bookmarkId }
-          : synthesized;
+        tokenRun.link = tokenRun.link ? { ...tokenRun.link, ...synthesized, anchor: bookmarkId } : synthesized;
       }
     }
 

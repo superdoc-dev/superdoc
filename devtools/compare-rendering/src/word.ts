@@ -5,71 +5,58 @@ import { hashFile, readCache, sha256, writeCache } from './cache.ts';
 
 const SCRIPT_PATH = fileURLToPath(new URL('./extract-layout.ps1', import.meta.url));
 
-type McpResponse = {
-  result?: { content?: Array<{ type: string; text?: string }> };
-  error?: { message: string };
+type JobEnvelope = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  result?: { output?: string } | null;
+  error?: { code: string; message: string } | null;
 };
 
-async function callWordMcp(command: string, timeoutSeconds = 240): Promise<string> {
-  const url = process.env.WORD_MCP_URL;
-  const token = process.env.WORD_MCP_TOKEN;
-  if (!url) throw new Error('WORD_MCP_URL not set');
-  if (!token) throw new Error('WORD_MCP_TOKEN not set');
+const POLL_INTERVAL_MS = 500;
+const POLL_BUFFER_MS = 30_000;
 
-  const body = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name: 'run_powershell',
-      arguments: { command, timeout_seconds: timeoutSeconds },
-    },
-  };
+async function runPowerShell(script: string, timeoutSeconds: number): Promise<string> {
+  const base = process.env.WORD_API_URL;
+  const token = process.env.WORD_API_TOKEN;
+  if (!base) throw new Error('WORD_API_URL not set');
+  if (!token) throw new Error('WORD_API_TOKEN not set');
 
-  const res = await fetch(url, {
+  const root = base.replace(/\/$/, '');
+  const authHeaders = { Authorization: `Bearer ${token}` } as const;
+
+  const res = await fetch(`${root}/v1/executions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ script, timeout_seconds: timeoutSeconds }),
   });
 
   if (!res.ok) {
-    const errText = await res.text().catch((e) => `<body read failed: ${(e as Error).message}>`);
-    throw new Error(`word-mcp HTTP ${res.status}: ${errText.slice(0, 5000)}`);
+    const body = await res.text().catch((e) => `<body read failed: ${(e as Error).message}>`);
+    throw new Error(`word-api HTTP ${res.status}: ${body.slice(0, 5000)}`);
   }
 
-  const contentType = res.headers.get('content-type') ?? '';
-  const parsed = contentType.startsWith('text/event-stream')
-    ? parseSseResponse(await res.text())
-    : ((await res.json()) as McpResponse);
+  let job = (await res.json()) as JobEnvelope;
+  const deadline = Date.now() + timeoutSeconds * 1000 + POLL_BUFFER_MS;
 
-  if (parsed.error) throw new Error(`word-mcp error: ${parsed.error.message}`);
-  const content = parsed.result?.content ?? [];
-  return content
-    .filter((c) => c.type === 'text' && typeof c.text === 'string')
-    .map((c) => c.text!)
-    .join('\n');
-}
-
-function parseSseResponse(stream: string): McpResponse {
-  // SSE events are separated by blank lines; we want the last `data:` payload that parses as our JSON-RPC response.
-  const events = stream.split(/\r?\n\r?\n/);
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const data = events[i]!.split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).replace(/^ /, ''))
-      .join('\n');
-    if (!data || data === '[DONE]') continue;
-    try {
-      return JSON.parse(data) as McpResponse;
-    } catch {
-      // try the previous event
+  while (job.status === 'queued' || job.status === 'running') {
+    if (Date.now() > deadline) {
+      throw new Error(`word-api job ${job.id} poll deadline exceeded (${job.status})`);
     }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const pollRes = await fetch(`${root}/v1/jobs/${job.id}`, { headers: authHeaders });
+    if (!pollRes.ok) {
+      const body = await pollRes.text().catch(() => '');
+      throw new Error(`word-api poll HTTP ${pollRes.status}: ${body.slice(0, 500)}`);
+    }
+    job = (await pollRes.json()) as JobEnvelope;
   }
-  throw new Error(`word-mcp: no parseable SSE payload in:\n${stream.slice(0, 500)}`);
+
+  if (job.status !== 'succeeded') {
+    const code = job.error?.code ?? 'unknown';
+    const message = job.error?.message ?? 'no error message';
+    throw new Error(`word-api job ${job.id} ${job.status} (${code}): ${message}`);
+  }
+  return job.result?.output ?? '';
 }
 
 function parseExtractionOutput(output: string): WordExtraction {
@@ -99,7 +86,7 @@ export async function extractWord(
   const b64 = docxBytes.toString('base64');
   const command = `$b64 = '${b64}'\n${psBody}`;
 
-  const output = await callWordMcp(command);
+  const output = await runPowerShell(command, 600);
   const extraction = parseExtractionOutput(output);
 
   if (useCache) await writeCache(docxSha, psSha, extraction);

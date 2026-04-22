@@ -13,8 +13,8 @@ This is a dev tool, not a pass/fail test. It surfaces concrete divergences so yo
 ## Quick start
 
 ```bash
-export WORD_MCP_URL="https://word-mcp.superdoc.workers.dev/mcp"
-export WORD_MCP_TOKEN="<your-bearer-token>"
+export WORD_API_URL="https://word-mcp.superdoc.workers.dev"
+export WORD_API_TOKEN="<your-bearer-token>"
 
 pnpm compare-rendering -- \
   --input evals/fixtures/docs/memorandum.docx \
@@ -50,7 +50,7 @@ Example output (truncated):
 
 ```
 docx
- ├── word adapter (POST run_powershell to word-mcp worker) ─► word.json (cached)
+ ├── word adapter (POST /v1/executions to word-api)         ─► word.json (cached)
  └── superdoc adapter (spawn pnpm layout:export-one)        ─► sd.layout.json
                                 │
                         normalize both sides
@@ -69,8 +69,8 @@ docx
 
 | Variable         | Purpose                                              |
 |------------------|------------------------------------------------------|
-| `WORD_MCP_URL`   | HTTP endpoint of the word-mcp MCP worker             |
-| `WORD_MCP_TOKEN` | Bearer token (same one you use in your `.mcp.json`)  |
+| `WORD_API_URL`   | Base URL of the word-api worker                      |
+| `WORD_API_TOKEN` | Bearer token                                         |
 
 ## Exit codes
 
@@ -87,10 +87,25 @@ Makes it CI-usable later without rework.
 - Auto-fix generation.
 - Publishing as a package.
 
-## Milestones
+## Milestones (revised after M1 corpus-batch insights)
 
-- **M1** (this): CLI works end-to-end on paragraph-only docs. 3 categories. JSON + markdown output. Caching.
-- **M2**: Pull resolved style fields out of SuperDoc's block schema. Taxonomy extends to `style`, `indent`, `font`, `color`, `alignment`, `spacing`, `numbering`.
-- **M3**: Batch mode (`--input-dir`), nightly run against the paragraph-only subset of the corpus, per-category dashboard.
-- **M4**: MCP wrapper `compare_rendering(docx_path)`. Agent dogfood with ECMA-spec MCP in context.
-- **M5**: Table support. Non-trivial — needs parallel table walks on both sides.
+- **M1** ✅ — CLI works end-to-end on paragraph-only docs. 4 categories (`text`, `pagination`, `structure`, `unsupported`). JSON + markdown output. Word-extraction cache. Ad-hoc `scripts/batch.ts` runner for whole-corpus sweeps.
+- **M2** — Baseline + delta reporting. Snapshot findings against a pinned SuperDoc sha, emit only `resolved` / `new` since baseline. This is what makes the tool **agent-usable**: signal becomes "my change fixed N, broke M" instead of "here are 367 absolute findings." Pin a `main`-branch baseline at `test-corpus/.baseline.json`.
+- **M3** — LLM screenshot judge for docs where schema diff is silent or near-silent. Catches rendering divergences that don't surface in layout data at all (e.g. `w:val="wave"` border styles rendered as plain lines, font substitution, painter-level overflow).
+- **M4** — Populate `NormalizedParagraph.resolved` on SuperDoc side. Taxonomy extends to `style`, `indent`, `font`, `color`, `alignment`, `spacing`, `numbering`. Safe to add once M2 absorbs the "new field adds findings everywhere" noise.
+- **M5** — Table support. Non-trivial; needs parallel table walks on both sides.
+
+## Insights from M1 corpus batch (75 docs, April 2026)
+
+- **Pagination findings compound.** Many "N pagination findings" collapse to one underlying bug expressed N times. `memorandum.docx` (3 findings) and `sd-1741-paragraph-between-borders` (36 findings) share the same root cause — SuperDoc fits slightly more content per page than Word; drift accumulates across pages. One fix likely eliminates most findings at once.
+- **Schema diff has real false negatives.** `sd-1741` reports 0 text/style findings, but visually SuperDoc renders every border-between style (`wave`, `doubleWave`, `dashDotStroked`, `triple`, …) as a plain line while Word renders each correctly. Schema-level comparison will never catch this class without the M3 screenshot judge.
+- **~27 % of the corpus is in M1 scope.** 13 / 75 docs are short-circuited for tables/shapes/comments/revisions; the rest yield meaningful findings. Real-world DOCX coverage unlocks at M5 (tables).
+
+## Corpus sweep
+
+Ad-hoc batch runner at `scripts/batch.ts` — iterates every `.docx` under a directory, writes per-doc JSON reports plus a `_summary.json`, and prints a one-line status per doc. Graduates to a proper `--input-dir` flag in M2 alongside baseline support.
+
+```bash
+WORD_API_URL=... WORD_API_TOKEN=... \
+  bun devtools/compare-rendering/scripts/batch.ts test-corpus/rendering
+```

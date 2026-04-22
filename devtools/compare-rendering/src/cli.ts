@@ -31,8 +31,8 @@ Options:
   -h, --help                 Show this help.
 
 Env:
-  WORD_MCP_URL               HTTP endpoint of the word-mcp worker.
-  WORD_MCP_TOKEN             Bearer token for the worker.
+  WORD_API_URL               Base URL of the word-api worker (e.g. https://word-mcp.superdoc.workers.dev).
+  WORD_API_TOKEN             Bearer token for the worker.
 
 Exit codes:
   0  — ran; findings are at most visible/cosmetic.

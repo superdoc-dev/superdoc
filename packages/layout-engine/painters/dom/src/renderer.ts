@@ -3103,6 +3103,7 @@ export class DomPainter {
       if (content) {
         // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
         const resolvedMarker = content.marker;
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
           const lineEl = this.renderLine(
@@ -3114,6 +3115,7 @@ export class DomPainter {
             resolvedLine.skipJustify,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
+            expandedRunsForBlock,
           );
 
           // Apply pre-computed indent values
@@ -3208,6 +3210,7 @@ export class DomPainter {
         const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
         const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
@@ -3313,6 +3316,8 @@ export class DomPainter {
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
+            undefined,
+            expandedRunsForBlock,
           );
 
           if (!isListFirstLine) {
@@ -3638,8 +3643,19 @@ export class DomPainter {
         ...item.paragraph,
         attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
       };
+      const expandedRunsForList = expandRunsForInlineNewlines(paraForList.runs);
       lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        const lineEl = this.renderLine(
+          paraForList,
+          line,
+          context,
+          fragment.width,
+          fragment.fromLine + idx,
+          true,
+          undefined,
+          undefined,
+          expandedRunsForList,
+        );
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
@@ -4898,6 +4914,7 @@ export class DomPainter {
 
       // Word justifies text inside table cells, but not the final line unless the
       // paragraph ends with an explicit line break.
+      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
       const renderLineForTableCell = (
         block: ParagraphBlock,
         line: Line,
@@ -4910,7 +4927,23 @@ export class DomPainter {
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
         const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+        let expandedRuns = tableCellExpandedRunsCache.get(block);
+        if (!expandedRuns) {
+          expandedRuns = expandRunsForInlineNewlines(block.runs);
+          tableCellExpandedRunsCache.set(block, expandedRuns);
+        }
+
+        return this.renderLine(
+          block,
+          line,
+          ctx,
+          undefined,
+          lineIndex,
+          shouldSkipJustify,
+          resolvedListTextStartPx,
+          undefined,
+          expandedRuns,
+        );
       };
 
       /**
@@ -5925,12 +5958,13 @@ export class DomPainter {
     skipJustify?: boolean,
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
+    preExpandedRuns?: Run[],
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
 
-    const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
+    const expandedBlock = { ...block, runs: preExpandedRuns ?? expandRunsForInlineNewlines(block.runs) };
     const lineRange = computeLinePmRange(expandedBlock, line);
     let runsForLine = sliceRunsForLine(expandedBlock, line);
 

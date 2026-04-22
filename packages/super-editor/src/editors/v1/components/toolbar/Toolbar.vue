@@ -89,7 +89,10 @@ const handleCommand = ({ item, argument, option }) => {
 };
 
 const restoreSelection = () => {
-  proxy.$toolbar.activeEditor?.commands?.restoreSelection();
+  const editor = proxy.$toolbar.activeEditor;
+  if (!editor) return;
+  if (editor.options?.isHeaderOrFooter) return;
+  editor.commands?.restoreSelection();
 };
 
 /**

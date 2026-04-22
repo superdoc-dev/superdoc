@@ -767,9 +767,10 @@ export class SuperToolbar extends EventEmitter {
       return;
     }
 
-    // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
-    // until the next selection update (after the user clicks into the editor).
-    if (!wasFocused && isMarkToggle) {
+    // Queue unfocused mark toggles only for body editors.
+    // Header/footer mark toggles execute immediately to avoid waiting for
+    // selectionUpdate and requiring an extra selection change.
+    if (!wasFocused && isMarkToggle && !this.activeEditor?.options?.isHeaderOrFooter) {
       this.pendingMarkCommands.push({ command, argument, item });
       const labelAttr = item?.labelAttr?.value;
       if (labelAttr && argument) {

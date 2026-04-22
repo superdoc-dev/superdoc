@@ -111,4 +111,32 @@ describe('Toolbar', () => {
     addSpy.mockRestore();
     removeSpy.mockRestore();
   });
+
+  it('does not restore selection when active editor is header/footer', async () => {
+    const restoreSelection = vi.fn();
+    const mockToolbar = createMockToolbar();
+    mockToolbar.activeEditor = {
+      options: { isHeaderOrFooter: true },
+      commands: { restoreSelection },
+    };
+
+    const ButtonGroupStub = defineComponent({
+      emits: ['item-clicked'],
+      template: '<button data-test="emit-item-clicked" @click="$emit(\'item-clicked\')">emit</button>',
+    });
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: ButtonGroupStub },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    await wrapper.find('[data-test="emit-item-clicked"]').trigger('click');
+    expect(restoreSelection).not.toHaveBeenCalled();
+  });
 });

@@ -232,6 +232,79 @@ describe('buildFootnotesInput', () => {
       ]);
     });
 
+    it('normalizes away note separator tabs before layout conversion', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'run', content: [], attrs: { runProperties: { styleId: 'FootnoteReference' } } },
+                {
+                  type: 'run',
+                  content: [{ type: 'tab' }, { type: 'text', text: 'Note' }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg?.content?.[0]?.content).toEqual([
+        {
+          type: 'run',
+          content: [{ type: 'text', text: 'Note' }],
+        },
+      ]);
+    });
+
+    it('normalizes away hidden passthrough field-code nodes before layout conversion', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: 'Section ' }],
+                },
+                {
+                  type: 'run',
+                  content: [{ type: 'passthroughInline', attrs: { originalName: 'w:fldChar' } }],
+                },
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: '1.2(b)' }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg?.content?.[0]?.content).toEqual([
+        {
+          type: 'run',
+          content: [{ type: 'text', text: 'Section ' }],
+        },
+        {
+          type: 'run',
+          content: [{ type: 'text', text: '1.2(b)' }],
+        },
+      ]);
+    });
+
     it('builds the marker as a scaled superscript run instead of a Unicode superscript glyph', () => {
       const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
       const converter = createMockConverter([

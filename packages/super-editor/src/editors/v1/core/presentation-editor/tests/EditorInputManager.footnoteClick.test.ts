@@ -43,6 +43,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   let manager: EditorInputManager;
   let viewportHost: HTMLElement;
   let visibleHost: HTMLElement;
+  let originalElementFromPoint: typeof document.elementFromPoint | undefined;
   let mockEditor: {
     isEditable: boolean;
     state: {
@@ -66,6 +67,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   let activateRenderedNoteSession: Mock;
 
   beforeEach(() => {
+    originalElementFromPoint = document.elementFromPoint?.bind(document);
     viewportHost = document.createElement('div');
     viewportHost.className = 'presentation-editor__viewport';
     visibleHost = document.createElement('div');
@@ -142,6 +144,14 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   afterEach(() => {
     manager.destroy();
     document.body.innerHTML = '';
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint,
+      });
+    } else {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
     vi.clearAllMocks();
   });
 
@@ -168,6 +178,15 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         dispatch: vi.fn(),
       },
     };
+  }
+
+  function stubElementFromPoint(element: Element | null): Mock {
+    const elementFromPoint = vi.fn(() => element);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: elementFromPoint,
+    });
+    return elementFromPoint;
   }
 
   it('activates a note session on direct footnote fragment click', () => {
@@ -520,6 +539,62 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(resolvePointerPositionHit).not.toHaveBeenCalled();
     expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
     expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('exits active header editing when the topmost visible target is body content even if region hit-testing still says header', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const exitHeaderFooterMode = vi.fn();
+
+    const visibleHeader = document.createElement('div');
+    visibleHeader.className = 'superdoc-page-header';
+    viewportHost.appendChild(visibleHeader);
+
+    const bodyText = document.createElement('span');
+    bodyText.textContent = 'Visible body text';
+    viewportHost.appendChild(bodyText);
+    stubElementFromPoint(bodyText);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+      overlayManager: { getActiveEditorHost: vi.fn(() => null) },
+    });
+    mockCallbacks.exitHeaderFooterMode = exitHeaderFooterMode;
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 24,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'body-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 300,
+      height: 220,
+    }));
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    bodyText.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 30,
+        clientY: 220,
+      } as PointerEventInit),
+    );
+
+    expect(exitHeaderFooterMode).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(30, 220);
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
   });
 
   it('syncs the tracked-change bubble for clicks inside the active header editor host', () => {

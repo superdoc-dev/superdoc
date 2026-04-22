@@ -706,6 +706,7 @@ watch(editingCommentId, (commentId) => {
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
+    data-editor-ui-surface
   >
     <!-- ── New comment card (pending) ── -->
     <template v-if="isPendingNewComment">

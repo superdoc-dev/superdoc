@@ -8,6 +8,7 @@ import {
   getCurrentInstance,
   inject,
   ref,
+  unref,
   onMounted,
   onBeforeUnmount,
   nextTick,
@@ -104,7 +105,6 @@ const {
   isCommentsListVisible,
   isFloatingCommentsReady,
   generalCommentIds,
-  getFloatingComments,
   hasSyncedCollaborationComments,
   editorCommentPositions,
   hasInitializedLocations,
@@ -127,6 +127,11 @@ const {
 } = commentsStore;
 const { proxy } = getCurrentInstance();
 commentsStore.proxy = proxy;
+
+const floatingComments = computed(() => {
+  const currentFloatingComments = unref(commentsStore.getFloatingComments);
+  return Array.isArray(currentFloatingComments) ? currentFloatingComments : [];
+});
 
 const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
@@ -239,6 +244,36 @@ const flushPendingReplayTrackedChangeSync = () => {
   if (!pendingReplayTrackedChangeSync.value) return;
   pendingReplayTrackedChangeSync.value = false;
   syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+let queuedTrackedChangeCommentResync = null;
+let isTrackedChangeCommentResyncQueued = false;
+
+const flushQueuedTrackedChangeCommentResync = () => {
+  isTrackedChangeCommentResyncQueued = false;
+
+  const pendingResync = queuedTrackedChangeCommentResync;
+  queuedTrackedChangeCommentResync = null;
+  if (!pendingResync?.editor) return;
+
+  syncTrackedChangeComments({
+    superdoc: proxy.$superdoc,
+    editor: pendingResync.editor,
+    broadcastChanges: pendingResync.broadcastChanges,
+  });
+};
+
+const queueTrackedChangeCommentResync = ({ editor, broadcastChanges = true } = {}) => {
+  if (!editor) return;
+
+  queuedTrackedChangeCommentResync = {
+    editor,
+    broadcastChanges: Boolean(queuedTrackedChangeCommentResync?.broadcastChanges) || Boolean(broadcastChanges),
+  };
+
+  if (isTrackedChangeCommentResyncQueued) return;
+  isTrackedChangeCommentResyncQueued = true;
+  queueMicrotask(flushQueuedTrackedChangeCommentResync);
 };
 
 const scheduleReplayTrackedChangeSync = () => {
@@ -1131,8 +1166,7 @@ const onEditorTransaction = (payload = {}) => {
   if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
     syncTrackedChangePositionsWithDocument({ documentId, editor });
-    syncTrackedChangeComments({
-      superdoc: proxy.$superdoc,
+    queueTrackedChangeCommentResync({
       editor,
       // Remote replay should rebuild only local sidebar state. The authoritative
       // collaboration comment update is already shared through the comments ydoc.
@@ -1148,7 +1182,7 @@ const showCommentsSidebar = computed(() => {
   if (!shouldRenderCommentsInViewing.value) return false;
   return (
     pendingComment.value ||
-    (getFloatingComments.value?.length > 0 &&
+    (floatingComments.value.length > 0 &&
       isReady.value &&
       layers.value &&
       isCommentsEnabled.value &&
@@ -1490,7 +1524,7 @@ watch(
 // Ensure hasInitializedLocations is set when comments arrive (backup for cases
 // where handleDocumentReady hasn't fired yet). Never toggle false→true→false —
 // the virtualized FloatingComments reacts to comment changes via computed properties.
-watch(getFloatingComments, () => {
+watch(floatingComments, () => {
   if (!hasInitializedLocations.value) {
     hasInitializedLocations.value = true;
   }
@@ -1648,7 +1682,7 @@ const getPDFViewer = () => {
     <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
       <div class="floating-comments">
         <FloatingComments
-          v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
+          v-if="hasInitializedLocations && (floatingComments.length > 0 || pendingComment)"
           v-for="doc in documentsWithConverations"
           :parent="layers"
           :current-document="doc"

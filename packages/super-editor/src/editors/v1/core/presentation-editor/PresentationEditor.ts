@@ -722,6 +722,10 @@ export class PresentationEditor extends EventEmitter {
       modeBanner: this.#modeBanner,
     });
     this.#headerFooterSession.setDocumentMode(this.#documentMode);
+    this.#headerFooterSession.setTrackedChangesRenderConfig({
+      mode: this.#trackedChangesMode,
+      enabled: this.#trackedChangesEnabled,
+    });
 
     this.#ariaLiveRegion = doc.createElement('div');
     this.#ariaLiveRegion.className = 'presentation-editor__aria-live';
@@ -785,6 +789,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupDragHandlers();
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
+      this.#syncHeaderFooterTrackedChangesRenderConfig();
       this.#setupSemanticResizeObserver();
       this.#initializeProofing();
 
@@ -1552,6 +1557,7 @@ export class PresentationEditor extends EventEmitter {
     this.#syncDocumentModeClass();
     this.#syncHiddenEditorA11yAttributes();
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
+    this.#syncHeaderFooterTrackedChangesRenderConfig();
     // Re-render if mode changed OR tracked changes preferences changed.
     // Mode change affects enableComments in toFlowBlocks even if tracked changes didn't change.
     if (modeChanged || trackedChangesChanged) {
@@ -1598,6 +1604,7 @@ export class PresentationEditor extends EventEmitter {
     this.#trackedChangesOverrides = overrides;
     this.#layoutOptions.trackedChanges = overrides;
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
+    this.#syncHeaderFooterTrackedChangesRenderConfig();
     if (trackedChangesChanged) {
       // Clear flow block cache since conversion-affecting settings changed
       this.#flowBlockCache.clear();
@@ -2011,6 +2018,23 @@ export class PresentationEditor extends EventEmitter {
     });
 
     return hasUpdates ? remapped : positions;
+  }
+
+  #shouldEmitCommentPositions(): boolean {
+    const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
+    return this.#documentMode !== 'viewing' || allowViewingCommentPositions;
+  }
+
+  #emitCommentPositions(relativeTo?: HTMLElement): void {
+    if (!this.#shouldEmitCommentPositions()) {
+      return;
+    }
+
+    const commentPositions = this.#collectCommentPositions();
+    const positionsWithBounds =
+      relativeTo != null ? this.getCommentBounds(commentPositions, relativeTo) : commentPositions;
+
+    this.emit('commentPositions', { positions: positionsWithBounds });
   }
 
   /**
@@ -3765,6 +3789,7 @@ export class PresentationEditor extends EventEmitter {
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
+      this.#syncHeaderFooterTrackedChangesRenderConfig();
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
@@ -4464,6 +4489,7 @@ export class PresentationEditor extends EventEmitter {
             storyType: 'headerFooterPart',
             refId: headerId,
           });
+          this.#emitCommentPositions();
         }
         this.emit('headerFooterTransaction', {
           editor: this.#editor,
@@ -5236,11 +5262,7 @@ export class PresentationEditor extends EventEmitter {
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
       // (e.g. when undo removes the last tracked-change mark).
-      const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
-      if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
-        const commentPositions = this.#collectCommentPositions();
-        this.emit('commentPositions', { positions: commentPositions });
-      }
+      this.#emitCommentPositions();
 
       this.#selectionSync.requestRender({ immediate: true });
 
@@ -7538,6 +7560,13 @@ export class PresentationEditor extends EventEmitter {
       this.#trackedChangesEnabled = enabled;
     }
     return hasChanged;
+  }
+
+  #syncHeaderFooterTrackedChangesRenderConfig(): void {
+    this.#headerFooterSession?.setTrackedChangesRenderConfig({
+      mode: this.#trackedChangesMode,
+      enabled: this.#trackedChangesEnabled,
+    });
   }
 
   #deriveTrackedChangesMode(): TrackedChangesMode {

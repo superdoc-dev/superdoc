@@ -1,6 +1,9 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-import { BASIC_FOOTNOTES_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
+import {
+  BASIC_FOOTNOTES_DOC_PATH as DOC_PATH,
+  COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH,
+} from '../../helpers/story-fixtures.js';
 
 test.use({ config: { showCaret: true, showSelection: true } });
 
@@ -266,8 +269,9 @@ async function loadAndActivateFootnote(
   superdoc: FootnoteBehaviorHarness,
   noteId: string,
   expectedText: string,
+  docPath = DOC_PATH,
 ): Promise<Locator> {
-  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.loadDocument(docPath);
   await superdoc.waitForStable();
 
   const footnote = getFootnoteLocator(superdoc.page, noteId);
@@ -728,5 +732,51 @@ test.describe('suggesting mode routing', () => {
 
     await expect(footnote).toContainText('fX0ootZnote');
     await expect(getBodyStoryText(superdoc.page)).resolves.toBe(bodyTextAfterBodyEdit);
+  });
+
+  test('complex imported footnotes stay aligned when the note starts with hidden separator content', async ({
+    superdoc,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === 'firefox',
+      'Headless Firefox does not yet persist hidden-host footnote edits through the behavior harness.',
+    );
+
+    let footnote = await loadAndActivateFootnote(
+      superdoc,
+      '1',
+      'If only one closing is contemplated',
+      COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH,
+    );
+
+    await expectCaretAtClickBoundary(superdoc.page, footnote, 'contemplated', 1);
+    await superdoc.page.keyboard.insertText('x');
+    await superdoc.waitForStable(300);
+    await expectStoryTextToContain(superdoc.page, 'cxontemplated');
+    await expect(footnote).toContainText('cxontemplated');
+  });
+
+  test('complex imported footnotes stay aligned when the note contains hidden field-code passthrough nodes', async ({
+    superdoc,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === 'firefox',
+      'Headless Firefox does not yet persist hidden-host footnote edits through the behavior harness.',
+    );
+
+    let footnote = await loadAndActivateFootnote(
+      superdoc,
+      '2',
+      'The Company may have tax reporting',
+      COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH,
+    );
+
+    await expectCaretAtClickBoundary(superdoc.page, footnote, 'reporting', 1);
+    await superdoc.page.keyboard.insertText('x');
+    await superdoc.waitForStable(300);
+    await expectStoryTextToContain(superdoc.page, 'rxeporting');
+    await expect(footnote).toContainText('rxeporting');
   });
 });

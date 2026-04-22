@@ -266,9 +266,28 @@ const buildCommentsStore = () => ({
   isCommentHighlighted: ref(false),
 });
 
-const mountComponent = async (superdocStub, { surfaceManager = null } = {}) => {
-  superdocStoreStub = buildSuperdocStore();
-  commentsStoreStub = buildCommentsStore();
+const createCommentsStoreWithFloatingGetter = () => {
+  const store = buildCommentsStore();
+  const floatingCommentsState = ref([]);
+
+  delete store.getFloatingComments;
+  Object.defineProperty(store, 'getFloatingComments', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return floatingCommentsState.value;
+    },
+  });
+
+  return { store, floatingCommentsState };
+};
+
+const mountComponent = async (
+  superdocStub,
+  { surfaceManager = null, superdocStore = null, commentsStore = null } = {},
+) => {
+  superdocStoreStub = superdocStore ?? buildSuperdocStore();
+  commentsStoreStub = commentsStore ?? buildCommentsStore();
   superdocStoreStub.modules.ai = { endpoint: '/ai' };
   commentsStoreStub.documentsWithConverations.value = [{ id: 'doc-1' }];
 
@@ -767,6 +786,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -786,6 +807,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -821,6 +844,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -858,6 +883,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -1639,6 +1666,20 @@ describe('SuperDoc.vue', () => {
     );
 
     await nextTick();
+    superdocStoreStub.isReady.value = true;
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(true);
+    expect(wrapper.find('.floating-comments').exists()).toBe(true);
+  });
+
+  it('shows floating comments when the comments store exposes them through a getter', async () => {
+    const superdocStub = createSuperdocStub();
+    const { store, floatingCommentsState } = createCommentsStoreWithFloatingGetter();
+    const wrapper = await mountComponent(superdocStub, { commentsStore: store });
+    await nextTick();
+
+    floatingCommentsState.value = [{ commentId: 'tracked-1' }];
     superdocStoreStub.isReady.value = true;
     await nextTick();
 

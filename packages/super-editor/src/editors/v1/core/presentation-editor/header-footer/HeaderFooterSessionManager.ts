@@ -28,6 +28,7 @@ import {
   HeaderFooterEditorManager,
   HeaderFooterLayoutAdapter,
   type HeaderFooterDescriptor,
+  type HeaderFooterTrackedChangesRenderConfig,
 } from '../../header-footer/HeaderFooterRegistry.js';
 import { EditorOverlayManager } from '../../header-footer/EditorOverlayManager.js';
 import { initHeaderFooterRegistry } from '../../header-footer/HeaderFooterRegistryInit.js';
@@ -43,6 +44,7 @@ import {
   type MultiSectionHeaderFooterIdentifier,
   type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
+import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import {
@@ -230,6 +232,10 @@ export class HeaderFooterSessionManager {
 
   // Document mode
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
+  #trackedChangesRenderConfig: HeaderFooterTrackedChangesRenderConfig = {
+    mode: 'review',
+    enabled: true,
+  };
 
   constructor(options: HeaderFooterSessionManagerOptions) {
     this.#options = options;
@@ -431,6 +437,23 @@ export class HeaderFooterSessionManager {
     }
   }
 
+  setTrackedChangesRenderConfig(config: HeaderFooterTrackedChangesRenderConfig): void {
+    const nextConfig: HeaderFooterTrackedChangesRenderConfig = {
+      mode: config.mode,
+      enabled: config.enabled,
+    };
+
+    if (
+      this.#trackedChangesRenderConfig.mode === nextConfig.mode &&
+      this.#trackedChangesRenderConfig.enabled === nextConfig.enabled
+    ) {
+      return;
+    }
+
+    this.#trackedChangesRenderConfig = nextConfig;
+    this.#headerFooterAdapter?.setTrackedChangesRenderConfig(nextConfig);
+  }
+
   /**
    * Set layout results from external layout computation.
    */
@@ -492,6 +515,7 @@ export class HeaderFooterSessionManager {
     this.#headerFooterIdentifier = result.headerFooterIdentifier;
     this.#headerFooterManager = result.headerFooterManager;
     this.#headerFooterAdapter = result.headerFooterAdapter;
+    this.#headerFooterAdapter?.setTrackedChangesRenderConfig(this.#trackedChangesRenderConfig);
     this.#managerCleanups = result.cleanups;
   }
 
@@ -1435,15 +1459,11 @@ export class HeaderFooterSessionManager {
   /**
    * Compute selection rectangles in header/footer mode.
    *
-   * This method intentionally does NOT use layout-engine geometry. Header/footer
-   * editing is driven by a dedicated ProseMirror editor instance mounted inside
-   * an overlay host. For selection, we rely on the browser's native DOM selection
-   * rectangles from that editor and then remap them into layout coordinates using
-   * the current region and body page height.
-   *
-   * Selection rectangles are therefore derived from:
-   * - Native ProseMirror selection → DOM Range → client rects
-   * - Header/footer region → pageIndex / local offset
+   * In visible overlay-host mode we read the active editor's DOM Range geometry
+   * directly for tight browser-aligned highlights. In hidden-host story-session
+   * mode, those DOM rects live off-screen, so we instead project the requested
+   * PM range through the header/footer layout data and then remap it into the
+   * active page region.
    */
   computeSelectionRects(from: number, to: number): LayoutRect[] {
     // Guard: must be in header/footer mode with an active editor and region context.
@@ -1469,29 +1489,14 @@ export class HeaderFooterSessionManager {
 
     const region = context.region;
     const pageIndex = region.pageIndex;
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
 
-    // Compute DOM-based rectangles local to the editor host. We intentionally
-    // ignore the numeric from/to arguments and any cached ProseMirror
-    // selection, and instead rely solely on the live DOM selection inside the
-    // active header/footer editor. This avoids stale selection state when
-    // switching between multiple header/footer editors.
-    const domSelection = view.dom.ownerDocument?.getSelection?.();
-    let domRectList: DOMRect[] = [];
-
-    if (domSelection && domSelection.rangeCount > 0) {
-      for (let i = 0; i < domSelection.rangeCount; i += 1) {
-        const range = domSelection.getRangeAt(i);
-        if (!range) continue;
-        const rangeRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
-        domRectList.push(...rangeRects);
-      }
-
-      // Normalize to a minimal set of rects. Browsers often return both a
-      // line-box rect and a text-content rect on the same line; without
-      // deduplication this produces overlapping highlights that look like
-      // intersecting selections.
-      domRectList = deduplicateOverlappingRects(domRectList);
+    const hiddenHostRects = this.#computeHiddenHostSelectionRects(context, from, to, bodyPageHeight);
+    if (hiddenHostRects) {
+      return hiddenHostRects;
     }
+
+    const domRectList = this.#computeEditorRangeClientRects(view, from, to);
 
     if (!domRectList.length) {
       return [];
@@ -1505,7 +1510,6 @@ export class HeaderFooterSessionManager {
     // deltas and sizes must be converted back out of zoom space here.
     const editorDom = view.dom as HTMLElement;
     const editorHostRect = editorDom.getBoundingClientRect();
-    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
     const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
     const zoom =
       typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
@@ -1543,6 +1547,130 @@ export class HeaderFooterSessionManager {
     }
 
     return layoutRects;
+  }
+
+  #computeHiddenHostSelectionRects(
+    context: HeaderFooterLayoutContext,
+    from: number,
+    to: number,
+    bodyPageHeight: number,
+  ): LayoutRect[] | null {
+    const activeEditor = this.#activeEditor;
+    const editorDom = activeEditor?.view?.dom as HTMLElement | null;
+    if (!editorDom?.closest?.('.presentation-editor__story-hidden-host')) {
+      return null;
+    }
+
+    const localRects = selectionToRects(context.layout, context.blocks, context.measures, from, to) ?? [];
+    if (localRects.length) {
+      return localRects.map((rect) => ({
+        pageIndex: context.region.pageIndex,
+        x: context.region.localX + rect.x,
+        y: context.region.pageIndex * bodyPageHeight + context.region.localY + rect.y,
+        width: rect.width,
+        height: rect.height,
+      }));
+    }
+
+    const liveRect = activeEditor
+      ? this.#computeHiddenHostLiveRangeRect(activeEditor, from, to, context, bodyPageHeight)
+      : null;
+    return liveRect ? [liveRect] : [];
+  }
+
+  #computeHiddenHostLiveRangeRect(
+    editor: Editor,
+    from: number,
+    to: number,
+    context: HeaderFooterLayoutContext,
+    bodyPageHeight: number,
+  ): LayoutRect | null {
+    const view = editor.view as
+      | (Editor['view'] & {
+          coordsAtPos?: (pos: number, side?: number) => { left: number; right: number; top: number; bottom: number };
+        })
+      | null
+      | undefined;
+
+    if (!view || typeof view.coordsAtPos !== 'function') {
+      return null;
+    }
+
+    const docSize = editor.state?.doc?.content?.size ?? 0;
+    const start = Math.max(0, Math.min(Math.min(from, to), docSize));
+    const end = Math.max(0, Math.min(Math.max(from, to), docSize));
+    if (start === end) {
+      return null;
+    }
+
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const editorHostRect = view.dom.getBoundingClientRect();
+
+    try {
+      const startCoords = view.coordsAtPos(start);
+      const endCoords = view.coordsAtPos(end, -1);
+      const left = Math.min(startCoords.left, endCoords.left);
+      const right = Math.max(startCoords.right, endCoords.right);
+      const top = Math.min(startCoords.top, endCoords.top);
+      const bottom = Math.max(startCoords.bottom, endCoords.bottom);
+      const width = Math.max(1, (right - left) / zoom);
+      const height = Math.max(1, (bottom - top) / zoom);
+      const localX = (left - editorHostRect.left) / zoom;
+      const localY = (top - editorHostRect.top) / zoom;
+
+      if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+        return null;
+      }
+
+      return {
+        pageIndex: context.region.pageIndex,
+        x: context.region.localX + localX,
+        y: context.region.pageIndex * bodyPageHeight + context.region.localY + localY,
+        width,
+        height,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  #computeEditorRangeClientRects(view: Editor['view'], from: number, to: number): DOMRect[] {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      return [];
+    }
+
+    const docSize = view.state?.doc?.content?.size ?? 0;
+    const start = Math.max(0, Math.min(Math.min(from, to), docSize));
+    const end = Math.max(0, Math.min(Math.max(from, to), docSize));
+    if (start === end || typeof view.domAtPos !== 'function') {
+      return [];
+    }
+
+    const doc = view.dom.ownerDocument;
+    const range = doc?.createRange?.();
+    if (!range) {
+      return [];
+    }
+
+    try {
+      const startBoundary = view.domAtPos(start);
+      const endBoundary = view.domAtPos(end);
+      range.setStart(startBoundary.node, startBoundary.offset);
+      range.setEnd(endBoundary.node, endBoundary.offset);
+    } catch {
+      return [];
+    }
+
+    try {
+      const clientRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
+      return deduplicateOverlappingRects(clientRects);
+    } catch {
+      return [];
+    }
   }
 
   computeCaretRect(pos: number): LayoutRect | null {

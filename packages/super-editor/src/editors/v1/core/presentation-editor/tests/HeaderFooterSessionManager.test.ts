@@ -38,6 +38,9 @@ function createMainEditorStub(): Editor {
 }
 
 function createHeaderFooterEditorStub(editorDom: HTMLElement): Editor {
+  const textNode = editorDom.ownerDocument.createTextNode('abcdefghij');
+  editorDom.appendChild(textNode);
+
   return {
     setEditable: vi.fn(),
     setOptions: vi.fn(),
@@ -58,6 +61,17 @@ function createHeaderFooterEditorStub(editorDom: HTMLElement): Editor {
     view: {
       dom: editorDom,
       focus: vi.fn(),
+      state: {
+        doc: {
+          content: {
+            size: 10,
+          },
+        },
+      },
+      domAtPos: vi.fn((pos: number) => ({
+        node: textNode,
+        offset: Math.max(0, Math.min(textNode.length, pos - 1)),
+      })),
     },
     on: vi.fn(),
     off: vi.fn(),
@@ -92,7 +106,7 @@ describe('HeaderFooterSessionManager', () => {
    * Sets up a full manager with an active header region and returns the manager
    * ready for `computeSelectionRects` assertions.
    *
-   * The DOM selection mock returns a single rect at (120, 90) with size 200x32,
+   * The DOM range mock returns a single rect at (120, 90) with size 200x32,
    * and the editor host is at (100, 50) with size 600x120. The header region is
    * at localX=40, localY=30 on page 1 with bodyPageHeight=800.
    */
@@ -211,12 +225,11 @@ describe('HeaderFooterSessionManager', () => {
     manager.headerRegions.set(headerRegion.pageIndex, headerRegion);
 
     vi.spyOn(editorDom, 'getBoundingClientRect').mockReturnValue(createRect(100, 50, 600, 120));
-    vi.spyOn(document, 'getSelection').mockReturnValue({
-      rangeCount: 1,
-      getRangeAt: vi.fn(() => ({
-        getClientRects: vi.fn(() => [createRect(120, 90, 200, 32)]),
-      })),
-    } as unknown as Selection);
+    vi.spyOn(document, 'createRange').mockReturnValue({
+      setStart: vi.fn(),
+      setEnd: vi.fn(),
+      getClientRects: vi.fn(() => [createRect(120, 90, 200, 32)]),
+    } as unknown as Range);
 
     manager.activateRegion(headerRegion);
     await vi.waitFor(() => expect(manager.activeEditor).toBe(headerFooterEditor));
@@ -268,6 +281,14 @@ describe('HeaderFooterSessionManager', () => {
     await setupWithZoom(NaN);
 
     expect(manager.computeSelectionRects(1, 10)).toEqual([{ pageIndex: 1, x: 60, y: 870, width: 200, height: 32 }]);
+  });
+
+  it('uses the requested PM range instead of the live DOM selection', async () => {
+    await setupWithZoom(1);
+
+    vi.spyOn(document, 'getSelection').mockReturnValue(null);
+
+    expect(manager.computeSelectionRects(3, 7)).toEqual([{ pageIndex: 1, x: 60, y: 870, width: 200, height: 32 }]);
   });
 
   it('activates header editing through the story-session manager without creating an overlay host', async () => {

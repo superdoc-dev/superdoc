@@ -77,6 +77,63 @@ function documentXmlWithEndnotes(): string {
 `;
 }
 
+function complexFootnoteMappingDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Complex mapped note</w:t></w:r>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>
+      <w:r><w:t xml:space="preserve"> and field-coded note</w:t></w:r>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="2"/></w:r>
+      <w:r><w:t>.</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:headerReference w:type="default" r:id="rId8"/>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
+function complexFootnotesXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:footnote w:type="separator" w:id="-1">
+    <w:p><w:r><w:separator/></w:r></w:p>
+  </w:footnote>
+  <w:footnote w:type="continuationSeparator" w:id="0">
+    <w:p><w:r><w:continuationSeparator/></w:r></w:p>
+  </w:footnote>
+  <w:footnote w:id="1">
+    <w:p>
+      <w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>
+      <w:r><w:tab/></w:r>
+      <w:r><w:t>If only one closing is contemplated, references to “Initial Closing” should be modified.</w:t></w:r>
+    </w:p>
+  </w:footnote>
+  <w:footnote w:id="2">
+    <w:p>
+      <w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>
+      <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+      <w:r><w:instrText xml:space="preserve"> STYLEREF 1 \\s </w:instrText></w:r>
+      <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+      <w:r><w:t>1.2(b)</w:t></w:r>
+      <w:r><w:fldChar w:fldCharType="end"/></w:r>
+      <w:r><w:t xml:space="preserve"> The Company may have tax reporting and/or withholding obligations in connection with the conversion of Convertible Securities into Company stock.</w:t></w:r>
+    </w:p>
+  </w:footnote>
+</w:footnotes>
+`;
+}
+
 function endnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:endnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -208,8 +265,17 @@ function trackedEndnotesXml(): string {
 }
 
 export const H_F_NORMAL_DOC_PATH = path.resolve(editorFixtureRoot, 'h_f-normal.docx');
+export const H_F_NORMAL_ODD_EVEN_FIRSTPG_DOC_PATH = path.resolve(editorFixtureRoot, 'h_f-normal-odd-even-firstpg.docx');
 export const LONGER_HEADER_SIGN_AREA_DOC_PATH = path.resolve(editorFixtureRoot, 'longer-header-sign-area.docx');
 export const BASIC_FOOTNOTES_DOC_PATH = path.resolve(editorFixtureRoot, 'basic-footnotes.docx');
+export const COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH = ensureGeneratedFixture(
+  'complex-imported-footnotes.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': complexFootnoteMappingDocumentXml(),
+    'word/footnotes.xml': complexFootnotesXml(),
+  },
+);
 export const BASIC_ENDNOTES_DOC_PATH = ensureGeneratedFixture('basic-endnotes.docx', 'h_f-normal.docx', {
   'word/document.xml': documentXmlWithEndnotes(),
   'word/endnotes.xml': endnotesXml(),

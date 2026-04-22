@@ -57,6 +57,7 @@ const SCROLL_DETECTION_TOLERANCE_PX = 1;
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
 const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id], .track-format[data-id]';
+const VISIBLE_HEADER_FOOTER_SELECTOR = '.superdoc-page-header, .superdoc-page-footer';
 const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
 const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
@@ -248,6 +249,29 @@ function resolveCommentThreadIdNearPointer(
   }
 
   return null;
+}
+
+function getVisibleHeaderFooterSurfaceAtPointer(
+  target: EventTarget | null,
+  clientX: number,
+  clientY: number,
+): HTMLElement | null {
+  const ownerDocument = target instanceof Element ? target.ownerDocument : document;
+  const ownerWindow = ownerDocument.defaultView;
+
+  if (typeof ownerDocument.elementFromPoint !== 'function' || !ownerWindow) {
+    return null;
+  }
+
+  const sampleX = clamp(clientX, 0, Math.max(ownerWindow.innerWidth - 1, 0));
+  const sampleY = clamp(clientY, 0, Math.max(ownerWindow.innerHeight - 1, 0));
+  const topmostElement = ownerDocument.elementFromPoint(sampleX, sampleY);
+
+  if (!(topmostElement instanceof HTMLElement)) {
+    return null;
+  }
+
+  return topmostElement.closest(VISIBLE_HEADER_FOOTER_SELECTOR) as HTMLElement | null;
 }
 
 function getActiveCommentThreadId(editor: Editor): string | null {
@@ -2054,6 +2078,10 @@ export class EditorInputManager {
     const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
     const clickedInsideEditorHost =
       activeEditorHost && (activeEditorHost.contains(event.target as Node) || activeEditorHost === event.target);
+    const activeSurfaceSelector =
+      session?.session?.mode === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const visibleSurfaceAtPointer = getVisibleHeaderFooterSurfaceAtPointer(event.target, event.clientX, event.clientY);
+    const clickedInsideVisibleActiveSurface = visibleSurfaceAtPointer?.closest(activeSurfaceSelector) != null;
 
     if (clickedInsideEditorHost) {
       this.#syncNonBodyCommentSelection(event, event.target as HTMLElement | null, this.#deps.getEditor(), {
@@ -2062,9 +2090,13 @@ export class EditorInputManager {
       return true; // Let editor handle it
     }
 
+    if (!clickedInsideVisibleActiveSurface) {
+      this.#callbacks.exitHeaderFooterMode?.();
+      return false; // Continue to body click handling after exiting the active H/F session
+    }
+
     const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y, pageIndex, pageLocalY);
     if (!headerFooterRegion) {
-      this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling
     }
 

@@ -331,5 +331,37 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       );
       expect(staleEvent.defaultPrevented).toBe(true);
     });
+
+    it('does not reroute keyboard input from a registered UI surface editor', () => {
+      const commentEditor = document.createElement('div');
+      commentEditor.className = 'ProseMirror';
+      commentEditor.setAttribute('contenteditable', 'true');
+
+      const commentDialog = document.createElement('div');
+      commentDialog.setAttribute('data-editor-ui-surface', '');
+      commentDialog.appendChild(commentEditor);
+      document.body.appendChild(commentDialog);
+
+      const staleEvent = new KeyboardEvent('keydown', {
+        key: 'U',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      const targetFocusSpy = vi.spyOn(targetDom, 'focus').mockImplementation(() => {});
+      const targetDispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      commentEditor.dispatchEvent(staleEvent);
+
+      expect(targetFocusSpy).not.toHaveBeenCalled();
+      expect(targetDispatchSpy).not.toHaveBeenCalled();
+      expect(staleEvent.defaultPrevented).toBe(false);
+    });
   });
 });

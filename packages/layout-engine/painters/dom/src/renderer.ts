@@ -3145,6 +3145,7 @@ export class DomPainter {
 
             if (!resolvedMarker.vanish) {
               const markerContainer = this.doc!.createElement('span');
+              markerContainer.classList.add('superdoc-list-marker');
               markerContainer.style.display = 'inline-block';
               markerContainer.style.wordSpacing = '0px';
 
@@ -3356,6 +3357,7 @@ export class DomPainter {
 
             if (!marker.run.vanish) {
               const markerContainer = this.doc!.createElement('span');
+              markerContainer.classList.add('superdoc-list-marker');
               markerContainer.style.display = 'inline-block';
               markerContainer.style.wordSpacing = '0px';
 

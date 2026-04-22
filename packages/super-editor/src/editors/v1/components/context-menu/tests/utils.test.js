@@ -129,6 +129,7 @@ describe('utils.js', () => {
         // Document structure
         isInTable: false,
         isInList: false,
+        isOnListMarker: false,
         isInSectionNode: false,
         isCellSelection: false,
         tableSelectionKind: null,

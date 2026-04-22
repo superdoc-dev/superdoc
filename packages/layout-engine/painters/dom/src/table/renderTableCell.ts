@@ -353,6 +353,7 @@ function renderListMarker(params: MarkerRenderParams): void {
 
   // Create marker container (inline-block to isolate from word-spacing used for justification)
   const markerContainer = doc.createElement('span');
+  markerContainer.classList.add('superdoc-list-marker');
   markerContainer.style.display = 'inline-block';
   markerContainer.style.wordSpacing = '0px';
 

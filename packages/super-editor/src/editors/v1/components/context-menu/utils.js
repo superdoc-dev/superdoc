@@ -122,6 +122,9 @@ export async function getEditorContext(editor, event) {
   const isInTable =
     structureFromResolvedPos?.isInTable ?? selectionHasNodeOrMark(state, 'table', { requireEnds: true });
   const isInList = structureFromResolvedPos?.isInList ?? selectionIncludesListParagraph(state);
+  // .superdoc-list-marker = DomPainter markerContainer / presentation mode
+  // .list-marker = ParagraphNodeView / flow editor mode
+  const isOnListMarker = Boolean(event?.target?.closest?.('.superdoc-list-marker, .list-marker'));
   const isInSectionNode =
     structureFromResolvedPos?.isInSectionNode ??
     selectionHasNodeOrMark(state, 'documentSection', { requireEnds: true });
@@ -199,6 +202,7 @@ export async function getEditorContext(editor, event) {
     selectionEnd: selection.to,
     isInTable,
     isInList,
+    isOnListMarker,
     isInSectionNode,
     isCellSelection: cellSelectionInfo.isCellSelection,
     tableSelectionKind: cellSelectionInfo.tableSelectionKind,

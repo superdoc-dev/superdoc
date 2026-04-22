@@ -2689,6 +2689,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    // appendTransaction plugins (e.g. numberingPlugin) may produce transactions that
+    // change the doc even when the original transaction does not. Track the full list so
+    // the 'update' event is emitted with the effective doc-changing transaction.
+    let appliedTransactions: readonly Transaction[] | undefined;
     const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
@@ -2709,8 +2713,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
           })
         : transactionToApply;
 
-      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
-      nextState = appliedState;
+      const result = prevState.applyTransaction(transactionToApply);
+      nextState = result.state;
+      appliedTransactions = result.transactions;
     } catch (error) {
       if (forceTrackChanges) throw error;
       // just in case
@@ -2758,8 +2763,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (transactionToApply.docChanged) {
-      // Track document modifications and promote to GUID if needed
+    // Find the effective doc-changing transaction: the original one, or the last
+    // appendTransaction result that introduced doc changes (e.g. numberingPlugin
+    // updating listRendering attrs from an otherwise empty transaction).
+    let effectiveDocTr: Transaction = transactionToApply;
+    if (appliedTransactions) {
+      for (let i = appliedTransactions.length - 1; i >= 0; i--) {
+        if (appliedTransactions[i].docChanged) {
+          effectiveDocTr = appliedTransactions[i];
+          break;
+        }
+      }
+    }
+
+    if (effectiveDocTr.docChanged) {
+      // Track document modifications and promote to GUID if needed.
+      // Only count user-initiated (original) transactions as document modifications.
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
           this.converter.promoteToGuid();
@@ -2770,7 +2789,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('update', {
         editor: this,
-        transaction: transactionToApply,
+        transaction: effectiveDocTr,
       });
     }
   }

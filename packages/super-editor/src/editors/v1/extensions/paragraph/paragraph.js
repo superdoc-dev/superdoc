@@ -9,6 +9,7 @@ import { findParentNode } from '@helpers/index.js';
 import { InputRule } from '@core/InputRule.js';
 import { toggleList } from '@core/commands/index.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
+import { continueNumbering } from '@core/commands/continueNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
 import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
@@ -332,6 +333,14 @@ export const Paragraph = OxmlNode.create({
        * @note Resets list numbering for the current list item and following items
        */
       restartNumbering: () => restartNumbering,
+      /**
+       * Remove the startOverride for the current list level so numbering continues
+       * from the previous chain instead of restarting.
+       * @category Command
+       * @example
+       * editor.commands.continueNumbering()
+       */
+      continueNumbering: () => continueNumbering,
     };
   },
 

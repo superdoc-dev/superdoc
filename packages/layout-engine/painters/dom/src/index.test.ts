@@ -11436,6 +11436,14 @@ describe('applyRunDataAttributes', () => {
       expect(fragment?.textContent).toContain('first');
       expect(fragment?.textContent).toContain('second');
       expect(fragment?.textContent).toContain('third');
+      const lines = fragment?.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines?.length).toBe(3);
+      expect(lines?.[0].dataset.pmStart).toEqual('0');
+      expect(lines?.[0].dataset.pmEnd).toEqual('5');
+      expect(lines?.[1].dataset.pmStart).toEqual('6');
+      expect(lines?.[1].dataset.pmEnd).toEqual('12');
+      expect(lines?.[2].dataset.pmStart).toEqual('13');
+      expect(lines?.[2].dataset.pmEnd).toEqual('18');
     });
 
     it('preserves PM positions for lineBreak runs', () => {

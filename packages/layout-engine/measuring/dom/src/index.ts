@@ -81,6 +81,7 @@ import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './mea
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
 import { computeAutoFitColumnWidths } from './autofit-columns.js';
 import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './autofit-normalize.js';
+import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import {
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
@@ -2528,7 +2529,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
  */
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-  const columnWidths = await resolveRuntimeTableColumnWidths(block, maxWidth);
+  const workingInput = buildAutoFitWorkingGridInput(block, { maxWidth });
+  const columnWidths = await resolveRuntimeTableColumnWidths(block, workingInput);
 
   // Derive grid column count from computed columnWidths (handles both explicit tblGrid and fallback cases)
   const gridColumnCount = columnWidths.length;
@@ -2557,15 +2559,29 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
   const spanConstraints: Array<{ startRow: number; rowSpan: number; requiredHeight: number }> = [];
   for (let rowIndex = 0; rowIndex < block.rows.length; rowIndex++) {
     const row = block.rows[rowIndex];
+    const normalizedRow = workingInput.rows[rowIndex];
     const cellMeasures: TableCellMeasure[] = [];
     let gridColIndex = 0; // Track position in the grid
 
-    for (const cell of row.cells) {
+    for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex++) {
+      const cell = row.cells[cellIndex];
       const colspan = cell.colSpan ?? 1;
       const rowspan = cell.rowSpan ?? 1;
+      const normalizedCell = normalizedRow?.cells?.[cellIndex];
+      const preferredStartColumn =
+        workingInput.layoutMode === 'fixed' && normalizedCell?.startColumn != null
+          ? normalizedCell.startColumn
+          : gridColIndex;
 
       // Skip grid columns that are occupied by rowspans from previous rows
-      // before processing this cell
+      // and advance to the fixed-layout logical start column before processing this cell.
+      while (gridColIndex < gridColumnCount && gridColIndex < preferredStartColumn) {
+        if (rowspanTracker[gridColIndex] > 0) {
+          rowspanTracker[gridColIndex]--;
+        }
+        gridColIndex++;
+      }
+
       while (gridColIndex < gridColumnCount && rowspanTracker[gridColIndex] > 0) {
         rowspanTracker[gridColIndex]--;
         gridColIndex++;
@@ -2768,17 +2784,12 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
  * - fixed layout: preferred widths remain authoritative
  * - AutoFit: content metrics participate in width resolution
  */
-async function resolveRuntimeTableColumnWidths(block: TableBlock, maxWidth: number): Promise<number[]> {
-  const workingInput = buildAutoFitWorkingGridInput(block, { maxWidth });
-
+async function resolveRuntimeTableColumnWidths(
+  block: TableBlock,
+  workingInput: WorkingTableGridInput,
+): Promise<number[]> {
   if (workingInput.layoutMode === 'fixed') {
-    return computeAutoFitColumnWidths({
-      tableLayout: workingInput.layoutMode,
-      maxTableWidth: workingInput.maxTableWidth,
-      preferredTableWidth: workingInput.preferredTableWidth,
-      preferredColumnWidths: workingInput.preferredColumnWidths,
-      rows: workingInput.rows,
-    }).columnWidths;
+    return computeFixedTableColumnWidths(workingInput).columnWidths;
   }
 
   const { rows, cellMetricKeys } = await buildMeasuredAutoFitRows(block, workingInput);

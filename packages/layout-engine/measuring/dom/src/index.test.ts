@@ -4842,10 +4842,11 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Fixed layout ignores content, but still resolves to the preferred table width.
-      expect(measure.totalWidth).toBe(600);
-      expect(measure.columnWidths[0]).toBe(300);
-      expect(measure.columnWidths[1]).toBe(300);
+      // Fixed layout now uses the shared fixed baseline and does not scale up to
+      // an explicit table width unless row/cell requests force a larger total.
+      expect(measure.totalWidth).toBe(200);
+      expect(measure.columnWidths[0]).toBe(100);
+      expect(measure.columnWidths[1]).toBe(100);
     });
 
     it('scales DOWN column widths for fixed layout tables when exceeding target width', async () => {
@@ -5669,10 +5670,54 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       const tableMeasure = measure as TableMeasure;
 
-      // Fixed layout ignores content, but still resolves against the preferred table width.
-      expect(tableMeasure.columnWidths[0]).toBe(100);
-      expect(tableMeasure.columnWidths[1]).toBe(100);
-      expect(tableMeasure.totalWidth).toBe(200);
+      // Fixed layout ignores AutoFit content expansion and keeps the fixed-pass
+      // baseline because the explicit table width is larger than the authored grid.
+      expect(tableMeasure.columnWidths[0]).toBe(50);
+      expect(tableMeasure.columnWidths[1]).toBe(50);
+      expect(tableMeasure.totalWidth).toBe(100);
+    });
+
+    it('honors fixed-layout skipped columns when measuring cell placement', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-skipped-columns',
+        attrs: {
+          tableLayout: 'fixed',
+        },
+        columnWidths: [40, 120],
+        rows: [
+          {
+            id: 'row-0',
+            attrs: {
+              tableRowProperties: {
+                gridBefore: 1,
+                wBefore: { value: 600, type: 'dxa' },
+              },
+            },
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'After skip', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 600 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      expect(tableMeasure.columnWidths).toEqual([40, 120]);
+      expect(tableMeasure.rows[0].cells[0].gridColumnStart).toBe(1);
+      expect(tableMeasure.rows[0].cells[0].width).toBe(120);
     });
 
     it('preserves proportional column widths when content exceeds page width', async () => {

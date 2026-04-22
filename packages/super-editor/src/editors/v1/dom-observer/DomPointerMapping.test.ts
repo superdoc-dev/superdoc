@@ -274,7 +274,54 @@ describe('DomPointerMapping', () => {
 
       expect(result).not.toBeNull();
       expect(result).toBeGreaterThanOrEqual(0);
-      expect(result).toBeLessThanOrEqual(20);
+      expect(result).toBeLessThanOrEqual(21);
+    });
+
+    it('returns the position after a terminal inline SDT when clicking to its visual right', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="2" data-pm-end="25">
+              <span data-pm-start="2" data-pm-end="8">Date: </span>
+              <span class="superdoc-structured-content-inline" data-pm-start="11" data-pm-end="25">
+                <span class="superdoc-structured-content-inline__label">Agreement Date</span>
+                <span data-pm-start="11" data-pm-end="25">Agreement Date</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const textSpan = container.querySelector(
+        '.superdoc-structured-content-inline span[data-pm-start]',
+      ) as HTMLElement;
+      const spanRect = textSpan.getBoundingClientRect();
+
+      expect(clickToPositionDom(container, spanRect.right + 10, lineRect.top + 5)).toBe(26);
+    });
+
+    it('returns the position before a leading inline SDT when clicking to its visual left', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="11" data-pm-end="25">
+              <span class="superdoc-structured-content-inline" data-pm-start="11" data-pm-end="25">
+                <span class="superdoc-structured-content-inline__label">Agreement Date</span>
+                <span data-pm-start="11" data-pm-end="25">Agreement Date</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const textSpan = container.querySelector(
+        '.superdoc-structured-content-inline span[data-pm-start]',
+      ) as HTMLElement;
+      const spanRect = textSpan.getBoundingClientRect();
+
+      expect(clickToPositionDom(container, spanRect.left - 10, lineRect.top + 5)).toBe(10);
     });
   });
 

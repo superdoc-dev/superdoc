@@ -994,6 +994,65 @@ describe('internal helper functions', () => {
     );
   });
 
+  it('handleTrackedChangeTransaction emits separate events for independent replacements', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'change-insert-only',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'change-delete-only',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+
+    const deletedNode = schema.text('Removed', [deleteMark]);
+    const insertedNode = schema.text('Added', [insertMark]);
+    const paragraph = schema.node('paragraph', null, [deletedNode, insertedNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      insertedMark: insertMark,
+      deletionMark: deleteMark,
+      formatMark: null,
+      deletionNodes: [deletedNode],
+      step: { slice: { content: { content: [insertedNode] } } },
+    };
+
+    const trackedChanges = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    expect(trackedChanges['change-insert-only']).toMatchObject({ insertion: 'change-insert-only' });
+    expect(trackedChanges['change-delete-only']).toMatchObject({ deletion: 'change-delete-only' });
+    expect(editor.emit).toHaveBeenCalledTimes(2);
+    expect(editor.emit).toHaveBeenNthCalledWith(
+      1,
+      'commentsUpdate',
+      expect.objectContaining({
+        event: comments_module_events.ADD,
+        changeId: 'change-insert-only',
+        trackedChangeType: TrackInsertMarkName,
+        trackedChangeText: 'Added',
+        deletedText: null,
+      }),
+    );
+    expect(editor.emit).toHaveBeenNthCalledWith(
+      2,
+      'commentsUpdate',
+      expect.objectContaining({
+        event: comments_module_events.ADD,
+        changeId: 'change-delete-only',
+        trackedChangeType: TrackDeleteMarkName,
+        trackedChangeText: '',
+        deletedText: 'Removed',
+      }),
+    );
+  });
+
   it('handleTrackedChangeTransaction returns original state when no marks provided', () => {
     const schema = createCommentSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Text')])]);
@@ -1165,6 +1224,42 @@ describe('internal helper functions', () => {
     expect(payload?.deletedText).toBe('original');
     expect(payload?.changeId).toBe('replace-update-1');
     expect(payload?.trackedChangeDisplayType).toBeNull();
+  });
+
+  it('does not collapse distinct insert/delete ids into one replacement payload', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'replace-insert-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'replace-delete-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const docInsertNode = schema.text('replacement', [insertMark]);
+    const docDeleteNode = schema.text('original', [deleteMark]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [docDeleteNode, docInsertNode])]);
+    const state = EditorState.create({ schema, doc });
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: insertMark, deletionMark: deleteMark, formatMark: null },
+      deletionNodes: [docDeleteNode],
+      nodes: [docInsertNode],
+      newEditorState: state,
+      documentId: 'doc-1',
+      trackedChangesForId: [{ mark: insertMark, from: 1, to: doc.content.size }],
+    });
+
+    expect(payload?.changeId).toBe('replace-insert-1');
+    expect(payload?.trackedChangeType).toBe(TrackInsertMarkName);
+    expect(payload?.trackedChangeText).toBe('replacement');
+    expect(payload?.deletedText).toBe('');
   });
 
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {

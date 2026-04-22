@@ -90,6 +90,7 @@ import type {
 import { DocumentApiAdapterError } from '../errors.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
+import { buildTextWithTabs, parentAllowsNodeAt } from '../helpers/text-with-tabs.js';
 import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
 
 // Shared helpers — single source of truth for SDT logic
@@ -362,7 +363,7 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
   }
 
   const paragraph = buildEmptyBlockContent(editor, resolved.node);
-  const paragraphText = text.length > 0 ? editor.schema.text(text) : null;
+  const paragraphText = text.length > 0 ? buildTextWithTabs(editor.schema, text, undefined) : null;
   const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
   const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
   const { tr } = editor.state;
@@ -960,6 +961,22 @@ function prependContentWrapper(
   });
 }
 
+function insertTextAroundSdt(
+  editor: Editor,
+  target: ContentControlTarget,
+  content: string,
+  resolvePos: (resolved: ReturnType<typeof resolveSdtByTarget>) => number,
+): boolean {
+  const resolved = resolveSdtByTarget(editor.state.doc, target);
+  const pos = resolvePos(resolved);
+  const { tr } = editor.state;
+  const tabType = editor.schema.nodes?.tab;
+  const parentAllowsTab = tabType && content.includes('\t') ? parentAllowsNodeAt(tr, pos, tabType) : false;
+  tr.insert(pos, buildTextWithTabs(editor.schema, content, undefined, { parentAllowsTab }));
+  dispatchTransaction(editor, tr);
+  return true;
+}
+
 function insertBeforeWrapper(
   editor: Editor,
   input: ContentControlsInsertBeforeInput,
@@ -967,15 +984,9 @@ function insertBeforeWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const target = buildTarget(sdt);
-
-  return executeSdtMutation(editor, target, options, () => {
-    const resolved = resolveSdtByTarget(editor.state.doc, input.target);
-    const textNode = editor.schema.text(input.content);
-    const { tr } = editor.state;
-    tr.insert(resolved.pos, textNode);
-    dispatchTransaction(editor, tr);
-    return true;
-  });
+  return executeSdtMutation(editor, target, options, () =>
+    insertTextAroundSdt(editor, input.target, input.content, (resolved) => resolved.pos),
+  );
 }
 
 function insertAfterWrapper(
@@ -985,16 +996,9 @@ function insertAfterWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const target = buildTarget(sdt);
-
-  return executeSdtMutation(editor, target, options, () => {
-    const resolved = resolveSdtByTarget(editor.state.doc, input.target);
-    const insertPos = resolved.pos + resolved.node.nodeSize;
-    const textNode = editor.schema.text(input.content);
-    const { tr } = editor.state;
-    tr.insert(insertPos, textNode);
-    dispatchTransaction(editor, tr);
-    return true;
-  });
+  return executeSdtMutation(editor, target, options, () =>
+    insertTextAroundSdt(editor, input.target, input.content, (resolved) => resolved.pos + resolved.node.nodeSize),
+  );
 }
 
 // ---------------------------------------------------------------------------

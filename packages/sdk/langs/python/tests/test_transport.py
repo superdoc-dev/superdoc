@@ -765,6 +765,54 @@ class TestAsyncCleanupLifecycle:
             _cleanup_wrapper(cli)
 
     @pytest.mark.asyncio
+    async def test_dispose_waits_for_cleanup_after_state_flips_disconnected(self):
+        # `_cleanup()` flips state to DISCONNECTED before awaiting
+        # `process.wait()`. dispose() must still wait for that cleanup task
+        # instead of short-circuiting and returning while teardown is in
+        # flight.
+        cli = _mock_cli_bin({'handshake': 'ok'})
+        try:
+            transport = AsyncHostTransport(cli, startup_timeout_ms=5_000)
+            await transport.connect()
+            process = transport._process
+            assert process is not None
+
+            wait_started = asyncio.Event()
+            release = asyncio.Event()
+            real_wait = process.wait
+
+            async def slow_wait():
+                wait_started.set()
+                await release.wait()
+                return await real_wait()
+
+            process.wait = slow_wait  # type: ignore[assignment]
+
+            transport._schedule_cleanup(
+                SuperDocError('reader-overflow', code=HOST_PROTOCOL_ERROR),
+            )
+            cleanup_task = transport._cleanup_task
+            assert cleanup_task is not None
+
+            await asyncio.wait_for(wait_started.wait(), timeout=2.0)
+            assert transport.state == 'DISCONNECTED'
+            assert transport._process is None
+            assert not cleanup_task.done()
+
+            dispose_task = asyncio.create_task(transport.dispose())
+            await asyncio.sleep(0.05)
+            assert not dispose_task.done()
+
+            release.set()
+            await dispose_task
+            assert transport.state == 'DISCONNECTED'
+            assert transport._cleanup_task is None
+            await process.wait()
+            assert process.returncode is not None
+        finally:
+            _cleanup_wrapper(cli)
+
+    @pytest.mark.asyncio
     async def test_ensure_connected_drains_in_flight_cleanup_before_spawn(self):
         # Round-3 regression: without this drain, `_start_host` reassigns
         # `self._process` while a stale `_cleanup` task is still scheduled;

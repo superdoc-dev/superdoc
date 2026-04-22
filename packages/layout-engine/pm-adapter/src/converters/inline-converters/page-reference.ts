@@ -3,6 +3,7 @@ import { type InlineConverterParams } from './common';
 import { getNodeInstruction } from '../../sdt/index.js';
 import type { PMNode, PMMark } from '../../types.js';
 import { textNodeToRun } from './text-run.js';
+import { buildFlowRunLink } from '../../marks/links.js';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun | void {
@@ -68,6 +69,19 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
       bookmarkId,
       instruction,
     };
+
+    // When the PAGEREF instruction carries the `\h` switch, render as an
+    // internal hyperlink pointing at `#<bookmarkId>` so clicks navigate to
+    // the target bookmark via the existing anchor-link navigation path.
+    if (/\\h\b/.test(instruction)) {
+      const synthesized = buildFlowRunLink({ anchor: bookmarkId });
+      if (synthesized) {
+        (tokenRun as TextRun).link = (tokenRun as TextRun).link
+          ? { ...(tokenRun as TextRun).link, ...synthesized, anchor: bookmarkId }
+          : synthesized;
+      }
+    }
+
     if (sdtMetadata) {
       tokenRun.sdt = sdtMetadata;
     }

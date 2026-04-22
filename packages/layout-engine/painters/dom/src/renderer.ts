@@ -5931,7 +5931,7 @@ export class DomPainter {
     }
 
     const lineRange = computeLinePmRange(block, line);
-    const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs as Run[]) };
+    const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
     let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');

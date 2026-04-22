@@ -1,5 +1,5 @@
 import type { EditorState } from 'prosemirror-state';
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
@@ -11,25 +11,9 @@ export type EndnoteConverterLike = {
   endnotes?: Array<{ id?: unknown; content?: unknown[] }>;
 };
 
-type Run = {
-  kind?: string;
-  text?: string;
-  fontFamily?: string;
-  fontSize?: number;
-  bold?: boolean;
-  italic?: boolean;
-  letterSpacing?: number;
-  color?: unknown;
-  vertAlign?: 'superscript' | 'subscript' | 'baseline';
-  baselineShift?: number;
-  pmStart?: number | null;
-  pmEnd?: number | null;
-  dataAttrs?: Record<string, string>;
-};
-
 type ParagraphBlock = FlowBlock & {
   kind: 'paragraph';
-  runs?: Run[];
+  runs?: LayoutRun[];
 };
 
 const ENDNOTE_MARKER_DATA_ATTR = 'data-sd-endnote-number';
@@ -91,8 +75,12 @@ export function buildEndnoteBlocks(
   return blocks;
 }
 
-function isEndnoteMarker(run: Run): boolean {
-  return Boolean(run.dataAttrs?.[ENDNOTE_MARKER_DATA_ATTR]);
+function isTextRun(run: LayoutRun): run is TextRun {
+  return (run.kind === 'text' || run.kind == null) && typeof (run as { text?: unknown }).text === 'string';
+}
+
+function isEndnoteMarker(run: LayoutRun): boolean {
+  return isTextRun(run) && Boolean(run.dataAttrs?.[ENDNOTE_MARKER_DATA_ATTR]);
 }
 
 function resolveDisplayNumber(id: string, endnoteNumberById: Record<string, number> | undefined): number {
@@ -102,11 +90,11 @@ function resolveDisplayNumber(id: string, endnoteNumberById: Record<string, numb
   return 1;
 }
 
-function resolveMarkerFontFamily(firstTextRun: Run | undefined): string {
+function resolveMarkerFontFamily(firstTextRun: TextRun | undefined): string {
   return typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : DEFAULT_MARKER_FONT_FAMILY;
 }
 
-function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
+function resolveMarkerBaseFontSize(firstTextRun: TextRun | undefined): number {
   if (
     typeof firstTextRun?.fontSize === 'number' &&
     Number.isFinite(firstTextRun.fontSize) &&
@@ -118,8 +106,8 @@ function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
   return DEFAULT_MARKER_FONT_SIZE;
 }
 
-function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run {
-  const markerRun: Run = {
+function buildMarkerRun(markerText: string, firstTextRun: TextRun | undefined): TextRun {
+  const markerRun: TextRun = {
     kind: 'text',
     text: markerText,
     dataAttrs: { [ENDNOTE_MARKER_DATA_ATTR]: 'true' },
@@ -138,7 +126,7 @@ function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run 
   return markerRun;
 }
 
-function syncMarkerRun(target: Run, source: Run): void {
+function syncMarkerRun(target: TextRun, source: TextRun): void {
   target.kind = source.kind;
   target.text = source.text;
   target.dataAttrs = source.dataAttrs;
@@ -165,10 +153,12 @@ function ensureEndnoteMarker(
   const runs = Array.isArray(firstParagraph.runs) ? firstParagraph.runs : [];
   firstParagraph.runs = runs;
 
-  const firstTextRun = runs.find((run) => !isEndnoteMarker(run) && typeof run.text === 'string' && run.text.length > 0);
+  const firstTextRun = runs.find(
+    (run): run is TextRun => isTextRun(run) && !isEndnoteMarker(run) && run.text.length > 0,
+  );
   const markerRun = buildMarkerRun(String(resolveDisplayNumber(id, endnoteNumberById)), firstTextRun);
 
-  if (runs[0] && isEndnoteMarker(runs[0])) {
+  if (runs[0] && isTextRun(runs[0]) && isEndnoteMarker(runs[0])) {
     syncMarkerRun(runs[0], markerRun);
     return;
   }

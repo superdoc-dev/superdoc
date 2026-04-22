@@ -81,7 +81,25 @@ main (next) → stable (latest) → X.x (maintenance)
 - If the merge conflicts, commits the conflicted merge to the branch so a human can resolve it there
 - Merging that PR triggers the automatic stable release workflow
 
-#### 4. Create Patch Branch (`create-patch.yml`)
+#### 4. Release Qualification Dispatch (`release-qualification-dispatch.yml`)
+
+**Trigger**: Pull requests targeting `stable` (`opened`, `reopened`, `synchronize`, `ready_for_review`)
+
+**Actions**:
+
+- Sends the PR head SHA and branch metadata to the Labs release-orchestrator service
+- Lets Labs create a generic GitHub check run on that SHA
+- Does not wait on or expose any private Labs details in the repository
+- Re-triggers automatically when new commits are pushed to the PR branch
+
+Only same-repository PRs dispatch to Labs. Forked PRs are intentionally skipped so private Labs credentials are never exposed to untrusted branches.
+
+**Required secrets**:
+
+- `LABS_RELEASE_QUALIFICATION_URL`
+- `LABS_RELEASE_QUALIFICATION_TOKEN`
+
+#### 5. Create Patch Branch (`create-patch.yml`)
 
 **Trigger**: Manual workflow dispatch
 
@@ -92,7 +110,7 @@ main (next) → stable (latest) → X.x (maintenance)
 - Creates `X.x` branch from last stable tag
 - Enables patching of old versions
 
-#### 5. Forward Port (`forward-port.yml`)
+#### 6. Forward Port (`forward-port.yml`)
 
 **Triggers**:
 
@@ -107,7 +125,7 @@ main (next) → stable (latest) → X.x (maintenance)
 
 ### Support Workflows
 
-#### 6. Test Suite (`test-suite.yml`)
+#### 7. Test Suite (`test-suite.yml`)
 
 **Type**: Reusable workflow
 
@@ -118,7 +136,7 @@ main (next) → stable (latest) → X.x (maintenance)
 - Visual regression tests (Playwright)
 - E2E tests (external service)
 
-#### 7. Visual Tests (`test-example-apps.yml`)
+#### 8. Visual Tests (`test-example-apps.yml`)
 
 **Triggers**:
 
@@ -211,10 +229,12 @@ These skip semantic-release entirely — useful for re-publishing a failed platf
 
 1. Run "Promote to Stable" workflow
 2. Review the generated PR from the candidate branch into `stable`
-3. If needed, resolve merge conflicts on the candidate branch
-4. Merge the PR into `stable`
-5. Automatically publishes `1.1.0` as @latest
-6. Syncs back to main with version bump
+3. Labs receives the PR head SHA and creates the `Release Qualification` GitHub check run
+4. If needed, resolve merge conflicts on the candidate branch and push fixes
+5. Re-run or wait for qualification on the new PR head SHA
+6. Merge the PR into `stable`
+7. Automatically publishes `1.1.0` as @latest
+8. Syncs back to main with version bump
 
 ### Scenario 3: Hotfix to Current Stable
 

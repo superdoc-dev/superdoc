@@ -1,6 +1,11 @@
 import type { TableBlock, TableRowProperties, TableWidthAttr } from '@superdoc/contracts';
 import { OOXML_PCT_DIVISOR } from '@superdoc/contracts';
-import type { AutoFitLayoutMode, AutoFitRowInput } from './autofit-columns.js';
+import type {
+  AutoFitCellInput,
+  AutoFitLayoutMode,
+  AutoFitRowInput,
+  AutoFitSkippedColumnInput,
+} from './autofit-columns.js';
 
 /** Number of OOXML twips per rendered CSS pixel at 96 DPI. */
 const TWIPS_PER_PX = 15;
@@ -58,8 +63,48 @@ export type WorkingTableGridInput = {
   preferredColumnWidths: number[];
   /** Logical grid column count after accounting for row skips and spans. */
   gridColumnCount: number;
-  /** Logical row inputs for the AutoFit solver. */
-  rows: AutoFitRowInput[];
+  /** Logical row placements for downstream fixed and AutoFit solvers. */
+  rows: WorkingTableRowInput[];
+};
+
+/**
+ * Explicit skipped-column placement inside a logical row.
+ *
+ * This extends the old skipped-column input with a concrete logical grid
+ * column index so downstream solvers no longer need to reconstruct placement.
+ */
+export type WorkingTableSkippedColumnInput = AutoFitSkippedColumnInput & {
+  /** Absolute logical grid column index for this skipped column. */
+  columnIndex: number;
+};
+
+/**
+ * Explicit logical cell placement within a row.
+ *
+ * The existing AutoFit cell width hints remain intact, but placement is made
+ * explicit so fixed and AutoFit solvers can share one row model.
+ */
+export type WorkingTableCellInput = AutoFitCellInput & {
+  /** Source runtime cell id when available, useful for debugging and testing. */
+  cellId?: string;
+  /** Absolute logical grid column where the cell starts. */
+  startColumn: number;
+};
+
+/**
+ * One normalized logical row in the shared working-grid model.
+ *
+ * This preserves the old `skippedBefore` / `cells` / `skippedAfter` shape for
+ * compatibility with the current AutoFit runtime path while also exposing the
+ * fully placed logical row needed by the rework.
+ */
+export type WorkingTableRowInput = AutoFitRowInput & {
+  /** All skipped columns in this row with explicit logical positions. */
+  skippedColumns: WorkingTableSkippedColumnInput[];
+  /** All concrete cells with explicit logical start columns. */
+  cells: WorkingTableCellInput[];
+  /** Logical column count occupied by this row after skips and spans. */
+  logicalColumnCount: number;
 };
 
 /**
@@ -121,24 +166,41 @@ function normalizePreferredColumnWidths(columnWidths: number[] | undefined): num
 /**
  * Normalize one runtime row into explicit skipped columns plus span-aware cells.
  */
-function normalizeRow(row: TableBlock['rows'][number], percentageBasis: number): AutoFitRowInput {
+function normalizeRow(row: TableBlock['rows'][number], percentageBasis: number): WorkingTableRowInput {
   const rowProps = (row.attrs?.tableRowProperties ?? {}) as TableRowProperties;
   const skippedBeforeCount = sanitizeCount(rowProps.gridBefore);
   const skippedAfterCount = sanitizeCount(rowProps.gridAfter);
   const cells = Array.isArray(row.cells) ? row.cells : [];
+  let columnIndex = 0;
+
+  const skippedBefore = buildSkippedColumns(
+    skippedBeforeCount,
+    rowProps.wBefore as OoxmlMeasurement | undefined,
+    percentageBasis,
+    columnIndex,
+  );
+  columnIndex += skippedBefore.length;
+
+  const normalizedCells = cells.map((cell) => {
+    const normalizedCell = normalizeCell(cell, percentageBasis, columnIndex);
+    columnIndex += normalizedCell.span ?? 1;
+    return normalizedCell;
+  });
+
+  const skippedAfter = buildSkippedColumns(
+    skippedAfterCount,
+    rowProps.wAfter as OoxmlMeasurement | undefined,
+    percentageBasis,
+    columnIndex,
+  );
+  columnIndex += skippedAfter.length;
 
   return {
-    skippedBefore: buildSkippedColumns(
-      skippedBeforeCount,
-      rowProps.wBefore as OoxmlMeasurement | undefined,
-      percentageBasis,
-    ),
-    cells: cells.map((cell) => normalizeCell(cell, percentageBasis)),
-    skippedAfter: buildSkippedColumns(
-      skippedAfterCount,
-      rowProps.wAfter as OoxmlMeasurement | undefined,
-      percentageBasis,
-    ),
+    skippedBefore,
+    cells: normalizedCells,
+    skippedAfter,
+    skippedColumns: [...skippedBefore, ...skippedAfter],
+    logicalColumnCount: columnIndex,
   };
 }
 
@@ -153,14 +215,16 @@ function buildSkippedColumns(
   count: number,
   preferredWidthMeasurement: OoxmlMeasurement | undefined,
   percentageBasis: number,
-): AutoFitRowInput['skippedBefore'] {
+  startColumnIndex: number,
+): WorkingTableSkippedColumnInput[] {
   if (count <= 0) return [];
 
   const totalPreferredWidth = resolveMeasurementToPx(preferredWidthMeasurement, percentageBasis);
   const perColumnPreferredWidth =
     totalPreferredWidth != null && count > 0 ? Math.max(0, totalPreferredWidth / count) : undefined;
 
-  return Array.from({ length: count }, () => ({
+  return Array.from({ length: count }, (_, index) => ({
+    columnIndex: startColumnIndex + index,
     preferredWidth: perColumnPreferredWidth,
     minContentWidth: 0,
     maxContentWidth: 0,
@@ -173,9 +237,12 @@ function buildSkippedColumns(
 function normalizeCell(
   cell: TableBlock['rows'][number]['cells'][number],
   percentageBasis: number,
-): NonNullable<AutoFitRowInput['cells']>[number] {
+  startColumn: number,
+): WorkingTableCellInput {
   const cellProps = (cell.attrs?.tableCellProperties ?? {}) as NormalizationTableCellProperties;
   return {
+    cellId: cell.id,
+    startColumn,
     span: sanitizeCount(cell.colSpan) || 1,
     preferredWidth: resolveMeasurementToPx(cellProps.cellWidth, percentageBasis),
   };
@@ -188,6 +255,9 @@ function determineGridColumnCount(preferredColumnCount: number, rows: AutoFitRow
   return Math.max(
     preferredColumnCount,
     ...rows.map((row) => {
+      if ('logicalColumnCount' in row && typeof row.logicalColumnCount === 'number') {
+        return row.logicalColumnCount;
+      }
       const skippedBefore = row.skippedBefore?.length ?? 0;
       const skippedAfter = row.skippedAfter?.length ?? 0;
       const cellSpanTotal = (row.cells ?? []).reduce((sum, cell) => sum + Math.max(1, cell.span ?? 1), 0);

@@ -44,6 +44,11 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.preferredTableWidth).toBe(320);
     expect(result.preferredColumnWidths).toEqual([100, 220]);
     expect(result.gridColumnCount).toBe(2);
+    expect(result.rows[0].logicalColumnCount).toBe(2);
+    expect(result.rows[0].cells).toEqual([
+      { cellId: 'cell-1', startColumn: 0, span: 1, preferredWidth: undefined },
+      { cellId: 'cell-2', startColumn: 1, span: 1, preferredWidth: undefined },
+    ]);
   });
 
   it('normalizes omitted tblLayout to autofit mode', () => {
@@ -90,12 +95,18 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.rows[0].skippedBefore).toHaveLength(1);
     expect(result.rows[0].skippedAfter).toHaveLength(2);
     expect(result.rows[0].skippedBefore).toEqual([
-      { preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 0, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
     ]);
     expect(result.rows[0].skippedAfter).toEqual([
-      { preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
-      { preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 2, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 3, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
     ]);
+    expect(result.rows[0].skippedColumns).toEqual([
+      { columnIndex: 0, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 2, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 3, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 },
+    ]);
+    expect(result.rows[0].cells).toEqual([{ cellId: 'cell-1', startColumn: 1, span: 1, preferredWidth: undefined }]);
     expect(result.gridColumnCount).toBe(4);
   });
 
@@ -120,10 +131,12 @@ describe('buildAutoFitWorkingGridInput', () => {
     const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
 
     expect(result.rows[0].skippedBefore).toEqual([
-      { preferredWidth: 10, minContentWidth: 0, maxContentWidth: 0 },
-      { preferredWidth: 10, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 0, preferredWidth: 10, minContentWidth: 0, maxContentWidth: 0 },
+      { columnIndex: 1, preferredWidth: 10, minContentWidth: 0, maxContentWidth: 0 },
     ]);
-    expect(result.rows[0].skippedAfter).toEqual([{ preferredWidth: 100 / 15, minContentWidth: 0, maxContentWidth: 0 }]);
+    expect(result.rows[0].skippedAfter).toEqual([
+      { columnIndex: 3, preferredWidth: 100 / 15, minContentWidth: 0, maxContentWidth: 0 },
+    ]);
   });
 
   it('preserves colspan cells as span-aware inputs', () => {
@@ -138,7 +151,7 @@ describe('buildAutoFitWorkingGridInput', () => {
 
     const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
 
-    expect(result.rows[0].cells).toEqual([{ span: 3, preferredWidth: undefined }]);
+    expect(result.rows[0].cells).toEqual([{ cellId: 'cell-1', startColumn: 0, span: 3, preferredWidth: undefined }]);
     expect(result.gridColumnCount).toBe(3);
   });
 
@@ -178,8 +191,8 @@ describe('buildAutoFitWorkingGridInput', () => {
 
     expect(result.preferredTableWidth).toBe(300);
     expect(result.rows[0].cells).toEqual([
-      { span: 1, preferredWidth: 100 },
-      { span: 1, preferredWidth: 150 },
+      { cellId: 'cell-1', startColumn: 0, span: 1, preferredWidth: 100 },
+      { cellId: 'cell-2', startColumn: 1, span: 1, preferredWidth: 150 },
     ]);
   });
 
@@ -198,5 +211,40 @@ describe('buildAutoFitWorkingGridInput', () => {
 
     expect(result.preferredColumnWidths).toEqual([120]);
     expect(result.gridColumnCount).toBe(3);
+  });
+
+  it('produces explicit logical placement for mixed skips and spans', () => {
+    const block = createTableBlock({
+      rows: [
+        {
+          id: 'row-1',
+          attrs: {
+            tableRowProperties: {
+              gridBefore: 1,
+              gridAfter: 1,
+              wBefore: { value: 150, type: 'dxa' },
+            },
+          },
+          cells: [
+            { id: 'cell-1', colSpan: 2 },
+            { id: 'cell-2', colSpan: 1 },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.rows[0]).toMatchObject({
+      logicalColumnCount: 5,
+      skippedColumns: [
+        { columnIndex: 0, preferredWidth: 10 },
+        { columnIndex: 4, preferredWidth: undefined },
+      ],
+      cells: [
+        { cellId: 'cell-1', startColumn: 1, span: 2, preferredWidth: undefined },
+        { cellId: 'cell-2', startColumn: 3, span: 1, preferredWidth: undefined },
+      ],
+    });
   });
 });

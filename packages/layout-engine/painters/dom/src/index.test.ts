@@ -11431,11 +11431,11 @@ describe('applyRunDataAttributes', () => {
         painter.paint(inlineNewlineLayout, mount);
       }).not.toThrow();
 
-      const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
-      expect(fragment).toBeTruthy();
-      expect(fragment.textContent).toContain('first');
-      expect(fragment.textContent).toContain('second');
-      expect(fragment.textContent).toContain('third');
+      const fragment = mount.querySelector<HTMLElement>('.superdoc-fragment');
+      expect(fragment).not.toBeNull();
+      expect(fragment?.textContent).toContain('first');
+      expect(fragment?.textContent).toContain('second');
+      expect(fragment?.textContent).toContain('third');
     });
 
     it('preserves PM positions for lineBreak runs', () => {

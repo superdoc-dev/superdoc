@@ -9,6 +9,12 @@ const HARNESS_URL = 'http://localhost:9990';
 interface HarnessConfig {
   layout?: boolean;
   toolbar?: 'none' | 'full';
+  /**
+   * Forwards `modules.toolbar.responsiveToContainer` to SuperDoc when true.
+   * Default is false (viewport-driven). Set true to drive overflow/compaction
+   * off the toolbar container's width instead of the viewport.
+   */
+  responsiveToContainer?: boolean;
   comments?: 'off' | 'on' | 'panel' | 'readonly' | 'disabled';
   trackChanges?: boolean;
   /**
@@ -49,6 +55,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   const params = new URLSearchParams();
   if (config.layout !== undefined) params.set('layout', config.layout ? '1' : '0');
   if (config.toolbar) params.set('toolbar', config.toolbar);
+  if (config.responsiveToContainer) params.set('responsiveToContainer', '1');
   if (config.comments) params.set('comments', config.comments);
   if (config.trackChanges) params.set('trackChanges', '1');
   if (config.replacements) params.set('replacements', config.replacements);

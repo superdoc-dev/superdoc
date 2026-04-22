@@ -1,13 +1,11 @@
-# Auto-releases CLI on push to:
-# - main (@next channel)
-# - stable (@latest channel)
+# Auto-releases CLI on push to main (@next channel).
+# Stable releases are orchestrated centrally by release-stable.yml.
 name: 📦 Release CLI
 
 on:
   push:
     branches:
       - main
-      - stable
     paths:
       # Keep in sync with apps/cli/.releaserc.cjs includePaths (patch-commit-filter).
       # Workflow paths trigger CI; includePaths control semantic-release commit analysis.
@@ -19,6 +17,7 @@ on:
       - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
+      - 'shared/**'
       - 'scripts/semantic-release/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
@@ -29,7 +28,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:

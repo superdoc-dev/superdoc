@@ -1,13 +1,11 @@
 import { Attribute } from '../Attribute.js';
 import { getMarkType } from '../helpers/getMarkType.js';
 import { isTextSelection } from '../helpers/isTextSelection.js';
+import { resolveHeaderFooterSelection } from './helpers/resolveHeaderFooterSelection.js';
 import { addParagraphRunProperty } from '../helpers/syncParagraphRunProperties.js';
 
-function canSetMark(editor, state, tr, newMarkType) {
-  let { selection } = tr;
-  if (editor.options.isHeaderOrFooter) {
-    selection = editor.options.lastSelection;
-  }
+function canSetMark(state, tr, newMarkType) {
+  const selection = resolveHeaderFooterSelection({ tr });
   let cursor = null;
 
   if (isTextSelection(selection)) {
@@ -53,11 +51,8 @@ function canSetMark(editor, state, tr, newMarkType) {
  * @param attributes Attributes to add.
  */
 //prettier-ignore
-export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch, editor }) => {
-    let { selection } = tr;
-    if (editor.options.isHeaderOrFooter) {
-      selection = editor.options.lastSelection;
-    }
+export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch }) => {
+    const selection = resolveHeaderFooterSelection({ tr });
     const { empty, ranges } = selection;
     const type = getMarkType(typeOrName, state.schema);
 
@@ -107,5 +102,5 @@ export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch, 
       }
     }
 
-    return canSetMark(editor, state, tr, type);
+    return canSetMark(state, tr, type);
   };

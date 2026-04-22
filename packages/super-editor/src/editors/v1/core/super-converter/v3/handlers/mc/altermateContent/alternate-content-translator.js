@@ -57,6 +57,9 @@ function encode(params) {
 function decode(params) {
   const { node } = params;
   const { drawingContent } = node.attrs;
+  if (!hasValidDrawingContent(drawingContent)) {
+    return null;
+  }
 
   // Handle modern DrawingML content (existing logic)
   const drawing = {
@@ -70,9 +73,19 @@ function decode(params) {
     elements: [drawing],
   };
 
+  const fallback = {
+    name: 'mc:Fallback',
+    elements: [
+      {
+        name: 'w:drawing',
+        elements: carbonCopy(drawing.elements || []),
+      },
+    ],
+  };
+
   return {
     name: 'mc:AlternateContent',
-    elements: [choice],
+    elements: [choice, fallback],
   };
 }
 
@@ -138,4 +151,19 @@ function buildPath(existingPath = [], node, branch) {
   if (node) path.push(node);
   if (branch) path.push(branch);
   return path;
+}
+
+/**
+ * @param {unknown} drawingContent
+ * @returns {boolean}
+ */
+function hasValidDrawingContent(drawingContent) {
+  const drawingChildren = drawingContent?.elements;
+  if (!Array.isArray(drawingChildren) || drawingChildren.length === 0) {
+    return false;
+  }
+
+  return drawingChildren.some(
+    (child) => child && typeof child === 'object' && (child.name === 'wp:inline' || child.name === 'wp:anchor'),
+  );
 }

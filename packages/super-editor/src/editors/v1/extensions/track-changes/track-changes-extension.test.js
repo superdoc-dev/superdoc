@@ -1896,6 +1896,89 @@ describe('TrackChanges extension commands', () => {
       expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
     });
 
+    it("gives each replacement mark its own ID when replacements='independent'", () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: {
+            user: { name: 'Default', email: 'default@example.com' },
+            trackedChanges: { replacements: 'independent' },
+          },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark).toBeDefined();
+      expect(meta.deletionMark).toBeDefined();
+      expect(meta.insertedMark.attrs.id).not.toBe(meta.deletionMark.attrs.id);
+    });
+
+    it('resolves only the targeted half of a replacement in unpaired mode', () => {
+      const { editor: interactionEditor } = initTestEditor({
+        mode: 'text',
+        content: '<p>Hello world</p>',
+        user: { name: 'Track Tester', email: 'track@example.com' },
+        trackedChanges: { replacements: 'independent' },
+      });
+
+      try {
+        const worldRange = getSubstringRange(interactionEditor.state.doc, 'world');
+        interactionEditor.commands.insertTrackedChange({
+          from: worldRange.from,
+          to: worldRange.to,
+          text: 'universe',
+        });
+
+        // Gather both independent ids for the insertion and deletion halves.
+        const changes = [];
+        interactionEditor.state.doc.descendants((node) => {
+          node.marks.forEach((mark) => {
+            if (mark.type.name === TrackInsertMarkName || mark.type.name === TrackDeleteMarkName) {
+              changes.push({ type: mark.type.name, id: mark.attrs.id });
+            }
+          });
+        });
+        const insertion = changes.find((c) => c.type === TrackInsertMarkName);
+        const deletion = changes.find((c) => c.type === TrackDeleteMarkName);
+        expect(insertion).toBeDefined();
+        expect(deletion).toBeDefined();
+        expect(insertion.id).not.toBe(deletion.id);
+
+        // Accepting the insertion must not touch the deletion side.
+        interactionEditor.commands.acceptTrackedChangeById(insertion.id);
+        expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+        expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('world');
+
+        // The deletion is still independently resolvable by its own id.
+        // Rejecting the deletion keeps the original text (unmarking it);
+        // the previously accepted insertion stays. Both words coexist in
+        // the final doc, which is the point of treating them as
+        // independent revisions.
+        interactionEditor.commands.rejectTrackedChangeById(deletion.id);
+        expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('');
+        expect(interactionEditor.state.doc.textContent).toContain('universe');
+        expect(interactionEditor.state.doc.textContent).toContain('world');
+      } finally {
+        interactionEditor.destroy();
+      }
+    });
+
     it('attaches comment to replacement using shared ID', () => {
       const doc = createDoc('Hello world');
       const state = createState(doc);

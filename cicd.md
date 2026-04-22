@@ -69,15 +69,17 @@ main (next) → stable (latest) → X.x (maintenance)
 
 #### 3. Promote to Stable (`promote-stable.yml`)
 
-**Trigger**: Manual workflow dispatch
+**Trigger**: Manual workflow dispatch or daily schedule at `07:00 UTC`
 
-**Input**: Optional tag to promote (defaults to latest from main)
+**Input**: Optional candidate branch name (defaults to `merge/main-into-stable-YYYY-MM-DD`)
 
 **Actions**:
 
-- Merges specified version to stable branch
-- Triggers automatic stable release
-- Updates npm @latest tag
+- Creates a fresh candidate branch from `stable`
+- Merges `main` into that branch
+- Opens a PR targeting `stable`
+- If the merge conflicts, commits the conflicted merge to the branch so a human can resolve it there
+- Merging that PR triggers the automatic stable release workflow
 
 #### 4. Create Patch Branch (`create-patch.yml`)
 
@@ -208,9 +210,11 @@ These skip semantic-release entirely — useful for re-publishing a failed platf
 ### Scenario 2: Creating Stable Release
 
 1. Run "Promote to Stable" workflow
-2. Merges main to stable
-3. Automatically publishes `1.1.0` as @latest
-4. Syncs back to main with version bump
+2. Review the generated PR from the candidate branch into `stable`
+3. If needed, resolve merge conflicts on the candidate branch
+4. Merge the PR into `stable`
+5. Automatically publishes `1.1.0` as @latest
+6. Syncs back to main with version bump
 
 ### Scenario 3: Hotfix to Current Stable
 

@@ -6,6 +6,7 @@
 
 import type { PMNode } from '../types.js';
 import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
+import type { ColumnLayout } from '@superdoc/contracts';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -40,6 +41,15 @@ export function parseColumnGap(gapTwips: string | number | undefined): number {
   if (gapTwips == null) return DEFAULT_COLUMN_GAP_INCHES;
   const gap = Number(gapTwips);
   return Number.isFinite(gap) ? gap / TWIPS_PER_INCH : DEFAULT_COLUMN_GAP_INCHES;
+}
+
+/**
+ * Parse presence of column separator from w:sep attribute (can be '1', 'true' or 'on').
+ * @param rawValue - Raw value from w:sep attribute
+ * @returns Presence of column separator
+ */
+export function parseColumnSeparator(rawValue: string | number | undefined): boolean {
+  return rawValue === '1' || rawValue === 'true' || rawValue === 'on' || rawValue === 1;
 }
 
 type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
@@ -209,13 +219,12 @@ function extractPageNumbering(elements: SectionElement[]):
 /**
  * Extract columns from <w:cols> element.
  */
-function extractColumns(
-  elements: SectionElement[],
-): { count: number; gap: number; widths?: number[]; equalWidth?: boolean } | undefined {
+function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
   const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
+  const withSeparator = parseColumnSeparator(cols.attributes['w:sep'] as string | number | undefined);
   const equalWidthRaw = cols.attributes['w:equalWidth'];
   const equalWidth =
     equalWidthRaw === '0' || equalWidthRaw === 0 || equalWidthRaw === false
@@ -233,9 +242,10 @@ function extractColumns(
     .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
     .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
 
-  const result = {
+  const result: ColumnLayout = {
     count,
     gap: gapInches * PX_PER_INCH,
+    withSeparator,
     ...(widths.length > 0 ? { widths } : {}),
     ...(equalWidth !== undefined ? { equalWidth } : {}),
   };
@@ -308,7 +318,7 @@ export function extractSectionData(para: PMNode): {
   type?: SectionType;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
-  columnsPx?: { count: number; gap: number; widths?: number[]; equalWidth?: boolean };
+  columnsPx?: ColumnLayout;
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;

@@ -140,19 +140,26 @@ modules: {
 
 ## Viewing mode visibility
 
-Comments are hidden by default when `documentMode` is `viewing`. Use the
-top-level `comments.visible` and `trackChanges.visible` flags to control what
-renders in read-only mode.
+Comments are hidden by default when `documentMode` is `viewing`. Use
+`comments.visible` and `modules.trackChanges.visible` to control what renders
+in read-only mode.
 
 ```javascript
 new SuperDoc({
   selector: "#viewer",
   document: "contract.docx",
   documentMode: "viewing",
-  comments: { visible: true },      // Standard comment threads
-  trackChanges: { visible: false }, // Tracked-change markup + threads
+  comments: { visible: true }, // Standard comment threads
+  modules: {
+    trackChanges: { visible: false }, // Tracked-change markup + threads
+  },
 });
 ```
+
+<Note>
+  The top-level `trackChanges` key still works as a deprecated alias for
+  `modules.trackChanges` and will emit a one-time console warning.
+</Note>
 
 ## Setting up the comments UI
 

@@ -2,8 +2,9 @@
 import { v4 as uuidv4 } from 'uuid';
 
 /**
+ * @typedef {'paired' | 'independent'} TrackChangesReplacements
  * @typedef {{ type: string, author: string, date: string, internalId: string }} TrackedChangeEntry
- * @typedef {{ lastTrackedChange: TrackedChangeEntry | null }} WalkContext
+ * @typedef {{ lastTrackedChange: TrackedChangeEntry | null, replacements: TrackChangesReplacements }} WalkContext
  */
 
 const TRACKED_CHANGE_NAMES = new Set(['w:ins', 'w:del']);
@@ -44,8 +45,9 @@ function isReplacementPair(previous, current) {
 }
 
 /**
- * Assigns an internal UUID to a tracked change element. Adjacent replacement
- * halves (w:del + w:ins with matching author/date) share the same UUID.
+ * Assigns an internal UUID to a tracked change element. In paired mode,
+ * adjacent replacement halves (w:del + w:ins with matching author/date)
+ * share the same UUID.
  *
  * @param {object} element  XML element (w:ins or w:del)
  * @param {Map<string, string>} idMap  Accumulates Word ID → internal UUID
@@ -70,7 +72,9 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
     date: element.attributes?.['w:date'] ?? '',
   };
 
-  if (context.lastTrackedChange && isReplacementPair(context.lastTrackedChange, current)) {
+  const shouldPair = context.replacements === 'paired';
+
+  if (shouldPair && context.lastTrackedChange && isReplacementPair(context.lastTrackedChange, current)) {
     // Second half of a replacement — share the first half's UUID, but only
     // if this w:id hasn't already been mapped. A reused id that was already
     // part of an earlier pair must keep its original mapping.
@@ -107,8 +111,14 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
 
       if (element.elements) {
         // Descend with an isolated context so content inside a tracked change
-        // cannot clear the outer replacement candidate.
-        walkElements(element.elements, idMap, { lastTrackedChange: null }, /* insideTrackedChange */ true);
+        // cannot clear the outer replacement candidate. Inherit `replacements`
+        // so nested changes honor the caller's choice if pairing ever applies.
+        walkElements(
+          element.elements,
+          idMap,
+          { lastTrackedChange: null, replacements: context.replacements },
+          /* insideTrackedChange */ true,
+        );
       }
     } else {
       // Content-bearing elements break replacement pairing. Only non-content
@@ -128,23 +138,27 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
  * Builds a map from OOXML `w:id` values to stable internal UUIDs by scanning
  * `word/document.xml`.
  *
- * Word tracked replacements use separate `w:id` values for the delete and
- * insert halves. This function detects adjacent opposite-type changes with
- * matching author and date and maps both halves to the same internal UUID so
- * the editor can resolve them as a single logical change.
+ * When `replacements` is `'paired'` (the default), Word tracked replacements
+ * are detected as adjacent opposite-type changes with matching author and
+ * date, and both halves map to the same internal UUID so the editor can
+ * resolve them as one logical change. When `replacements` is `'independent'`,
+ * each `w:id` maps to its own UUID — matching the ECMA-376 §17.13.5 model
+ * where every `<w:ins>` and `<w:del>` is an independent revision.
  *
  * Must run before comment import so all consumers — translators, comment
  * helpers, and the tracked-change resolver — see a fully populated map.
  *
  * @param {object} docx  Parsed DOCX package
+ * @param {{ replacements?: TrackChangesReplacements }} [options]
  * @returns {Map<string, string>}  Word `w:id` → internal UUID
  */
-export function buildTrackedChangeIdMap(docx) {
+export function buildTrackedChangeIdMap(docx, options = {}) {
   const body = docx?.['word/document.xml']?.elements?.[0];
   if (!body?.elements) return new Map();
 
+  const replacements = options.replacements === 'independent' ? 'independent' : 'paired';
   const idMap = new Map();
-  walkElements(body.elements, idMap, { lastTrackedChange: null });
+  walkElements(body.elements, idMap, { lastTrackedChange: null, replacements });
 
   return idMap;
 }

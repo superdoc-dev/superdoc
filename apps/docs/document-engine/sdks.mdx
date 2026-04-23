@@ -581,6 +581,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+| `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -1042,6 +1043,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+| `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |

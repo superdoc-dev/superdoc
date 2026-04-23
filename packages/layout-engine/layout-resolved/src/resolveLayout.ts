@@ -10,6 +10,7 @@ import type {
   ParaFragment,
   TableFragment,
   Line,
+  ParagraphBorders,
   ResolvedLayout,
   ResolvedPage,
   ResolvedPaintItem,
@@ -26,6 +27,7 @@ import { resolveImageItem } from './resolveImage.js';
 import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
 import { computeSdtContainerKey } from './sdtContainerKey.js';
+import { hashParagraphBorders } from './paragraphBorderHash.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -127,6 +129,26 @@ function resolveParagraphContentIfApplicable(
   return resolveParagraphContent(fragment, entry.block as ParagraphBlock, entry.measure as ParagraphMeasure);
 }
 
+function resolveFragmentParagraphBorders(
+  fragment: Fragment,
+  blockMap: Map<string, BlockMapEntry>,
+): ParagraphBorders | undefined {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return undefined;
+
+  if (fragment.kind === 'para' && entry.block.kind === 'paragraph') {
+    return (entry.block as ParagraphBlock).attrs?.borders;
+  }
+
+  if (fragment.kind === 'list-item' && entry.block.kind === 'list') {
+    const block = entry.block as ListBlock;
+    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
+    return item?.paragraph.attrs?.borders;
+  }
+
+  return undefined;
+}
+
 function resolveFragmentSdtContainerKey(fragment: Fragment, blockMap: Map<string, BlockMapEntry>): string | null {
   const entry = blockMap.get(fragment.blockId);
   if (!entry) return null;
@@ -192,6 +214,14 @@ function resolveFragmentItem(
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+
+      // Pre-compute paragraph border data for between-border grouping
+      const borders = resolveFragmentParagraphBorders(fragment, blockMap);
+      if (borders) {
+        item.paragraphBorders = borders;
+        item.paragraphBorderHash = hashParagraphBorders(borders);
+      }
+
       if (fragment.kind === 'para') {
         const para = fragment as ParaFragment;
         if (para.pmStart != null) item.pmStart = para.pmStart;

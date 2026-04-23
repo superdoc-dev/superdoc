@@ -2224,7 +2224,7 @@ export class DomPainter {
       this.sdtLabelsRendered,
       resolvedPage?.items,
     );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -2659,7 +2659,7 @@ export class DomPainter {
       this.sdtLabelsRendered,
       resolvedPage?.items,
     );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2824,7 +2824,7 @@ export class DomPainter {
       this.sdtLabelsRendered,
       resolvedPage?.items,
     );
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup, resolvedPage?.items);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);

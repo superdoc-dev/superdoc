@@ -15,6 +15,7 @@ on:
       - 'packages/preset-geometry/**'
       - 'tests/behavior/**'
       - 'shared/**'
+      - '.github/workflows/ci-behavior.yml'
       - '!**/*.md'
   merge_group:
   workflow_dispatch:
@@ -29,7 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        browser: [chromium, firefox, webkit]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
 
@@ -56,20 +58,20 @@ jobs:
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ matrix.browser }}
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browser
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
         working-directory: tests/behavior
 
       - name: Install Playwright system deps
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium firefox webkit
+        run: pnpm exec playwright install-deps ${{ matrix.browser }}
         working-directory: tests/behavior
 
-      - name: Run behavior tests (shard ${{ matrix.shard }}/3)
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/3
+      - name: Run behavior tests (${{ matrix.browser }} shard ${{ matrix.shard }}/4)
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/4
         working-directory: tests/behavior
 
   validate:

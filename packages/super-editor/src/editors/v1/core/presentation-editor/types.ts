@@ -165,6 +165,15 @@ export type LayoutEngineOptions = {
   ruler?: RulerOptions;
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
+  /**
+   * Render visible gray `[` / `]` bracket markers at bookmark start/end
+   * positions — matching Word's opt-in "Show bookmarks" (File > Options >
+   * Advanced). Off by default because bookmarks are a structural concept,
+   * not a visual one. Auto-generated bookmarks (names starting with `_`,
+   * such as `_Toc…` or `_Ref…`) are hidden even when enabled, mirroring
+   * Word's behavior. SD-2454.
+   */
+  showBookmarks?: boolean;
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {

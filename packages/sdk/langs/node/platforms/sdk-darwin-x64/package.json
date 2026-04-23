@@ -1,6 +1,10 @@
 {
   "name": "@superdoc-dev/sdk-darwin-x64",
+<<<<<<< HEAD
   "version": "1.7.0",
+=======
+  "version": "1.6.0",
+>>>>>>> origin/main
   "os": [
     "darwin"
   ],

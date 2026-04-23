@@ -359,6 +359,12 @@ export type EditorInputCallbacks = {
     dragAnchor: number,
     dragMode: 'char' | 'word' | 'para',
   ) => void;
+  /**
+   * Called when a pointer text-drag selection ends.
+   * Used to scroll the selection into view once after auto-scroll stops; during drag,
+   * selection-driven scroll is suppressed to avoid fighting edge auto-scroll.
+   */
+  notifyDragSelectionEnded?: () => void;
   /** Hit test table at coordinates */
   hitTestTable?: (x: number, y: number) => TableHitResult | null;
 };
@@ -1406,6 +1412,8 @@ export class EditorInputManager {
         this.#callbacks.finalizeDragSelectionWithDom?.(pointer, dragAnchor, dragMode);
       }
 
+      this.#callbacks.notifyDragSelectionEnded?.();
+
       this.#callbacks.scheduleA11ySelectionAnnouncement?.({ immediate: true });
 
       this.#dragLastPointer = null;
@@ -1555,9 +1563,12 @@ export class EditorInputManager {
   #handleLinkClick(event: MouseEvent, linkEl: HTMLAnchorElement): void {
     const href = linkEl.getAttribute('href') ?? '';
     const isAnchorLink = href.startsWith('#') && href.length > 1;
-    const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;
 
-    if (isAnchorLink && isTocLink) {
+    // SD-2495: route any internal-anchor click (`#<bookmark>`) to in-document
+    // navigation. Covers TOC entries, heading/bookmark cross-references
+    // (REF fields with `\h`), and any other internal-hyperlink case — they all
+    // should scroll to the bookmark target instead of navigating the browser.
+    if (isAnchorLink) {
       event.preventDefault();
       event.stopPropagation();
       this.#callbacks.goToAnchor?.(href);

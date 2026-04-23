@@ -1,6 +1,10 @@
 {
   "name": "@superdoc-dev/sdk",
+<<<<<<< HEAD
   "version": "1.7.0",
+=======
+  "version": "1.6.0",
+>>>>>>> origin/main
   "private": false,
   "type": "module",
   "main": "./dist/index.cjs",

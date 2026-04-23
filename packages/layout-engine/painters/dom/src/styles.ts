@@ -197,6 +197,21 @@ const LINK_AND_TOC_STYLES = `
   }
 }
 
+/* SD-2454: bookmark bracket indicators.
+ * When the showBookmarks layout option is enabled, the pm-adapter emits
+ * [ and ] marker TextRuns at bookmark start/end positions. Mirror Word's
+ * visual treatment: subtle gray, non-selectable so users can't accidentally
+ * include the brackets in copied text. The bookmark name is surfaced via
+ * the native title tooltip on the opening bracket. */
+[data-bookmark-marker="start"],
+[data-bookmark-marker="end"] {
+  color: #8b8b8b;
+  user-select: none;
+  cursor: default;
+  font-weight: normal;
+}
+
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .superdoc-link {

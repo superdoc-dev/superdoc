@@ -43,6 +43,7 @@ const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
+const showBookmarks = ref(urlParams.get('bookmarks') === '1');
 const useWebLayout = ref(urlParams.get('view') === 'web');
 // Tracked-change replacement model. 'paired' groups ins+del into one change
 // (Google Docs model); 'independent' keeps each as its own revision (Word / ECMA-376).
@@ -687,6 +688,7 @@ const init = async () => {
     layoutEngineOptions: {
       flowMode: useWebLayout.value ? 'semantic' : 'paginated',
       ...(useWebLayout.value ? { semanticOptions: { marginsMode: 'none' } } : {}),
+      showBookmarks: showBookmarks.value,
     },
     rulers: true,
     rulerContainer: '#ruler-container',
@@ -1204,6 +1206,11 @@ const toggleLayoutEngine = () => {
   window.location.href = url.toString();
 };
 
+const toggleShowBookmarks = () => {
+  showBookmarks.value = !showBookmarks.value;
+  superdoc.value?.setShowBookmarks?.(showBookmarks.value);
+};
+
 const toggleViewLayout = () => {
   const nextValue = !useWebLayout.value;
   const url = new URL(window.location.href);
@@ -1501,6 +1508,9 @@ if (scrollTestMode.value) {
                 @change="handleCompareFile"
               />
             </div>
+            <button class="dev-app__header-export-btn" @click="toggleShowBookmarks">
+              {{ showBookmarks ? 'Hide' : 'Show' }} bookmarks
+            </button>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>

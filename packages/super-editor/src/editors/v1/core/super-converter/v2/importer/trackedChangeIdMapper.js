@@ -135,6 +135,26 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
 }
 
 /**
+ * Scan a single OOXML part and return a fresh `w:id → internal UUID` map.
+ *
+ * The scan assumes the top-level element is a document / hdr / ftr / footnotes
+ * / endnotes root. Returns an empty map when the part is absent or malformed.
+ *
+ * @param {object | undefined} part Parsed OOXML part (from SuperConverter).
+ * @param {{ replacements?: TrackChangesReplacements }} [options]
+ * @returns {Map<string, string>}
+ */
+function buildTrackedChangeIdMapForPart(part, options = {}) {
+  const root = part?.elements?.[0];
+  if (!root?.elements) return new Map();
+
+  const replacements = options.replacements === 'independent' ? 'independent' : 'paired';
+  const idMap = new Map();
+  walkElements(root.elements, idMap, { lastTrackedChange: null, replacements });
+  return idMap;
+}
+
+/**
  * Builds a map from OOXML `w:id` values to stable internal UUIDs by scanning
  * `word/document.xml`.
  *
@@ -153,12 +173,41 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
  * @returns {Map<string, string>}  Word `w:id` → internal UUID
  */
 export function buildTrackedChangeIdMap(docx, options = {}) {
-  const body = docx?.['word/document.xml']?.elements?.[0];
-  if (!body?.elements) return new Map();
+  return buildTrackedChangeIdMapForPart(docx?.['word/document.xml'], options);
+}
 
-  const replacements = options.replacements === 'independent' ? 'independent' : 'paired';
-  const idMap = new Map();
-  walkElements(body.elements, idMap, { lastTrackedChange: null, replacements });
+/**
+ * Builds per-part `w:id → internal UUID` maps for every revision-capable
+ * content part in the DOCX package.
+ *
+ * Word revision IDs are not globally unique across parts, so each part keeps
+ * its own isolated `w:id` namespace.
+ *
+ * @param {Record<string, object | undefined> | null | undefined} docx
+ * @param {{ replacements?: TrackChangesReplacements }} [options]
+ * @returns {Map<string, Map<string, string>>}
+ */
+export function buildTrackedChangeIdMapsByPart(docx, options = {}) {
+  /** @type {Map<string, Map<string, string>>} */
+  const mapsByPart = new Map();
+  if (!docx || typeof docx !== 'object') return mapsByPart;
 
-  return idMap;
+  /** @type {Record<string, object | undefined>} */
+  const parts = /** @type {Record<string, object | undefined>} */ (docx);
+
+  mapsByPart.set('word/document.xml', buildTrackedChangeIdMapForPart(parts['word/document.xml'], options));
+
+  for (const partPath of Object.keys(parts)) {
+    if (!/^word\/(?:header|footer)\d+\.xml$/.test(partPath)) continue;
+    mapsByPart.set(partPath, buildTrackedChangeIdMapForPart(parts[partPath], options));
+  }
+
+  if (parts['word/footnotes.xml']) {
+    mapsByPart.set('word/footnotes.xml', buildTrackedChangeIdMapForPart(parts['word/footnotes.xml'], options));
+  }
+  if (parts['word/endnotes.xml']) {
+    mapsByPart.set('word/endnotes.xml', buildTrackedChangeIdMapForPart(parts['word/endnotes.xml'], options));
+  }
+
+  return mapsByPart;
 }

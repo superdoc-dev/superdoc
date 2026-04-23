@@ -129,6 +129,9 @@ export function createStoryEditor(
   const inheritedExtensions = parentEditor.options.extensions?.length
     ? [...parentEditor.options.extensions]
     : undefined;
+  const inheritedTrackedChanges = parentEditor.options.trackedChanges
+    ? { ...parentEditor.options.trackedChanges }
+    : undefined;
   const StoryEditorClass = parentEditor.constructor as new (options: Partial<EditorOptions>) => Editor;
 
   const storyEditor = new StoryEditorClass({
@@ -144,6 +147,8 @@ export function createStoryEditor(
     media,
     mediaFiles: media,
     fonts: parentEditor.options.fonts,
+    user: parentEditor.options.user,
+    trackedChanges: inheritedTrackedChanges,
     isHeaderOrFooter,
     isHeadless,
     pagination: false,
@@ -156,7 +161,9 @@ export function createStoryEditor(
     // Only set element when not headless
     ...(isHeadless ? {} : { element }),
 
-    // Disable collaboration, comments, and tracked changes for story editors
+    // Disable collaboration and comment threading for story editors.
+    // Tracked-change configuration is inherited from the parent editor so
+    // suggesting-mode story sessions honor the same replacement model.
     ydoc: null,
     collaborationProvider: null,
     isCommentsEnabled: false,
@@ -169,17 +176,21 @@ export function createStoryEditor(
   // Store parent editor reference as a non-enumerable property to avoid
   // circular reference issues during serialization while still allowing
   // access when needed.
-  Object.defineProperty(storyEditor.options, 'parentEditor', {
-    enumerable: false,
-    configurable: true,
-    get() {
-      return parentEditor;
-    },
-  });
+  if (storyEditor.options && typeof storyEditor.options === 'object') {
+    Object.defineProperty(storyEditor.options, 'parentEditor', {
+      enumerable: false,
+      configurable: true,
+      get() {
+        return parentEditor;
+      },
+    });
+  }
 
   // Start non-editable; the caller (e.g. PresentationEditor) will enable
   // editing when entering edit mode.
-  storyEditor.setEditable(false, false);
+  if (typeof storyEditor.setEditable === 'function') {
+    storyEditor.setEditable(false, false);
+  }
 
   return storyEditor;
 }

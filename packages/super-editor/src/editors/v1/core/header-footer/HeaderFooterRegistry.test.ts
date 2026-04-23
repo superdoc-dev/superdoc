@@ -521,6 +521,86 @@ describe('HeaderFooterLayoutAdapter', () => {
     expect(options?.mediaFiles).toEqual(manager.rootEditor.converter.media);
   });
 
+  it('stamps header/footer FlowBlocks with the part story key', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+
+    const [, options] = mockToFlowBlocks.mock.calls[0] || [];
+    expect(options?.storyKey).toBe('hf:part:rId-header-default');
+  });
+
+  it('passes tracked change render config through to header/footer flow blocks', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+    adapter.setTrackedChangesRenderConfig({ mode: 'final', enabled: false });
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+
+    const [, options] = mockToFlowBlocks.mock.calls[0] || [];
+    expect(options?.trackedChangesMode).toBe('final');
+    expect(options?.enableTrackedChanges).toBe(false);
+  });
+
+  it('invalidates cached header/footer flow blocks when tracked change render config changes', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+    adapter.getBatch('header');
+    expect(mockToFlowBlocks).toHaveBeenCalledTimes(1);
+
+    adapter.setTrackedChangesRenderConfig({ mode: 'final', enabled: true });
+    adapter.getBatch('header');
+    expect(mockToFlowBlocks).toHaveBeenCalledTimes(2);
+  });
+
   it('returns undefined when no descriptors have FlowBlocks', () => {
     const manager = {
       getDescriptors: () => [{ id: 'missing', kind: 'header', variant: 'default' }],

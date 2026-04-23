@@ -6,12 +6,8 @@ import {
   HeaderFooterLayoutAdapter,
   type HeaderFooterDescriptor,
 } from './HeaderFooterRegistry.js';
-import { EditorOverlayManager } from './EditorOverlayManager.js';
 
 export type InitHeaderFooterRegistryDeps = {
-  painterHost: HTMLElement;
-  visibleHost: HTMLElement;
-  selectionOverlay: HTMLElement | null;
   editor: Editor;
   converter: Parameters<typeof extractIdentifierFromConverter>[0];
   mediaFiles?: Record<string, unknown>;
@@ -19,15 +15,12 @@ export type InitHeaderFooterRegistryDeps = {
   initBudgetMs: number;
   resetSession: () => void;
   requestRerender: () => void;
-  exitHeaderFooterMode: () => void;
   previousCleanups: Array<() => void>;
   previousAdapter: HeaderFooterLayoutAdapter | null;
   previousManager: HeaderFooterEditorManager | null;
-  previousOverlayManager: EditorOverlayManager | null;
 };
 
 export type InitHeaderFooterRegistryResult = {
-  overlayManager: EditorOverlayManager;
   headerFooterIdentifier: HeaderFooterIdentifier | null;
   headerFooterManager: HeaderFooterEditorManager;
   headerFooterAdapter: HeaderFooterLayoutAdapter;
@@ -35,9 +28,6 @@ export type InitHeaderFooterRegistryResult = {
 };
 
 export function initHeaderFooterRegistry({
-  painterHost,
-  visibleHost,
-  selectionOverlay,
   editor,
   converter,
   mediaFiles,
@@ -45,11 +35,9 @@ export function initHeaderFooterRegistry({
   initBudgetMs,
   resetSession,
   requestRerender,
-  exitHeaderFooterMode,
   previousCleanups,
   previousAdapter,
   previousManager,
-  previousOverlayManager,
 }: InitHeaderFooterRegistryDeps): InitHeaderFooterRegistryResult {
   const startTime = performance.now();
 
@@ -62,14 +50,8 @@ export function initHeaderFooterRegistry({
   });
   previousAdapter?.clear();
   previousManager?.destroy();
-  previousOverlayManager?.destroy();
 
   resetSession();
-
-  // Initialize EditorOverlayManager for in-place editing
-  const overlayManager = new EditorOverlayManager(painterHost, visibleHost, selectionOverlay);
-  // Set callback for when user clicks on dimming overlay to exit edit mode
-  overlayManager.setOnDimmingClick(exitHeaderFooterMode);
 
   const headerFooterIdentifier = extractIdentifierFromConverter(converter);
   const headerFooterManager = new HeaderFooterEditorManager(editor);
@@ -99,7 +81,6 @@ export function initHeaderFooterRegistry({
   }
 
   return {
-    overlayManager,
     headerFooterIdentifier,
     headerFooterManager,
     headerFooterAdapter,

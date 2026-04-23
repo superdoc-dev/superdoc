@@ -242,6 +242,8 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
   } else {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
+    resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
+    resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
   }
 
   resolvedWidths = shrinkToTargetWidth(resolvedWidths, targetTableWidth, minBounds);
@@ -728,6 +730,98 @@ function raiseToMinimums(widths: number[], minBounds: number[]): number[] {
 }
 
 /**
+ * Redistribute width toward column-level maximums while keeping the current
+ * table width fixed.
+ *
+ * This covers the AutoFit case where no column violates its minimum width, but
+ * one or more columns still sit below their no-wrap maximums and other columns
+ * have spare width above their minima. Word does this for ordinary content such
+ * as the "Human Plasma (long text)" case even though no `min-content` trigger
+ * fires.
+ */
+function redistributeTowardMaximumsWithinCurrentTable(
+  widths: number[],
+  minBounds: number[],
+  maxBounds: number[],
+): number[] {
+  const next = widths.slice();
+
+  for (let iteration = 0; iteration < 8; iteration++) {
+    const receiverHeadrooms = next.map((width, index) => Math.max(0, maxBounds[index] - width));
+    const totalReceiverHeadroom = receiverHeadrooms.reduce((sum, headroom) => sum + headroom, 0);
+    if (totalReceiverHeadroom <= 0.001) {
+      break;
+    }
+
+    const donorCapacities = next.map((width, index) =>
+      receiverHeadrooms[index] > 0.001 ? 0 : Math.max(0, width - minBounds[index]),
+    );
+    let totalDonorCapacity = donorCapacities.reduce((sum, capacity) => sum + capacity, 0);
+
+    if (totalDonorCapacity <= 0.001) {
+      for (let index = 0; index < next.length; index++) {
+        donorCapacities[index] = Math.max(0, next[index] - minBounds[index]);
+      }
+      totalDonorCapacity = donorCapacities.reduce((sum, capacity) => sum + capacity, 0);
+    }
+
+    if (totalDonorCapacity <= 0.001) {
+      break;
+    }
+
+    const redistribution = Math.min(totalReceiverHeadroom, totalDonorCapacity);
+    shrinkColumnsByCapacity(next, donorCapacities, minBounds, redistribution);
+    growColumnsByHeadroom(next, receiverHeadrooms, redistribution);
+  }
+
+  return next;
+}
+
+/**
+ * Redistribute a fixed-width AutoFit table beyond strict `max-content` caps
+ * using a content-demand-weighted target shape.
+ *
+ * Word does not always stop once every column reaches its measured no-wrap
+ * width. In customer documents such as `test-blank-autofit2.docx`, Word keeps
+ * the table at the same total width but still shifts more width into the
+ * highest-demand column, producing a visually different distribution from a
+ * strict `max-content` stop. This phase models that behavior by:
+ * - preserving the current total table width exactly
+ * - preserving every column minimum
+ * - redistributing the width above minima using content-demand weights
+ *
+ * The weights intentionally bias larger-demand columns more strongly than a
+ * linear share by squaring each column's content-demand signal. This is an
+ * observed-Word-parity heuristic rather than a literal ECMA rule.
+ *
+ * @param widths - Current fixed-total width vector after no-wrap fitting.
+ * @param minBounds - Per-column minimum widths that may not be violated.
+ * @param maxBounds - Per-column content-demand widths used as weighting input.
+ * @returns A reshaped width vector with the same total width.
+ */
+function redistributeTowardContentWeightedShape(widths: number[], minBounds: number[], maxBounds: number[]): number[] {
+  const currentTotal = sumWidths(widths);
+  const minTotal = sumWidths(minBounds);
+  const distributableWidth = currentTotal - minTotal;
+
+  if (distributableWidth <= 0.001 || widths.length === 0) {
+    return widths;
+  }
+
+  const demandWeights = widths.map((width, index) => {
+    const demand = Math.max(maxBounds[index], width, minBounds[index], 1);
+    return demand * demand;
+  });
+  const totalDemandWeight = demandWeights.reduce((sum, weight) => sum + weight, 0);
+
+  if (totalDemandWeight <= 0.001) {
+    return widths;
+  }
+
+  return widths.map((_, index) => minBounds[index] + distributableWidth * (demandWeights[index] / totalDemandWeight));
+}
+
+/**
  * Continue the ECMA override flow after minimum satisfaction by shrinking
  * non-trigger columns toward their minima so constrained spans can move toward
  * their maximum widths while staying within the current table width.
@@ -875,6 +969,29 @@ function shrinkColumnsByCapacity(
       index === widths.length - 1 ? shrinkAmount - applied : shrinkAmount * (capacities[index] / totalCapacity);
     widths[index] = Math.max(minBounds[index], widths[index] - reduction);
     applied += reduction;
+  }
+}
+
+/**
+ * Grow columns proportionally to their remaining headroom to maximum.
+ */
+function growColumnsByHeadroom(widths: number[], headrooms: number[], growthAmount: number): void {
+  const totalHeadroom = headrooms.reduce((sum, headroom) => sum + headroom, 0);
+  if (totalHeadroom <= 0 || growthAmount <= 0) {
+    return;
+  }
+
+  let applied = 0;
+  const activeIndexes = headrooms
+    .map((headroom, index) => ({ headroom, index }))
+    .filter((entry) => entry.headroom > 0.001);
+
+  for (let activeIndex = 0; activeIndex < activeIndexes.length; activeIndex++) {
+    const { index, headroom } = activeIndexes[activeIndex];
+    const growth =
+      activeIndex === activeIndexes.length - 1 ? growthAmount - applied : growthAmount * (headroom / totalHeadroom);
+    widths[index] += Math.min(headroom, growth);
+    applied += Math.min(headroom, growth);
   }
 }
 

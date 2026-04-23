@@ -99,6 +99,100 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBe(400);
   });
 
+  it('redistributes width toward the dominant content column even when no min-content trigger fires', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 640,
+          maxTableWidth: 640,
+          preferredColumnWidths: [160, 160, 160, 160],
+          gridColumnCount: 4,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 4,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+                { startColumn: 3, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [160, 160, 160, 160],
+          totalWidth: 640,
+          gridColumnCount: 4,
+          preferredTableWidth: 640,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 80, max: 192 },
+            { min: 60, max: 80 },
+            { min: 70, max: 95 },
+            { min: 70, max: 95 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBe(640);
+    expect(result.columnWidths[0]).toBeGreaterThan(192);
+    expect(result.columnWidths[1]).toBeLessThan(160);
+    expect(result.columnWidths[2]).toBeLessThan(160);
+    expect(result.columnWidths[3]).toBeLessThan(160);
+  });
+
+  it('continues reshaping a fixed-width autofit table after all content already fits', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 624,
+          maxTableWidth: 624,
+          preferredColumnWidths: [156, 156, 156, 156],
+          gridColumnCount: 4,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 4,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+                { startColumn: 3, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [156, 156, 156, 156],
+          totalWidth: 624,
+          gridColumnCount: 4,
+          preferredTableWidth: 624,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 80, max: 193.5 },
+            { min: 60, max: 70 },
+            { min: 60, max: 75 },
+            { min: 60, max: 75 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeCloseTo(624, 3);
+    expect(result.columnWidths[0]).toBeGreaterThan(193.5);
+    expect(result.columnWidths[1]).toBeLessThan(140);
+    expect(result.columnWidths[2]).toBeLessThan(140);
+    expect(result.columnWidths[3]).toBeLessThan(140);
+  });
+
   it('lets single-span preferred widths override content maxima downward', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

@@ -1611,13 +1611,18 @@ export class DomPainter {
 
   private updateBlockLookup(input: DomPainterInput): void {
     const { blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
+    const resolvedBlockVersions = this.resolvedLayout?.blockVersions;
 
     // Build lookup for main document blocks
-    const nextLookup = this.buildBlockLookup(blocks, measures);
+    const nextLookup = this.buildBlockLookup(blocks, measures, resolvedBlockVersions);
 
     const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
     if (normalizedHeader) {
-      const headerLookup = this.buildBlockLookup(normalizedHeader.blocks, normalizedHeader.measures);
+      const headerLookup = this.buildBlockLookup(
+        normalizedHeader.blocks,
+        normalizedHeader.measures,
+        resolvedBlockVersions,
+      );
       headerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
@@ -1625,7 +1630,11 @@ export class DomPainter {
 
     const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
     if (normalizedFooter) {
-      const footerLookup = this.buildBlockLookup(normalizedFooter.blocks, normalizedFooter.measures);
+      const footerLookup = this.buildBlockLookup(
+        normalizedFooter.blocks,
+        normalizedFooter.measures,
+        resolvedBlockVersions,
+      );
       footerLookup.forEach((entry, id) => {
         nextLookup.set(id, entry);
       });
@@ -7048,7 +7057,11 @@ export class DomPainter {
     return 0;
   }
 
-  private buildBlockLookup(blocks: FlowBlock[], measures: Measure[]): BlockLookup {
+  private buildBlockLookup(
+    blocks: FlowBlock[],
+    measures: Measure[],
+    precomputedVersions?: Record<string, string>,
+  ): BlockLookup {
     if (blocks.length !== measures.length) {
       throw new Error('DomPainter requires the same number of blocks and measures');
     }
@@ -7058,7 +7071,7 @@ export class DomPainter {
       lookup.set(block.id, {
         block,
         measure: measures[index],
-        version: deriveBlockVersion(block),
+        version: precomputedVersions?.[block.id] ?? deriveBlockVersion(block),
       });
     });
     return lookup;

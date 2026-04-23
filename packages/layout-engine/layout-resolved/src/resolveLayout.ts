@@ -294,6 +294,12 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     pages,
   };
 
+  if (blocks.length > 0) {
+    resolved.blockVersions = Object.fromEntries(
+      blocks.map((block) => [block.id, computeBlockVersion(block.id, blockMap, blockVersionCache)]),
+    );
+  }
+
   if (layout.layoutEpoch != null) {
     resolved.layoutEpoch = layout.layoutEpoch;
   }

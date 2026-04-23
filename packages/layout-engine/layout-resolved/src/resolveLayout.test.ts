@@ -90,6 +90,33 @@ describe('resolveLayout', () => {
     expect(a).toEqual(b);
   });
 
+  it('includes precomputed block versions for every supplied block', () => {
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 0, width: 468 }],
+        },
+      ],
+    };
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }] } as any,
+      { kind: 'paragraph', id: 'p2', runs: [{ text: 'lookup-only', fontFamily: 'Arial', fontSize: 12 }] } as any,
+    ];
+    const measures: Measure[] = [
+      { kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any,
+      { kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any,
+    ];
+
+    const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+
+    expect(result.blockVersions).toBeDefined();
+    expect(result.blockVersions).toHaveProperty('p1');
+    expect(result.blockVersions).toHaveProperty('p2');
+    expect(result.blockVersions?.p1).not.toBe(result.blockVersions?.p2);
+  });
+
   it('defaults pageGap to 0 when layout.pageGap is undefined', () => {
     const result = resolveLayout({ layout: baseLayout, flowMode: 'paginated', blocks: [], measures: [] });
     expect(result.pageGap).toBe(0);

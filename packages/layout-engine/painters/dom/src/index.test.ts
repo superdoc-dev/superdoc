@@ -5028,6 +5028,75 @@ describe('DomPainter', () => {
     expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
+  it('uses resolved block versions for block change tracking', () => {
+    const blockId = 'resolved-version-block';
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: blockId,
+      runs: [{ text: 'Stable content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+    const paragraphLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId, fromLine: 0, toLine: 1, x: 24, y: 24, width: 300, pmStart: 0, pmEnd: 14 },
+          ],
+        },
+      ],
+    };
+
+    const item = {
+      kind: 'fragment' as const,
+      id: `para:${blockId}:0:1`,
+      pageIndex: 0,
+      x: 24,
+      y: 24,
+      width: 300,
+      height: 20,
+      fragmentKind: 'para' as const,
+      blockId,
+      fragmentIndex: 0,
+      version: 'stable-fragment-version',
+    };
+
+    const painter = createTestPainter({ blocks: [paragraphBlock], measures: [paragraphMeasure] });
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-1' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const initialWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-2' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const updatedWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
+  });
+
   it('applies resolved zIndex only to anchored media fragments', () => {
     const anchoredDrawingBlock: FlowBlock = {
       kind: 'drawing',

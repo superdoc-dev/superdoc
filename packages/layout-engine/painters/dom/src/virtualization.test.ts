@@ -33,7 +33,6 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
             });
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
-        sourceLayout: layout,
       };
       painter.paint(input, mount, mapping as any);
     },

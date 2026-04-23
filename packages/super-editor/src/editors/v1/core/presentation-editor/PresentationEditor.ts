@@ -102,6 +102,7 @@ import type {
   Layout,
   Measure,
   Page,
+  ResolvedLayout,
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
@@ -4365,7 +4366,7 @@ export class PresentationEditor extends EventEmitter {
       // Process per-rId header/footer content and decoration providers (paginated only)
       if (!isSemanticFlow) {
         await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
-        this.#updateDecorationProviders(layout);
+        this.#updateDecorationProviders(layout, resolvedLayout);
       }
 
       this.#ensurePainter();
@@ -4385,7 +4386,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintStart = perfNow();
       const paintInput: DomPainterInput = {
         resolvedLayout,
-        sourceLayout: layout,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
@@ -5532,8 +5532,8 @@ export class PresentationEditor extends EventEmitter {
    * Update decoration providers for header/footer.
    * Delegates to HeaderFooterSessionManager which handles provider creation.
    */
-  #updateDecorationProviders(layout: Layout) {
-    this.#headerFooterSession?.updateDecorationProviders(layout);
+  #updateDecorationProviders(layout: Layout, resolvedLayout: ResolvedLayout) {
+    this.#headerFooterSession?.updateDecorationProviders(layout, resolvedLayout);
   }
 
   /**

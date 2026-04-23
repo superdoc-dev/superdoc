@@ -236,6 +236,7 @@ export function resolveFragmentItem(
         blockId: fragment.blockId,
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
+        fragment: fragment as ParaFragment | ListItemFragment,
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
 

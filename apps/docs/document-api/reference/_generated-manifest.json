@@ -355,6 +355,8 @@
     "apps/docs/document-api/reference/sections/set-section-direction.mdx",
     "apps/docs/document-api/reference/sections/set-title-page.mdx",
     "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
+    "apps/docs/document-api/reference/selection/current.mdx",
+    "apps/docs/document-api/reference/selection/index.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/clear-style.mdx",
@@ -991,6 +993,13 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "selection",
+      "operationIds": ["selection.current"],
+      "pagePath": "apps/docs/document-api/reference/selection/index.mdx",
+      "title": "Selection"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "diff",
       "operationIds": ["diff.capture", "diff.compare", "diff.apply"],
       "pagePath": "apps/docs/document-api/reference/diff/index.mdx",
@@ -1018,5 +1027,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "c8670fb494b56c19fbd09a7bada35974fbb3c22d938f6a5e01eee6e8467961c0"
+  "sourceHash": "f5c0786256e77432e9b9a58bc2009e39e2e832f6b0b2b625ee6dbeb3a762bdd6"
 }

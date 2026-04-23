@@ -81,6 +81,17 @@ function isSameTarget(
   return left.blockId === right.blockId && left.range.start === right.range.start && left.range.end === right.range.end;
 }
 
+/**
+ * Normalize a TextAddress | TextTarget comment target into an array of
+ * segments. For TextAddress, the result is a single-entry array.
+ */
+function targetToSegments(
+  target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
+): TextSegment[] {
+  if ('segments' in target) return [...target.segments];
+  return [{ blockId: target.blockId, range: target.range }];
+}
+
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
   try {
     return listCommentAnchors(editor);
@@ -365,22 +376,62 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
 function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
   requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
 
-  if (input.target.range.start === input.target.range.end) {
+  // The target can be either a single-block TextAddress or a multi-segment
+  // TextTarget. For a TextTarget, resolve each segment and require they
+  // cover a contiguous PM range in document order — out-of-order or
+  // disjoint segments would otherwise silently anchor the comment over
+  // intervening text the caller never selected.
+  const target = input.target;
+  if (!target) {
     return {
       success: false,
       failure: {
         code: 'INVALID_TARGET',
-        message: 'Comment target range must be non-collapsed.',
+        message: 'Comment target is required.',
       },
     };
   }
+  const segments = targetToSegments(target);
 
-  const resolved = resolveTextTarget(editor, input.target);
-  if (!resolved) {
+  const resolvedSegments = segments.map((seg) =>
+    resolveTextTarget(editor, { kind: 'text', blockId: seg.blockId, range: seg.range }),
+  );
+  if (resolvedSegments.some((r) => r === null)) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Comment target could not be resolved.', {
-      target: input.target,
+      target,
     });
   }
+
+  const docForGap = editor.state?.doc;
+  for (let i = 1; i < resolvedSegments.length; i += 1) {
+    const prev = resolvedSegments[i - 1]!;
+    const curr = resolvedSegments[i]!;
+    if (prev.to > curr.from) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target segments must be in document order.',
+          details: { target },
+        },
+      };
+    }
+    const gapText = docForGap ? docForGap.textBetween(prev.to, curr.from, '') : '';
+    if (gapText.length > 0) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target segments must be contiguous — non-selected text between segments is not supported.',
+          details: { target },
+        },
+      };
+    }
+  }
+
+  const firstResolved = resolvedSegments[0]!;
+  const lastResolved = resolvedSegments[resolvedSegments.length - 1]!;
+  const resolved = { from: firstResolved.from, to: lastResolved.to };
   if (resolved.from === resolved.to) {
     return {
       success: false,

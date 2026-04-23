@@ -4678,8 +4678,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         text: { type: 'string', description: 'Comment text content.' },
         target: {
-          ...textAddressSchema,
-          description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
+          oneOf: [textAddressSchema, textTargetSchema],
+          description:
+            "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
         },
         parentCommentId: {
           type: 'string',
@@ -5167,6 +5168,24 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ['start', 'end'],
         ),
         output: resolveRangeOutputSchema,
+      },
+
+      'selection.current': {
+        input: objectSchema(
+          {
+            includeText: { type: 'boolean' },
+          },
+          [],
+        ),
+        output: objectSchema(
+          {
+            empty: { type: 'boolean' },
+            target: { oneOf: [textTargetSchema, { type: 'null' }] },
+            activeMarks: arraySchema({ type: 'string' }),
+            text: { type: 'string' },
+          },
+          ['empty', 'target', 'activeMarks'],
+        ),
       },
 
       'mutations.preview': {

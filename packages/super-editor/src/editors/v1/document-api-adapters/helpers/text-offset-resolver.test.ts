@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset-resolver.js';
+import { computeTextContentLength, pmPositionToTextOffset, resolveTextRangeInBlock } from './text-offset-resolver.js';
 
 type NodeOptions = {
   text?: string;
@@ -154,5 +154,58 @@ describe('computeTextContentLength', () => {
     const paragraph = createNode('paragraph', [runNode], { isBlock: true, inlineContent: true });
 
     expect(computeTextContentLength(paragraph)).toBe(2);
+  });
+});
+
+describe('pmPositionToTextOffset', () => {
+  it('maps plain-text PM positions directly to offsets', () => {
+    const textNode = createNode('text', [], { text: 'Hello' });
+    const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });
+
+    // paragraph starts at PM pos 0; text content starts at 1.
+    expect(pmPositionToTextOffset(paragraph, 0, 1)).toBe(0);
+    expect(pmPositionToTextOffset(paragraph, 0, 3)).toBe(2);
+    expect(pmPositionToTextOffset(paragraph, 0, 6)).toBe(5);
+  });
+
+  it('ignores inline wrapper boundary tokens (run marks, etc.)', () => {
+    // Block: <p><run>Hi</run></p>
+    // PM positions: 0=p start, 1=run start, 2='H', 3='i', 4=run end, 5=p end
+    // Flattened: just "Hi" — 2 chars.
+    const textNode = createNode('text', [], { text: 'Hi' });
+    const runNode = createNode('run', [textNode], { isInline: true, isLeaf: false });
+    const paragraph = createNode('paragraph', [runNode], { isBlock: true, inlineContent: true });
+
+    // End of "Hi" is PM pos 4 (inside run, right after 'i') → flattened 2.
+    // Naïve `pmPos - blockPos - 1` would give 3 (wrong — off by one).
+    expect(pmPositionToTextOffset(paragraph, 0, 4)).toBe(2);
+    // Start of "Hi" is PM pos 2.
+    expect(pmPositionToTextOffset(paragraph, 0, 2)).toBe(0);
+  });
+
+  it('counts leaf atoms as 1 flattened unit even if nodeSize > 1', () => {
+    const textNode = createNode('text', [], { text: 'A' });
+    const imageNode = createNode('image', [], { isInline: true, isLeaf: true, nodeSize: 3 });
+    const paragraph = createNode('paragraph', [textNode, imageNode], { isBlock: true, inlineContent: true });
+
+    // "A" (1) + image (1 flattened, but nodeSize 3 in PM) = 2 flattened units total.
+    // PM pos after image = 1 (p start) + 1 (A) + 3 (image) = 5.
+    expect(pmPositionToTextOffset(paragraph, 0, 5)).toBe(2);
+  });
+
+  it('returns 0 when pmPos is at or before block start', () => {
+    const textNode = createNode('text', [], { text: 'Hi' });
+    const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });
+
+    expect(pmPositionToTextOffset(paragraph, 0, 0)).toBe(0);
+    expect(pmPositionToTextOffset(paragraph, 0, 1)).toBe(0);
+  });
+
+  it('returns the full length when pmPos is past block end', () => {
+    const textNode = createNode('text', [], { text: 'Hi' });
+    const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });
+
+    // Past-end PM positions clamp to block length.
+    expect(pmPositionToTextOffset(paragraph, 0, 1000)).toBe(2);
   });
 });

@@ -1,0 +1,177 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import type {
+  SelectionCurrentInput,
+  SelectionInfo,
+  SelectionChangeListener,
+  TextTarget,
+  TextSegment,
+} from '@superdoc/document-api';
+import type { Editor } from '../../core/Editor.js';
+import { pmPositionToTextOffset } from './text-offset-resolver.js';
+
+/**
+ * Reads the current ProseMirror selection and projects it into the Document
+ * API's {@link SelectionInfo} shape, including a multi-segment
+ * {@link TextTarget} for selections that span more than one block.
+ *
+ * Positions within a textblock are mapped to the flattened text model used
+ * by {@link computeTextContentLength} (text = length, leaf atoms = 1, block
+ * separators = 1 between children). For text-only blocks this collapses to
+ * a direct position-within-block mapping.
+ */
+export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurrentInput): SelectionInfo {
+  const state = editor.state;
+  if (!state) {
+    return { empty: true, target: null, activeMarks: [] };
+  }
+
+  const sel = state.selection;
+  const { from, to, empty } = sel;
+
+  const segments = collectTextSegments(state.doc, from, to);
+  const target: TextTarget | null = segments.length > 0 ? buildTextTarget(segments) : null;
+
+  const activeMarks = collectActiveMarks(state, from, to);
+
+  const info: SelectionInfo = {
+    empty,
+    target,
+    activeMarks,
+  };
+
+  if (input.includeText && !empty) {
+    info.text = state.doc.textBetween(from, to, ' ');
+  }
+
+  return info;
+}
+
+function buildTextTarget(segments: TextSegment[]): TextTarget {
+  // TextTarget requires a non-empty segments array — we already checked above.
+  return {
+    kind: 'text',
+    segments: segments as [TextSegment, ...TextSegment[]],
+  };
+}
+
+/**
+ * Walk every textblock touched by [from, to] and emit one segment per block
+ * with block-relative flattened-text offsets.
+ */
+function collectTextSegments(doc: ProseMirrorNode, from: number, to: number): TextSegment[] {
+  const segments: TextSegment[] = [];
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true; // descend
+
+    const blockId = readBlockId(node);
+    if (!blockId) return false; // skip this block, can't address it
+
+    const blockStart = pos + 1; // first position inside the block
+    const blockEnd = pos + node.nodeSize - 1;
+
+    // Clamp the selection to this block in PM-position space, then convert
+    // each endpoint to the flattened text-offset model. Subtracting PM
+    // positions directly would be wrong for blocks with inline wrappers
+    // (e.g. `run` marks) or leaf atoms whose PM boundary tokens do not
+    // count in the flattened model.
+    const selStart = Math.max(from, blockStart);
+    const selEnd = Math.min(to, blockEnd);
+
+    const start = pmPositionToTextOffset(node, pos, selStart);
+    const end = Math.max(start, pmPositionToTextOffset(node, pos, selEnd));
+
+    segments.push({ blockId, range: { start, end } });
+    return false; // don't descend into a textblock we've already captured
+  });
+
+  return segments;
+}
+
+function readBlockId(node: ProseMirrorNode): string | null {
+  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  const id = attrs.sdBlockId ?? attrs.id ?? attrs.blockId;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+function collectActiveMarks(
+  state: { selection: any; storedMarks?: any; doc: ProseMirrorNode },
+  from: number,
+  to: number,
+): string[] {
+  const names = new Set<string>();
+
+  // Stored marks at the caret (sticky formatting before typing).
+  const stored = state.storedMarks;
+  if (stored) {
+    for (const mark of stored) names.add(mark.type.name);
+  }
+
+  // Marks present on every character of the selection.
+  if (from === to) {
+    const $pos = state.doc.resolve(from);
+    const marks = $pos.marks();
+    for (const mark of marks) names.add(mark.type.name);
+  } else {
+    const common = markTypesPresentEverywhere(state.doc, from, to);
+    for (const name of common) names.add(name);
+  }
+
+  return Array.from(names);
+}
+
+/**
+ * Subscribe to selection changes on the editor. Debounced via microtask so
+ * multi-step transactions (a single user action that dispatches several PM
+ * transactions) fire the listener at most once per tick.
+ */
+export function subscribeToSelection(editor: Editor, listener: SelectionChangeListener): () => void {
+  let scheduled = false;
+  let cancelled = false;
+  const flush = () => {
+    scheduled = false;
+    if (cancelled) return;
+    const info = resolveCurrentSelectionInfo(editor, {});
+    listener(info);
+  };
+  const schedule = () => {
+    if (scheduled || cancelled) return;
+    scheduled = true;
+    queueMicrotask(flush);
+  };
+
+  editor.on('selectionUpdate', schedule);
+  editor.on('transaction', schedule);
+
+  return () => {
+    // Mark cancelled first so a microtask already queued by `schedule`
+    // no-ops when it finally fires — otherwise the listener can be invoked
+    // after unsubscribe returns (stale state updates during unmount).
+    cancelled = true;
+    editor.off?.('selectionUpdate', schedule);
+    editor.off?.('transaction', schedule);
+  };
+}
+
+function markTypesPresentEverywhere(doc: ProseMirrorNode, from: number, to: number): Set<string> {
+  const perCharMarks: Set<string>[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true;
+    const start = Math.max(pos, from);
+    const end = Math.min(pos + node.nodeSize, to);
+    const len = end - start;
+    const names = new Set<string>();
+    for (const m of node.marks) names.add(m.type.name);
+    for (let i = 0; i < len; i++) perCharMarks.push(names);
+    return false;
+  });
+  if (perCharMarks.length === 0) return new Set();
+  const first = perCharMarks[0]!;
+  const common = new Set<string>(first);
+  for (const set of perCharMarks.slice(1)) {
+    for (const name of common) {
+      if (!set.has(name)) common.delete(name);
+    }
+  }
+  return common;
+}

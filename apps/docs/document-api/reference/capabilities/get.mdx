@@ -855,6 +855,11 @@ _No fields._
 | `operations.diff.compare.dryRun` | boolean | yes |  |
 | `operations.diff.compare.reasons` | enum[] | no |  |
 | `operations.diff.compare.tracked` | boolean | yes |  |
+| `operations.extract` | object | yes |  |
+| `operations.extract.available` | boolean | yes |  |
+| `operations.extract.dryRun` | boolean | yes |  |
+| `operations.extract.reasons` | enum[] | no |  |
+| `operations.extract.tracked` | boolean | yes |  |
 | `operations.fields.get` | object | yes |  |
 | `operations.fields.get.available` | boolean | yes |  |
 | `operations.fields.get.dryRun` | boolean | yes |  |
@@ -3067,6 +3072,11 @@ _No fields._
       "tracked": false
     },
     "diff.compare": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "extract": {
       "available": true,
       "dryRun": false,
       "tracked": false
@@ -10145,6 +10155,41 @@ _No fields._
           "type": "object"
         },
         "diff.compare": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "extract": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19570,6 +19615,7 @@ _No fields._
         "getHtml",
         "markdownToFragment",
         "info",
+        "extract",
         "clearContent",
         "insert",
         "replace",

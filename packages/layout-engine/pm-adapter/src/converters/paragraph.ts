@@ -49,6 +49,7 @@ import { structuredContentNodeToBlocks } from './inline-converters/structured-co
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
+import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
@@ -665,6 +666,33 @@ export function paragraphToFlowBlocks({
     blockWithAttrs.attrs.anchorParagraphId = anchorParagraphId;
     return blockWithAttrs;
   };
+  const attachInlineShapeGroupAlignment = <T extends FlowBlock>(block: T): T => {
+    if (block.kind !== 'drawing') {
+      return block;
+    }
+    const drawingBlock = block as T & {
+      drawingKind?: string;
+      attrs?: Record<string, unknown>;
+    };
+    const rawWrap = drawingBlock.attrs?.wrap as { type?: unknown } | undefined;
+    if (drawingBlock.drawingKind !== 'shapeGroup' || rawWrap?.type !== 'Inline') {
+      return block;
+    }
+    // w:jc="distribute" distributes remaining space equally around inline content,
+    // which visually centers a sole inline drawing. normalizeAlignment collapses
+    // 'distribute' to 'justify', so we check the raw justification value to distinguish
+    // it from 'both' (which only stretches inter-word spacing and does not center).
+    const isDistribute = resolvedParagraphProperties.justification === 'distribute';
+    const effectiveAlignment = isDistribute ? 'center' : paragraphAttrs.alignment;
+    if (effectiveAlignment === 'center' || effectiveAlignment === 'right') {
+      if (!drawingBlock.attrs) drawingBlock.attrs = {};
+      drawingBlock.attrs.inlineParagraphAlignment = effectiveAlignment;
+      const indent = paragraphAttrs.indent;
+      if (typeof indent?.left === 'number') drawingBlock.attrs.paragraphIndentLeft = indent.left;
+      if (typeof indent?.right === 'number') drawingBlock.attrs.paragraphIndentRight = indent.right;
+    }
+    return block;
+  };
 
   const flushParagraph = () => {
     if (currentRuns.length === 0) {
@@ -757,11 +785,13 @@ export function paragraphToFlowBlocks({
             const block = blockConverter(node, { ...blockOptions, blocks: newBlocks });
             if (block) {
               attachAnchorParagraphId(block, anchorParagraphId);
+              attachInlineShapeGroupAlignment(block);
               blocks.push(block);
             } else if (newBlocks.length > 0) {
               // Some block converters may push multiple blocks to the provided array
               newBlocks.forEach((b) => {
                 attachAnchorParagraphId(b, anchorParagraphId);
+                attachInlineShapeGroupAlignment(b);
                 blocks.push(b);
               });
             }
@@ -779,6 +809,7 @@ export function paragraphToFlowBlocks({
       const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
       const drawingBlock = converter(node, stableNextBlockId, positions);
       if (drawingBlock) {
+        attachInlineShapeGroupAlignment(drawingBlock);
         blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;
@@ -896,6 +927,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   bookmarkStart: {
     inlineConverter: bookmarkStartNodeToBlocks,
+  },
+  bookmarkEnd: {
+    inlineConverter: bookmarkEndNodeToRun,
   },
   tab: {
     inlineConverter: tabNodeToRun,

@@ -6,6 +6,8 @@ keywords: "angular docx editor, angular word component, superdoc angular, angula
 
 SuperDoc works with Angular through direct DOM manipulation. No wrapper needed.
 
+Requires Angular 17.2+. `viewChild()` and `input()` are stable from Angular 19; developer preview before that. On older versions, use `@ViewChild`, `@Input`, and `ngOnDestroy` in place of `inject(DestroyRef)`.
+
 ## Install
 
 ```bash
@@ -15,7 +17,7 @@ npm install superdoc
 ## Basic setup
 
 ```typescript
-import { Component, ElementRef, ViewChild, OnInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, viewChild, AfterViewInit, inject, DestroyRef } from '@angular/core';
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -23,20 +25,20 @@ import 'superdoc/style.css';
   selector: 'app-editor',
   template: `<div #editor style="height: 700px"></div>`,
 })
-export class EditorComponent implements OnInit, OnDestroy {
-  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
+export class EditorComponent implements AfterViewInit {
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
   private superdoc: SuperDoc | null = null;
 
-  ngOnInit() {
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.superdoc?.destroy());
+  }
+
+  ngAfterViewInit() {
     this.superdoc = new SuperDoc({
-      selector: this.editorRef.nativeElement,
+      selector: this.editorRef().nativeElement,
       document: 'contract.docx',
       documentMode: 'editing',
     });
-  }
-
-  ngOnDestroy() {
-    this.superdoc?.destroy();
   }
 }
 ```
@@ -46,7 +48,7 @@ export class EditorComponent implements OnInit, OnDestroy {
 A reusable editor component with mode switching and export:
 
 ```typescript
-import { Component, ElementRef, ViewChild, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, viewChild, input, AfterViewInit, inject, DestroyRef } from '@angular/core';
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -62,25 +64,25 @@ import 'superdoc/style.css';
     <div #editor style="height: 700px"></div>
   `,
 })
-export class DocEditorComponent implements OnInit, OnDestroy {
-  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
-  @Input() document!: File | string;
-  @Input() user?: { name: string; email: string };
+export class DocEditorComponent implements AfterViewInit {
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
+  readonly document = input.required<File | string>();
+  readonly user = input<{ name: string; email: string }>();
 
   private superdoc: SuperDoc | null = null;
 
-  ngOnInit() {
-    this.superdoc = new SuperDoc({
-      selector: this.editorRef.nativeElement,
-      document: this.document,
-      documentMode: 'editing',
-      user: this.user,
-      onReady: () => console.log('Editor ready'),
-    });
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.superdoc?.destroy());
   }
 
-  ngOnDestroy() {
-    this.superdoc?.destroy();
+  ngAfterViewInit() {
+    this.superdoc = new SuperDoc({
+      selector: this.editorRef().nativeElement,
+      document: this.document(),
+      documentMode: 'editing',
+      user: this.user(),
+      onReady: () => console.log('Editor ready!'),
+    });
   }
 
   setMode(mode: 'editing' | 'viewing' | 'suggesting') {
@@ -96,6 +98,10 @@ export class DocEditorComponent implements OnInit, OnDestroy {
 ## Handle file uploads
 
 ```typescript
+import { Component, ElementRef, viewChild, inject, DestroyRef } from '@angular/core';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
 @Component({
   selector: 'app-upload-editor',
   template: `
@@ -103,9 +109,13 @@ export class DocEditorComponent implements OnInit, OnDestroy {
     <div #editor style="height: 700px"></div>
   `,
 })
-export class UploadEditorComponent implements OnDestroy {
-  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
+export class UploadEditorComponent {
+  private readonly editorRef = viewChild.required<ElementRef<HTMLDivElement>>('editor');
   private superdoc: SuperDoc | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.superdoc?.destroy());
+  }
 
   onFileChange(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
@@ -113,14 +123,10 @@ export class UploadEditorComponent implements OnDestroy {
 
     this.superdoc?.destroy();
     this.superdoc = new SuperDoc({
-      selector: this.editorRef.nativeElement,
+      selector: this.editorRef().nativeElement,
       document: file,
       documentMode: 'editing',
     });
-  }
-
-  ngOnDestroy() {
-    this.superdoc?.destroy();
   }
 }
 ```

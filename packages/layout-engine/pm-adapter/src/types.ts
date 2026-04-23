@@ -123,6 +123,13 @@ export interface AdapterOptions {
   emitSectionBreaks?: boolean;
 
   /**
+   * When true, render visible gray `[` / `]` marker runs at bookmarkStart and
+   * bookmarkEnd positions (SD-2454). Matches Word's opt-in "Show bookmarks"
+   * behavior. Off by default because bookmarks are structural, not visual.
+   */
+  showBookmarks?: boolean;
+
+  /**
    * Optional instrumentation hook for fidelity logging.
    */
   instrumentation?: AdapterInstrumentation;

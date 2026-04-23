@@ -17,6 +17,7 @@ import {
   normalizePath,
   printCorpusEnvHint,
   saveRegistry,
+  seedCorpusFromPrimary,
   sortRegistryDocs,
   writeProgressBar,
 } from './shared.mjs';
@@ -48,6 +49,8 @@ Options:
       --match <text>       Substring filter (repeatable)
       --exclude <prefix>   Exclude filter (repeatable)
       --force              Re-download files even if they already exist
+      --no-seed            In a git worktree, skip hardlinking from the primary
+                           repo's corpus before pulling from R2
       --link-visual        Point tests/visual/test-data at --dest via symlink
       --dry-run            Print actions without downloading
       --quiet              Suppress verbose logs; show only progress and summary
@@ -65,6 +68,7 @@ function parseArgs(argv) {
     linkVisual: false,
     dryRun: false,
     quiet: false,
+    seedFromPrimary: true,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -97,6 +101,10 @@ function parseArgs(argv) {
     }
     if (arg === '--force') {
       args.force = true;
+      continue;
+    }
+    if (arg === '--no-seed') {
+      args.seedFromPrimary = false;
       continue;
     }
     if (arg === '--link-visual') {
@@ -247,11 +255,19 @@ async function main() {
 
     let downloaded = 0;
     let skipped = 0;
+    let seeded = 0;
 
     if (!args.quiet) {
       console.log(`[corpus] Source: ${corpus.source}`);
       console.log(`[corpus] Destination: ${destinationRoot}`);
       console.log(`[corpus] Corpus size: ${selectedDocs.length} documents`);
+    }
+
+    // Fast path for git worktrees: hardlink from the primary repo's corpus
+    // before reaching for R2. Downloads below still run for anything the
+    // primary is missing, so --force or a fresh fixture still trigger R2.
+    if (args.seedFromPrimary && !args.force && !args.dryRun) {
+      seeded = seedCorpusFromPrimary(destinationRoot, selectedDocs, { quiet: args.quiet });
     }
 
     if (corpus.source === REGISTRY_KEY && corpus.registry) {
@@ -316,6 +332,14 @@ async function main() {
           const { relativePath, objectKey, destinationPath } = toDownload[idx];
 
           try {
+            // Unlink before writing. If the destination is a hardlink to the
+            // primary repo's corpus (seeded above), wrangler's r2 object get
+            // would otherwise write through and mutate the primary's file.
+            try {
+              fs.rmSync(destinationPath, { force: true });
+            } catch {
+              // swallow — the write below will surface any real permission issue
+            }
             await client.getObjectToFile(objectKey, destinationPath);
             downloaded += 1;
           } catch (error) {
@@ -379,12 +403,16 @@ async function main() {
 
     const elapsed = Date.now() - startedAt;
     if (args.quiet) {
-      if (downloaded > 0) {
-        console.log(`[corpus] Synced ${downloaded} new document(s) in ${formatDurationMs(elapsed)}`);
+      if (downloaded > 0 || seeded > 0) {
+        const parts = [];
+        if (seeded > 0) parts.push(`${seeded} seeded`);
+        if (downloaded > 0) parts.push(`${downloaded} downloaded`);
+        console.log(`[corpus] Synced ${parts.join(' + ')} in ${formatDurationMs(elapsed)}`);
       }
     } else {
+      const seedPart = seeded > 0 ? `, Seeded: ${seeded}` : '';
       console.log(
-        `[corpus] Done. Downloaded: ${downloaded}, Skipped: ${skipped}, Missing: ${missingRegistryPaths.length}, Elapsed: ${formatDurationMs(elapsed)}`,
+        `[corpus] Done. Downloaded: ${downloaded}${seedPart}, Skipped: ${skipped}, Missing: ${missingRegistryPaths.length}, Elapsed: ${formatDurationMs(elapsed)}`,
       );
     }
   } finally {

@@ -1,0 +1,9 @@
+{
+  "name": "@superdoc-example/cdn",
+  "private": true,
+  "scripts": {
+    "setup": "node ./setup.mjs",
+    "dev": "pnpm run setup && npx serve . -l 3000",
+    "test": "EXAMPLE=cdn playwright test --config ../../__tests__/playwright.config.ts"
+  }
+}

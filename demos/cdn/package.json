@@ -4,8 +4,8 @@
   "description": "This is a very basic example of loading SuperDoc from CDN without any bundlers.",
   "main": "index.js",
   "scripts": {
-    "dev": "http-server",
-    "start": "http-server",
+    "dev": "node ./setup.mjs && http-server",
+    "start": "node ./setup.mjs && http-server",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

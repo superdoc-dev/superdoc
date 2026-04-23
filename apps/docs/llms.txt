@@ -9,6 +9,7 @@ SuperDoc renders, edits, and automates .docx files — in the browser, headless 
 - Reads and writes OOXML natively — documents stay real .docx files at every step
 - 180+ MCP tools covering reading, editing, formatting, comments, tracked changes, and more
 - Tracked changes and comments as first-class operations
+- Math equations render natively as MathML — no external library needed
 - Same document model across browser editor, headless Node, and APIs
 - Stateless API for convert, annotate, sign, and verify
 - Real-time collaboration with Yjs CRDT

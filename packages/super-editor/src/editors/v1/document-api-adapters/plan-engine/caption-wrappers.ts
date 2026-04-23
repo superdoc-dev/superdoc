@@ -28,8 +28,9 @@ import { paginate, resolveBlockCreatePosition } from '../helpers/adapter-utils.j
 import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { Fragment } from 'prosemirror-model';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { DocumentApiAdapterError } from '../errors.js';
+import { buildTextWithTabs } from '../helpers/text-with-tabs.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -140,9 +141,14 @@ export function captionsInsertWrapper(
         );
       }
 
-      // Add separator and user text
+      // Add separator and user text — splits any '\t' into tab nodes so exports emit <w:tab/>.
       if (input.text) {
-        children.push(schema.text(`: ${input.text}`));
+        const captionContent = buildTextWithTabs(schema, `: ${input.text}`, undefined);
+        if (captionContent instanceof Fragment) {
+          captionContent.forEach((child) => children.push(child));
+        } else {
+          children.push(captionContent);
+        }
       }
 
       const captionParagraph = schema.nodes.paragraph.create(buildCaptionParagraphAttrs(nodeId), children);
@@ -195,7 +201,7 @@ export function captionsUpdateWrapper(
       const newText = input.patch.text ? `: ${input.patch.text}` : '';
 
       if (newText) {
-        tr.replaceWith(trailingTextStart, contentEnd, editor.schema.text(newText));
+        tr.replaceWith(trailingTextStart, contentEnd, buildTextWithTabs(editor.schema, newText, undefined));
       } else {
         tr.delete(trailingTextStart, contentEnd);
       }

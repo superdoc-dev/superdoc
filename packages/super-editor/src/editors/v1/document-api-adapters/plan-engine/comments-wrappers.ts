@@ -81,6 +81,26 @@ function isSameTarget(
   return left.blockId === right.blockId && left.range.start === right.range.start && left.range.end === right.range.end;
 }
 
+/**
+ * Normalize a TextAddress | TextTarget comment target into its first and
+ * last segments. For TextAddress the two are the same; for TextTarget with
+ * multiple segments they span the full comment range across blocks.
+ */
+function splitTargetSegments(
+  target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
+): { firstSegment: TextSegment; lastSegment: TextSegment } {
+  if ('segments' in target) {
+    const segments = target.segments;
+    return { firstSegment: segments[0]!, lastSegment: segments[segments.length - 1]! };
+  }
+  const seg: TextSegment = { blockId: target.blockId, range: target.range };
+  return { firstSegment: seg, lastSegment: seg };
+}
+
+function segmentIsCollapsed(segment: TextSegment): boolean {
+  return segment.range.start === segment.range.end;
+}
+
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
   try {
     return listCommentAnchors(editor);
@@ -365,7 +385,22 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
 function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
   requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
 
-  if (input.target.range.start === input.target.range.end) {
+  // The target can be either a single-block TextAddress or a multi-segment
+  // TextTarget. For a TextTarget, resolve each segment and span the full
+  // PM range from the first segment's start to the last segment's end.
+  const target = input.target;
+  if (!target) {
+    return {
+      success: false,
+      failure: {
+        code: 'INVALID_TARGET',
+        message: 'Comment target is required.',
+      },
+    };
+  }
+  const { firstSegment, lastSegment } = splitTargetSegments(target);
+
+  if (segmentIsCollapsed(firstSegment) && firstSegment === lastSegment) {
     return {
       success: false,
       failure: {
@@ -375,12 +410,27 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
     };
   }
 
-  const resolved = resolveTextTarget(editor, input.target);
-  if (!resolved) {
+  const firstResolved = resolveTextTarget(editor, {
+    kind: 'text',
+    blockId: firstSegment.blockId,
+    range: firstSegment.range,
+  });
+  const lastResolved =
+    firstSegment === lastSegment
+      ? firstResolved
+      : resolveTextTarget(editor, {
+          kind: 'text',
+          blockId: lastSegment.blockId,
+          range: lastSegment.range,
+        });
+
+  if (!firstResolved || !lastResolved) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Comment target could not be resolved.', {
-      target: input.target,
+      target,
     });
   }
+
+  const resolved = { from: firstResolved.from, to: lastResolved.to };
   if (resolved.from === resolved.to) {
     return {
       success: false,

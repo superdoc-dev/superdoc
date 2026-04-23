@@ -184,6 +184,7 @@ import type {
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
+import type { SelectionCurrentInput, SelectionInfo } from '../selection/selection.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -845,6 +846,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- ranges.* ---
   'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
+
+  // --- selection.* ---
+  'selection.current': { input: SelectionCurrentInput | undefined; options: never; output: SelectionInfo };
 
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };

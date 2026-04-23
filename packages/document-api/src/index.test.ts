@@ -2088,7 +2088,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.comments.create({ target: { kind: 'text', blockId: 'p1' }, text: 'comment' } as any),
-        'target must be a text address object',
+        'target must be a TextAddress or TextTarget object',
       );
     });
 

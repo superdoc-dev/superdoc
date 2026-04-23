@@ -63,6 +63,7 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
+  | 'selection'
   | 'diff'
   | 'protection'
   | 'permissionRanges';
@@ -2352,6 +2353,22 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
+  },
+
+  'selection.current': {
+    memberPath: 'selection.current',
+    description:
+      "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.",
+    expectedResult:
+      'Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_CONTEXT'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'selection/current.mdx',
+    referenceGroup: 'selection',
   },
 
   'mutations.preview': {

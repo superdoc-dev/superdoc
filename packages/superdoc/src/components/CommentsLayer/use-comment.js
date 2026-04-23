@@ -58,6 +58,10 @@ export default function useComment(params) {
   const trackedChangeType = ref(params.trackedChangeType || null);
   const trackedChangeText = ref(params.trackedChangeText || null);
   const trackedChangeDisplayType = ref(params.trackedChangeDisplayType || null);
+  const trackedChangeStory = ref(params.trackedChangeStory || null);
+  const trackedChangeStoryKind = ref(params.trackedChangeStoryKind || null);
+  const trackedChangeStoryLabel = ref(params.trackedChangeStoryLabel || '');
+  const trackedChangeAnchorKey = ref(params.trackedChangeAnchorKey || null);
   const deletedText = ref(params.deletedText || null);
 
   const resolvedTime = ref(params.resolvedTime || null);
@@ -253,6 +257,10 @@ export default function useComment(params) {
       trackedChangeText: trackedChangeText.value,
       trackedChangeType: trackedChangeType.value,
       trackedChangeDisplayType: trackedChangeDisplayType.value,
+      trackedChangeStory: trackedChangeStory.value,
+      trackedChangeStoryKind: trackedChangeStoryKind.value,
+      trackedChangeStoryLabel: trackedChangeStoryLabel.value,
+      trackedChangeAnchorKey: trackedChangeAnchorKey.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
       resolvedByEmail: resolvedByEmail.value,
@@ -289,6 +297,10 @@ export default function useComment(params) {
     trackedChangeType,
     trackedChangeText,
     trackedChangeDisplayType,
+    trackedChangeStory,
+    trackedChangeStoryKind,
+    trackedChangeStoryLabel,
+    trackedChangeAnchorKey,
     resolvedTime,
     resolvedByEmail,
     resolvedByName,

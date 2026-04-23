@@ -250,17 +250,20 @@ export type RenderedLineInfo = {
  * Input to `DomPainter.paint()`.
  *
  * `resolvedLayout` is the canonical resolved data. The remaining fields are
- * bridge data carried for internal rendering of non-paragraph fragments
- * (tables, images, drawings) that have not yet been migrated to resolved items.
+ * still required bridge data until the painter can render solely from resolved
+ * items for lookups, change tracking, and non-paragraph fragment rendering.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
-  /** Raw Layout for internal fragment access (bridge — will be removed once all fragment types are resolved). */
+  /** Raw Layout for internal fragment access (bridge, will be removed once render loops iterate resolved items). */
   sourceLayout: Layout;
+  /** Main document blocks/measures used for lookups and version tracking. */
   blocks: FlowBlock[];
   measures: Measure[];
+  /** Header block data (still needed for decoration rendering, no resolved path yet). */
   headerBlocks?: FlowBlock[];
   headerMeasures?: Measure[];
+  /** Footer block data (still needed for decoration rendering, no resolved path yet). */
   footerBlocks?: FlowBlock[];
   footerMeasures?: Measure[];
 };
@@ -1640,7 +1643,7 @@ export class DomPainter {
       });
     }
 
-    // Track changed blocks
+    // Track changed blocks (decoration only now, body change detection uses resolved version)
     const changed = new Set<string>();
     nextLookup.forEach((entry, id) => {
       const previous = this.blockLookup.get(id);
@@ -1674,7 +1677,13 @@ export class DomPainter {
     // Complex transactions (paste, multi-step replace, etc.) fall back to full rebuild.
     const isSimpleTransaction = mapping && mapping.maps.length === 1;
     if (mapping && !isSimpleTransaction) {
-      // Complex transaction - force all fragments to rebuild (safe fallback)
+      // Complex transaction, force all body fragments to rebuild (safe fallback).
+      for (const page of input.resolvedLayout.pages) {
+        for (const item of page.items) {
+          if ('blockId' in item) this.changedBlocks.add(item.blockId);
+        }
+      }
+      // Also mark all header/footer blocks as changed.
       this.blockLookup.forEach((_, id) => this.changedBlocks.add(id));
       this.currentMapping = null;
     } else {
@@ -2426,6 +2435,7 @@ export class DomPainter {
 
     return separatorPositions;
   }
+
   private renderDecorationsForPage(
     pageEl: HTMLElement,
     page: Page,
@@ -5063,6 +5073,11 @@ export class DomPainter {
       // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
       if (resolvedItem) {
         this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+        // Re-apply the SDT group width override after the resolved frame, so block-SDT
+        // containers can stretch table fragments to match sibling paragraph widths.
+        if (sdtBoundary?.widthOverride != null) {
+          el.style.width = `${sdtBoundary.widthOverride}px`;
+        }
       }
 
       return el;

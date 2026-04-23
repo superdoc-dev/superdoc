@@ -2567,6 +2567,9 @@ importers:
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../../layout-resolved
       '@superdoc/preset-geometry':
         specifier: workspace:*
         version: link:../../../preset-geometry

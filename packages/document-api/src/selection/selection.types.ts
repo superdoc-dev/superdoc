@@ -1,10 +1,13 @@
 import type { TextTarget } from '../types/address.js';
-import type { StoryLocator } from '../types/story.types.js';
 
 /**
  * Input for `selection.current` — reads the editor's current selection.
  *
- * Purely a read operation; does not modify the document.
+ * Purely a read operation; does not modify the document. `selection.current`
+ * always reflects the live editor selection in whichever story currently
+ * holds focus (body, header, footer). Story scoping is not a query
+ * parameter here; if a consumer needs a read of a specific story, focus
+ * must be set there first.
  */
 export interface SelectionCurrentInput {
   /**
@@ -13,10 +16,6 @@ export interface SelectionCurrentInput {
    * Omit or set `false` to skip text extraction for performance.
    */
   includeText?: boolean;
-  /**
-   * Story locator — omit for body, provide for header/footer selections.
-   */
-  in?: StoryLocator;
 }
 
 /**

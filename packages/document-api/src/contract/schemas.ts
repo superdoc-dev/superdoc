@@ -5174,14 +5174,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         input: objectSchema(
           {
             includeText: { type: 'boolean' },
-            in: { type: 'object' },
           },
           [],
         ),
         output: objectSchema(
           {
             empty: { type: 'boolean' },
-            target: { type: 'object' },
+            target: { oneOf: [textTargetSchema, { type: 'null' }] },
             activeMarks: arraySchema({ type: 'string' }),
             text: { type: 'string' },
           },

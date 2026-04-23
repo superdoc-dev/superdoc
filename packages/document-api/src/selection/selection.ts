@@ -10,7 +10,6 @@
 import type { SelectionCurrentInput, SelectionInfo } from './selection.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
-import { validateStoryLocator } from '../validation/story-validator.js';
 
 export type { SelectionCurrentInput, SelectionInfo } from './selection.types.js';
 
@@ -59,7 +58,7 @@ export interface SelectionApi {
   onChange(listener: SelectionChangeListener): () => void;
 }
 
-const SELECTION_CURRENT_ALLOWED_KEYS = new Set(['includeText', 'in']);
+const SELECTION_CURRENT_ALLOWED_KEYS = new Set(['includeText']);
 
 function validateSelectionCurrentInput(input: unknown): asserts input is SelectionCurrentInput {
   if (input === undefined) return;
@@ -74,7 +73,6 @@ function validateSelectionCurrentInput(input: unknown): asserts input is Selecti
       { field: 'includeText', value: input.includeText },
     );
   }
-  validateStoryLocator(input.in, 'in');
 }
 
 export function executeSelectionCurrent(adapter: SelectionAdapter, input?: SelectionCurrentInput): SelectionInfo {

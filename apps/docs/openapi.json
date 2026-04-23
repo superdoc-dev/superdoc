@@ -280,7 +280,7 @@
                 "data": {
                   "type": "object",
                   "additionalProperties": true,
-                  "description": "Event-specific payload emitted by the e-sign SDK. Shape depends on `type`:\n- `scroll` — `{ percent: number }`\n- `field_change` — `{ fieldId: string, value: string | boolean, previousValue?: string | boolean }`\n- `ready`, `submit` — typically omitted"
+                  "description": "Event-specific payload emitted by the e-sign SDK. Shape depends on `type`:\n- `scroll` - `{ percent: number }`\n- `field_change` - `{ fieldId: string, value: string | boolean | number | null, previousValue?: string | boolean | number | null }`\n- `ready`, `submit` - typically omitted"
                 }
               }
             }

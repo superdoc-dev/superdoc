@@ -13,6 +13,7 @@
  */
 
 import { Fragment, type Node as ProseMirrorNode, type Schema } from 'prosemirror-model';
+import { TextSelection } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import type { ProseMirrorJSON } from '../../core/types/EditorTypes.js';
 import type {
@@ -89,6 +90,8 @@ import type {
 import { DocumentApiAdapterError } from '../errors.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
+import { buildTextWithTabs, parentAllowsNodeAt } from '../helpers/text-with-tabs.js';
+import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
 
 // Shared helpers — single source of truth for SDT logic
 import {
@@ -360,7 +363,7 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
   }
 
   const paragraph = buildEmptyBlockContent(editor, resolved.node);
-  const paragraphText = text.length > 0 ? editor.schema.text(text) : null;
+  const paragraphText = text.length > 0 ? buildTextWithTabs(editor.schema, text, undefined) : null;
   const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
   const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
   const { tr } = editor.state;
@@ -958,6 +961,22 @@ function prependContentWrapper(
   });
 }
 
+function insertTextAroundSdt(
+  editor: Editor,
+  target: ContentControlTarget,
+  content: string,
+  resolvePos: (resolved: ReturnType<typeof resolveSdtByTarget>) => number,
+): boolean {
+  const resolved = resolveSdtByTarget(editor.state.doc, target);
+  const pos = resolvePos(resolved);
+  const { tr } = editor.state;
+  const tabType = editor.schema.nodes?.tab;
+  const parentAllowsTab = tabType && content.includes('\t') ? parentAllowsNodeAt(tr, pos, tabType) : false;
+  tr.insert(pos, buildTextWithTabs(editor.schema, content, undefined, { parentAllowsTab }));
+  dispatchTransaction(editor, tr);
+  return true;
+}
+
 function insertBeforeWrapper(
   editor: Editor,
   input: ContentControlsInsertBeforeInput,
@@ -965,15 +984,9 @@ function insertBeforeWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const target = buildTarget(sdt);
-
-  return executeSdtMutation(editor, target, options, () => {
-    const resolved = resolveSdtByTarget(editor.state.doc, input.target);
-    const textNode = editor.schema.text(input.content);
-    const { tr } = editor.state;
-    tr.insert(resolved.pos, textNode);
-    dispatchTransaction(editor, tr);
-    return true;
-  });
+  return executeSdtMutation(editor, target, options, () =>
+    insertTextAroundSdt(editor, input.target, input.content, (resolved) => resolved.pos),
+  );
 }
 
 function insertAfterWrapper(
@@ -983,16 +996,9 @@ function insertAfterWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const target = buildTarget(sdt);
-
-  return executeSdtMutation(editor, target, options, () => {
-    const resolved = resolveSdtByTarget(editor.state.doc, input.target);
-    const insertPos = resolved.pos + resolved.node.nodeSize;
-    const textNode = editor.schema.text(input.content);
-    const { tr } = editor.state;
-    tr.insert(insertPos, textNode);
-    dispatchTransaction(editor, tr);
-    return true;
-  });
+  return executeSdtMutation(editor, target, options, () =>
+    insertTextAroundSdt(editor, input.target, input.content, (resolved) => resolved.pos + resolved.node.nodeSize),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1853,30 +1859,44 @@ function createWrapper(
       return true;
     }
 
+    // When a SelectionTarget is provided, set the editor selection to that
+    // range so insertStructuredContentInline/Block wraps the targeted text.
+    if (input.at) {
+      const { absFrom, absTo } = resolveSelectionTarget(editor, input.at);
+      const { tr } = editor.state;
+      tr.setSelection(TextSelection.create(tr.doc, absFrom, absTo));
+      dispatchTransaction(editor, tr);
+    }
+
+    // Re-acquire the command so it picks up fresh editor state — important
+    // when `at` dispatched a selection change above.
+    const cmd = editor.commands?.[commandName];
+    if (typeof cmd !== 'function') return false;
+
     // Default: delegate to the editor command (inserts at current selection).
     if (contentText !== undefined) {
       if (input.kind === 'block') {
         if (isCheckboxCreate) {
           return Boolean(
-            insertCmd({
+            cmd({
               attrs,
               json: { type: 'paragraph', content: [buildCheckboxTextJson(checkboxSymbol)] },
             }),
           );
         }
         return Boolean(
-          insertCmd({
+          cmd({
             attrs,
             json: { type: 'paragraph', content: [{ type: 'text', text: contentText }] },
           }),
         );
       }
       if (isCheckboxCreate) {
-        return Boolean(insertCmd({ attrs, json: buildCheckboxTextJson(checkboxSymbol) }));
+        return Boolean(cmd({ attrs, json: buildCheckboxTextJson(checkboxSymbol) }));
       }
-      return Boolean(insertCmd({ attrs, text: contentText }));
+      return Boolean(cmd({ attrs, text: contentText }));
     }
-    return Boolean(insertCmd({ attrs }));
+    return Boolean(cmd({ attrs }));
   });
 }
 

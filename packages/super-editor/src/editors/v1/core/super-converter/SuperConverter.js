@@ -19,7 +19,7 @@ import {
   prepareCommentParaIds,
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
-import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { prepareFootnotesXmlForExport, prepareEndnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
 import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
 import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
@@ -207,6 +207,14 @@ class SuperConverter {
     this.media = params?.media || {};
 
     this.fonts = params?.fonts || {};
+
+    /**
+     * Track-changes options forwarded from the editor. Consumed during
+     * import (e.g. by `buildTrackedChangeIdMap`) so behaviors like
+     * `replacements` can be toggled per SuperDoc instance.
+     * @type {{ replacements?: 'paired' | 'independent' } | null}
+     */
+    this.trackedChangesOptions = params?.trackedChangesOptions || null;
 
     this.addedMedia = {};
     this.comments = [];
@@ -1194,12 +1202,25 @@ class SuperConverter {
     });
     this.convertedXml = { ...this.convertedXml, ...footnotesUpdatedXml };
 
+    const {
+      updatedXml: endnotesUpdatedXml,
+      relationships: endnotesRels,
+      media: endnotesMedia,
+    } = prepareEndnotesXmlForExport({
+      endnotes: this.endnotes,
+      editor,
+      converter: this,
+      convertedXml: this.convertedXml,
+    });
+    this.convertedXml = { ...this.convertedXml, ...endnotesUpdatedXml };
+
     // Update media
     await this.#exportProcessMediaFiles(
       {
         ...documentMedia,
         ...params.media,
         ...footnotesMedia,
+        ...endnotesMedia,
         ...this.media,
       },
       editor,
@@ -1235,7 +1256,13 @@ class SuperConverter {
     this._currentStatFieldCacheMap = undefined; // cleanup after export cycle
 
     // Update the rels table
-    this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
+    this.#exportProcessNewRelationships([
+      ...params.relationships,
+      ...commentsRels,
+      ...footnotesRels,
+      ...endnotesRels,
+      ...headFootRels,
+    ]);
 
     // Prune relationships for comment parts that were removed
     if (removedTargets?.length) {

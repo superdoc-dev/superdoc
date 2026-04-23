@@ -77,7 +77,7 @@
     "build": "pnpm run compile",
     "watch": "pnpm run compile:ext -- --watch",
     "package": "vsce package --no-dependencies",
-    "publish:vsce": "vsce publish --packagePath *.vsix",
+    "publish:vsce": "vsce publish --packagePath *.vsix --skip-duplicate",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",

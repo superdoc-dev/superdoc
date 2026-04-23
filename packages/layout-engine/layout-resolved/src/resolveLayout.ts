@@ -189,7 +189,6 @@ function computeBlockVersion(
   cache.set(blockId, version);
   return version;
 }
-
 function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
@@ -251,14 +250,12 @@ function resolveFragmentItem(
           item.measure = entry.measure as ListMeasure;
         }
       }
-
       // Pre-compute paragraph border data for between-border grouping
       const borders = resolveFragmentParagraphBorders(fragment, blockMap);
       if (borders) {
         item.paragraphBorders = borders;
         item.paragraphBorderHash = hashParagraphBorders(borders);
       }
-
       if (fragment.kind === 'para') {
         const para = fragment as ParaFragment;
         if (para.pmStart != null) item.pmStart = para.pmStart;
@@ -309,6 +306,11 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     pages,
   };
 
+  if (blocks.length > 0) {
+    resolved.blockVersions = Object.fromEntries(
+      blocks.map((block) => [block.id, computeBlockVersion(block.id, blockMap, blockVersionCache)]),
+    );
+  }
   if (layout.layoutEpoch != null) {
     resolved.layoutEpoch = layout.layoutEpoch;
   }

@@ -43,7 +43,13 @@ export function generateParagraphProperties(params) {
         elements: [],
       };
     }
-    pPr.elements.push(sectPr);
+    // Per CT_PPr, sectPr must precede pPrChange.
+    const pPrChangeIdx = pPr.elements.findIndex((el) => el.name === 'w:pPrChange');
+    if (pPrChangeIdx === -1) {
+      pPr.elements.push(sectPr);
+    } else {
+      pPr.elements.splice(pPrChangeIdx, 0, sectPr);
+    }
   }
   return pPr;
 }

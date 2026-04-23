@@ -1,8 +1,11 @@
+import { describe, expect, it, vi } from 'vitest';
 import type { TextAddress } from '@superdoc/document-api';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Editor } from '../../core/Editor.js';
 
 function makeEditor(text: string): Editor {
+  // textBetweenWithTabs uses nodesBetween in real PM docs and falls back to
+  // textBetween for mocked docs that don't provide nodesBetween.
   return {
     state: {
       doc: {
@@ -13,7 +16,7 @@ function makeEditor(text: string): Editor {
 }
 
 describe('readTextAtResolvedRange', () => {
-  it('delegates to textBetween with canonical separators', () => {
+  it('reads text between resolved positions with canonical separators', () => {
     const editor = makeEditor('Hello');
     const result = readTextAtResolvedRange(editor, { from: 1, to: 6 });
 

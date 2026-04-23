@@ -19,6 +19,7 @@ import type {
   SectionMetadata,
   Fragment,
   ResolvedHeaderFooterLayout,
+  ResolvedPaintItem,
 } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
@@ -359,6 +360,42 @@ type HeaderFooterActivationOptions = {
  */
 function resolveResult(result: HeaderFooterLayoutResult): ResolvedHeaderFooterLayout {
   return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+}
+
+function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
+  if (item.kind === 'group') {
+    return {
+      ...item,
+      y: item.y + yOffset,
+      children: item.children.map((child) => shiftResolvedPaintItemY(child, yOffset)),
+    };
+  }
+
+  return {
+    ...item,
+    y: item.y + yOffset,
+  };
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
+  if (layoutMinY >= 0) {
+    return fragments;
+  }
+
+  const yOffset = -layoutMinY;
+  return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
+}
+
+function normalizeDecorationItems(
+  items: ResolvedPaintItem[] | undefined,
+  layoutMinY: number,
+): ResolvedPaintItem[] | undefined {
+  if (!items || layoutMinY >= 0) {
+    return items;
+  }
+
+  const yOffset = -layoutMinY;
+  return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
 }
 
 // =============================================================================
@@ -2233,12 +2270,12 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments =
-              layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
 
             return {
               fragments: normalizedFragments,
-              items: alignedItems,
+              items: normalizedItems,
               height: metrics.containerHeight,
               contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
               offset: metrics.offset,
@@ -2294,11 +2331,12 @@ export class HeaderFooterSessionManager {
       const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
 
       return {
         fragments: normalizedFragments,
-        items: alignedVariantItems,
+        items: normalizedItems,
         height: metrics.containerHeight,
         contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
         offset: metrics.offset,

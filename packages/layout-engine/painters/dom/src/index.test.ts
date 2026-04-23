@@ -6365,6 +6365,76 @@ describe('DomPainter', () => {
       expect(page2Line.style.textIndent).toBe('0px');
     });
 
+    it('uses resolved continuesFromPrev for first-line width calculations', () => {
+      const continuedBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'resolved-continued-block',
+        runs: [{ text: 'alpha beta gamma', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { alignment: 'justify', indent: { left: 20, hanging: 40 } },
+      };
+
+      const continuedMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 16,
+            width: 120,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const continuedLayout: Layout = {
+        pageSize: layout.pageSize,
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'resolved-continued-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 200,
+                continuesOnNext: true,
+              },
+            ],
+          },
+        ],
+      };
+
+      const resolvedLayout = createSinglePageResolvedLayout({
+        kind: 'fragment',
+        id: 'resolved-continued-item',
+        pageIndex: 0,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 20,
+        fragmentKind: 'para',
+        blockId: 'resolved-continued-block',
+        fragmentIndex: 0,
+        continuesFromPrev: true,
+        continuesOnNext: true,
+      });
+
+      const painter = createTestPainter({ blocks: [continuedBlock], measures: [continuedMeasure] });
+      painter.setResolvedLayout(resolvedLayout);
+      painter.paint(continuedLayout, mount);
+
+      const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(lineEl.style.textIndent).toBe('0px');
+      expect(lineEl.style.wordSpacing).toBe('30px');
+    });
+
     it('removes fragment-level indent styles to prevent double-application', () => {
       const doubleIndentBlock: FlowBlock = {
         kind: 'paragraph',

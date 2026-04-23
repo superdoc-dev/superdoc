@@ -3340,7 +3340,7 @@ export class DomPainter {
           }
 
           // Adjust availableWidth for first-line text indent (hanging indent).
-          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isFirstLine = index === 0 && !paraContinuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
           if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
             availableWidthOverride = adjustAvailableWidthForTextIndent(

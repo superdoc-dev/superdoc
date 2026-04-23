@@ -61,6 +61,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         hyperlinkConfig,
         enableComments,
         trackedChangesConfig,
+        themeColors,
         converters,
         converterContext,
         sectionState,

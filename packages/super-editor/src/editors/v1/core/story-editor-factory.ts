@@ -1,5 +1,6 @@
 import type { Editor } from './Editor.js';
 import type { EditorOptions } from './types/EditorConfig.js';
+import type { PresentationEditor } from './presentation-editor/index.js';
 
 /**
  * Options for creating a story editor (header, footer, footnote, endnote, etc.).
@@ -172,6 +173,16 @@ export function createStoryEditor(
     // Caller-provided overrides (e.g. onCreate, onBlur)
     ...editorOptions,
   } as Partial<EditorOptions>);
+
+  const inheritedPresentationEditor =
+    parentEditor.presentationEditor ??
+    (parentEditor as Editor & { _presentationEditor?: PresentationEditor | null })._presentationEditor ??
+    null;
+  if (inheritedPresentationEditor) {
+    storyEditor.presentationEditor = inheritedPresentationEditor;
+    (storyEditor as Editor & { _presentationEditor?: PresentationEditor | null })._presentationEditor =
+      inheritedPresentationEditor;
+  }
 
   // Store parent editor reference as a non-enumerable property to avoid
   // circular reference issues during serialization while still allowing

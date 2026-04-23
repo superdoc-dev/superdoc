@@ -273,6 +273,42 @@ test('double-clicking into an inactive footer places the initial caret at the cl
   await waitForActiveStory(superdoc.page, { storyType: 'headerFooterPart' });
 });
 
+test('double-clicking a footer while a header is active switches directly to the footer session', async ({
+  superdoc,
+}) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable();
+
+  await activateHeader(superdoc);
+  const headerStory = await getActiveStorySession(superdoc.page);
+  expect(headerStory).toEqual(expect.objectContaining({ storyType: 'headerFooterPart' }));
+  const headerRefId = headerStory && 'refId' in headerStory ? headerStory.refId : null;
+
+  const footerSurface = superdoc.page.locator('.superdoc-page-footer').first();
+  await footerSurface.scrollIntoViewIfNeeded();
+  const footerBox = await footerSurface.boundingBox();
+  expect(footerBox).toBeTruthy();
+  await superdoc.page.mouse.dblclick(footerBox!.x + footerBox!.width / 2, footerBox!.y + footerBox!.height / 2);
+  await superdoc.waitForStable();
+
+  await expectActiveStoryTextToContain(superdoc.page, 'Footer');
+  const footerStory = await getActiveStorySession(superdoc.page);
+  expect(footerStory).toEqual(expect.objectContaining({ storyType: 'headerFooterPart' }));
+  const footerRefId = footerStory && 'refId' in footerStory ? footerStory.refId : null;
+  expect(footerRefId).not.toBe(headerRefId);
+});
+
+test('editing a header shows the active header/footer divider', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable();
+
+  await activateHeader(superdoc);
+
+  const divider = superdoc.page.locator('.superdoc-header-footer-border');
+  await expect(divider).toHaveCount(1);
+  await expect(divider.first()).toBeVisible();
+});
+
 test('blank document header activation shows a visible caret', async ({ superdoc }) => {
   await superdoc.waitForStable();
   await expectBlankDocumentHeaderCaretAfterActivation(superdoc);

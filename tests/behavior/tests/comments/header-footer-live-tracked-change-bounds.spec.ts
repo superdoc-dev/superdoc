@@ -12,6 +12,7 @@ import {
   getFooterSurfaceLocator,
   getHeaderEditorLocator,
   getHeaderSurfaceLocator,
+  moveActiveStoryCursorToEnd,
 } from '../../helpers/story-surfaces.js';
 
 test.use({
@@ -57,6 +58,31 @@ async function readTrackedChangeState(page: Page, insertedText: string) {
           comment?.trackedChangeStory?.storyType === 'headerFooterPart',
       ).length,
       storyRefId: match?.trackedChangeStory?.refId ?? null,
+    };
+  }, insertedText);
+}
+
+async function readTrackedChangeAnchorGeometry(page: Page, insertedText: string) {
+  return page.evaluate((text) => {
+    const harness = (window as any).behaviorHarness;
+    const comments = harness?.getCommentsSnapshot?.() ?? [];
+    const positions = harness?.getEditorCommentPositions?.() ?? {};
+
+    const match = comments.find(
+      (comment: any) =>
+        comment?.trackedChange === true &&
+        comment?.trackedChangeText === text &&
+        comment?.trackedChangeStory?.storyType === 'headerFooterPart',
+    );
+
+    const anchorKey = match?.trackedChangeAnchorKey ?? null;
+    const position = anchorKey ? (positions[anchorKey] ?? null) : null;
+    const rects = Array.isArray(position?.rects) ? position.rects : [];
+
+    return {
+      pageIndex: position?.pageIndex ?? null,
+      boundsHeight: position?.bounds?.height ?? null,
+      rectPageIndexes: rects.map((rect: any) => rect?.pageIndex).filter((value: any) => Number.isFinite(value)),
     };
   }, insertedText);
 }
@@ -188,6 +214,45 @@ test('repeated footer tracked changes render on later pages without activating t
   await secondPageFooter.scrollIntoViewIfNeeded();
   await secondPageFooter.waitFor({ state: 'visible', timeout: 15_000 });
   await expectRenderedFooterTrackChange(superdoc.page, insertedText, 1);
+});
+
+test('repeated footer tracked-change anchors stay on the page that was edited', async ({ superdoc }) => {
+  await superdoc.loadDocument(MULTI_PAGE_HEADER_FOOTER_DOC_PATH);
+  await superdoc.waitForStable();
+  await expect.poll(() => superdoc.page.locator('.superdoc-page-footer').count()).toBeGreaterThanOrEqual(3);
+
+  const insertedText = 'FTRANCHORP3';
+  await activateFooter(superdoc, 2);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await insertTrackedTextInActiveStory(superdoc.page, insertedText);
+  await superdoc.waitForStable();
+
+  await expect
+    .poll(() => readTrackedChangeState(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual(
+      expect.objectContaining({
+        hasComment: true,
+        hasBounds: true,
+        floatingMatchCount: 1,
+        storyRefId: expect.any(String),
+      }),
+    );
+
+  await expect(getFooterEditorLocator(superdoc.page)).toContainText(insertedText);
+
+  await exitActiveStory(superdoc.page);
+  await superdoc.waitForStable();
+
+  await expect
+    .poll(() => readTrackedChangeAnchorGeometry(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual({
+      pageIndex: 2,
+      boundsHeight: expect.any(Number),
+      rectPageIndexes: [0, 1, 2],
+    });
+
+  const anchorGeometry = await readTrackedChangeAnchorGeometry(superdoc.page, insertedText);
+  expect(anchorGeometry.boundsHeight).toBeLessThan(120);
 });
 
 test('first-page header tracked changes stay bound to the first-page story', async ({ superdoc }) => {

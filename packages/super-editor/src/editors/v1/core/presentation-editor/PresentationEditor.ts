@@ -472,6 +472,10 @@ export class PresentationEditor extends EventEmitter {
   #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionTransactionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionEditor: Editor | null = null;
+  #activeSurfaceUiEventEditor: Editor | null = null;
+  #activeSurfaceUiUpdateHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuOpenHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuCloseHandler: ((...args: unknown[]) => void) | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -1294,6 +1298,24 @@ export class PresentationEditor extends EventEmitter {
    */
   getStorySessionManager(): StoryPresentationSessionManager | null {
     return this.#storySessionManager;
+  }
+
+  /**
+   * Exit any active non-body editing surface and restore the body editor.
+   *
+   * This gives tests and editor-integrated helpers a single public entry point
+   * that does not need to know whether the current surface is managed by the
+   * generic story-session bridge, the header/footer session manager, or both.
+   */
+  exitActiveStorySurface(): void {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      this.#exitHeaderFooterMode();
+    }
+
+    if (this.#getActiveStorySession()) {
+      this.#exitActiveStorySession();
+    }
   }
 
   // -------------------------------------------------------------------
@@ -2295,7 +2317,10 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const bounds = this.#aggregateLayoutBounds(rects);
+    const groupedRects = this.#groupRangeRectsByPage(rects);
+    const preferredPageIndex = this.#getPreferredRenderedTrackedChangePageIndex(storyKey, groupedRects, relativeTo);
+    const anchorRects = groupedRects.get(preferredPageIndex) ?? rects;
+    const bounds = this.#aggregateLayoutBounds(anchorRects);
     if (!bounds) {
       return null;
     }
@@ -2303,7 +2328,7 @@ export class PresentationEditor extends EventEmitter {
     return {
       bounds,
       rects,
-      pageIndex: rects[0]?.pageIndex ?? 0,
+      pageIndex: preferredPageIndex,
     };
   }
 
@@ -2314,8 +2339,117 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const baseSelector = `[data-track-change-id="${escapeAttrValue(rawId)}"]`;
-    const selector = storyKey ? `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]` : baseSelector;
-    return Array.from(host.querySelectorAll<HTMLElement>(selector));
+    if (!storyKey) {
+      return Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+    }
+
+    const storySelector = `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]`;
+    const exactMatches = Array.from(host.querySelectorAll<HTMLElement>(storySelector));
+    const allMatches = Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+
+    if (exactMatches.length > 1 || exactMatches.length === allMatches.length || allMatches.length === 0) {
+      return exactMatches;
+    }
+
+    return allMatches;
+  }
+
+  #groupRangeRectsByPage(rects: RangeRect[]): Map<number, RangeRect[]> {
+    const grouped = new Map<number, RangeRect[]>();
+
+    rects.forEach((rect) => {
+      const pageIndex = Number.isFinite(rect.pageIndex) ? rect.pageIndex : 0;
+      const pageRects = grouped.get(pageIndex);
+      if (pageRects) {
+        pageRects.push(rect);
+        return;
+      }
+      grouped.set(pageIndex, [rect]);
+    });
+
+    return grouped;
+  }
+
+  #getPreferredRenderedTrackedChangePageIndex(
+    storyKey: string,
+    groupedRects: Map<number, RangeRect[]>,
+    relativeTo?: HTMLElement,
+  ): number {
+    const activeHeaderFooterSession = this.#headerFooterSession?.session;
+    const activeHeaderFooterStoryKey =
+      activeHeaderFooterSession?.mode !== 'body' && activeHeaderFooterSession?.headerFooterRefId
+        ? buildStoryKey({
+            kind: 'story',
+            storyType: 'headerFooterPart',
+            refId: activeHeaderFooterSession.headerFooterRefId,
+          })
+        : null;
+
+    const activePageIndex =
+      activeHeaderFooterStoryKey === storyKey && Number.isFinite(activeHeaderFooterSession?.pageIndex)
+        ? Number(activeHeaderFooterSession?.pageIndex)
+        : null;
+    if (activePageIndex != null && groupedRects.has(activePageIndex)) {
+      return activePageIndex;
+    }
+
+    const scrollViewport =
+      this.#scrollContainer instanceof Window
+        ? {
+            top: 0,
+            bottom: this.#scrollContainer.innerHeight,
+          }
+        : this.#scrollContainer instanceof Element
+          ? this.#scrollContainer.getBoundingClientRect()
+          : this.#visibleHost?.ownerDocument?.defaultView
+            ? {
+                top: 0,
+                bottom: this.#visibleHost.ownerDocument.defaultView.innerHeight,
+              }
+            : this.#visibleHost?.getBoundingClientRect?.();
+    const viewportRect = scrollViewport ?? null;
+    if (viewportRect) {
+      const relativeRect = relativeTo?.getBoundingClientRect?.();
+      const visibleTop = viewportRect.top - (relativeRect?.top ?? 0);
+      const visibleBottom = viewportRect.bottom - (relativeRect?.top ?? 0);
+      const viewportCenter = visibleTop + (visibleBottom - visibleTop) / 2;
+
+      let bestPageIndex: number | null = null;
+      let bestIntersection = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      groupedRects.forEach((pageRects, pageIndex) => {
+        const pageBounds = this.#aggregateLayoutBounds(pageRects);
+        if (!pageBounds) {
+          return;
+        }
+
+        const intersection = Math.max(
+          0,
+          Math.min(pageBounds.bottom, visibleBottom) - Math.max(pageBounds.top, visibleTop),
+        );
+        const pageCenter = pageBounds.top + pageBounds.height / 2;
+        const distance = Math.abs(pageCenter - viewportCenter);
+
+        if (
+          intersection > bestIntersection ||
+          (intersection === bestIntersection && distance < bestDistance) ||
+          (intersection === bestIntersection &&
+            distance === bestDistance &&
+            (bestPageIndex == null || pageIndex < bestPageIndex))
+        ) {
+          bestPageIndex = pageIndex;
+          bestIntersection = intersection;
+          bestDistance = distance;
+        }
+      });
+
+      if (bestPageIndex != null) {
+        return bestPageIndex;
+      }
+    }
+
+    return [...groupedRects.keys()].sort((left, right) => left - right)[0] ?? 0;
   }
 
   /**
@@ -3559,6 +3693,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#teardownStorySessionEventBridge();
+    this.#teardownActiveSurfaceUiEventBridge();
 
     // Unregister from static registry
     if (this.#registryKey) {
@@ -3971,6 +4106,7 @@ export class PresentationEditor extends EventEmitter {
       event: 'stylesDefaultsChanged',
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
+    this.#syncActiveSurfaceUiEventBridge(this.#editor);
 
     // Listen for footnote/endnote part mutations (e.g., insert via document API).
     // These modify the OOXML part and derived cache but don't change the PM document,
@@ -4498,6 +4634,8 @@ export class PresentationEditor extends EventEmitter {
           this.#scheduleSelectionUpdate({ immediate: true });
           this.#scheduleA11ySelectionAnnouncement({ immediate: true });
         }
+
+        this.#syncActiveSurfaceUiEventBridge();
       },
       onEditBlocked: (reason) => {
         this.emit('headerFooterEditBlocked', { reason });
@@ -4566,6 +4704,58 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = null;
   }
 
+  #teardownActiveSurfaceUiEventBridge(): void {
+    if (this.#activeSurfaceUiEventEditor) {
+      if (this.#activeSurfaceUiUpdateHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('update', this.#activeSurfaceUiUpdateHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuOpenHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:open', this.#activeSurfaceUiContextMenuOpenHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuCloseHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:close', this.#activeSurfaceUiContextMenuCloseHandler);
+      }
+    }
+
+    this.#activeSurfaceUiEventEditor = null;
+    this.#activeSurfaceUiUpdateHandler = null;
+    this.#activeSurfaceUiContextMenuOpenHandler = null;
+    this.#activeSurfaceUiContextMenuCloseHandler = null;
+  }
+
+  #syncActiveSurfaceUiEventBridge(editor: Editor | null = this.getActiveEditor()): void {
+    const nextEditor = editor ?? null;
+    if (nextEditor === this.#activeSurfaceUiEventEditor) {
+      return;
+    }
+
+    this.#teardownActiveSurfaceUiEventBridge();
+    if (!nextEditor) {
+      return;
+    }
+
+    const updateHandler = (event?: { transaction?: Transaction }) => {
+      this.emit('update', {
+        ...(event ?? {}),
+        editor: this,
+      });
+    };
+    const contextMenuOpenHandler = (event?: { menuPosition?: { left?: string; top?: string } }) => {
+      this.emit('contextMenu:open', event ?? {});
+    };
+    const contextMenuCloseHandler = () => {
+      this.emit('contextMenu:close');
+    };
+
+    nextEditor.on?.('update', updateHandler);
+    nextEditor.on?.('contextMenu:open', contextMenuOpenHandler);
+    nextEditor.on?.('contextMenu:close', contextMenuCloseHandler);
+    this.#activeSurfaceUiEventEditor = nextEditor;
+    this.#activeSurfaceUiUpdateHandler = updateHandler;
+    this.#activeSurfaceUiContextMenuOpenHandler = contextMenuOpenHandler;
+    this.#activeSurfaceUiContextMenuCloseHandler = contextMenuCloseHandler;
+  }
+
   #syncStorySessionEventBridge(session: StoryPresentationSession | null): void {
     this.#teardownStorySessionEventBridge();
 
@@ -4598,6 +4788,7 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = transactionHandler;
     this.#scheduleSelectionUpdate({ immediate: true });
     this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+    this.#syncActiveSurfaceUiEventBridge();
   }
 
   #syncActiveStorySessionDocumentMode(session: StoryPresentationSession | null): void {
@@ -4668,6 +4859,7 @@ export class PresentationEditor extends EventEmitter {
         }
         this.#syncActiveStorySessionDocumentMode(activeSession);
         this.#syncStorySessionEventBridge(activeSession);
+        this.#syncActiveSurfaceUiEventBridge();
         this.#inputBridge?.notifyTargetChanged();
       },
     });

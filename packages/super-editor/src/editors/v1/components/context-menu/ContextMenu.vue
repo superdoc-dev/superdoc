@@ -312,9 +312,37 @@ const shouldHandleContextMenu = (event) => {
  *
  * @param {MouseEvent} event - The context menu event in capture phase
  */
+const getContextMenuTargets = () => {
+  const targets = new Set();
+  const surface = getEditorSurfaceElement(props.editor);
+  if (surface) {
+    targets.add(surface);
+  }
+
+  const activeEditor =
+    typeof props.editor?.getActiveEditor === 'function' ? props.editor.getActiveEditor() : props.editor;
+  const activeDom = activeEditor?.view?.dom;
+  if (activeDom instanceof HTMLElement) {
+    targets.add(activeDom);
+  }
+
+  return [...targets];
+};
+
+const isEventWithinContextMenuTargets = (event) => {
+  const target = event?.target;
+  if (!(target instanceof Node)) {
+    return false;
+  }
+
+  return getContextMenuTargets().some(
+    (surface) => surface === target || (typeof surface?.contains === 'function' && surface.contains(target)),
+  );
+};
+
 const handleRightClickCapture = (event) => {
   try {
-    if (shouldHandleContextMenu(event)) {
+    if (isEventWithinContextMenuTargets(event) && shouldHandleContextMenu(event)) {
       event[CONTEXT_MENU_HANDLED_FLAG] = true;
     }
   } catch (error) {
@@ -325,6 +353,10 @@ const handleRightClickCapture = (event) => {
 };
 
 const handleRightClick = async (event) => {
+  if (!isEventWithinContextMenuTargets(event)) {
+    return;
+  }
+
   if (!shouldHandleContextMenu(event)) {
     return;
   }
@@ -469,7 +501,6 @@ const closeMenu = (options = { restoreCursor: true }) => {
 /**
  * Lifecycle hooks on mount and onBeforeUnmount
  */
-let contextMenuTarget = null;
 let contextMenuOpenHandler = null;
 let contextMenuCloseHandler = null;
 
@@ -481,6 +512,8 @@ onMounted(() => {
   // call event.preventDefault() which suppresses mousedown events
   document.addEventListener('keydown', handleGlobalKeyDown);
   document.addEventListener('pointerdown', handleGlobalOutsideClick);
+  document.addEventListener('contextmenu', handleRightClickCapture, true);
+  document.addEventListener('contextmenu', handleRightClick);
 
   // Close menu if the editor becomes read-only while it's open
   props.editor.on('update', handleEditorUpdate);
@@ -507,13 +540,6 @@ onMounted(() => {
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 
-  // Attach context menu to the active surface (flow view.dom or presentation host)
-  contextMenuTarget = getEditorSurfaceElement(props.editor);
-  if (contextMenuTarget) {
-    contextMenuTarget.addEventListener('contextmenu', handleRightClickCapture, true);
-    contextMenuTarget.addEventListener('contextmenu', handleRightClick);
-  }
-
   contextMenuCloseHandler = () => {
     cleanupCustomItems();
     isOpen.value = false;
@@ -527,6 +553,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleGlobalKeyDown);
   document.removeEventListener('pointerdown', handleGlobalOutsideClick);
+  document.removeEventListener('contextmenu', handleRightClickCapture, true);
+  document.removeEventListener('contextmenu', handleRightClick);
 
   cleanupCustomItems();
 
@@ -540,8 +568,6 @@ onBeforeUnmount(() => {
         props.editor.off('contextMenu:close', contextMenuCloseHandler);
       }
       props.editor.off('update', handleEditorUpdate);
-      contextMenuTarget?.removeEventListener('contextmenu', handleRightClickCapture, true);
-      contextMenuTarget?.removeEventListener('contextmenu', handleRightClick);
     } catch (error) {
       console.warn('[ContextMenu] Error during cleanup:', error);
     }

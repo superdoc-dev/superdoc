@@ -101,6 +101,21 @@ describe('ContextMenu.vue', () => {
     });
   });
 
+  const getDocumentContextMenuHandler = (capture = false) => {
+    const match = commonMocks.spies.docAddEventListener.mock.calls.find(
+      (call) => call[0] === 'contextmenu' && (capture ? call[2] === true : call[2] !== true),
+    );
+    return match?.[1];
+  };
+
+  const setEventTarget = (event, target = surfaceElementMock) => {
+    Object.defineProperty(event, 'target', {
+      value: target,
+      configurable: true,
+    });
+    return event;
+  };
+
   describe('component mounting and lifecycle', () => {
     it('should mount without errors', () => {
       const wrapper = mount(ContextMenu, { props: mockProps });
@@ -130,11 +145,15 @@ describe('ContextMenu.vue', () => {
       surfaceElementMock = presentationHost;
 
       const wrapper = mount(ContextMenu, { props: mockProps });
-      expect(presentationHost.addEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(commonMocks.spies.docAddEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function), true);
+      expect(commonMocks.spies.docAddEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(presentationHost.addEventListener).not.toHaveBeenCalled();
       expect(mockEditor.view.dom.addEventListener).not.toHaveBeenCalledWith('contextmenu', expect.any(Function));
 
       wrapper.unmount();
-      expect(presentationHost.removeEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(commonMocks.spies.docRemoveEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function), true);
+      expect(commonMocks.spies.docRemoveEventListener).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(presentationHost.removeEventListener).not.toHaveBeenCalled();
     });
   });
 
@@ -225,7 +244,7 @@ describe('ContextMenu.vue', () => {
     });
 
     it('should pass right-click context (including event) to custom renderers', async () => {
-      const rightClickEvent = new MouseEvent('contextmenu', { clientX: 120, clientY: 160 });
+      const rightClickEvent = setEventTarget(new MouseEvent('contextmenu', { clientX: 120, clientY: 160 }));
 
       const contextFromEvent = {
         selectedText: '',
@@ -259,9 +278,7 @@ describe('ContextMenu.vue', () => {
 
       mount(ContextMenu, { props: mockProps });
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu',
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       await contextMenuHandler(rightClickEvent);
 
@@ -283,11 +300,9 @@ describe('ContextMenu.vue', () => {
       mockEditor.state.selection.to = 15;
       mockEditor.posAtCoords = vi.fn(() => ({ pos: 10 }));
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu',
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
-      const rightClickEvent = new MouseEvent('contextmenu', { clientX: 120, clientY: 160 });
+      const rightClickEvent = setEventTarget(new MouseEvent('contextmenu', { clientX: 120, clientY: 160 }));
 
       await contextMenuHandler(rightClickEvent);
 
@@ -305,11 +320,9 @@ describe('ContextMenu.vue', () => {
       mockEditor.posAtCoords = vi.fn(() => ({ pos: 25 }));
 
       // Find the bubble phase handler (not capture phase which has `true` as third arg)
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu' && call[2] !== true,
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
-      const rightClickEvent = new MouseEvent('contextmenu', { clientX: 120, clientY: 160 });
+      const rightClickEvent = setEventTarget(new MouseEvent('contextmenu', { clientX: 120, clientY: 160 }));
 
       await contextMenuHandler(rightClickEvent);
 
@@ -339,10 +352,9 @@ describe('ContextMenu.vue', () => {
       const target = document.createElement('span');
       target.dataset.pmStart = '10';
       tableFragment.appendChild(target);
+      surfaceElementMock.appendChild(tableFragment);
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu' && call[2] !== true,
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       await contextMenuHandler({
         type: 'contextmenu',
@@ -379,10 +391,9 @@ describe('ContextMenu.vue', () => {
       const target = document.createElement('span');
       target.dataset.pmStart = '10';
       tableFragment.appendChild(target);
+      surfaceElementMock.appendChild(tableFragment);
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu' && call[2] !== true,
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       await contextMenuHandler({
         type: 'contextmenu',
@@ -401,9 +412,7 @@ describe('ContextMenu.vue', () => {
 
       mockGetEditorContext.mockClear();
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu',
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       const event = {
         ctrlKey: true,
@@ -413,6 +422,7 @@ describe('ContextMenu.vue', () => {
         type: 'contextmenu',
         detail: 0,
         button: 2,
+        target: surfaceElementMock,
       };
 
       await contextMenuHandler(event);
@@ -426,9 +436,7 @@ describe('ContextMenu.vue', () => {
 
       mockGetEditorContext.mockClear();
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu',
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       const keyboardEvent = {
         preventDefault: vi.fn(),
@@ -437,6 +445,7 @@ describe('ContextMenu.vue', () => {
         detail: 0,
         button: 0,
         type: 'contextmenu',
+        target: surfaceElementMock,
       };
 
       await contextMenuHandler(keyboardEvent);
@@ -446,7 +455,7 @@ describe('ContextMenu.vue', () => {
     });
 
     it('should reuse the computed context instead of re-reading clipboard for custom renders', async () => {
-      const rightClickEvent = new MouseEvent('contextmenu', { clientX: 200, clientY: 240 });
+      const rightClickEvent = setEventTarget(new MouseEvent('contextmenu', { clientX: 200, clientY: 240 }));
 
       mockGetEditorContext.mockReset();
       mockGetEditorContext.mockResolvedValue({
@@ -478,9 +487,7 @@ describe('ContextMenu.vue', () => {
 
       mount(ContextMenu, { props: mockProps });
 
-      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
-        (call) => call[0] === 'contextmenu',
-      )[1];
+      const contextMenuHandler = getDocumentContextMenuHandler();
 
       await contextMenuHandler(rightClickEvent);
 
@@ -837,12 +844,7 @@ describe('ContextMenu.vue', () => {
     beforeEach(() => {
       mount(ContextMenu, { props: mockProps });
       // Find the capture phase contextmenu listener
-      const captureCall = surfaceElementMock.addEventListener.mock.calls.find(
-        (call) =>
-          call[0] === 'contextmenu' &&
-          (call[2] === true || call[2]?.capture === true || call[1]?.name === 'handleRightClickCapture'),
-      );
-      captureHandler = captureCall?.[1];
+      captureHandler = getDocumentContextMenuHandler(true);
     });
 
     it('should set __sdHandledByContextMenu flag when editor is editable', () => {
@@ -855,6 +857,7 @@ describe('ContextMenu.vue', () => {
         clientX: 120,
         clientY: 150,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -873,6 +876,7 @@ describe('ContextMenu.vue', () => {
         clientX: 120,
         clientY: 150,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -891,6 +895,7 @@ describe('ContextMenu.vue', () => {
         clientX: 120,
         clientY: 150,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -908,6 +913,7 @@ describe('ContextMenu.vue', () => {
         clientX: 120,
         clientY: 150,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -925,6 +931,7 @@ describe('ContextMenu.vue', () => {
         clientX: 120,
         clientY: 150,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -942,6 +949,7 @@ describe('ContextMenu.vue', () => {
         clientX: 0,
         clientY: 0,
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       captureHandler(event);
@@ -958,6 +966,7 @@ describe('ContextMenu.vue', () => {
           throw new Error('Test error');
         },
         preventDefault: vi.fn(),
+        target: surfaceElementMock,
       };
 
       // Should not throw, error should be caught
@@ -976,10 +985,8 @@ describe('ContextMenu.vue', () => {
       wrapper.unmount();
 
       // Verify the capture listener was removed (check for contextmenu with capture flag)
-      const removeCall = surfaceElementMock.removeEventListener.mock.calls.find(
-        (call) =>
-          call[0] === 'contextmenu' &&
-          (call[2] === true || call[2]?.capture === true || call[1]?.name === 'handleRightClickCapture'),
+      const removeCall = commonMocks.spies.docRemoveEventListener.mock.calls.find(
+        (call) => call[0] === 'contextmenu' && call[2] === true,
       );
       expect(removeCall).toBeDefined();
     });

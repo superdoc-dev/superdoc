@@ -21,9 +21,7 @@ const fixture = (name: string) => path.join(FIXTURES_DIR, name);
 function requireFixture(name: string): string {
   const p = fixture(name);
   if (!fs.existsSync(p)) {
-    throw new Error(
-      `Missing SD-2672 fixture "${name}". Run: bun tests/behavior/tests/navigation/fixtures/build-sd-2672-fixtures.mjs`,
-    );
+    throw new Error(`Missing SD-2672 fixture "${name}" in ${FIXTURES_DIR}.`);
   }
   return p;
 }

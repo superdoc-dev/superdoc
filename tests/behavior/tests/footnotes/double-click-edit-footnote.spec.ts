@@ -177,6 +177,20 @@ async function expectVisibleCaret(page: Page) {
   return box!;
 }
 
+async function expectCaretAlignedToVisibleBoundary(
+  page: Page,
+  footnote: Locator,
+  searchText: string,
+  offsetWithinMatch: number,
+  tolerancePx = 3,
+) {
+  const boundaryPoint = await getBoundaryClickPoint(footnote, searchText, offsetWithinMatch);
+  expect(boundaryPoint).toBeTruthy();
+
+  const caretBox = await expectVisibleCaret(page);
+  expect(Math.abs(caretBox.x - boundaryPoint!.x)).toBeLessThanOrEqual(tolerancePx);
+}
+
 async function getActiveSelectionPosition(page: Page) {
   return page.evaluate(() => {
     const activeEditor = (window as any).editor?.presentationEditor?.getActiveEditor?.();
@@ -596,6 +610,79 @@ test.describe('suggesting mode routing', () => {
     await expectStoryText(superdoc.page, 'This is a simZple footnote');
     await expect(footnote).toContainText('This is a simZple footnote');
     await expect(getBodyStoryText(superdoc.page)).resolves.toBe(originalBodyText);
+  });
+
+  test('tracked inserts keep the active footnote caret aligned with the rendered insertion point', async ({
+    superdoc,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === 'firefox',
+      'Headless Firefox does not yet persist hidden-host footnote edits through the behavior harness.',
+    );
+
+    const footnote = await loadAndActivateFootnote(
+      superdoc,
+      '1',
+      'If only one closing is contemplated',
+      COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH,
+    );
+
+    await expectCaretAtClickBoundary(superdoc.page, footnote, 'references', 3);
+
+    let insertedText = '';
+    for (const nextChar of ['X', 'Y', 'Z']) {
+      insertedText += nextChar;
+      await superdoc.page.keyboard.insertText(nextChar);
+      await superdoc.waitForStable(300);
+
+      await expectStoryTextToContain(superdoc.page, `ref${insertedText}erences`);
+      await expect(footnote).toContainText(`ref${insertedText}erences`);
+      await expectCaretAlignedToVisibleBoundary(
+        superdoc.page,
+        footnote,
+        `ref${insertedText}erences`,
+        3 + insertedText.length,
+      );
+    }
+  });
+
+  test('word selection overlay stays aligned after a tracked insert splits the note text', async ({
+    superdoc,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === 'firefox',
+      'Headless Firefox does not yet persist hidden-host footnote edits through the behavior harness.',
+    );
+
+    const footnote = await loadAndActivateFootnote(
+      superdoc,
+      '1',
+      'If only one closing is contemplated',
+      COMPLEX_IMPORTED_FOOTNOTES_DOC_PATH,
+    );
+
+    await expectCaretAtClickBoundary(superdoc.page, footnote, 'references', 3);
+    await superdoc.page.keyboard.insertText('XYZ');
+    await superdoc.waitForStable(300);
+    await expect(footnote).toContainText('refXYZerences');
+
+    const selectedWord = 'Closing';
+    const selectedWordPoint = await getTextClickPoint(footnote, selectedWord, 2);
+    const selectedWordRect = await getWordRect(footnote, selectedWord);
+    expect(selectedWordPoint).toBeTruthy();
+    expect(selectedWordRect).toBeTruthy();
+
+    await superdoc.page.mouse.dblclick(selectedWordPoint!.x, selectedWordPoint!.y);
+    await superdoc.waitForStable();
+
+    const domSelectionAfterClick = await getActiveDomSelection(superdoc.page);
+    expect(domSelectionAfterClick?.text).toBe(selectedWord);
+
+    const overlayRect = await getSelectionOverlayRect(superdoc.page);
+    expect(Math.abs(overlayRect.x - selectedWordRect!.left)).toBeLessThanOrEqual(2.5);
+    expect(Math.abs(overlayRect.width - selectedWordRect!.width)).toBeLessThanOrEqual(3);
   });
 
   test('footnote clicks stay accurately mapped after returning to the body in suggesting mode', async ({

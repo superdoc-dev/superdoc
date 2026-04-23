@@ -62,6 +62,11 @@ import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from '
 import { renderCellSelectionOverlay } from './selection/CellSelectionOverlay.js';
 import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelectionOverlayRendering.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
+import {
+  computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
+  computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
+  measureVisibleTextOffset as measureVisibleTextOffsetFromHelper,
+} from './selection/VisibleTextOffsetGeometry.js';
 import { collectCommentPositions as collectCommentPositionsFromHelper } from './utils/CommentPositionCollection.js';
 import { getCurrentSectionPageStyles as getCurrentSectionPageStylesFromHelper } from './layout/SectionPageStyles.js';
 import {
@@ -1745,7 +1750,7 @@ export class PresentationEditor extends EventEmitter {
         return this.#computeHeaderFooterSelectionRects(start, end);
       }
       if (useNoteSurface) {
-        return this.#computeNoteSelectionRects(start, end);
+        return this.#computeNoteSelectionRects(start, end) ?? [];
       }
       const domRects = this.#computeSelectionRectsFromDom(start, end);
       if (domRects != null) {
@@ -2858,7 +2863,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (this.#getActiveNoteStorySession()) {
-      const rects = this.#computeNoteSelectionRects(pos, pos);
+      const rects = this.#computeNoteSelectionRects(pos, pos) ?? [];
       let rect = rects?.[0] ?? null;
       if (!rect) {
         rect = this.#computeNoteCaretRect(pos);
@@ -6538,6 +6543,16 @@ export class PresentationEditor extends EventEmitter {
     return 0;
   }
 
+  #getRenderedNoteFragmentElements(noteBlockIds: ReadonlySet<string>): HTMLElement[] {
+    if (!this.#viewportHost || noteBlockIds.size === 0) {
+      return [];
+    }
+
+    return Array.from(this.#viewportHost.querySelectorAll<HTMLElement>('[data-block-id]')).filter((element) =>
+      noteBlockIds.has(element.getAttribute('data-block-id') ?? ''),
+    );
+  }
+
   #findRenderedNoteFragmentAtPoint(
     noteBlockIds: ReadonlySet<string>,
     clientX: number,
@@ -6568,13 +6583,7 @@ export class PresentationEditor extends EventEmitter {
       }
     }
 
-    const renderedFragments = Array.from(this.#viewportHost.querySelectorAll<HTMLElement>('[data-block-id]'));
-    for (const fragmentElement of renderedFragments) {
-      const blockId = fragmentElement.getAttribute('data-block-id') ?? '';
-      if (!noteBlockIds.has(blockId)) {
-        continue;
-      }
-
+    for (const fragmentElement of this.#getRenderedNoteFragmentElements(noteBlockIds)) {
       const rect = fragmentElement.getBoundingClientRect();
       if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
         continue;
@@ -7467,22 +7476,88 @@ export class PresentationEditor extends EventEmitter {
     return this.#headerFooterSession?.computeCaretRect(pos) ?? null;
   }
 
-  #computeNoteSelectionRects(from: number, to: number): LayoutRect[] {
+  /**
+   * Translate an active hidden-editor position into a visible-text offset.
+   *
+   * `domAtPos()` gives the correct DOM boundary inside the hidden note editor,
+   * even when the PM position sits inside tracked-change wrapper structure. We
+   * then measure that boundary as visible text so it can be projected onto the
+   * painted note surface without relying on raw PM ranges.
+   */
+  #measureActiveEditorVisibleTextOffset(pos: number): number | null {
+    if (!Number.isFinite(pos)) {
+      return null;
+    }
+
+    const activeEditor = this.getActiveEditor();
+    const view = activeEditor?.view;
+    const root = view?.dom as HTMLElement | null;
+    if (!view || !root) {
+      return null;
+    }
+
+    try {
+      const domPoint = view.domAtPos(pos);
+      if (!domPoint?.node) {
+        return null;
+      }
+
+      return measureVisibleTextOffsetFromHelper(root, domPoint.node, domPoint.offset);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PresentationEditor] Failed to measure active editor visible text offset:', error);
+      }
+      return null;
+    }
+  }
+
+  #computeNoteSelectionRectsFromDom(context: NoteLayoutContext, from: number, to: number): LayoutRect[] | null {
+    const layout = this.#layoutState.layout;
+    if (!layout) {
+      return null;
+    }
+
+    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
+    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
+    if (startOffset == null || endOffset == null) {
+      return null;
+    }
+
+    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
+    if (!noteFragments.length) {
+      return null;
+    }
+
+    return computeSelectionRectsFromVisibleTextOffsetsFromHelper(
+      {
+        containers: noteFragments,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        pageHeight: this.#getBodyPageHeight(),
+        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+      },
+      startOffset,
+      endOffset,
+    );
+  }
+
+  #computeNoteSelectionRects(from: number, to: number): LayoutRect[] | null {
     const context = this.#buildActiveNoteLayoutContext();
     const layout = this.#layoutState.layout;
     if (!context || !layout) {
-      return [];
+      return null;
     }
 
-    return (
-      selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined) ?? []
-    );
+    const domRects = this.#computeNoteSelectionRectsFromDom(context, from, to);
+    if (domRects != null) {
+      return domRects;
+    }
+
+    return selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined);
   }
 
   #computeNoteDomCaretRect(context: NoteLayoutContext, pos: number): LayoutRect | null {
     const layout = this.#layoutState.layout;
-    const pageCount = layout?.pages?.length ?? 0;
-    if (pageCount === 0) {
+    if (!layout) {
       return null;
     }
 
@@ -7491,73 +7566,20 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const zoom =
-      typeof this.#layoutOptions.zoom === 'number' &&
-      Number.isFinite(this.#layoutOptions.zoom) &&
-      this.#layoutOptions.zoom > 0
-        ? this.#layoutOptions.zoom
-        : 1;
-    const pageStride = this.#getBodyPageHeight() + (layout?.pageGap ?? 0);
-
-    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-      const pageElement = this.#getPageElement(pageIndex);
-      if (!pageElement) {
-        continue;
-      }
-
-      const pageRect = pageElement.getBoundingClientRect();
-      const noteFragments = Array.from(pageElement.querySelectorAll<HTMLElement>('[data-block-id]')).filter((element) =>
-        noteBlockIds.has(element.getAttribute('data-block-id') ?? ''),
-      );
-
-      for (const fragmentElement of noteFragments) {
-        const textRuns = fragmentElement.querySelectorAll<HTMLElement>('[data-pm-start][data-pm-end]');
-        for (const runElement of Array.from(textRuns)) {
-          const pmStart = Number(runElement.dataset.pmStart);
-          const pmEnd = Number(runElement.dataset.pmEnd);
-          if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd) || pos < pmStart || pos > pmEnd) {
-            continue;
-          }
-
-          const textNode = Array.from(runElement.childNodes).find(
-            (node): node is Text => node.nodeType === Node.TEXT_NODE,
-          );
-          if (!textNode) {
-            continue;
-          }
-
-          const charIndex = Math.max(0, Math.min(textNode.length, pos - pmStart));
-          const range = runElement.ownerDocument?.createRange();
-          if (!range) {
-            continue;
-          }
-
-          range.setStart(textNode, charIndex);
-          range.setEnd(textNode, charIndex);
-          const rect = range.getBoundingClientRect();
-          if (rect.width === 0 && rect.height === 0) {
-            continue;
-          }
-
-          const localX = (rect.left - pageRect.left) / zoom;
-          const localY = (rect.top - pageRect.top) / zoom;
-          const height = Math.max(1, rect.height / zoom);
-          if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
-            continue;
-          }
-
-          return {
-            pageIndex,
-            x: localX,
-            y: pageIndex * pageStride + localY,
-            width: 1,
-            height,
-          };
-        }
-      }
+    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
+    if (textOffset == null) {
+      return null;
     }
 
-    return null;
+    return computeCaretRectFromVisibleTextOffsetFromHelper(
+      {
+        containers: this.#getRenderedNoteFragmentElements(noteBlockIds),
+        zoom: this.#layoutOptions.zoom ?? 1,
+        pageHeight: this.#getBodyPageHeight(),
+        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+      },
+      textOffset,
+    );
   }
 
   #computeNoteCaretRect(pos: number): LayoutRect | null {
@@ -7583,7 +7605,7 @@ export class PresentationEditor extends EventEmitter {
         zoom: this.#layoutOptions.zoom ?? 1,
       },
       pos,
-      true,
+      false,
     );
     if (!geometry) {
       return null;
@@ -8102,7 +8124,7 @@ export class PresentationEditor extends EventEmitter {
       if (!selection) {
         return this.#buildActiveNoteLayoutContext()?.firstPageIndex ?? 0;
       }
-      const rects = this.#computeNoteSelectionRects(selection.from, selection.to);
+      const rects = this.#computeNoteSelectionRects(selection.from, selection.to) ?? [];
       if (rects.length > 0) {
         return rects[0]?.pageIndex ?? 0;
       }
@@ -8347,9 +8369,6 @@ export class PresentationEditor extends EventEmitter {
     if (from === to) {
       const caretRect = this.#computeNoteCaretRect(from);
       if (!caretRect) {
-        try {
-          this.#localSelectionLayer.innerHTML = '';
-        } catch {}
         return;
       }
 
@@ -8379,7 +8398,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const rects = this.#computeNoteSelectionRects(from, to);
-    if (!rects.length) {
+    if (rects == null || !rects.length) {
       return;
     }
 

@@ -191,11 +191,6 @@ test('repeated footer tracked changes render on later pages without activating t
 });
 
 test('first-page header tracked changes stay bound to the first-page story', async ({ superdoc }) => {
-  test.fail(
-    true,
-    'Known separate regression: exiting a tracked first-page header edit remaps rendering to the default header ref.',
-  );
-
   await superdoc.loadDocument(FIRST_PAGE_HEADER_DOC_PATH);
   await superdoc.waitForStable();
 
@@ -227,6 +222,8 @@ test('first-page header tracked changes stay bound to the first-page story', asy
 
   await exitActiveStory(superdoc.page);
   await superdoc.waitForStable();
+  await superdoc.page.evaluate(() => window.scrollTo(0, 0));
+  await expect(getHeaderSurfaceLocator(superdoc.page, 0)).toBeVisible();
 
   await expectRenderedHeaderTrackChange(superdoc.page, insertedText, initialIdentity.expectedRefId);
 });

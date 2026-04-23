@@ -128,6 +128,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     clear: vi.fn(),
     getBatch: vi.fn(() => []),
     getBlocksByRId: vi.fn(() => new Map()),
+    setTrackedChangesRenderConfig: vi.fn(),
   })),
 }));
 

@@ -212,6 +212,51 @@ function removeGridColumnWidth(grid: unknown, deleteIndex: number): unknown | nu
   return serializeGridColumns(grid, { ...normalized, columns: colWidths });
 }
 
+function buildFirstRowCellWidthProps(
+  attrs: Record<string, unknown>,
+  cellStartCol: number,
+  colspan: number,
+  colwidth: number[],
+  gridColumns?: { col: number }[],
+): Record<string, unknown> | undefined {
+  const currentCellProps =
+    attrs.tableCellProperties && typeof attrs.tableCellProperties === 'object'
+      ? (attrs.tableCellProperties as Record<string, unknown>)
+      : {};
+
+  const spanTwips = resolveSpanWidthTwips(cellStartCol, colspan, colwidth, gridColumns);
+  if (spanTwips == null) return Object.keys(currentCellProps).length > 0 ? currentCellProps : undefined;
+
+  return {
+    ...currentCellProps,
+    cellWidth: { value: spanTwips, type: 'dxa' },
+  };
+}
+
+function resolveSpanWidthTwips(
+  cellStartCol: number,
+  colspan: number,
+  colwidth: number[],
+  gridColumns?: { col: number }[],
+): number | undefined {
+  const boundedSpan = Math.max(1, colspan);
+  if (Array.isArray(gridColumns) && cellStartCol >= 0 && cellStartCol + boundedSpan <= gridColumns.length) {
+    const gridSpanTwips = gridColumns
+      .slice(cellStartCol, cellStartCol + boundedSpan)
+      .reduce((sum, column) => sum + normalizeGridWidth(column).col, 0);
+    if (gridSpanTwips > 0) return gridSpanTwips;
+  }
+
+  const spanWidthPx = colwidth
+    .slice(0, boundedSpan)
+    .reduce((sum, width) => sum + (Number.isFinite(width) ? width : 0), 0);
+  if (spanWidthPx > 0) {
+    return Math.round(spanWidthPx * PIXELS_TO_TWIPS);
+  }
+
+  return undefined;
+}
+
 function normalizeCellAttrsForSingleCell(attrs: Record<string, unknown>): Record<string, unknown> {
   const currentColwidth = Array.isArray(attrs.colwidth) ? (attrs.colwidth as number[]) : null;
   const tableCellProperties = {
@@ -1490,8 +1535,15 @@ export function tablesSetColumnWidthAdapter(
     const tablePos = table.candidate.pos;
     const tableStart = tablePos + 1;
     const tableNode = table.candidate.node;
+    const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const map = TableMap.get(tableNode);
     const widthPx = Math.round(input.widthPt * (96 / 72)); // Points → pixels at 96 DPI
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const nextGridColumns = normalizedGrid?.columns.slice();
+
+    if (nextGridColumns && columnIndex < nextGridColumns.length) {
+      nextGridColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
+    }
 
     // Set colwidth on all cells at this column.
     const processed = new Set<number>();
@@ -1513,17 +1565,23 @@ export function tablesSetColumnWidthAdapter(
       while (colwidth.length < colspan) colwidth.push(0);
       colwidth[withinCol] = widthPx;
 
-      tr.setNodeMarkup(tableStart + pos, null, { ...attrs, colwidth });
+      const nextAttrs: Record<string, unknown> = { ...attrs, colwidth };
+      if (row === 0) {
+        const nextCellProps = buildFirstRowCellWidthProps(attrs, cellStartCol, colspan, colwidth, nextGridColumns);
+        if (nextCellProps) {
+          nextAttrs.tableCellProperties = nextCellProps;
+        } else {
+          delete nextAttrs.tableCellProperties;
+        }
+      }
+
+      tr.setNodeMarkup(tableStart + pos, null, nextAttrs);
     }
 
-    const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
     const tableAttrUpdates: Record<string, unknown> = {};
 
-    if (normalizedGrid && columnIndex < normalizedGrid.columns.length) {
-      const newColumns = normalizedGrid.columns.slice();
-      newColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
-      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
+    if (normalizedGrid && nextGridColumns) {
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: nextGridColumns });
     }
 
     tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));

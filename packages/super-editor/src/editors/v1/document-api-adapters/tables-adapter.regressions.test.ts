@@ -624,6 +624,30 @@ describe('tables-adapter regressions', () => {
     expect(tableUpdate.tableWidth).toEqual({ width: 392, type: 'dxa' });
   });
 
+  it('syncs first-row tcW when setting a column width', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const firstCell = firstRow.child(0) as ProseMirrorNode;
+    (firstCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 7200, type: 'dxa' },
+    };
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const firstCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 2)?.[2] as Record<string, unknown>;
+    expect(firstCellUpdate.colwidth).toEqual([192]);
+    expect(firstCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2880, type: 'dxa' },
+    });
+  });
+
   it('preserves visible tableCellSpacing when setting a column width', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };

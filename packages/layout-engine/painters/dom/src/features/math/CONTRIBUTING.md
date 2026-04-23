@@ -36,7 +36,9 @@ type MathObjectConverter = (
   doc: Document,            // For creating DOM elements
   convertChildren: (children: OmmlJsonNode[]) => DocumentFragment,
                              // Recursively converts nested OMML content
-) => Element | null;
+) => Node | null;           // Return a single Element for one atom, or a
+                             // DocumentFragment when your converter produces
+                             // multiple sibling elements (see m:r / math-run).
 ```
 
 `convertChildren` is the important one. Pass it any child elements that contain nested math content (`m:e`, `m:num`, `m:sub`, etc.). It handles everything inside them, including other math objects.

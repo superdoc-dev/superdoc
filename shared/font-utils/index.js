@@ -45,6 +45,40 @@ export const FONT_FAMILY_FALLBACKS = Object.freeze({
 export const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 
 /**
+ * Known serif-like font families used as a heuristic when OOXML `w:family`
+ * is unavailable. This keeps fallbacks closer to Word metrics for fonts like Cambria.
+ */
+const SERIF_LIKE_FONTS = new Set([
+  'cambria',
+  'cambria math',
+  'times',
+  'times new roman',
+  'georgia',
+  'garamond',
+  'palatino',
+  'palatino linotype',
+  'book antiqua',
+  'baskerville',
+  'cochin',
+  'hoefler text',
+  'minion pro',
+  'didot',
+  'bodoni mt',
+  'constantia',
+]);
+
+const normalizeFontNameForLookup = (fontName) => {
+  if (!fontName || typeof fontName !== 'string') return '';
+  return fontName
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .toLowerCase();
+};
+
+const inferGenericFallbackFromFontName = (fontName) =>
+  SERIF_LIKE_FONTS.has(normalizeFontNameForLookup(fontName)) ? 'serif' : DEFAULT_GENERIC_FALLBACK;
+
+/**
  * Normalizes a comma-separated font-family string into an array of trimmed, non-empty parts.
  *
  * This internal helper splits a CSS font-family string by commas, trims whitespace
@@ -189,7 +223,7 @@ export function mapWordFamilyFallback(wordFamily) {
  * @example
  * // Basic usage with default fallback
  * toCssFontFamily('Arial'); // "Arial, sans-serif"
- * toCssFontFamily('Times New Roman'); // "Times New Roman, sans-serif"
+ * toCssFontFamily('Times New Roman'); // "Times New Roman, serif"
  *
  * @example
  * // Custom explicit fallback
@@ -244,7 +278,9 @@ export function toCssFontFamily(fontName, options = {}) {
 
   const { fallback, wordFamily } = options;
   const fallbackValue =
-    fallback ?? (wordFamily ? mapWordFamilyFallback(wordFamily) : undefined) ?? DEFAULT_GENERIC_FALLBACK;
+    fallback ??
+    (wordFamily ? mapWordFamilyFallback(wordFamily) : undefined) ??
+    inferGenericFallbackFromFontName(trimmed);
 
   const fallbackParts = normalizeParts(fallbackValue);
   if (fallbackParts.length === 0) {

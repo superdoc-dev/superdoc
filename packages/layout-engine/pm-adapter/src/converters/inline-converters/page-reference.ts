@@ -3,6 +3,7 @@ import { type InlineConverterParams } from './common';
 import { getNodeInstruction } from '../../sdt/index.js';
 import type { PMNode, PMMark } from '../../types.js';
 import { textNodeToRun } from './text-run.js';
+import { buildFlowRunLink } from '../../marks/links.js';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun | void {
@@ -60,14 +61,23 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
 
     // Copy PM positions from parent pageReference node
     if (pageRefPos) {
-      (tokenRun as TextRun).pmStart = pageRefPos.start;
-      (tokenRun as TextRun).pmEnd = pageRefPos.end;
+      tokenRun.pmStart = pageRefPos.start;
+      tokenRun.pmEnd = pageRefPos.end;
     }
-    (tokenRun as TextRun).token = 'pageReference';
-    (tokenRun as TextRun).pageRefMetadata = {
+    tokenRun.token = 'pageReference';
+    tokenRun.pageRefMetadata = {
       bookmarkId,
       instruction,
     };
+
+    // \h switch - case-insensitive per ECMA-376 §17.16.1.
+    if (/\\h\b/i.test(instruction)) {
+      const synthesized = buildFlowRunLink({ anchor: bookmarkId });
+      if (synthesized) {
+        tokenRun.link = tokenRun.link ? { ...tokenRun.link, ...synthesized, anchor: bookmarkId } : synthesized;
+      }
+    }
+
     if (sdtMetadata) {
       tokenRun.sdt = sdtMetadata;
     }

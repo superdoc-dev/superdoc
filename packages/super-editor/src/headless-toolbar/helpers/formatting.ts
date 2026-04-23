@@ -526,7 +526,10 @@ export const createImageExecute =
         });
       })
       .catch((err: unknown) => {
-        console.error('[headless-toolbar] Image insertion failed:', err);
+        const originalError = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(`[headless-toolbar] Image insertion failed: ${originalError.message}`);
+        editor?.emit?.('exception', { error, editor });
+        console.error(error, originalError);
       });
 
     return true;

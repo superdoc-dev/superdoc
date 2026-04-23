@@ -24,6 +24,8 @@ export type ResolvedLayout = {
   flowMode: FlowMode;
   /** Gap between pages in pixels (0 when unset). */
   pageGap: number;
+  /** Pre-computed block versions for painter-side cache invalidation. */
+  blockVersions?: Record<string, string>;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
   /** Document epoch identifier from the source layout. Used for change tracking in the painter. */

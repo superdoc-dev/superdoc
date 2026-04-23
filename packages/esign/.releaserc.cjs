@@ -16,6 +16,7 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
+  'shared',
   'pnpm-workspace.yaml',
 ]);
 

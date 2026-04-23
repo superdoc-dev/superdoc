@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { convertOmmlToMathml, MATHML_NS } from './omml-to-mathml.js';
+import { tokenizeMathText } from './converters/math-run.js';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 const doc = dom.window.document;
@@ -342,6 +343,310 @@ describe('convertOmmlToMathml', () => {
     expect(children.some((c) => c.localName === 'mi')).toBe(true); // x
     expect(children.some((c) => c.localName === 'mo')).toBe(true); // +
     expect(children.some((c) => c.localName === 'mn')).toBe(true); // 1
+  });
+
+  // ─── tokenizeMathText direct coverage (SD-2632) ────────────────────────────
+
+  it('tokenizes leading-decimal content with . as an operator followed by digits', () => {
+    // ".5" has no leading digit, so the "." is not part of a number.
+    expect(tokenizeMathText('.5')).toEqual([
+      { tag: 'mo', content: '.' },
+      { tag: 'mn', content: '5' },
+    ]);
+  });
+
+  it('tokenizes a trailing decimal point as a separate operator', () => {
+    // "5." — the digit run ends at "5" because a lookahead digit is required.
+    expect(tokenizeMathText('5.')).toEqual([
+      { tag: 'mn', content: '5' },
+      { tag: 'mo', content: '.' },
+    ]);
+  });
+
+  it('tokenizes "1.2.3" as number, operator, number — only first dot is inline', () => {
+    expect(tokenizeMathText('1.2.3')).toEqual([
+      { tag: 'mn', content: '1.2' },
+      { tag: 'mo', content: '.' },
+      { tag: 'mn', content: '3' },
+    ]);
+  });
+
+  it('tokenizes "2x+1" — number-identifier-operator-number', () => {
+    expect(tokenizeMathText('2x+1')).toEqual([
+      { tag: 'mn', content: '2' },
+      { tag: 'mi', content: 'x' },
+      { tag: 'mo', content: '+' },
+      { tag: 'mn', content: '1' },
+    ]);
+  });
+
+  it('tokenizes consecutive operator characters as separate <mo> atoms', () => {
+    expect(tokenizeMathText('\u2264\u2265')).toEqual([
+      { tag: 'mo', content: '\u2264' },
+      { tag: 'mo', content: '\u2265' },
+    ]);
+  });
+
+  it('tokenizes empty text as an empty list', () => {
+    expect(tokenizeMathText('')).toEqual([]);
+  });
+
+  it('tokenizes standalone ∞ as identifier, not operator (SD-2632)', () => {
+    // U+221E was removed from OPERATOR_CHARS; Word classifies it as <mi>.
+    expect(tokenizeMathText('\u221E')).toEqual([{ tag: 'mi', content: '\u221E' }]);
+  });
+
+  it('keeps astral-plane characters whole (does not split surrogate pairs)', () => {
+    // 𝑥 (U+1D465, mathematical italic small x) is a UTF-16 surrogate pair.
+    // Splitting by code unit would emit two bogus half-pair <mi>s.
+    const text = '\u{1D465}+1';
+    expect(tokenizeMathText(text)).toEqual([
+      { tag: 'mi', content: '\u{1D465}' },
+      { tag: 'mo', content: '+' },
+      { tag: 'mn', content: '1' },
+    ]);
+  });
+
+  // ─── SD-2632: per-character split of multi-char m:r text ──────────────────
+
+  it('splits a single m:r containing operator + identifier into <mo> + <mi> (SD-2632)', () => {
+    // Fixture case 1 of math-limit-tests.docx has m:r "→∞" as one run inside
+    // m:limLow's m:lim. Word's OMML2MML.XSL splits it to <mo>→</mo><mi>∞</mi>.
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '\u2192\u221E' }] }] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const children = Array.from(result!.children);
+    expect(children.map((c) => `${c.localName}:${c.textContent}`)).toEqual(['mo:\u2192', 'mi:\u221E']);
+  });
+
+  it('splits "x+1=2" per character with digits grouped (SD-2632)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x+1=2' }] }] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const children = Array.from(result!.children);
+    expect(children.map((c) => `${c.localName}:${c.textContent}`)).toEqual(['mi:x', 'mo:+', 'mn:1', 'mo:=', 'mn:2']);
+  });
+
+  it('groups consecutive digits with an interior decimal point into one <mn> (SD-2632)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '123.45+67' }] }] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const children = Array.from(result!.children);
+    expect(children.map((c) => `${c.localName}:${c.textContent}`)).toEqual(['mn:123.45', 'mo:+', 'mn:67']);
+  });
+
+  it('splits m:r content inside m:sub of an m:sSub (SD-2632 F3)', () => {
+    // Word's built-up "b_(n+1)" has "n+1" as a single m:r inside m:sub.
+    // The subscript should contain separate <mi>n</mi><mo>+</mo><mn>1</mn>.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:sSub',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+            },
+            {
+              name: 'm:sub',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n+1' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const subMrow = result!.querySelector('msub > mrow:nth-child(2)');
+    expect(subMrow).not.toBeNull();
+    const children = Array.from(subMrow!.children);
+    expect(children.map((c) => `${c.localName}:${c.textContent}`)).toEqual(['mi:n', 'mo:+', 'mn:1']);
+  });
+
+  it('preserves m:rPr mathvariant across every atom of a split run (SD-2632)', () => {
+    // When m:sty="b" (bold) applies to the whole run, every atom emitted
+    // from the split inherits it.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:r',
+          elements: [
+            { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'b' } }] },
+            { name: 'm:t', elements: [{ type: 'text', text: 'x+1' }] },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const variants = Array.from(result!.children).map((c) => c.getAttribute('mathvariant'));
+    expect(variants).toEqual(['bold', 'bold', 'bold']);
+  });
+
+  it('keeps "log" whole but splits operators and digits for m:fName with mixed content (SD-2632)', () => {
+    // Word's OMML2MML.XSL for <m:fName><m:r>log_2</m:r></m:fName>: letters group
+    // into one <mi>, operators and digits still split.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'log_2' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const fnameRow = result!.querySelector('mrow > mrow:first-child');
+    const children = Array.from(fnameRow!.children);
+    expect(children.map((c) => `${c.localName}:${c.textContent}`)).toEqual(['mi:log', 'mo:_', 'mn:2']);
+  });
+
+  it('collapses a multi-char base inside nested m:sSub wrapped by m:fName (SD-2632)', () => {
+    // Ensures the msub/msup entries of BASE_BEARING_ELEMENTS are actually pinned.
+    // <m:fName><m:sSub><m:e>f</m:e><m:sub>i</m:sub></m:sSub></m:fName> should
+    // keep "f" as a single <mi> inside the subscript wrapper's base slot.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [
+                {
+                  name: 'm:sSub',
+                  elements: [
+                    {
+                      name: 'm:e',
+                      elements: [
+                        {
+                          name: 'm:r',
+                          elements: [
+                            { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'p' } }] },
+                            { name: 'm:t', elements: [{ type: 'text', text: 'log' }] },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'm:sub',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const msub = result!.querySelector('msub');
+    expect(msub).not.toBeNull();
+    const baseMi = msub!.children[0]!.querySelector('mi');
+    expect(baseMi!.textContent).toBe('log');
+    expect(baseMi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('collapses multi-char base inside nested m:sPre (mmultiscripts) wrapped by m:fName (SD-2632)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [
+                {
+                  name: 'm:sPre',
+                  elements: [
+                    {
+                      name: 'm:sub',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] }],
+                    },
+                    {
+                      name: 'm:sup',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'n' }] }] }],
+                    },
+                    {
+                      name: 'm:e',
+                      elements: [
+                        {
+                          name: 'm:r',
+                          elements: [
+                            { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'p' } }] },
+                            { name: 'm:t', elements: [{ type: 'text', text: 'log' }] },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mms = result!.querySelector('mmultiscripts');
+    expect(mms).not.toBeNull();
+    const baseMi = mms!.children[0]!.querySelector('mi');
+    expect(baseMi!.textContent).toBe('log');
+    expect(baseMi!.getAttribute('mathvariant')).toBe('normal');
+  });
+
+  it('keeps multi-letter function names whole inside m:func > m:fName (SD-2632 exception)', () => {
+    // Word's OMML2MML.XSL keeps "sin" as one <mi> when nested in m:fName,
+    // even though it would otherwise per-char split a bare m:r. Exception is
+    // applied by convertFunction.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'sin' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const functionName = result!.querySelector('mrow > mrow:first-child > mi');
+    expect(functionName!.textContent).toBe('sin');
+    expect(functionName!.getAttribute('mathvariant')).toBe('normal');
   });
 });
 
@@ -860,6 +1165,43 @@ describe('m:func converter', () => {
     expect(mis.length).toBe(2);
     expect(mis[0]!.textContent).toBe('sin');
     expect(mis[1]!.textContent).toBe('cos');
+  });
+
+  it('preserves explicit m:sty=i on function-name runs', () => {
+    // SD-2538 preserve branch: forceNormalMathVariant must NOT overwrite
+    // an existing mathvariant. When Word marks a function-name run with
+    // m:sty="i", convertMathRun already set mathvariant="italic" — the
+    // function-apply pass must leave it alone.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:func',
+          elements: [
+            {
+              name: 'm:fName',
+              elements: [
+                {
+                  name: 'm:r',
+                  elements: [
+                    { name: 'm:rPr', elements: [{ name: 'm:sty', attributes: { 'm:val': 'i' } }] },
+                    { name: 'm:t', elements: [{ type: 'text', text: 'L' }] },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const nameMi = result!.querySelectorAll('mi')[0];
+    expect(nameMi!.textContent).toBe('L');
+    expect(nameMi!.getAttribute('mathvariant')).toBe('italic');
   });
 });
 
@@ -2296,8 +2638,18 @@ describe('m:limLow converter', () => {
     const munder = result!.querySelector('munder');
     expect(munder).not.toBeNull();
     expect(munder!.children.length).toBe(2);
-    expect(munder!.children[0]!.textContent).toBe('lim');
-    expect(munder!.children[1]!.textContent).toBe('n');
+
+    // Base: "lim" — upright via m:sty=p on the run.
+    const limMi = munder!.children[0]!.querySelector('mi');
+    expect(limMi!.textContent).toBe('lim');
+    expect(limMi!.getAttribute('mathvariant')).toBe('normal');
+
+    // Limit expression: "n" — must stay italic (no mathvariant attribute set).
+    // SD-2538 regression: convertFunction used to recurse into the <munder>
+    // and force mathvariant="normal" on every <mi>, including this one.
+    const nMi = munder!.children[1]!.querySelector('mi');
+    expect(nMi!.textContent).toBe('n');
+    expect(nMi!.getAttribute('mathvariant')).toBeNull();
   });
 });
 
@@ -2565,8 +2917,17 @@ describe('m:limUpp converter', () => {
     const mover = result!.querySelector('mover');
     expect(mover).not.toBeNull();
     expect(mover!.children.length).toBe(2);
-    expect(mover!.children[0]!.textContent).toBe('lim');
-    expect(mover!.children[1]!.textContent).toBe('x');
+
+    // Base: "lim" — upright via m:sty=p. Limit variable "x" — italic default.
+    // Symmetric to the m:limLow-in-m:func case; pins the 'mover' entry of
+    // MATH_VARIANT_BOUNDARY_ELEMENTS.
+    const limMi = mover!.children[0]!.querySelector('mi');
+    expect(limMi!.textContent).toBe('lim');
+    expect(limMi!.getAttribute('mathvariant')).toBe('normal');
+
+    const xMi = mover!.children[1]!.querySelector('mi');
+    expect(xMi!.textContent).toBe('x');
+    expect(xMi!.getAttribute('mathvariant')).toBeNull();
   });
 });
 
@@ -3927,5 +4288,346 @@ describe('m:m converter', () => {
     const cells = mtable!.querySelectorAll('mtd');
     expect(cells.length).toBe(2);
     expect(mtable!.textContent).toBe('ab');
+  });
+});
+describe('m:box converter', () => {
+  it('converts m:box to <mrow>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:box',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mrow')).not.toBeNull();
+    expect(result!.textContent).toBe('x');
+  });
+
+  it('returns null for empty m:box', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:box', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('drops m:boxPr children (opEmu / noBreak / aln / diff are not yet mapped)', () => {
+    // Pins current scope: we render <mrow> and silently ignore boxPr semantics.
+    // When opEmu or noBreak grow real MathML mappings, this test should fail
+    // and be updated — that failure is the point.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:box',
+          elements: [
+            {
+              name: 'm:boxPr',
+              elements: [
+                { name: 'm:opEmu', attributes: { 'm:val': '1' } },
+                { name: 'm:noBreak', attributes: { 'm:val': '1' } },
+                { name: 'm:aln' },
+                { name: 'm:diff', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '==' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    expect(result!.querySelector('mrow')).not.toBeNull();
+    expect(result!.querySelector('menclose')).toBeNull();
+    expect(result!.textContent).toBe('==');
+  });
+});
+
+describe('m:borderBox converter', () => {
+  it('converts m:borderBox to <menclose notation="box"> by default', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'E' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('box');
+    expect(menclose!.textContent).toBe('E');
+  });
+
+  it('hides top and bottom sides (notation="left right")', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    // Exact string — production order is top/bottom/left/right, so a side-swap regression fails here.
+    expect(menclose!.getAttribute('notation')).toBe('left right');
+  });
+
+  it('adds strike notations', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).not.toBeNull();
+    expect(menclose!.getAttribute('notation')).toBe('horizontalstrike');
+  });
+
+  it('falls back to <mrow> when all borders hidden and no strikes', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+                { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+                { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'q' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const menclose = result!.querySelector('menclose');
+    expect(menclose).toBeNull();
+    expect(result!.textContent).toBe('q');
+  });
+
+  // ── ST_OnOff variants (ECMA-376 §22.9.2.7) ────────────────────────────────
+  // isOn accepts "1", "true", "on", and bare tags; rejects "0" / "false" / "off".
+  // Annex L.6.1.3 itself uses m:val="on" even though the normative enum is {0,1,true,false}.
+
+  const makeBorderBox = (hideTopFlag: Record<string, unknown>) => ({
+    name: 'm:oMath',
+    elements: [
+      {
+        name: 'm:borderBox',
+        elements: [
+          { name: 'm:borderBoxPr', elements: [{ name: 'm:hideTop', ...hideTopFlag }] },
+          {
+            name: 'm:e',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('treats m:val="true" as on (ST_OnOff)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'true' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats m:val="on" as on (Annex L.6.1.3 form)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'on' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats bare <m:hideTop/> as on (spec default val=1)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({}), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right');
+  });
+
+  it('treats m:val="0" as off (top remains visible)', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': '0' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('box');
+  });
+
+  it('treats m:val="false" as off', () => {
+    const result = convertOmmlToMathml(makeBorderBox({ attributes: { 'm:val': 'false' } }), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('box');
+  });
+
+  // ── Strike directions ─────────────────────────────────────────────────────
+  // BLTR (bottom-left → top-right = "/") maps to updiagonalstrike.
+  // TLBR (top-left → bottom-right = "\") maps to downdiagonalstrike.
+  // The directional naming is counter-intuitive — these tests pin it.
+
+  const makeStrike = (strikeName: string) => ({
+    name: 'm:oMath',
+    elements: [
+      {
+        name: 'm:borderBox',
+        elements: [
+          {
+            name: 'm:borderBoxPr',
+            elements: [
+              { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+              { name: 'm:hideBot', attributes: { 'm:val': '1' } },
+              { name: 'm:hideLeft', attributes: { 'm:val': '1' } },
+              { name: 'm:hideRight', attributes: { 'm:val': '1' } },
+              { name: strikeName, attributes: { 'm:val': '1' } },
+            ],
+          },
+          {
+            name: 'm:e',
+            elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('maps m:strikeBLTR to notation="updiagonalstrike" (/ direction)', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeBLTR'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('updiagonalstrike');
+  });
+
+  it('maps m:strikeTLBR to notation="downdiagonalstrike" (\\ direction)', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeTLBR'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('downdiagonalstrike');
+  });
+
+  it('maps m:strikeV to notation="verticalstrike"', () => {
+    const result = convertOmmlToMathml(makeStrike('m:strikeV'), doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('verticalstrike');
+  });
+
+  it('combines multiple strikes in a fixed order', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:strikeBLTR', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeTLBR', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeV', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe(
+      'box updiagonalstrike horizontalstrike downdiagonalstrike verticalstrike',
+    );
+  });
+
+  it('combines partial hide flags with a strike (hideTop + strikeH)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [
+            {
+              name: 'm:borderBoxPr',
+              elements: [
+                { name: 'm:hideTop', attributes: { 'm:val': '1' } },
+                { name: 'm:strikeH', attributes: { 'm:val': '1' } },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result!.querySelector('menclose')!.getAttribute('notation')).toBe('bottom left right horizontalstrike');
+  });
+
+  it('returns null when m:e is empty (no bordered-but-empty <menclose>)', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:borderBox',
+          elements: [{ name: 'm:borderBoxPr', elements: [{ name: 'm:strikeH', attributes: { 'm:val': '1' } }] }],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    // oMath still renders but has no children because borderBox dropped itself.
+    expect(result).toBeNull();
   });
 });

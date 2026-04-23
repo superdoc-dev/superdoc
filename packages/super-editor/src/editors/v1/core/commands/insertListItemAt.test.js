@@ -175,7 +175,7 @@ describe('insertListItemAt', () => {
       dispatch,
     });
 
-    expect(state.schema.text).toHaveBeenCalledWith('New item');
+    expect(state.schema.text).toHaveBeenCalledWith('New item', undefined);
   });
 
   it('does not inherit sdBlockId from the target node when omitted', () => {

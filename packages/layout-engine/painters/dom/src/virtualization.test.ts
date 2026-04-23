@@ -34,6 +34,8 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
         sourceLayout: layout,
+        blocks: currentBlocks,
+        measures: currentMeasures,
         headerBlocks: undefined,
         headerMeasures: undefined,
         footerBlocks: undefined,

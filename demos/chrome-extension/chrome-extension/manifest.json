@@ -30,13 +30,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/superdoc.umd.js", "content.js"]
+      "js": ["lib/superdoc.min.js", "content.js"]
     }
   ],
 
   "web_accessible_resources": [
     {
-      "resources": ["icons/logo.webp", "lib/style.css", "lib/superdoc.umd.js", "modal.html", "modal.css", "dist/docx-validator.bundle.js"],
+      "resources": ["icons/logo.webp", "lib/style.css", "lib/superdoc.min.js", "modal.html", "modal.css", "dist/docx-validator.bundle.js"],
       "matches": ["<all_urls>"]
     }
   ]

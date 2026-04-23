@@ -25,8 +25,11 @@ const layout = params.get('layout') !== '0';
 const showCaret = params.get('showCaret') === '1';
 const showSelection = params.get('showSelection') === '1';
 const toolbar = params.get('toolbar');
+const responsiveToContainer = params.get('responsiveToContainer') === '1';
 const comments = params.get('comments');
 const trackChanges = params.get('trackChanges') === '1';
+const replacementsParam = params.get('replacements');
+const replacements: 'paired' | 'independent' = replacementsParam === 'independent' ? 'independent' : 'paired';
 const allowSelectionInViewMode = params.get('allowSelectionInViewMode') === '1';
 const documentMode = params.get('documentMode') as 'editing' | 'viewing' | 'suggesting' | null;
 const contentOverride = params.get('contentOverride') ?? undefined;
@@ -92,6 +95,13 @@ function init(file?: File, content?: ContentOverrideInput) {
     config.toolbar = '#toolbar';
   }
 
+  if (responsiveToContainer) {
+    config.modules = {
+      ...(config.modules ?? {}),
+      toolbar: { responsiveToContainer: true },
+    };
+  }
+
   // Comments
   if (comments === 'on' || comments === 'panel') {
     config.comments = { visible: true };
@@ -103,9 +113,16 @@ function init(file?: File, content?: ContentOverrideInput) {
     config.modules = { ...(config.modules ?? {}), comments: false };
   }
 
-  // Track changes
-  if (trackChanges) {
-    config.trackChanges = { visible: true };
+  // Track changes — use the canonical modules.trackChanges surface so the
+  // harness can exercise the replacements enum end-to-end.
+  if (trackChanges || replacementsParam) {
+    config.modules = {
+      ...(config.modules ?? {}),
+      trackChanges: {
+        ...(trackChanges ? { visible: true } : {}),
+        replacements,
+      },
+    };
   }
 
   // Selection in viewing mode

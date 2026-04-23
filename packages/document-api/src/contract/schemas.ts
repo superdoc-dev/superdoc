@@ -2190,6 +2190,7 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
           kind: { enum: ['block', 'inline'] },
           controlType: { type: 'string' },
           target: contentControlTargetSchema,
+          at: selectionTargetSchema,
           tag: { type: 'string' },
           alias: { type: 'string' },
           lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },

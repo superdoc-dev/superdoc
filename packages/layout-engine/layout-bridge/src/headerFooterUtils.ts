@@ -343,6 +343,21 @@ export function getHeaderFooterTypeForSection(
   const hasEven = Boolean(ids.even);
   const hasOdd = Boolean(ids.odd);
   const hasDefault = Boolean(ids.default);
+  const legacyIds = kind === 'header' ? identifier.headerIds : identifier.footerIds;
+  let hasAny = hasFirst || hasEven || hasOdd || hasDefault;
+  if (!hasAny) {
+    for (let index = sectionIndex - 1; index >= 0; index -= 1) {
+      const inheritedIds =
+        kind === 'header' ? identifier.sectionHeaderIds.get(index) : identifier.sectionFooterIds.get(index);
+      if (inheritedIds?.first || inheritedIds?.even || inheritedIds?.odd || inheritedIds?.default) {
+        hasAny = true;
+        break;
+      }
+    }
+  }
+  if (!hasAny) {
+    hasAny = Boolean(legacyIds.first || legacyIds.even || legacyIds.odd || legacyIds.default);
+  }
 
   // Check titlePg for this specific section
   const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
@@ -357,17 +372,15 @@ export function getHeaderFooterTypeForSection(
     // has a 'first' header defined. Word inherits headers from previous sections when not defined,
     // so we let the rendering layer handle the inheritance/fallback logic.
     // Only return null if there's absolutely no header content anywhere.
-    if (hasFirst || hasDefault || hasEven || hasOdd) return 'first';
+    if (hasAny) return 'first';
     return null;
   }
 
   if (identifier.alternateHeaders) {
-    if (pageNumber % 2 === 0 && (hasEven || hasDefault)) {
-      return hasEven ? 'even' : 'default';
-    }
-    if (pageNumber % 2 === 1 && (hasOdd || hasDefault)) {
-      return hasOdd ? 'odd' : 'default';
-    }
+    // Keep parity-based variant selection even when this section doesn't
+    // explicitly define that variant. Resolution/inheritance happens later.
+    if (!hasAny) return null;
+    return pageNumber % 2 === 0 ? 'even' : 'odd';
   }
 
   if (hasDefault) {

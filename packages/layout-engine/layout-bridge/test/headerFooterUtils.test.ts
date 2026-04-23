@@ -628,5 +628,109 @@ describe('headerFooterUtils', () => {
       });
       expect(section1FirstPage).toBe('first');
     });
+
+    it('returns even/odd variants for alternate headers even when section defines only default', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { even: 'h0-even' },
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default' }, // no explicit even/odd in this section
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+
+      // Page 4 belongs to section 1 and is even: variant must stay 'even' so renderer
+      // can resolve inherited even ref rather than prematurely downgrading to default.
+      const evenPageType = getHeaderFooterTypeForSection(4, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 2,
+      });
+      expect(evenPageType).toBe('even');
+
+      const oddPageType = getHeaderFooterTypeForSection(5, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 3,
+      });
+      expect(oddPageType).toBe('odd');
+    });
+
+    it('keeps parity variant but does not infer default content id for missing alternate refs', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          footerRefs: { default: 'f0-default' },
+        },
+        {
+          sectionIndex: 1,
+          footerRefs: { odd: 'f1-odd' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          {
+            number: 2,
+            fragments: [],
+            sectionIndex: 1,
+            sectionRefs: { footerRefs: { odd: 'f1-odd' } },
+          },
+        ],
+        headerFooter: {
+          even: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const evenPageFooterId = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'footer' });
+      expect(evenPageFooterId?.type).toBe('even');
+      expect(evenPageFooterId?.contentId).toBeNull();
+    });
+
+    it('keeps inherited parity selection when the current section has no explicit refs', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { even: 'h0-even', odd: 'h0-odd' },
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: {},
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+
+      const evenPageType = getHeaderFooterTypeForSection(4, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 2,
+      });
+      expect(evenPageType).toBe('even');
+    });
+
+    it('returns null when a later section has no explicit default ref', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: {},
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const inheritedDefaultType = getHeaderFooterTypeForSection(2, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      expect(inheritedDefaultType).toBeNull();
+    });
   });
 });

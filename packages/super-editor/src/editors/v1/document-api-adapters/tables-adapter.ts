@@ -1620,7 +1620,10 @@ export function tablesDistributeColumnsAdapter(
     const tablePos = candidate.pos;
     const tableStart = tablePos + 1;
     const tableNode = candidate.node;
+    const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const map = TableMap.get(tableNode);
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const nextGridColumns = normalizedGrid?.columns.slice();
 
     const rangeStart = input.columnRange?.start ?? 0;
     const rangeEnd = input.columnRange?.end ?? map.width - 1;
@@ -1639,6 +1642,14 @@ export function tablesDistributeColumnsAdapter(
     }
 
     const evenWidth = Math.round(totalWidth / rangeWidth);
+    if (nextGridColumns) {
+      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
+      const maxColumn = Math.min(rangeEnd, nextGridColumns.length - 1);
+
+      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
+        nextGridColumns[col] = { col: evenWidthTwips };
+      }
+    }
 
     // Apply even width to all cells in the range.
     const processed = new Set<number>();
@@ -1665,26 +1676,26 @@ export function tablesDistributeColumnsAdapter(
           }
         }
 
-        tr.setNodeMarkup(tableStart + pos, null, { ...attrs, colwidth: newColwidth });
+        const nextAttrs: Record<string, unknown> = { ...attrs, colwidth: newColwidth };
+        if (row === 0) {
+          const nextCellProps = buildFirstRowCellWidthProps(attrs, cellStartCol, colspan, newColwidth, nextGridColumns);
+          if (nextCellProps) {
+            nextAttrs.tableCellProperties = nextCellProps;
+          } else {
+            delete nextAttrs.tableCellProperties;
+          }
+        }
+
+        tr.setNodeMarkup(tableStart + pos, null, nextAttrs);
       }
     }
 
     // Keep table grid in sync with distributed column widths so DOCX export
     // emits uniform <w:gridCol> values rather than stale grid widths.
-    const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
     const tableAttrUpdates: Record<string, unknown> = {};
 
-    if (normalizedGrid) {
-      const newColumns = normalizedGrid.columns.slice();
-      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
-      const maxColumn = Math.min(rangeEnd, newColumns.length - 1);
-
-      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
-        newColumns[col] = { col: evenWidthTwips };
-      }
-
-      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
+    if (normalizedGrid && nextGridColumns) {
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: nextGridColumns });
     }
 
     tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));

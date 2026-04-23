@@ -699,6 +699,38 @@ describe('tables-adapter regressions', () => {
     });
   });
 
+  it('syncs first-row tcW when distributing column widths', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const firstCell = firstRow.child(0) as ProseMirrorNode;
+    const secondCell = firstRow.child(1) as ProseMirrorNode;
+    (firstCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 7200, type: 'dxa' },
+    };
+    (secondCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 3600, type: 'dxa' },
+    };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 1 },
+    });
+
+    expect(result.success).toBe(true);
+    const firstCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 2)?.[2] as Record<string, unknown>;
+    const secondCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 11)?.[2] as Record<string, unknown>;
+    expect(firstCellUpdate.colwidth).toEqual([150]);
+    expect(firstCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2250, type: 'dxa' },
+    });
+    expect(secondCellUpdate.colwidth).toEqual([150]);
+    expect(secondCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2250, type: 'dxa' },
+    });
+  });
+
   it('only updates grid columns inside the requested range', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };

@@ -1056,6 +1056,45 @@ describe('CommentDialog.vue', () => {
     document.body.removeChild(trackedInsert);
   });
 
+  it('does not deselect when geometry finds a tracked-change element behind a pointer-events-none surface', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+
+    const viewportHost = document.createElement('div');
+    const page = document.createElement('div');
+    page.className = 'superdoc-page';
+    document.body.appendChild(page);
+
+    const trackedInsert = document.createElement('span');
+    trackedInsert.className = 'track-insert-dec';
+    trackedInsert.setAttribute('data-track-change-id', 'tracked-geometry-1');
+    trackedInsert.getBoundingClientRect = vi.fn(() => ({
+      top: 40,
+      left: 32,
+      right: 132,
+      bottom: 64,
+      width: 100,
+      height: 24,
+      x: 32,
+      y: 40,
+      toJSON: () => ({}),
+    }));
+    document.body.appendChild(trackedInsert);
+
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => page);
+
+    const handler = wrapper.element.__clickOutside;
+    handler({ target: viewportHost, clientX: 80, clientY: 52 });
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
+
+    document.elementFromPoint = originalElementFromPoint;
+    document.body.removeChild(trackedInsert);
+    document.body.removeChild(page);
+  });
+
   it('deselects when elementFromPoint returns a non-ignored element', async () => {
     const { wrapper, baseComment } = await mountDialog();
     commentsStoreStub.activeComment.value = baseComment.commentId;

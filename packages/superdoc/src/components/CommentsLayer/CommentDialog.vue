@@ -64,6 +64,27 @@ const {
 const isInternal = ref(true);
 const commentInput = ref(null);
 const editCommentInputs = ref(new Map());
+const CLICK_OUTSIDE_HIT_TOLERANCE_PX = 3;
+const CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS = [
+  [0, 0],
+  [-CLICK_OUTSIDE_HIT_TOLERANCE_PX, 0],
+  [CLICK_OUTSIDE_HIT_TOLERANCE_PX, 0],
+  [0, -CLICK_OUTSIDE_HIT_TOLERANCE_PX],
+  [0, CLICK_OUTSIDE_HIT_TOLERANCE_PX],
+];
+const CLICK_OUTSIDE_IGNORED_SELECTORS = [
+  '.comments-dropdown__option-label',
+  '.superdoc-comment-highlight',
+  '.sd-editor-comment-highlight',
+  '.sd-editor-tracked-change-highlight',
+  '[data-track-change-id]',
+  '.track-insert',
+  '.track-insert-dec',
+  '.track-delete',
+  '.track-delete-dec',
+  '.track-format',
+  '.track-format-dec',
+].join(',');
 
 const setEditCommentInputRef = (commentId) => (el) => {
   if (!commentId) return;
@@ -77,6 +98,39 @@ const setEditCommentInputRef = (commentId) => (el) => {
   } else {
     editCommentInputs.value.delete(commentId);
   }
+};
+
+const elementContainsClickPoint = (element, clientX, clientY) => {
+  const rect = element?.getBoundingClientRect?.();
+  if (
+    !rect ||
+    ![rect.left, rect.top, rect.right, rect.bottom].every(Number.isFinite) ||
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    return false;
+  }
+
+  return CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS.some(([offsetX, offsetY]) => {
+    const sampleX = clientX + offsetX;
+    const sampleY = clientY + offsetY;
+    return sampleX >= rect.left && sampleX <= rect.right && sampleY >= rect.top && sampleY <= rect.bottom;
+  });
+};
+
+const findIgnoredElementByGeometry = (clientX, clientY) => {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  const ignoredElements = document.querySelectorAll(CLICK_OUTSIDE_IGNORED_SELECTORS);
+  for (const element of ignoredElements) {
+    if (element instanceof HTMLElement && elementContainsClickPoint(element, clientX, clientY)) {
+      return element;
+    }
+  }
+
+  return null;
 };
 
 const focusEditInput = (commentId) => {
@@ -475,20 +529,10 @@ const handleClickOutside = (e) => {
   // (used by the presentation editor) can redirect e.target away from the
   // originally clicked element, causing the selector check to miss it.
   const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
-  const ignoredSelectors = [
-    '.comments-dropdown__option-label',
-    '.superdoc-comment-highlight',
-    '.sd-editor-comment-highlight',
-    '.sd-editor-tracked-change-highlight',
-    '.track-insert',
-    '.track-insert-dec',
-    '.track-delete',
-    '.track-delete-dec',
-    '.track-format',
-    '.track-format-dec',
-  ].join(',');
   const clickedIgnoredTarget =
-    targetElement?.closest?.(ignoredSelectors) || elementAtPoint?.closest?.(ignoredSelectors);
+    targetElement?.closest?.(CLICK_OUTSIDE_IGNORED_SELECTORS) ||
+    elementAtPoint?.closest?.(CLICK_OUTSIDE_IGNORED_SELECTORS) ||
+    findIgnoredElementByGeometry(e.clientX, e.clientY);
 
   if (clickedIgnoredTarget || isCommentHighlighted.value) return;
 

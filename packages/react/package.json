@@ -21,6 +21,7 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
+    "pretype-check": "node ../../apps/cli/scripts/ensure-superdoc-build.js --types",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx",
     "prepublishOnly": "pnpm run build"

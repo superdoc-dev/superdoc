@@ -66,19 +66,27 @@ const props = defineProps({
 
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
-const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry, clearInstantSidebarAlignment } =
-  commentsStore;
+const { clearInstantSidebarAlignment } = commentsStore;
 
 const {
-  getFloatingComments,
   activeComment,
+  activeFloatingCommentInstanceId,
   editorCommentPositions,
   pendingComment,
   editingCommentId,
   instantSidebarAlignmentTargetY,
   instantSidebarAlignmentThreadId,
+  instantSidebarAlignmentInstanceId,
 } = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
+
+// Access the Pinia getter directly instead of storeToRefs(). In this component
+// the getter-backed ref can lag behind the live store array during rapid
+// tracked-change updates, which collapses the virtualized sidebar to a stale subset.
+const floatingCommentInstances = computed(() => {
+  const currentFloatingCommentInstances = commentsStore.getFloatingCommentInstances;
+  return Array.isArray(currentFloatingCommentInstances) ? currentFloatingCommentInstances : [];
+});
 
 const floatingCommentsContainer = ref(null);
 const commentsRenderKey = ref(0);
@@ -92,21 +100,52 @@ const isPendingThread = (commentOrId) => {
   return commentOrId === pendingId || commentOrId === 'pending';
 };
 
-// Resolve activeComment (which stores commentId) to the position key used by allPositions
-// (which prefers importedId). Without this, imported Word comments where importedId !== commentId
-// would fail the template guard and could unmount when scrolled out of the observer viewport.
-const resolveLayoutKey = (commentOrId, preferredId) => {
-  if (preferredId === 'pending' || isPendingThread(preferredId) || isPendingThread(commentOrId)) {
-    return 'pending';
-  }
-  const { key } = resolveCommentPositionEntry(commentOrId, preferredId);
-  if (key) return key;
-  return getCommentAliasIds(commentOrId)[0] ?? getCommentPositionKey(commentOrId);
+const getThreadId = (comment) => {
+  return comment?.commentId ?? comment?.importedId ?? null;
 };
 
-const activeCommentKey = computed(() => {
+const findPrimaryInstanceIdForThread = (threadId) => {
+  if (threadId == null) {
+    return null;
+  }
+
+  const normalizedThreadId = String(threadId);
+  const matchingInstances = floatingCommentInstances.value.filter(
+    (instance) => String(getThreadId(instance.comment)) === normalizedThreadId,
+  );
+  if (!matchingInstances.length) {
+    return null;
+  }
+
+  return matchingInstances.find((instance) => instance.isPrimary)?.id ?? matchingInstances[0]?.id ?? null;
+};
+
+const resolveFloatingInstanceId = (threadId, preferredInstanceId = null) => {
+  if (threadId == null) {
+    return null;
+  }
+
+  const normalizedThreadId = String(threadId);
+  const matchingInstances = floatingCommentInstances.value.filter(
+    (instance) => String(getThreadId(instance.comment)) === normalizedThreadId,
+  );
+  if (!matchingInstances.length) {
+    return null;
+  }
+
+  if (preferredInstanceId != null) {
+    const preferredInstance = matchingInstances.find((instance) => String(instance.id) === String(preferredInstanceId));
+    if (preferredInstance) {
+      return preferredInstance.id;
+    }
+  }
+
+  return matchingInstances.find((instance) => instance.isPrimary)?.id ?? matchingInstances[0]?.id ?? null;
+};
+
+const activeCommentInstanceId = computed(() => {
   if (!activeComment.value) return null;
-  return resolveLayoutKey(activeComment.value);
+  return resolveFloatingInstanceId(activeComment.value, activeFloatingCommentInstanceId.value);
 });
 
 // Heights: measured (actual) or estimated. Seeded from module-level cache to
@@ -123,16 +162,14 @@ let observer = null;
 // Track which DOM elements are currently being observed (avoids disconnect/re-observe cycle)
 const observedElements = new Set();
 
-// Compute anchor position for a comment from editor position data
-const getAnchorTop = (comment) => {
-  const { entry: positionEntry } = resolveCommentPositionEntry(comment);
-
+// Compute anchor position for a floating comment instance.
+const getAnchorTop = (instance) => {
   if (props.currentDocument.type === 'application/pdf') {
     const zoom = (activeZoom.value ?? 100) / 100;
-    return Number(comment.selection?.selectionBounds?.top) * zoom;
+    return Number(instance?.comment?.selection?.selectionBounds?.top) * zoom;
   }
 
-  return positionEntry?.bounds?.top;
+  return instance?.positionEntry?.bounds?.top;
 };
 
 // Compute anchor position for the pending (new) comment.
@@ -149,24 +186,36 @@ const getPendingAnchorTop = () => {
   return isNaN(top) ? null : top * zoom;
 };
 
+const instantAlignmentInstanceKey = computed(() => {
+  if (!instantSidebarAlignmentThreadId.value) {
+    return null;
+  }
+
+  return resolveFloatingInstanceId(instantSidebarAlignmentThreadId.value, instantSidebarAlignmentInstanceId.value);
+});
+
 // Pre-compute all positions with collision avoidance
 const allPositions = computed(() => {
-  const comments = getFloatingComments.value;
+  const instances = floatingCommentInstances.value;
   const hasPending = pendingComment.value && pendingComment.value.fileId === props.currentDocument.id;
-  if (!comments.length && !hasPending) return [];
+  if (!instances.length && !hasPending) return [];
 
   const positions = [];
-  for (const comment of comments) {
-    const key = resolveLayoutKey(comment);
-    const top = getAnchorTop(comment);
-    if (!key || typeof top !== 'number' || isNaN(top)) continue;
+  for (const instance of instances) {
+    const key = instance?.id;
+    const top = getAnchorTop(instance);
+    const threadId = getThreadId(instance?.comment);
+    if (!key || !threadId || typeof top !== 'number' || isNaN(top)) continue;
 
     positions.push({
       id: key,
+      threadId,
+      pageIndex: instance?.pageIndex ?? null,
       anchorTop: top,
       top,
       height: measuredHeights.value[key] || ESTIMATED_HEIGHT,
-      commentRef: comment,
+      commentRef: instance.comment,
+      instanceRef: instance,
     });
   }
 
@@ -187,7 +236,7 @@ const allPositions = computed(() => {
   positions.sort((a, b) => a.anchorTop - b.anchorTop);
 
   // Pending comment is always treated as active for collision avoidance
-  const activeKey = hasPending ? 'pending' : activeCommentKey.value;
+  const activeKey = hasPending ? 'pending' : activeCommentInstanceId.value;
   const activeIndex = activeKey ? positions.findIndex((p) => p.id === activeKey) : -1;
   resolveCollisions(positions, activeIndex, 15);
 
@@ -273,20 +322,19 @@ const storeHeight = (key, height) => {
 // When a CommentDialog mounts and reports its size, record the measured height.
 const handleDialog = (dialog) => {
   if (!dialog) return;
-  const { elementRef, commentId: rawId } = dialog;
+  const { elementRef, commentId: instanceId } = dialog;
   if (!elementRef) return;
 
   nextTick(() => {
     const bounds = elementRef.value?.getBoundingClientRect();
     if (!bounds || bounds.height <= 0) return;
-    const key = resolveLayoutKey(rawId, rawId);
-    if (key) storeHeight(key, bounds.height);
+    if (instanceId) storeHeight(instanceId, bounds.height);
   });
 };
 
 // Re-measure a specific comment dialog when it signals a resize (e.g. text truncation toggle)
-const handleResize = (comment) => {
-  const key = resolveLayoutKey(comment);
+const handleResize = (position) => {
+  const key = position?.id;
   if (!key) return;
   nextTick(() => {
     const el = placeholderRefs.value[key];
@@ -295,10 +343,14 @@ const handleResize = (comment) => {
     if (!dialog) return;
     storeHeight(key, dialog.getBoundingClientRect().height);
 
-    const isActiveThread = key === activeCommentKey.value;
+    const isActiveInstance = key === activeCommentInstanceId.value;
     const isPending = key === 'pending';
-    const isEditingThread = !!editingCommentId.value && editingCommentId.value === comment?.commentId;
-    if (!isActiveThread && !isPending && !isEditingThread) return;
+    const isEditingThread =
+      !!editingCommentId.value &&
+      !!activeComment.value &&
+      position?.threadId != null &&
+      String(position.threadId) === String(activeComment.value);
+    if (!isActiveInstance && !isPending && !isEditingThread) return;
 
     // Reflow nearby cards after size changes of the active/pending/editing thread.
     // Avoid force-snapping to anchor here because it can over-shift the whole lane
@@ -349,14 +401,6 @@ const setPlaceholderRef = (id, el) => {
 // Timer IDs for cancellation on rapid active-comment switching
 let remeasureTimers = [];
 let scrollTimer = null;
-
-const instantAlignmentKey = computed(() => {
-  if (!instantSidebarAlignmentThreadId.value) {
-    return null;
-  }
-
-  return resolveLayoutKey(instantSidebarAlignmentThreadId.value, instantSidebarAlignmentThreadId.value);
-});
 
 const clearDeferredRemeasureTimers = () => {
   remeasureTimers.forEach(clearTimeout);
@@ -413,11 +457,11 @@ const applyInstantSidebarAlignment = (key, targetY) => {
 
 // Re-measure when active comment changes. The active dialog expands (reply input, thread)
 // and the previously active one collapses — both change height.
-watch(activeCommentKey, (newKey, oldKey) => {
+watch(activeCommentInstanceId, (newKey, oldKey) => {
   clearDeferredRemeasureTimers();
   const keysToRemeasure = [newKey, oldKey];
   const hasPendingInstantAlignment =
-    newKey && newKey === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
+    newKey && newKey === instantAlignmentInstanceKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
 
   nextTick(() => {
     if (hasPendingInstantAlignment) {
@@ -429,10 +473,13 @@ watch(activeCommentKey, (newKey, oldKey) => {
   });
 });
 
-watch([activeCommentKey, instantAlignmentKey, instantSidebarAlignmentTargetY], ([activeKey, requestKey, targetY]) => {
-  if (!activeKey || !requestKey || activeKey !== requestKey || !Number.isFinite(targetY)) return;
-  applyInstantSidebarAlignment(activeKey, targetY);
-});
+watch(
+  [activeCommentInstanceId, instantAlignmentInstanceKey, instantSidebarAlignmentTargetY],
+  ([activeKey, requestKey, targetY]) => {
+    if (!activeKey || !requestKey || activeKey !== requestKey || !Number.isFinite(targetY)) return;
+    applyInstantSidebarAlignment(activeKey, targetY);
+  },
+);
 
 // Re-measure when editing state changes. Entering/exiting edit mode changes
 // the dialog height (CommentInput + action buttons vs static text).
@@ -461,9 +508,10 @@ watch(activeComment, () => {
     ? pendingComment.value
     : commentsStore.getComment(activeComment.value);
   if (!comment) return;
-  const key = resolveLayoutKey(comment);
+  const key = isPendingThread(activeComment.value) ? 'pending' : activeCommentInstanceId.value;
   if (!key) return;
-  const instantAlignment = key === instantAlignmentKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
+  const instantAlignment =
+    key === instantAlignmentInstanceKey.value && Number.isFinite(instantSidebarAlignmentTargetY.value);
   if (instantAlignment) {
     setInstantLayoutTransitionsDisabled(true);
     return;
@@ -476,7 +524,8 @@ watch(activeComment, () => {
       const parentRect = props.parent?.getBoundingClientRect?.();
       if (!parentRect) return;
 
-      const anchorTop = key === 'pending' ? getPendingAnchorTop() : getAnchorTop(comment);
+      const activePosition = allPositions.value.find((position) => position.id === key);
+      const anchorTop = key === 'pending' ? getPendingAnchorTop() : activePosition?.anchorTop;
       if (typeof anchorTop !== 'number' || isNaN(anchorTop)) return;
 
       const currentTop = el.getBoundingClientRect().top;
@@ -617,6 +666,10 @@ onBeforeUnmount(() => {
         :key="pos.id"
         :ref="(el) => setPlaceholderRef(pos.id, el)"
         :data-comment-id="pos.id"
+        :data-comment-instance-id="pos.id"
+        :data-comment-thread-id="pos.threadId"
+        :data-comment-position-key="pos.instanceRef?.positionKey ?? ''"
+        :data-comment-page-index="pos.pageIndex ?? ''"
         :style="{
           top: pos.top + 'px',
           height: pos.height + 'px',
@@ -626,13 +679,17 @@ onBeforeUnmount(() => {
       >
         <!-- Only mount the heavy CommentDialog when near the viewport -->
         <CommentDialog
-          v-if="visibleIds.has(pos.id) || pos.id === activeCommentKey || pos.id === 'pending'"
+          v-if="visibleIds.has(pos.id) || pos.id === activeCommentInstanceId || pos.id === 'pending'"
           :key="pos.id + commentsRenderKey"
           @ready="handleDialog"
-          @resize="handleResize(pos.commentRef)"
+          @resize="handleResize(pos)"
           class="floating-comment"
           :parent="parent"
           :comment="pos.commentRef"
+          :floating-instance-id="pos.id"
+          :floating-page-index="pos.pageIndex"
+          :floating-position-entry="pos.instanceRef?.positionEntry ?? null"
+          :is-floating-instance-active="pos.id === activeCommentInstanceId"
         />
       </div>
     </div>

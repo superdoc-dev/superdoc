@@ -11,6 +11,12 @@
  * - Toggle visibility between static decoration content and live editors
  * - Manage dimming overlay for body content during editing
  * - Control selection overlay visibility to prevent double caret rendering
+ *
+ * @deprecated (legacy)
+ * This visible child-PM overlay predates the story-session/hidden-host
+ * editing model. PresentationEditor no longer routes header/footer editing
+ * through this overlay, and it remains only as retired legacy scaffolding
+ * until the surrounding dead code is deleted.
  */
 
 import type { HeaderFooterRegion } from './types.js';
@@ -184,6 +190,9 @@ export class EditorOverlayManager {
           // Find the editor container (first child with super-editor class)
           const editorContainer = editorHost.querySelector('.super-editor');
           if (editorContainer instanceof HTMLElement) {
+            // Reset any stale transform from prior footer sessions before
+            // reapplying the top offset for the current region.
+            editorContainer.style.transform = '';
             // Instead of top: 0, position from the calculated offset
             editorContainer.style.top = `${contentOffset}px`;
           }

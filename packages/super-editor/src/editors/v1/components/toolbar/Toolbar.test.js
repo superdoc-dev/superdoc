@@ -17,9 +17,11 @@ function createMockToolbar() {
     config: {
       toolbarGroups: ['left', 'center', 'right'],
       toolbarButtonsExclude: [],
+      responsiveToContainer: false,
     },
     getToolbarItemByGroup: () => [],
     getToolbarItemByName: () => null,
+    getAvailableWidth: () => 1200,
     onToolbarResize: vi.fn(),
     emitCommand: vi.fn(),
     overflowItems: [],
@@ -30,6 +32,7 @@ function createMockToolbar() {
 describe('Toolbar', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('removes resize and keydown listeners on unmount (not only on KeepAlive deactivate)', () => {
@@ -110,5 +113,94 @@ describe('Toolbar', () => {
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
+  });
+
+  it('does not restore selection when active editor is header/footer', async () => {
+    const restoreSelection = vi.fn();
+    const mockToolbar = createMockToolbar();
+    mockToolbar.activeEditor = {
+      options: { isHeaderOrFooter: true },
+      commands: { restoreSelection },
+    };
+
+    const ButtonGroupStub = defineComponent({
+      emits: ['item-clicked'],
+      template: '<button data-test="emit-item-clicked" @click="$emit(\'item-clicked\')">emit</button>',
+    });
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: ButtonGroupStub },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    await wrapper.find('[data-test="emit-item-clicked"]').trigger('click');
+    expect(restoreSelection).not.toHaveBeenCalled();
+  });
+
+  it('does not attach ResizeObserver when responsiveToContainer is disabled', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const mockToolbar = {
+      ...createMockToolbar(),
+      toolbarContainer: document.createElement('div'),
+    };
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: true },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    expect(ResizeObserverMock).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('attaches ResizeObserver to the container when responsiveToContainer is enabled', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const container = document.createElement('div');
+    const mockToolbar = {
+      ...createMockToolbar(),
+      config: { ...createMockToolbar().config, responsiveToContainer: true },
+      toolbarContainer: container,
+    };
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: true },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    expect(ResizeObserverMock).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledWith(container);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });

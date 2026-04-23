@@ -197,19 +197,110 @@
           },
           "document": {
             "type": "object",
-            "description": "PDF or DOCX input provided as either base64 or URL"
+            "description": "PDF or DOCX input. Provide exactly one of `base64` or `url`.",
+            "oneOf": [
+              {
+                "type": "object",
+                "title": "base64",
+                "required": ["base64"],
+                "properties": {
+                  "base64": {
+                    "type": "string",
+                    "format": "byte",
+                    "minLength": 100,
+                    "description": "Base64-encoded PDF or DOCX file"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "title": "url",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL to fetch the document from"
+                  }
+                }
+              }
+            ]
           },
           "signer": {
             "type": "object",
-            "description": "Signer details (name, email, etc.)"
+            "description": "Details of the person applying the signature. `email` and `name` are required; `ip` and `userAgent` are optional and recorded in the audit trail / certificate page when provided. No other fields are accepted — use `metadata` for application-specific context.",
+            "required": ["email", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "maxLength": 255,
+                "description": "Signer's email address",
+                "example": "jane@example.com"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 255,
+                "description": "Signer's full name as it should appear on the signature",
+                "example": "Jane Smith"
+              },
+              "ip": {
+                "type": "string",
+                "format": "ipv4",
+                "description": "IPv4 address the signer submitted from. Included in the audit trail certificate for compliance.",
+                "example": "203.0.113.42"
+              },
+              "userAgent": {
+                "type": "string",
+                "description": "Browser user agent string the signer submitted from. Included in the audit trail certificate for compliance.",
+                "example": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+              }
+            }
           },
           "auditTrail": {
             "type": "array",
-            "description": "Array of signing events and user interactions"
+            "description": "Complete event trail of user interactions. Must include at least one `submit` event for e-signature compliance.",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type", "timestamp"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["ready", "scroll", "field_change", "submit"],
+                  "description": "Event kind"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "ISO-8601 timestamp for the event"
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Event-specific payload emitted by the e-sign SDK. Shape depends on `type`:\n- `scroll` - `{ percent: number }`\n- `field_change` - `{ fieldId: string, value: string | boolean | number | null, previousValue?: string | boolean | number | null }`\n- `ready`, `submit` - typically omitted"
+                }
+              }
+            }
           },
           "metadata": {
             "type": "object",
-            "description": "Optional metadata (IP, user agent, custom fields)"
+            "additionalProperties": true,
+            "description": "Optional application-specific metadata. Free-form object for any context you want to attach to the signing event (e.g. tenantId, contractId, custom audit fields)."
+          },
+          "certificate": {
+            "type": "object",
+            "description": "Configuration for the audit trail certificate page that is appended to the signed PDF.",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to append an audit trail certificate page to the signed document"
+              }
+            }
           }
         }
       },
@@ -792,7 +883,7 @@
       "post": {
         "summary": "Sign",
         "tags": ["Signature"],
-        "description": "Sign a PDF or DOCX document with a cryptographic signature.\n\nSend a JSON request body with:\n- `document`: object containing either `base64` or `url`\n- `signer`: object with signer details (name, email, etc.)\n- `auditTrail`: array of signing events\n- `eventId`: optional unique identifier\n- `metadata`: optional metadata (IP, user agent, custom fields)\n\nThe response returns the signed PDF as base64.",
+        "description": "Sign a PDF or DOCX document with a cryptographic signature.\n\nSend a JSON request body with:\n- `document` (required): object containing either `base64` or `url`\n- `signer` (required): signer details — `email` and `name` are required; `ip` and `userAgent` are optional and, when provided, are recorded in the audit trail certificate. No other signer fields are accepted; use `metadata` for anything application-specific.\n- `auditTrail` (required): array of signing events. Must include at least one `submit` event for e-signature compliance.\n- `eventId` (optional): unique identifier for the signing event\n- `metadata` (optional): free-form object for application-specific context (tenantId, contractId, etc.)\n- `certificate` (optional): `{ enabled: boolean }` — controls whether an audit trail certificate page is appended (default: `true`)\n\nThe response returns the signed PDF as base64.",
         "requestBody": {
           "content": {
             "application/json": {

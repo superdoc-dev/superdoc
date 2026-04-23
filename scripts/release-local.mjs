@@ -30,25 +30,26 @@ function getCurrentBranch() {
 }
 
 /**
- * Allowlist of every tag prefix used across the monorepo.
+ * Allowlist of every release tag pattern used across the monorepo.
  * Used by pruneLocalOnlyReleaseTags to avoid leaking local-only
  * tags from any package namespace, including the current one, into
  * semantic-release's version detection.
  *
  * MAINTENANCE: when adding a new releasable package with its own
- * tagFormat in .releaserc.*, add its prefix here too. You can find
+ * tagFormat in .releaserc.*, add its pattern here too. You can find
  * all current tagFormat values with:
  *   grep -r 'tagFormat' --include='*.cjs' --include='*.js' --include='*.mjs' .
  */
-const ALL_TAG_PREFIXES = [
-  'v',                   // superdoc  (packages/superdoc/.releaserc.cjs)
-  'cli-v',              // CLI       (apps/cli/.releaserc.cjs)
-  'sdk-v',              // SDK
-  'react-v',            // React
-  'vscode-v',           // VS Code
-  'mcp-v',              // MCP
-  'esign-v',            // esign
-  'template-builder-v', // template-builder
+const ALL_TAG_PATTERNS = [
+  'v[0-9]*', // superdoc  (packages/superdoc/.releaserc.cjs)
+  'cli-v*', // CLI       (apps/cli/.releaserc.cjs)
+  'create-v*', // Create
+  'sdk-v*', // SDK
+  'react-v*', // React
+  'vscode-v*', // VS Code
+  'mcp-v*', // MCP
+  'esign-v*', // esign
+  'template-builder-v*', // template-builder
 ];
 
 export function run(command, args, options = {}) {
@@ -63,7 +64,12 @@ export function run(command, args, options = {}) {
 
 export function listTags(pattern) {
   const output = run('git', ['tag', '--list', pattern], { capture: true }).trim();
-  return output ? output.split('\n').map((tag) => tag.trim()).filter(Boolean) : [];
+  return output
+    ? output
+        .split('\n')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    : [];
 }
 
 export function getRemoteTags() {
@@ -91,8 +97,8 @@ export function pruneLocalOnlyReleaseTags() {
   const pruned = [];
   const remoteTags = getRemoteTags();
 
-  for (const prefix of ALL_TAG_PREFIXES) {
-    const tags = listTags(`${prefix}*`);
+  for (const pattern of ALL_TAG_PATTERNS) {
+    const tags = listTags(pattern);
     for (const tag of tags) {
       if (remoteTags.has(tag)) continue;
       run('git', ['tag', '-d', tag]);
@@ -101,9 +107,7 @@ export function pruneLocalOnlyReleaseTags() {
   }
 
   if (pruned.length > 0) {
-    console.log(
-      `Pruned ${pruned.length} local-only foreign tags before release: ${pruned.join(', ')}`,
-    );
+    console.log(`Pruned ${pruned.length} local-only foreign tags before release: ${pruned.join(', ')}`);
   }
 }
 

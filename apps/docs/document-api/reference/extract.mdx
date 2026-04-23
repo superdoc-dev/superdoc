@@ -1,0 +1,276 @@
+---
+title: extract
+sidebarTitle: extract
+description: Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().
+
+- Operation ID: `extract`
+- API member path: `editor.doc.extract(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `blocks` | object[] | yes |  |
+| `comments` | object[] | yes |  |
+| `revision` | string | yes |  |
+| `trackedChanges` | object[] | yes |  |
+
+### Example response
+
+```json
+{
+  "blocks": [
+    {
+      "headingLevel": 1,
+      "nodeId": "node-def456",
+      "tableContext": {
+        "colspan": 1,
+        "columnIndex": 1,
+        "parentRowIndex": 1,
+        "parentTableOrdinal": 1,
+        "rowIndex": 1,
+        "rowspan": 1,
+        "tableOrdinal": 1
+      },
+      "text": "Hello, world.",
+      "type": "example"
+    }
+  ],
+  "comments": [
+    {
+      "anchoredText": "example",
+      "entityId": "entity-789",
+      "status": "open",
+      "text": "Hello, world."
+    }
+  ],
+  "revision": "example",
+  "trackedChanges": [
+    {
+      "author": "Jane Doe",
+      "entityId": "entity-789",
+      "excerpt": "Sample excerpt...",
+      "type": "insert"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "blocks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "headingLevel": {
+            "description": "Heading level (1–6). Only present for headings.",
+            "type": "integer"
+          },
+          "nodeId": {
+            "description": "Stable block ID — pass to scrollToElement() for navigation.",
+            "type": "string"
+          },
+          "tableContext": {
+            "additionalProperties": false,
+            "properties": {
+              "colspan": {
+                "description": "Number of columns the cell spans.",
+                "type": "integer"
+              },
+              "columnIndex": {
+                "description": "0-based logical grid column, not the row child order.",
+                "type": "integer"
+              },
+              "parentColumnIndex": {
+                "description": "Column index in the parent table. Set with parentTableOrdinal.",
+                "type": "integer"
+              },
+              "parentRowIndex": {
+                "description": "Row index in the parent table. Set with parentTableOrdinal.",
+                "type": "integer"
+              },
+              "parentTableOrdinal": {
+                "description": "Ordinal of the parent table when the containing table is nested.",
+                "type": "integer"
+              },
+              "rowIndex": {
+                "description": "0-based row index of the containing cell.",
+                "type": "integer"
+              },
+              "rowspan": {
+                "description": "Number of rows the cell spans.",
+                "type": "integer"
+              },
+              "tableOrdinal": {
+                "description": "0-based table ordinal, unique within one extract() result.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "tableOrdinal",
+              "rowIndex",
+              "columnIndex",
+              "rowspan",
+              "colspan"
+            ],
+            "type": "object"
+          },
+          "text": {
+            "description": "Full plain text content of the block.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Block type: paragraph, heading, listItem, image, tableOfContents.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "comments": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "anchoredText": {
+            "description": "The document text the comment is anchored to.",
+            "type": "string"
+          },
+          "author": {
+            "description": "Comment author name.",
+            "type": "string"
+          },
+          "blockId": {
+            "description": "Block ID the comment is anchored to.",
+            "type": "string"
+          },
+          "entityId": {
+            "description": "Comment entity ID — pass to scrollToElement() for navigation.",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "description": "Comment body text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entityId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "revision": {
+      "description": "Document revision at the time of extraction.",
+      "type": "string"
+    },
+    "trackedChanges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "description": "Change author name.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Change date (ISO string).",
+            "type": "string"
+          },
+          "entityId": {
+            "description": "Tracked change entity ID — pass to scrollToElement() for navigation.",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "Short text excerpt of the changed content.",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "insert",
+              "delete",
+              "format"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "entityId",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "blocks",
+    "comments",
+    "trackedChanges",
+    "revision"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

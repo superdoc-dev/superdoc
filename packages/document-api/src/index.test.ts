@@ -795,6 +795,7 @@ describe('createDocumentApi', () => {
 
   it('delegates trackChanges read operations', () => {
     const trackAdpt = makeTrackChangesAdapter();
+    const footnoteStory = { kind: 'story', storyType: 'footnote', noteId: '5' } as const;
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -811,15 +812,20 @@ describe('createDocumentApi', () => {
 
     const listResult = api.trackChanges.list({ limit: 1 });
     const getResult = api.trackChanges.get({ id: 'tc-1' });
+    api.trackChanges.list({ in: footnoteStory, type: 'insert' });
+    api.trackChanges.get({ id: 'tc-2', story: footnoteStory });
 
     expect(listResult.total).toBe(0);
     expect(getResult.id).toBe('tc-1');
     expect(trackAdpt.list).toHaveBeenCalledWith({ limit: 1 });
     expect(trackAdpt.get).toHaveBeenCalledWith({ id: 'tc-1' });
+    expect(trackAdpt.list).toHaveBeenCalledWith({ in: footnoteStory, type: 'insert' });
+    expect(trackAdpt.get).toHaveBeenCalledWith({ id: 'tc-2', story: footnoteStory });
   });
 
   it('delegates trackChanges.decide to trackChanges adapter methods', () => {
     const trackAdpt = makeTrackChangesAdapter();
+    const footnoteStory = { kind: 'story', storyType: 'footnote', noteId: '5' } as const;
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -836,6 +842,7 @@ describe('createDocumentApi', () => {
 
     const acceptResult = api.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } });
     const rejectResult = api.trackChanges.decide({ decision: 'reject', target: { id: 'tc-1' } });
+    api.trackChanges.decide({ decision: 'accept', target: { id: 'tc-2', story: footnoteStory } });
     const acceptAllResult = api.trackChanges.decide({ decision: 'accept', target: { scope: 'all' } });
     const rejectAllResult = api.trackChanges.decide({ decision: 'reject', target: { scope: 'all' } });
 
@@ -845,6 +852,7 @@ describe('createDocumentApi', () => {
     expect(rejectAllResult.success).toBe(true);
     expect(trackAdpt.accept).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
+    expect(trackAdpt.accept).toHaveBeenCalledWith({ id: 'tc-2', story: footnoteStory }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
   });

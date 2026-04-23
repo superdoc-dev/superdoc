@@ -43,9 +43,6 @@ describe('ensureEditorNativeSelectionStyles', () => {
     expect(css).toContain('.superdoc-layout *::selection');
     expect(css).toContain('.superdoc-layout *::-moz-selection');
     expect(css).toContain('background: transparent');
-    expect(css).toContain('.superdoc-layout .superdoc-header-editor-host *::selection');
-    expect(css).toContain('.superdoc-layout .superdoc-footer-editor-host *::selection');
-    expect(css).toContain('color: HighlightText');
   });
 });
 

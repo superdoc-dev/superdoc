@@ -20,6 +20,21 @@ let measurementCtx: CanvasRenderingContext2D | null = null;
 
 const TAB_CHAR_LENGTH = 1;
 
+const getRunCharacterLength = (run: Run | undefined): number => {
+  if (!run) return 0;
+  if (isTabRun(run)) return TAB_CHAR_LENGTH;
+  if (
+    'src' in run ||
+    run.kind === 'lineBreak' ||
+    run.kind === 'break' ||
+    run.kind === 'fieldAnnotation' ||
+    run.kind === 'math'
+  ) {
+    return 0;
+  }
+  return run.text?.length ?? 0;
+};
+
 /**
  * Characters considered as spaces for justify alignment calculations.
  * Only includes regular space (U+0020) and non-breaking space (U+00A0).
@@ -224,7 +239,8 @@ const getJustifyAdjustment = (
   // This ensures measurement matches rendering even when callers don't pass these flags.
   const lastRunIndex = block.runs.length - 1;
   const lastRun = block.runs[lastRunIndex];
-  const derivedIsLastLine = line.toRun >= lastRunIndex;
+  const lastRunLength = getRunCharacterLength(lastRun);
+  const derivedIsLastLine = line.toRun > lastRunIndex || (line.toRun === lastRunIndex && line.toChar >= lastRunLength);
   const derivedEndsWithLineBreak = lastRun ? lastRun.kind === 'lineBreak' : false;
   // Determine if justify should be applied using shared logic
   const shouldJustify = shouldApplyJustify({

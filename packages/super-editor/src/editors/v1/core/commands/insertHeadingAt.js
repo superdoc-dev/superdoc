@@ -1,3 +1,5 @@
+import { buildTextWithTabs } from '../../document-api-adapters/helpers/text-with-tabs.js';
+
 /**
  * Insert a heading node at an absolute document position.
  *
@@ -25,13 +27,13 @@ export const insertHeadingAt =
       },
     };
     const normalizedText = typeof text === 'string' ? text : '';
-    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
+    // buildTextWithTabs splits '\t' into real tab nodes so exports emit <w:tab/>.
+    const content = normalizedText.length > 0 ? buildTextWithTabs(state.schema, normalizedText, undefined) : null;
 
     let paragraphNode;
     try {
       paragraphNode =
-        paragraphType.createAndFill(attrs, textNode ?? undefined) ??
-        paragraphType.create(attrs, textNode ? [textNode] : undefined);
+        paragraphType.createAndFill(attrs, content ?? undefined) ?? paragraphType.create(attrs, content ?? undefined);
     } catch {
       return false;
     }

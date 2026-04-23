@@ -33,27 +33,30 @@ const encode = (params) => {
   const { nodes = [], nodeListHandler } = params || {};
   const node = nodes[0];
 
-  let processedContent = nodeListHandler.handler({
+  const rawChildren = nodeListHandler.handler({
     ...params,
     nodes: node.elements || [],
   });
-  const hasParagraphBlocks = (processedContent || []).some((child) => child?.type === 'paragraph');
-  if (!hasParagraphBlocks) {
-    processedContent = [
-      {
-        type: 'paragraph',
-        content: processedContent.filter((child) => Boolean(child && child.type)),
-      },
-    ];
-  }
-  const attrs = {
-    instruction: node.attributes?.instruction || '',
-  };
-  attrs.rightAlignPageNumbers = deriveRightAlignPageNumbers(processedContent);
+  // The tableOfContents schema requires paragraph* children. If the handler returned
+  // any non-paragraph children (e.g. stray inline runs from a malformed TOC field),
+  // wrap each inline child into its own paragraph so downstream consumers can rely
+  // on the invariant. This also covers the all-inline case.
+  const normalizedContent = (rawChildren || []).reduce((acc, child) => {
+    if (!child || !child.type) return acc;
+    if (child.type === 'paragraph') {
+      acc.push(child);
+    } else {
+      acc.push({ type: 'paragraph', content: [child] });
+    }
+    return acc;
+  }, []);
   const processedNode = {
     type: 'tableOfContents',
-    attrs,
-    content: processedContent,
+    attrs: {
+      instruction: node.attributes?.instruction || '',
+      rightAlignPageNumbers: deriveRightAlignPageNumbers(normalizedContent),
+    },
+    content: normalizedContent,
   };
 
   return processedNode;

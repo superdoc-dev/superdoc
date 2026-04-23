@@ -451,7 +451,7 @@ const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<string, un
  * @param mark - ProseMirror mark containing tracked change attributes
  * @returns TrackedChangeMeta object, or undefined if not a tracked change mark
  */
-export const buildTrackedChangeMetaFromMark = (mark: PMMark): TrackedChangeMeta | undefined => {
+export const buildTrackedChangeMetaFromMark = (mark: PMMark, storyKey?: string): TrackedChangeMeta | undefined => {
   const kind = pickTrackedChangeKind(mark.type);
   if (!kind) return undefined;
   const attrs = mark.attrs ?? {};
@@ -474,6 +474,9 @@ export const buildTrackedChangeMetaFromMark = (mark: PMMark): TrackedChangeMeta 
   if (kind === 'format') {
     meta.before = normalizeRunMarkList((attrs as { before?: unknown }).before);
     meta.after = normalizeRunMarkList((attrs as { after?: unknown }).after);
+  }
+  if (typeof storyKey === 'string' && storyKey.length > 0) {
+    meta.storyKey = storyKey;
   }
   return meta;
 };
@@ -522,10 +525,10 @@ export const trackedChangesCompatible = (a: TextRun, b: TextRun): boolean => {
  * @param marks - Array of ProseMirror marks to process
  * @returns The highest-priority TrackedChangeMeta, or undefined if none found
  */
-export const collectTrackedChangeFromMarks = (marks?: PMMark[]): TrackedChangeMeta | undefined => {
+export const collectTrackedChangeFromMarks = (marks?: PMMark[], storyKey?: string): TrackedChangeMeta | undefined => {
   if (!marks || !marks.length) return undefined;
   return marks.reduce<TrackedChangeMeta | undefined>((current, mark) => {
-    const meta = buildTrackedChangeMetaFromMark(mark);
+    const meta = buildTrackedChangeMetaFromMark(mark, storyKey);
     if (!meta) return current;
     return selectTrackedChangeMeta(current, meta);
   }, undefined);
@@ -835,6 +838,7 @@ export const applyMarksToRun = (
   themeColors?: ThemeColorPalette,
   backgroundColor?: string,
   enableComments = true,
+  storyKey?: string,
 ): void => {
   // If comments are disabled, clear any existing annotations before processing marks.
   if (!enableComments && 'comments' in run && (run as TextRun).comments) {
@@ -856,7 +860,7 @@ export const applyMarksToRun = (
         case TRACK_FORMAT_MARK: {
           // Tracked change marks only apply to TextRun
           if (!isTabRun) {
-            const tracked = buildTrackedChangeMetaFromMark(mark);
+            const tracked = buildTrackedChangeMetaFromMark(mark, storyKey);
             if (tracked) {
               run.trackedChange = selectTrackedChangeMeta(run.trackedChange, tracked);
             }

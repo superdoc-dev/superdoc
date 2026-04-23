@@ -43,7 +43,17 @@ function getConverter(editor: Editor): ConverterForHeaderFooter | undefined {
 // Part ID Parsing
 // ---------------------------------------------------------------------------
 
-/** Mutation source tag for local header/footer sub-editor edits. */
+/**
+ * Mutation source tag for local header/footer sub-editor edits.
+ *
+ * @remarks
+ * This tag remains a coordination signal used to suppress redundant refresh
+ * fan-out when a local sub-editor has already propagated an edit. The
+ * refactor described in
+ * `plans/story-backed-parts-presentation-editing.md` (Phase 5) aims to stop
+ * relying on local UI code to pre-update converter caches; the tag stays, but
+ * the descriptor path should become authoritative for cache rebuilds.
+ */
 export const SOURCE_HEADER_FOOTER_LOCAL = 'header-footer-sync:local';
 
 const HEADER_PATTERN = /^word\/header\d+\.xml$/;
@@ -125,14 +135,17 @@ export function ensureHeaderFooterDescriptor(partId: PartId, sectionId: string):
 
       const resolvedSectionId = ctx.sectionId ?? sectionId;
 
-      // Local edits (header-footer-sync:local) already update the PM cache
-      // and refresh other sub-editors in onHeaderFooterDataUpdate. Running
-      // refreshActiveSubEditors here would re-replace the originating editor,
-      // causing a redundant update cycle with cursor churn.
+      // Local edits still emit SOURCE_HEADER_FOOTER_LOCAL as a coordination
+      // signal so we can suppress redundant live-editor fan-out, but the
+      // descriptor path is authoritative for rebuilding the PM cache from the
+      // committed OOXML. This avoids depending on UI callers to pre-update
+      // converter state before mutatePart runs.
       const isLocalSync = ctx.source === SOURCE_HEADER_FOOTER_LOCAL;
 
-      // For remote applies, rebuild the PM JSON from the updated OOXML
-      if (!isLocalSync && typeof converter.reimportHeaderFooterPart === 'function') {
+      // Rebuild the PM JSON cache from the updated OOXML for both local and
+      // remote applies. Local sync suppresses only the live-editor refresh
+      // fan-out below.
+      if (typeof converter.reimportHeaderFooterPart === 'function') {
         try {
           const pmJson = converter.reimportHeaderFooterPart(ctx.partId);
           if (pmJson) {
@@ -222,14 +235,18 @@ function destroySubEditors(converter: ConverterForHeaderFooter, type: 'header' |
 
 function registerHeaderFooterInvalidationHandler(partId: PartId): void {
   registerInvalidationHandler(partId, (editor) => {
+    const view = (editor as unknown as { view?: { dispatch?: (tr: unknown) => void } }).view;
+    if (!view?.dispatch) {
+      return;
+    }
+
     try {
       const tr = (editor as unknown as { state: { tr: unknown } }).state.tr;
       const setMeta = (tr as unknown as { setMeta: (key: string, value: boolean) => unknown }).setMeta;
       setMeta.call(tr, 'forceUpdatePagination', true);
-      const view = (editor as unknown as { view?: { dispatch?: (tr: unknown) => void } }).view;
-      view?.dispatch?.(tr);
+      view.dispatch(tr);
     } catch {
-      // View may not be ready
+      // UI invalidation is best-effort only.
     }
   });
 }

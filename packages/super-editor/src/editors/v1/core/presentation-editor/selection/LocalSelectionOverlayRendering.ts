@@ -106,8 +106,8 @@ export type RenderCaretOverlayDeps = {
  *
  * @remarks
  * This function creates a single div element representing the text cursor with:
- * - 2px width and height from caretLayout
- * - Black color (#000000)
+ * - Black 2px caret with the global blink animation
+ * - Subtle white halo for contrast against dark glyphs
  * - 1px border radius for visual polish
  * - Absolute positioning in overlay coordinates
  * - Pointer-events: none to allow interaction with underlying content
@@ -144,6 +144,7 @@ export function renderCaretOverlay({
   caretEl.style.height = `${finalHeight}px`;
   caretEl.style.backgroundColor = '#000000';
   caretEl.style.borderRadius = '1px';
+  caretEl.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.92)';
   caretEl.style.pointerEvents = 'none';
   localSelectionLayer.appendChild(caretEl);
 }

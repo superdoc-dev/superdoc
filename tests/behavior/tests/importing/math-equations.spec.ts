@@ -724,6 +724,48 @@ test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
     expect(counts.sup).toBe(1);
   });
 
+  test('keeps limit variables italic when m:limLow/m:limUpp is wrapped in m:func (SD-2538)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // ECMA-376 §22.1.2.111: m:r without m:sty defaults to italic. Word's own
+    // OMML2MML.xsl emits <mi>n</mi> (no mathvariant) for limit variables.
+    //
+    // Fixture math-limit-tests.docx has 6 m:func>m:fName wrappers: 5 around
+    // m:limLow (→ <munder>) and 1 around m:limUpp (→ <mover>). The function
+    // bases are lim×4, max×1, sup×1 — all carry m:sty=p and must render
+    // upright. The limit expression runs have no m:sty and must stay italic.
+    const FUNCTION_BASES = ['lim', 'max', 'sup'];
+    const variantCheck = await superdoc.page.evaluate((bases) => {
+      const collect = (tag: string) =>
+        Array.from(document.querySelectorAll(tag))
+          .map((el) => {
+            const baseMi = el.children[0]?.querySelector('mi');
+            const limitEl = el.children[1];
+            return {
+              base: baseMi?.textContent ?? '',
+              baseVariant: baseMi?.getAttribute('mathvariant') ?? null,
+              limitVariants: Array.from(limitEl?.querySelectorAll('mi') ?? []).map((mi) =>
+                mi.getAttribute('mathvariant'),
+              ),
+            };
+          })
+          .filter((entry) => bases.includes(entry.base));
+      return { munder: collect('munder'), mover: collect('mover') };
+    }, FUNCTION_BASES);
+
+    // Exact counts pin against a regression that drops a case silently.
+    expect(variantCheck.munder).toHaveLength(5); // 3×lim + 1×max + 1×sup
+    expect(variantCheck.mover).toHaveLength(1); // 1×lim (case: m:limUpp in func)
+
+    for (const entry of [...variantCheck.munder, ...variantCheck.mover]) {
+      expect(entry.baseVariant).toBe('normal');
+      for (const limVariant of entry.limitVariants) {
+        expect(limVariant).toBeNull();
+      }
+    }
+  });
+
   test('preserves nested <msub> inside <munder> (case 8: lim of x_i → 0)', async ({ superdoc }) => {
     await superdoc.loadDocument(LIMIT_DOC);
     await superdoc.waitForStable();
@@ -778,6 +820,24 @@ test.describe('m:limLow / m:limUpp (limit object) rendering', () => {
       return leaks;
     });
     expect(leaked).toEqual([]);
+  });
+
+  test('splits multi-char operator runs in m:lim content (SD-2632)', async ({ superdoc }) => {
+    await superdoc.loadDocument(LIMIT_DOC);
+    await superdoc.waitForStable();
+
+    // Case 1: lim_(n→∞). Word emits the "→∞" as a single m:r. Previously we
+    // rendered it as one <mi>→∞</mi>; now per Word's OMML2MML.XSL it splits
+    // into separate atoms. Assert the full ordered sequence so a regression
+    // that drops or misclassifies any atom is caught.
+    const limExpressionAtoms = await superdoc.page.evaluate(() => {
+      const munders = Array.from(document.querySelectorAll('munder'));
+      const limMunder = munders.find((m) => m.children[0]?.querySelector('mi')?.textContent === 'lim');
+      const limExpr = limMunder?.children[1];
+      return Array.from(limExpr?.children ?? []).map((c) => `${c.localName}:${c.textContent}`);
+    });
+
+    expect(limExpressionAtoms).toEqual(['mi:n', 'mo:\u2192', 'mi:\u221E']);
   });
 });
 
@@ -1299,9 +1359,12 @@ test.describe('m:groupChr (group character) rendering', () => {
     await superdoc.loadDocument(GROUPCHR_DOC);
     await superdoc.waitForStable();
 
+    // Use `:scope > mo` to target the group character directly — the base
+    // expression may itself contain <mo> atoms (e.g. "a+b" splits to
+    // <mi>a</mi><mo>+</mo><mi>b</mi> per Word's OMML2MML.XSL).
     const firstMunder = await superdoc.page.evaluate(() => {
       const munder = document.querySelector('munder');
-      const mo = munder?.querySelector('mo');
+      const mo = munder?.querySelector(':scope > mo');
       return mo ? { text: mo.textContent, stretchy: mo.getAttribute('stretchy') } : null;
     });
 
@@ -1317,7 +1380,7 @@ test.describe('m:groupChr (group character) rendering', () => {
     // Variant 2 — second munder in DOM order.
     const hiddenChar = await superdoc.page.evaluate(() => {
       const munders = document.querySelectorAll('munder');
-      const mo = munders[1]?.querySelector('mo');
+      const mo = munders[1]?.querySelector(':scope > mo');
       return mo?.textContent;
     });
 
@@ -1330,7 +1393,7 @@ test.describe('m:groupChr (group character) rendering', () => {
 
     const chars = await superdoc.page.evaluate(() => {
       const wrappers = document.querySelectorAll('munder, mover');
-      return Array.from(wrappers).map((w) => w.querySelector('mo')?.textContent ?? null);
+      return Array.from(wrappers).map((w) => w.querySelector(':scope > mo')?.textContent ?? null);
     });
 
     // Variants 4 (U+23DE), 5 (U+2190), 6 (U+2192).

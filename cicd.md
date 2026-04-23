@@ -94,10 +94,10 @@ main (next) → stable (latest) → X.x (maintenance)
 
 Only same-repository PRs dispatch to Labs. Forked PRs are intentionally skipped so private Labs credentials are never exposed to untrusted branches.
 
-**Required secrets**:
+**Required configuration**:
 
-- `LABS_RELEASE_QUALIFICATION_URL`
-- `LABS_RELEASE_QUALIFICATION_TOKEN`
+- variable: `LABS_RELEASE_QUALIFICATION_URL`
+- secret: `LABS_RELEASE_QUALIFICATION_TOKEN`
 
 #### 5. Create Patch Branch (`create-patch.yml`)
 

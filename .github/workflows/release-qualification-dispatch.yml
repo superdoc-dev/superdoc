@@ -53,7 +53,7 @@ jobs:
         id: dispatch
         env:
           LABS_RELEASE_QUALIFICATION_TOKEN: ${{ secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
-          LABS_RELEASE_QUALIFICATION_URL: ${{ secrets.LABS_RELEASE_QUALIFICATION_URL }}
+          LABS_RELEASE_QUALIFICATION_URL: ${{ vars.LABS_RELEASE_QUALIFICATION_URL }}
         run: |
           set -euo pipefail
 
@@ -68,6 +68,7 @@ jobs:
           fi
 
           RESPONSE_FILE="$(mktemp)"
+          set +e
           HTTP_STATUS="$(curl \
             --fail-with-body \
             --silent \
@@ -79,6 +80,13 @@ jobs:
             -H "x-labs-internal-token: ${LABS_RELEASE_QUALIFICATION_TOKEN}" \
             --data @release-qualification-payload.json \
             "${LABS_RELEASE_QUALIFICATION_URL}")"
+          CURL_EXIT=$?
+          set -e
+
+          if [[ "${CURL_EXIT}" -ne 0 ]]; then
+            cat "${RESPONSE_FILE}"
+            exit "${CURL_EXIT}"
+          fi
 
           if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
             cat "${RESPONSE_FILE}"

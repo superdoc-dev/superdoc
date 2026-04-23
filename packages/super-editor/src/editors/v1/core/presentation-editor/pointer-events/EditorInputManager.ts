@@ -2206,6 +2206,35 @@ export class EditorInputManager {
     return (session.sectionType ?? null) !== (region.sectionType ?? null);
   }
 
+  #isSameHeaderFooterRegion(
+    left: HeaderFooterRegion | null | undefined,
+    right: HeaderFooterRegion | null | undefined,
+  ): boolean {
+    if (!left || !right) {
+      return false;
+    }
+
+    if (left.kind !== right.kind || left.pageIndex !== right.pageIndex) {
+      return false;
+    }
+
+    if ((left.sectionId ?? null) !== (right.sectionId ?? null)) {
+      return false;
+    }
+
+    if ((left.sectionType ?? null) !== (right.sectionType ?? null)) {
+      return false;
+    }
+
+    const leftRefId = left.headerFooterRefId ?? null;
+    const rightRefId = right.headerFooterRefId ?? null;
+    if (leftRefId && rightRefId && leftRefId !== rightRefId) {
+      return false;
+    }
+
+    return true;
+  }
+
   #handleInlineImageClick(
     event: PointerEvent,
     targetImg: HTMLImageElement | null,
@@ -2456,17 +2485,12 @@ export class EditorInputManager {
   #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
-    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      this.#callbacks.clearHoverRegion?.();
-      return;
-    }
-
     if (this.#deps.getDocumentMode() === 'viewing') {
       this.#callbacks.clearHoverRegion?.();
       return;
     }
 
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     const region = this.#callbacks.hitTestHeaderFooterRegion?.(
       normalized.x,
       normalized.y,
@@ -2478,13 +2502,13 @@ export class EditorInputManager {
       return;
     }
 
+    if (sessionMode !== 'body' && !this.#isDifferentHeaderFooterRegionFromActiveSession(region)) {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
     const currentHover = this.#deps.getHeaderFooterSession()?.hoverRegion;
-    if (
-      currentHover &&
-      currentHover.kind === region.kind &&
-      currentHover.pageIndex === region.pageIndex &&
-      currentHover.sectionType === region.sectionType
-    ) {
+    if (this.#isSameHeaderFooterRegion(currentHover, region)) {
       return;
     }
 

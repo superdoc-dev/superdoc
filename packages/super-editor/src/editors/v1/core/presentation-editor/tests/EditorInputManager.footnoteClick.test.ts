@@ -820,6 +820,128 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     );
   });
 
+  it('renders the hover affordance for a different header/footer region while another region is active', () => {
+    const renderHover = vi.fn();
+    const renderHoverRegion = vi.fn();
+    const clearHoverRegion = vi.fn();
+    const footerSurface = document.createElement('div');
+    footerSurface.className = 'superdoc-page-footer';
+    viewportHost.appendChild(footerSurface);
+
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: {
+        mode: 'header',
+        headerFooterRefId: 'rId6',
+        sectionType: 'default',
+        pageIndex: 0,
+      },
+      hoverRegion: null,
+      renderHover,
+    });
+    mockCallbacks.renderHoverRegion = renderHoverRegion;
+    mockCallbacks.clearHoverRegion = clearHoverRegion;
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'footer',
+      headerFooterRefId: 'rId7',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      sectionId: 'section-0',
+      sectionIndex: 0,
+      localX: 0,
+      localY: 180,
+      width: 300,
+      height: 40,
+    }));
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    footerSurface.dispatchEvent(
+      new PointerEventImpl('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 30,
+        clientY: 210,
+      } as PointerEventInit),
+    );
+
+    expect(renderHover).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'footer',
+        headerFooterRefId: 'rId7',
+      }),
+    );
+    expect(renderHoverRegion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'footer',
+        headerFooterRefId: 'rId7',
+      }),
+    );
+    expect(clearHoverRegion).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hover affordance hidden for the currently active header/footer region', () => {
+    const renderHover = vi.fn();
+    const renderHoverRegion = vi.fn();
+    const clearHoverRegion = vi.fn();
+    const headerSurface = document.createElement('div');
+    headerSurface.className = 'superdoc-page-header';
+    viewportHost.appendChild(headerSurface);
+
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: {
+        mode: 'header',
+        headerFooterRefId: 'rId6',
+        sectionType: 'default',
+        pageIndex: 0,
+      },
+      hoverRegion: {
+        kind: 'footer',
+        headerFooterRefId: 'rId7',
+        pageIndex: 0,
+        pageNumber: 1,
+        sectionType: 'default',
+        sectionId: 'section-0',
+        sectionIndex: 0,
+        localX: 0,
+        localY: 180,
+        width: 300,
+        height: 40,
+      },
+      renderHover,
+    });
+    mockCallbacks.renderHoverRegion = renderHoverRegion;
+    mockCallbacks.clearHoverRegion = clearHoverRegion;
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      headerFooterRefId: 'rId6',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      sectionId: 'section-0',
+      sectionIndex: 0,
+      localX: 0,
+      localY: 0,
+      width: 300,
+      height: 40,
+    }));
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    headerSurface.dispatchEvent(
+      new PointerEventImpl('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 30,
+        clientY: 20,
+      } as PointerEventInit),
+    );
+
+    expect(clearHoverRegion).toHaveBeenCalledTimes(1);
+    expect(renderHover).not.toHaveBeenCalled();
+    expect(renderHoverRegion).not.toHaveBeenCalled();
+  });
+
   it('syncs the tracked-change bubble for real clicks inside the active rendered header surface', () => {
     const activeHeaderEditor = createActiveSessionEditor();
     const pageEl = document.createElement('div');

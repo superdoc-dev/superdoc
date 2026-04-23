@@ -151,6 +151,33 @@ async function expectBlankDocumentHeaderCaretAfterActivation(superdoc: SuperDocF
   expect(caretMetrics.height).toBeGreaterThan(8);
 }
 
+async function expectHoverAffordanceForSurface(
+  superdoc: SuperDocFixture,
+  surface: Locator,
+  tooltipText: string,
+): Promise<void> {
+  await surface.scrollIntoViewIfNeeded();
+  await superdoc.waitForStable();
+
+  const box = await surface.boundingBox();
+  expect(box).toBeTruthy();
+
+  await superdoc.page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+  const overlay = superdoc.page.locator('.presentation-editor__hover-overlay');
+  const tooltip = superdoc.page.locator('.presentation-editor__hover-tooltip');
+  await expect(overlay).toBeVisible();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText(tooltipText);
+
+  const overlayBox = await overlay.boundingBox();
+  expect(overlayBox).toBeTruthy();
+  expect(Math.abs(overlayBox!.x - box!.x)).toBeLessThan(4);
+  expect(Math.abs(overlayBox!.y - box!.y)).toBeLessThan(4);
+  expect(Math.abs(overlayBox!.width - box!.width)).toBeLessThan(4);
+  expect(Math.abs(overlayBox!.height - box!.height)).toBeLessThan(4);
+}
+
 async function exitToBody(superdoc: SuperDocFixture) {
   await superdoc.page.keyboard.press('Escape');
   await superdoc.waitForStable();
@@ -307,6 +334,30 @@ test('editing a header shows the active header/footer divider', async ({ superdo
   const divider = superdoc.page.locator('.superdoc-header-footer-border');
   await expect(divider).toHaveCount(1);
   await expect(divider.first()).toBeVisible();
+});
+
+test('editing a header still shows the footer hover affordance', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable();
+
+  await activateHeader(superdoc);
+  await expect(superdoc.page.locator('.superdoc-header-footer-border')).toHaveCount(1);
+
+  const footerSurface = superdoc.page.locator('.superdoc-page-footer').first();
+  await expectHoverAffordanceForSurface(superdoc, footerSurface, 'Double-click to edit footer');
+  await expect(superdoc.page.locator('.superdoc-header-footer-border')).toHaveCount(1);
+});
+
+test('editing a footer still shows the header hover affordance', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable();
+
+  await activateFooter(superdoc);
+  await expect(superdoc.page.locator('.superdoc-header-footer-border')).toHaveCount(1);
+
+  const headerSurface = superdoc.page.locator('.superdoc-page-header').first();
+  await expectHoverAffordanceForSurface(superdoc, headerSurface, 'Double-click to edit header');
+  await expect(superdoc.page.locator('.superdoc-header-footer-border')).toHaveCount(1);
 });
 
 test('blank document header activation shows a visible caret', async ({ superdoc }) => {

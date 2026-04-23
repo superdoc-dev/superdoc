@@ -1072,6 +1072,32 @@ describe('TableResizeOverlay', () => {
 
       wrapper.unmount();
     });
+
+    it('mirrors the new span width into tableCellProperties.cellWidth so the fixed-layout solver observes the edit', async () => {
+      const editor = createMockEditor();
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      // First setNodeMarkup call is the table itself; the second is the affected cell.
+      const [, , cellAttrs] = editor.view.state.tr.setNodeMarkup.mock.calls[1];
+      expect(cellAttrs.colwidth).toEqual([140]);
+      // pixelsToTwips(140) === 2100
+      expect(cellAttrs.tableCellProperties).toMatchObject({
+        cellWidth: { value: 2100, type: 'dxa' },
+      });
+
+      wrapper.unmount();
+    });
   });
 
   // ==========================================================================

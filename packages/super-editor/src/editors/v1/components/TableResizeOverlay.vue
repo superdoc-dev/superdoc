@@ -1110,9 +1110,23 @@ function updateCellColwidths(tr, tableNode, tablePos, affectedColumns, newWidths
         // Only update if we have valid widths
         // colwidth must always be an array, even for single columns
         if (newColwidth.length > 0) {
+          // Mirror the new span width into tableCellProperties.cellWidth (OOXML w:tcW).
+          // The fixed-layout measuring solver treats tcW as authoritative for first-row
+          // cells, so without this the next measure pass would override the edited
+          // grid and snap the column back to its imported width.
+          const spanTwips = newColwidth.reduce((sum, w) => sum + pixelsToTwips(w), 0);
+          const existingTableCellProperties = node.attrs.tableCellProperties;
+          const tableCellProperties = {
+            ...(existingTableCellProperties && typeof existingTableCellProperties === 'object'
+              ? existingTableCellProperties
+              : {}),
+            cellWidth: { value: spanTwips, type: 'dxa' },
+          };
+
           tr.setNodeMarkup(absolutePos, null, {
             ...node.attrs,
             colwidth: newColwidth,
+            tableCellProperties,
           });
         }
       }

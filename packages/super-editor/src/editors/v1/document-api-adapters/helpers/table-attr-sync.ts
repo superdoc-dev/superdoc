@@ -17,7 +17,9 @@ export function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<str
   extracted.tableStyleId = tp.tableStyleId ?? null;
   extracted.justification = tp.justification ?? null;
   extracted.tableLayout = tp.tableLayout ?? null;
-  extracted.borders = tp.borders ?? null;
+  // Keep the PM schema default shape ({}) when no borders are present. The table
+  // extension's renderDOM calls Object.keys(borders), which crashes on null.
+  extracted.borders = tp.borders ?? {};
 
   const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
   if (indent?.value != null) {

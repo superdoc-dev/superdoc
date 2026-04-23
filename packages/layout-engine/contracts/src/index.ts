@@ -1901,6 +1901,16 @@ export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
   numberText?: string;
+  /**
+   * Optional page-local block clones backing this page's resolved fragments.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  blocks?: FlowBlock[];
+  /**
+   * Optional page-local measures aligned with `blocks`.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  measures?: Measure[];
 };
 
 export type HeaderFooterLayout = {

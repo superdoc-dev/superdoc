@@ -95,4 +95,94 @@ describe('resolveHeaderFooterLayout', () => {
     expect(item.block).toBeUndefined();
     expect(item.measure).toBeUndefined();
   });
+
+  it('resolves each page against its own cloned block data', () => {
+    const paraFragment: ParaFragment = {
+      kind: 'para',
+      blockId: 'page-token',
+      fromLine: 0,
+      toLine: 1,
+      x: 0,
+      y: 0,
+      width: 120,
+    };
+    const pageOneBlocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'page-token',
+        runs: [
+          { text: 'Page ', fontFamily: 'Arial', fontSize: 16 },
+          { text: '1', token: 'pageNumber', fontFamily: 'Arial', fontSize: 16 },
+        ],
+      },
+    ];
+    const pageTwoBlocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'page-token',
+        runs: [
+          { text: 'Page ', fontFamily: 'Arial', fontSize: 16 },
+          { text: '2', token: 'pageNumber', fontFamily: 'Arial', fontSize: 16 },
+        ],
+      },
+    ];
+    const makeMeasure = (text: string): Measure => ({
+      kind: 'paragraph',
+      lines: [
+        { fromRun: 0, fromChar: 0, toRun: 1, toChar: text.length, width: 120, ascent: 10, descent: 3, lineHeight: 18 },
+      ],
+      totalHeight: 18,
+    });
+    const layout: HeaderFooterLayout = {
+      height: 50,
+      pages: [
+        { number: 1, fragments: [paraFragment], blocks: pageOneBlocks, measures: [makeMeasure('Page 1')] },
+        { number: 2, fragments: [paraFragment], blocks: pageTwoBlocks, measures: [makeMeasure('Page 2')] },
+      ],
+    };
+
+    const result = resolveHeaderFooterLayout(layout, pageOneBlocks, [makeMeasure('Page 1')]);
+    const firstItem = result.pages[0].items[0] as ResolvedFragmentItem;
+    const secondItem = result.pages[1].items[0] as ResolvedFragmentItem;
+
+    expect(firstItem.block?.kind).toBe('paragraph');
+    expect(secondItem.block?.kind).toBe('paragraph');
+    expect(firstItem.block?.runs[1]?.text).toBe('1');
+    expect(secondItem.block?.runs[1]?.text).toBe('2');
+    expect(firstItem.version).not.toBe(secondItem.version);
+  });
+
+  it('uses document page indices for sparse header/footer pages', () => {
+    const paraFragment: ParaFragment = {
+      kind: 'para',
+      blockId: 'p1',
+      fromLine: 0,
+      toLine: 1,
+      x: 0,
+      y: 0,
+      width: 100,
+    };
+    const layout: HeaderFooterLayout = {
+      height: 50,
+      pages: [
+        { number: 5, fragments: [paraFragment], numberText: '5' },
+        { number: 50, fragments: [paraFragment], numberText: '50' },
+        { number: 500, fragments: [paraFragment], numberText: '500' },
+      ],
+    };
+    const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+    const measures: Measure[] = [
+      {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 10, descent: 3, lineHeight: 18 }],
+        totalHeight: 18,
+      },
+    ];
+
+    const result = resolveHeaderFooterLayout(layout, blocks, measures);
+
+    expect((result.pages[0].items[0] as ResolvedFragmentItem).pageIndex).toBe(4);
+    expect((result.pages[1].items[0] as ResolvedFragmentItem).pageIndex).toBe(49);
+    expect((result.pages[2].items[0] as ResolvedFragmentItem).pageIndex).toBe(499);
+  });
 });

@@ -81,6 +81,38 @@ describe('layoutHeaderFooterWithCache', () => {
     expect(measureBlock).not.toHaveBeenCalled();
   });
 
+  it('stores page-local block clones for tokenized header/footer pages', async () => {
+    const sections = {
+      default: [
+        {
+          kind: 'paragraph',
+          id: 'page-token-header',
+          runs: [
+            { text: 'Page ', fontFamily: 'Arial', fontSize: 16 },
+            { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 16 },
+          ],
+        } satisfies FlowBlock,
+      ],
+    };
+    const measureBlock = vi.fn(async () => makeMeasure(12));
+
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 300, height: 40 },
+      measureBlock,
+      undefined,
+      undefined,
+      (pageNumber) => ({ displayText: String(pageNumber), totalPages: 2 }),
+      'header',
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(2);
+    expect(result.default?.layout.pages[0].blocks?.[0].runs[1]?.text).toBe('1');
+    expect(result.default?.layout.pages[1].blocks?.[0].runs[1]?.text).toBe('2');
+    expect(result.default?.layout.pages[0].measures).toHaveLength(1);
+    expect(result.default?.layout.pages[1].measures).toHaveLength(1);
+  });
+
   describe('integration test', () => {
     it('full pipeline: PM JSON with page tokens → FlowBlocks → Measures → Layout', async () => {
       // 1. Create PM JSON with page number tokens (simulates header/footer from SuperConverter)

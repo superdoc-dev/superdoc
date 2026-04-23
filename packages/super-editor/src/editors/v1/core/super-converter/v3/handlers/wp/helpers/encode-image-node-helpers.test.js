@@ -1448,6 +1448,45 @@ describe('getVectorShape', () => {
     expect(result.attrs.flipV).toBe(true);
   });
 
+  it('preserves WordArt textbox metadata for render-time watermark handling', () => {
+    const graphicData = {
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            {
+              name: 'wps:spPr',
+              elements: [
+                {
+                  name: 'a:prstGeom',
+                  attributes: { prst: 'ellipse' },
+                },
+              ],
+            },
+            {
+              name: 'wps:cNvSpPr',
+              attributes: { txBox: '1' },
+            },
+            {
+              name: 'wps:bodyPr',
+              attributes: { fromWordArt: '1', wrap: 'square' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = getVectorShape({
+      params: makeParams(),
+      node: {},
+      graphicData,
+      size: { width: 72, height: 72 },
+    });
+
+    expect(result.attrs.isTextBox).toBe(true);
+    expect(result.attrs.isWordArt).toBe(true);
+  });
+
   it('uses default size when size parameter is missing', () => {
     const graphicData = makeGraphicData();
 

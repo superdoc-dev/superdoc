@@ -19,6 +19,7 @@ import twoColumnFixture from './fixtures/two-column-two-page.json';
 import tabsDecimalFixture from './fixtures/tabs-decimal.json';
 import tabsCenterEndFixture from './fixtures/tabs-center-end.json';
 import paragraphPPrVariationsFixture from './fixtures/paragraph_pPr_variations.json';
+import { twipsToPx } from './utilities.js';
 
 const DEFAULT_CONVERTER_CONTEXT = {
   docx: {},
@@ -292,7 +293,12 @@ describe('PM → FlowBlock → Measure integration', () => {
     const decimalMeasure = expectParagraphMeasure(await measureBlock(blocks[0], 400));
     const controlMeasure = expectParagraphMeasure(await measureBlock(controlBlocks[0], 400));
 
-    expect(decimalMeasure.lines[0].width).toBeLessThanOrEqual(controlMeasure.lines[0].width);
+    const rightAlignedStopTwips = blocks[0].attrs?.tabs?.find((stop) => stop.val === 'end')?.pos;
+    if (typeof rightAlignedStopTwips === 'number') {
+      expect(decimalMeasure.lines[0].width).toBeCloseTo(twipsToPx(rightAlignedStopTwips), 2);
+    }
+    // Decimal-aligned measurement should reserve at least as much width as the control case
+    expect(decimalMeasure.lines[0].width).toBeGreaterThanOrEqual(controlMeasure.lines[0].width);
   });
 
   it('derives default decimal separator from document language when not explicitly set', async () => {

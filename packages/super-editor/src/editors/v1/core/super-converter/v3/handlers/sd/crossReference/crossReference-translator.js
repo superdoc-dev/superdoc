@@ -108,16 +108,29 @@ function parseDisplay(instruction) {
 }
 
 /**
- * Extracts resolved text from processed content.
+ * Extracts resolved text from processed content. Walks recursively because the
+ * cached result between w:fldChar separate/end is typically wrapped in a `run`
+ * node (or deeper: run -> text with marks), so a top-level text-only filter
+ * misses the field's display text.
  * @param {Array<any>} content
  * @returns {string}
  */
 function extractResolvedText(content) {
   if (!Array.isArray(content)) return '';
-  return content
-    .filter((n) => n.type === 'text')
-    .map((n) => n.text || '')
-    .join('');
+  let out = '';
+  /** @param {Array<any>} nodes */
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (!node) continue;
+      if (node.type === 'text') {
+        out += node.text || '';
+      } else if (Array.isArray(node.content)) {
+        walk(node.content);
+      }
+    }
+  };
+  walk(content);
+  return out;
 }
 
 /** @type {import('@translator').NodeTranslatorConfig} */

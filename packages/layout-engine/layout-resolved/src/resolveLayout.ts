@@ -187,16 +187,10 @@ function resolveFragmentItem(
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       return item;
     }
-    case 'image': {
-      const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
-      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
-      return item;
-    }
-    case 'drawing': {
-      const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
-      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
-      return item;
-    }
+    case 'image':
+      return resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
+    case 'drawing':
+      return resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
     default: {
       // para, list-item — existing generic resolution
       const item: ResolvedFragmentItem = {
@@ -221,7 +215,6 @@ function resolveFragmentItem(
         item.paragraphBorders = borders;
         item.paragraphBorderHash = hashParagraphBorders(borders);
       }
-
       if (fragment.kind === 'para') {
         const para = fragment as ParaFragment;
         if (para.pmStart != null) item.pmStart = para.pmStart;

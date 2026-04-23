@@ -4,32 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuperDoc — CDN</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
-      rel="stylesheet"
-    />
-    <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.umd.js"></script>
+    <link href="./style.css" rel="stylesheet" />
+    <script src="./superdoc.min.js"></script>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; }
+      #controls { padding: .5rem 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; display: flex; gap: .5rem; align-items: center; }
+      #toolbar { border-bottom: 1px solid #e2e8f0; }
+      #editor { height: calc(100vh - 92px); }
+    </style>
   </head>
   <body>
-    <div style="padding: 1rem; background: #f5f5f5">
+    <div id="controls">
       <input type="file" id="file-input" accept=".docx" />
+      <span style="color:#64748b;font-size:.875rem">or open the bundled sample</span>
     </div>
-    <div id="editor" style="height: calc(100vh - 60px)"></div>
+    <div id="toolbar"></div>
+    <div id="editor"></div>
 
     <script>
-      var superdoc = new SuperDocLibrary.SuperDoc({
-        selector: '#editor',
-      });
+      function mount(source) {
+        if (window.__sd) window.__sd.destroy();
+        window.__sd = new SuperDoc({
+          selector: '#editor',
+          toolbar: '#toolbar',
+          document: source,
+          documentMode: 'editing',
+          user: { name: 'Guest', email: 'guest@example.com' },
+          onReady: () => (window.__SUPERDOC_READY__ = true),
+        });
+      }
+
+      // Load the bundled sample on first paint so the page shows a real editor.
+      mount('./test_file.docx');
 
       document.getElementById('file-input').addEventListener('change', function (e) {
-        var file = e.target.files[0];
-        if (!file) return;
-
-        if (superdoc) superdoc.destroy();
-        superdoc = new SuperDocLibrary.SuperDoc({
-          selector: '#editor',
-          document: file,
-        });
+        const file = e.target.files[0];
+        if (file) mount(file);
       });
     </script>
   </body>

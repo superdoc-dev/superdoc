@@ -30,6 +30,23 @@ const NATIVE_SELECTION_STYLES = `
 .superdoc-layout *::-moz-selection {
   background: transparent;
 }
+
+/* Keep native selection visible inside live header/footer editors.
+ * Unlike the main document surface, header/footer editing uses a visible
+ * ProseMirror host. If we suppress native selection there, users can end up
+ * with no obvious selection feedback when the custom overlay is subtle or
+ * still syncing to the current drag gesture. */
+.superdoc-layout .superdoc-header-editor-host *::selection,
+.superdoc-layout .superdoc-footer-editor-host *::selection {
+  background: Highlight;
+  color: HighlightText;
+}
+
+.superdoc-layout .superdoc-header-editor-host *::-moz-selection,
+.superdoc-layout .superdoc-footer-editor-host *::-moz-selection {
+  background: Highlight;
+  color: HighlightText;
+}
 `;
 
 let nativeSelectionStylesInjected = false;

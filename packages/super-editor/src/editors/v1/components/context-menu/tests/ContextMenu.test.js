@@ -316,6 +316,86 @@ describe('ContextMenu.vue', () => {
       expect(moveCursorToMouseEvent).toHaveBeenCalledWith(rightClickEvent, mockEditor);
     });
 
+    it('should not reseat selection in table when a text range is selected', async () => {
+      mount(ContextMenu, { props: mockProps });
+
+      const { moveCursorToMouseEvent } = await import('../../cursor-helpers.js');
+      moveCursorToMouseEvent.mockClear();
+      mockEditor.state.tr.setSelection.mockClear();
+
+      mockEditor.state.selection.from = 5;
+      mockEditor.state.selection.to = 15;
+      mockEditor.posAtCoords = vi.fn(() => ({ pos: 10 }));
+      mockGetEditorContext.mockResolvedValueOnce({
+        selectedText: 'selected text',
+        hasSelection: true,
+        isInTable: true,
+        pos: 10,
+        event: { type: 'contextmenu' },
+      });
+
+      const tableFragment = document.createElement('div');
+      tableFragment.className = 'superdoc-table-fragment';
+      const target = document.createElement('span');
+      target.dataset.pmStart = '10';
+      tableFragment.appendChild(target);
+
+      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
+        (call) => call[0] === 'contextmenu' && call[2] !== true,
+      )[1];
+
+      await contextMenuHandler({
+        type: 'contextmenu',
+        clientX: 120,
+        clientY: 160,
+        target,
+        preventDefault: vi.fn(),
+      });
+
+      expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    });
+
+    it('should reseat selection in table when selection is collapsed', async () => {
+      mount(ContextMenu, { props: mockProps });
+
+      const pmState = await import('prosemirror-state');
+      const nearSpy = vi.spyOn(pmState.Selection, 'near').mockReturnValue({ from: 10, to: 10 });
+
+      mockEditor.state.tr.setSelection.mockClear();
+      mockEditor.state.selection.from = 10;
+      mockEditor.state.selection.to = 10;
+      mockEditor.state.doc.content = { size: 100 };
+      mockGetEditorContext.mockResolvedValueOnce({
+        selectedText: '',
+        hasSelection: false,
+        isInTable: true,
+        pos: 10,
+        event: { type: 'contextmenu' },
+      });
+
+      const tableFragment = document.createElement('div');
+      tableFragment.className = 'superdoc-table-fragment';
+      const target = document.createElement('span');
+      target.dataset.pmStart = '10';
+      tableFragment.appendChild(target);
+
+      const contextMenuHandler = mockEditor.view.dom.addEventListener.mock.calls.find(
+        (call) => call[0] === 'contextmenu' && call[2] !== true,
+      )[1];
+
+      await contextMenuHandler({
+        type: 'contextmenu',
+        clientX: 120,
+        clientY: 160,
+        target,
+        preventDefault: vi.fn(),
+      });
+
+      expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+      nearSpy.mockRestore();
+    });
+
     it('should allow native context menu when modifier is pressed', async () => {
       mount(ContextMenu, { props: mockProps });
 

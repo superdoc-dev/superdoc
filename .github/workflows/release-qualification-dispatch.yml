@@ -1,0 +1,124 @@
+name: 🧪 Dispatch Release Qualification
+
+on:
+  pull_request:
+    branches:
+      - stable
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: release-qualification-dispatch-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch-release-qualification:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build dispatch payload
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          MERGE_PREPARATION_STATUS="unknown"
+          if [[ "${PR_TITLE}" == *"conflicts need resolution"* ]]; then
+            MERGE_PREPARATION_STATUS="conflicts"
+          fi
+
+          cat <<EOF > release-qualification-payload.json
+          {
+            "repositoryOwner": "${{ github.repository_owner }}",
+            "repositoryName": "${GITHUB_REPOSITORY#*/}",
+            "repositoryFullName": "${{ github.repository }}",
+            "pullRequestNumber": ${{ github.event.pull_request.number }},
+            "pullRequestUrl": "${{ github.event.pull_request.html_url }}",
+            "baseRef": "${{ github.event.pull_request.base.ref }}",
+            "headRef": "${{ github.event.pull_request.head.ref }}",
+            "headSha": "${{ github.event.pull_request.head.sha }}",
+            "mergePreparationStatus": "${MERGE_PREPARATION_STATUS}",
+            "triggerEvent": "${{ github.event.action }}"
+          }
+          EOF
+
+      - name: Dispatch to Labs release orchestrator
+        id: dispatch
+        env:
+          LABS_RELEASE_QUALIFICATION_TOKEN: ${{ secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          LABS_RELEASE_QUALIFICATION_URL: ${{ vars.LABS_RELEASE_QUALIFICATION_URL }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LABS_RELEASE_QUALIFICATION_URL}" ]]; then
+            echo "LABS_RELEASE_QUALIFICATION_URL is required." >&2
+            exit 1
+          fi
+
+          if [[ -z "${LABS_RELEASE_QUALIFICATION_TOKEN}" ]]; then
+            echo "LABS_RELEASE_QUALIFICATION_TOKEN is required." >&2
+            exit 1
+          fi
+
+          RESPONSE_FILE="$(mktemp)"
+          set +e
+          HTTP_STATUS="$(curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "x-labs-internal-token: ${LABS_RELEASE_QUALIFICATION_TOKEN}" \
+            --data @release-qualification-payload.json \
+            "${LABS_RELEASE_QUALIFICATION_URL}")"
+          CURL_EXIT=$?
+          set -e
+
+          if [[ "${CURL_EXIT}" -ne 0 ]]; then
+            cat "${RESPONSE_FILE}"
+            exit "${CURL_EXIT}"
+          fi
+
+          if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+            cat "${RESPONSE_FILE}"
+            exit 1
+          fi
+
+          RUN_ID="$(jq -r '.run.runId // empty' "${RESPONSE_FILE}")"
+          RUN_STATUS="$(jq -r '.run.status // empty' "${RESPONSE_FILE}")"
+          CREATED="$(jq -r '.created // false' "${RESPONSE_FILE}")"
+
+          if [[ -z "${RUN_ID}" || -z "${RUN_STATUS}" ]]; then
+            cat "${RESPONSE_FILE}"
+            echo "Labs response did not include the expected run metadata." >&2
+            exit 1
+          fi
+
+          echo "run_id=${RUN_ID}" >> "${GITHUB_OUTPUT}"
+          echo "run_status=${RUN_STATUS}" >> "${GITHUB_OUTPUT}"
+          echo "created=${CREATED}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write workflow summary
+        run: |
+          {
+            echo "### Release Qualification Dispatch"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| PR | #${{ github.event.pull_request.number }} |"
+            echo "| Base branch | \`${{ github.event.pull_request.base.ref }}\` |"
+            echo "| Head branch | \`${{ github.event.pull_request.head.ref }}\` |"
+            echo "| Head SHA | \`${{ github.event.pull_request.head.sha }}\` |"
+            echo "| Labs run | \`${{ steps.dispatch.outputs.run_id }}\` |"
+            echo "| Labs status | \`${{ steps.dispatch.outputs.run_status }}\` |"
+            echo "| New run created | \`${{ steps.dispatch.outputs.created }}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"

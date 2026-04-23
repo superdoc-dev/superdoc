@@ -2032,7 +2032,6 @@ describe('resolveLayout', () => {
       expect(result.layoutEpoch).toBeUndefined();
     });
   });
-
   describe('sdtContainerKey resolution', () => {
     it('sets sdtContainerKey for a paragraph with block structuredContent sdt', () => {
       const layout: Layout = {

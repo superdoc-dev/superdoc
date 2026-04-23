@@ -2834,7 +2834,7 @@ describe('PresentationEditor', () => {
       const { sessionEditor } = await activateFootnoteSession();
 
       expect(editor.getStorySessionManager()).not.toBeNull();
-      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('continuous');
+      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('onExit');
       expect(editor.getActiveEditor()).toBe(sessionEditor);
       expect(sessionEditor?.setDocumentMode).toHaveBeenCalledWith('editing');
 

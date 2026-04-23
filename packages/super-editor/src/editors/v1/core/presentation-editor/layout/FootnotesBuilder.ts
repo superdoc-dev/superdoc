@@ -40,6 +40,11 @@ export type ConverterLike = {
   footnotes?: Array<{ id?: unknown; content?: unknown[] }>;
 };
 
+export type NoteRenderOverride = {
+  noteId: string;
+  docJson: Record<string, unknown>;
+};
+
 /** A text run within a paragraph block. */
 type Run = {
   kind?: string;
@@ -91,6 +96,7 @@ export function buildFootnotesInput(
   converter: ConverterLike | null | undefined,
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
+  renderOverride: NoteRenderOverride | null = null,
 ): FootnotesLayoutInput | null {
   if (!editorState) return null;
 
@@ -121,14 +127,10 @@ export function buildFootnotesInput(
   const blocksById = new Map<string, FlowBlock[]>();
 
   idsInUse.forEach((id) => {
-    const entry = findNoteEntryById(importedFootnotes, id);
-    const content = entry?.content;
-    if (!Array.isArray(content) || content.length === 0) return;
-
     try {
-      // Deep clone to prevent mutation of the original converter data
-      const clonedContent = JSON.parse(JSON.stringify(content));
-      const footnoteDoc = normalizeNotePmJson({ type: 'doc', content: clonedContent });
+      const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
+      if (!footnoteDoc) return;
+
       const result = toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
@@ -230,6 +232,31 @@ function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run 
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
 
   return markerRun;
+}
+
+function cloneNoteDocJson(docJson: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(docJson)) as Record<string, unknown>;
+}
+
+function resolveNoteDocJson(
+  id: string,
+  importedFootnotes: Array<{ id?: unknown; content?: unknown[] }>,
+  renderOverride: NoteRenderOverride | null,
+): Record<string, unknown> | null {
+  if (renderOverride && renderOverride.noteId === id) {
+    return normalizeNotePmJson(cloneNoteDocJson(renderOverride.docJson));
+  }
+
+  const entry = findNoteEntryById(importedFootnotes, id);
+  const content = entry?.content;
+  if (!Array.isArray(content) || content.length === 0) {
+    return null;
+  }
+
+  return normalizeNotePmJson({
+    type: 'doc',
+    content: cloneNoteDocJson(content) as unknown[],
+  });
 }
 
 function syncMarkerRun(target: Run, source: Run): void {

@@ -42,7 +42,7 @@ import {
 import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
-import { buildFootnotesInput } from './layout/FootnotesBuilder.js';
+import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -1228,6 +1228,33 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
     return session as NoteStorySession;
+  }
+
+  #buildActiveNoteRenderOverride(storyType: 'footnote' | 'endnote'): NoteRenderOverride | null {
+    const session = this.#getActiveNoteStorySession();
+    if (!session || session.locator.storyType !== storyType) {
+      return null;
+    }
+
+    const storyEditor = session.editor as Editor & {
+      getJSON?: () => Record<string, unknown>;
+      getUpdatedJson?: () => Record<string, unknown>;
+    };
+    const docJson =
+      typeof storyEditor.getUpdatedJson === 'function'
+        ? storyEditor.getUpdatedJson()
+        : typeof storyEditor.getJSON === 'function'
+          ? storyEditor.getJSON()
+          : null;
+
+    if (!docJson || typeof docJson !== 'object') {
+      return null;
+    }
+
+    return {
+      noteId: session.locator.noteId,
+      docJson,
+    };
   }
 
   #getActiveTrackedChangeStorySurface(): { storyKey: string; editor: Editor } | null {
@@ -4558,7 +4585,6 @@ export class PresentationEditor extends EventEmitter {
 
       if (session.kind === 'note') {
         this.#invalidateTrackedChangesForStory(session.locator);
-        this.#flowBlockCache.setHasExternalChanges(true);
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();
@@ -5002,20 +5028,24 @@ export class PresentationEditor extends EventEmitter {
       const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
+      const activeFootnoteOverride = this.#buildActiveNoteRenderOverride('footnote');
       const footnotesLayoutInput = buildFootnotesInput(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeFootnoteOverride,
       );
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
         : [];
+      const activeEndnoteOverride = this.#buildActiveNoteRenderOverride('endnote');
       const endnoteBlocks = buildEndnoteBlocks(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeEndnoteOverride,
       );
       const blocksForLayout =
         semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0
@@ -6621,9 +6651,9 @@ export class PresentationEditor extends EventEmitter {
         noteId: target.noteId,
       },
       {
-        // Notes need to repaint while the user types; otherwise the hidden-host
-        // editor is active but the rendered footnote appears frozen until exit.
-        commitPolicy: 'continuous',
+        // Render from the active note session locally while typing, then persist
+        // the canonical notes part once when the session exits.
+        commitPolicy: 'onExit',
         preferHiddenHost: true,
         hostWidthPx: targetContext?.hostWidthPx ?? this.#visibleHost.clientWidth ?? 1,
         editorContext: {

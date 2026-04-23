@@ -19,6 +19,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
+import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
 import { DomPositionIndex } from '../../dom-observer/DomPositionIndex.js';
 import { DomPositionIndexObserverManager } from '../../dom-observer/DomPositionIndexObserverManager.js';
@@ -1241,8 +1242,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const storyEditor = session.editor as Editor & {
-      getJSON?: () => Record<string, unknown>;
-      getUpdatedJson?: () => Record<string, unknown>;
+      getJSON?: () => ProseMirrorJSON;
+      getUpdatedJson?: () => ProseMirrorJSON;
     };
     const docJson =
       typeof storyEditor.getUpdatedJson === 'function'

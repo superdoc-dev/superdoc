@@ -3,6 +3,7 @@ import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
+import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
 import { normalizeNotePmJson } from '../../../document-api-adapters/helpers/note-pm-json.js';
 import { buildStoryKey } from '../../../document-api-adapters/story-runtime/story-key.js';
@@ -141,17 +142,21 @@ function syncMarkerRun(target: TextRun, source: TextRun): void {
   delete target.pmEnd;
 }
 
-function cloneNoteDocJson(docJson: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(docJson)) as Record<string, unknown>;
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneNoteContentJson(content: unknown[]): ProseMirrorJSON[] {
+  return cloneJsonValue(content) as ProseMirrorJSON[];
 }
 
 function resolveEndnoteDocJson(
   id: string,
   importedEndnotes: Array<{ id?: unknown; content?: unknown[] }>,
   renderOverride: NoteRenderOverride | null,
-): Record<string, unknown> | null {
+): ProseMirrorJSON | null {
   if (renderOverride && renderOverride.noteId === id) {
-    return normalizeNotePmJson(cloneNoteDocJson(renderOverride.docJson));
+    return normalizeNotePmJson(cloneJsonValue(renderOverride.docJson));
   }
 
   const entry = findNoteEntryById(importedEndnotes, id);
@@ -162,7 +167,7 @@ function resolveEndnoteDocJson(
 
   return normalizeNotePmJson({
     type: 'doc',
-    content: cloneNoteDocJson(content) as unknown[],
+    content: cloneNoteContentJson(content),
   });
 }
 

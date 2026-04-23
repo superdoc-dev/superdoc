@@ -250,8 +250,8 @@ export type RenderedLineInfo = {
  * Input to `DomPainter.paint()`.
  *
  * `resolvedLayout` is the canonical resolved data. The remaining fields are
- * bridge data carried for internal rendering of non-paragraph fragments
- * (tables, images, drawings) that have not yet been migrated to resolved items.
+ * still required bridge data until the painter can render solely from resolved
+ * items for lookups, change tracking, and non-paragraph fragment rendering.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;

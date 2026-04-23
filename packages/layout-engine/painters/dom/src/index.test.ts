@@ -69,6 +69,8 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
         sourceLayout: layout,
+        blocks: currentBlocks,
+        measures: currentMeasures,
         headerBlocks: mergedHeaderBlocks,
         headerMeasures: mergedHeaderMeasures,
         footerBlocks: mergedFooterBlocks,
@@ -1696,6 +1698,20 @@ describe('DomPainter', () => {
     // Block/measure integrity is now validated at the resolve-layout stage.
     const painter = createTestPainter({ blocks: [block], measures: [] });
     expect(() => painter.paint(layout, mount)).toThrow();
+  });
+
+  it('rejects resolved-layout-only paint input until body lookups are removed', () => {
+    const painter = createDomPainter({});
+
+    expect(() =>
+      painter.paint(
+        {
+          resolvedLayout: emptyResolved,
+          sourceLayout: layout,
+        } as DomPainterInput,
+        mount,
+      ),
+    ).toThrow('DomPainterInput requires body blocks and measures');
   });
 
   it('renders placeholder content for empty lines', () => {

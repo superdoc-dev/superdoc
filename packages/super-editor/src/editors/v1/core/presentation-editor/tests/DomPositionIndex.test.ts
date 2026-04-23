@@ -88,6 +88,26 @@ describe('DomPositionIndex', () => {
     expect(index.findElementAtPosition(10)).toBe(null);
   });
 
+  it('skips footnote descendants when building the body DOM index', () => {
+    const container = document.createElement('div');
+    container.innerHTML = `
+      <div class="superdoc-page">
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="6">Simple</span>
+        </div>
+        <div data-block-id="footnote-1-0" class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="4">This</span>
+        </div>
+      </div>
+    `;
+
+    const index = new DomPositionIndex();
+    index.rebuild(container);
+
+    expect(index.size).toBe(1);
+    expect(index.findElementAtPosition(1)?.textContent).toBe('Simple');
+  });
+
   it('correctly distributes elements across header, body, and footer sections', () => {
     const container = document.createElement('div');
     container.innerHTML = `

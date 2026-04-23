@@ -94,6 +94,13 @@ export interface AdapterOptions {
   blockIdPrefix?: string;
 
   /**
+   * Story key for the document being converted. Used to stamp tracked-change
+   * metadata so rendered DOM anchors can distinguish body, header/footer, and
+   * note stories.
+   */
+  storyKey?: string;
+
+  /**
    * Optional list of ProseMirror node type names that should be treated as atom/leaf nodes
    * for position mapping. Use this to keep PM positions correct when custom atom nodes exist.
    */
@@ -286,6 +293,7 @@ export interface NodeHandlerContext {
   // ID generation & positions
   nextBlockId: BlockIdGenerator;
   blockIdPrefix?: string;
+  storyKey?: string;
   positions: PositionMap;
 
   // Style & defaults
@@ -340,6 +348,7 @@ export type ParagraphToFlowBlocksParams = {
   para: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
+  storyKey?: string;
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
@@ -355,6 +364,7 @@ export type ParagraphToFlowBlocksParams = {
 export type TableNodeToBlockParams = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
+  storyKey?: string;
   trackedChangesConfig: TrackedChangesConfig;
   bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;

@@ -1,11 +1,12 @@
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, TrackedChangesMode } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -78,7 +79,13 @@ export interface HeaderFooterDocument {
 
 type HeaderFooterLayoutCacheEntry = {
   docRef: unknown;
+  renderConfigKey: string;
   blocks: FlowBlock[];
+};
+
+export type HeaderFooterTrackedChangesRenderConfig = {
+  mode: TrackedChangesMode;
+  enabled: boolean;
 };
 
 type HeaderFooterEditorEntry = {
@@ -1006,6 +1013,10 @@ export class HeaderFooterLayoutAdapter {
   #manager: HeaderFooterEditorManager;
   #mediaFiles?: Record<string, string>;
   #blockCache: Map<string, HeaderFooterLayoutCacheEntry> = new Map();
+  #trackedChangesRenderConfig: HeaderFooterTrackedChangesRenderConfig = {
+    mode: 'review',
+    enabled: true,
+  };
 
   /**
    * Creates a new HeaderFooterLayoutAdapter.
@@ -1016,6 +1027,23 @@ export class HeaderFooterLayoutAdapter {
   constructor(manager: HeaderFooterEditorManager, mediaFiles?: Record<string, string>) {
     this.#manager = manager;
     this.#mediaFiles = mediaFiles;
+  }
+
+  setTrackedChangesRenderConfig(config: HeaderFooterTrackedChangesRenderConfig): void {
+    const nextConfig: HeaderFooterTrackedChangesRenderConfig = {
+      mode: config.mode,
+      enabled: config.enabled,
+    };
+
+    if (
+      this.#trackedChangesRenderConfig.mode === nextConfig.mode &&
+      this.#trackedChangesRenderConfig.enabled === nextConfig.enabled
+    ) {
+      return;
+    }
+
+    this.#trackedChangesRenderConfig = nextConfig;
+    this.invalidateAll();
   }
 
   /**
@@ -1159,8 +1187,9 @@ export class HeaderFooterLayoutAdapter {
     const doc = this.#manager.getDocumentJson(descriptor);
     if (!doc) return undefined;
 
+    const renderConfigKey = this.#serializeRenderConfig();
     const cacheEntry = this.#blockCache.get(descriptor.id);
-    if (cacheEntry?.docRef === doc) {
+    if (cacheEntry?.docRef === doc && cacheEntry.renderConfigKey === renderConfigKey) {
       return cacheEntry.blocks;
     }
 
@@ -1186,12 +1215,19 @@ export class HeaderFooterLayoutAdapter {
       converterContext,
       defaultFont,
       defaultSize,
+      trackedChangesMode: this.#trackedChangesRenderConfig.mode,
+      enableTrackedChanges: this.#trackedChangesRenderConfig.enabled,
+      storyKey: buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId: descriptor.id }),
       ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
     });
     const blocks = result.blocks;
 
-    this.#blockCache.set(descriptor.id, { docRef: doc, blocks });
+    this.#blockCache.set(descriptor.id, { docRef: doc, renderConfigKey, blocks });
     return blocks;
+  }
+
+  #serializeRenderConfig(): string {
+    return `${this.#trackedChangesRenderConfig.mode}|${this.#trackedChangesRenderConfig.enabled ? '1' : '0'}`;
   }
   /**
    * Extracts converter context needed for FlowBlock conversion.

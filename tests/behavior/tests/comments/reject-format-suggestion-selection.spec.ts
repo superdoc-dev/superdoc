@@ -4,6 +4,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
 const TEXT = 'Agreement signed by both parties';
+const TRACKED_CHANGE_DIALOGS = '.comment-placeholder .comments-dialog, #comments-panel .comments-dialog';
 
 type EditorCommand = [name: string, ...args: unknown[]];
 
@@ -45,7 +46,7 @@ test('reject tracked mixed marks + textStyle on selection restores original form
   await superdoc.waitForStable();
 
   await superdoc.assertTrackedChangeExists('format');
-  const trackedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+  const trackedDialog = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
     has: superdoc.page.locator('.tracked-change-text'),
   });
   await expect(trackedDialog).toHaveCount(1);

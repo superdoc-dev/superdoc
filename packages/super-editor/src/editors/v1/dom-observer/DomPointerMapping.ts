@@ -215,6 +215,26 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
 }
 
 /**
+ * Resolves a click within a specific rendered fragment.
+ *
+ * Unlike {@link clickToPositionDom}, this helper does not scan the full page
+ * hit chain to choose a fragment. Callers that already know which rendered
+ * fragment owns the click can use this to avoid cross-surface ambiguity when
+ * multiple stories share overlapping PM position ranges.
+ */
+export function resolvePositionWithinFragmentDom(
+  fragmentEl: HTMLElement,
+  clientX: number,
+  clientY: number,
+): number | null {
+  if (!fragmentEl.classList?.contains?.(CLASS.fragment)) {
+    return null;
+  }
+
+  return resolveFragment(fragmentEl, clientX, clientY);
+}
+
+/**
  * Finds the page element containing the given viewport coordinates.
  *
  * Tries `elementsFromPoint` first, then falls back to bounding-rect checks
@@ -359,21 +379,52 @@ function resolvePositionInLine(
 
   const targetEl = findSpanAtX(spanEls, viewX);
   if (!targetEl) return lineStart;
+  const targetIndex = spanEls.indexOf(targetEl);
+  if (targetIndex < 0) {
+    return lineStart;
+  }
 
   const { start: spanStart, end: spanEnd } = readPmRange(targetEl);
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return null;
+  const rightCaretBoundary = resolveRightCaretBoundary(spanEls, targetIndex, spanStart, spanEnd);
 
   // Non-text or empty element → snap to nearest edge
   const firstChild = targetEl.firstChild;
   if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
     const targetRect = targetEl.getBoundingClientRect();
     const closerToLeft = Math.abs(viewX - targetRect.left) <= Math.abs(viewX - targetRect.right);
-    return rtl ? (closerToLeft ? spanEnd : spanStart) : closerToLeft ? spanStart : spanEnd;
+    return rtl ? (closerToLeft ? rightCaretBoundary : spanStart) : closerToLeft ? spanStart : rightCaretBoundary;
   }
 
   const textNode = firstChild as Text;
   const charIndex = findCharIndexAtX(textNode, viewX, rtl);
-  return mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
+  return mapCharIndexToPm(spanStart, spanEnd, rightCaretBoundary, textNode.length, charIndex);
+}
+
+/**
+ * Visible text can be split across adjacent PM wrapper nodes, which creates
+ * hidden structural gaps between consecutive rendered spans. The caret the user
+ * sees at the right edge of the current span should land at the next rendered
+ * span's start, not inside the hidden wrapper gap.
+ */
+function resolveRightCaretBoundary(
+  spanEls: readonly HTMLElement[],
+  targetIndex: number,
+  spanStart: number,
+  spanEnd: number,
+): number {
+  for (let index = targetIndex + 1; index < spanEls.length; index += 1) {
+    const { start: nextStart } = readPmRange(spanEls[index]);
+    if (!Number.isFinite(nextStart)) {
+      continue;
+    }
+    if (nextStart > spanEnd) {
+      return nextStart;
+    }
+    break;
+  }
+
+  return spanEnd;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,19 +482,45 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
  * Otherwise (e.g. ligatures or collapsed content) falls back to a midpoint
  * heuristic.
  */
-function mapCharIndexToPm(spanStart: number, spanEnd: number, textLength: number, charIndex: number): number {
+function mapCharIndexToPm(
+  spanStart: number,
+  spanEnd: number,
+  rightCaretBoundary: number,
+  textLength: number,
+  charIndex: number,
+): number {
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return spanStart;
   if (textLength <= 0) return spanStart;
 
   const pmRange = spanEnd - spanStart;
   if (!Number.isFinite(pmRange) || pmRange <= 0) return spanStart;
 
+  const safeRightBoundary =
+    Number.isFinite(rightCaretBoundary) && rightCaretBoundary >= spanEnd ? rightCaretBoundary : spanEnd;
+
+  const clampedIndex = Math.max(0, Math.min(textLength, charIndex));
+
+  // When text is split across wrapper nodes (for example tracked-change runs),
+  // PM exposes hidden boundary positions between visible spans. Preserve the
+  // normal 1:1 mapping for visible characters and reserve the structural gap
+  // for the final caret boundary only.
+  if (safeRightBoundary > spanEnd) {
+    if (clampedIndex >= textLength) {
+      return safeRightBoundary;
+    }
+
+    const directPos = spanStart + clampedIndex;
+    if (directPos <= spanEnd) {
+      return directPos;
+    }
+  }
+
   if (pmRange === textLength) {
-    return Math.min(spanEnd, Math.max(spanStart, spanStart + charIndex));
+    return Math.min(spanEnd, Math.max(spanStart, spanStart + clampedIndex));
   }
 
   // PM range ≠ text length — snap to closer half
-  return charIndex / textLength <= 0.5 ? spanStart : spanEnd;
+  return clampedIndex / textLength <= 0.5 ? spanStart : safeRightBoundary;
 }
 
 /**

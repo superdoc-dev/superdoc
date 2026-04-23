@@ -390,6 +390,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       kind: { const: 'entity' },
       entityType: { const: 'trackedChange' },
       entityId: { type: 'string' },
+      story: ref('StoryLocator'),
     },
     ['kind', 'entityType', 'entityId'],
   ),
@@ -4707,11 +4708,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         enum: ['insert', 'delete', 'format'],
         description: "Filter by change type: 'insert', 'delete', or 'format'.",
       },
+      in: {
+        oneOf: [storyLocatorSchema, { const: 'all' }],
+        description:
+          "Story scope. Omit for body only, pass a StoryLocator for a single story, or 'all' for body + every revision-capable non-body story.",
+      },
     }),
     output: trackChangesListResultSchema,
   },
   'trackChanges.get': {
-    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    input: objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
     output: trackChangeInfoSchema,
   },
   'trackChanges.decide': {
@@ -4721,7 +4727,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         decision: { enum: ['accept', 'reject'] },
         target: {
           oneOf: [
-            objectSchema({ id: { type: 'string' } }, ['id']),
+            objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
             objectSchema({ scope: { enum: ['all'] } }, ['scope']),
           ],
         },

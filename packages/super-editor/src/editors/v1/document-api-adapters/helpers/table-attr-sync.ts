@@ -34,7 +34,7 @@ export function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<str
   const spacing = tp.tableCellSpacing as { value?: number; type?: string } | undefined;
   if (spacing?.value != null) {
     extracted.tableCellSpacing = {
-      w: String(spacing.value),
+      value: twipsToPixels(spacing.value),
       type: spacing.type ?? 'dxa',
     };
     extracted.borderCollapse = 'separate';

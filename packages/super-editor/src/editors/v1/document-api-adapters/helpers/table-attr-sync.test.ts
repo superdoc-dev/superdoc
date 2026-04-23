@@ -37,4 +37,21 @@ describe('buildWidthAuthoringTableAttrs', () => {
     expect((result.tableProperties as Record<string, unknown>).tableWidth).toBeUndefined();
     expect(result.tableWidth).toBeNull();
   });
+
+  it('preserves promoted tableCellSpacing in the importer-compatible value shape', () => {
+    const result = buildWidthAuthoringTableAttrs({
+      tableProperties: {
+        tableLayout: 'autofit',
+        tableCellSpacing: { value: 30, type: 'dxa' },
+      },
+      grid: [{ col: 1200 }, { col: 3000 }],
+    });
+
+    expect(result.tableProperties).toMatchObject({
+      tableLayout: 'fixed',
+      tableCellSpacing: { value: 30, type: 'dxa' },
+    });
+    expect(result.tableCellSpacing).toEqual({ value: 2, type: 'dxa' });
+    expect(result.borderCollapse).toBe('separate');
+  });
 });

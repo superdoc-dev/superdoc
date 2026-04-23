@@ -429,6 +429,61 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths[0] + result.columnWidths[1]).toBeLessThanOrEqual(240.001);
   });
 
+  it('keeps the strongest exact-span trigger across repeated row patterns', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 300,
+          maxTableWidth: 300,
+          preferredColumnWidths: [100, 100, 100],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 2, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+              ],
+            },
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 2, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100, 100],
+          totalWidth: 300,
+          gridColumnCount: 3,
+          preferredTableWidth: 300,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { span: 2, min: 201, max: 230 },
+            { min: 20, max: 20 },
+          ],
+          [
+            { span: 2, min: 201, max: 280 },
+            { min: 20, max: 20 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBe(300);
+    expect(result.columnWidths[0] + result.columnWidths[1]).toBeCloseTo(280, 3);
+    expect(result.columnWidths[2]).toBeCloseTo(20, 3);
+  });
+
   it('redistributes remaining slack back to tblW after trigger handling', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

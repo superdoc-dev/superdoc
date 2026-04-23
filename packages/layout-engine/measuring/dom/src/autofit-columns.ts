@@ -159,6 +159,7 @@ type NormalizedSkippedColumn = {
 };
 
 type NormalizedCell = {
+  rowIndex: number;
   cellIndex: number;
   startColumn: number;
   span: number;
@@ -337,7 +338,7 @@ function resolveLayoutMode(tableLayout: string | null | undefined): AutoFitLayou
  * Convert legacy rows into normalized logical-grid rows with explicit starts.
  */
 function normalizeLegacyRows(rows: AutoFitRowInput[]): NormalizedRow[] {
-  return rows.map((row) => {
+  return rows.map((row, rowIndex) => {
     let columnIndex = 0;
     const skippedColumns: NormalizedSkippedColumn[] = [];
     const cells: NormalizedCell[] = [];
@@ -352,6 +353,7 @@ function normalizeLegacyRows(rows: AutoFitRowInput[]): NormalizedRow[] {
       if (!cell) continue;
       const span = Math.max(1, Math.floor(cell.span ?? 1));
       cells.push({
+        rowIndex,
         cellIndex,
         startColumn: columnIndex,
         span,
@@ -398,6 +400,7 @@ function buildNormalizedRows(
         const metrics = metricsRow?.cells[cellIndex];
         const placedCell = cell as { startColumn: number; span?: number; preferredWidth?: number };
         return {
+          rowIndex,
           cellIndex: metrics?.cellIndex ?? cellIndex,
           startColumn: placedCell.startColumn,
           span: Math.max(1, placedCell.span ?? metrics?.span ?? 1),
@@ -524,7 +527,7 @@ function collectTriggerCells(
     }
   }
 
-  return dedupeCells(triggers);
+  return coalesceEquivalentTriggerCells(dedupeCells(triggers));
 }
 
 /**
@@ -1100,11 +1103,31 @@ function collectSpanRanges(
 function dedupeCells(cells: NormalizedCell[]): NormalizedCell[] {
   const seen = new Set<string>();
   return cells.filter((cell) => {
-    const key = `${cell.startColumn}:${cell.span}:${cell.cellIndex}`;
+    const key = `${cell.rowIndex}:${cell.startColumn}:${cell.span}:${cell.cellIndex}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function coalesceEquivalentTriggerCells(cells: NormalizedCell[]): NormalizedCell[] {
+  const strongestBySpan = new Map<string, NormalizedCell>();
+
+  for (const cell of cells) {
+    const key = `${cell.startColumn}:${cell.span}`;
+    const current = strongestBySpan.get(key);
+    if (!current || resolveTriggerStrength(cell) > resolveTriggerStrength(current)) {
+      strongestBySpan.set(key, cell);
+    }
+  }
+
+  return [...strongestBySpan.values()];
+}
+
+function resolveTriggerStrength(cell: NormalizedCell): number {
+  return cell.preferredWidth != null
+    ? Math.max(cell.preferredWidth, cell.minContentWidth)
+    : Math.max(cell.maxContentWidth, cell.minContentWidth);
 }
 
 function determineGridColumnCount(preferredColumnWidths: number[], rows: NormalizedRow[]): number {

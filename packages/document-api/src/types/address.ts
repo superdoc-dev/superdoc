@@ -125,6 +125,8 @@ export type TrackedChangeAddress = {
   kind: 'entity';
   entityType: 'trackedChange';
   entityId: string;
+  /** Story containing this tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;

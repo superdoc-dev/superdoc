@@ -228,7 +228,9 @@ The frontend sends the `onSubmit` payload plus a document reference and signer d
   "document": { "url": "https://example.com/agreement.docx" },
   "signer": {
     "name": "Jane Smith",
-    "email": "jane@example.com"
+    "email": "jane@example.com",
+    "ip": "203.0.113.42",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
   },
   "documentFields": [
     { "id": "1", "value": "Jane Smith" }
@@ -250,6 +252,19 @@ The frontend sends the `onSubmit` payload plus a document reference and signer d
   "isFullyCompleted": true
 }
 ```
+
+### Signer fields
+
+When forwarding this payload to `POST /v1/sign`, only the following `signer` fields are accepted:
+
+| Field       | Required | Description                                                                 |
+| ----------- | -------- | --------------------------------------------------------------------------- |
+| `name`      | yes      | Signer's full name (2–255 chars). Rendered on the signature.                |
+| `email`     | yes      | Signer's email address (valid email, max 255 chars).                        |
+| `ip`        | no       | IPv4 address of the signer. Included in the audit trail certificate.        |
+| `userAgent` | no       | Browser user agent string. Included in the audit trail certificate.         |
+
+No other properties are accepted on `signer` — the request is rejected with a validation error if extra keys are sent. For application-specific context (tenantId, contractId, etc.), pass a top-level `metadata` object instead.
 
 ## API reference
 

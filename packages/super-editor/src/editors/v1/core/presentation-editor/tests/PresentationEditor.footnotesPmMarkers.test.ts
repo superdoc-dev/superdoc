@@ -64,35 +64,42 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   };
 });
 
-vi.mock('@superdoc/layout-bridge', () => ({
-  incrementalLayout: mockIncrementalLayout,
-  normalizeMargin: (value: number | undefined, fallback: number) =>
-    Number.isFinite(value) ? (value as number) : fallback,
-  selectionToRects: vi.fn(() => []),
-  clickToPosition: vi.fn(),
-  getFragmentAtPosition: vi.fn(),
-  computeLinePmRange: vi.fn(),
-  measureCharacterX: vi.fn(),
-  extractIdentifierFromConverter: vi.fn(),
-  getHeaderFooterType: vi.fn(),
-  getBucketForPageNumber: vi.fn(),
-  getBucketRepresentative: vi.fn(),
-  buildMultiSectionIdentifier: vi.fn(),
-  getHeaderFooterTypeForSection: vi.fn(),
-  layoutHeaderFooterWithCache: vi.fn(),
-  computeDisplayPageNumber: vi.fn(),
-  findWordBoundaries: vi.fn(),
-  findParagraphBoundaries: vi.fn(),
-  createDragHandler: vi.fn(),
-  PageGeometryHelper: vi.fn(() => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => 0),
-    getLayout: vi.fn(() => ({ pages: [] })),
-  })),
-}));
+vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/layout-bridge')>();
+
+  return {
+    ...actual,
+    incrementalLayout: mockIncrementalLayout,
+    normalizeMargin: (value: number | undefined, fallback: number) =>
+      Number.isFinite(value) ? (value as number) : fallback,
+    selectionToRects: vi.fn(() => []),
+    clickToPosition: vi.fn(),
+    getFragmentAtPosition: vi.fn(),
+    computeLinePmRange: vi.fn(),
+    measureCharacterX: vi.fn(),
+    extractIdentifierFromConverter: vi.fn(),
+    getHeaderFooterType: vi.fn(),
+    getBucketForPageNumber: vi.fn(),
+    getBucketRepresentative: vi.fn(),
+    buildMultiSectionIdentifier: vi.fn(),
+    buildEffectiveHeaderFooterRefsBySection: vi.fn(() => new Map()),
+    collectReferencedHeaderFooterRIds: vi.fn(() => new Set()),
+    getHeaderFooterTypeForSection: vi.fn(),
+    layoutHeaderFooterWithCache: vi.fn(),
+    computeDisplayPageNumber: vi.fn(),
+    findWordBoundaries: vi.fn(),
+    findParagraphBoundaries: vi.fn(),
+    createDragHandler: vi.fn(),
+    PageGeometryHelper: vi.fn(() => ({
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => 0),
+      getLayout: vi.fn(() => ({ pages: [] })),
+    })),
+  };
+});
 
 vi.mock('@superdoc/painter-dom', () => ({
   createDomPainter: vi.fn(() => ({

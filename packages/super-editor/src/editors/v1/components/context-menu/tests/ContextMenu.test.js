@@ -19,10 +19,16 @@ vi.mock('@extensions/context-menu', () => ({
   },
 }));
 
-vi.mock('../utils.js', () => ({
-  getPropsByItemId: vi.fn(() => ({ editor: {} })),
-  getEditorContext: vi.fn(),
-}));
+vi.mock('../utils.js', async () => {
+  const actual = await vi.importActual('../utils.js');
+
+  return {
+    ...actual,
+    getPropsByItemId: vi.fn(() => ({ editor: {} })),
+    getEditorContext: vi.fn(),
+    resolveContextMenuCommandEditor: vi.fn((editor) => editor),
+  };
+});
 
 vi.mock('../menuItems.js', () => ({
   getItems: vi.fn(),
@@ -50,6 +56,7 @@ describe('ContextMenu.vue', () => {
   let mockProps;
   let mockGetItems;
   let mockGetEditorContext;
+  let mockResolveContextMenuCommandEditor;
   let commonMocks;
 
   beforeEach(async () => {
@@ -77,10 +84,13 @@ describe('ContextMenu.vue', () => {
     };
 
     const { getItems } = await import('../menuItems.js');
-    const { getEditorContext } = await import('../utils.js');
+    const { getEditorContext, resolveContextMenuCommandEditor } = await import('../utils.js');
 
     mockGetItems = getItems;
     mockGetEditorContext = getEditorContext;
+    mockResolveContextMenuCommandEditor = resolveContextMenuCommandEditor;
+    mockResolveContextMenuCommandEditor.mockReset();
+    mockResolveContextMenuCommandEditor.mockImplementation((editor) => editor);
 
     mockGetItems.mockReturnValue(
       createMockMenuItems(1, [
@@ -798,6 +808,56 @@ describe('ContextMenu.vue', () => {
 
       expect(mockAction).toHaveBeenCalledWith(
         mockEditor,
+        expect.objectContaining({
+          hasSelection: expect.any(Boolean),
+          selectedText: expect.any(String),
+          trigger: expect.any(String),
+        }),
+      );
+    });
+
+    it('should execute item action with the active editor resolved from a wrapper', async () => {
+      const activeEditor = createMockEditor();
+      const editorWrapper = {
+        ...mockEditor,
+        getActiveEditor: vi.fn(() => activeEditor),
+      };
+      const mockAction = vi.fn();
+
+      mockResolveContextMenuCommandEditor.mockImplementation((editor) => {
+        return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
+      });
+
+      mockGetItems.mockReturnValue([
+        {
+          id: 'test-section',
+          items: [
+            {
+              id: 'test-item',
+              label: 'Test Item',
+              showWhen: (context) => context.trigger === TRIGGERS.slash,
+              action: mockAction,
+            },
+          ],
+        },
+      ]);
+
+      const wrapper = mount(ContextMenu, {
+        props: {
+          ...mockProps,
+          editor: editorWrapper,
+        },
+      });
+
+      const onContextMenuOpen = editorWrapper.on.mock.calls.find((call) => call[0] === 'contextMenu:open')[1];
+      await onContextMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
+      await nextTick();
+
+      await wrapper.find('.context-menu-item').trigger('click');
+
+      expect(editorWrapper.getActiveEditor).toHaveBeenCalled();
+      expect(mockAction).toHaveBeenCalledWith(
+        activeEditor,
         expect.objectContaining({
           hasSelection: expect.any(Boolean),
           selectedText: expect.any(String),

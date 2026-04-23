@@ -319,8 +319,7 @@ const getContextMenuTargets = () => {
     targets.add(surface);
   }
 
-  const activeEditor =
-    typeof props.editor?.getActiveEditor === 'function' ? props.editor.getActiveEditor() : props.editor;
+  const activeEditor = resolveContextMenuCommandEditor(props.editor);
   const activeDom = activeEditor?.view?.dom;
   if (activeDom instanceof HTMLElement) {
     targets.add(activeDom);

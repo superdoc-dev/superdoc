@@ -275,6 +275,9 @@ type OptionalBlockMeasurePair = {
 
 type PageDecorationPayload = {
   fragments: Fragment[];
+  /** Resolved items aligned 1:1 with `fragments`. Same length, same order.
+   *  Absent when provider has no resolved data (painter falls back to blockLookup). */
+  items?: ResolvedPaintItem[];
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
@@ -2451,16 +2454,13 @@ export class DomPainter {
    * Used to determine special Y positioning for page-relative anchored media
    * in header/footer decoration sections.
    */
-  private isPageRelativeAnchoredFragment(fragment: Fragment): boolean {
+  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem?: ResolvedPaintItem): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup) {
-      return false;
-    }
-    const block = lookup.block;
-    if (block.kind !== 'image' && block.kind !== 'drawing') {
+    const resolvedBlock = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const block = resolvedBlock ?? this.blockLookup.get(fragment.blockId)?.block;
+    if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) {
       return false;
     }
     return block.anchor?.vRelativeFrom === 'page';
@@ -2580,9 +2580,10 @@ export class DomPainter {
       const contentHeight =
         typeof data.contentHeight === 'number'
           ? data.contentHeight
-          : data.fragments.reduce((max, f) => {
+          : data.fragments.reduce((max, f, fi) => {
+              const resolvedItem = data.items?.[fi];
               const fragHeight =
-                'height' in f && typeof f.height === 'number' ? f.height : this.estimateFragmentHeight(f);
+                'height' in f && typeof f.height === 'number' ? f.height : this.estimateFragmentHeight(f, resolvedItem);
               return Math.max(max, f.y + Math.max(0, fragHeight));
             }, 0);
       // Offset to push content to bottom of container
@@ -2599,7 +2600,7 @@ export class DomPainter {
     };
 
     // Compute between-border flags for header/footer paragraph fragments
-    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup);
+    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup, data.items);
 
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
@@ -2636,8 +2637,15 @@ export class DomPainter {
     // By inserting at the beginning and using z-index: 0, they render below body content
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       let pageY: number;
       if (isPageRelative && kind === 'footer') {
@@ -2660,8 +2668,15 @@ export class DomPainter {
 
     // Render normal fragments in the header/footer container
     normalFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       if (isPageRelative && kind === 'footer') {
         // Footer page-relative: fragment.y is normalized to band-local coords
@@ -7043,7 +7058,10 @@ export class DomPainter {
    * @param fragment - The fragment to estimate height for
    * @returns Estimated height in pixels, or 0 if height cannot be determined
    */
-  private estimateFragmentHeight(fragment: Fragment): number {
+  private estimateFragmentHeight(fragment: Fragment, resolvedItem?: ResolvedPaintItem): number {
+    if (resolvedItem && 'height' in resolvedItem && typeof resolvedItem.height === 'number') {
+      return resolvedItem.height;
+    }
     const lookup = this.blockLookup.get(fragment.blockId);
     const measure = lookup?.measure;
 

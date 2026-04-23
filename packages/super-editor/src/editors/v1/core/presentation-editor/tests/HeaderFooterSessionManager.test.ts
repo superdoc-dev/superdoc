@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockInitHeaderFooterRegistry } = vi.hoisted(() => ({
+const { mockInitHeaderFooterRegistry, mockLayoutPerRIdHeaderFooters } = vi.hoisted(() => ({
   mockInitHeaderFooterRegistry: vi.fn(),
+  mockLayoutPerRIdHeaderFooters: vi.fn(),
 }));
 
 vi.mock('../../header-footer/HeaderFooterRegistryInit.js', () => ({
   initHeaderFooterRegistry: mockInitHeaderFooterRegistry,
 }));
 
+vi.mock('../../header-footer/HeaderFooterPerRidLayout.js', () => ({
+  layoutPerRIdHeaderFooters: mockLayoutPerRIdHeaderFooters,
+}));
+
 import type { Editor } from '../../Editor.js';
+import type { FlowBlock, HeaderFooterLayout, Layout, Measure, ParaFragment } from '@superdoc/contracts';
+import type { HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
 import {
   HeaderFooterSessionManager,
   type SessionManagerDependencies,
@@ -86,6 +93,7 @@ describe('HeaderFooterSessionManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLayoutPerRIdHeaderFooters.mockReset();
 
     painterHost = document.createElement('div');
     visibleHost = document.createElement('div');
@@ -512,5 +520,218 @@ describe('HeaderFooterSessionManager', () => {
     manager.exitMode();
     expect(exit).toHaveBeenCalledTimes(1);
     expect(manager.session.mode).toBe('body');
+  });
+
+  describe('createDecorationProvider — resolved items', () => {
+    function buildHeaderResult(options?: { y?: number; minY?: number }): HeaderFooterLayoutResult {
+      const y = options?.y ?? 10;
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y,
+        width: 468,
+      };
+      const layout: HeaderFooterLayout = {
+        height: 50,
+        ...(options?.minY != null ? { minY: options.minY } : {}),
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 100, ascent: 10, descent: 3, lineHeight: 18 }],
+          totalHeight: 18,
+        },
+      ];
+      return { kind: 'header', type: 'default', layout, blocks, measures };
+    }
+
+    it('delivers items aligned 1:1 with fragments when variant layout is used', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: 'rId-header-default', first: null, even: null, odd: null },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.setLayoutResults([buildHeaderResult()], null);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 } } as never],
+      } as unknown as Layout;
+      const provider = manager.createDecorationProvider('header', layout);
+      expect(provider).toBeDefined();
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0]);
+      expect(payload).not.toBeNull();
+      expect(payload!.fragments).toHaveLength(1);
+      expect(payload!.items).toBeDefined();
+      expect(payload!.items!.length).toBe(payload!.fragments.length);
+      expect(payload!.items![0]!.blockId).toBe('p1');
+    });
+
+    it('normalizes resolved items when variant layout minY is negative', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: 'rId-header-default', first: null, even: null, odd: null },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.setLayoutResults([buildHeaderResult({ y: -12, minY: -12 })], null);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 } } as never],
+      } as unknown as Layout;
+      const provider = manager.createDecorationProvider('header', layout);
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0]);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.fragments[0]!.y).toBe(0);
+      expect(payload!.items).toBeDefined();
+      expect(payload!.items![0]).toMatchObject({ blockId: 'p1', x: 72, y: 0 });
+    });
+
+    it('normalizes resolved items when per-rId layout minY is negative', async () => {
+      mockLayoutPerRIdHeaderFooters.mockImplementation(
+        async (
+          _input: unknown,
+          _layout: unknown,
+          _sectionMetadata: unknown,
+          deps: { headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> },
+        ) => {
+          deps.headerLayoutsByRId.set('rId-header-default', buildHeaderResult({ y: -12, minY: -12 }));
+        },
+      );
+
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: 'rId-header-default', first: null, even: null, odd: null },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default', first: undefined, even: undefined },
+              footerRefs: {},
+            },
+          } as never,
+        ],
+      } as unknown as Layout;
+
+      await manager.layoutPerRId(
+        {
+          headerBlocksByRId: new Map(),
+          footerBlocksByRId: new Map(),
+          constraints: {
+            width: 468,
+            height: 648,
+            pageWidth: 612,
+            pageHeight: 792,
+            margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+            overflowBaseHeight: 36,
+          },
+        },
+        layout,
+        [{ sectionIndex: 0 } as never],
+      );
+
+      const provider = manager.createDecorationProvider('header', layout);
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0]);
+
+      expect(mockLayoutPerRIdHeaderFooters).toHaveBeenCalledTimes(1);
+      expect(payload).not.toBeNull();
+      expect(payload!.fragments[0]!.y).toBe(0);
+      expect(payload!.items).toBeDefined();
+      expect(payload!.items![0]).toMatchObject({ blockId: 'p1', x: 72, y: 0 });
+    });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Tests for list-marker context menu section (SD-2524).
+ * Tests for list-marker context menu section.
  *
  * When the user right-clicks on a list marker, getItems() should return
  * a "list-marker" section with restart-numbering, continue-numbering,
@@ -48,7 +48,7 @@ function flatItems(sections) {
   return sections.flatMap((s) => s.items);
 }
 
-describe('list-marker menu section (SD-2524)', () => {
+describe('list-marker menu section', () => {
   describe('visibility when isOnListMarker is true', () => {
     it('shows restart-numbering item', () => {
       const context = makeListMarkerContext();

@@ -1,5 +1,5 @@
 /**
- * Tests for isOnListMarker detection in getEditorContext (SD-2524).
+ * Tests for isOnListMarker detection in getEditorContext.
  *
  * When a right-click event lands on a `.superdoc-list-marker` element,
  * the context returned by getEditorContext must include `isOnListMarker: true`
@@ -42,7 +42,7 @@ vi.mock('prosemirror-tables', () => ({
 
 import { getEditorContext } from '../utils.js';
 
-describe('getEditorContext — isOnListMarker (SD-2524)', () => {
+describe('getEditorContext — isOnListMarker', () => {
   let mockEditor;
 
   beforeEach(

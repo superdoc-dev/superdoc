@@ -2731,6 +2731,7 @@ describe('paragraph converters', () => {
           applyMarksToRun,
           undefined,
           true,
+          undefined,
         );
 
         const paraBlock = blocks[0] as ParagraphBlock;

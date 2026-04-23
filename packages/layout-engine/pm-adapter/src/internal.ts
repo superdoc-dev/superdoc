@@ -195,6 +195,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     recordBlockKind,
     nextBlockId,
     blockIdPrefix: idPrefix,
+    storyKey: options?.storyKey,
     positions,
     defaultFont,
     defaultSize,

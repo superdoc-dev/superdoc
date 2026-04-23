@@ -108,6 +108,7 @@ function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
+  storyKey?: string;
   trackedChangesConfig: TrackedChangesConfig;
   bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -340,6 +341,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         para: childNode,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
+        storyKey: context.storyKey,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -361,6 +363,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             para: nestedNode,
             nextBlockId: context.nextBlockId,
             positions: context.positions,
+            storyKey: context.storyKey,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -376,6 +379,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
           const tableBlock = tableNodeToBlock(nestedNode, {
             nextBlockId: context.nextBlockId,
             positions: context.positions,
+            storyKey: context.storyKey,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -398,6 +402,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       const tableBlock = tableNodeToBlock(childNode, {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
+        storyKey: context.storyKey,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -414,7 +419,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'image' && context.converters?.imageNodeToBlock) {
       const mergedMarks = [...(childNode.marks ?? [])];
-      const trackedMeta = context.trackedChangesConfig ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
+      const trackedMeta = context.trackedChangesConfig
+        ? collectTrackedChangeFromMarks(mergedMarks, context.storyKey)
+        : undefined;
       if (shouldHideTrackedNode(trackedMeta, context.trackedChangesConfig)) {
         continue;
       }
@@ -788,6 +795,7 @@ export function tableNodeToBlock(
   {
     nextBlockId,
     positions,
+    storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -804,6 +812,7 @@ export function tableNodeToBlock(
   const parserDeps: TableParserDependencies = {
     nextBlockId,
     positions,
+    storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -1037,6 +1046,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
   const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
+    storyKey: context.storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

@@ -38,6 +38,7 @@ export class NotInlineNodeError extends Error {
 export type InlineConverterParams = {
   node: PMNode;
   positions: PositionMap;
+  storyKey?: string;
   inheritedMarks: PMMark[];
   defaultFont: string;
   defaultSize: number;
@@ -60,6 +61,7 @@ export type BlockConverterOptions = {
   nextBlockId: BlockIdGenerator;
   nextId: () => string;
   positions: WeakMap<PMNode, Position>;
+  storyKey?: string;
   trackedChangesConfig: NodeHandlerContext['trackedChangesConfig'];
   defaultFont: string;
   defaultSize: number;

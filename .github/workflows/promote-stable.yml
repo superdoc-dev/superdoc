@@ -1,0 +1,184 @@
+name: 🚀 Promote to stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: Optional candidate branch name (defaults to merge/main-into-stable-YYYY-MM-DD)
+        required: false
+        type: string
+  schedule:
+    - cron: '0 7 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-stable
+  cancel-in-progress: false
+
+jobs:
+  prepare-stable-pr:
+    runs-on: ubuntu-latest
+    env:
+      BASE_BRANCH: stable
+      SOURCE_BRANCH: main
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Prepare candidate branch
+        id: prepare
+        env:
+          REQUESTED_BRANCH_NAME: ${{ inputs.branch_name }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "${BASE_BRANCH}" "${SOURCE_BRANCH}" --prune
+
+          DEFAULT_BRANCH_NAME="merge/main-into-stable-$(date -u +%Y-%m-%d)"
+          BRANCH_NAME="${REQUESTED_BRANCH_NAME}"
+          if [[ -z "${BRANCH_NAME}" ]]; then
+            BRANCH_NAME="${DEFAULT_BRANCH_NAME}"
+          fi
+
+          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" >/dev/null 2>&1; then
+            echo "Remote branch already exists: ${BRANCH_NAME}"
+            echo "Preserving the existing frozen candidate branch."
+            echo "branch_name=${BRANCH_NAME}" >> "${GITHUB_OUTPUT}"
+            echo "merge_status=existing" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git checkout -B "${BRANCH_NAME}" "origin/${BASE_BRANCH}"
+
+          if git merge --no-ff --no-edit "origin/${SOURCE_BRANCH}"; then
+            MERGE_STATUS="clean"
+          else
+            MERGE_STATUS="conflicts"
+            git add -A
+            git commit -m "chore: merge main into stable (conflicts need resolution)"
+          fi
+
+          if git diff --quiet "origin/${BASE_BRANCH}"...HEAD; then
+            echo "No changes to promote from ${SOURCE_BRANCH} into ${BASE_BRANCH}."
+            echo "branch_name=" >> "${GITHUB_OUTPUT}"
+            echo "merge_status=noop" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git push origin "${BRANCH_NAME}"
+
+          echo "branch_name=${BRANCH_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "merge_status=${MERGE_STATUS}" >> "${GITHUB_OUTPUT}"
+
+      - name: Open pull request
+        if: steps.prepare.outputs.branch_name != ''
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}
+          MERGE_STATUS: ${{ steps.prepare.outputs.merge_status }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${MERGE_STATUS}" == "conflicts" ]]; then
+            PR_TITLE="Merge main into stable (conflicts need resolution)"
+            PR_BODY="$(cat <<EOF
+          ## Summary
+
+          - creates \`${BRANCH_NAME}\` from \`${BASE_BRANCH}\`
+          - merges \`${SOURCE_BRANCH}\` into the candidate branch
+          - commits the merge with conflict markers so a human can resolve the branch
+
+          ## Next Step
+
+          Resolve the conflicts on \`${BRANCH_NAME}\`, push the fixes, and then merge this PR into \`${BASE_BRANCH}\`.
+
+          ---
+          _Auto-created by promote-stable workflow._
+          EOF
+            )"
+          else
+            PR_TITLE="Merge main into stable"
+            PR_BODY="$(cat <<EOF
+          ## Summary
+
+          - creates \`${BRANCH_NAME}\` from \`${BASE_BRANCH}\`
+          - merges \`${SOURCE_BRANCH}\` into the candidate branch
+          - opens the promotion PR to \`${BASE_BRANCH}\`
+
+          ---
+          _Auto-created by promote-stable workflow._
+          EOF
+            )"
+          fi
+
+          if [[ "${MERGE_STATUS}" == "existing" ]]; then
+            PR_TITLE="Merge main into stable"
+            PR_BODY="$(cat <<EOF
+          ## Summary
+
+          - reuses the existing candidate branch \`${BRANCH_NAME}\`
+          - preserves the previously created frozen snapshot
+          - ensures there is an open PR targeting \`${BASE_BRANCH}\`
+
+          ---
+          _Auto-created by promote-stable workflow._
+          EOF
+            )"
+          fi
+
+          EXISTING_PR_URL="$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base "${BASE_BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --state open \
+            --json url \
+            --jq '.[0].url' 2>/dev/null || true)"
+
+          if [[ -n "${EXISTING_PR_URL}" ]]; then
+            gh pr edit "${EXISTING_PR_URL}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${PR_TITLE}" \
+              --body "${PR_BODY}"
+            echo "url=${EXISTING_PR_URL}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          PR_URL="$(gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base "${BASE_BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --title "${PR_TITLE}" \
+            --body "${PR_BODY}")"
+
+          echo "url=${PR_URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write workflow summary
+        run: |
+          {
+            echo "### Promote to stable"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`${{ github.event_name }}\` |"
+            echo "| Source branch | \`${SOURCE_BRANCH}\` |"
+            echo "| Base branch | \`${BASE_BRANCH}\` |"
+            echo "| Candidate branch | \`${{ steps.prepare.outputs.branch_name || 'n/a' }}\` |"
+            echo "| Merge status | \`${{ steps.prepare.outputs.merge_status || 'n/a' }}\` |"
+            echo "| PR | ${{ steps.pr.outputs.url || 'n/a' }} |"
+          } >> "${GITHUB_STEP_SUMMARY}"

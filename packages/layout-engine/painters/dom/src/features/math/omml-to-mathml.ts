@@ -29,6 +29,8 @@ import {
   convertPhantom,
   convertGroupCharacter,
   convertMatrix,
+  convertBox,
+  convertBorderBox,
 } from './converters/index.js';
 
 export const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
@@ -66,9 +68,8 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
   'm:sPre': convertPreSubSuperscript, // Pre-sub-superscript (left of base)
 
-  // ── Not yet implemented (community contributions welcome) ────────────────
-  'm:borderBox': null, // Border box (border around math content)
-  'm:box': null, // Box (invisible grouping container)
+  'm:borderBox': convertBorderBox, // Border box (border around math content)
+  'm:box': convertBox, // Box (invisible grouping container)
   'm:groupChr': convertGroupCharacter, // Group character (overbrace, underbrace)
 };
 

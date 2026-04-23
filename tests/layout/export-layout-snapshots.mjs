@@ -1365,7 +1365,14 @@ function computeHeaderFooterConstraints(layoutOptions) {
     width: bodyContentWidth,
     height,
     pageWidth: pageSize.w,
-    margins: { left: marginLeft, right: marginRight },
+    pageHeight: pageSize.h,
+    margins: {
+      left: marginLeft,
+      right: marginRight,
+      top: marginTop,
+      bottom: marginBottom,
+      header: headerMargin,
+    },
     overflowBaseHeight,
   };
 }

@@ -82,13 +82,26 @@ function isAlreadyPublished(packageName, version, authToken, baseEnv = process.e
   throw new Error(`Failed to check published version for ${packageName}@${version}: ${details}`);
 }
 
+function ensureDistTag(packageName, version, tag, authToken, baseEnv = process.env) {
+  const result = spawnSync('npm', ['dist-tag', 'add', `${packageName}@${version}`, tag], {
+    cwd: REPO_ROOT,
+    stdio: 'inherit',
+    env: createNpmEnv(baseEnv, authToken),
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Failed to ensure dist-tag "${tag}" for ${packageName}@${version}`);
+  }
+}
+
 function runNpmPublish(packageName, tag, dryRun, authToken, baseEnv = process.env) {
   const pkgDir = PACKAGE_DIR_BY_NAME[packageName];
   if (!pkgDir) throw new Error(`No package directory mapping for ${packageName}`);
 
   const version = getPackageVersion(packageName);
   if (!dryRun && isAlreadyPublished(packageName, version, authToken, baseEnv)) {
-    console.log(`Skipping ${packageName}@${version} (already published).`);
+    console.log(`Skipping ${packageName}@${version} (already published, ensuring dist-tag "${tag}").`);
+    ensureDistTag(packageName, version, tag, authToken, baseEnv);
     return;
   }
 

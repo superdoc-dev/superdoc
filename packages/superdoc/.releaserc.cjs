@@ -13,6 +13,7 @@ const SUPERDOC_PACKAGES = [
   'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
+  'shared',
   'pnpm-workspace.yaml',
 ]
 

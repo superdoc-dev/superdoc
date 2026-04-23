@@ -237,6 +237,8 @@ function buildLegacyPaintInput(
   return {
     resolvedLayout,
     sourceLayout: layout,
+    blocks: legacyState.blocks,
+    measures: legacyState.measures,
     headerBlocks: legacyState.headerBlocks,
     headerMeasures: legacyState.headerMeasures,
     footerBlocks: legacyState.footerBlocks,

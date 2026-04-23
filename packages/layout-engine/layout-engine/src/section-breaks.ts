@@ -30,7 +30,7 @@ export type BreakDecision = {
 };
 
 /** Default single-column configuration per OOXML spec (absence of w:cols element) */
-const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = { count: 1, gap: 0 };
+export const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = { count: 1, gap: 0 };
 
 /**
  * Get the column configuration for a section break.
@@ -38,7 +38,7 @@ const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = { count: 1, gap: 0 };
  * Per OOXML spec, absence of <w:cols> element means single column layout.
  *
  * @param blockColumns - The columns property from the section break block (may be undefined)
- * @returns Column configuration with count and gap
+ * @returns Column configuration with count, gap, and separator presence
  */
 function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
   return blockColumns ? cloneColumnLayout(blockColumns) : { ...SINGLE_COLUMN_DEFAULT };
@@ -56,17 +56,22 @@ function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
  */
 function isColumnConfigChanging(blockColumns: ColumnLayout | undefined, activeColumns: ColumnLayout): boolean {
   if (blockColumns) {
-    // Explicit column change
+    // Explicit column change: any of count, gap, separator presence, equalWidth,
+    // or widths differs. withSeparator must be included because a sep-only toggle
+    // still needs a new column region so the renderer can draw (or stop drawing)
+    // the separator from the toggle point onward.
     return (
       blockColumns.count !== activeColumns.count ||
       blockColumns.gap !== activeColumns.gap ||
+      Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator) ||
       blockColumns.equalWidth !== activeColumns.equalWidth ||
       !widthsEqual(blockColumns.widths, activeColumns.widths)
     );
   }
-  // No columns specified = reset to single column (OOXML default)
-  // This is a change only if currently in multi-column layout
-  return activeColumns.count > 1;
+  // No columns specified = reset to single column (OOXML default).
+  // This is a change if currently in multi-column layout, or if the separator was on
+  // (the reset implicitly turns it off).
+  return activeColumns.count > 1 || Boolean(activeColumns.withSeparator);
 }
 
 /**

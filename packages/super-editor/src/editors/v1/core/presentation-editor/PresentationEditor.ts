@@ -333,6 +333,8 @@ export class PresentationEditor extends EventEmitter {
   /**
    * When true, the next selection render scrolls the caret/selection head into view.
    * Only set for user-initiated actions (keyboard/mouse selection, image click, zoom).
+   * Not set on each `selectionUpdate` while a pointer drag is active — edge auto-scroll
+   * owns the viewport then; `notifyDragSelectionEnded` restores one scroll after mouseup.
    * Passive re-renders (virtualization remounts, layout completions, DOM rebuilds) leave
    * this unset so they don't fight the user's scroll position.
    */
@@ -468,6 +470,7 @@ export class PresentationEditor extends EventEmitter {
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
+      showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -2019,6 +2022,24 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Toggle the SD-2454 "Show bookmarks" bracket indicators at runtime.
+   *
+   * When enabled, the pm-adapter emits visible gray `[` / `]` marker runs at
+   * bookmarkStart / bookmarkEnd positions (mirroring Word's opt-in behavior).
+   * Because markers are real characters that participate in text measurement
+   * and line breaking, toggling invalidates the flow-block cache and triggers
+   * a full re-layout.
+   */
+  setShowBookmarks(showBookmarks: boolean): void {
+    const next = !!showBookmarks;
+    if (this.#layoutOptions.showBookmarks === next) return;
+    this.#layoutOptions.showBookmarks = next;
+    this.#flowBlockCache?.clear();
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
+  }
+
+  /**
    * Convert a viewport coordinate into a document hit using the current layout.
    */
   hitTest(clientX: number, clientY: number): PositionHit | null {
@@ -3245,8 +3266,11 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      // User-initiated selection change (keyboard, mouse) — scroll caret into view.
-      this.#shouldScrollSelectionIntoView = true;
+      // User-initiated selection change — scroll caret/head into view once, except during
+      // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView.
+      if (!this.#editorInputManager?.isDragging) {
+        this.#shouldScrollSelectionIntoView = true;
+      }
       // Use immediate rendering for selection-only changes (clicks, arrow keys).
       // Without immediate, the render is RAF-deferred — leaving a window where
       // a remote collaborator's edit can cancel the pending render via
@@ -3566,6 +3590,10 @@ export class PresentationEditor extends EventEmitter {
       selectParagraphAt: (pos: number) => this.#selectParagraphAt(pos),
       finalizeDragSelectionWithDom: (pointer, dragAnchor, dragMode) =>
         this.#finalizeDragSelectionWithDom(pointer, dragAnchor, dragMode),
+      notifyDragSelectionEnded: () => {
+        this.#shouldScrollSelectionIntoView = true;
+        this.#scheduleSelectionUpdate({ immediate: true });
+      },
       hitTestTable: (x: number, y: number) => this.#hitTestTable(x, y),
     });
   }
@@ -4194,6 +4222,7 @@ export class PresentationEditor extends EventEmitter {
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
           flowBlockCache: this.#flowBlockCache,
+          showBookmarks: this.#layoutOptions.showBookmarks ?? false,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });
@@ -4988,7 +5017,8 @@ export class PresentationEditor extends EventEmitter {
     // (virtualization remounts, layout completions) never set this flag, so
     // they won't scroll the viewport to the caret — only real user-initiated
     // selection changes (keyboard, mouse, image click, zoom) will.
-    const shouldScrollIntoView = this.#shouldScrollSelectionIntoView;
+    // Belt-and-suspenders: never scroll from this path while pointer-drag is active.
+    const shouldScrollIntoView = this.#shouldScrollSelectionIntoView && !this.#editorInputManager?.isDragging;
     this.#shouldScrollSelectionIntoView = false;
 
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
@@ -5408,12 +5438,17 @@ export class PresentationEditor extends EventEmitter {
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
+    const alternateHeaders = Boolean(
+      (this.#editor as EditorWithConverter | undefined)?.converter?.pageStyles?.alternateHeaders,
+    );
+
     return {
       flowMode: 'paginated',
       pageSize,
       margins: resolvedMargins,
       ...(columns ? { columns } : {}),
       sectionMetadata,
+      alternateHeaders,
     };
   }
 
@@ -5832,8 +5867,24 @@ export class PresentationEditor extends EventEmitter {
       yPosition += pageHeight + virtualGap;
     }
 
-    // Scroll viewport to the calculated position
-    if (this.#visibleHost) {
+    // Scroll viewport to the calculated position.
+    //
+    // The authoritative scrollable ancestor is `#scrollContainer` — setting
+    // scrollTop on the visible host alone is a no-op when the host is
+    // `overflow: visible` (the standard layout). Without this, anchor
+    // navigation (TOC clicks, cross-reference click-to-navigate under
+    // SD-2495) silently does nothing whenever the target page is outside
+    // the current viewport.
+    //
+    // We also write to `#visibleHost` for backwards compatibility: legacy
+    // layouts may make the visible host itself scrollable, and tests mock
+    // scrollTop on the host element.
+    if (this.#scrollContainer instanceof Window) {
+      this.#scrollContainer.scrollTo({ top: yPosition });
+    } else if (this.#scrollContainer) {
+      this.#scrollContainer.scrollTop = yPosition;
+    }
+    if (this.#visibleHost && this.#visibleHost !== this.#scrollContainer) {
       this.#visibleHost.scrollTop = yPosition;
     }
   }

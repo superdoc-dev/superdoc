@@ -63,6 +63,42 @@ describe('translateContentBlock', () => {
     expect(alternateChoiceTranslator.decode).not.toHaveBeenCalled();
     expect(result.elements[0].name).toBe('w:pict');
   });
+
+  it('should use translateVRectContentBlock when legacy VML markers exist in attributes', () => {
+    const params = {
+      node: {
+        attrs: {
+          attributes: {
+            style: 'position:absolute;width:100pt;height:20pt',
+            fillcolor: 'yellow',
+            stroked: 'f',
+          },
+        },
+      },
+    };
+
+    generateRandomSigned32BitIntStrId.mockReturnValue('12345678');
+
+    const result = translateContentBlock(params);
+
+    expect(alternateChoiceTranslator.decode).not.toHaveBeenCalled();
+    expect(result.elements[0].name).toBe('w:pict');
+  });
+
+  it('should return null when alternateChoiceTranslator returns null', () => {
+    alternateChoiceTranslator.decode.mockReturnValue(null);
+
+    const params = {
+      node: {
+        attrs: {},
+      },
+    };
+
+    const result = translateContentBlock(params);
+
+    expect(result).toBeNull();
+    expect(wrapTextInRun).not.toHaveBeenCalled();
+  });
 });
 
 describe('translateVRectContentBlock', () => {

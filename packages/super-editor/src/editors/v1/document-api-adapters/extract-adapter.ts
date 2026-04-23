@@ -220,10 +220,21 @@ function collectContainerBlocks(
     }
 
     const childType = mapBlockNodeType(child);
-    if (!childType || !EMITTABLE_BLOCK_TYPES.has(childType)) continue;
+    if (childType && EMITTABLE_BLOCK_TYPES.has(childType)) {
+      const block = buildBlock(child, childPos, childType, childPath, tableContext);
+      if (block) blocks.push(block);
+      continue;
+    }
 
-    const block = buildBlock(child, childPos, childType, childPath, tableContext);
-    if (block) blocks.push(block);
+    // Unrecognized block wrapper with block-level children (e.g.
+    // `documentSection`, `documentPartObject`, `shapeContainer`). Recurse
+    // transparently so paragraphs inside these wrappers still surface in
+    // extract output. Without this, content inside them would be silently
+    // dropped: the pre-SD-2672 `textContent` walk included that text, and
+    // the new walker must not regress coverage.
+    if (!child.isLeaf && child.firstChild?.isBlock === true) {
+      blocks.push(...collectContainerBlocks(child, childPos + 1, childPath, ordinals, tableContext, nestedParent));
+    }
   }
 
   return blocks;

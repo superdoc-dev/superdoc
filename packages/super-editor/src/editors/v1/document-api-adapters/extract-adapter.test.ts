@@ -167,6 +167,46 @@ describe('extract-adapter SDT transparency', () => {
     expect(result.blocks.find((b) => b.text === 'outside')?.type).toBe('paragraph');
   });
 
+  it('recurses transparently into unrecognized block containers inside a cell', async () => {
+    // documentSection is a block wrapper (`content: 'block*'`) that neither
+    // mapBlockNodeType nor EMITTABLE_BLOCK_TYPES recognize. The walker must
+    // step through it so paragraphs inside still emit with the cell's
+    // tableContext attached. The pre-SD-2672 textContent walk included
+    // this text, so skipping it would be a coverage regression.
+    const doc: SchemaDoc = {
+      type: 'doc',
+      content: [
+        table([
+          row([
+            cell([
+              {
+                type: 'documentSection',
+                attrs: {},
+                content: [paragraph('inside section')],
+              },
+            ]),
+            cell([paragraph('normal cell')]),
+          ]),
+        ]),
+      ],
+    };
+
+    const ctx = await makeEditor(doc);
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+    const wrapped = result.blocks.find((b) => b.text === 'inside section');
+    const normal = result.blocks.find((b) => b.text === 'normal cell');
+
+    expect(wrapped).toBeDefined();
+    expect(wrapped!.type).toBe('paragraph');
+    expect(wrapped!.tableContext).toBeDefined();
+    expect(wrapped!.tableContext!.rowIndex).toBe(0);
+    expect(wrapped!.tableContext!.columnIndex).toBe(0);
+
+    expect(normal?.tableContext?.columnIndex).toBe(1);
+  });
+
   it('does not flatten tables wrapped in an SDT', async () => {
     const doc: SchemaDoc = {
       type: 'doc',

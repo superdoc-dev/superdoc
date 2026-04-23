@@ -196,6 +196,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- ranges.* ---
     'ranges.resolve': (input) => api.ranges.resolve(input),
+    'ranges.scrollIntoView': (input) => api.ranges.scrollIntoView(input),
 
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),

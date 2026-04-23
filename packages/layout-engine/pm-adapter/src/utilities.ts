@@ -1001,9 +1001,18 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
       return undefined;
     }
 
+    const addPathCandidates = (value?: string) => {
+      if (!value) return [] as string[];
+      const normalized = normalizeMediaKey(value);
+      if (!normalized) return [value];
+      const withoutWordPrefix = normalized.startsWith('word/') ? normalized.slice(5) : normalized;
+      const withWordPrefix = normalized.startsWith('word/') ? normalized : `word/${normalized}`;
+      return [value, normalized, withoutWordPrefix, withWordPrefix];
+    };
+
     const candidates = new Set<string>();
-    candidates.add(src);
-    if (attrSrc) candidates.add(attrSrc);
+    addPathCandidates(src).forEach((candidate) => candidates.add(candidate));
+    if (attrSrc) addPathCandidates(attrSrc).forEach((candidate) => candidates.add(candidate));
     if (relId) {
       const inferredExt = extension ?? inferExtensionFromPath(src) ?? 'jpeg';
       candidates.add(`word/media/${relId}.${inferredExt}`);

@@ -3029,7 +3029,7 @@ describe('DomPainter', () => {
     expect(appliedWordSpacing).toBeCloseTo(expectedWordSpacing, 5);
   });
 
-  it('reuses fragment DOM nodes when layout geometry changes', () => {
+  it('rebuilds fragment DOM nodes when layout geometry changes to keep line epochs in sync', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
@@ -3051,9 +3051,12 @@ describe('DomPainter', () => {
 
     painter.paint(movedLayout, mount);
     const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    const lineAfter = fragmentAfter.querySelector('.superdoc-line') as HTMLElement;
 
-    expect(fragmentAfter).toBe(fragmentBefore);
+    expect(fragmentAfter).not.toBe(fragmentBefore);
     expect(fragmentAfter.style.left).toBe('60px');
+    expect(fragmentAfter.dataset.layoutEpoch).toBeTruthy();
+    expect(lineAfter.dataset.layoutEpoch).toBe(fragmentAfter.dataset.layoutEpoch);
   });
 
   it('rebuilds fragment DOM when block content changes via setData', () => {
@@ -5016,10 +5019,82 @@ describe('DomPainter', () => {
     painter.paint(updatedLayout, mount);
 
     const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    expect(updatedWrapper).toBe(initialWrapper);
+    const updatedLine = updatedWrapper.querySelector('.superdoc-line') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
     expect(updatedWrapper.style.left).toBe('90px');
     expect(updatedWrapper.style.top).toBe('55px');
     expect(updatedWrapper.style.width).toBe('310px');
+    expect(updatedWrapper.dataset.layoutEpoch).toBeTruthy();
+    expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
+  });
+
+  it('uses resolved block versions for block change tracking', () => {
+    const blockId = 'resolved-version-block';
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: blockId,
+      runs: [{ text: 'Stable content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+    const paragraphLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId, fromLine: 0, toLine: 1, x: 24, y: 24, width: 300, pmStart: 0, pmEnd: 14 },
+          ],
+        },
+      ],
+    };
+
+    const item = {
+      kind: 'fragment' as const,
+      id: `para:${blockId}:0:1`,
+      pageIndex: 0,
+      x: 24,
+      y: 24,
+      width: 300,
+      height: 20,
+      fragmentKind: 'para' as const,
+      blockId,
+      fragmentIndex: 0,
+      version: 'stable-fragment-version',
+    };
+
+    const painter = createTestPainter({ blocks: [paragraphBlock], measures: [paragraphMeasure] });
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-1' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const initialWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-2' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const updatedWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
   });
 
   it('applies resolved zIndex only to anchored media fragments', () => {
@@ -6357,6 +6432,76 @@ describe('DomPainter', () => {
       // Second page (continues from prev) - line should NOT have firstLine indent
       const page2Line = pages[1].querySelector('.superdoc-line') as HTMLElement;
       expect(page2Line.style.textIndent).toBe('0px');
+    });
+
+    it('uses resolved continuesFromPrev for first-line width calculations', () => {
+      const continuedBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'resolved-continued-block',
+        runs: [{ text: 'alpha beta gamma', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { alignment: 'justify', indent: { left: 20, hanging: 40 } },
+      };
+
+      const continuedMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 16,
+            width: 120,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const continuedLayout: Layout = {
+        pageSize: layout.pageSize,
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'resolved-continued-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 200,
+                continuesOnNext: true,
+              },
+            ],
+          },
+        ],
+      };
+
+      const resolvedLayout = createSinglePageResolvedLayout({
+        kind: 'fragment',
+        id: 'resolved-continued-item',
+        pageIndex: 0,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 20,
+        fragmentKind: 'para',
+        blockId: 'resolved-continued-block',
+        fragmentIndex: 0,
+        continuesFromPrev: true,
+        continuesOnNext: true,
+      });
+
+      const painter = createTestPainter({ blocks: [continuedBlock], measures: [continuedMeasure] });
+      painter.setResolvedLayout(resolvedLayout);
+      painter.paint(continuedLayout, mount);
+
+      const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(lineEl.style.textIndent).toBe('0px');
+      expect(lineEl.style.wordSpacing).toBe('30px');
     });
 
     it('removes fragment-level indent styles to prevent double-application', () => {

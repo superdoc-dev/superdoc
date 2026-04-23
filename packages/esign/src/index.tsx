@@ -527,4 +527,5 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
 
 SuperDocESign.displayName = 'SuperDocESign';
 
+export { SuperDocESign };
 export default SuperDocESign;

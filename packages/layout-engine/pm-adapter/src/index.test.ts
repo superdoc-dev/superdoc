@@ -70,7 +70,7 @@ describe('toFlowBlocks', () => {
         runs: [
           {
             text: 'Hello world',
-            fontFamily: 'Times New Roman, sans-serif',
+            fontFamily: 'Times New Roman, serif',
           },
         ],
       });
@@ -114,7 +114,7 @@ describe('toFlowBlocks', () => {
       });
 
       expect(blocks[0].runs[0]).toMatchObject({
-        fontFamily: 'Times New Roman, sans-serif',
+        fontFamily: 'Times New Roman, serif',
       });
       expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });

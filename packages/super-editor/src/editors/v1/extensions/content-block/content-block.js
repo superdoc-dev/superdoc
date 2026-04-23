@@ -142,6 +142,16 @@ export const ContentBlock = Node.create({
         rendered: false,
       },
 
+      vmlAttributes: {
+        default: null,
+        rendered: false,
+      },
+
+      style: {
+        default: null,
+        rendered: false,
+      },
+
       attributes: {
         rendered: false,
       },

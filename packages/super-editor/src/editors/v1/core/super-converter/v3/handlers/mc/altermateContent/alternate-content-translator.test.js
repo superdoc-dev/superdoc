@@ -125,7 +125,7 @@ describe('mc:AltermateContent translator', () => {
   });
 
   describe('decode', () => {
-    it('returns mc:AlternateContent structure with w:drawing inside mc:Choice', () => {
+    it('returns mc:AlternateContent with valid choice and fallback drawing branches', () => {
       const params = {
         node: {
           attrs: {
@@ -149,29 +149,24 @@ describe('mc:AltermateContent translator', () => {
               },
             ],
           },
-        ],
-      });
-    });
-
-    it('handles empty drawingContent gracefully', () => {
-      const params = { node: { attrs: {} } };
-      const result = translator.decode(params);
-
-      expect(result).toEqual({
-        name: 'mc:AlternateContent',
-        elements: [
           {
-            name: 'mc:Choice',
-            attributes: { Requires: 'wps' },
+            name: 'mc:Fallback',
             elements: [
               {
                 name: 'w:drawing',
-                elements: [],
+                elements: [{ name: 'wp:inline' }],
               },
             ],
           },
         ],
       });
+    });
+
+    it('returns null when drawingContent is missing/invalid', () => {
+      const params = { node: { attrs: {} } };
+      const result = translator.decode(params);
+
+      expect(result).toBeNull();
     });
   });
 });

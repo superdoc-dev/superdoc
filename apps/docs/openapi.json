@@ -277,13 +277,10 @@
                   "format": "date-time",
                   "description": "ISO-8601 timestamp for the event"
                 },
-                "field": {
-                  "type": "string",
-                  "description": "Field id the event relates to (for `field_change`)"
-                },
-                "value": {
-                  "oneOf": [{ "type": "string" }, { "type": "boolean" }],
-                  "description": "Value associated with the event (for `field_change`)"
+                "data": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Event-specific payload emitted by the e-sign SDK. Shape depends on `type`:\n- `scroll` — `{ percent: number }`\n- `field_change` — `{ fieldId: string, value: string | boolean, previousValue?: string | boolean }`\n- `ready`, `submit` — typically omitted"
                 }
               }
             }

@@ -1800,11 +1800,6 @@ _No fields._
 | `operations.ranges.resolve.dryRun` | boolean | yes |  |
 | `operations.ranges.resolve.reasons` | enum[] | no |  |
 | `operations.ranges.resolve.tracked` | boolean | yes |  |
-| `operations.ranges.scrollIntoView` | object | yes |  |
-| `operations.ranges.scrollIntoView.available` | boolean | yes |  |
-| `operations.ranges.scrollIntoView.dryRun` | boolean | yes |  |
-| `operations.ranges.scrollIntoView.reasons` | enum[] | no |  |
-| `operations.ranges.scrollIntoView.tracked` | boolean | yes |  |
 | `operations.replace` | object | yes |  |
 | `operations.replace.available` | boolean | yes |  |
 | `operations.replace.dryRun` | boolean | yes |  |
@@ -4022,11 +4017,6 @@ _No fields._
       "tracked": false
     },
     "ranges.resolve": {
-      "available": true,
-      "dryRun": false,
-      "tracked": false
-    },
-    "ranges.scrollIntoView": {
       "available": true,
       "dryRun": false,
       "tracked": false
@@ -16814,41 +16804,6 @@ _No fields._
           ],
           "type": "object"
         },
-        "ranges.scrollIntoView": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "HELPER_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE",
-                  "STYLES_PART_MISSING",
-                  "COLLABORATION_ACTIVE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
         "replace": {
           "additionalProperties": false,
           "properties": {
@@ -19801,7 +19756,6 @@ _No fields._
         "trackChanges.decide",
         "query.match",
         "ranges.resolve",
-        "ranges.scrollIntoView",
         "mutations.preview",
         "mutations.apply",
         "capabilities.get",

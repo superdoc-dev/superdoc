@@ -335,7 +335,6 @@
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/ranges/index.mdx",
     "apps/docs/document-api/reference/ranges/resolve.mdx",
-    "apps/docs/document-api/reference/ranges/scroll-into-view.mdx",
     "apps/docs/document-api/reference/replace.mdx",
     "apps/docs/document-api/reference/sections/clear-header-footer-ref.mdx",
     "apps/docs/document-api/reference/sections/clear-page-borders.mdx",
@@ -986,7 +985,7 @@
     {
       "aliasMemberPaths": [],
       "key": "ranges",
-      "operationIds": ["ranges.resolve", "ranges.scrollIntoView"],
+      "operationIds": ["ranges.resolve"],
       "pagePath": "apps/docs/document-api/reference/ranges/index.mdx",
       "title": "Ranges"
     },
@@ -1019,5 +1018,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "d5e9e25569d285b9ccc50bf018769c620f550ef2d511f942d06190d56fddb07d"
+  "sourceHash": "c8670fb494b56c19fbd09a7bada35974fbb3c22d938f6a5e01eee6e8467961c0"
 }

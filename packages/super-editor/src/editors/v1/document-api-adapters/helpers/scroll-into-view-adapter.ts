@@ -1,59 +1,66 @@
 import type { ScrollIntoViewInput, ScrollIntoViewOutput } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { resolveTextTarget } from './adapter-utils.js';
-import { resolveTrackedChange } from './tracked-change-resolver.js';
-import { listCommentAnchors } from './comment-target-resolver.js';
 
 /**
- * Implementation of `editor.doc.ranges.scrollIntoView` — resolves the
- * target to PM positions, then delegates to the presentation editor's
- * `scrollToPositionAsync`, which handles paginated / virtualized layouts
- * by mounting the target page if it isn't yet in the DOM.
+ * Implementation of `editor.doc.ranges.scrollIntoView`.
+ *
+ * Two paths:
+ * - EntityAddress (comment / tracked change by id) → delegates to
+ *   `presentation.navigateTo(target)`, which handles paginated layouts,
+ *   virtualized page mounting, AND story activation for entities in
+ *   header/footer/footnote/endnote stories. `block` and `behavior`
+ *   options are not applied here — `navigateTo` picks sensible viewport
+ *   alignment per entity type.
+ * - TextAddress / TextTarget → resolves the first segment to a PM
+ *   position and calls `scrollToPositionAsync` with caller-provided
+ *   `block` / `behavior` options. This path is body-only today; text
+ *   targets that reference non-body stories are out of scope for this
+ *   operation.
  */
 export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
-  const pmPosition = resolveTargetToPmPosition(editor, input.target);
-  if (pmPosition == null) return { success: false };
-
   const presentation = editor.presentationEditor;
-  if (!presentation || typeof presentation.scrollToPositionAsync !== 'function') {
+  if (!presentation) {
     return { success: false };
   }
 
-  const ok = await presentation.scrollToPositionAsync(pmPosition, {
-    block: input.block ?? 'center',
-    behavior: input.behavior ?? 'smooth',
-  });
-
-  return { success: ok };
-}
-
-function resolveTargetToPmPosition(editor: Editor, target: ScrollIntoViewInput['target']): number | null {
-  // EntityAddress — comment or tracked change by id
-  if ('kind' in target && target.kind === 'entity') {
-    if (target.entityType === 'trackedChange') {
-      const tc = resolveTrackedChange(editor, target.entityId);
-      return tc?.from ?? null;
+  // EntityAddress path — hand off to the presentation editor so it can
+  // activate the right story (footnotes, header/footer) before scrolling.
+  if ('kind' in input.target && input.target.kind === 'entity') {
+    if (typeof presentation.navigateTo !== 'function') {
+      return { success: false };
     }
-    if (target.entityType === 'comment') {
-      try {
-        const anchors = listCommentAnchors(editor);
-        const anchor = anchors.find((a) => a.commentId === target.entityId || a.importedId === target.entityId);
-        return anchor?.pos ?? null;
-      } catch {
-        return null;
-      }
+    try {
+      const ok = await presentation.navigateTo(input.target);
+      return { success: ok };
+    } catch {
+      return { success: false };
     }
-    return null;
   }
 
-  // TextTarget (multi-segment) — resolve the first segment
-  // TextAddress (single-block) — resolve directly
-  const firstSegment = 'segments' in target ? target.segments[0] : { blockId: target.blockId, range: target.range };
-  if (!firstSegment) return null;
+  // TextAddress / TextTarget path — resolve to a PM position in the body
+  // and scroll directly. TextTarget resolves the FIRST segment, so a
+  // multi-block selection scrolls to where the selection begins.
+  if (typeof presentation.scrollToPositionAsync !== 'function') {
+    return { success: false };
+  }
+
+  const firstSegment =
+    'segments' in input.target
+      ? input.target.segments[0]
+      : { blockId: input.target.blockId, range: input.target.range };
+  if (!firstSegment) return { success: false };
+
   const resolved = resolveTextTarget(editor, {
     kind: 'text',
     blockId: firstSegment.blockId,
     range: firstSegment.range,
   });
-  return resolved?.from ?? null;
+  if (!resolved) return { success: false };
+
+  const ok = await presentation.scrollToPositionAsync(resolved.from, {
+    block: input.block ?? 'center',
+    behavior: input.behavior ?? 'smooth',
+  });
+  return { success: ok };
 }

@@ -2354,22 +2354,6 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'ranges',
   },
 
-  'ranges.scrollIntoView': {
-    memberPath: 'ranges.scrollIntoView',
-    description:
-      'Scroll the editor viewport so the given target is visible. Accepts a TextAddress, a TextTarget (from `selection.current()`), or an EntityAddress (scroll to a comment or tracked change by id). Handles paginated, virtualized layouts by mounting the target page on demand. Async — resolves after the scroll settles or the page-mount timeout expires.',
-    expectedResult:
-      'Returns a ScrollIntoViewOutput with `success: true` when the scroll completed, `false` when the target could not be resolved or a virtualized page failed to mount.',
-    requiresDocumentContext: true,
-    metadata: readOperation({
-      idempotency: 'idempotent',
-      throws: ['INVALID_INPUT', 'INVALID_TARGET', 'INVALID_CONTEXT'],
-      deterministicTargetResolution: true,
-    }),
-    referenceDocPath: 'ranges/scroll-into-view.mdx',
-    referenceGroup: 'ranges',
-  },
-
   'mutations.preview': {
     memberPath: 'mutations.preview',
     description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',

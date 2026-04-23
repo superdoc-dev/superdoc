@@ -5169,18 +5169,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         output: resolveRangeOutputSchema,
       },
 
-      'ranges.scrollIntoView': {
-        input: objectSchema(
-          {
-            target: { oneOf: [textAddressSchema, textTargetSchema, entityAddressSchema] },
-            block: { enum: ['start', 'center', 'end', 'nearest'] },
-            behavior: { enum: ['auto', 'smooth'] },
-          },
-          ['target'],
-        ),
-        output: objectSchema({ success: { type: 'boolean' } }, ['success']),
-      },
-
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '../../fixtures/superdoc.js';
 import { listTrackChanges } from '../../helpers/document-api.js';
@@ -6,6 +7,8 @@ import { activateFooter } from '../../helpers/story-surfaces.js';
 const FOOTER_PAGE_NUMBER_DOC_PATH = fileURLToPath(
   new URL('../../test-data/footer-page-number-test.docx', import.meta.url),
 );
+
+test.skip(!fs.existsSync(FOOTER_PAGE_NUMBER_DOC_PATH), 'Test document not available — run pnpm corpus:pull');
 
 test.use({
   config: {

@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed, markRaw } f
 import { Selection } from 'prosemirror-state';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
 import { ContextMenuPluginKey } from '../../extensions/context-menu/context-menu.js';
-import { getPropsByItemId } from './utils.js';
+import { getPropsByItemId, resolveContextMenuCommandEditor } from './utils.js';
 import { shouldBypassContextMenu } from '../../utils/contextmenu-helpers.js';
 import { moveCursorToMouseEvent } from '../cursor-helpers.js';
 import { getEditorSurfaceElement } from '../../core/helpers/editorSurface.js';
@@ -425,6 +425,7 @@ const handleRightClick = async (event) => {
 
 const executeCommand = async (item) => {
   if (props.editor) {
+    const commandEditor = resolveContextMenuCommandEditor(props.editor);
     const currentPos = currentContext.value?.pos;
     const shouldReseatTableSelection =
       currentContext.value?.event?.type === 'contextmenu' &&
@@ -438,11 +439,14 @@ const executeCommand = async (item) => {
     }
 
     // First call the action if needed on the item
-    item.action ? await item.action(props.editor, currentContext.value) : null;
+    item.action ? await item.action(commandEditor, currentContext.value) : null;
 
     if (item.component) {
       const menuElement = menuRef.value;
-      const componentProps = getPropsByItemId(item.id, props);
+      const componentProps = getPropsByItemId(item.id, {
+        ...props,
+        editor: commandEditor,
+      });
 
       // Convert viewport-relative coordinates (used by fixed-position ContextMenu)
       // to container-relative coordinates (used by absolute-position GenericPopover)

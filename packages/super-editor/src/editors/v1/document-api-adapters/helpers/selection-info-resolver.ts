@@ -7,7 +7,7 @@ import type {
   TextSegment,
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
-import { computeTextContentLength } from './text-offset-resolver.js';
+import { pmPositionToTextOffset } from './text-offset-resolver.js';
 
 /**
  * Reads the current ProseMirror selection and projects it into the Document
@@ -69,13 +69,17 @@ function collectTextSegments(doc: ProseMirrorNode, from: number, to: number): Te
 
     const blockStart = pos + 1; // first position inside the block
     const blockEnd = pos + node.nodeSize - 1;
-    const textLen = computeTextContentLength(node);
 
+    // Clamp the selection to this block in PM-position space, then convert
+    // each endpoint to the flattened text-offset model. Subtracting PM
+    // positions directly would be wrong for blocks with inline wrappers
+    // (e.g. `run` marks) or leaf atoms whose PM boundary tokens do not
+    // count in the flattened model.
     const selStart = Math.max(from, blockStart);
     const selEnd = Math.min(to, blockEnd);
 
-    const start = Math.max(0, Math.min(selStart - blockStart, textLen));
-    const end = Math.max(start, Math.min(selEnd - blockStart, textLen));
+    const start = pmPositionToTextOffset(node, pos, selStart);
+    const end = Math.max(start, pmPositionToTextOffset(node, pos, selEnd));
 
     segments.push({ blockId, range: { start, end } });
     return false; // don't descend into a textblock we've already captured
@@ -123,13 +127,15 @@ function collectActiveMarks(
  */
 export function subscribeToSelection(editor: Editor, listener: SelectionChangeListener): () => void {
   let scheduled = false;
+  let cancelled = false;
   const flush = () => {
     scheduled = false;
+    if (cancelled) return;
     const info = resolveCurrentSelectionInfo(editor, {});
     listener(info);
   };
   const schedule = () => {
-    if (scheduled) return;
+    if (scheduled || cancelled) return;
     scheduled = true;
     queueMicrotask(flush);
   };
@@ -138,6 +144,10 @@ export function subscribeToSelection(editor: Editor, listener: SelectionChangeLi
   editor.on('transaction', schedule);
 
   return () => {
+    // Mark cancelled first so a microtask already queued by `schedule`
+    // no-ops when it finally fires — otherwise the listener can be invoked
+    // after unsubscribe returns (stale state updates during unmount).
+    cancelled = true;
     editor.off?.('selectionUpdate', schedule);
     editor.off?.('transaction', schedule);
   };

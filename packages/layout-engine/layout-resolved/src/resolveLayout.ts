@@ -189,7 +189,6 @@ function computeBlockVersion(
   cache.set(blockId, version);
   return version;
 }
-
 function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
@@ -245,7 +244,6 @@ function resolveFragmentItem(
         item.paragraphBorders = borders;
         item.paragraphBorderHash = hashParagraphBorders(borders);
       }
-
       if (fragment.kind === 'para') {
         const para = fragment as ParaFragment;
         if (para.pmStart != null) item.pmStart = para.pmStart;

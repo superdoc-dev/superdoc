@@ -420,6 +420,30 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  it('executes text-color none and converts to inherit for inline command and null for annotations', () => {
+    const setColor = vi.fn(() => true);
+    const setFieldAnnotationsTextColor = vi.fn();
+    const superdoc = createActiveEditorHost({
+      commands: {
+        setColor,
+        setFieldAnnotationsTextColor,
+      },
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['text-color'],
+    });
+
+    expect(controller.execute?.('text-color', 'none')).toBe(true);
+    expect(setColor).toHaveBeenCalledTimes(1);
+    expect(setColor).toHaveBeenCalledWith('inherit');
+    expect(setFieldAnnotationsTextColor).toHaveBeenCalledTimes(1);
+    expect(setFieldAnnotationsTextColor).toHaveBeenCalledWith(null, true);
+
+    controller.destroy();
+  });
+
   it('executes highlight-color none and syncs annotation and cell background resets', () => {
     const setHighlight = vi.fn(() => true);
     const setFieldAnnotationsTextHighlight = vi.fn();
@@ -675,6 +699,53 @@ describe('createHeadlessToolbar', () => {
     expect(controller.execute?.('zoom', 150)).toBe(true);
     expect(setZoom).toHaveBeenCalledTimes(1);
     expect(setZoom).toHaveBeenCalledWith(150);
+
+    controller.destroy();
+  });
+
+  it('executes zoom with string payloads (e.g. "150" or "150%")', () => {
+    const setZoom = vi.fn();
+    const superdoc: HeadlessToolbarSuperdocHost = {
+      activeEditor: {
+        commands: {},
+        doc: {} as any,
+        isEditable: true,
+        state: { selection: { empty: true } },
+      } as any,
+      setZoom,
+      getZoom: vi.fn(() => 100),
+    } as any;
+
+    const controller = createHeadlessToolbar({ superdoc, commands: ['zoom'] });
+
+    expect(controller.execute?.('zoom', '150')).toBe(true);
+    expect(setZoom).toHaveBeenLastCalledWith(150);
+
+    expect(controller.execute?.('zoom', '150%')).toBe(true);
+    expect(setZoom).toHaveBeenLastCalledWith(150);
+
+    controller.destroy();
+  });
+
+  it('rejects invalid zoom payloads (non-numeric, zero, negative)', () => {
+    const setZoom = vi.fn();
+    const superdoc: HeadlessToolbarSuperdocHost = {
+      activeEditor: {
+        commands: {},
+        doc: {} as any,
+        isEditable: true,
+        state: { selection: { empty: true } },
+      } as any,
+      setZoom,
+      getZoom: vi.fn(() => 100),
+    } as any;
+
+    const controller = createHeadlessToolbar({ superdoc, commands: ['zoom'] });
+
+    expect(controller.execute?.('zoom', 'abc')).toBe(false);
+    expect(controller.execute?.('zoom', 0)).toBe(false);
+    expect(controller.execute?.('zoom', -50)).toBe(false);
+    expect(setZoom).not.toHaveBeenCalled();
 
     controller.destroy();
   });

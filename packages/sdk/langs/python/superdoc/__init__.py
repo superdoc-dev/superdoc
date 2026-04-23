@@ -10,6 +10,7 @@ from .tools_api import (
     get_tool_catalog,
     list_tools,
 )
+from .transport import DEFAULT_STDOUT_BUFFER_LIMIT_BYTES
 
 __all__ = [
     "SuperDocClient",
@@ -17,6 +18,7 @@ __all__ = [
     "SuperDocDocument",
     "AsyncSuperDocDocument",
     "SuperDocError",
+    "DEFAULT_STDOUT_BUFFER_LIMIT_BYTES",
     "get_skill",
     "install_skill",
     "list_skills",

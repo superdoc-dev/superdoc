@@ -1,4 +1,5 @@
-import type { SectionBreakBlock } from '@superdoc/contracts';
+import type { ColumnLayout, SectionBreakBlock } from '@superdoc/contracts';
+
 export type SectionState = {
   activeTopMargin: number;
   activeBottomMargin: number;
@@ -20,14 +21,8 @@ export type SectionState = {
     w: number;
     h: number;
   } | null;
-  activeColumns: {
-    count: number;
-    gap: number;
-  };
-  pendingColumns: {
-    count: number;
-    gap: number;
-  } | null;
+  activeColumns: ColumnLayout;
+  pendingColumns: ColumnLayout | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;
@@ -37,6 +32,7 @@ export type BreakDecision = {
   forceMidPageRegion: boolean;
   requiredParity?: 'even' | 'odd';
 };
+
 /**
  * Schedule section break effects by updating pending/active state and returning a break decision.
  * This function is pure with respect to inputs/outputs and does not mutate external variables.
@@ -56,6 +52,7 @@ export declare function scheduleSectionBreak(
   decision: BreakDecision;
   state: SectionState;
 };
+
 /**
  * Apply pending margins/pageSize/columns/orientation to active values at a page boundary and clear pending.
  */

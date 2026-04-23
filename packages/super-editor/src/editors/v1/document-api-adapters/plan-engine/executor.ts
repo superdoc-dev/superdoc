@@ -52,10 +52,45 @@ import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
+import { getWordChanges } from './word-diff.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
+import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
+import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
+
+// ---------------------------------------------------------------------------
+// Character-offset → document-position mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a character offset (within the text content of a range) to the
+ * corresponding ProseMirror document position.  Needed because inline
+ * node boundaries (run open/close) create gaps in the position space
+ * that `textBetween` hides.
+ */
+function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+  let count = 0;
+  let foundPos = -1;
+
+  doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+    if (foundPos >= 0) return false;
+    if (!node.isText) return true; // descend into non-text nodes
+
+    const textStart = Math.max(pos, rangeFrom);
+    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+    const textLen = textEnd - textStart;
+
+    if (count + textLen >= charOffset) {
+      foundPos = textStart + (charOffset - count);
+    }
+    count += textLen;
+    return false;
+  });
+
+  return foundPos >= 0 ? foundPos : rangeTo;
+}
 
 // ---------------------------------------------------------------------------
 // Style resolution helpers
@@ -804,10 +839,107 @@ export function executeTextRewrite(
     }
   }
 
-  const textNode = editor.state.schema.text(replacementText, asProseMirrorMarks(marks));
-  tr.replaceWith(absFrom, absTo, textNode);
+  // 1. Character-level prefix/suffix trim to narrow the replacement range.
+  //    This handles cases where only a few characters differ (e.g., a "(" added
+  //    before a URL, or "YoY" → "year over year") without replacing the full range.
+  //    Tab nodes render as real '\t' so diffs align with caller-supplied replacement text.
+  const originalText = textBetweenWithTabs(tr.doc, absFrom, absTo, '', '');
+  const origLen = originalText.length;
+  const replLen = replacementText.length;
+
+  let prefix = 0;
+  while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
+    prefix++;
+  }
+  if (prefix === origLen && prefix === replLen) {
+    return { changed: false }; // texts are identical
+  }
+  let suffix = 0;
+  while (
+    suffix < origLen - prefix &&
+    suffix < replLen - prefix &&
+    originalText[origLen - 1 - suffix] === replacementText[replLen - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const trimmedFrom = charOffsetToDocPos(tr.doc, absFrom, absTo, prefix);
+  const trimmedTo = charOffsetToDocPos(tr.doc, absFrom, absTo, origLen - suffix);
+  const trimmedOld = originalText.slice(prefix, origLen - suffix);
+  const trimmedNew = replacementText.slice(prefix, replLen - suffix);
+
+  // 2. Word-level diff on the trimmed range for multi-word granularity.
+  const wordChanges = getWordChanges(trimmedOld, trimmedNew);
+
+  if (wordChanges.length > 1) {
+    // Multiple word-level changes: apply each granularly.
+    const doc = tr.doc;
+    const baseSteps = tr.steps.length;
+    const mapped = wordChanges.map((change) => {
+      if (change.type === 'insert') {
+        return { ...change, docPos: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.insertAt) };
+      }
+      return {
+        ...change,
+        docFrom: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldFrom),
+        docTo: charOffsetToDocPos(doc, trimmedFrom, trimmedTo, change.oldTo),
+      };
+    });
+
+    for (let i = 0; i < mapped.length; i++) {
+      const change = mapped[i];
+      const remap = (pos: number) => {
+        for (let s = baseSteps; s < tr.steps.length; s++) {
+          pos = tr.steps[s].getMap().map(pos);
+        }
+        return pos;
+      };
+
+      if (change.type === 'delete') {
+        tr.delete(remap(change.docFrom), remap(change.docTo));
+      } else if (change.type === 'insert') {
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        tr.insert(remap(change.docPos), content);
+      } else {
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        tr.replaceWith(remap(change.docFrom), remap(change.docTo), content);
+      }
+    }
+  } else {
+    // 0 or 1 word change: replace just the trimmed range.
+    const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks));
+    tr.replaceWith(trimmedFrom, trimmedTo, content);
+  }
 
   return { changed: replacementText !== target.text };
+}
+
+/**
+ * Resolve the marks an insertion at `absPos` should inherit.
+ *
+ * Falls back to PM's `$pos.marks()` for mocked test docs. In a real editor,
+ * runs through `getFormattingStateAtPos` so super-editor's paragraph-level
+ * and run-level `runProperties` (e.g. a bold-paragraph default) flow through
+ * to the inserted content — otherwise inserts into a bold paragraph produce
+ * unmarked text/tab nodes that export without `<w:rPr>`.
+ */
+function resolveInheritedMarksAt(editor: Editor, tr: Transaction, absPos: number): readonly ProseMirrorMark[] {
+  try {
+    const state = editor.state as unknown as { doc: { resolve?: unknown } };
+    if (typeof state?.doc?.resolve !== 'function') {
+      const $pos = tr.doc.resolve(absPos);
+      return $pos.marks();
+    }
+    const resolved = getFormattingStateAtPos(
+      editor.state as unknown as import('prosemirror-state').EditorState,
+      absPos,
+      editor as unknown as undefined,
+    );
+    return (resolved?.resolvedMarks as ProseMirrorMark[]) ?? [];
+  } catch {
+    const $pos = tr.doc.resolve(absPos);
+    return $pos.marks();
+  }
 }
 
 export function executeTextInsert(
@@ -825,18 +957,12 @@ export function executeTextInsert(
 
   let marks: readonly ProseMirrorMark[] = [];
   const stylePolicy = step.args.style?.inline;
-  if (stylePolicy) {
-    if (stylePolicy.mode === 'set') {
-      marks = buildMarksFromSetMarks(editor, stylePolicy.setMarks);
-    } else if (stylePolicy.mode === 'clear') {
-      marks = [];
-    } else {
-      const resolvedPos = tr.doc.resolve(absPos);
-      marks = resolvedPos.marks();
-    }
+  if (stylePolicy?.mode === 'set') {
+    marks = buildMarksFromSetMarks(editor, stylePolicy.setMarks);
+  } else if (stylePolicy?.mode === 'clear') {
+    marks = [];
   } else {
-    const resolvedPos = tr.doc.resolve(absPos);
-    marks = resolvedPos.marks();
+    marks = resolveInheritedMarksAt(editor, tr, absPos);
   }
 
   const structuralInsert = resolveStructuralTextInsert(tr.doc, absPos, step);
@@ -869,8 +995,9 @@ export function executeTextInsert(
     }
   }
 
-  const textNode = editor.state.schema.text(text, marks);
-  tr.insert(absPos, textNode);
+  const tabNodeType = editor.state.schema.nodes?.tab;
+  const parentAllowsTab = tabNodeType && text.includes('\t') ? parentAllowsNodeAt(tr, absPos, tabNodeType) : false;
+  tr.insert(absPos, buildTextWithTabs(editor.state.schema, text, marks, { parentAllowsTab }));
 
   return { changed: true };
 }
@@ -1049,8 +1176,8 @@ export function executeSpanTextRewrite(
   // For single replacement block, use flat replacement into the span
   if (replacementBlocks.length === 1) {
     const marks = resolveSpanMarks(editor, target, policy, step.id);
-    const textNode = editor.state.schema.text(replacementBlocks[0], asProseMirrorMarks(marks));
-    tr.replaceWith(absFrom, absTo, textNode);
+    const content = buildTextWithTabs(editor.state.schema, replacementBlocks[0], asProseMirrorMarks(marks));
+    tr.replaceWith(absFrom, absTo, content);
     return { changed: true };
   }
 
@@ -1068,10 +1195,10 @@ export function executeSpanTextRewrite(
     const paragraphAttrs = resolveInheritedParagraphAttrsForReplacement(editor, target, segmentIndex);
 
     const text = replacementBlocks[i];
-    const textNode = text.length > 0 ? schema.text(text, asProseMirrorMarks(marks)) : null;
+    const content = text.length > 0 ? buildTextWithTabs(schema, text, asProseMirrorMarks(marks)) : null;
     const para =
-      paragraphType.createAndFill(paragraphAttrs, textNode ?? undefined) ??
-      paragraphType.create(paragraphAttrs, textNode ? [textNode] : undefined);
+      paragraphType.createAndFill(paragraphAttrs, content ?? undefined) ??
+      paragraphType.create(paragraphAttrs, content ?? undefined);
     nodes.push(para);
   }
 
@@ -1513,8 +1640,11 @@ function buildReplacementParagraphNodes(
     throw planError('INVALID_INPUT', 'paragraph node type not in schema', stepId);
   }
 
-  const wrapInlineContent = (contentNode: ProseMirrorNode | null, wrappers: InlineWrapperSpec[]): ProseMirrorNode => {
-    let content = contentNode;
+  const wrapInlineContent = (
+    contentNode: ProseMirrorNode | Fragment | null,
+    wrappers: InlineWrapperSpec[],
+  ): ProseMirrorNode => {
+    let content: ProseMirrorNode | Fragment | null = contentNode;
 
     for (let index = wrappers.length - 1; index >= 0; index -= 1) {
       const wrapper = wrappers[index];
@@ -1523,7 +1653,7 @@ function buildReplacementParagraphNodes(
         wrapper.type.create(wrapper.attrs, content ?? undefined, wrapper.marks);
     }
 
-    if (!content) {
+    if (!content || content instanceof Fragment) {
       throw planError('INVALID_INPUT', 'could not build inline wrapper content', stepId);
     }
 
@@ -1533,7 +1663,7 @@ function buildReplacementParagraphNodes(
   const defaultWrappers = leadingWrappers.length > 0 ? leadingWrappers : trailingWrappers;
 
   return replacementBlocks.map((text, index) => {
-    const textNode = text.length > 0 ? schema.text(text, asProseMirrorMarks(marks)) : null;
+    const textContent = text.length > 0 ? buildTextWithTabs(schema, text, asProseMirrorMarks(marks)) : null;
     const wrappers =
       index === 0
         ? leadingWrappers.length > 0
@@ -1545,12 +1675,17 @@ function buildReplacementParagraphNodes(
             : defaultWrappers
           : defaultWrappers;
     const content =
-      textNode == null
+      textContent == null
         ? wrappers.length > 0
           ? wrapInlineContent(null, wrappers)
           : undefined
-        : wrapInlineContent(textNode, wrappers);
-    return paragraphType.createAndFill(paragraphAttrs, content) ?? paragraphType.create(paragraphAttrs, content);
+        : wrappers.length > 0
+          ? wrapInlineContent(textContent, wrappers)
+          : textContent;
+    return (
+      paragraphType.createAndFill(paragraphAttrs, content ?? undefined) ??
+      paragraphType.create(paragraphAttrs, content ?? undefined)
+    );
   });
 }
 
@@ -1795,7 +1930,7 @@ function resolveScopedTextForAssert(
   if (!scope.ok) return '';
   if (!scope.range) return doc.textContent;
 
-  return doc.textBetween(scope.range.start, scope.range.end, '\n', '\ufffc');
+  return textBetweenWithTabs(doc, scope.range.start, scope.range.end, '\n', '\ufffc');
 }
 
 function executeAssertStep(
@@ -1858,7 +1993,7 @@ export function executeCreateStep(
 
   const sdBlockId = args.sdBlockId as string | undefined;
   const text = (args.text as string) ?? '';
-  const textNode = text.length > 0 ? editor.state.schema.text(text) : null;
+  const textContent = text.length > 0 ? buildTextWithTabs(editor.state.schema, text, undefined) : null;
 
   let attrs: Record<string, unknown> | undefined;
   if (step.op === 'create.heading') {
@@ -1872,8 +2007,8 @@ export function executeCreateStep(
   }
 
   const node =
-    paragraphType.createAndFill(attrs, textNode ?? undefined) ??
-    paragraphType.create(attrs, textNode ? [textNode] : undefined);
+    paragraphType.createAndFill(attrs, textContent ?? undefined) ??
+    paragraphType.create(attrs, textContent ?? undefined);
 
   if (!node) {
     throw planError('INVALID_INPUT', `could not create ${step.op} node`, step.id);

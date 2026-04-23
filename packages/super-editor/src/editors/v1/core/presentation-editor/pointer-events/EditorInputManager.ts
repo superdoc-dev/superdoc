@@ -2708,12 +2708,9 @@ export class EditorInputManager {
       `${activeSurfaceSelector} ${TRACK_CHANGE_SELECTOR}`,
       `${activeSurfaceSelector} ${PM_TRACK_CHANGE_SELECTOR}`,
     ].join(', ');
+    const annotationElements = Array.from(viewportHost.querySelectorAll<HTMLElement>(annotationSelector));
 
-    return resolveCommentThreadIdFromGeometry(
-      viewportHost.querySelectorAll<HTMLElement>(annotationSelector),
-      clientX,
-      clientY,
-    );
+    return resolveCommentThreadIdFromGeometry(annotationElements, clientX, clientY);
   }
 
   #syncNonBodyCommentSelection(

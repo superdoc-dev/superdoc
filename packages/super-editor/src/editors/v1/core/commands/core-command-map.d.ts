@@ -9,6 +9,7 @@ type CoreCommandNames =
   | 'first'
   | 'command'
   | 'insertTabChar'
+  | 'insertTabCharacter'
   | 'insertTabNode'
   | 'setMeta'
   | 'splitBlock'
@@ -21,6 +22,7 @@ type CoreCommandNames =
   | 'unsetAllMarks'
   | 'toggleMark'
   | 'toggleMarkCascade'
+  | 'isStyleTokenEnabled'
   | 'clearNodes'
   | 'setNode'
   | 'toggleNode'
@@ -46,6 +48,7 @@ type CoreCommandNames =
   | 'increaseListIndent'
   | 'decreaseListIndent'
   | 'changeListLevel'
+  | 'updateNumberingProperties'
   | 'removeNumberingProperties'
   | 'insertListItemAt'
   | 'setListTypeAt'
@@ -53,7 +56,14 @@ type CoreCommandNames =
   | 'restoreSelection'
   | 'setTextSelection'
   | 'insertTableAt'
-  | 'getSelectionMarks';
+  | 'getSelectionMarks'
+  | 'backspaceEmptyRunParagraph'
+  | 'backspaceSkipEmptyRun'
+  | 'backspaceNextToRun'
+  | 'backspaceAcrossRuns'
+  | 'deleteSkipEmptyRun'
+  | 'deleteNextToRun'
+  | 'skipTab';
 
 export type CoreCommandSignatures = {
   [K in CoreCommandNames]: ExtractCommandSignature<(typeof CoreCommandExports)[K]>;

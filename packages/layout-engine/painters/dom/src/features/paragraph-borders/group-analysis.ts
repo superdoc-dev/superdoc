@@ -15,6 +15,8 @@ import type {
   ListMeasure,
   ParagraphBlock,
   ParagraphAttrs,
+  ResolvedPaintItem,
+  ResolvedFragmentItem,
 } from '@superdoc/contracts';
 import type { BlockLookup } from './types.js';
 import { hashParagraphBorders } from '../../paragraph-hash-utils.js';
@@ -124,9 +126,23 @@ const isBetweenBorderNone = (borders: ParagraphAttrs['borders']): boolean => {
  *
  * Middle fragments in a chain of 3+ get both flags.
  */
+
+/**
+ * Helper: check whether a resolved item is a ResolvedFragmentItem (para/list-item)
+ * with pre-computed paragraph border data.
+ */
+function isResolvedFragmentWithBorders(
+  item: ResolvedPaintItem | undefined,
+): item is ResolvedFragmentItem & { paragraphBorders: NonNullable<ResolvedFragmentItem['paragraphBorders']> } {
+  return (
+    item !== undefined && item.kind === 'fragment' && 'paragraphBorders' in item && item.paragraphBorders !== undefined
+  );
+}
+
 export const computeBetweenBorderFlags = (
   fragments: readonly Fragment[],
   blockLookup: BlockLookup,
+  resolvedItems?: readonly ResolvedPaintItem[],
 ): Map<number, BetweenBorderInfo> => {
   // Phase 1: determine which consecutive pairs form between-border groups
   const pairFlags = new Set<number>();
@@ -137,7 +153,10 @@ export const computeBetweenBorderFlags = (
     if (frag.kind !== 'para' && frag.kind !== 'list-item') continue;
     if (frag.continuesOnNext) continue;
 
-    const borders = getFragmentParagraphBorders(frag, blockLookup);
+    const resolvedCur = resolvedItems?.[i];
+    const borders = isResolvedFragmentWithBorders(resolvedCur)
+      ? resolvedCur.paragraphBorders
+      : getFragmentParagraphBorders(frag, blockLookup);
     if (!borders) continue;
 
     const next = fragments[i + 1];
@@ -152,9 +171,24 @@ export const computeBetweenBorderFlags = (
     )
       continue;
 
-    const nextBorders = getFragmentParagraphBorders(next, blockLookup);
+    const resolvedNext = resolvedItems?.[i + 1];
+    const nextBorders = isResolvedFragmentWithBorders(resolvedNext)
+      ? resolvedNext.paragraphBorders
+      : getFragmentParagraphBorders(next, blockLookup);
     if (!nextBorders) continue;
-    if (hashParagraphBorders(borders) !== hashParagraphBorders(nextBorders)) continue;
+
+    // Compare using pre-computed hashes when available, falling back to computing on-the-fly.
+    const curHash =
+      resolvedCur && 'paragraphBorderHash' in resolvedCur && (resolvedCur as ResolvedFragmentItem).paragraphBorderHash
+        ? (resolvedCur as ResolvedFragmentItem).paragraphBorderHash!
+        : hashParagraphBorders(borders);
+    const nextHash =
+      resolvedNext &&
+      'paragraphBorderHash' in resolvedNext &&
+      (resolvedNext as ResolvedFragmentItem).paragraphBorderHash
+        ? (resolvedNext as ResolvedFragmentItem).paragraphBorderHash!
+        : hashParagraphBorders(nextBorders);
+    if (curHash !== nextHash) continue;
 
     // Skip fragments in different columns (different x positions)
     if (frag.x !== next.x) continue;
@@ -175,7 +209,11 @@ export const computeBetweenBorderFlags = (
   for (const i of pairFlags) {
     const frag = fragments[i];
     const next = fragments[i + 1];
-    const fragHeight = getFragmentHeight(frag, blockLookup);
+    const resolvedCur = resolvedItems?.[i];
+    const fragHeight =
+      resolvedCur && 'height' in resolvedCur && resolvedCur.height != null
+        ? resolvedCur.height
+        : getFragmentHeight(frag, blockLookup);
     const gapBelow = Math.max(0, next.y - (frag.y + fragHeight));
     const isNoBetween = noBetweenPairs.has(i);
 

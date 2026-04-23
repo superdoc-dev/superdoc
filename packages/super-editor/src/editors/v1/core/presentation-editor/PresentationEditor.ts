@@ -4278,6 +4278,8 @@ export class PresentationEditor extends EventEmitter {
       let layout: Layout;
       let measures: Measure[];
       let resolvedLayout: ReturnType<typeof resolveLayout>;
+      let bodyBlocksForPaint: FlowBlock[] = blocksForLayout;
+      let bodyMeasuresForPaint: Measure[] = [];
       let headerLayouts: HeaderFooterLayoutResult[] | undefined;
       let footerLayouts: HeaderFooterLayoutResult[] | undefined;
       let extraBlocks: FlowBlock[] | undefined;
@@ -4321,14 +4323,14 @@ export class PresentationEditor extends EventEmitter {
 
         // Include footnote-injected blocks (separators, footnote paragraphs) so
         // resolveLayout can find them when resolving page fragments.
-        const resolveBlocks = extraBlocks ? [...blocksForLayout, ...extraBlocks] : blocksForLayout;
-        const resolveMeasures = extraMeasures ? [...measures, ...extraMeasures] : measures;
+        bodyBlocksForPaint = extraBlocks ? [...blocksForLayout, ...extraBlocks] : blocksForLayout;
+        bodyMeasuresForPaint = extraMeasures ? [...measures, ...extraMeasures] : measures;
 
         resolvedLayout = resolveLayout({
           layout,
           flowMode: this.#layoutOptions.flowMode ?? 'paginated',
-          blocks: resolveBlocks,
-          measures: resolveMeasures,
+          blocks: bodyBlocksForPaint,
+          measures: bodyMeasuresForPaint,
         });
 
         headerLayouts = result.headers;
@@ -4440,12 +4442,6 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      // Merge any extra lookup blocks (e.g., footnotes injected into page fragments)
-      if (extraBlocks && extraMeasures && extraBlocks.length === extraMeasures.length && extraBlocks.length > 0) {
-        footerBlocks.push(...extraBlocks);
-        footerMeasures.push(...extraMeasures);
-      }
-
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
@@ -4456,8 +4452,8 @@ export class PresentationEditor extends EventEmitter {
       const paintInput: DomPainterInput = {
         resolvedLayout,
         sourceLayout: layout,
-        blocks: blocksForLayout,
-        measures,
+        blocks: bodyBlocksForPaint,
+        measures: bodyMeasuresForPaint,
         headerBlocks: headerBlocks.length > 0 ? headerBlocks : undefined,
         headerMeasures: headerMeasures.length > 0 ? headerMeasures : undefined,
         footerBlocks: footerBlocks.length > 0 ? footerBlocks : undefined,

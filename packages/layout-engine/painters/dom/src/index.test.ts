@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { DomPainter } from './renderer.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
@@ -42,17 +43,38 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
   let footerBlocks: FlowBlock[] | undefined;
   let footerMeasures: Measure[] | undefined;
 
+  let resolvedLayoutOverridden = false;
+
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const effectiveResolved = resolvedLayoutOverridden
+        ? currentResolved
+        : resolveLayout({
+            layout,
+            flowMode: opts.flowMode ?? 'paginated',
+            blocks: currentBlocks,
+            measures: currentMeasures,
+          });
+      // Tests historically pass header/footer blocks via the main `blocks` array and
+      // rely on the blockLookup containing them. Merge body blocks into headerBlocks
+      // so header/footer fragments from providers can resolve their block data.
+      const mergedHeaderBlocks =
+        headerBlocks || currentBlocks.length > 0 ? [...currentBlocks, ...(headerBlocks ?? [])] : undefined;
+      const mergedHeaderMeasures =
+        headerMeasures || currentMeasures.length > 0 ? [...currentMeasures, ...(headerMeasures ?? [])] : undefined;
+      const mergedFooterBlocks =
+        footerBlocks || currentBlocks.length > 0 ? [...currentBlocks, ...(footerBlocks ?? [])] : undefined;
+      const mergedFooterMeasures =
+        footerMeasures || currentMeasures.length > 0 ? [...currentMeasures, ...(footerMeasures ?? [])] : undefined;
       const input: DomPainterInput = {
-        resolvedLayout: currentResolved,
+        resolvedLayout: effectiveResolved,
         sourceLayout: layout,
         blocks: currentBlocks,
         measures: currentMeasures,
-        headerBlocks,
-        headerMeasures,
-        footerBlocks,
-        footerMeasures,
+        headerBlocks: mergedHeaderBlocks,
+        headerMeasures: mergedHeaderMeasures,
+        footerBlocks: mergedFooterBlocks,
+        footerMeasures: mergedFooterMeasures,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -73,6 +95,7 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setResolvedLayout(rl: ResolvedLayout | null) {
       currentResolved = rl ?? emptyResolved;
+      resolvedLayoutOverridden = true;
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
@@ -1357,7 +1380,10 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('renders an error placeholder when a legacy table fragment is missing its lookup entry', () => {
+  it('surfaces a missing-block error from resolveLayout when a table fragment references an unknown block', () => {
+    // Previous behavior: painter rendered a placeholder for missing lookup entries.
+    // New behavior: resolveLayout validates block/measure integrity upstream and throws
+    // before the painter runs. Missing-block bugs are now caught at the resolved stage.
     const missingTableLayout: Layout = {
       pageSize: { w: 300, h: 300 },
       pages: [
@@ -1379,19 +1405,8 @@ describe('DomPainter', () => {
       ],
     };
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-      // Intentionally empty - suppress expected error logging during this regression test.
-    });
-
     const painter = createTestPainter({ blocks: [], measures: [] });
-    expect(() => painter.paint(missingTableLayout, mount)).not.toThrow();
-
-    const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
-    expect(placeholder).toBeTruthy();
-    expect(placeholder?.textContent).toContain('[Render Error: missing-table]');
-    expect(consoleErrorSpy).toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
+    expect(() => painter.paint(missingTableLayout, mount)).toThrow(/Missing block\/measure/);
   });
 
   it('renders an error placeholder when table-cell line rendering throws', () => {
@@ -1680,8 +1695,23 @@ describe('DomPainter', () => {
   });
 
   it('throws if blocks and measures length mismatch', () => {
+    // Block/measure integrity is now validated at the resolve-layout stage.
     const painter = createTestPainter({ blocks: [block], measures: [] });
-    expect(() => painter.paint(layout, mount)).toThrow(/same number of blocks/);
+    expect(() => painter.paint(layout, mount)).toThrow();
+  });
+
+  it('rejects resolved-layout-only paint input until body lookups are removed', () => {
+    const painter = createDomPainter({});
+
+    expect(() =>
+      painter.paint(
+        {
+          resolvedLayout: emptyResolved,
+          sourceLayout: layout,
+        } as DomPainterInput,
+        mount,
+      ),
+    ).toThrow('DomPainterInput requires body blocks and measures');
   });
 
   it('renders placeholder content for empty lines', () => {
@@ -5028,6 +5058,75 @@ describe('DomPainter', () => {
     expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
+  it('uses resolved block versions for block change tracking', () => {
+    const blockId = 'resolved-version-block';
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: blockId,
+      runs: [{ text: 'Stable content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+    const paragraphLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId, fromLine: 0, toLine: 1, x: 24, y: 24, width: 300, pmStart: 0, pmEnd: 14 },
+          ],
+        },
+      ],
+    };
+
+    const item = {
+      kind: 'fragment' as const,
+      id: `para:${blockId}:0:1`,
+      pageIndex: 0,
+      x: 24,
+      y: 24,
+      width: 300,
+      height: 20,
+      fragmentKind: 'para' as const,
+      blockId,
+      fragmentIndex: 0,
+      version: 'stable-fragment-version',
+    };
+
+    const painter = createTestPainter({ blocks: [paragraphBlock], measures: [paragraphMeasure] });
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-1' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const initialWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+
+    painter.setResolvedLayout({
+      ...createSinglePageResolvedLayout(item),
+      blockVersions: { [blockId]: 'resolved-block-version-2' },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const updatedWrapper = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
+  });
+
   it('applies resolved zIndex only to anchored media fragments', () => {
     const anchoredDrawingBlock: FlowBlock = {
       kind: 'drawing',
@@ -6363,6 +6462,76 @@ describe('DomPainter', () => {
       // Second page (continues from prev) - line should NOT have firstLine indent
       const page2Line = pages[1].querySelector('.superdoc-line') as HTMLElement;
       expect(page2Line.style.textIndent).toBe('0px');
+    });
+
+    it('uses resolved continuesFromPrev for first-line width calculations', () => {
+      const continuedBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'resolved-continued-block',
+        runs: [{ text: 'alpha beta gamma', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { alignment: 'justify', indent: { left: 20, hanging: 40 } },
+      };
+
+      const continuedMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 16,
+            width: 120,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const continuedLayout: Layout = {
+        pageSize: layout.pageSize,
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'resolved-continued-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 200,
+                continuesOnNext: true,
+              },
+            ],
+          },
+        ],
+      };
+
+      const resolvedLayout = createSinglePageResolvedLayout({
+        kind: 'fragment',
+        id: 'resolved-continued-item',
+        pageIndex: 0,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 20,
+        fragmentKind: 'para',
+        blockId: 'resolved-continued-block',
+        fragmentIndex: 0,
+        continuesFromPrev: true,
+        continuesOnNext: true,
+      });
+
+      const painter = createTestPainter({ blocks: [continuedBlock], measures: [continuedMeasure] });
+      painter.setResolvedLayout(resolvedLayout);
+      painter.paint(continuedLayout, mount);
+
+      const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(lineEl.style.textIndent).toBe('0px');
+      expect(lineEl.style.wordSpacing).toBe('30px');
     });
 
     it('removes fragment-level indent styles to prevent double-application', () => {

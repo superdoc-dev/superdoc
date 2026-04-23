@@ -423,6 +423,37 @@ describe('PresentationEditor', () => {
   });
 
   describe('semantic flow mode configuration', () => {
+    it('passes body blocks and measures to the painter on blank-document render', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'blank-render-contract-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const painterInstance = (mockCreateDomPainter as unknown as Mock).mock.results[
+        (mockCreateDomPainter as unknown as Mock).mock.results.length - 1
+      ].value as {
+        paint: Mock;
+      };
+
+      await vi.waitFor(() => expect(painterInstance.paint).toHaveBeenCalled());
+
+      const [paintInput] = painterInstance.paint.mock.calls[painterInstance.paint.mock.calls.length - 1] as [
+        {
+          blocks: unknown[];
+          measures: unknown[];
+          resolvedLayout: unknown;
+          sourceLayout: unknown;
+        },
+      ];
+
+      expect(paintInput.blocks).toEqual([]);
+      expect(paintInput.measures).toEqual([]);
+      expect(paintInput.resolvedLayout).toBeTruthy();
+      expect(paintInput.sourceLayout).toBeTruthy();
+    });
+
     it('forces vertical layout and disables virtualization when flowMode is semantic', async () => {
       editor = new PresentationEditor({
         element: container,

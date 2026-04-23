@@ -1,26 +1,21 @@
-import type { Receipt, TextAddress, TextTarget } from '../types/index.js';
+import type { Receipt, TextAddress } from '../types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
-import { isRecord, isTextAddress, isTextTarget, assertNoUnknownFields } from '../validation-primitives.js';
+import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
 /**
  * Input for adding a comment to a text range.
- *
- * `target` accepts either a single-block {@link TextAddress} or a multi-
- * segment {@link TextTarget}. A multi-segment target anchors the comment
- * across contiguous blocks — use it directly from `editor.doc.selection.current().target`
- * without picking a single segment.
  */
 export interface AddCommentInput {
   /**
    * The text range to attach the comment to.
    *
-   * Pass a {@link TextAddress} for single-block ranges (e.g. from `find`'s
-   * `textRanges[0]`) or a {@link TextTarget} with multi-segment for
-   * selections that span multiple blocks.
+   * Note: text matches can span multiple blocks; callers should pick a single
+   * block range (e.g., the first `textRanges` entry from `find`) until
+   * multi-block comment targets are supported.
    */
-  target?: TextAddress | TextTarget;
+  target?: TextAddress;
   /** The comment body text. */
   text: string;
 }
@@ -78,14 +73,8 @@ export interface GetCommentInput {
 export interface CommentsCreateInput {
   /** The comment body text. */
   text: string;
-  /**
-   * The text range to attach the comment to (root comments only).
-   *
-   * Accepts either a single-block {@link TextAddress} or a multi-segment
-   * {@link TextTarget}. Prefer passing `editor.doc.selection.current().target`
-   * directly for selections that may span multiple blocks.
-   */
-  target?: TextAddress | TextTarget;
+  /** The text range to attach the comment to (root comments only). */
+  target?: TextAddress;
   /** Parent comment ID — when provided, creates a reply instead of a root comment. */
   parentCommentId?: string;
 }
@@ -210,8 +199,8 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
     });
   }
 
-  if (!isTextAddress(target) && !isTextTarget(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a TextAddress or TextTarget object.', {
+  if (!isTextAddress(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
       field: 'target',
       value: target,
     });

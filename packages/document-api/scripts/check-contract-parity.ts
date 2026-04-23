@@ -21,17 +21,8 @@ import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js'
 import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
-/**
- * Meta-methods and helper methods on DocumentApi that are not contract
- * operations. `selection.onChange` is a subscription primitive (push-based,
- * no request/response shape) rather than a request-response operation, so
- * it is not represented in OPERATION_DEFINITIONS / schemas / dispatch.
- */
-const META_MEMBER_PATHS = [
-  'invoke',
-  'selection.onChange',
-  ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath),
-];
+/** Meta-methods and helper methods on DocumentApi that are not contract operations. */
+const META_MEMBER_PATHS = ['invoke', ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath)];
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];

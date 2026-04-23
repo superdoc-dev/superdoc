@@ -28,14 +28,6 @@ export type {
   RangeResolverAdapter,
 } from './ranges/index.js';
 export { executeResolveRange } from './ranges/index.js';
-export type {
-  SelectionApi,
-  SelectionAdapter,
-  SelectionCurrentInput,
-  SelectionInfo,
-  SelectionChangeListener,
-} from './selection/selection.js';
-export { executeSelectionCurrent } from './selection/selection.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -134,14 +126,6 @@ import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeResolveRange } from './ranges/resolve.js';
 import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
-import { executeSelectionCurrent } from './selection/selection.js';
-import type {
-  SelectionApi,
-  SelectionAdapter,
-  SelectionCurrentInput,
-  SelectionInfo,
-  SelectionChangeListener,
-} from './selection/selection.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -1669,11 +1653,6 @@ export interface DocumentApi {
    */
   ranges: RangesApi;
   /**
-   * Read the editor's current selection as a portable SelectionInfo.
-   * Primitive for custom UIs (toolbars, sidebars, popovers).
-   */
-  selection: SelectionApi;
-  /**
    * Mutation plan engine — preview and apply atomic mutation plans.
    */
   mutations: MutationsApi;
@@ -1753,13 +1732,6 @@ export interface DocumentApiAdapters {
   citations?: CitationsAdapter;
   authorities?: AuthoritiesAdapter;
   ranges: RangesAdapter;
-  /**
-   * Optional: when omitted, `editor.doc.selection.*` throws
-   * `SELECTION_ADAPTER_UNAVAILABLE`. All first-party engines register one;
-   * external consumers constructing an adapter bag manually should only
-   * need this if they invoke selection operations.
-   */
-  selection?: SelectionAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   diff: DiffAdapter;
@@ -3147,28 +3119,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     ranges: {
       resolve(input: ResolveRangeInput): ResolveRangeOutput {
         return executeResolveRange(adapters.ranges, input);
-      },
-    },
-    selection: {
-      current(input?: SelectionCurrentInput): SelectionInfo {
-        const adapter = adapters.selection;
-        if (!adapter) {
-          throw new DocumentApiValidationError(
-            'SELECTION_ADAPTER_UNAVAILABLE',
-            'No selection adapter was registered. Pass `selection` in DocumentApiAdapters to call selection.current().',
-          );
-        }
-        return executeSelectionCurrent(adapter, input);
-      },
-      onChange(listener: SelectionChangeListener): () => void {
-        const adapter = adapters.selection;
-        if (!adapter) {
-          throw new DocumentApiValidationError(
-            'SELECTION_ADAPTER_UNAVAILABLE',
-            'No selection adapter was registered. Pass `selection` in DocumentApiAdapters to call selection.onChange().',
-          );
-        }
-        return adapter.onChange(listener);
       },
     },
     mutations: {

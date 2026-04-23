@@ -18,8 +18,6 @@ export function dispatchIntentTool(
           return execute('doc.getHtml', rest);
         case 'info':
           return execute('doc.info', rest);
-        case 'extract':
-          return execute('doc.extract', rest);
         case 'blocks':
           return execute('doc.blocks.list', rest);
         default:

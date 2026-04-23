@@ -27,7 +27,12 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `parentCommentId` | string | no |  |
-| `target` | TextAddress \\| TextTarget | no | One of: TextAddress, TextTarget |
+| `target` | TextAddress | no | TextAddress |
+| `target.blockId` | string | no |  |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.range` | Range | no | Range |
+| `target.range.end` | integer | no |  |
+| `target.range.start` | integer | no |  |
 | `text` | string | yes |  |
 
 ### Example request
@@ -113,15 +118,8 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
       "type": "string"
     },
     "target": {
-      "description": "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/TextAddress"
-        },
-        {
-          "$ref": "#/$defs/TextTarget"
-        }
-      ]
+      "$ref": "#/$defs/TextAddress",
+      "description": "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}."
     },
     "text": {
       "description": "Comment text content.",

@@ -22,11 +22,7 @@ function isLeadingNoteReferenceRun(value: unknown): value is PmJsonNode {
   }
 
   const styleId = (value.attrs as { runProperties?: { styleId?: unknown } } | undefined)?.runProperties?.styleId;
-  if (styleId === 'FootnoteReference' || styleId === 'EndnoteReference') {
-    return true;
-  }
-
-  return true;
+  return styleId === 'FootnoteReference' || styleId === 'EndnoteReference';
 }
 
 function isWhitespaceOnlyTextNode(value: unknown): value is PmJsonNode {

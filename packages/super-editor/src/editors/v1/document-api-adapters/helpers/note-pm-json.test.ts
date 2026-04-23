@@ -135,6 +135,39 @@ describe('normalizeNotePmJson', () => {
     });
   });
 
+  it('does not strip separators after an unrelated empty leading run', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'run', content: [], attrs: { runProperties: { styleId: 'SomeOtherStyle' } } },
+            {
+              type: 'run',
+              content: [{ type: 'tab' }, { type: 'text', text: ' Hello' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(normalizeNotePmJson(doc)).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              content: [{ type: 'tab' }, { type: 'text', text: ' Hello' }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('strips hidden passthrough inline nodes from note paragraphs', () => {
     const doc = {
       type: 'doc',

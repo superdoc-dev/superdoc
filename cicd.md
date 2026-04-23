@@ -88,8 +88,8 @@ main (next) → stable (latest) → X.x (maintenance)
 **Actions**:
 
 - Sends the PR head SHA and branch metadata to the Labs release-orchestrator service
-- Lets Labs create a generic GitHub check run on that SHA
-- Does not wait on or expose any private Labs details in the repository
+- Polls Labs for the terminal release-qualification state
+- Uses the GitHub Actions job itself as the required public status check
 - Re-triggers automatically when new commits are pushed to the PR branch
 
 Only same-repository PRs dispatch to Labs. Forked PRs are intentionally skipped so private Labs credentials are never exposed to untrusted branches.
@@ -229,7 +229,7 @@ These skip semantic-release entirely — useful for re-publishing a failed platf
 
 1. Run "Promote to Stable" workflow
 2. Review the generated PR from the candidate branch into `stable`
-3. Labs receives the PR head SHA and creates the `Release Qualification` GitHub check run
+3. Labs receives the PR head SHA, records the qualification run, and the workflow job polls Labs for the terminal result
 4. If needed, resolve merge conflicts on the candidate branch and push fixes
 5. Re-run or wait for qualification on the new PR head SHA
 6. Merge the PR into `stable`

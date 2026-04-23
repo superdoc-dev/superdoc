@@ -96,7 +96,7 @@ export async function runBenchmarkScenario(config: BenchmarkConfig): Promise<Ben
     blocks: doc.blocks,
     measures: initial.measures,
   });
-  painter.paint({ resolvedLayout: initialResolved, sourceLayout: initial.layout }, mount);
+  painter.paint({ resolvedLayout: initialResolved }, mount);
 
   previousBlocks = doc.blocks;
   previousLayout = initial.layout;
@@ -121,7 +121,7 @@ export async function runBenchmarkScenario(config: BenchmarkConfig): Promise<Ben
       blocks: nextBlocks,
       measures: result.measures,
     });
-    painter.paint({ resolvedLayout: resolved, sourceLayout: result.layout }, mount);
+    painter.paint({ resolvedLayout: resolved }, mount);
     const duration = performance.now() - start;
     durations.push(duration);
 

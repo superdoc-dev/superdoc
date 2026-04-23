@@ -489,7 +489,7 @@ describe('PM → FlowBlock → Measure integration', () => {
 
     const painter = createDomPainter({});
     const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
-    painter.paint({ resolvedLayout, sourceLayout: layout }, mount);
+    painter.paint({ resolvedLayout }, mount);
 
     expect(mount.children.length).toBeGreaterThan(0);
     expect(mount.textContent).toContain('This is a simple paragraph');
@@ -545,7 +545,7 @@ describe('PM → FlowBlock → Measure integration', () => {
 
     const painter = createDomPainter({});
     const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
-    painter.paint({ resolvedLayout, sourceLayout: layout }, mount);
+    painter.paint({ resolvedLayout }, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
@@ -758,7 +758,7 @@ describe('page break integration tests', () => {
 
     const painter = createDomPainter({});
     const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
-    painter.paint({ resolvedLayout, sourceLayout: layout }, mount);
+    painter.paint({ resolvedLayout }, mount);
 
     // Verify multiple pages were created in DOM
     const pages = mount.querySelectorAll('.superdoc-page');

@@ -5,7 +5,6 @@ import type {
   SelectionChangeListener,
   TextTarget,
   TextSegment,
-  StoryLocator,
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { computeTextContentLength } from './text-offset-resolver.js';
@@ -30,7 +29,7 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const { from, to, empty } = sel;
 
   const segments = collectTextSegments(state.doc, from, to);
-  const target: TextTarget | null = segments.length > 0 ? buildTextTarget(segments, input.in) : null;
+  const target: TextTarget | null = segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
 
@@ -47,12 +46,11 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   return info;
 }
 
-function buildTextTarget(segments: TextSegment[], story?: StoryLocator): TextTarget {
+function buildTextTarget(segments: TextSegment[]): TextTarget {
   // TextTarget requires a non-empty segments array — we already checked above.
   return {
     kind: 'text',
     segments: segments as [TextSegment, ...TextSegment[]],
-    ...(story ? { story } : {}),
   };
 }
 

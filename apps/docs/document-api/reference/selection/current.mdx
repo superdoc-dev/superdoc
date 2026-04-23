@@ -26,14 +26,12 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `in` | object | no |  |
 | `includeText` | boolean | no |  |
 
 ### Example request
 
 ```json
 {
-  "in": {},
   "includeText": true
 }
 ```
@@ -44,7 +42,7 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 | --- | --- | --- | --- |
 | `activeMarks` | string[] | yes |  |
 | `empty` | boolean | yes |  |
-| `target` | object | yes |  |
+| `target` | TextTarget \\| null | yes | One of: TextTarget, null |
 | `text` | string | no |  |
 
 ### Example response
@@ -55,7 +53,18 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
     "example"
   ],
   "empty": true,
-  "target": {},
+  "target": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
   "text": "Hello, world."
 }
 ```
@@ -76,9 +85,6 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 {
   "additionalProperties": false,
   "properties": {
-    "in": {
-      "type": "object"
-    },
     "includeText": {
       "type": "boolean"
     }
@@ -103,7 +109,14 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
       "type": "boolean"
     },
     "target": {
-      "type": "object"
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "text": {
       "type": "string"

@@ -82,23 +82,14 @@ function isSameTarget(
 }
 
 /**
- * Normalize a TextAddress | TextTarget comment target into its first and
- * last segments. For TextAddress the two are the same; for TextTarget with
- * multiple segments they span the full comment range across blocks.
+ * Normalize a TextAddress | TextTarget comment target into an array of
+ * segments. For TextAddress, the result is a single-entry array.
  */
-function splitTargetSegments(
+function targetToSegments(
   target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
-): { firstSegment: TextSegment; lastSegment: TextSegment } {
-  if ('segments' in target) {
-    const segments = target.segments;
-    return { firstSegment: segments[0]!, lastSegment: segments[segments.length - 1]! };
-  }
-  const seg: TextSegment = { blockId: target.blockId, range: target.range };
-  return { firstSegment: seg, lastSegment: seg };
-}
-
-function segmentIsCollapsed(segment: TextSegment): boolean {
-  return segment.range.start === segment.range.end;
+): TextSegment[] {
+  if ('segments' in target) return [...target.segments];
+  return [{ blockId: target.blockId, range: target.range }];
 }
 
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
@@ -386,8 +377,10 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
   requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
 
   // The target can be either a single-block TextAddress or a multi-segment
-  // TextTarget. For a TextTarget, resolve each segment and span the full
-  // PM range from the first segment's start to the last segment's end.
+  // TextTarget. For a TextTarget, resolve each segment and require they
+  // cover a contiguous PM range in document order — out-of-order or
+  // disjoint segments would otherwise silently anchor the comment over
+  // intervening text the caller never selected.
   const target = input.target;
   if (!target) {
     return {
@@ -398,38 +391,46 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
       },
     };
   }
-  const { firstSegment, lastSegment } = splitTargetSegments(target);
+  const segments = targetToSegments(target);
 
-  if (segmentIsCollapsed(firstSegment) && firstSegment === lastSegment) {
-    return {
-      success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment target range must be non-collapsed.',
-      },
-    };
-  }
-
-  const firstResolved = resolveTextTarget(editor, {
-    kind: 'text',
-    blockId: firstSegment.blockId,
-    range: firstSegment.range,
-  });
-  const lastResolved =
-    firstSegment === lastSegment
-      ? firstResolved
-      : resolveTextTarget(editor, {
-          kind: 'text',
-          blockId: lastSegment.blockId,
-          range: lastSegment.range,
-        });
-
-  if (!firstResolved || !lastResolved) {
+  const resolvedSegments = segments.map((seg) =>
+    resolveTextTarget(editor, { kind: 'text', blockId: seg.blockId, range: seg.range }),
+  );
+  if (resolvedSegments.some((r) => r === null)) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Comment target could not be resolved.', {
       target,
     });
   }
 
+  const docForGap = editor.state?.doc;
+  for (let i = 1; i < resolvedSegments.length; i += 1) {
+    const prev = resolvedSegments[i - 1]!;
+    const curr = resolvedSegments[i]!;
+    if (prev.to > curr.from) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target segments must be in document order.',
+          details: { target },
+        },
+      };
+    }
+    const gapText = docForGap ? docForGap.textBetween(prev.to, curr.from, '') : '';
+    if (gapText.length > 0) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target segments must be contiguous — non-selected text between segments is not supported.',
+          details: { target },
+        },
+      };
+    }
+  }
+
+  const firstResolved = resolvedSegments[0]!;
+  const lastResolved = resolvedSegments[resolvedSegments.length - 1]!;
   const resolved = { from: firstResolved.from, to: lastResolved.to };
   if (resolved.from === resolved.to) {
     return {

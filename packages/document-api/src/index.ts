@@ -1753,7 +1753,13 @@ export interface DocumentApiAdapters {
   citations?: CitationsAdapter;
   authorities?: AuthoritiesAdapter;
   ranges: RangesAdapter;
-  selection: SelectionAdapter;
+  /**
+   * Optional: when omitted, `editor.doc.selection.*` throws
+   * `SELECTION_ADAPTER_UNAVAILABLE`. All first-party engines register one;
+   * external consumers constructing an adapter bag manually should only
+   * need this if they invoke selection operations.
+   */
+  selection?: SelectionAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   diff: DiffAdapter;
@@ -3145,10 +3151,24 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     selection: {
       current(input?: SelectionCurrentInput): SelectionInfo {
-        return executeSelectionCurrent(adapters.selection, input);
+        const adapter = adapters.selection;
+        if (!adapter) {
+          throw new DocumentApiValidationError(
+            'SELECTION_ADAPTER_UNAVAILABLE',
+            'No selection adapter was registered. Pass `selection` in DocumentApiAdapters to call selection.current().',
+          );
+        }
+        return executeSelectionCurrent(adapter, input);
       },
       onChange(listener: SelectionChangeListener): () => void {
-        return adapters.selection.onChange(listener);
+        const adapter = adapters.selection;
+        if (!adapter) {
+          throw new DocumentApiValidationError(
+            'SELECTION_ADAPTER_UNAVAILABLE',
+            'No selection adapter was registered. Pass `selection` in DocumentApiAdapters to call selection.onChange().',
+          );
+        }
+        return adapter.onChange(listener);
       },
     },
     mutations: {

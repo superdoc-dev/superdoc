@@ -809,6 +809,58 @@ describe('comments-store', () => {
     ]);
   });
 
+  it('fans repeated header/footer tracked changes into one floating bubble instance per page', () => {
+    const anchorKey = 'tc::hf:part:rId-footer::change-repeat';
+    store.commentsList = [
+      {
+        commentId: 'change-repeat',
+        fileId: 'doc-1',
+        trackedChange: true,
+        trackedChangeAnchorKey: anchorKey,
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-footer' },
+        resolvedTime: null,
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      [anchorKey]: {
+        key: anchorKey,
+        threadId: 'change-repeat',
+        storyKey: 'hf:part:rId-footer',
+        kind: 'trackedChange',
+        pageIndex: 2,
+        bounds: { top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        rects: [
+          { pageIndex: 0, top: 20, left: 12, right: 64, bottom: 44, width: 52, height: 24 },
+          { pageIndex: 1, top: 140, left: 12, right: 64, bottom: 164, width: 52, height: 24 },
+          { pageIndex: 2, top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        ],
+      },
+    };
+
+    expect(store.getFloatingComments).toHaveLength(1);
+    expect(store.getFloatingCommentInstances).toEqual([
+      expect.objectContaining({
+        id: `${anchorKey}::page:0`,
+        threadId: 'change-repeat',
+        pageIndex: 0,
+        isPrimary: false,
+      }),
+      expect.objectContaining({
+        id: `${anchorKey}::page:1`,
+        threadId: 'change-repeat',
+        pageIndex: 1,
+        isPrimary: false,
+      }),
+      expect.objectContaining({
+        id: `${anchorKey}::page:2`,
+        threadId: 'change-repeat',
+        pageIndex: 2,
+        isPrimary: true,
+      }),
+    ]);
+  });
+
   it('removes stale tracked-change anchors when tracked marks no longer exist', () => {
     const trackedComment = {
       commentId: 'change-3',

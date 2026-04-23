@@ -7195,7 +7195,11 @@ export class PresentationEditor extends EventEmitter {
           return await this.#navigateToComment(target.entityId);
         }
         if (target.entityType === 'trackedChange') {
-          return await this.#navigateToTrackedChange(target.entityId, resolveStoryKeyFromAddress(target.story));
+          return await this.#navigateToTrackedChange(
+            target.entityId,
+            resolveStoryKeyFromAddress(target.story),
+            target.pageIndex,
+          );
         }
       }
 
@@ -7277,7 +7281,7 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #navigateToTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  async #navigateToTrackedChange(entityId: string, storyKey?: string, preferredPageIndex?: number): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
@@ -7286,13 +7290,13 @@ export class PresentationEditor extends EventEmitter {
         return true;
       }
 
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey)) {
+      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
         if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey);
+      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex);
     }
 
     const setCursorById = editor.commands?.setCursorById;
@@ -7306,7 +7310,7 @@ export class PresentationEditor extends EventEmitter {
     // Fall back to resolving the tracked change position and scrolling.
     const resolved = resolveTrackedChange(editor, entityId);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId);
+      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex);
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -7329,7 +7333,11 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #activateTrackedChangeStorySurface(entityId: string, storyKey: string): Promise<boolean> {
+  async #activateTrackedChangeStorySurface(
+    entityId: string,
+    storyKey: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
     let locator: StoryLocator | null = null;
     try {
       locator = parseStoryKey(storyKey);
@@ -7341,7 +7349,7 @@ export class PresentationEditor extends EventEmitter {
       return false;
     }
 
-    const candidate = this.#findRenderedTrackedChangeElements(entityId, storyKey)[0] ?? null;
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
     if (!candidate) {
       return false;
     }
@@ -7442,14 +7450,39 @@ export class PresentationEditor extends EventEmitter {
     this.#scheduleSelectionUpdate({ immediate: true });
   }
 
-  async #scrollToRenderedTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  #findRenderedTrackedChangeElement(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): HTMLElement | null {
     const candidates = this.#findRenderedTrackedChangeElements(entityId, storyKey);
     if (!candidates.length) {
+      return null;
+    }
+
+    if (!Number.isFinite(preferredPageIndex)) {
+      return candidates[0] ?? null;
+    }
+
+    return (
+      candidates.find((candidate) => this.#resolveRenderedPageIndexForElement(candidate) === preferredPageIndex) ??
+      candidates[0] ??
+      null
+    );
+  }
+
+  async #scrollToRenderedTrackedChange(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
+    if (!candidate) {
       return false;
     }
 
     try {
-      candidates[0]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      candidate.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
       return true;
     } catch {
       return false;

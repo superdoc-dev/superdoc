@@ -146,6 +146,7 @@ const mountDialog = async ({
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
     clearInstantSidebarAlignment: vi.fn(),
+    setActiveFloatingCommentInstance: vi.fn(),
     decideTrackedChangeFromSidebar: vi.fn(() => ({ ok: true, success: true })),
     getCommentDocumentId: vi.fn(
       (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
@@ -183,6 +184,7 @@ const mountDialog = async ({
     suppressInternalExternal: ref(false),
     getConfig: ref({ readOnly: false }),
     activeComment: ref(null),
+    activeFloatingCommentInstanceId: ref(null),
     floatingCommentsOffset: ref(0),
     pendingComment: ref(null),
     currentCommentText: ref('<p>Pending</p>'),
@@ -344,6 +346,50 @@ describe('CommentDialog.vue', () => {
       entityId: 'imported-tracked-change-story-1',
       story: trackedChangeStory,
     });
+  });
+
+  it('navigates repeated header/footer tracked changes to the clicked floating page instance', async () => {
+    const presentation = {
+      navigateTo: vi.fn().mockResolvedValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const trackedChangeStory = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-repeat' };
+    const floatingInstanceId = 'tc::hf:part:rId-repeat::tracked-change-story-repeat::page:2';
+
+    const { wrapper } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId,
+        floatingPageIndex: 2,
+        floatingPositionEntry: {
+          pageIndex: 2,
+          bounds: { top: 240, left: 12, right: 64, bottom: 264, width: 52, height: 24 },
+        },
+      },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-story-repeat',
+        importedId: 'imported-tracked-change-story-repeat',
+        trackedChange: true,
+        trackedChangeStory,
+      },
+    });
+
+    await wrapper.trigger('click');
+
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-story-repeat',
+      story: trackedChangeStory,
+      pageIndex: 2,
+    });
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
+      expect.any(Number),
+      'tracked-change-story-repeat',
+      floatingInstanceId,
+    );
+    expect(commentsStoreStub.setActiveFloatingCommentInstance).toHaveBeenCalledWith(floatingInstanceId);
   });
 
   it('falls back to setCursorById for resolved tracked changes when PresentationEditor navigation is unavailable', async () => {

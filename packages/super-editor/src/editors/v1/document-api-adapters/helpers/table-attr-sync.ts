@@ -81,11 +81,17 @@ export function buildWidthAuthoringTableAttrs(
   tablePropertyOverrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
+  const nextTableWidth = resolveWidthAuthoringTableWidth(currentAttrs, attrOverrides, tablePropertyOverrides);
   const updatedTableProps = {
     ...currentTableProps,
     ...tablePropertyOverrides,
     tableLayout: 'fixed',
   };
+  if (nextTableWidth) {
+    updatedTableProps.tableWidth = nextTableWidth;
+  } else {
+    delete updatedTableProps.tableWidth;
+  }
 
   return {
     ...currentAttrs,
@@ -94,4 +100,72 @@ export function buildWidthAuthoringTableAttrs(
     ...syncExtractedTableAttrs(updatedTableProps),
     userEdited: true,
   };
+}
+
+type GridColumn = { col?: unknown };
+
+function resolveWidthAuthoringTableWidth(
+  currentAttrs: Record<string, unknown>,
+  attrOverrides: Record<string, unknown>,
+  tablePropertyOverrides: Record<string, unknown>,
+): { value: number; type: 'dxa' } | null {
+  const explicitOverride = normalizeTableWidthMeasurement(tablePropertyOverrides.tableWidth);
+  if (explicitOverride) return explicitOverride;
+
+  const gridWidth = sumGridColumnTwips(attrOverrides.grid ?? currentAttrs.grid);
+  if (gridWidth != null) {
+    return { value: gridWidth, type: 'dxa' };
+  }
+
+  return null;
+}
+
+function sumGridColumnTwips(grid: unknown): number | null {
+  const columns = normalizeGridColumns(grid);
+  if (!columns || columns.length === 0) return null;
+
+  const total = columns.reduce((sum, column) => sum + column.col, 0);
+  return total > 0 ? total : null;
+}
+
+function normalizeGridColumns(grid: unknown): { col: number }[] | null {
+  if (Array.isArray(grid)) {
+    const columns = grid.map((width) => normalizeGridWidth(width)).filter((width) => width != null);
+    return columns.length > 0 ? columns : null;
+  }
+
+  if (grid && typeof grid === 'object') {
+    const rawColWidths = (grid as { colWidths?: unknown }).colWidths;
+    if (Array.isArray(rawColWidths)) {
+      const columns = rawColWidths.map((width) => normalizeGridWidth(width)).filter((width) => width != null);
+      return columns.length > 0 ? columns : null;
+    }
+  }
+
+  return null;
+}
+
+function normalizeGridWidth(width: unknown): { col: number } | null {
+  if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
+    return { col: Math.round(width) };
+  }
+
+  const value = (width as GridColumn | null | undefined)?.col;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return { col: Math.round(value) };
+  }
+
+  return null;
+}
+
+function normalizeTableWidthMeasurement(width: unknown): { value: number; type: 'dxa' } | null {
+  if (!width || typeof width !== 'object') return null;
+
+  const value = (width as { value?: unknown }).value;
+  const type = (width as { type?: unknown }).type;
+  if (type !== 'dxa' || typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return { value: Math.round(value), type: 'dxa' };
 }

@@ -987,14 +987,10 @@ function dispatchResizeTransaction(columnIndex, newWidths) {
     const gridTwips = newWidths.map((w) => pixelsToTwips(w));
     const newGrid = gridTwips.map((twips) => ({ col: twips }));
 
-    // Calculate total table width in twips for tableWidth attribute
-    const totalWidthTwips = gridTwips.reduce((sum, w) => sum + w, 0);
-
     // Width drags are explicit authoring, so keep runtime attrs and DOCX
     // export state aligned on fixed layout immediately.
     const newAttrs = buildWidthAuthoringTableAttrs(tableNode.attrs, {
       grid: newGrid,
-      tableWidth: totalWidthTwips,
     });
 
     tr.setNodeMarkup(tablePos, null, newAttrs);

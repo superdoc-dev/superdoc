@@ -599,6 +599,31 @@ describe('tables-adapter regressions', () => {
     expect(tableUpdate.tableProperties).toMatchObject({ tableLayout: 'fixed' });
   });
 
+  it('replaces stale tableWidth metadata when setting a column width', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = {
+      tableLayout: 'autofit',
+      tableWidth: { value: 7200, type: 'dxa' },
+    };
+    (tableNode.attrs as Record<string, unknown>).tableWidth = { width: 480, type: 'dxa' };
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as Record<string, unknown>;
+    expect(tableUpdate.tableProperties).toMatchObject({
+      tableLayout: 'fixed',
+      tableWidth: { value: 5880, type: 'dxa' },
+    });
+    expect(tableUpdate.tableWidth).toEqual({ width: 392, type: 'dxa' });
+  });
+
   it('updates object-shaped grid colWidths when distributing columns', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };

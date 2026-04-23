@@ -80,4 +80,43 @@ describe('footnotes import', () => {
     const types = collectNodeTypes(result.pmDoc);
     expect(types).toContain('footnoteReference');
   });
+
+  it('imports w:endnoteReference and loads matching endnotes.xml entry', () => {
+    const documentXml =
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body>' +
+      '<w:p>' +
+      '<w:r><w:t>Hello</w:t></w:r>' +
+      '<w:r><w:endnoteReference w:id="1"/></w:r>' +
+      '</w:p>' +
+      '</w:body>' +
+      '</w:document>';
+
+    const endnotesXml =
+      '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:endnote w:id="-1" w:type="separator"><w:p><w:r><w:separator/></w:r></w:p></w:endnote>' +
+      '<w:endnote w:id="1"><w:p><w:r><w:t>Endnote text</w:t></w:r></w:p></w:endnote>' +
+      '</w:endnotes>';
+
+    const docx = {
+      'word/document.xml': parseXmlToJson(documentXml),
+      'word/endnotes.xml': parseXmlToJson(endnotesXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
+    };
+
+    const converter = { headers: {}, footers: {}, headerIds: {}, footerIds: {}, docHiglightColors: new Set() };
+    const editor = { options: {}, emit: () => {} };
+
+    const result = createDocumentJson(docx, converter, editor);
+    expect(result).toBeTruthy();
+
+    expect(Array.isArray(result.endnotes)).toBe(true);
+    const endnote = result.endnotes.find((note) => note?.id === '1');
+    expect(endnote).toBeTruthy();
+    expect(Array.isArray(endnote.content)).toBe(true);
+    expect(extractPlainText(endnote.content)).toBe('Endnote text');
+
+    const types = collectNodeTypes(result.pmDoc);
+    expect(types).toContain('endnoteReference');
+  });
 });

@@ -4,6 +4,10 @@ import { clickToPosition } from '@superdoc/layout-bridge';
 import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
 import { TextSelection } from 'prosemirror-state';
 
+const { mockCommentsPluginState } = vi.hoisted(() => ({
+  mockCommentsPluginState: { activeThreadId: null as string | null },
+}));
+
 import {
   EditorInputManager,
   type EditorInputDependencies,
@@ -28,22 +32,28 @@ vi.mock('@superdoc/layout-bridge', () => ({
 
 vi.mock('prosemirror-state', async (importOriginal) => {
   const original = await importOriginal<typeof import('prosemirror-state')>();
+  class MockTextSelection {
+    empty = true;
+    $from = { parent: { inlineContent: true } };
+    static create = vi.fn(() => new MockTextSelection());
+  }
   return {
     ...original,
-    TextSelection: {
-      ...original.TextSelection,
-      create: vi.fn(() => ({
-        empty: true,
-        $from: { parent: { inlineContent: true } },
-      })),
-    },
+    TextSelection: MockTextSelection,
   };
 });
+
+vi.mock('@extensions/comment/comments-plugin.js', () => ({
+  CommentsPluginKey: {
+    getState: vi.fn(() => mockCommentsPluginState),
+  },
+}));
 
 describe('EditorInputManager - Footnote click selection behavior', () => {
   let manager: EditorInputManager;
   let viewportHost: HTMLElement;
   let visibleHost: HTMLElement;
+  let originalElementFromPoint: typeof document.elementFromPoint | undefined;
   let mockEditor: {
     isEditable: boolean;
     state: {
@@ -64,8 +74,11 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   };
   let mockDeps: EditorInputDependencies;
   let mockCallbacks: EditorInputCallbacks;
+  let activateRenderedNoteSession: Mock;
 
   beforeEach(() => {
+    originalElementFromPoint = document.elementFromPoint?.bind(document);
+    mockCommentsPluginState.activeThreadId = null;
     viewportHost = document.createElement('div');
     viewportHost.className = 'presentation-editor__viewport';
     visibleHost = document.createElement('div');
@@ -92,6 +105,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         },
         selection: { $anchor: null },
         storedMarks: null,
+        comments$: { activeThreadId: null },
       },
       view: {
         dispatch: vi.fn(),
@@ -106,6 +120,7 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     mockDeps = {
       getActiveEditor: vi.fn(() => mockEditor as unknown as ReturnType<EditorInputDependencies['getActiveEditor']>),
+      getActiveStorySession: vi.fn(() => null),
       getEditor: vi.fn(() => mockEditor as unknown as ReturnType<EditorInputDependencies['getEditor']>),
       getLayoutState: vi.fn(() => ({ layout: {} as any, blocks: [], measures: [] })),
       getEpochMapper: vi.fn(() => ({
@@ -124,10 +139,12 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     };
 
     mockCallbacks = {
+      activateRenderedNoteSession: vi.fn(() => true),
       normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
     };
+    activateRenderedNoteSession = mockCallbacks.activateRenderedNoteSession as Mock;
 
     manager = new EditorInputManager();
     manager.setDependencies(mockDeps);
@@ -138,6 +155,14 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   afterEach(() => {
     manager.destroy();
     document.body.innerHTML = '';
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint,
+      });
+    } else {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
     vi.clearAllMocks();
   });
 
@@ -148,7 +173,70 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     );
   }
 
-  it('does not change editor selection on direct footnote fragment click', () => {
+  function createActiveSessionEditor(docSize = 50) {
+    return {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: { ...mockEditor.state.doc, content: { size: docSize } },
+        tr: {
+          setSelection: vi.fn().mockReturnThis(),
+          setStoredMarks: vi.fn().mockReturnThis(),
+        },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+      },
+    };
+  }
+
+  function stubElementFromPoint(element: Element | null): Mock {
+    const elementFromPoint = vi.fn(() => element);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: elementFromPoint,
+    });
+    return elementFromPoint;
+  }
+
+  function stubElementsFromPoint(elements: Array<Element | null>): Mock {
+    const elementsFromPoint = vi.fn(() => elements.filter((element): element is Element => !!element));
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+    return elementsFromPoint;
+  }
+
+  function stubBoundingRect(
+    element: Element,
+    {
+      left,
+      top,
+      width,
+      height,
+    }: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    },
+  ) {
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      x: left,
+      y: top,
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  it('activates a note session on direct footnote fragment click', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
     const nestedEl = document.createElement('span');
@@ -167,12 +255,75 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    // Expected behavior: footnote click should not relocate caret to start of the document.
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'footnote', noteId: '1' },
+      expect.objectContaining({ clientX: 10, clientY: 10 }),
+    );
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
-  it('does not change editor selection when hit-test resolves to a footnote block', () => {
+  it('activates a note session on direct endnote fragment click', () => {
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'endnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 16,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'endnote', noteId: '1' },
+      expect.objectContaining({ clientX: 16, clientY: 12 }),
+    );
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+  });
+
+  it('activates the note session and syncs the tracked-change bubble on footnote clicks', () => {
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.setAttribute('data-track-change-id', 'tc-1');
+    fragmentEl.appendChild(trackedChangeEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 12,
+        clientY: 10,
+      } as PointerEventInit),
+    );
+
+    expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+      { storyType: 'footnote', noteId: '1' },
+      expect.objectContaining({ clientX: 12, clientY: 10 }),
+    );
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: 'tc-1',
+      }),
+    );
+  });
+
+  it('keeps legacy read-only behavior for stale footnote hits without a rendered footnote target', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
@@ -197,26 +348,47 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    // Expected behavior: block edits in footnotes without resetting user selection.
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 
-  it('does not change editor selection when hit-test resolves to a semantic footnote block', () => {
+  it('does not reactivate the same note session when clicking inside the active note', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
       pos: 22,
       layoutEpoch: 1,
       pageIndex: 0,
-      blockId: '__sd_semantic_footnote-1-1',
+      blockId: 'footnote-1-1',
       column: 0,
       lineIndex: -1,
     });
 
-    const target = document.createElement('span');
-    viewportHost.appendChild(target);
+    const activeNoteEditor = {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: { ...mockEditor.state.doc, content: { size: 50 } },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+      },
+    };
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
 
     const PointerEventImpl = getPointerEventImpl();
-    target.dispatchEvent(
+    nestedEl.dispatchEvent(
       new PointerEventImpl('pointerdown', {
         bubbles: true,
         cancelable: true,
@@ -227,11 +399,37 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).toHaveBeenCalled();
   });
 
-  it('does not change editor selection on semantic footnotes heading click', () => {
+  it('does not reactivate the same note session on double-click inside the active note', () => {
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: createActiveSessionEditor(),
+    });
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    nestedEl.dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: 12,
+        clientY: 14,
+      }),
+    );
+
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+  });
+
+  it('does not activate a note session on semantic footnotes heading click', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 
     const headingEl = document.createElement('div');
@@ -252,7 +450,406 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       } as PointerEventInit),
     );
 
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('uses story-surface hit testing for active note clicks', () => {
+    const activeNoteEditor = createActiveSessionEditor();
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 41,
+      layoutEpoch: 7,
+      pageIndex: 0,
+      blockId: 'footnote-1-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 16,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(18, 16);
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(activeNoteEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('keeps note hit testing while syncing the tracked-change bubble during active note editing', () => {
+    const activeNoteEditor = createActiveSessionEditor();
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 21,
+      layoutEpoch: 7,
+      pageIndex: 0,
+      blockId: 'footnote-1-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.setAttribute('data-track-change-id', 'tc-1');
+    fragmentEl.appendChild(trackedChangeEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 16,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(18, 16);
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: 'tc-1',
+      }),
+    );
+  });
+
+  it('uses story-surface hit testing for active header clicks', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const pageContainer = document.createElement('div');
+    pageContainer.className = 'superdoc-page';
+    viewportHost.appendChild(pageContainer);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'header-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 200,
+      height: 40,
+    }));
+    stubElementsFromPoint([pageContainer]);
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(24, 12);
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+    expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('keeps active header editing when the pointer stack only exposes the page container', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const exitHeaderFooterMode = vi.fn();
+
+    const pageContainer = document.createElement('div');
+    pageContainer.className = 'superdoc-page';
+    viewportHost.appendChild(pageContainer);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.exitHeaderFooterMode = exitHeaderFooterMode;
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'header-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 200,
+      height: 40,
+    }));
+    manager.setCallbacks(mockCallbacks);
+    stubElementsFromPoint([pageContainer]);
+
+    const PointerEventImpl = getPointerEventImpl();
+    pageContainer.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(exitHeaderFooterMode).not.toHaveBeenCalled();
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(24, 12);
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+  });
+
+  it('exits active header editing when the topmost visible target is body content even if region hit-testing still says header', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const exitHeaderFooterMode = vi.fn();
+
+    const visibleHeader = document.createElement('div');
+    visibleHeader.className = 'superdoc-page-header';
+    viewportHost.appendChild(visibleHeader);
+
+    const bodyLine = document.createElement('div');
+    bodyLine.className = 'superdoc-line';
+    const bodyText = document.createElement('span');
+    bodyText.textContent = 'Visible body text';
+    bodyLine.appendChild(bodyText);
+    viewportHost.appendChild(bodyLine);
+    stubElementFromPoint(bodyText);
+    stubElementsFromPoint([bodyText, bodyLine, visibleHeader]);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.exitHeaderFooterMode = exitHeaderFooterMode;
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 24,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'body-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 300,
+      height: 220,
+    }));
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    bodyText.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 30,
+        clientY: 220,
+      } as PointerEventInit),
+    );
+
+    expect(exitHeaderFooterMode).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.hitTest as Mock).toHaveBeenCalledWith(30, 220);
+    expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
+  });
+
+  it('syncs the tracked-change bubble for real clicks inside the active rendered header surface', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const pageEl = document.createElement('div');
+    pageEl.className = 'superdoc-page';
+    const activeHeaderSurface = document.createElement('div');
+    activeHeaderSurface.className = 'superdoc-page-header';
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.className = 'track-insert';
+    trackedChangeEl.setAttribute('data-id', 'tc-header-1');
+    activeHeaderSurface.appendChild(trackedChangeEl);
+    pageEl.appendChild(activeHeaderSurface);
+    viewportHost.appendChild(pageEl);
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 300,
+      height: 220,
+    }));
+    stubElementFromPoint(pageEl);
+    stubElementsFromPoint([pageEl]);
+    stubBoundingRect(trackedChangeEl, { left: 16, top: 8, width: 52, height: 18 });
+
+    const PointerEventImpl = getPointerEventImpl();
+    pageEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 20,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: 'tc-header-1',
+      }),
+    );
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+  });
+
+  it('clears the active tracked-change bubble for plain clicks inside the active rendered header surface', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const activeHeaderSurface = document.createElement('div');
+    activeHeaderSurface.className = 'superdoc-page-header';
+    const plainTextEl = document.createElement('span');
+    plainTextEl.textContent = 'Generic content header';
+    activeHeaderSurface.appendChild(plainTextEl);
+    viewportHost.appendChild(activeHeaderSurface);
+
+    mockCommentsPluginState.activeThreadId = 'tc-header-1';
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 300,
+      height: 220,
+    }));
+    stubElementFromPoint(plainTextEl);
+    stubElementsFromPoint([activeHeaderSurface]);
+
+    const PointerEventImpl = getPointerEventImpl();
+    plainTextEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        activeCommentId: null,
+      }),
+    );
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+  });
+
+  it('resets multi-click state when the active editing target changes', () => {
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const selectWordAt = vi.fn(() => true);
+    mockCallbacks.selectWordAt = selectWordAt;
+    manager.setCallbacks(mockCallbacks);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+    viewportHost.dispatchEvent(
+      new PointerEventImpl('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+
+    manager.notifyTargetChanged();
+
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 18,
+        clientY: 22,
+        pointerId: 2,
+      } as PointerEventInit),
+    );
+
+    expect(selectWordAt).not.toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalledTimes(2);
   });
 });

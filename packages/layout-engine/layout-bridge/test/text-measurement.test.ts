@@ -571,6 +571,25 @@ describe('text measurement utility', () => {
       expect(lastX).toBe(lastXNormal);
     });
 
+    it('applies justify spacing to wrapped non-last lines within a single text run', () => {
+      const block = createBlock([{ text: 'A B C D E F', fontFamily: 'Arial', fontSize: 16 }]);
+      (block as any).attrs = { alignment: 'justify' };
+
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0,
+        fromChar: 0,
+        toChar: 9, // Wrapped line consumes only part of the single text run
+        width: 90,
+        maxWidth: 120,
+      });
+
+      const xWithNaturalWidth = measureCharacterX(block, line, 7, 90);
+      const xWithSlack = measureCharacterX(block, line, 7, 120);
+
+      expect(xWithSlack).toBeGreaterThan(xWithNaturalWidth);
+    });
+
     it('skips justify spacing for manual tabs without explicit segments', () => {
       const trailingText = 'Item body';
       const tabWidth = 48;

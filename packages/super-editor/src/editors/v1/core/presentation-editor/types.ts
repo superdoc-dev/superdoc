@@ -352,6 +352,10 @@ export interface EditorWithConverter extends Editor {
       id: string;
       content?: unknown[];
     }>;
+    endnotes?: Array<{
+      id: string;
+      content?: unknown[];
+    }>;
   };
 }
 
@@ -434,7 +438,7 @@ export type PendingMarginClick =
  * to prevent unwanted scroll behavior when the hidden editor receives focus.
  *
  * @remarks
- * This flag is set by {@link PresentationEditor#wrapHiddenEditorFocus} to ensure
+ * This flag is set by {@link PresentationEditor#wrapOffscreenEditorFocus} to ensure
  * the wrapping is idempotent (applied only once per view instance).
  */
 export interface EditorViewWithScrollFlag {

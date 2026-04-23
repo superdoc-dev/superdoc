@@ -128,6 +128,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     clear: vi.fn(),
     getBatch: vi.fn(() => []),
     getBlocksByRId: vi.fn(() => new Map()),
+    setTrackedChangesRenderConfig: vi.fn(),
   })),
 }));
 
@@ -174,7 +175,7 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     vi.clearAllMocks();
   });
 
-  it('adds pmStart/pmEnd to the data-sd-footnote-number marker run', async () => {
+  it('keeps the synthetic footnote number marker out of the editable PM range', async () => {
     editor = new PresentationEditor({ element: container });
     await new Promise((r) => setTimeout(r, 100));
 
@@ -185,8 +186,8 @@ describe('PresentationEditor - footnote number marker PM position', () => {
 
     const markerRun = blocks?.[0]?.runs?.[0];
     expect(markerRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
-    expect(markerRun?.pmStart).toBe(5);
-    expect(markerRun?.pmEnd).toBe(6);
+    expect(markerRun?.pmStart).toBeUndefined();
+    expect(markerRun?.pmEnd).toBeUndefined();
   });
 
   it('appends semantic footnotes as end-of-document blocks in semantic flow mode', async () => {

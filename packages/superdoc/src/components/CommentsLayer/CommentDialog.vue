@@ -64,6 +64,27 @@ const {
 const isInternal = ref(true);
 const commentInput = ref(null);
 const editCommentInputs = ref(new Map());
+const CLICK_OUTSIDE_HIT_TOLERANCE_PX = 3;
+const CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS = [
+  [0, 0],
+  [-CLICK_OUTSIDE_HIT_TOLERANCE_PX, 0],
+  [CLICK_OUTSIDE_HIT_TOLERANCE_PX, 0],
+  [0, -CLICK_OUTSIDE_HIT_TOLERANCE_PX],
+  [0, CLICK_OUTSIDE_HIT_TOLERANCE_PX],
+];
+const CLICK_OUTSIDE_IGNORED_SELECTORS = [
+  '.comments-dropdown__option-label',
+  '.superdoc-comment-highlight',
+  '.sd-editor-comment-highlight',
+  '.sd-editor-tracked-change-highlight',
+  '[data-track-change-id]',
+  '.track-insert',
+  '.track-insert-dec',
+  '.track-delete',
+  '.track-delete-dec',
+  '.track-format',
+  '.track-format-dec',
+].join(',');
 
 const setEditCommentInputRef = (commentId) => (el) => {
   if (!commentId) return;
@@ -77,6 +98,39 @@ const setEditCommentInputRef = (commentId) => (el) => {
   } else {
     editCommentInputs.value.delete(commentId);
   }
+};
+
+const elementContainsClickPoint = (element, clientX, clientY) => {
+  const rect = element?.getBoundingClientRect?.();
+  if (
+    !rect ||
+    ![rect.left, rect.top, rect.right, rect.bottom].every(Number.isFinite) ||
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    return false;
+  }
+
+  return CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS.some(([offsetX, offsetY]) => {
+    const sampleX = clientX + offsetX;
+    const sampleY = clientY + offsetY;
+    return sampleX >= rect.left && sampleX <= rect.right && sampleY >= rect.top && sampleY <= rect.bottom;
+  });
+};
+
+const findIgnoredElementByGeometry = (clientX, clientY) => {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  const ignoredElements = document.querySelectorAll(CLICK_OUTSIDE_IGNORED_SELECTORS);
+  for (const element of ignoredElements) {
+    if (element instanceof HTMLElement && elementContainsClickPoint(element, clientX, clientY)) {
+      return element;
+    }
+  }
+
+  return null;
 };
 
 const focusEditInput = (commentId) => {
@@ -136,6 +190,8 @@ const entriesOverlapRange = (entry, candidateEntry) => {
 
 const shouldIncludeThreadAlias = (entry, candidateEntry) => {
   if (!entry || !candidateEntry) return false;
+  if (entry.kind && candidateEntry.kind && entry.kind !== candidateEntry.kind) return false;
+  if (entry.storyKey && candidateEntry.storyKey && entry.storyKey !== candidateEntry.storyKey) return false;
   if (candidateEntry.start === entry.start && candidateEntry.end === entry.end) return true;
   return (
     entriesShareLine(entry, candidateEntry) &&
@@ -379,6 +435,7 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
+  const isTrackedChange = Boolean(props.comment?.trackedChange);
   const targetClientY = getPreferredCommentFocusTargetClientY();
   const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
   let instantAlignmentTargetY = targetClientY;
@@ -395,21 +452,51 @@ const setFocus = () => {
       : visibleAnchorTargetY;
     const shouldSkipFocusScroll = isDialogAlreadyAlignedWithTarget(commentDialogElement.value, visibleThreadTargetY);
     const cursorId = getCommentFocusThreadId(props.comment);
-    if (props.comment.resolvedTime) {
-      editor.commands?.setCursorById(cursorId);
-    } else {
-      const activeCommentId = props.comment.commentId;
-      const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
-      if (!didScroll) {
-        editor.commands?.setActiveComment({ commentId: activeCommentId });
-      }
-    }
     const documentId = getCommentDocumentId(props.comment);
     const presentation = documentId ? PresentationEditor.getInstance(documentId) : null;
-    const fallbackThreadId = props.comment.commentId;
-    const reachableTargetY = shouldSkipFocusScroll
-      ? null
-      : scrollThreadAnchorToFocusTarget(presentation, cursorId, fallbackThreadId, targetClientY);
+    let reachableTargetY = null;
+
+    if (isTrackedChange) {
+      const trackedTarget = props.comment.trackedChangeStory
+        ? {
+            kind: 'entity',
+            entityType: 'trackedChange',
+            entityId: cursorId,
+            story: props.comment.trackedChangeStory,
+          }
+        : {
+            kind: 'entity',
+            entityType: 'trackedChange',
+            entityId: cursorId,
+          };
+
+      if (presentation?.navigateTo) {
+        void presentation.navigateTo(trackedTarget);
+      } else if (props.comment.resolvedTime) {
+        editor.commands?.setCursorById(cursorId);
+      } else {
+        const activeCommentId = props.comment.commentId;
+        const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
+        if (!didScroll) {
+          editor.commands?.setActiveComment({ commentId: activeCommentId });
+        }
+      }
+    } else {
+      if (props.comment.resolvedTime) {
+        editor.commands?.setCursorById(cursorId);
+      } else {
+        const activeCommentId = props.comment.commentId;
+        const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
+        if (!didScroll) {
+          editor.commands?.setActiveComment({ commentId: activeCommentId });
+        }
+      }
+
+      const fallbackThreadId = props.comment.commentId;
+      reachableTargetY = shouldSkipFocusScroll
+        ? null
+        : scrollThreadAnchorToFocusTarget(presentation, cursorId, fallbackThreadId, targetClientY);
+    }
     if (Number.isFinite(visibleHighlightTargetY)) {
       instantAlignmentTargetY = visibleHighlightTargetY;
     } else if (Number.isFinite(visibleAnchorTargetY)) {
@@ -442,20 +529,10 @@ const handleClickOutside = (e) => {
   // (used by the presentation editor) can redirect e.target away from the
   // originally clicked element, causing the selector check to miss it.
   const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
-  const ignoredSelectors = [
-    '.comments-dropdown__option-label',
-    '.superdoc-comment-highlight',
-    '.sd-editor-comment-highlight',
-    '.sd-editor-tracked-change-highlight',
-    '.track-insert',
-    '.track-insert-dec',
-    '.track-delete',
-    '.track-delete-dec',
-    '.track-format',
-    '.track-format-dec',
-  ].join(',');
   const clickedIgnoredTarget =
-    targetElement?.closest?.(ignoredSelectors) || elementAtPoint?.closest?.(ignoredSelectors);
+    targetElement?.closest?.(CLICK_OUTSIDE_IGNORED_SELECTORS) ||
+    elementAtPoint?.closest?.(CLICK_OUTSIDE_IGNORED_SELECTORS) ||
+    findIgnoredElementByGeometry(e.clientX, e.clientY);
 
   if (clickedIgnoredTarget || isCommentHighlighted.value) return;
 
@@ -502,7 +579,11 @@ const handleReject = () => {
   if (props.comment.trackedChange && typeof customHandler === 'function') {
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else if (props.comment.trackedChange) {
-    proxy.$superdoc.activeEditor.commands.rejectTrackedChangeById(props.comment.commentId);
+    commentsStore.decideTrackedChangeFromSidebar({
+      superdoc: proxy.$superdoc,
+      comment: props.comment,
+      decision: 'reject',
+    });
   } else {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
@@ -533,7 +614,11 @@ const handleResolve = () => {
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else {
     if (props.comment.trackedChange) {
-      proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
+      commentsStore.decideTrackedChangeFromSidebar({
+        superdoc: proxy.$superdoc,
+        comment: props.comment,
+        decision: 'accept',
+      });
     }
   }
 
@@ -665,6 +750,7 @@ watch(editingCommentId, (commentId) => {
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
+    data-editor-ui-surface
   >
     <!-- ── New comment card (pending) ── -->
     <template v-if="isPendingNewComment">

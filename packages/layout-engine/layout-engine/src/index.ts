@@ -153,6 +153,10 @@ function getMeasureHeight(block: FlowBlock, measure: Measure): number {
   }
 }
 
+function buildSectionAwareReferenceKey(refId: string, sectionIndex: number): string {
+  return `${refId}::s${sectionIndex}`;
+}
+
 // ConstraintBoundary and PageState now come from paginator
 
 /**
@@ -504,6 +508,14 @@ export type LayoutOptions = {
    */
   headerContentHeightsByRId?: Map<string, number>;
   /**
+   * Actual measured header content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same header part across sections with different geometry.
+   */
+  headerContentHeightsBySectionRef?: Map<string, number>;
+  /**
    * Actual measured footer content heights per relationship ID.
    * Used for multi-section documents where each section may have unique
    * footers referenced by their relationship IDs.
@@ -512,6 +524,14 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Actual measured footer content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same footer part across sections with different geometry.
+   */
+  footerContentHeightsBySectionRef?: Map<string, number>;
   /**
    * Allow body layout to synthesize page 1 for anchored tables when a document has
    * no anchor paragraphs and would otherwise render zero pages.
@@ -554,6 +574,7 @@ export type HeaderFooterConstraints = {
    * `left`/`right`: horizontal page-relative conversion.
    * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
    * `header`: header distance from page top edge (header band origin).
+   * `footer`: footer distance from page bottom edge (footer band origin).
    */
   margins?: {
     left: number;
@@ -561,6 +582,7 @@ export type HeaderFooterConstraints = {
     top?: number;
     bottom?: number;
     header?: number;
+    footer?: number;
   };
   /**
    * Optional base height used to bound behindDoc overflow handling.
@@ -675,7 +697,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const headerContentHeights = options.headerContentHeights;
   const footerContentHeights = options.footerContentHeights;
   const headerContentHeightsByRId = options.headerContentHeightsByRId;
+  const headerContentHeightsBySectionRef = options.headerContentHeightsBySectionRef;
   const footerContentHeightsByRId = options.footerContentHeightsByRId;
+  const footerContentHeightsBySectionRef = options.footerContentHeightsBySectionRef;
 
   /**
    * Determines the header/footer variant type for a given page based on section settings.
@@ -716,12 +740,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param headerRef - Optional relationship ID from section's headerRefs
    * @returns The appropriate header content height, or 0 if not found
    */
-  const getHeaderHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', headerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getHeaderHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    headerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (headerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(headerRef, sectionIndex);
+      if (headerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(headerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (headerRef && headerContentHeightsByRId?.has(headerRef)) {
       return validateContentHeight(headerContentHeightsByRId.get(headerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (headerContentHeights) {
       return validateContentHeight(headerContentHeights[variantType]);
     }
@@ -737,12 +772,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param footerRef - Optional relationship ID from section's footerRefs
    * @returns The appropriate footer content height, or 0 if not found
    */
-  const getFooterHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', footerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getFooterHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    footerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (footerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(footerRef, sectionIndex);
+      if (footerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(footerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (footerRef && footerContentHeightsByRId?.has(footerRef)) {
       return validateContentHeight(footerContentHeightsByRId.get(footerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (footerContentHeights) {
       return validateContentHeight(footerContentHeights[variantType]);
     }
@@ -811,8 +857,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Initial effective margins use default variant (will be adjusted per-page)
   const headerDistance = margins.header ?? margins.top;
   const footerDistance = margins.footer ?? margins.bottom;
-  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined);
-  const defaultFooterHeight = getFooterHeightForPage('default', undefined);
+  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined, 0);
+  const defaultFooterHeight = getFooterHeightForPage('default', undefined, 0);
   const effectiveTopMargin = calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top);
   const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
 
@@ -1365,10 +1411,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
         // Calculate the actual header/footer heights for this page's variant
         // Use effectiveVariantType for header height lookup to match the fallback
-        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef);
+        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef, activeSectionIndex);
         const footerHeight = getFooterHeightForPage(
           variantType !== 'default' && !activeSectionRefs?.footerRefs?.[variantType] ? 'default' : variantType,
           footerRef,
+          activeSectionIndex,
         );
 
         // Adjust margins based on the actual header/footer for this page.

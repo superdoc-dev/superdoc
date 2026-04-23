@@ -6,13 +6,14 @@
  *
  * ## Key Concepts
  *
- * - `pmStart`/`pmEnd`: ProseMirror document positions that map layout elements
- *   back to their source positions in the editor. Used for selection, cursor
- *   placement, and click-to-position functionality.
- *
  * - `data-sd-footnote-number`: A data attribute marking the superscript number
  *   run (e.g., "1") at the start of footnote content. Used to distinguish the
  *   marker from actual footnote text during rendering and selection.
+ *
+ * The synthetic marker is visual chrome, not part of the editable note story.
+ * It must not carry `pmStart`/`pmEnd`, otherwise the rendered marker consumes
+ * horizontal space that the hidden story editor does not own. That creates
+ * caret drift and inaccurate click-to-position at the start of the note.
  *
  * @module presentation-editor/layout/FootnotesBuilder
  */
@@ -24,6 +25,8 @@ import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
+import { normalizeNotePmJson } from '../../../document-api-adapters/helpers/note-pm-json.js';
+import { buildStoryKey } from '../../../document-api-adapters/story-runtime/story-key.js';
 
 // Re-export types for consumers
 export type { FootnoteReference, FootnotesLayoutInput };
@@ -125,9 +128,10 @@ export function buildFootnotesInput(
     try {
       // Deep clone to prevent mutation of the original converter data
       const clonedContent = JSON.parse(JSON.stringify(content));
-      const footnoteDoc = { type: 'doc', content: clonedContent };
+      const footnoteDoc = normalizeNotePmJson({ type: 'doc', content: clonedContent });
       const result = toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
+        storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
         enableRichHyperlinks: true,
         themeColors: themeColors as never,
         converterContext: converterContext as never,
@@ -168,25 +172,6 @@ function isFootnoteMarker(run: Run): boolean {
 }
 
 /**
- * Finds the first run with valid ProseMirror position data.
- * Used to inherit position info for the marker run.
- *
- * @param runs - Array of runs to search
- * @returns The first run with pmStart/pmEnd, or undefined
- */
-function findRunWithPositions(runs: Run[]): Run | undefined {
-  return runs.find((r) => {
-    if (isFootnoteMarker(r)) return false;
-    return (
-      typeof r.pmStart === 'number' &&
-      Number.isFinite(r.pmStart) &&
-      typeof r.pmEnd === 'number' &&
-      Number.isFinite(r.pmEnd)
-    );
-  });
-}
-
-/**
  * Resolves the display number for a footnote.
  * Falls back to 1 if the footnote ID is not in the mapping or invalid.
  *
@@ -211,33 +196,6 @@ function resolveMarkerText(value: unknown): string {
   return String(value ?? '');
 }
 
-/**
- * Computes the PM position range for the marker run.
- *
- * The marker inherits position info from an existing run so that clicking
- * on the footnote number positions the cursor correctly. The end position
- * is clamped to not exceed the original run's range.
- *
- * @param baseRun - The run to inherit positions from
- * @param markerLength - Length of the marker text
- * @returns Object with pmStart and pmEnd, or nulls if no base run
- */
-function computeMarkerPositions(
-  baseRun: Run | undefined,
-  markerLength: number,
-): { pmStart: number | null; pmEnd: number | null } {
-  if (baseRun?.pmStart == null) {
-    return { pmStart: null, pmEnd: null };
-  }
-
-  const pmStart = baseRun.pmStart;
-  // Clamp pmEnd to not exceed the base run's end position
-  const pmEnd =
-    baseRun.pmEnd != null ? Math.max(pmStart, Math.min(baseRun.pmEnd, pmStart + markerLength)) : pmStart + markerLength;
-
-  return { pmStart, pmEnd };
-}
-
 function resolveMarkerFontFamily(firstTextRun: Run | undefined): string {
   return typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : DEFAULT_MARKER_FONT_FAMILY;
 }
@@ -254,11 +212,7 @@ function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
   return DEFAULT_MARKER_FONT_SIZE;
 }
 
-function buildMarkerRun(
-  markerText: string,
-  firstTextRun: Run | undefined,
-  positions: { pmStart: number | null; pmEnd: number | null },
-): Run {
+function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run {
   const markerRun: Run = {
     kind: 'text',
     text: markerText,
@@ -274,8 +228,6 @@ function buildMarkerRun(
     markerRun.letterSpacing = firstTextRun.letterSpacing;
   }
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
-  if (positions.pmStart != null) markerRun.pmStart = positions.pmStart;
-  if (positions.pmEnd != null) markerRun.pmEnd = positions.pmEnd;
 
   return markerRun;
 }
@@ -292,8 +244,8 @@ function syncMarkerRun(target: Run, source: Run): void {
   target.color = source.color;
   target.vertAlign = source.vertAlign;
   target.baselineShift = source.baselineShift;
-  target.pmStart = source.pmStart ?? target.pmStart;
-  target.pmEnd = source.pmEnd ?? target.pmEnd;
+  delete target.pmStart;
+  delete target.pmEnd;
 }
 
 /**
@@ -303,7 +255,8 @@ function syncMarkerRun(target: Run, source: Run): void {
  * number rendered as a normal digit with superscript styling. This function
  * prepends that marker to the first paragraph's runs.
  *
- * If a marker already exists, updates its PM positions if missing.
+ * If a marker already exists, normalizes it back to the synthetic visual-only
+ * shape so stale PM ranges do not leak into the active editing surface.
  * Modifies the blocks array in place.
  *
  * @param blocks - Array of FlowBlocks to modify
@@ -321,11 +274,8 @@ function ensureFootnoteMarker(
   const runs: Run[] = Array.isArray(firstParagraph.runs) ? firstParagraph.runs : [];
   const displayNumber = resolveDisplayNumber(id, footnoteNumberById);
   const markerText = resolveMarkerText(displayNumber);
-
-  const baseRun = findRunWithPositions(runs);
-  const positions = computeMarkerPositions(baseRun, markerText.length);
   const firstTextRun = runs.find((run) => typeof run.text === 'string' && !isFootnoteMarker(run));
-  const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun, positions);
+  const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun);
 
   // Check if marker already exists
   const existingMarker = runs.find(isFootnoteMarker);

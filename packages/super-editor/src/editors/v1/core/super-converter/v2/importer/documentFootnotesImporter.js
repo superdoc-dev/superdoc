@@ -2,21 +2,24 @@ import { defaultNodeListHandler } from './docxImporter';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
 
 /**
- * Remove w:footnoteRef placeholders from converted footnote content.
- * In OOXML footnotes, the first run often includes a w:footnoteRef marker which
- * Word uses to render the footnote number. We render numbering ourselves.
+ * Remove w:footnoteRef / w:endnoteRef placeholders from converted note content.
+ * In OOXML notes, the first run often includes a reference marker which Word
+ * uses to render the display number. We render numbering ourselves.
  *
  * @param {Array} nodes
  * @returns {Array}
  */
-const stripFootnoteMarkerNodes = (nodes) => {
+const stripNoteMarkerNodes = (nodes) => {
   if (!Array.isArray(nodes) || nodes.length === 0) return nodes;
   const walk = (list) => {
     if (!Array.isArray(list) || list.length === 0) return;
     for (let i = list.length - 1; i >= 0; i--) {
       const node = list[i];
       if (!node) continue;
-      if (node.type === 'passthroughInline' && node.attrs?.originalName === 'w:footnoteRef') {
+      if (
+        node.type === 'passthroughInline' &&
+        (node.attrs?.originalName === 'w:footnoteRef' || node.attrs?.originalName === 'w:endnoteRef')
+      ) {
         list.splice(i, 1);
         continue;
       }
@@ -109,7 +112,7 @@ function importNoteEntries({
       path: [el],
     });
 
-    const stripped = stripFootnoteMarkerNodes(converted);
+    const stripped = stripNoteMarkerNodes(converted);
     results.push({
       id,
       type,

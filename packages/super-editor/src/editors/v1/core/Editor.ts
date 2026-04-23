@@ -1864,10 +1864,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
-    this.options = {
-      ...this.options,
+    const previousOptions = this.options ?? {};
+    const nextOptions = {
+      ...previousOptions,
       ...options,
     };
+
+    // Preserve non-enumerable option metadata (for example the story editor's
+    // `parentEditor` getter) across option updates. Plain object spreading drops
+    // those descriptors, which breaks commit routing for child/story editors.
+    const previousDescriptors = Object.getOwnPropertyDescriptors(previousOptions);
+    for (const [key, descriptor] of Object.entries(previousDescriptors)) {
+      if (descriptor.enumerable) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(options, key)) {
+        continue;
+      }
+      Object.defineProperty(nextOptions, key, descriptor);
+    }
+
+    this.options = nextOptions;
 
     if ((this.options.isNewFile || !this.options.ydoc) && this.options.isCommentsEnabled) {
       this.options.shouldLoadComments = true;

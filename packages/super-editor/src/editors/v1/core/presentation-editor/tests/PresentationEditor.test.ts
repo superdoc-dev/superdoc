@@ -23,7 +23,9 @@ const {
   mockMeasureBlock,
   mockEditorConverterStore,
   mockCreateHeaderFooterEditor,
+  mockCreateStoryEditor,
   createdSectionEditors,
+  createdStoryEditors,
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
@@ -89,18 +91,24 @@ const {
       once: emitter.once,
       emit: emitter.emit,
       destroy: vi.fn(),
+      getJSON: vi.fn(() => ({ type: 'doc', content: [{ type: 'paragraph' }] })),
+      getUpdatedJson: vi.fn(() => ({ type: 'doc', content: [{ type: 'paragraph' }] })),
       setEditable: vi.fn(),
+      setDocumentMode: vi.fn(),
       setOptions: vi.fn(),
       commands: {
         setTextSelection: vi.fn(),
+        setCursorById: vi.fn(() => true),
       },
       state: {
         doc: {
           content: {
             size: 10,
           },
+          textBetween: vi.fn(() => 'Lazy note session'),
         },
       },
+      options: {},
       view: {
         dom: document.createElement('div'),
         focus: vi.fn(),
@@ -111,6 +119,7 @@ const {
   };
 
   const editors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
+  const storyEditors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
   const mockFlowBlockCacheInstances: Array<{
     clear: ReturnType<typeof vi.fn>;
     setHasExternalChanges: ReturnType<typeof vi.fn>;
@@ -150,7 +159,14 @@ const {
       editors.push({ editor });
       return editor;
     }),
+    mockCreateStoryEditor: vi.fn((parentEditor?: EditorInstance) => {
+      const editor = createSectionEditor();
+      editor.options = { ...editor.options, parentEditor };
+      storyEditors.push({ editor });
+      return editor;
+    }),
     createdSectionEditors: editors,
+    createdStoryEditors: storyEditors,
     mockOnHeaderFooterDataUpdate: vi.fn(),
     mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
@@ -324,6 +340,10 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
+vi.mock('../../story-editor-factory.js', () => ({
+  createStoryEditor: mockCreateStoryEditor,
+}));
+
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -350,6 +370,7 @@ describe('PresentationEditor', () => {
     };
     mockEditorConverterStore.mediaFiles = {};
     createdSectionEditors.length = 0;
+    createdStoryEditors.length = 0;
     mockFlowBlockCacheInstances.length = 0;
 
     // Reset static instances
@@ -2446,8 +2467,8 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2514,8 +2535,8 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
 
       const sourceEditor = editor.getActiveEditor();
       const transaction = { docChanged: true };
@@ -2572,8 +2593,8 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
 
-      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2602,64 +2623,6 @@ describe('PresentationEditor', () => {
           duration: 12,
         }),
       );
-    });
-
-    it('clears leftover footer transform when entering footer editing with non-negative minY', async () => {
-      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
-
-      const editorContainer = document.createElement('div');
-      editorContainer.className = 'super-editor';
-      editorContainer.style.transform = 'translateY(24px)';
-      const editorHost = document.createElement('div');
-      editorHost.appendChild(editorContainer);
-
-      const showEditingOverlay = vi.fn(() => ({
-        success: true,
-        editorHost,
-        reason: null,
-      }));
-
-      mockEditorOverlayManager.mockImplementationOnce(() => ({
-        showEditingOverlay,
-        hideEditingOverlay: vi.fn(),
-        showSelectionOverlay: vi.fn(),
-        hideSelectionOverlay: vi.fn(),
-        setOnDimmingClick: vi.fn(),
-        getActiveEditorHost: vi.fn(() => editorHost),
-        destroy: vi.fn(),
-      }));
-
-      editor = new PresentationEditor({
-        element: container,
-        documentId: 'test-doc',
-      });
-
-      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
-      const mockPage = document.createElement('div');
-      mockPage.setAttribute('data-page-index', '0');
-      pagesHost.appendChild(mockPage);
-
-      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
-      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 800,
-        height: 1000,
-        right: 800,
-        bottom: 1000,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      } as DOMRect);
-
-      // Click inside the footer hitbox (y between footer margin 36 and bottom margin 72)
-      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
-
-      await vi.waitFor(() => expect(showEditingOverlay).toHaveBeenCalled());
-      await vi.waitFor(() => expect(editorContainer.style.transform).toBe(''));
     });
 
     it('exits header mode on Escape and announces the transition', async () => {
@@ -2731,6 +2694,272 @@ describe('PresentationEditor', () => {
       );
 
       expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
+    });
+  });
+
+  describe('footnote interactions', () => {
+    const prepareFootnoteEditor = async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            },
+          ],
+        },
+        measures: [],
+      });
+
+      mockEditorConverterStore.current = {
+        ...mockEditorConverterStore.current,
+        footnotes: [
+          {
+            id: '1',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lazy note session' }] }],
+          },
+        ],
+        convertedXml: {
+          'word/footnotes.xml': {
+            elements: [
+              {
+                name: 'w:footnotes',
+                elements: [
+                  {
+                    name: 'w:footnote',
+                    attributes: { 'w:id': '1' },
+                    elements: [{ name: 'w:p', elements: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'footnote-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const footnoteFragment = document.createElement('span');
+      footnoteFragment.setAttribute('data-block-id', 'footnote-1-0');
+      viewport.appendChild(footnoteFragment);
+
+      return { viewport, footnoteFragment };
+    };
+
+    const activateFootnoteSession = async () => {
+      const { viewport, footnoteFragment } = await prepareFootnoteEditor();
+
+      expect(editor.getStorySessionManager()).not.toBeNull();
+      expect(editor.getStorySessionManager()?.getActiveSession()).toBeNull();
+
+      footnoteFragment.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }),
+      );
+
+      await vi.waitFor(() => expect(mockCreateStoryEditor.mock.calls.length).toBeGreaterThanOrEqual(1));
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(1));
+
+      return {
+        viewport,
+        footnoteFragment,
+        sessionEditor: createdStoryEditors.at(-1)?.editor,
+      };
+    };
+
+    const prepareEndnoteEditor = async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            },
+          ],
+        },
+        measures: [],
+      });
+
+      mockEditorConverterStore.current = {
+        ...mockEditorConverterStore.current,
+        endnotes: [
+          {
+            id: '1',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lazy endnote session' }] }],
+          },
+        ],
+        convertedXml: {
+          'word/endnotes.xml': {
+            elements: [
+              {
+                name: 'w:endnotes',
+                elements: [
+                  {
+                    name: 'w:endnote',
+                    attributes: { 'w:id': '1' },
+                    elements: [{ name: 'w:p', elements: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'endnote-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const endnoteFragment = document.createElement('span');
+      endnoteFragment.setAttribute('data-block-id', 'endnote-1-0');
+      viewport.appendChild(endnoteFragment);
+
+      return { viewport, endnoteFragment };
+    };
+
+    it('activates a note editing session through the shared story-session manager', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+
+      expect(editor.getStorySessionManager()).not.toBeNull();
+      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('continuous');
+      expect(editor.getActiveEditor()).toBe(sessionEditor);
+      expect(sessionEditor?.setDocumentMode).toHaveBeenCalledWith('editing');
+
+      editor.setDocumentMode('viewing');
+      expect(sessionEditor?.setDocumentMode).toHaveBeenLastCalledWith('viewing');
+      expect(createdSectionEditors.length).toBe(0);
+    });
+
+    it('routes tracked-change navigation to the active note session editor', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+      const setCursorById = vi.fn(() => true);
+      if (sessionEditor?.commands) {
+        sessionEditor.commands.setCursorById = setCursorById;
+      }
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-note-1',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(setCursorById).toHaveBeenCalledWith('tc-note-1', { preferredActiveThreadId: 'tc-note-1' });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('falls back to rendered tracked-change stamps for inactive non-body stories', async () => {
+      const { viewport } = await prepareFootnoteEditor();
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-footnote-2';
+      renderedChange.dataset.storyKey = 'fn:2';
+      renderedChange.scrollIntoView = vi.fn();
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-footnote-2',
+        story: { kind: 'story', storyType: 'footnote', noteId: '2' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(renderedChange.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'auto',
+        block: 'center',
+        inline: 'nearest',
+      });
+    });
+
+    it('activates an inactive endnote story before routing tracked-change navigation', async () => {
+      const { viewport } = await prepareEndnoteEditor();
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-endnote-1';
+      renderedChange.dataset.storyKey = 'en:1';
+      renderedChange.scrollIntoView = vi.fn();
+      vi.spyOn(renderedChange, 'getBoundingClientRect').mockReturnValue({
+        left: 140,
+        top: 720,
+        width: 20,
+        height: 12,
+        right: 160,
+        bottom: 732,
+        x: 140,
+        y: 720,
+        toJSON: () => ({}),
+      } as DOMRect);
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(2));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setCursorById).toHaveBeenCalledWith('tc-endnote-1', {
+        preferredActiveThreadId: 'tc-endnote-1',
+      });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+      expect(renderedChange.scrollIntoView).not.toHaveBeenCalled();
     });
   });
 

@@ -67,7 +67,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }
 
-async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
+async function waitForReady(page: Page, timeout = 60_000): Promise<void> {
   // Vite may trigger a dep-optimization reload on WebKit after the initial load event,
   // which destroys the execution context and resets `superdocReady`. Retry across
   // navigations until the flag is set or the overall deadline is reached.

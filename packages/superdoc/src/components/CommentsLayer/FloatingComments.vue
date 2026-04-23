@@ -70,7 +70,6 @@ const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry, 
   commentsStore;
 
 const {
-  getFloatingComments,
   activeComment,
   editorCommentPositions,
   pendingComment,
@@ -79,6 +78,15 @@ const {
   instantSidebarAlignmentThreadId,
 } = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
+
+// Access the Pinia getter directly instead of storeToRefs(). In this component
+// the getter-backed ref can lag behind the live store array during rapid
+// tracked-change updates, which collapses the virtualized sidebar to a stale
+// subset of comments.
+const floatingComments = computed(() => {
+  const currentFloatingComments = commentsStore.getFloatingComments;
+  return Array.isArray(currentFloatingComments) ? currentFloatingComments : [];
+});
 
 const floatingCommentsContainer = ref(null);
 const commentsRenderKey = ref(0);
@@ -151,7 +159,7 @@ const getPendingAnchorTop = () => {
 
 // Pre-compute all positions with collision avoidance
 const allPositions = computed(() => {
-  const comments = getFloatingComments.value;
+  const comments = floatingComments.value;
   const hasPending = pendingComment.value && pendingComment.value.fileId === props.currentDocument.id;
   if (!comments.length && !hasPending) return [];
 

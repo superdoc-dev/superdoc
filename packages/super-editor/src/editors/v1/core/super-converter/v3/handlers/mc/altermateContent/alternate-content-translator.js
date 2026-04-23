@@ -116,10 +116,11 @@ export function selectAlternateContentElements(node) {
     const requiresAttr = choice?.attributes?.Requires || choice?.attributes?.requires;
     if (!requiresAttr) return false;
 
-    return requiresAttr
-      .split(/\s+/)
-      .filter(Boolean)
-      .some((namespace) => SUPPORTED_ALTERNATE_CONTENT_REQUIRES.has(namespace));
+    const requiredNamespaces = requiresAttr.split(/\s+/).filter(Boolean);
+    if (requiredNamespaces.length === 0) return false;
+
+    // ECMA-376 mc:Choice requires ALL listed namespaces to be understood.
+    return requiredNamespaces.every((namespace) => SUPPORTED_ALTERNATE_CONTENT_REQUIRES.has(namespace));
   });
 
   const branch = supportedChoice || fallback || choices[0] || null;

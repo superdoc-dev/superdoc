@@ -5,9 +5,35 @@ type SuperDocConfig = ConstructorParameters<typeof SuperDoc>[0];
 type SuperDocInstance = InstanceType<typeof SuperDoc>;
 type SuperDocReadyPayload = Parameters<NonNullable<SuperDocConfig['onReady']>>[0];
 type OverrideType = 'markdown' | 'html' | 'text';
+type StoryLocator =
+  | { kind: 'story'; storyType: 'body' }
+  | { kind: 'story'; storyType: 'headerFooterPart'; refId: string }
+  | { kind: 'story'; storyType: 'footnote' | 'endnote'; noteId: string };
 type ContentOverrideInput = {
   contentOverride?: string;
   overrideType?: OverrideType;
+};
+type BehaviorHarnessCommentSnapshot = {
+  commentId?: string;
+  importedId?: string;
+  trackedChange?: boolean;
+  trackedChangeText?: string | null;
+  trackedChangeType?: string | null;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeStoryKind?: string | null;
+  trackedChangeStoryLabel?: string;
+  trackedChangeAnchorKey?: string | null;
+  deletedText?: string | null;
+  resolvedTime?: number | null;
+};
+type BehaviorHarnessApi = {
+  getActiveStorySession: () => StoryLocator | null;
+  getActiveStoryText: () => string | null;
+  getBodyStoryText: () => string | null;
+  getCommentsSnapshot: () => BehaviorHarnessCommentSnapshot[];
+  getEditorCommentPositions: () => Record<string, unknown>;
+  getActiveCommentId: () => string | null;
 };
 
 type HarnessWindow = Window &
@@ -15,6 +41,7 @@ type HarnessWindow = Window &
     superdocReady?: boolean;
     superdoc?: SuperDocInstance;
     editor?: unknown;
+    behaviorHarness?: BehaviorHarnessApi;
     behaviorHarnessInit?: (input?: ContentOverrideInput) => void;
   };
 
@@ -40,6 +67,63 @@ if (!showCaret) {
 }
 
 let instance: SuperDocInstance | null = null;
+const commentsPanel = document.querySelector<HTMLElement>('#comments-panel');
+
+function getEditorText(editor: any): string | null {
+  const state = editor?.state;
+  const doc = state?.doc;
+  if (!doc || typeof doc.textBetween !== 'function' || typeof doc.content?.size !== 'number') return null;
+  return doc.textBetween(0, doc.content.size, '\n', '\n');
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildBehaviorHarnessApi(): BehaviorHarnessApi {
+  return {
+    getActiveStorySession: () => {
+      const session = (harnessWindow.editor as any)?.presentationEditor
+        ?.getStorySessionManager?.()
+        ?.getActiveSession?.();
+      return session?.locator ?? null;
+    },
+    getActiveStoryText: () => {
+      const activeEditor = (harnessWindow.editor as any)?.presentationEditor?.getActiveEditor?.();
+      if (!activeEditor || activeEditor === harnessWindow.editor) return null;
+      return getEditorText(activeEditor);
+    },
+    getBodyStoryText: () => getEditorText(harnessWindow.editor),
+    getCommentsSnapshot: () => {
+      const comments = (harnessWindow.superdoc as any)?.commentsStore?.commentsList ?? [];
+      return comments.map((comment: any) => {
+        const raw = typeof comment?.getValues === 'function' ? comment.getValues() : comment;
+        return cloneJson({
+          commentId: raw?.commentId,
+          importedId: raw?.importedId,
+          trackedChange: raw?.trackedChange === true,
+          trackedChangeText: raw?.trackedChangeText ?? null,
+          trackedChangeType: raw?.trackedChangeType ?? null,
+          trackedChangeDisplayType: raw?.trackedChangeDisplayType ?? null,
+          trackedChangeStory: raw?.trackedChangeStory ?? null,
+          trackedChangeStoryKind: raw?.trackedChangeStoryKind ?? null,
+          trackedChangeStoryLabel: raw?.trackedChangeStoryLabel ?? '',
+          trackedChangeAnchorKey: raw?.trackedChangeAnchorKey ?? null,
+          deletedText: raw?.deletedText ?? null,
+          resolvedTime: raw?.resolvedTime ?? null,
+        });
+      });
+    },
+    getEditorCommentPositions: () => {
+      const positions = (harnessWindow.superdoc as any)?.commentsStore?.editorCommentPositions ?? {};
+      return cloneJson(positions);
+    },
+    getActiveCommentId: () => {
+      const activeComment = (harnessWindow.superdoc as any)?.commentsStore?.activeComment;
+      return activeComment == null ? null : String(activeComment);
+    },
+  };
+}
 
 function applyContentOverride(config: SuperDocConfig, input?: ContentOverrideInput) {
   if (!input?.contentOverride || !input?.overrideType) return;
@@ -75,10 +159,15 @@ function init(file?: File, content?: ContentOverrideInput) {
     telemetry: { enabled: false },
     onReady: ({ superdoc }: SuperDocReadyPayload) => {
       harnessWindow.superdoc = superdoc;
+      if (comments === 'panel' && commentsPanel) {
+        commentsPanel.replaceChildren();
+        superdoc.addCommentsList(commentsPanel);
+      }
       superdoc.activeEditor.on('create', (payload: unknown) => {
         if (!payload || typeof payload !== 'object' || !('editor' in payload)) return;
         harnessWindow.editor = (payload as { editor: unknown }).editor;
       });
+      harnessWindow.behaviorHarness = buildBehaviorHarnessApi();
       harnessWindow.superdocReady = true;
     },
   };
@@ -105,6 +194,14 @@ function init(file?: File, content?: ContentOverrideInput) {
   // Comments
   if (comments === 'on' || comments === 'panel') {
     config.comments = { visible: true };
+    if (comments === 'panel') {
+      config.modules = {
+        ...(config.modules ?? {}),
+        comments: {
+          ...((config.modules as Record<string, unknown> | undefined)?.comments as Record<string, unknown> | undefined),
+        },
+      };
+    }
   } else if (comments === 'readonly') {
     config.comments = { visible: true, readOnly: true };
   } else if (comments === 'disabled') {
@@ -136,6 +233,10 @@ function init(file?: File, content?: ContentOverrideInput) {
   }
 
   instance = new SuperDoc(config);
+  if (commentsPanel) {
+    commentsPanel.classList.toggle('is-visible', comments === 'panel');
+    if (comments !== 'panel') commentsPanel.replaceChildren();
+  }
 
   if (!showSelection) {
     const style = document.createElement('style');

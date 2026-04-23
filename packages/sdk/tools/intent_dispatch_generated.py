@@ -21,6 +21,8 @@ def dispatch_intent_tool(
             return execute('doc.getHtml', rest)
         elif action == 'info':
             return execute('doc.info', rest)
+        elif action == 'extract':
+            return execute('doc.extract', rest)
         elif action == 'blocks':
             return execute('doc.blocks.list', rest)
         else:

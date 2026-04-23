@@ -131,8 +131,12 @@ export function buildAutoFitWorkingGridInput(
     maxTableWidth,
   );
   const preferredColumnWidths = normalizePreferredColumnWidths(block.columnWidths);
-
-  const rows = block.rows.map((row) => normalizeRow(row, preferredTableWidth ?? maxTableWidth));
+  let activeRowSpans: number[] = [];
+  const rows = block.rows.map((row) => {
+    const normalized = normalizeRow(row, preferredTableWidth ?? maxTableWidth, activeRowSpans);
+    activeRowSpans = normalized.nextActiveRowSpans;
+    return normalized.row;
+  });
   const gridColumnCount = determineGridColumnCount(preferredColumnWidths.length, rows);
 
   return {
@@ -166,41 +170,60 @@ function normalizePreferredColumnWidths(columnWidths: number[] | undefined): num
 /**
  * Normalize one runtime row into explicit skipped columns plus span-aware cells.
  */
-function normalizeRow(row: TableBlock['rows'][number], percentageBasis: number): WorkingTableRowInput {
+function normalizeRow(
+  row: TableBlock['rows'][number],
+  percentageBasis: number,
+  activeRowSpans: number[],
+): { row: WorkingTableRowInput; nextActiveRowSpans: number[] } {
   const rowProps = (row.attrs?.tableRowProperties ?? {}) as TableRowProperties;
   const skippedBeforeCount = sanitizeCount(rowProps.gridBefore);
   const skippedAfterCount = sanitizeCount(rowProps.gridAfter);
   const cells = Array.isArray(row.cells) ? row.cells : [];
-  let columnIndex = 0;
+  let columnIndex = advancePastOccupiedColumns(activeRowSpans, 0);
 
-  const skippedBefore = buildSkippedColumns(
+  const skippedBeforePlacement = buildSkippedColumns(
     skippedBeforeCount,
     rowProps.wBefore as OoxmlMeasurement | undefined,
     percentageBasis,
     columnIndex,
+    activeRowSpans,
   );
-  columnIndex += skippedBefore.length;
+  columnIndex = skippedBeforePlacement.nextColumnIndex;
 
   const normalizedCells = cells.map((cell) => {
+    columnIndex = advancePastOccupiedColumns(activeRowSpans, columnIndex);
     const normalizedCell = normalizeCell(cell, percentageBasis, columnIndex);
     columnIndex += normalizedCell.span ?? 1;
     return normalizedCell;
   });
 
-  const skippedAfter = buildSkippedColumns(
+  const skippedAfterPlacement = buildSkippedColumns(
     skippedAfterCount,
     rowProps.wAfter as OoxmlMeasurement | undefined,
     percentageBasis,
     columnIndex,
+    activeRowSpans,
   );
-  columnIndex += skippedAfter.length;
+  columnIndex = skippedAfterPlacement.nextColumnIndex;
+
+  const logicalColumnCount = Math.max(columnIndex, resolveOccupiedLogicalColumnCount(activeRowSpans));
+  const nextActiveRowSpans = advanceRowSpans(activeRowSpans);
+  normalizedCells.forEach((cell, index) => {
+    const rowSpan = sanitizeCount(cells[index]?.rowSpan) || 1;
+    if (rowSpan > 1) {
+      markRowSpanOccupancy(nextActiveRowSpans, cell.startColumn, cell.span ?? 1, rowSpan - 1);
+    }
+  });
 
   return {
-    skippedBefore,
-    cells: normalizedCells,
-    skippedAfter,
-    skippedColumns: [...skippedBefore, ...skippedAfter],
-    logicalColumnCount: columnIndex,
+    row: {
+      skippedBefore: skippedBeforePlacement.columns,
+      cells: normalizedCells,
+      skippedAfter: skippedAfterPlacement.columns,
+      skippedColumns: [...skippedBeforePlacement.columns, ...skippedAfterPlacement.columns],
+      logicalColumnCount,
+    },
+    nextActiveRowSpans,
   };
 }
 
@@ -216,19 +239,30 @@ function buildSkippedColumns(
   preferredWidthMeasurement: OoxmlMeasurement | undefined,
   percentageBasis: number,
   startColumnIndex: number,
-): WorkingTableSkippedColumnInput[] {
-  if (count <= 0) return [];
+  activeRowSpans: number[],
+): { columns: WorkingTableSkippedColumnInput[]; nextColumnIndex: number } {
+  if (count <= 0) {
+    return { columns: [], nextColumnIndex: startColumnIndex };
+  }
 
   const totalPreferredWidth = resolveMeasurementToPx(preferredWidthMeasurement, percentageBasis);
   const perColumnPreferredWidth =
     totalPreferredWidth != null && count > 0 ? Math.max(0, totalPreferredWidth / count) : undefined;
+  const columns: WorkingTableSkippedColumnInput[] = [];
+  let columnIndex = startColumnIndex;
 
-  return Array.from({ length: count }, (_, index) => ({
-    columnIndex: startColumnIndex + index,
-    preferredWidth: perColumnPreferredWidth,
-    minContentWidth: 0,
-    maxContentWidth: 0,
-  }));
+  for (let index = 0; index < count; index++) {
+    columnIndex = advancePastOccupiedColumns(activeRowSpans, columnIndex);
+    columns.push({
+      columnIndex,
+      preferredWidth: perColumnPreferredWidth,
+      minContentWidth: 0,
+      maxContentWidth: 0,
+    });
+    columnIndex += 1;
+  }
+
+  return { columns, nextColumnIndex: columnIndex };
 }
 
 /**
@@ -246,6 +280,40 @@ function normalizeCell(
     span: sanitizeCount(cell.colSpan) || 1,
     preferredWidth: resolveMeasurementToPx(cellProps.cellWidth, percentageBasis),
   };
+}
+
+function advancePastOccupiedColumns(activeRowSpans: number[], columnIndex: number): number {
+  let nextColumnIndex = columnIndex;
+  while ((activeRowSpans[nextColumnIndex] ?? 0) > 0) {
+    nextColumnIndex += 1;
+  }
+  return nextColumnIndex;
+}
+
+function resolveOccupiedLogicalColumnCount(activeRowSpans: number[]): number {
+  for (let index = activeRowSpans.length - 1; index >= 0; index--) {
+    if ((activeRowSpans[index] ?? 0) > 0) {
+      return index + 1;
+    }
+  }
+  return 0;
+}
+
+function advanceRowSpans(activeRowSpans: number[]): number[] {
+  return activeRowSpans.map((remainingRows) => Math.max(0, remainingRows - 1));
+}
+
+function markRowSpanOccupancy(
+  activeRowSpans: number[],
+  startColumn: number,
+  span: number,
+  remainingRows: number,
+): void {
+  const boundedSpan = Math.max(1, sanitizeCount(span));
+  for (let offset = 0; offset < boundedSpan; offset++) {
+    const columnIndex = startColumn + offset;
+    activeRowSpans[columnIndex] = Math.max(activeRowSpans[columnIndex] ?? 0, remainingRows);
+  }
 }
 
 /**

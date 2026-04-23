@@ -247,4 +247,44 @@ describe('buildAutoFitWorkingGridInput', () => {
       ],
     });
   });
+
+  it('skips columns occupied by active rowspans when placing later-row cells', () => {
+    const block = createTableBlock({
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', colSpan: 1, rowSpan: 2 },
+            { id: 'cell-2', colSpan: 1 },
+          ],
+        },
+        {
+          id: 'row-2',
+          cells: [
+            {
+              id: 'cell-3',
+              colSpan: 1,
+              attrs: {
+                tableCellProperties: {
+                  cellWidth: { value: 1500, type: 'dxa' },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.rows[0].cells).toEqual([
+      { cellId: 'cell-1', startColumn: 0, span: 1, preferredWidth: undefined },
+      { cellId: 'cell-2', startColumn: 1, span: 1, preferredWidth: undefined },
+    ]);
+    expect(result.rows[1]).toMatchObject({
+      logicalColumnCount: 2,
+      cells: [{ cellId: 'cell-3', startColumn: 1, span: 1, preferredWidth: 100 }],
+    });
+    expect(result.gridColumnCount).toBe(2);
+  });
 });

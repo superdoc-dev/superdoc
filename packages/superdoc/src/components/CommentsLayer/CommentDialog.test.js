@@ -146,6 +146,7 @@ const mountDialog = async ({
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
     clearInstantSidebarAlignment: vi.fn(),
+    decideTrackedChangeFromSidebar: vi.fn(() => ({ ok: true, success: true })),
     getCommentDocumentId: vi.fn(
       (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
     ),
@@ -158,7 +159,7 @@ const mountDialog = async ({
               (item) => item.commentId === commentOrId || item.importedId === commentOrId,
             );
 
-      return [rawId, comment?.commentId, comment?.importedId].filter(Boolean);
+      return [rawId, comment?.trackedChangeAnchorKey, comment?.commentId, comment?.importedId].filter(Boolean);
     }),
     resolveCommentPositionEntry: vi.fn((commentOrId) => {
       const positions = commentsStoreStub.editorCommentPositions.value ?? {};
@@ -293,6 +294,7 @@ describe('CommentDialog.vue', () => {
     const presentation = {
       getReachableThreadAnchorClientY: vi.fn().mockReturnValue(165),
       scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+      navigateTo: vi.fn().mockResolvedValue(true),
     };
     PresentationEditor.getInstance.mockReturnValue(presentation);
 
@@ -307,16 +309,115 @@ describe('CommentDialog.vue', () => {
       },
     });
 
-    expect(presentation.getReachableThreadAnchorClientY).toHaveBeenCalledWith(
-      'imported-tracked-change-1',
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-1',
+    });
+    expect(presentation.getReachableThreadAnchorClientY).not.toHaveBeenCalled();
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
       expect.any(Number),
+      'tracked-change-1',
     );
-    expect(presentation.scrollThreadAnchorToClientY).toHaveBeenCalledWith(
-      'imported-tracked-change-1',
-      expect.any(Number),
-      { behavior: 'auto' },
+  });
+
+  it('navigates tracked changes with story metadata through PresentationEditor', async () => {
+    const presentation = {
+      navigateTo: vi.fn().mockResolvedValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const trackedChangeStory = { kind: 'story', storyType: 'footnote', noteId: '1' };
+
+    await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tracked-change-story-1',
+        importedId: 'imported-tracked-change-story-1',
+        trackedChange: true,
+        trackedChangeStory,
+      },
+    });
+
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-story-1',
+      story: trackedChangeStory,
+    });
+  });
+
+  it('falls back to setCursorById for resolved tracked changes when PresentationEditor navigation is unavailable', async () => {
+    PresentationEditor.getInstance.mockReturnValue({});
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-resolved-1',
+        importedId: 'imported-tracked-change-resolved-1',
+        trackedChange: true,
+        resolvedTime: Date.now(),
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith('tracked-change-resolved-1');
+    expect(superdocStub.activeEditor.commands.setActiveComment).not.toHaveBeenCalled();
+  });
+
+  it('activates the tracked-change bubble when cursor placement fallback fails', async () => {
+    PresentationEditor.getInstance.mockReturnValue({});
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-fallback-1',
+        importedId: 'imported-tracked-change-fallback-1',
+        trackedChange: true,
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockReturnValue(false);
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    superdocStub.activeEditor.commands.setActiveComment.mockClear();
+
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(
+      'imported-tracked-change-fallback-1',
+      {
+        activeCommentId: 'tracked-change-fallback-1',
+      },
     );
-    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(165, 'tracked-change-1');
+    expect(superdocStub.activeEditor.commands.setActiveComment).toHaveBeenCalledWith({
+      commentId: 'tracked-change-fallback-1',
+    });
+  });
+
+  it('activates the comment thread when non-tracked cursor placement fallback fails', async () => {
+    PresentationEditor.getInstance.mockReturnValue(null);
+
+    const { wrapper, superdocStub } = await mountDialog({
+      props: { autoFocus: false },
+      baseCommentOverrides: {
+        commentId: 'comment-fallback-1',
+        trackedChange: false,
+      },
+    });
+
+    superdocStub.activeEditor.commands.setCursorById.mockReturnValue(false);
+    superdocStub.activeEditor.commands.setCursorById.mockClear();
+    superdocStub.activeEditor.commands.setActiveComment.mockClear();
+
+    await wrapper.trigger('click');
+
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith('comment-fallback-1', {
+      activeCommentId: 'comment-fallback-1',
+    });
+    expect(superdocStub.activeEditor.commands.setActiveComment).toHaveBeenCalledWith({
+      commentId: 'comment-fallback-1',
+    });
   });
 
   it('prefers the actual visible highlight top after the scroll attempt', async () => {
@@ -378,6 +479,7 @@ describe('CommentDialog.vue', () => {
     const presentation = {
       getReachableThreadAnchorClientY: vi.fn().mockReturnValue(456),
       scrollThreadAnchorToClientY: vi.fn().mockReturnValue(true),
+      navigateTo: vi.fn().mockResolvedValue(true),
     };
     PresentationEditor.getInstance.mockReturnValue(presentation);
 
@@ -421,7 +523,15 @@ describe('CommentDialog.vue', () => {
 
     await wrapper.trigger('click');
 
-    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(456, 'tracked-change-1');
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-3f15df8f',
+    });
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
+      expect.any(Number),
+      'tracked-change-1',
+    );
   });
 
   it('does not ask the presentation layer to scroll when the bubble is already aligned', async () => {
@@ -554,7 +664,9 @@ describe('CommentDialog.vue', () => {
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
     await nextTick();
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalledWith({
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
@@ -564,7 +676,9 @@ describe('CommentDialog.vue', () => {
 
     header.vm.$emit('reject');
     await nextTick();
-    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'reject' }),
+    );
     expect(superdocStub.focus).toHaveBeenCalledTimes(2);
   });
 
@@ -681,8 +795,9 @@ describe('CommentDialog.vue', () => {
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
 
-    // Default behavior should be called
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalled();
   });
 
@@ -703,12 +818,16 @@ describe('CommentDialog.vue', () => {
 
     // Test accept
     header.vm.$emit('resolve');
-    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
     expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Test reject
     header.vm.$emit('reject');
-    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'reject' }),
+    );
   });
 
   it('still runs cleanup when custom handler does nothing (no-op)', async () => {
@@ -935,6 +1054,45 @@ describe('CommentDialog.vue', () => {
 
     document.elementFromPoint = originalElementFromPoint;
     document.body.removeChild(trackedInsert);
+  });
+
+  it('does not deselect when geometry finds a tracked-change element behind a pointer-events-none surface', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+
+    const viewportHost = document.createElement('div');
+    const page = document.createElement('div');
+    page.className = 'superdoc-page';
+    document.body.appendChild(page);
+
+    const trackedInsert = document.createElement('span');
+    trackedInsert.className = 'track-insert-dec';
+    trackedInsert.setAttribute('data-track-change-id', 'tracked-geometry-1');
+    trackedInsert.getBoundingClientRect = vi.fn(() => ({
+      top: 40,
+      left: 32,
+      right: 132,
+      bottom: 64,
+      width: 100,
+      height: 24,
+      x: 32,
+      y: 40,
+      toJSON: () => ({}),
+    }));
+    document.body.appendChild(trackedInsert);
+
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => page);
+
+    const handler = wrapper.element.__clickOutside;
+    handler({ target: viewportHost, clientX: 80, clientY: 52 });
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
+
+    document.elementFromPoint = originalElementFromPoint;
+    document.body.removeChild(trackedInsert);
+    document.body.removeChild(page);
   });
 
   it('deselects when elementFromPoint returns a non-ignored element', async () => {

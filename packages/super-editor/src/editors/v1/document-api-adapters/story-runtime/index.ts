@@ -29,6 +29,11 @@ export {
 
 // Runtime cache
 export { StoryRuntimeCache } from './runtime-cache.js';
+export {
+  registerLiveStorySessionRuntime,
+  resolveLiveStorySessionRuntime,
+  unregisterLiveStorySessionRuntime,
+} from './live-story-session-runtime-registry.js';
 
 // Resolution
 export { resolveStoryRuntime, getStoryRuntimeCache } from './resolve-story-runtime.js';

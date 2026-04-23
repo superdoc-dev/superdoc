@@ -2886,6 +2886,10 @@ export class DomPainter {
     if (fragmentEl.closest('.superdoc-page-header, .superdoc-page-footer')) {
       return;
     }
+    // Notes use local story positions, so body mappings must not rewrite them.
+    if (isNonBodyStoryBlockId(fragmentEl.dataset.blockId)) {
+      return;
+    }
 
     // Wrap mapping logic in try-catch to prevent corrupted mappings from crashing paint cycle
     try {
@@ -6776,6 +6780,7 @@ export class DomPainter {
 
     elem.dataset.trackChangeId = meta.id;
     elem.dataset.trackChangeKind = meta.kind;
+    elem.dataset.storyKey = meta.storyKey ?? 'body';
     if (meta.author) {
       elem.dataset.trackChangeAuthor = meta.author;
     }
@@ -7484,6 +7489,13 @@ const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean
     typeof next.height === 'number' &&
     previous.height !== next.height);
 
+const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
+  typeof blockId === 'string' &&
+  (blockId.startsWith('footnote-') ||
+    blockId.startsWith('endnote-') ||
+    blockId.startsWith('__sd_semantic_footnote-') ||
+    blockId.startsWith('__sd_semantic_endnote-'));
+
 const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
   if (!metadata) return '';
   if ('id' in metadata && metadata.id != null) {
@@ -7651,6 +7663,19 @@ const deriveBlockVersion = (block: FlowBlock): string => {
 
         // Handle TextRun (kind is 'text' or undefined)
         const textRun = run as TextRun;
+        const trackedChangeVersion = textRun.trackedChange
+          ? [
+              textRun.trackedChange.kind ?? '',
+              textRun.trackedChange.id ?? '',
+              textRun.trackedChange.storyKey ?? '',
+              textRun.trackedChange.author ?? '',
+              textRun.trackedChange.authorEmail ?? '',
+              textRun.trackedChange.authorImage ?? '',
+              textRun.trackedChange.date ?? '',
+              textRun.trackedChange.before ? JSON.stringify(textRun.trackedChange.before) : '',
+              textRun.trackedChange.after ? JSON.stringify(textRun.trackedChange.after) : '',
+            ].join(':')
+          : '';
         return [
           textRun.text ?? '',
           textRun.fontFamily,
@@ -7668,8 +7693,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.baselineShift != null ? textRun.baselineShift : '',
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           textRun.token ?? '',
-          // Tracked changes - force re-render when added or removed tracked change
-          textRun.trackedChange ? 1 : 0,
+          // Tracked changes - force re-render when any rendered tracked-change metadata changes.
+          trackedChangeVersion,
           // Comment annotations - force re-render when comments are enabled/disabled
           textRun.comments?.length ?? 0,
         ].join(',');

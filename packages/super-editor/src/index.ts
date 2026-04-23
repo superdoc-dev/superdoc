@@ -54,6 +54,7 @@ export type {
   FontsResolvedPayload,
   PaginationPayload,
   ListDefinitionsPayload,
+  TrackedChangesChangedPayload,
   ProtectionChangeSource,
   EditorEventMap,
 } from './editors/v1/core/types/EditorEvents.js';

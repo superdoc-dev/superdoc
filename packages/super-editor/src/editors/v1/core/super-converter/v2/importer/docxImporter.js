@@ -20,12 +20,13 @@ import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
-import { buildTrackedChangeIdMap } from './trackedChangeIdMapper.js';
+import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
 import { importFootnoteData, importEndnoteData } from './documentFootnotesImporter.js';
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
+import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
@@ -153,9 +154,11 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, {
+    const trackedChangeIdMapOptions = {
       replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
-    });
+    };
+    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
+    converter.trackedChangeIdMapsByPart = buildTrackedChangeIdMapsByPart(docx, trackedChangeIdMapOptions);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -241,6 +244,7 @@ export const defaultNodeListHandler = () => {
     trackChangeNodeHandlerEntity,
     tableNodeHandlerEntity,
     footnoteReferenceHandlerEntity,
+    endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,

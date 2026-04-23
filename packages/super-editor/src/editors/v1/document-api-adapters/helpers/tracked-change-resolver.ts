@@ -1,6 +1,11 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import type { TrackChangeType, TrackChangeWordRevisionIds } from '@superdoc/document-api';
+import type {
+  StoryLocator,
+  TrackChangeType,
+  TrackChangeWordRevisionIds,
+  TrackedChangeAddress,
+} from '@superdoc/document-api';
 import {
   TrackDeleteMarkName,
   TrackFormatMarkName,
@@ -8,6 +13,9 @@ import {
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { normalizeExcerpt, toNonEmptyString } from './value-utils.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { buildStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
+import type { TrackedChangeRuntimeRef } from './tracked-change-runtime-ref.js';
 
 const DERIVED_ID_LENGTH = 24;
 
@@ -212,4 +220,101 @@ export function buildTrackedChangeCanonicalIdMap(editor: Editor): Map<string, st
     map.set(change.id, change.id);
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// Story-aware resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves a tracked-change identity across stories.
+ *
+ * Accepts either:
+ * - A bare canonical id string (body back-compat), OR
+ * - A public {@link TrackedChangeAddress} (with optional `story`).
+ *
+ * Returns the grouped change AND the story editor that owns it, so callers
+ * can apply mutations (accept/reject) against the correct runtime without
+ * re-resolving.
+ */
+export interface ResolvedStoryTrackedChange {
+  /** The owning story editor (body host editor OR a story runtime editor). */
+  editor: Editor;
+  /** Public story locator. */
+  story: StoryLocator;
+  /** Internal runtime ref. */
+  runtimeRef: TrackedChangeRuntimeRef;
+  /** The grouped change in the owning editor. */
+  change: GroupedTrackedChange;
+  /** Optional commit callback — present for non-body runtimes. */
+  commit?: (hostEditor: Editor) => void;
+}
+
+type TrackedChangeLookupInput = string | TrackedChangeAddress;
+
+function toAddress(input: TrackedChangeLookupInput): TrackedChangeAddress {
+  if (typeof input === 'string') {
+    return { kind: 'entity', entityType: 'trackedChange', entityId: input };
+  }
+  return input;
+}
+
+/**
+ * Resolves a tracked-change id/address to the owning story editor and the
+ * grouped change within it.
+ *
+ * For body addresses (no `story` field) this is an O(n) search against the
+ * host editor's grouped marks — same as the legacy body-only resolver.
+ *
+ * For non-body addresses it resolves the correct story runtime, then performs
+ * the lookup within that editor's state.
+ *
+ * Returns `null` if the address resolves to no matching tracked change.
+ */
+export function resolveTrackedChangeInStory(
+  hostEditor: Editor,
+  input: TrackedChangeLookupInput,
+): ResolvedStoryTrackedChange | null {
+  const address = toAddress(input);
+  const entityId = address.entityId;
+
+  const story: StoryLocator = address.story ?? { kind: 'story', storyType: 'body' };
+  const storyKey = address.story ? buildStoryKey(address.story) : BODY_STORY_KEY;
+
+  if (storyKey === BODY_STORY_KEY) {
+    const match = findMatchingChange(hostEditor, entityId);
+    if (!match) return null;
+    return {
+      editor: hostEditor,
+      story,
+      runtimeRef: { storyKey: BODY_STORY_KEY, rawId: match.rawId },
+      change: match,
+    };
+  }
+
+  let runtime;
+  try {
+    runtime = resolveStoryRuntime(hostEditor, story);
+  } catch {
+    return null;
+  }
+
+  const match = findMatchingChange(runtime.editor, entityId);
+  if (!match) return null;
+  return {
+    editor: runtime.editor,
+    story: runtime.locator,
+    runtimeRef: { storyKey: runtime.storyKey, rawId: match.rawId },
+    change: match,
+    commit: runtime.commit,
+  };
+}
+
+/**
+ * Lookup helper — accepts both the canonical id and the raw mark id to
+ * tolerate callers that stored whichever was convenient at the time.
+ */
+function findMatchingChange(editor: Editor, id: string): GroupedTrackedChange | null {
+  const grouped = groupTrackedChanges(editor);
+  return grouped.find((item) => item.id === id || item.rawId === id) ?? null;
 }

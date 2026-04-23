@@ -28,6 +28,7 @@ import { applyInlineRunProperties, type InlineConverterParams } from './common.j
 export function textNodeToRun({
   node,
   positions,
+  storyKey,
   defaultFont,
   defaultSize,
   inheritedMarks = [],
@@ -59,6 +60,7 @@ export function textNodeToRun({
     themeColors,
     converterContext?.backgroundColor,
     enableComments,
+    storyKey,
   );
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
@@ -89,6 +91,7 @@ export function tokenNodeToRun(
   token: TextRun['token'],
   hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
   themeColors?: ThemeColorPalette,
+  storyKey?: string,
 ): TextRun {
   // Tokens carry a placeholder character so measurers reserve width; painters will replace it with the real value.
   const run: TextRun = {
@@ -115,7 +118,7 @@ export function tokenNodeToRun(
   const effectiveMarks = nodeMarks.length > 0 ? nodeMarks : marksAsAttrs;
 
   const marks = [...effectiveMarks, ...(inheritedMarks ?? [])];
-  applyMarksToRun(run, marks, hyperlinkConfig, themeColors);
+  applyMarksToRun(run, marks, hyperlinkConfig, themeColors, undefined, true, storyKey);
 
   // If marksAsAttrs carried font styling, mark the run so downstream defaults don't overwrite it.
   if (marksAsAttrs.length > 0) {

@@ -4,11 +4,48 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SuperDoc Behavior Test Harness</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #harness-root {
+      display: flex;
+      min-height: 100vh;
+      align-items: flex-start;
+    }
+
+    #harness-main {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    #comments-panel {
+      display: none;
+      width: 360px;
+      min-height: 100vh;
+      box-sizing: border-box;
+      overflow: auto;
+      padding: 12px;
+      border-left: 1px solid #d8d8d8;
+      background: #fafafa;
+    }
+
+    #comments-panel.is-visible {
+      display: block;
+    }
+  </style>
 </head>
 <body>
-  <input type="file" accept=".docx" />
-  <div id="toolbar"></div>
-  <div id="editor"></div>
+  <div id="harness-root">
+    <div id="harness-main">
+      <input type="file" accept=".docx" />
+      <div id="toolbar"></div>
+      <div id="editor"></div>
+    </div>
+    <div id="comments-panel"></div>
+  </div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

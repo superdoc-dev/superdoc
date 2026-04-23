@@ -72,6 +72,32 @@ export function resolveLiveStorySessionRuntime(hostEditor: Editor, storyKey: str
 }
 
 /**
+ * Commits all currently active live story sessions for a host editor.
+ *
+ * Export paths operate on the host editor's canonical converter / OOXML
+ * state. When a user is mid-edit in a hidden-host story session, that live
+ * editor may contain newer content than the converter cache. Flush the
+ * registered session editors first so host-level exports include those edits
+ * without requiring the UI session to exit.
+ *
+ * @returns The number of live sessions that were committed.
+ */
+export function commitLiveStorySessionRuntimes(hostEditor: Editor): number {
+  const sessions = liveSessionsByHost.get(hostEditor);
+  if (!sessions || sessions.size === 0) {
+    return 0;
+  }
+
+  let committedCount = 0;
+  for (const registration of [...sessions.values()]) {
+    buildLiveSessionRuntime(registration).commit?.(hostEditor);
+    committedCount += 1;
+  }
+
+  return committedCount;
+}
+
+/**
  * Remove a registered interactive runtime.
  *
  * When `editor` is provided, the registration is removed only if it still

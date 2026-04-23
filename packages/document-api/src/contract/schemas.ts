@@ -2963,9 +2963,40 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
-              type: { type: 'string', description: 'Block type: paragraph, heading, listItem, table, image, etc.' },
+              type: {
+                type: 'string',
+                description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
+              },
               text: { type: 'string', description: 'Full plain text content of the block.' },
               headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              tableContext: objectSchema(
+                {
+                  tableOrdinal: {
+                    type: 'integer',
+                    description: '0-based table ordinal, unique within one extract() result.',
+                  },
+                  parentTableOrdinal: {
+                    type: 'integer',
+                    description: 'Ordinal of the parent table when the containing table is nested.',
+                  },
+                  parentRowIndex: {
+                    type: 'integer',
+                    description: 'Row index in the parent table. Set with parentTableOrdinal.',
+                  },
+                  parentColumnIndex: {
+                    type: 'integer',
+                    description: 'Column index in the parent table. Set with parentTableOrdinal.',
+                  },
+                  rowIndex: { type: 'integer', description: '0-based row index of the containing cell.' },
+                  columnIndex: {
+                    type: 'integer',
+                    description: '0-based logical grid column, not the row child order.',
+                  },
+                  rowspan: { type: 'integer', description: 'Number of rows the cell spans.' },
+                  colspan: { type: 'integer', description: 'Number of columns the cell spans.' },
+                },
+                ['tableOrdinal', 'rowIndex', 'columnIndex', 'rowspan', 'colspan'],
+              ),
             },
             ['nodeId', 'type', 'text'],
           ),

@@ -11,8 +11,18 @@
  * @module presentation-editor/header-footer/HeaderFooterSessionManager
  */
 
-import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
+import type {
+  Layout,
+  FlowBlock,
+  Measure,
+  Page,
+  SectionMetadata,
+  Fragment,
+  ResolvedHeaderFooterLayout,
+  ResolvedPaintItem,
+} from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
+import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
@@ -340,6 +350,55 @@ type HeaderFooterActivationOptions = {
 };
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Resolve a `HeaderFooterLayoutResult` into a `ResolvedHeaderFooterLayout`.
+ * Paired with the originals so the decoration provider can deliver aligned
+ * `items` alongside `fragments`.
+ */
+function resolveResult(result: HeaderFooterLayoutResult): ResolvedHeaderFooterLayout {
+  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+}
+
+function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
+  if (item.kind === 'group') {
+    return {
+      ...item,
+      y: item.y + yOffset,
+      children: item.children.map((child) => shiftResolvedPaintItemY(child, yOffset)),
+    };
+  }
+
+  return {
+    ...item,
+    y: item.y + yOffset,
+  };
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
+  if (layoutMinY >= 0) {
+    return fragments;
+  }
+
+  const yOffset = -layoutMinY;
+  return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
+}
+
+function normalizeDecorationItems(
+  items: ResolvedPaintItem[] | undefined,
+  layoutMinY: number,
+): ResolvedPaintItem[] | undefined {
+  if (!items || layoutMinY >= 0) {
+    return items;
+  }
+
+  const yOffset = -layoutMinY;
+  return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
+}
+
+// =============================================================================
 // HeaderFooterSessionManager
 // =============================================================================
 
@@ -364,6 +423,12 @@ export class HeaderFooterSessionManager {
   #footerLayoutResults: HeaderFooterLayoutResult[] | null = null;
   #headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
   #footerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
+
+  // Resolved layouts (aligned 1:1 with the results above)
+  #resolvedHeaderLayouts: ResolvedHeaderFooterLayout[] | null = null;
+  #resolvedFooterLayouts: ResolvedHeaderFooterLayout[] | null = null;
+  #resolvedHeaderByRId: Map<string, ResolvedHeaderFooterLayout> = new Map();
+  #resolvedFooterByRId: Map<string, ResolvedHeaderFooterLayout> = new Map();
 
   // Decoration providers
   #headerDecorationProvider: PageDecorationProvider | undefined;
@@ -492,6 +557,7 @@ export class HeaderFooterSessionManager {
   /** Set header layout results */
   set headerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#headerLayoutResults = results;
+    this.#resolvedHeaderLayouts = results ? results.map(resolveResult) : null;
   }
 
   /** Footer layout results */
@@ -502,6 +568,7 @@ export class HeaderFooterSessionManager {
   /** Set footer layout results */
   set footerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#footerLayoutResults = results;
+    this.#resolvedFooterLayouts = results ? results.map(resolveResult) : null;
   }
 
   /** Header layouts by rId */
@@ -612,6 +679,8 @@ export class HeaderFooterSessionManager {
   ): void {
     this.#headerLayoutResults = headerResults;
     this.#footerLayoutResults = footerResults;
+    this.#resolvedHeaderLayouts = headerResults ? headerResults.map(resolveResult) : null;
+    this.#resolvedFooterLayouts = footerResults ? footerResults.map(resolveResult) : null;
   }
 
   /**
@@ -1449,10 +1518,20 @@ export class HeaderFooterSessionManager {
     layout: Layout,
     sectionMetadata: SectionMetadata[],
   ): Promise<void> {
-    return await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
       headerLayoutsByRId: this.#headerLayoutsByRId,
       footerLayoutsByRId: this.#footerLayoutsByRId,
     });
+
+    // Rebuild resolved maps aligned 1:1 with the raw rId maps.
+    this.#resolvedHeaderByRId.clear();
+    for (const [key, result] of this.#headerLayoutsByRId) {
+      this.#resolvedHeaderByRId.set(key, resolveResult(result));
+    }
+    this.#resolvedFooterByRId.clear();
+    for (const [key, result] of this.#footerLayoutsByRId) {
+      this.#resolvedFooterByRId.set(key, resolveResult(result));
+    }
   }
 
   #computeMetrics(
@@ -2092,6 +2171,8 @@ export class HeaderFooterSessionManager {
   createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
     const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
     const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
+    const resolvedResults = kind === 'header' ? this.#resolvedHeaderLayouts : this.#resolvedFooterLayouts;
+    const resolvedByRId = kind === 'header' ? this.#resolvedHeaderByRId : this.#resolvedFooterByRId;
 
     if ((!results || results.length === 0) && (!layoutsByRId || layoutsByRId.size === 0)) {
       return undefined;
@@ -2166,6 +2247,15 @@ export class HeaderFooterSessionManager {
           const slotPage = this.#findPageForNumber(rIdLayout.layout.pages, pageNumber);
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
+            const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
+            const resolvedSlotPage = resolvedLayout?.pages.find((p) => p.number === slotPage.number);
+            const resolvedItems = resolvedSlotPage?.items;
+            if (resolvedItems && resolvedItems.length !== fragments.length) {
+              console.warn(
+                `[HeaderFooterSessionManager] Resolved items length (${resolvedItems.length}) does not match fragments length (${fragments.length}) for rId '${rIdLayoutKey}' page ${pageNumber}. Dropping items.`,
+              );
+            }
+            const alignedItems = resolvedItems && resolvedItems.length === fragments.length ? resolvedItems : undefined;
             const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
@@ -2180,11 +2270,12 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments =
-              layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
 
             return {
               fragments: normalizedFragments,
+              items: normalizedItems,
               height: metrics.containerHeight,
               contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
               offset: metrics.offset,
@@ -2205,7 +2296,8 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variant = results.find((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
       }
@@ -2215,6 +2307,17 @@ export class HeaderFooterSessionManager {
         return null;
       }
       const fragments = slotPage.fragments ?? [];
+
+      const resolvedVariant = resolvedResults?.[variantIndex];
+      const resolvedVariantPage = resolvedVariant?.pages.find((p) => p.number === slotPage.number);
+      const resolvedVariantItems = resolvedVariantPage?.items;
+      if (resolvedVariantItems && resolvedVariantItems.length !== fragments.length) {
+        console.warn(
+          `[HeaderFooterSessionManager] Resolved items length (${resolvedVariantItems.length}) does not match fragments length (${fragments.length}) for variant '${headerFooterType}' page ${pageNumber}. Dropping items.`,
+        );
+      }
+      const alignedVariantItems =
+        resolvedVariantItems && resolvedVariantItems.length === fragments.length ? resolvedVariantItems : undefined;
 
       const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
       const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
@@ -2228,10 +2331,12 @@ export class HeaderFooterSessionManager {
       const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
 
       return {
         fragments: normalizedFragments,
+        items: normalizedItems,
         height: metrics.containerHeight,
         contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
         offset: metrics.offset,
@@ -2312,6 +2417,10 @@ export class HeaderFooterSessionManager {
     this.#footerLayoutResults = null;
     this.#headerLayoutsByRId.clear();
     this.#footerLayoutsByRId.clear();
+    this.#resolvedHeaderLayouts = null;
+    this.#resolvedFooterLayouts = null;
+    this.#resolvedHeaderByRId.clear();
+    this.#resolvedFooterByRId.clear();
 
     // Clear decoration providers
     this.#headerDecorationProvider = undefined;

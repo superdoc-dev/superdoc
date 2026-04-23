@@ -178,10 +178,10 @@ describe('selectAlternateContentElements', () => {
     expect(SUPPORTED_ALTERNATE_CONTENT_REQUIRES.has('w16sdtfl')).toBe(true);
   });
 
-  it('selects supported choice when namespace matches set', () => {
+  it('selects supported choice when all required namespaces are supported', () => {
     const choice = {
       name: 'mc:Choice',
-      attributes: { Requires: 'foo wps bar' },
+      attributes: { Requires: 'wps w14' },
       elements: [{ name: 'w:r' }],
     };
     const node = {
@@ -191,6 +191,22 @@ describe('selectAlternateContentElements', () => {
     const { branch, elements } = selectAlternateContentElements(node);
     expect(branch).toBe(choice);
     expect(elements).toEqual(choice.elements);
+  });
+
+  it('falls back when mc:Choice requires an unsupported namespace', () => {
+    const fallback = { name: 'mc:Fallback', elements: [{ name: 'w:p' }] };
+    const mixedChoice = {
+      name: 'mc:Choice',
+      attributes: { Requires: 'wps unknownNs' },
+      elements: [{ name: 'w:r' }],
+    };
+    const node = {
+      elements: [mixedChoice, fallback],
+    };
+
+    const { branch, elements } = selectAlternateContentElements(node);
+    expect(branch).toBe(fallback);
+    expect(elements).toEqual(fallback.elements);
   });
 
   it('returns fallback when no choice is supported', () => {

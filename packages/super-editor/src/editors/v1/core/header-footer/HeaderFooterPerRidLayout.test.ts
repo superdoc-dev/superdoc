@@ -8,11 +8,14 @@ const { mockLayoutHeaderFooterWithCache, mockComputeDisplayPageNumber, mockMeasu
   mockMeasureBlock: vi.fn(),
 }));
 
-vi.mock('@superdoc/layout-bridge', () => ({
-  OOXML_PCT_DIVISOR: 5000,
-  computeDisplayPageNumber: mockComputeDisplayPageNumber,
-  layoutHeaderFooterWithCache: mockLayoutHeaderFooterWithCache,
-}));
+vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/layout-bridge')>();
+  return {
+    ...actual,
+    computeDisplayPageNumber: mockComputeDisplayPageNumber,
+    layoutHeaderFooterWithCache: mockLayoutHeaderFooterWithCache,
+  };
+});
 
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,

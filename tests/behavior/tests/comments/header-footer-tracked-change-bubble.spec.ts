@@ -26,20 +26,17 @@ async function clearActiveComment(page: Page) {
   });
 }
 
-async function dispatchPointerDown(locator: import('@playwright/test').Locator): Promise<void> {
-  await locator.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    element.dispatchEvent(
-      new PointerEvent('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX: rect.left + Math.min(8, Math.max(rect.width / 2, 1)),
-        clientY: rect.top + Math.min(8, Math.max(rect.height / 2, 1)),
-      }),
-    );
-  });
+async function clickRenderedTrackedChange(page: Page, locator: import('@playwright/test').Locator): Promise<void> {
+  await locator.waitFor({ state: 'visible', timeout: 15_000 });
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error('Tracked-change marker is not clickable: no bounding box available.');
+  }
+
+  await page.mouse.click(
+    box.x + Math.min(8, Math.max(box.width / 2, 1)),
+    box.y + Math.min(8, Math.max(box.height / 2, 1)),
+  );
 }
 
 for (const entry of STORY_CASES) {
@@ -57,7 +54,10 @@ for (const entry of STORY_CASES) {
     await clearActiveComment(superdoc.page);
     await expect.poll(() => getActiveCommentId(superdoc.page)).toBeNull();
 
-    await dispatchPointerDown(surface.locator('[data-track-change-id]', { hasText: entry.excerpt }).first());
+    await clickRenderedTrackedChange(
+      superdoc.page,
+      surface.locator('[data-track-change-id]', { hasText: entry.excerpt }).first(),
+    );
     await superdoc.waitForStable();
     await expect.poll(() => getActiveCommentId(superdoc.page)).toBe(String(comment.commentId ?? comment.importedId));
 

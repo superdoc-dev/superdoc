@@ -225,6 +225,54 @@ function collectElementsNearPointerTarget(target: EventTarget | null, clientX: n
   return candidates;
 }
 
+function elementContainsPointerSample(element: Element, clientX: number, clientY: number): boolean {
+  const rect = element.getBoundingClientRect();
+  if (![rect.left, rect.top, rect.right, rect.bottom].every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) {
+    return false;
+  }
+
+  for (const [offsetX, offsetY] of COMMENT_THREAD_HIT_SAMPLE_OFFSETS) {
+    const sampleX = clientX + offsetX;
+    const sampleY = clientY + offsetY;
+    if (sampleX >= rect.left && sampleX <= rect.right && sampleY >= rect.top && sampleY <= rect.bottom) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function resolveCommentThreadIdFromGeometry(
+  elements: Iterable<HTMLElement>,
+  clientX: number,
+  clientY: number,
+): string | null {
+  let resolvedThreadId: string | null = null;
+
+  for (const element of elements) {
+    if (!elementContainsPointerSample(element, clientX, clientY)) {
+      continue;
+    }
+
+    const hit = resolveCommentThreadHit(element);
+    if (hit.isAmbiguous) {
+      return null;
+    }
+
+    if (!hit.threadId) {
+      continue;
+    }
+
+    if (resolvedThreadId && resolvedThreadId !== hit.threadId) {
+      return null;
+    }
+
+    resolvedThreadId = hit.threadId;
+  }
+
+  return resolvedThreadId;
+}
+
 function resolveCommentThreadIdNearPointer(
   target: EventTarget | null,
   clientX: number,
@@ -2643,13 +2691,40 @@ export class EditorInputManager {
     this.#syncNonBodyCommentSelection(event, target, editor);
   }
 
+  #resolveHeaderFooterCommentThreadIdFromGeometry(clientX: number, clientY: number): string | null {
+    const sessionMode = this.#deps?.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'header' && sessionMode !== 'footer') {
+      return null;
+    }
+
+    const viewportHost = this.#deps?.getViewportHost();
+    if (!viewportHost) {
+      return null;
+    }
+
+    const activeSurfaceSelector = sessionMode === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const annotationSelector = [
+      `${activeSurfaceSelector} ${COMMENT_HIGHLIGHT_SELECTOR}`,
+      `${activeSurfaceSelector} ${TRACK_CHANGE_SELECTOR}`,
+      `${activeSurfaceSelector} ${PM_TRACK_CHANGE_SELECTOR}`,
+    ].join(', ');
+
+    return resolveCommentThreadIdFromGeometry(
+      viewportHost.querySelectorAll<HTMLElement>(annotationSelector),
+      clientX,
+      clientY,
+    );
+  }
+
   #syncNonBodyCommentSelection(
     event: PointerEvent,
     target: HTMLElement | null,
     editor: Editor,
     { clearOnMiss = false }: { clearOnMiss?: boolean } = {},
   ): void {
-    const clickedThreadId = resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY);
+    const clickedThreadId =
+      resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY) ??
+      this.#resolveHeaderFooterCommentThreadIdFromGeometry(event.clientX, event.clientY);
     const activeThreadId = getActiveCommentThreadId(editor);
 
     if (!clickedThreadId) {

@@ -209,6 +209,33 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     return elementsFromPoint;
   }
 
+  function stubBoundingRect(
+    element: Element,
+    {
+      left,
+      top,
+      width,
+      height,
+    }: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    },
+  ) {
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      x: left,
+      y: top,
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      toJSON: () => ({}),
+    } as DOMRect);
+  }
+
   it('activates a note session on direct footnote fragment click', () => {
     const fragmentEl = document.createElement('span');
     fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
@@ -675,15 +702,18 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(mockCallbacks.scheduleSelectionUpdate as Mock).toHaveBeenCalled();
   });
 
-  it('syncs the tracked-change bubble for clicks inside the active rendered header surface', () => {
+  it('syncs the tracked-change bubble for real clicks inside the active rendered header surface', () => {
     const activeHeaderEditor = createActiveSessionEditor();
+    const pageEl = document.createElement('div');
+    pageEl.className = 'superdoc-page';
     const activeHeaderSurface = document.createElement('div');
     activeHeaderSurface.className = 'superdoc-page-header';
     const trackedChangeEl = document.createElement('span');
     trackedChangeEl.className = 'track-insert';
     trackedChangeEl.setAttribute('data-id', 'tc-header-1');
     activeHeaderSurface.appendChild(trackedChangeEl);
-    viewportHost.appendChild(activeHeaderSurface);
+    pageEl.appendChild(activeHeaderSurface);
+    viewportHost.appendChild(pageEl);
 
     (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
     (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
@@ -699,10 +729,12 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       width: 300,
       height: 220,
     }));
-    stubElementFromPoint(trackedChangeEl);
+    stubElementFromPoint(pageEl);
+    stubElementsFromPoint([pageEl]);
+    stubBoundingRect(trackedChangeEl, { left: 16, top: 8, width: 52, height: 18 });
 
     const PointerEventImpl = getPointerEventImpl();
-    trackedChangeEl.dispatchEvent(
+    pageEl.dispatchEvent(
       new PointerEventImpl('pointerdown', {
         bubbles: true,
         cancelable: true,

@@ -82,7 +82,7 @@ export function buildWidthAuthoringTableAttrs(
 ): Record<string, unknown> {
   const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
   const nextTableWidth = resolveWidthAuthoringTableWidth(currentAttrs, attrOverrides, tablePropertyOverrides);
-  const updatedTableProps = {
+  const updatedTableProps: Record<string, unknown> = {
     ...currentTableProps,
     ...tablePropertyOverrides,
     tableLayout: 'fixed',

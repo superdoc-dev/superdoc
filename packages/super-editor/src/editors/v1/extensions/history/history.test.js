@@ -77,6 +77,61 @@ describe('History extension', () => {
   });
 
   it.each([
+    ['undo', runEditorUndo, mockOriginalUndo],
+    ['redo', runEditorRedo, mockOriginalRedo],
+  ])('keeps local %s side-effect free when dispatch is disallowed', (_label, runner, originalCommand) => {
+    const { editor, tr, dispatch } = createEditor();
+
+    originalCommand.mockReturnValue(true);
+
+    const result = runner(editor, { allowDispatch: false });
+
+    expect(result).toBe(true);
+    expect(originalCommand).toHaveBeenCalledWith(editor.state, undefined);
+    expect(tr.setMeta).not.toHaveBeenCalledWith('inputType', expect.anything());
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['undo', 'undo', mockOriginalUndo],
+    ['redo', 'redo', mockOriginalRedo],
+  ])('keeps local %s side-effect free inside can()', (_label, commandName, originalCommand) => {
+    const { editor, tr, dispatch } = createEditor();
+
+    originalCommand.mockReturnValue(true);
+
+    const commands = History.config.addCommands.call({
+      editor,
+      options: { depth: 100, newGroupDelay: 500 },
+    });
+
+    const result = commands[commandName]()({ tr, dispatch: undefined });
+
+    expect(result).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+    expect(originalCommand).toHaveBeenCalledWith(editor.state, undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['undo', runEditorUndo, mockYUndo],
+    ['redo', runEditorRedo, mockYRedo],
+  ])('keeps collaborative %s side-effect free when dispatch is disallowed', (_label, runner, collabCommand) => {
+    const { editor, dispatch } = createEditor({
+      options: { collaborationProvider: { id: 'provider' }, ydoc: { guid: 'ydoc' } },
+    });
+
+    collabCommand.mockReturnValue(true);
+
+    const result = runner(editor, { allowDispatch: false });
+
+    expect(result).toBe(true);
+    expect(collabCommand).toHaveBeenCalledWith(editor.state, undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(editor.setOptions).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['undo', 'undo'],
     ['redo', 'redo'],
   ])('routes %s through PresentationEditor when the body editor is active', (_label, commandName) => {
@@ -84,6 +139,8 @@ describe('History extension', () => {
       getActiveEditor: vi.fn(),
       undo: vi.fn(() => true),
       redo: vi.fn(() => true),
+      canUndo: vi.fn(() => true),
+      canRedo: vi.fn(() => true),
     };
     const { editor, tr } = createEditor({ presentationEditor });
     presentationEditor.getActiveEditor.mockReturnValue(editor);
@@ -93,11 +150,39 @@ describe('History extension', () => {
       options: { depth: 100, newGroupDelay: 500 },
     });
 
-    const result = commands[commandName]()({ tr });
+    const result = commands[commandName]()({ tr, dispatch: () => undefined });
 
     expect(result).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
     expect(presentationEditor[commandName]).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['undo', 'undo', 'canUndo'],
+    ['redo', 'redo', 'canRedo'],
+  ])('keeps presentation-routed %s side-effect free inside can()', (_label, commandName, canMethodName) => {
+    const presentationEditor = {
+      getActiveEditor: vi.fn(),
+      undo: vi.fn(() => true),
+      redo: vi.fn(() => true),
+      canUndo: vi.fn(() => true),
+      canRedo: vi.fn(() => true),
+    };
+    const { editor, tr, dispatch } = createEditor({ presentationEditor });
+    presentationEditor.getActiveEditor.mockReturnValue(editor);
+
+    const commands = History.config.addCommands.call({
+      editor,
+      options: { depth: 100, newGroupDelay: 500 },
+    });
+
+    const result = commands[commandName]()({ tr, dispatch: undefined });
+
+    expect(result).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+    expect(presentationEditor[canMethodName]).toHaveBeenCalledTimes(1);
+    expect(presentationEditor[commandName]).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('keeps body-local undo local when a different presentation surface is active', () => {
@@ -114,7 +199,7 @@ describe('History extension', () => {
       options: { depth: 100, newGroupDelay: 500 },
     });
 
-    const result = commands.undo()({ tr });
+    const result = commands.undo()({ tr, dispatch: () => undefined });
 
     expect(result).toBe(true);
     expect(presentationEditor.undo).not.toHaveBeenCalled();

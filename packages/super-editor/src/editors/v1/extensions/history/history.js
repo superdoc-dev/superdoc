@@ -55,40 +55,60 @@ function getPresentationHistoryProxy(editor) {
   return presentationEditor.getActiveEditor() === editor ? presentationEditor : null;
 }
 
-export function runEditorUndo(editor) {
+function resolveHistoryDispatch(editor, allowDispatch) {
+  if (!allowDispatch) {
+    return undefined;
+  }
+
+  return editor?.view?.dispatch?.bind(editor.view) ?? editor?.dispatch?.bind(editor);
+}
+
+export function runEditorUndo(editor, options = {}) {
   const state = editor?.state;
   const tr = state?.tr;
+  const allowDispatch = options.allowDispatch !== false;
   if (!state || !tr) {
     return false;
   }
 
+  const dispatch = resolveHistoryDispatch(editor, allowDispatch);
+
   if (editor.options.collaborationProvider && editor.options.ydoc) {
-    const result = yUndo(state);
-    runSelectionCleanupAfterCollabHistory(editor);
+    const result = yUndo(state, dispatch);
+    if (allowDispatch && result) {
+      runSelectionCleanupAfterCollabHistory(editor);
+    }
     return result;
   }
 
-  tr.setMeta('inputType', 'historyUndo');
-  const dispatch = editor?.view?.dispatch?.bind(editor.view) ?? editor?.dispatch?.bind(editor);
+  if (allowDispatch) {
+    tr.setMeta('inputType', 'historyUndo');
+  }
   const wrappedDispatch = createHistoryDispatch(editor, dispatch);
   return originalUndo(state, wrappedDispatch);
 }
 
-export function runEditorRedo(editor) {
+export function runEditorRedo(editor, options = {}) {
   const state = editor?.state;
   const tr = state?.tr;
+  const allowDispatch = options.allowDispatch !== false;
   if (!state || !tr) {
     return false;
   }
 
+  const dispatch = resolveHistoryDispatch(editor, allowDispatch);
+
   if (editor.options.collaborationProvider && editor.options.ydoc) {
-    const result = yRedo(state);
-    runSelectionCleanupAfterCollabHistory(editor);
+    const result = yRedo(state, dispatch);
+    if (allowDispatch && result) {
+      runSelectionCleanupAfterCollabHistory(editor);
+    }
     return result;
   }
 
-  tr.setMeta('inputType', 'historyRedo');
-  const dispatch = editor?.view?.dispatch?.bind(editor.view) ?? editor?.dispatch?.bind(editor);
+  if (allowDispatch) {
+    tr.setMeta('inputType', 'historyRedo');
+  }
   const wrappedDispatch = createHistoryDispatch(editor, dispatch);
   return originalRedo(state, wrappedDispatch);
 }
@@ -139,13 +159,17 @@ export const History = Extension.create({
        * editor.commands.undo()
        * @note Groups changes within the newGroupDelay window
        */
-      undo: () => ({ tr }) => {
+      undo: () => ({ tr, dispatch }) => {
         tr?.setMeta('preventDispatch', true);
+        const allowDispatch = typeof dispatch === 'function';
         const presentationEditor = getPresentationHistoryProxy(this.editor);
-        if (presentationEditor && typeof presentationEditor.undo === 'function') {
-          return Boolean(presentationEditor.undo());
+        if (presentationEditor) {
+          if (allowDispatch && typeof presentationEditor.undo === 'function') {
+            return Boolean(presentationEditor.undo());
+          }
+          return typeof presentationEditor.canUndo === 'function' ? Boolean(presentationEditor.canUndo()) : false;
         }
-        return runEditorUndo(this.editor);
+        return runEditorUndo(this.editor, { allowDispatch });
       },
 
       /**
@@ -155,13 +179,17 @@ export const History = Extension.create({
        * editor.commands.redo()
        * @note Only available after an undo action
        */
-      redo: () => ({ tr }) => {
+      redo: () => ({ tr, dispatch }) => {
         tr?.setMeta('preventDispatch', true);
+        const allowDispatch = typeof dispatch === 'function';
         const presentationEditor = getPresentationHistoryProxy(this.editor);
-        if (presentationEditor && typeof presentationEditor.redo === 'function') {
-          return Boolean(presentationEditor.redo());
+        if (presentationEditor) {
+          if (allowDispatch && typeof presentationEditor.redo === 'function') {
+            return Boolean(presentationEditor.redo());
+          }
+          return typeof presentationEditor.canRedo === 'function' ? Boolean(presentationEditor.canRedo()) : false;
         }
-        return runEditorRedo(this.editor);
+        return runEditorRedo(this.editor, { allowDispatch });
       },
     };
   },

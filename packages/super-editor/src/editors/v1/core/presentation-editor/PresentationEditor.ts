@@ -1539,6 +1539,53 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  #canRunEditorHistoryCommand(editor: Editor | null, command: 'undo' | 'redo'): boolean {
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      return Boolean(
+        command === 'undo'
+          ? runEditorUndo(editor, { allowDispatch: false })
+          : runEditorRedo(editor, { allowDispatch: false }),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  #canRunPersistentStoryHistoryCommand(command: 'undo' | 'redo'): boolean {
+    const editor = this.#lastPersistentStoryHistoryEditor;
+    if (!editor || !this.#persistentStorySessionEditors.has(editor)) {
+      return false;
+    }
+
+    return this.#canRunEditorHistoryCommand(editor, command);
+  }
+
+  canUndo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'undo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('undo');
+    }
+    return false;
+  }
+
+  canRedo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'redo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('redo');
+    }
+    return false;
+  }
+
   /**
    * Undo the last action in the active editor.
    */

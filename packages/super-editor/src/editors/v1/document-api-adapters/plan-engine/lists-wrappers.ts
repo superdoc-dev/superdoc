@@ -89,6 +89,7 @@ type InsertListItemAtCommand = (options: {
   position: 'before' | 'after';
   text?: string;
   sdBlockId?: string;
+  paraId?: string;
   tracked?: boolean;
 }) => boolean;
 
@@ -1032,7 +1033,9 @@ export function listsSplitWrapper(editor: Editor, input: ListsSplitInput, option
 
   const separateResult = listsSeparateWrapper(editor, { target: input.target }, options);
   if (!separateResult.success) {
-    return separateResult;
+    // Failure shape (ListsFailureResult) is shared between Separate and Split,
+    // but TS can't infer that from the union narrowing alone — cast through.
+    return separateResult as ListsSplitResult;
   }
 
   const restartNumbering = input.restartNumbering !== false;

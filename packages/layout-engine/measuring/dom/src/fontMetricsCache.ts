@@ -23,10 +23,71 @@ export type FontInfo = {
 
 /**
  * Measured font metrics from the Canvas API.
+ *
+ * `ascent`/`descent` come from `actualBoundingBox*` on a sample string — these
+ * are the painted bounds used by downstream code for glyph-clipping guards.
+ *
+ * `naturalSingleLine` (optional) is the font's intrinsic single-line-height
+ * (what Word uses as the base for `w:lineRule="auto"` rendering). It comes
+ * either from a per-font calibration table (for fonts where Word's intrinsic
+ * metrics are known to diverge from the browser's) or, when the browser
+ * exposes it, from `fontBoundingBoxAscent + fontBoundingBoxDescent`.
+ * When undefined, callers fall back to `ascent + descent` or a
+ * multiplier-of-fontSize heuristic.
  */
 export type FontMetricsResult = {
   ascent: number;
   descent: number;
+  naturalSingleLine?: number;
+};
+
+/**
+ * Per-font calibration of natural single-line height, keyed by lowercased
+ * family name (first entry of a comma-separated stack).
+ *
+ * The multiplier is `fontSize × multiplier = naturalSingleLine` in px. These
+ * values were measured by rendering the font in Word and reading back the
+ * resulting row heights — the browser's Canvas `fontBoundingBox*` and
+ * `actualBoundingBox*` do not produce the same numbers because Word uses
+ * Microsoft's internal metrics from the actual font file (not available to
+ * the browser unless the font is bundled).
+ *
+ * Aptos (Microsoft's default since late 2023) and Calibri (previous default)
+ * both render at ~1.218–1.219 × fontSize natural single-line in Word.
+ * Fonts not in this table fall through to the browser's measured metrics.
+ *
+ * Add entries as document-corpus evidence accumulates. Values should match
+ * Word's output as measured from rendered PDFs at known font sizes.
+ */
+const FONT_NATURAL_LINE_CALIBRATION: Record<string, number> = {
+  aptos: 1.218,
+  'aptos display': 1.218,
+  calibri: 1.219,
+  'calibri light': 1.219,
+  cambria: 1.219,
+};
+
+/**
+ * Parse a CSS font-family stack and return the first family name lowercased,
+ * stripped of quotes. Returns empty string for invalid/empty input.
+ */
+const primaryFontFamily = (fontFamily: string): string => {
+  if (typeof fontFamily !== 'string') return '';
+  const first = fontFamily.split(',')[0] ?? '';
+  return first
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .toLowerCase();
+};
+
+/**
+ * Look up per-font natural-single-line calibration for a given family.
+ * Returns px value when the family has a calibration entry, undefined otherwise.
+ */
+export const getCalibratedNaturalSingleLine = (fontFamily: string, fontSizePx: number): number | undefined => {
+  const multiplier = FONT_NATURAL_LINE_CALIBRATION[primaryFontFamily(fontFamily)];
+  if (multiplier == null || !Number.isFinite(fontSizePx) || fontSizePx <= 0) return undefined;
+  return fontSizePx * multiplier;
 };
 
 /**
@@ -219,7 +280,21 @@ export function getFontMetrics(
     descent = fontInfo.fontSize * 0.2;
   }
 
-  const result: FontMetricsResult = { ascent, descent };
+  // Natural single-line height: prefer explicit calibration for fonts where
+  // Word's intrinsic metrics differ from the browser's measurement, otherwise
+  // use the browser's `fontBoundingBox*` values when exposed, otherwise leave
+  // undefined and let the caller apply its own fallback.
+  let naturalSingleLine: number | undefined = getCalibratedNaturalSingleLine(fontInfo.fontFamily, fontInfo.fontSize);
+  if (
+    naturalSingleLine == null &&
+    typeof textMetrics.fontBoundingBoxAscent === 'number' &&
+    typeof textMetrics.fontBoundingBoxDescent === 'number' &&
+    textMetrics.fontBoundingBoxAscent > 0
+  ) {
+    naturalSingleLine = textMetrics.fontBoundingBoxAscent + textMetrics.fontBoundingBoxDescent;
+  }
+
+  const result: FontMetricsResult = { ascent, descent, naturalSingleLine };
 
   // Cache the result (with size limit)
   if (fontMetricsCache.size >= MAX_CACHE_SIZE) {

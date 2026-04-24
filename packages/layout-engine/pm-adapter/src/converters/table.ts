@@ -321,11 +321,45 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   const appendParagraphBlocks = (
     paragraphBlocks: FlowBlock[],
     sdtMetadata?: ReturnType<typeof resolveNodeSdtMetadata>,
+    sourceChildNode?: PMNode,
   ) => {
     applySdtMetadataToParagraphBlocks(
       paragraphBlocks.filter((block) => block.kind === 'paragraph') as ParagraphBlock[],
       sdtMetadata,
     );
+    // Apply TableGrid pPr cascade for table-cell paragraphs (ECMA-376
+    // §17.3.1.33). The super-converter resolves paragraph attrs at DOCX-import
+    // time before the table context is known, so paragraphs inside table cells
+    // currently inherit spacing from docDefaults (`w:line="278"` ≈ 1.15
+    // multiplier) instead of TableGrid's `w:line="240"` (= 1.0 multiplier).
+    //
+    // We rewrite the line multiplier here where the table context is
+    // available. Only paragraphs that did NOT carry an explicit `<w:spacing>`
+    // in their pPr are adjusted — those that did are preserved as-is because
+    // the author's intent was explicit. We detect "no explicit spacing" by
+    // the absence of `paragraphProperties.spacing` on the source PM node.
+    //
+    // TODO(SD-2735 cascade): move this to super-converter / style-engine so
+    // the cascade is applied once at DOCX-import time for all consumers.
+    const tableStyleId = tableInfo?.tableProperties?.tableStyleId;
+    if (tableStyleId && sourceChildNode) {
+      const sourceParaProps = (sourceChildNode.attrs as { paragraphProperties?: { spacing?: unknown } } | undefined)
+        ?.paragraphProperties;
+      const hasExplicitSpacing = !!sourceParaProps?.spacing;
+      if (!hasExplicitSpacing) {
+        for (const block of paragraphBlocks) {
+          if (block.kind !== 'paragraph') continue;
+          const attrs = (block as ParagraphBlock).attrs as
+            | { spacing?: { line?: number; lineUnit?: string; lineRule?: string } }
+            | undefined;
+          // Only adjust when the inherited spacing is the auto-multiplier
+          // form. atLeast/exact are absolute and shouldn't be overridden.
+          if (attrs?.spacing && attrs.spacing.lineUnit === 'multiplier' && attrs.spacing.lineRule === 'auto') {
+            attrs.spacing = { ...attrs.spacing, line: 1.0 };
+          }
+        }
+      }
+    }
     paragraphBlocks.forEach((block) => {
       if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
         blocks.push(block);
@@ -348,7 +382,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         converters: context.converters,
         enableComments: context.enableComments,
       });
-      appendParagraphBlocks(paragraphBlocks);
+      appendParagraphBlocks(paragraphBlocks, undefined, childNode);
       continue;
     }
 
@@ -369,7 +403,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             converters: context.converters,
             enableComments: context.enableComments,
           });
-          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
+          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata, nestedNode);
           continue;
         }
         if (nestedNode.type === 'table' && tableNodeToBlock) {

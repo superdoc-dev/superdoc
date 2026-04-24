@@ -412,6 +412,12 @@ function calculateTypographyMetrics(
   const resolvedFontSize = normalizeFontSize(fontSize);
   let ascent: number;
   let descent: number;
+  // `naturalSingle` is the font's intrinsic single-line-height — what Word
+  // uses as the base for `w:lineRule="auto"` rendering. Per-font calibration
+  // table in fontMetricsCache populates this for fonts where Word's intrinsic
+  // metrics diverge from the browser's (Aptos, Calibri). Absent calibration,
+  // we fall back to ascent + descent below.
+  let naturalSingle: number | undefined;
 
   if (
     fontInfo &&
@@ -424,13 +430,14 @@ function calculateTypographyMetrics(
     const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
     ascent = roundValue(metrics.ascent);
     descent = roundValue(metrics.descent);
+    naturalSingle = metrics.naturalSingleLine;
   } else {
     // Fallback approximations for empty paragraphs or missing font info
     ascent = roundValue(resolvedFontSize * 0.8);
     descent = roundValue(resolvedFontSize * 0.2);
   }
 
-  const lineHeight = resolveLineHeight(spacing, fontSize, ascent + descent);
+  const lineHeight = resolveLineHeight(spacing, fontSize, naturalSingle ?? ascent + descent);
 
   return {
     ascent,
@@ -3580,10 +3587,19 @@ const resolveLineHeight = (
     return naturalSingle;
   }
 
-  // Compute the target per the adapter's unit convention.
+  // Compute the target per the adapter's unit convention + ECMA-376 §17.18.48.
+  //
+  // For `lineUnit='multiplier'`, the adapter has already divided `w:line` by
+  // 240 (so `line` is the dimensionless ratio). Per spec, auto rule's result
+  // is `(line/240) × naturalSingle = line × naturalSingle`. We now multiply
+  // by the natural single-line height (font-calibrated when available) — this
+  // replaces the prior `line × fontSize` approximation, which coincidentally
+  // worked for fonts where naturalSingle ≈ fontSize × 1.0 (the `× 1.15` floor
+  // tricks the arithmetic out for the Normal-style case) but was wrong for
+  // Aptos/Calibri where naturalSingle ≈ fontSize × 1.218.
   let target = spacing.line;
   if (spacing.lineUnit === 'multiplier') {
-    target = target * fontSize;
+    target = target * naturalSingle;
   }
 
   const rule = spacing.lineRule ?? 'auto';

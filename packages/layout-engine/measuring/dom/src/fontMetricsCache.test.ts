@@ -359,4 +359,48 @@ describe('fontMetricsCache', () => {
       expect(metrics.ascent).toBeGreaterThan(metrics.descent);
     });
   });
+
+  describe('naturalSingleLine calibration (SD-2735)', () => {
+    // Per ECMA-376 §17.18.48, spacing multipliers are relative to the font's
+    // "natural single line height". JSDOM's Canvas implementation cannot read
+    // the actual ascent/descent from Microsoft's Aptos/Calibri font files, so
+    // we calibrate these fonts by measured-vs-Word ratio.
+
+    it('populates naturalSingleLine for Aptos at 12pt matching Word (~19.5px)', () => {
+      const metrics = getFontMetrics(ctx, { fontFamily: 'Aptos', fontSize: 16 }, 'browser', defaultFonts);
+      expect(metrics.naturalSingleLine).toBeDefined();
+      // 16px × 1.218 = 19.488 — Word renders Aptos 12pt at ~19.5px
+      expect(metrics.naturalSingleLine!).toBeCloseTo(19.488, 1);
+    });
+
+    it('populates naturalSingleLine for Calibri at 12pt (~19.5px)', () => {
+      const metrics = getFontMetrics(ctx, { fontFamily: 'Calibri', fontSize: 16 }, 'browser', defaultFonts);
+      expect(metrics.naturalSingleLine).toBeDefined();
+      expect(metrics.naturalSingleLine!).toBeCloseTo(19.504, 1);
+    });
+
+    it('falls back to canvas measurement for fonts without calibration', () => {
+      const metrics = getFontMetrics(ctx, { fontFamily: 'Arial', fontSize: 16 }, 'browser', defaultFonts);
+      // Arial has no entry in the calibration table; naturalSingleLine may
+      // still come through from fontBoundingBox* when the canvas provides it.
+      // Either a canvas-sourced value or undefined is acceptable here.
+      if (metrics.naturalSingleLine != null) {
+        expect(metrics.naturalSingleLine).toBeGreaterThan(0);
+        expect(metrics.naturalSingleLine).toBeLessThan(30);
+      }
+    });
+
+    it('scales naturalSingleLine linearly with font size for Aptos', () => {
+      const m12 = getFontMetrics(ctx, { fontFamily: 'Aptos', fontSize: 16 }, 'browser', defaultFonts);
+      const m24 = getFontMetrics(ctx, { fontFamily: 'Aptos', fontSize: 32 }, 'browser', defaultFonts);
+      // Calibration is a pure multiplier: doubling fontSize doubles naturalSingle.
+      expect(m24.naturalSingleLine! / m12.naturalSingleLine!).toBeCloseTo(2, 2);
+    });
+
+    it('matches Aptos Display and Aptos to the same calibration', () => {
+      const m1 = getFontMetrics(ctx, { fontFamily: 'Aptos', fontSize: 16 }, 'browser', defaultFonts);
+      const m2 = getFontMetrics(ctx, { fontFamily: 'Aptos Display', fontSize: 16 }, 'browser', defaultFonts);
+      expect(m1.naturalSingleLine).toBeCloseTo(m2.naturalSingleLine!, 2);
+    });
+  });
 });

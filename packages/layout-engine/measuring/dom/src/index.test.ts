@@ -1000,9 +1000,13 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // `lineUnit: "multiplier"` applies directly to fontSize.
-      // (pm-adapter already bakes the OOXML auto 1.15 factor into the multiplier value.)
-      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * fontSize, 1);
+      // `lineUnit: "multiplier"` now applies to naturalSingleLine per
+      // ECMA-376 §17.18.48 auto rule `(line/240) × naturalSingle`. For fonts
+      // without explicit calibration, naturalSingle falls back to
+      // WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize = 1.15 × 16 = 18.4.
+      // → 1.5 × 18.4 = 27.6.
+      const baseNaturalSingle = 1.15 * fontSize; // 18.4 fallback for Arial
+      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * baseNaturalSingle, 1);
     });
 
     it('applies higher auto multipliers to the baseline line height', async () => {
@@ -1023,7 +1027,10 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * fontSize, 1);
+      // ECMA-376 §17.18.48 auto rule: multiplier × naturalSingle (not fontSize).
+      // For uncalibrated Arial, naturalSingle falls back to 1.15 × fontSize.
+      const baseNaturalSingle = 1.15 * fontSize; // 18.4
+      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * baseNaturalSingle, 1);
     });
 
     it('applies large auto values as multipliers', async () => {
@@ -1043,7 +1050,8 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * 16, 1);
+      // 42 × naturalSingle (fallback 1.15 × 16 = 18.4) = 772.8.
+      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * 1.15 * 16, 1);
     });
 
     it('does not clamp line height for very small fonts', async () => {
@@ -1155,10 +1163,14 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // 0.5 × 16 = 8 px. Previously the `auto` path max-clamped this up to
-      // 18.4, eating the author's explicit half-spacing intent.
-      expect(measure.lines[0].lineHeight).toBeCloseTo(0.5 * fontSize, 1);
-      expect(measure.lines[0].lineHeight).toBeLessThan(fontSize);
+      // 0.5 × naturalSingle (= 0.5 × 18.4 = 9.2 for uncalibrated Arial).
+      // Previously the `auto` path max-clamped this up to 18.4, eating the
+      // author's explicit half-spacing intent. After the §17.18.48 rule
+      // fix the multiplier applies cleanly, even if the result is still
+      // smaller than the font's cap height (caller is responsible for
+      // glyph-clipping guards elsewhere).
+      const baseNaturalSingle = 1.15 * fontSize; // 18.4 fallback
+      expect(measure.lines[0].lineHeight).toBeCloseTo(0.5 * baseNaturalSingle, 1);
     });
 
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {

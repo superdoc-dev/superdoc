@@ -100,6 +100,15 @@ type ContentChangedPayload = {
   descriptor: HeaderFooterDescriptor;
 };
 
+type EditorCreatedPayload = {
+  descriptor: HeaderFooterDescriptor;
+  editor: Editor;
+};
+
+type EditorDisposedPayload = {
+  descriptor: HeaderFooterDescriptor;
+};
+
 type SyncErrorPayload = {
   descriptor: HeaderFooterDescriptor;
   error: unknown;
@@ -117,6 +126,8 @@ type _HeaderFooterManagerEvents = {
   contentChanged: ContentChangedPayload;
   syncError: SyncErrorPayload;
   error: ErrorPayload;
+  editorCreated: EditorCreatedPayload;
+  editorDisposed: EditorDisposedPayload;
 };
 
 type _ConverterEditorEntry = {
@@ -150,6 +161,12 @@ export class HeaderFooterEditorManager extends EventEmitter {
   #cacheHits = 0;
   #cacheMisses = 0;
   #evictions = 0;
+  /**
+   * Descriptor ids whose editors must not be evicted by the LRU cap while
+   * pinned. Used by the unified history coordinator to keep editors with
+   * reachable global undo/redo entries alive.
+   */
+  #pinnedIds: Set<string> = new Set();
 
   /**
    * Creates a new HeaderFooterEditorManager for managing header and footer editors.
@@ -652,7 +669,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
   }
 
   #teardownMissingEditors(nextDescriptors: Map<string, HeaderFooterDescriptor>) {
-    const toRemove: string[] = [];
+    const toRemove: Array<{ key: string; descriptor: HeaderFooterDescriptor }> = [];
     this.#editorEntries.forEach((entry, key) => {
       if (!nextDescriptors.has(key)) {
         try {
@@ -660,14 +677,20 @@ export class HeaderFooterEditorManager extends EventEmitter {
         } catch (error) {
           console.warn('[HeaderFooterEditorManager] Cleanup failed for editor:', key, error);
         }
-        toRemove.push(key);
+        toRemove.push({ key, descriptor: entry.descriptor });
       }
     });
-    toRemove.forEach((key) => this.#editorEntries.delete(key));
+    toRemove.forEach(({ key, descriptor }) => {
+      this.#editorEntries.delete(key);
+      this.#pinnedIds.delete(key);
+      this.emit('editorDisposed', { descriptor } as EditorDisposedPayload);
+    });
   }
 
   #teardownEditors() {
+    const descriptors: HeaderFooterDescriptor[] = [];
     this.#editorEntries.forEach((entry) => {
+      descriptors.push(entry.descriptor);
       try {
         entry.disposer();
       } catch (error) {
@@ -675,6 +698,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
       }
     });
     this.#editorEntries.clear();
+    this.#pinnedIds.clear();
+    descriptors.forEach((descriptor) => {
+      this.emit('editorDisposed', { descriptor } as EditorDisposedPayload);
+    });
   }
 
   #createEditorEntry(
@@ -796,13 +823,21 @@ export class HeaderFooterEditorManager extends EventEmitter {
       });
     });
 
-    return {
+    const entry: HeaderFooterEditorEntry = {
       descriptor,
       editor,
       container,
       disposer,
       ready,
     };
+
+    // Notify observers (e.g. the document-wide history coordinator) that a
+    // new editor is available for this descriptor. Listeners must tolerate
+    // being called while `ready` is still pending; they can await it
+    // themselves if they need the `create` event to have fired.
+    this.emit('editorCreated', { descriptor, editor } as EditorCreatedPayload);
+
+    return entry;
   }
 
   #mountAndUpdateEntry(
@@ -930,26 +965,72 @@ export class HeaderFooterEditorManager extends EventEmitter {
   /**
    * Enforces the cache size limit by evicting least recently used editors.
    *
-   * When the number of cached editors exceeds `#maxCachedEditors`, this method
-   * removes the oldest editors (from the front of the access order array) until
-   * the cache size is within the limit. Each evicted editor is properly disposed.
+   * When the number of unpinned cached editors exceeds `#maxCachedEditors`,
+   * this method removes the oldest unpinned editors (from the front of the
+   * access order array) until the cache size is within the limit. Pinned
+   * editors are exempt from eviction — this preserves surfaces that still
+   * have reachable entries in the document-wide history queue.
    */
   #enforceCacheSizeLimit(): void {
-    while (this.#editorAccessOrder.length > this.#maxCachedEditors) {
-      const oldestId = this.#editorAccessOrder.shift();
+    const overflow = () => this.#countEvictableEntries() > this.#maxCachedEditors;
+    let guard = this.#editorAccessOrder.length;
+    while (overflow() && guard > 0) {
+      guard -= 1;
+      const oldestId = this.#findOldestEvictableId();
       if (!oldestId) break;
-
-      const oldEntry = this.#editorEntries.get(oldestId);
-      if (oldEntry) {
-        try {
-          oldEntry.disposer();
-          this.#evictions += 1;
-        } catch (error) {
-          console.warn('[HeaderFooterEditorManager] LRU eviction cleanup failed:', error);
-        }
-        this.#editorEntries.delete(oldestId);
-      }
+      this.#evictById(oldestId);
     }
+  }
+
+  #countEvictableEntries(): number {
+    let count = 0;
+    for (const id of this.#editorAccessOrder) {
+      if (!this.#pinnedIds.has(id)) count += 1;
+    }
+    return count;
+  }
+
+  #findOldestEvictableId(): string | null {
+    for (const id of this.#editorAccessOrder) {
+      if (!this.#pinnedIds.has(id)) return id;
+    }
+    return null;
+  }
+
+  #evictById(id: string): void {
+    this.#editorAccessOrder = this.#editorAccessOrder.filter((existingId) => existingId !== id);
+    const oldEntry = this.#editorEntries.get(id);
+    if (!oldEntry) return;
+    try {
+      oldEntry.disposer();
+      this.#evictions += 1;
+    } catch (error) {
+      console.warn('[HeaderFooterEditorManager] LRU eviction cleanup failed:', error);
+    }
+    this.#editorEntries.delete(id);
+    this.emit('editorDisposed', { descriptor: oldEntry.descriptor } as EditorDisposedPayload);
+  }
+
+  /**
+   * Pin the editor for a given descriptor id. Pinned editors are exempt from
+   * LRU eviction, so owners with reachable history (e.g. the document-wide
+   * history coordinator) can guarantee the editor stays alive.
+   */
+  pin(id: string): void {
+    if (!id) return;
+    this.#pinnedIds.add(id);
+  }
+
+  /** Remove a previous `pin()`. The editor may become evictable on the next access. */
+  unpin(id: string): void {
+    if (!id) return;
+    this.#pinnedIds.delete(id);
+    this.#enforceCacheSizeLimit();
+  }
+
+  /** True while the descriptor id is pinned. */
+  isPinned(id: string): boolean {
+    return this.#pinnedIds.has(id);
   }
 
   /**

@@ -9,14 +9,14 @@ Source of truth for which repo paths should trigger CI and release workflows for
 - **CI gates compatibility.** A change to SuperDoc core should run the CI of every dependent package — that's how breakage in `@superdoc-dev/react` or `@superdoc-dev/sdk` gets caught before it ships. CI paths follow *compatibility* impact.
 - **Release gates artifact changes.** A package should only publish a new version when its own published artifact actually changes. Release paths follow *artifact* impact.
 
-These two are not the same. React externalizes `superdoc` in its build, so a core change doesn't change the react tarball → CI broad, release narrow. CLI bundles core into platform binaries, so a core change does change the CLI tarball → both broad.
+These two are not the same. `template-builder` and `esign` externalize `superdoc` in their builds and declare it as a `peerDependency`, so a core change doesn't change their tarballs → CI broad, release narrow. CLI bundles core into platform binaries, so a core change does change the CLI tarball → both broad.
 
 ## Surfaces
 
 | Surface | Purpose | Release impact | CI impact |
 |---|---|---|---|
 | `superdoc` | Main browser DOCX editor/runtime | core | core |
-| `@superdoc-dev/react` | React wrapper around superdoc | `packages/react/**` only | react + core |
+| `@superdoc-dev/react` | React wrapper around superdoc | react + core (see note below) | react + core |
 | `@superdoc-dev/template-builder` | React SDT/template authoring UI | `packages/template-builder/**` only | template-builder + core |
 | `@superdoc-dev/esign` | React signing workflow | `packages/esign/**` only | esign + core |
 | `@superdoc-dev/cli` | Native Document API CLI | cli + doc-api + core | same |
@@ -49,7 +49,8 @@ These two are not the same. React externalizes `superdoc` in its build, so a cor
 
 ## Why each classification
 
-- **React wrappers (`react`, `template-builder`, `esign`)** externalize `superdoc` in their Vite build (`rollupOptions.external`). A SuperDoc core change does not change the wrapper's published bundle — consumers receive the new core through their own `npm install` via `peerDependencies`. Release-on-core is pure version noise; CI-on-core remains necessary to catch breaking API changes.
+- **`template-builder` and `esign`** externalize `superdoc` in their Vite build (`rollupOptions.external`) and declare it as a `peerDependency`. A SuperDoc core change does not change the wrapper's published bundle — consumers receive the new core through their own `npm install`. Release-on-core is pure version noise; CI-on-core remains necessary to catch breaking API changes.
+- **`react`** externalizes `superdoc` in its Vite build the same way, but declares `superdoc` in `dependencies` (not `peerDependencies`). Existing consumers with lockfiles pinned to a specific react version won't pick up a new core version until react republishes, so release-on-core is correct *today*. Once react migrates `superdoc` to `peerDependencies` (a breaking change for consumers, tracked separately), it can move to release-narrow like the other wrappers.
 - **CLI / SDK** bundle engine behavior into platform-specific native binaries (see `apps/cli/.releaserc.cjs` and `packages/sdk/.releaserc.cjs` — both use `patch-commit-filter.cjs` to expand release analysis into core paths). The published artifact genuinely changes when core changes.
 - **MCP** depends on SDK via `workspace:*` and imports engine/session code directly. Its current release trigger (`apps/mcp/**` only) causes it to lag SDK releases. Expand to match SDK's release paths.
 - **VS Code extension** packages SuperDoc into the extension VSIX. Treated like CLI/SDK.
@@ -60,5 +61,6 @@ These two are not the same. React externalizes `superdoc` in its build, so a cor
 ## Notes
 
 - `packages/ai/**` has been removed from all release and CI triggers. `@superdoc-dev/ai` is being deprecated; npm-side deprecation is a separate operational step.
-- When SuperDoc core ships a breaking API change, React wrappers (`react`, `template-builder`, `esign`) must be manually updated and released. Their `peerDependencies` version bump is the signal; semantic-release won't auto-trigger on upstream changes.
+- When SuperDoc core ships a breaking API change, `template-builder` and `esign` must be manually updated and released. Their `peerDependencies` version bump is the signal; semantic-release won't auto-trigger on upstream changes for them.
+- `@superdoc-dev/react` currently declares `superdoc` in `dependencies`, not `peerDependencies`. A migration to peer-dep would unlock release-narrow here, but is a breaking change for consumers and is tracked as a separate decision.
 - When editing a release or CI workflow, its `paths:` filter must match the corresponding row in this map. Workflow-lint rules should enforce this.

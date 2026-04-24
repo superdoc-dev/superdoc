@@ -1,11 +1,23 @@
 /* eslint-env node */
 /*
- * Release narrow: react externalizes `superdoc` in its build, so a core
- * change does not alter the published react tarball (consumers get the new
- * core via their own peerDependencies install). Only commits touching
- * packages/react/** should trigger a react release. See
- * .github/package-impact-map.md.
+ * Commit filter: react declares `superdoc` in dependencies (not
+ * peerDependencies), so existing consumers with lockfiles won't pick up a
+ * new core version until react republishes. Expand commit analysis into
+ * core paths so semantic-release triggers a react release on core changes.
+ *
+ * When react migrates `superdoc` to peerDependencies, narrow this to
+ * packages/react only. See .github/package-impact-map.md.
  */
+require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+  'packages/react',
+  'packages/superdoc',
+  'packages/super-editor',
+  'packages/layout-engine',
+  'packages/word-layout',
+  'packages/preset-geometry',
+  'shared',
+  'pnpm-workspace.yaml',
+]);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
@@ -27,8 +39,21 @@ const config = {
   branches,
   tagFormat: 'react-v${version}',
   plugins: [
-    'semantic-release-commit-filter',
-    '@semantic-release/commit-analyzer',
+    [
+      '@semantic-release/commit-analyzer',
+      {
+        // Cap at minor — react declares superdoc in dependencies, so
+        // upstream breaking changes don't break react's own public API.
+        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
+        releaseRules: [
+          { breaking: true, release: 'minor' },
+          { type: 'feat', release: 'minor' },
+          { type: 'fix', release: 'patch' },
+          { type: 'perf', release: 'patch' },
+          { type: 'revert', release: 'patch' },
+        ],
+      },
+    ],
     notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }],
     '../../scripts/publish-react.cjs',

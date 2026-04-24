@@ -12,6 +12,7 @@ import {
   getFooterSurfaceLocator,
   getHeaderEditorLocator,
   getHeaderSurfaceLocator,
+  moveActiveStoryCursorToEnd,
 } from '../../helpers/story-surfaces.js';
 
 test.use({
@@ -59,6 +60,120 @@ async function readTrackedChangeState(page: Page, insertedText: string) {
       storyRefId: match?.trackedChangeStory?.refId ?? null,
     };
   }, insertedText);
+}
+
+async function readTrackedChangeAnchorGeometry(page: Page, insertedText: string) {
+  return page.evaluate((text) => {
+    const harness = (window as any).behaviorHarness;
+    const comments = harness?.getCommentsSnapshot?.() ?? [];
+    const positions = harness?.getEditorCommentPositions?.() ?? {};
+
+    const match = comments.find(
+      (comment: any) =>
+        comment?.trackedChange === true &&
+        comment?.trackedChangeText === text &&
+        comment?.trackedChangeStory?.storyType === 'headerFooterPart',
+    );
+
+    const anchorKey = match?.trackedChangeAnchorKey ?? null;
+    const position = anchorKey ? (positions[anchorKey] ?? null) : null;
+    const rects = Array.isArray(position?.rects) ? position.rects : [];
+
+    return {
+      pageIndex: position?.pageIndex ?? null,
+      boundsHeight: position?.bounds?.height ?? null,
+      rectPageIndexes: rects.map((rect: any) => rect?.pageIndex).filter((value: any) => Number.isFinite(value)),
+    };
+  }, insertedText);
+}
+
+async function readFloatingBubbleInstances(page: Page, insertedText: string) {
+  return page.evaluate((text) => {
+    const harness = (window as any).behaviorHarness;
+    const comments = harness?.getCommentsSnapshot?.() ?? [];
+
+    const match = comments.find(
+      (comment: any) =>
+        comment?.trackedChange === true &&
+        comment?.trackedChangeText === text &&
+        comment?.trackedChangeStory?.storyType === 'headerFooterPart',
+    );
+
+    const anchorKey = match?.trackedChangeAnchorKey != null ? String(match.trackedChangeAnchorKey) : null;
+    const threadId = match?.commentId != null ? String(match.commentId) : null;
+    if (!anchorKey || !threadId) {
+      return {
+        anchorKey: null,
+        threadId: null,
+        count: 0,
+        pageIndexes: [],
+        activePageIndexes: [],
+      };
+    }
+
+    const renderedInstanceElements = [
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>(`.comment-placeholder[data-comment-position-key="${anchorKey}"]`),
+      ),
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>(
+          `#comments-panel .comments-dialog[data-comment-position-key="${anchorKey}"]`,
+        ),
+      ),
+    ].filter((element) => element.dataset.commentThreadId === threadId);
+
+    const parsePageIndex = (value: string | undefined) => {
+      const pageIndex = Number(value ?? 'NaN');
+      return Number.isFinite(pageIndex) ? pageIndex : null;
+    };
+
+    const instanceElementsById = new Map<string, HTMLElement>();
+    renderedInstanceElements.forEach((element) => {
+      const instanceId =
+        element.dataset.commentInstanceId ??
+        `${threadId}::page:${parsePageIndex(element.dataset.commentPageIndex) ?? 'unknown'}`;
+      const existingElement = instanceElementsById.get(instanceId);
+      const shouldPreferCurrentElement =
+        existingElement == null ||
+        (element.classList.contains('comments-dialog') && !existingElement.classList.contains('comments-dialog'));
+
+      if (shouldPreferCurrentElement) {
+        instanceElementsById.set(instanceId, element);
+      }
+    });
+
+    const renderedInstances = [...instanceElementsById.values()];
+
+    return {
+      anchorKey,
+      threadId,
+      count: renderedInstances.length,
+      pageIndexes: renderedInstances
+        .map((element) => parsePageIndex(element.dataset.commentPageIndex))
+        .filter((value): value is number => value != null)
+        .sort((a, b) => a - b),
+      activePageIndexes: renderedInstances
+        .filter(
+          (element) =>
+            element.matches('.comments-dialog.is-active') ||
+            Boolean(element.querySelector('.comments-dialog.is-active')),
+        )
+        .map((element) => parsePageIndex(element.dataset.commentPageIndex))
+        .filter((value): value is number => value != null)
+        .sort((a, b) => a - b),
+    };
+  }, insertedText);
+}
+
+async function clickFloatingBubbleInstance(page: Page, anchorKey: string, pageIndex: number): Promise<void> {
+  const bubble = page.locator(
+    [
+      `.comment-placeholder[data-comment-position-key="${anchorKey}"][data-comment-page-index="${pageIndex}"] .comments-dialog`,
+      `#comments-panel .comments-dialog[data-comment-position-key="${anchorKey}"][data-comment-page-index="${pageIndex}"]`,
+    ].join(', '),
+  );
+  await expect(bubble).toBeVisible();
+  await bubble.click();
 }
 
 async function readFirstPageHeaderIdentity(page: Page) {
@@ -188,6 +303,88 @@ test('repeated footer tracked changes render on later pages without activating t
   await secondPageFooter.scrollIntoViewIfNeeded();
   await secondPageFooter.waitFor({ state: 'visible', timeout: 15_000 });
   await expectRenderedFooterTrackChange(superdoc.page, insertedText, 1);
+});
+
+test('repeated footer tracked-change anchors stay on the page that was edited', async ({ superdoc }) => {
+  await superdoc.loadDocument(MULTI_PAGE_HEADER_FOOTER_DOC_PATH);
+  await superdoc.waitForStable();
+  await expect.poll(() => superdoc.page.locator('.superdoc-page-footer').count()).toBeGreaterThanOrEqual(3);
+
+  const insertedText = 'FTRANCHORP3';
+  await activateFooter(superdoc, 2);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await insertTrackedTextInActiveStory(superdoc.page, insertedText);
+  await superdoc.waitForStable();
+
+  await expect
+    .poll(() => readTrackedChangeState(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual(
+      expect.objectContaining({
+        hasComment: true,
+        hasBounds: true,
+        floatingMatchCount: 1,
+        storyRefId: expect.any(String),
+      }),
+    );
+
+  await expect(getFooterEditorLocator(superdoc.page)).toContainText(insertedText);
+
+  await exitActiveStory(superdoc.page);
+  await superdoc.waitForStable();
+
+  await expect
+    .poll(() => readTrackedChangeAnchorGeometry(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual({
+      pageIndex: 2,
+      boundsHeight: expect.any(Number),
+      rectPageIndexes: [0, 1, 2],
+    });
+
+  const anchorGeometry = await readTrackedChangeAnchorGeometry(superdoc.page, insertedText);
+  expect(anchorGeometry.boundsHeight).toBeLessThan(120);
+});
+
+test('repeated footer tracked changes render one floating bubble per page instance and activate the clicked page', async ({
+  superdoc,
+}) => {
+  await superdoc.loadDocument(MULTI_PAGE_HEADER_FOOTER_DOC_PATH);
+  await superdoc.waitForStable();
+  await expect.poll(() => superdoc.page.locator('.superdoc-page-footer').count()).toBeGreaterThanOrEqual(3);
+
+  const insertedText = 'FTRBUBBLEP3';
+  await activateFooter(superdoc, 2);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await insertTrackedTextInActiveStory(superdoc.page, insertedText);
+  await superdoc.waitForStable();
+
+  await exitActiveStory(superdoc.page);
+  await superdoc.waitForStable();
+
+  await expect
+    .poll(() => readFloatingBubbleInstances(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual({
+      anchorKey: expect.any(String),
+      threadId: expect.any(String),
+      count: 3,
+      pageIndexes: [0, 1, 2],
+      activePageIndexes: [],
+    });
+
+  const floatingBubbleState = await readFloatingBubbleInstances(superdoc.page, insertedText);
+  await clickFloatingBubbleInstance(superdoc.page, floatingBubbleState.anchorKey!, 2);
+  await superdoc.waitForStable();
+
+  await expect(getFooterEditorLocator(superdoc.page, 2)).toBeVisible();
+  await expect(getFooterEditorLocator(superdoc.page, 2)).toContainText(insertedText);
+  await expect
+    .poll(() => readFloatingBubbleInstances(superdoc.page, insertedText), { timeout: 10_000 })
+    .toEqual({
+      anchorKey: floatingBubbleState.anchorKey,
+      threadId: floatingBubbleState.threadId,
+      count: 3,
+      pageIndexes: [0, 1, 2],
+      activePageIndexes: [2],
+    });
 });
 
 test('first-page header tracked changes stay bound to the first-page story', async ({ superdoc }) => {

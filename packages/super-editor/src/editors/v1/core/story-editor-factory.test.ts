@@ -61,4 +61,34 @@ describe('createStoryEditor', () => {
     child.options.trackedChanges!.replacements = 'paired';
     expect(parent.options.trackedChanges?.replacements).toBe('independent');
   });
+
+  it('inherits presentation editor references from the parent editor', () => {
+    const parent = trackEditor(
+      initTestEditor({
+        mode: 'text',
+        content: '<p>Hello world</p>',
+      }).editor as Editor,
+    );
+    const presentationEditor = { element: document.createElement('div') } as unknown as Editor['presentationEditor'];
+    parent.presentationEditor = presentationEditor;
+    (parent as Editor & { _presentationEditor?: typeof presentationEditor })._presentationEditor = presentationEditor;
+
+    const child = trackEditor(
+      createStoryEditor(
+        parent,
+        {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Header text' }] }],
+        },
+        {
+          documentId: 'hf:part:rId9',
+          isHeaderOrFooter: true,
+          headless: true,
+        },
+      ),
+    );
+
+    expect(child.presentationEditor).toBe(presentationEditor);
+    expect((child as Editor & { _presentationEditor?: unknown })._presentationEditor).toBe(presentationEditor);
+  });
 });

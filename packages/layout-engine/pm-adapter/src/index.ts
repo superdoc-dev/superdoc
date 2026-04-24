@@ -40,6 +40,9 @@ export { SectionType } from './types.js';
 // Re-export public API functions from internal implementation
 export { toFlowBlocks, toFlowBlocksMap } from './internal.js';
 
+// Re-export run type guards and run utilities
+export { isTextRun, expandRunsForInlineNewlines } from './converters/paragraph.js';
+
 // Re-export cache for incremental conversion
 export { FlowBlockCache } from './cache.js';
 export type { CachedParagraphEntry, FlowBlockCacheStats, CacheLookupResult } from './cache.js';

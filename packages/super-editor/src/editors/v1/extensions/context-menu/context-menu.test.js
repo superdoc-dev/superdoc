@@ -8,6 +8,7 @@ vi.mock('@core/commands/list-helpers', () => ({
 }));
 
 vi.mock('../../core/helpers/editorSurface.js', () => ({
+  getEditorSurfaceElement: vi.fn((editor) => editor?.presentationEditor?.element ?? editor?.view?.dom ?? null),
   getSurfaceRelativePoint: vi.fn(() => ({ left: 20, top: 30 })),
 }));
 
@@ -898,6 +899,62 @@ describe('ContextMenu extension', () => {
       // Position should be adjusted for containing block position AND scroll offset
       // Expected: clientX (150) - containingBlock.left (100) + scrollLeft (50) + offset (10) = 110px
       expect(pluginState.menuPosition.left).toBe('110px');
+    });
+
+    it('prefers the visible presentation surface when correcting right-click position', () => {
+      const baseDoc = doc(p());
+      const initialSelection = TextSelection.create(baseDoc, 1);
+      let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
+
+      const containingBlock = document.createElement('div');
+      containingBlock.style.transform = 'translateX(0)';
+      containingBlock.style.position = 'relative';
+      testContainer.appendChild(containingBlock);
+
+      const presentationSurface = document.createElement('div');
+      containingBlock.appendChild(presentationSurface);
+
+      const hiddenSurface = document.createElement('div');
+      testContainer.appendChild(hiddenSurface);
+
+      vi.spyOn(containingBlock, 'getBoundingClientRect').mockReturnValue({ left: 100, top: 100 });
+
+      const editor = {
+        options: {},
+        emit: vi.fn(),
+        view: null,
+        presentationEditor: { element: presentationSurface },
+      };
+
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
+
+      const view = {
+        state,
+        dispatch: vi.fn((tr) => {
+          state = state.apply(tr);
+          view.state = state;
+        }),
+        dom: hiddenSurface,
+      };
+
+      editor.view = view;
+
+      view.dispatch(
+        view.state.tr.setMeta(ContextMenuPluginKey, {
+          type: 'open',
+          clientX: 150,
+          clientY: 200,
+          pos: 1,
+        }),
+      );
+
+      const pluginState = ContextMenuPluginKey.getState(view.state);
+      expect(pluginState.open).toBe(true);
+      expect(pluginState.menuPosition).toEqual({
+        left: '60px',
+        top: '110px',
+      });
     });
 
     it('should adjust menu position for scrollTop offset in containing block', () => {

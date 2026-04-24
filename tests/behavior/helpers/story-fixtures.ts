@@ -127,6 +127,103 @@ function multiPageHeaderFooterDocumentXml(): string {
 `;
 }
 
+function twoSectionFooterDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Section 1</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>First section body content.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:sectPr>
+          <w:footerReference w:type="default" r:id="rId10"/>
+          <w:type w:val="nextPage"/>
+          <w:pgSz w:w="12240" w:h="15840"/>
+          <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+          <w:cols w:space="720"/>
+          <w:docGrid w:linePitch="360"/>
+        </w:sectPr>
+      </w:pPr>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Section 2</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>Second section content lives on the next page.</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:footerReference w:type="default" r:id="rId9"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
+function footerFootnoteTransitionDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Footer transition anchor</w:t></w:r>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>
+      <w:r><w:t>.</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
+function simpleFootnotesXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:footnote w:type="separator" w:id="-1">
+    <w:p><w:r><w:separator/></w:r></w:p>
+  </w:footnote>
+  <w:footnote w:type="continuationSeparator" w:id="0">
+    <w:p><w:r><w:continuationSeparator/></w:r></w:p>
+  </w:footnote>
+  <w:footnote w:id="1">
+    <w:p>
+      <w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>
+      <w:r><w:t xml:space="preserve"> This is a simple footnote</w:t></w:r>
+    </w:p>
+  </w:footnote>
+</w:footnotes>
+`;
+}
+
+function simpleFooterXml(text: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t>${text}</w:t></w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
 function complexFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -244,6 +341,23 @@ function trackedFooterXml(): string {
 `;
 }
 
+function inlinePageFieldFooterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve">Finance QA </w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
 function trackedFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -311,6 +425,27 @@ export const MULTI_PAGE_HEADER_FOOTER_DOC_PATH = ensureGeneratedFixture(
   'h_f-normal.docx',
   {
     'word/document.xml': multiPageHeaderFooterDocumentXml(),
+  },
+);
+export const TWO_SECTION_FOOTER_DOC_PATH = ensureGeneratedFixture('two-section-footer.docx', 'h_f-normal.docx', {
+  'word/document.xml': twoSectionFooterDocumentXml(),
+  'word/footer1.xml': simpleFooterXml('Appendix footer'),
+  'word/footer2.xml': simpleFooterXml('Main footer'),
+});
+export const FOOTER_FOOTNOTE_TRANSITION_DOC_PATH = ensureGeneratedFixture(
+  'footer-footnote-transition.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': footerFootnoteTransitionDocumentXml(),
+    'word/footnotes.xml': simpleFootnotesXml(),
+    'word/footer2.xml': simpleFooterXml('Transition footer'),
+  },
+);
+export const FOOTER_INLINE_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
+  'footer-inline-page-field.docx',
+  'h_f-normal.docx',
+  {
+    'word/footer2.xml': inlinePageFieldFooterXml(),
   },
 );
 export const STORY_ONLY_TRACKED_CHANGES_DOC_PATH = ensureGeneratedFixture(

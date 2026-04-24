@@ -19,6 +19,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
+import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
 import { DomPositionIndex } from '../../dom-observer/DomPositionIndex.js';
 import { DomPositionIndexObserverManager } from '../../dom-observer/DomPositionIndexObserverManager.js';
@@ -42,7 +43,7 @@ import {
 import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
-import { buildFootnotesInput } from './layout/FootnotesBuilder.js';
+import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -124,6 +125,7 @@ import type {
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
+import { runEditorRedo, runEditorUndo } from '@extensions/history/history.js';
 
 // Collaboration cursor imports
 import { ySyncPluginKey } from 'y-prosemirror';
@@ -168,6 +170,45 @@ type NoteLayoutContext = {
   firstPageIndex: number;
   hostWidthPx: number;
 };
+
+const VOLATILE_HISTORY_ATTR_KEYS = new Set(['sdBlockId', 'sdBlockRev']);
+
+function stripVolatileHistoryAttrs(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripVolatileHistoryAttrs(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
+    if (VOLATILE_HISTORY_ATTR_KEYS.has(key)) {
+      continue;
+    }
+    result[key] = stripVolatileHistoryAttrs(entryValue);
+  }
+  return result;
+}
+
+function docsEqualIgnoringVolatileHistoryAttrs(
+  before: ProseMirrorNode | null | undefined,
+  after: ProseMirrorNode | null | undefined,
+): boolean {
+  if (!before || !after) {
+    return false;
+  }
+
+  if (typeof before.eq === 'function' && before.eq(after)) {
+    return true;
+  }
+
+  const beforeJson = typeof before.toJSON === 'function' ? before.toJSON() : before;
+  const afterJson = typeof after.toJSON === 'function' ? after.toJSON() : after;
+
+  return JSON.stringify(stripVolatileHistoryAttrs(beforeJson)) === JSON.stringify(stripVolatileHistoryAttrs(afterJson));
+}
 
 type RenderedNoteFragmentHit = {
   fragmentElement: HTMLElement;
@@ -472,6 +513,12 @@ export class PresentationEditor extends EventEmitter {
   #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionTransactionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionEditor: Editor | null = null;
+  #persistentStorySessionEditors = new WeakSet<Editor>();
+  #lastPersistentStoryHistoryEditor: Editor | null = null;
+  #activeSurfaceUiEventEditor: Editor | null = null;
+  #activeSurfaceUiUpdateHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuOpenHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuCloseHandler: ((...args: unknown[]) => void) | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -1230,6 +1277,33 @@ export class PresentationEditor extends EventEmitter {
     return session as NoteStorySession;
   }
 
+  #buildActiveNoteRenderOverride(storyType: 'footnote' | 'endnote'): NoteRenderOverride | null {
+    const session = this.#getActiveNoteStorySession();
+    if (!session || session.locator.storyType !== storyType) {
+      return null;
+    }
+
+    const storyEditor = session.editor as Editor & {
+      getJSON?: () => ProseMirrorJSON;
+      getUpdatedJson?: () => ProseMirrorJSON;
+    };
+    const docJson =
+      typeof storyEditor.getUpdatedJson === 'function'
+        ? storyEditor.getUpdatedJson()
+        : typeof storyEditor.getJSON === 'function'
+          ? storyEditor.getJSON()
+          : null;
+
+    if (!docJson || typeof docJson !== 'object') {
+      return null;
+    }
+
+    return {
+      noteId: session.locator.noteId,
+      docJson,
+    };
+  }
+
   #getActiveTrackedChangeStorySurface(): { storyKey: string; editor: Editor } | null {
     const storySession = this.#getActiveStorySession();
     if (storySession) {
@@ -1267,6 +1341,24 @@ export class PresentationEditor extends EventEmitter {
    */
   getStorySessionManager(): StoryPresentationSessionManager | null {
     return this.#storySessionManager;
+  }
+
+  /**
+   * Exit any active non-body editing surface and restore the body editor.
+   *
+   * This gives tests and editor-integrated helpers a single public entry point
+   * that does not need to know whether the current surface is managed by the
+   * generic story-session bridge, the header/footer session manager, or both.
+   */
+  exitActiveStorySurface(): void {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      this.#exitHeaderFooterMode();
+    }
+
+    if (this.#getActiveStorySession()) {
+      this.#exitActiveStorySession();
+    }
   }
 
   // -------------------------------------------------------------------
@@ -1392,13 +1484,119 @@ export class PresentationEditor extends EventEmitter {
     };
   }
 
+  #runEditorHistoryCommand(
+    editor: Editor | null,
+    command: 'undo' | 'redo',
+  ): { didRun: boolean; didChangeDoc: boolean } {
+    if (!editor) {
+      return { didRun: false, didChangeDoc: false };
+    }
+
+    const beforeDoc = editor.state?.doc ?? null;
+
+    try {
+      const didRun = command === 'undo' ? runEditorUndo(editor) : runEditorRedo(editor);
+      const rawDidChangeDoc =
+        beforeDoc && editor.state?.doc && typeof editor.state.doc.eq === 'function'
+          ? !editor.state.doc.eq(beforeDoc)
+          : didRun;
+      const didChangeDoc =
+        editor === this.#editor &&
+        rawDidChangeDoc &&
+        docsEqualIgnoringVolatileHistoryAttrs(beforeDoc, editor.state?.doc)
+          ? false
+          : rawDidChangeDoc;
+
+      if (didRun && this.#persistentStorySessionEditors.has(editor)) {
+        this.#lastPersistentStoryHistoryEditor = editor;
+      }
+
+      return { didRun, didChangeDoc };
+    } catch {
+      return { didRun: false, didChangeDoc: false };
+    }
+  }
+
+  #runPersistentStoryHistoryCommand(command: 'undo' | 'redo'): boolean {
+    const editor = this.#lastPersistentStoryHistoryEditor;
+    if (!editor || !this.#persistentStorySessionEditors.has(editor)) {
+      return false;
+    }
+
+    const handler = command === 'undo' ? editor.commands?.undo : editor.commands?.redo;
+    if (typeof handler !== 'function') {
+      return false;
+    }
+
+    try {
+      const didRun = Boolean(handler());
+      if (didRun) {
+        this.#lastPersistentStoryHistoryEditor = editor;
+      }
+      return didRun;
+    } catch {
+      return false;
+    }
+  }
+
+  #canRunEditorHistoryCommand(editor: Editor | null, command: 'undo' | 'redo'): boolean {
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      return Boolean(
+        command === 'undo'
+          ? runEditorUndo(editor, { allowDispatch: false })
+          : runEditorRedo(editor, { allowDispatch: false }),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  #canRunPersistentStoryHistoryCommand(command: 'undo' | 'redo'): boolean {
+    const editor = this.#lastPersistentStoryHistoryEditor;
+    if (!editor || !this.#persistentStorySessionEditors.has(editor)) {
+      return false;
+    }
+
+    return this.#canRunEditorHistoryCommand(editor, command);
+  }
+
+  canUndo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'undo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('undo');
+    }
+    return false;
+  }
+
+  canRedo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'redo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('redo');
+    }
+    return false;
+  }
+
   /**
    * Undo the last action in the active editor.
    */
   undo(): boolean {
     const editor = this.getActiveEditor();
-    if (editor?.commands?.undo) {
-      return Boolean(editor.commands.undo());
+    const { didRun, didChangeDoc } = this.#runEditorHistoryCommand(editor, 'undo');
+    if (didRun && (editor !== this.#editor || didChangeDoc)) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#runPersistentStoryHistoryCommand('undo');
     }
     return false;
   }
@@ -1408,8 +1606,12 @@ export class PresentationEditor extends EventEmitter {
    */
   redo(): boolean {
     const editor = this.getActiveEditor();
-    if (editor?.commands?.redo) {
-      return Boolean(editor.commands.redo());
+    const { didRun, didChangeDoc } = this.#runEditorHistoryCommand(editor, 'redo');
+    if (didRun && (editor !== this.#editor || didChangeDoc)) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#runPersistentStoryHistoryCommand('redo');
     }
     return false;
   }
@@ -2268,7 +2470,10 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const bounds = this.#aggregateLayoutBounds(rects);
+    const groupedRects = this.#groupRangeRectsByPage(rects);
+    const preferredPageIndex = this.#getPreferredRenderedTrackedChangePageIndex(storyKey, groupedRects, relativeTo);
+    const anchorRects = groupedRects.get(preferredPageIndex) ?? rects;
+    const bounds = this.#aggregateLayoutBounds(anchorRects);
     if (!bounds) {
       return null;
     }
@@ -2276,7 +2481,7 @@ export class PresentationEditor extends EventEmitter {
     return {
       bounds,
       rects,
-      pageIndex: rects[0]?.pageIndex ?? 0,
+      pageIndex: preferredPageIndex,
     };
   }
 
@@ -2287,8 +2492,117 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const baseSelector = `[data-track-change-id="${escapeAttrValue(rawId)}"]`;
-    const selector = storyKey ? `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]` : baseSelector;
-    return Array.from(host.querySelectorAll<HTMLElement>(selector));
+    if (!storyKey) {
+      return Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+    }
+
+    const storySelector = `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]`;
+    const exactMatches = Array.from(host.querySelectorAll<HTMLElement>(storySelector));
+    const allMatches = Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+
+    if (exactMatches.length > 1 || exactMatches.length === allMatches.length || allMatches.length === 0) {
+      return exactMatches;
+    }
+
+    return allMatches;
+  }
+
+  #groupRangeRectsByPage(rects: RangeRect[]): Map<number, RangeRect[]> {
+    const grouped = new Map<number, RangeRect[]>();
+
+    rects.forEach((rect) => {
+      const pageIndex = Number.isFinite(rect.pageIndex) ? rect.pageIndex : 0;
+      const pageRects = grouped.get(pageIndex);
+      if (pageRects) {
+        pageRects.push(rect);
+        return;
+      }
+      grouped.set(pageIndex, [rect]);
+    });
+
+    return grouped;
+  }
+
+  #getPreferredRenderedTrackedChangePageIndex(
+    storyKey: string,
+    groupedRects: Map<number, RangeRect[]>,
+    relativeTo?: HTMLElement,
+  ): number {
+    const activeHeaderFooterSession = this.#headerFooterSession?.session;
+    const activeHeaderFooterStoryKey =
+      activeHeaderFooterSession?.mode !== 'body' && activeHeaderFooterSession?.headerFooterRefId
+        ? buildStoryKey({
+            kind: 'story',
+            storyType: 'headerFooterPart',
+            refId: activeHeaderFooterSession.headerFooterRefId,
+          })
+        : null;
+
+    const activePageIndex =
+      activeHeaderFooterStoryKey === storyKey && Number.isFinite(activeHeaderFooterSession?.pageIndex)
+        ? Number(activeHeaderFooterSession?.pageIndex)
+        : null;
+    if (activePageIndex != null && groupedRects.has(activePageIndex)) {
+      return activePageIndex;
+    }
+
+    const scrollViewport =
+      this.#scrollContainer instanceof Window
+        ? {
+            top: 0,
+            bottom: this.#scrollContainer.innerHeight,
+          }
+        : this.#scrollContainer instanceof Element
+          ? this.#scrollContainer.getBoundingClientRect()
+          : this.#visibleHost?.ownerDocument?.defaultView
+            ? {
+                top: 0,
+                bottom: this.#visibleHost.ownerDocument.defaultView.innerHeight,
+              }
+            : this.#visibleHost?.getBoundingClientRect?.();
+    const viewportRect = scrollViewport ?? null;
+    if (viewportRect) {
+      const relativeRect = relativeTo?.getBoundingClientRect?.();
+      const visibleTop = viewportRect.top - (relativeRect?.top ?? 0);
+      const visibleBottom = viewportRect.bottom - (relativeRect?.top ?? 0);
+      const viewportCenter = visibleTop + (visibleBottom - visibleTop) / 2;
+
+      let bestPageIndex: number | null = null;
+      let bestIntersection = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      groupedRects.forEach((pageRects, pageIndex) => {
+        const pageBounds = this.#aggregateLayoutBounds(pageRects);
+        if (!pageBounds) {
+          return;
+        }
+
+        const intersection = Math.max(
+          0,
+          Math.min(pageBounds.bottom, visibleBottom) - Math.max(pageBounds.top, visibleTop),
+        );
+        const pageCenter = pageBounds.top + pageBounds.height / 2;
+        const distance = Math.abs(pageCenter - viewportCenter);
+
+        if (
+          intersection > bestIntersection ||
+          (intersection === bestIntersection && distance < bestDistance) ||
+          (intersection === bestIntersection &&
+            distance === bestDistance &&
+            (bestPageIndex == null || pageIndex < bestPageIndex))
+        ) {
+          bestPageIndex = pageIndex;
+          bestIntersection = intersection;
+          bestDistance = distance;
+        }
+      });
+
+      if (bestPageIndex != null) {
+        return bestPageIndex;
+      }
+    }
+
+    return [...groupedRects.keys()].sort((left, right) => left - right)[0] ?? 0;
   }
 
   /**
@@ -2541,44 +2855,6 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      const context = this.#getHeaderFooterContext();
-      if (!context) {
-        return null;
-      }
-      const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
-      const bodyPageHeight = this.#getBodyPageHeight();
-      const pageIndex = Math.max(0, Math.floor(normalized.y / bodyPageHeight));
-      if (pageIndex !== context.region.pageIndex) {
-        return null;
-      }
-      const localX = normalized.x - context.region.localX;
-      const localY = normalized.y - context.region.pageIndex * bodyPageHeight - context.region.localY;
-      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
-        return null;
-      }
-      const headerPageIndex = Math.floor(localY / headerPageHeight);
-      const headerPoint = {
-        x: localX,
-        y: headerPageIndex * headerPageHeight + (localY - headerPageIndex * headerPageHeight),
-      };
-      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      if (!hit) {
-        return null;
-      }
-
-      const doc = this.getActiveEditor().state?.doc;
-      if (!doc) {
-        return hit;
-      }
-
-      return {
-        ...hit,
-        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
-      };
-    }
-
     const noteContext = this.#buildActiveNoteLayoutContext();
     if (noteContext) {
       const rawHit =
@@ -2598,6 +2874,44 @@ export class PresentationEditor extends EventEmitter {
       return {
         ...rawHit,
         pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)),
+      };
+    }
+
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const context = this.#getHeaderFooterContext();
+      if (!context) {
+        return null;
+      }
+      const pageGap = this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap();
+      const bodyPageHeight = this.#getBodyPageHeight();
+      const pageIndex = normalized.pageIndex ?? Math.max(0, Math.floor(normalized.y / (bodyPageHeight + pageGap)));
+      if (pageIndex !== context.region.pageIndex) {
+        return null;
+      }
+      const localX = normalized.x - context.region.localX;
+      const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
+      const localY = pageLocalY - context.region.localY;
+      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
+        return null;
+      }
+      const headerPoint = {
+        x: localX,
+        y: localY,
+      };
+      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      if (!hit) {
+        return null;
+      }
+
+      const doc = this.getActiveEditor().state?.doc;
+      if (!doc) {
+        return hit;
+      }
+
+      return {
+        ...hit,
+        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
       };
     }
 
@@ -3532,6 +3846,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#teardownStorySessionEventBridge();
+    this.#teardownActiveSurfaceUiEventBridge();
 
     // Unregister from static registry
     if (this.#registryKey) {
@@ -3944,6 +4259,7 @@ export class PresentationEditor extends EventEmitter {
       event: 'stylesDefaultsChanged',
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
+    this.#syncActiveSurfaceUiEventBridge(this.#editor);
 
     // Listen for footnote/endnote part mutations (e.g., insert via document API).
     // These modify the OOXML part and derived cache but don't change the PM document,
@@ -4471,6 +4787,8 @@ export class PresentationEditor extends EventEmitter {
           this.#scheduleSelectionUpdate({ immediate: true });
           this.#scheduleA11ySelectionAnnouncement({ immediate: true });
         }
+
+        this.#syncActiveSurfaceUiEventBridge();
       },
       onEditBlocked: (reason) => {
         this.emit('headerFooterEditBlocked', { reason });
@@ -4539,6 +4857,58 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = null;
   }
 
+  #teardownActiveSurfaceUiEventBridge(): void {
+    if (this.#activeSurfaceUiEventEditor) {
+      if (this.#activeSurfaceUiUpdateHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('update', this.#activeSurfaceUiUpdateHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuOpenHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:open', this.#activeSurfaceUiContextMenuOpenHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuCloseHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:close', this.#activeSurfaceUiContextMenuCloseHandler);
+      }
+    }
+
+    this.#activeSurfaceUiEventEditor = null;
+    this.#activeSurfaceUiUpdateHandler = null;
+    this.#activeSurfaceUiContextMenuOpenHandler = null;
+    this.#activeSurfaceUiContextMenuCloseHandler = null;
+  }
+
+  #syncActiveSurfaceUiEventBridge(editor: Editor | null = this.getActiveEditor()): void {
+    const nextEditor = editor ?? null;
+    if (nextEditor === this.#activeSurfaceUiEventEditor) {
+      return;
+    }
+
+    this.#teardownActiveSurfaceUiEventBridge();
+    if (!nextEditor) {
+      return;
+    }
+
+    const updateHandler = (event?: { transaction?: Transaction }) => {
+      this.emit('update', {
+        ...(event ?? {}),
+        editor: this,
+      });
+    };
+    const contextMenuOpenHandler = (event?: { menuPosition?: { left?: string; top?: string } }) => {
+      this.emit('contextMenu:open', event ?? {});
+    };
+    const contextMenuCloseHandler = () => {
+      this.emit('contextMenu:close');
+    };
+
+    nextEditor.on?.('update', updateHandler);
+    nextEditor.on?.('contextMenu:open', contextMenuOpenHandler);
+    nextEditor.on?.('contextMenu:close', contextMenuCloseHandler);
+    this.#activeSurfaceUiEventEditor = nextEditor;
+    this.#activeSurfaceUiUpdateHandler = updateHandler;
+    this.#activeSurfaceUiContextMenuOpenHandler = contextMenuOpenHandler;
+    this.#activeSurfaceUiContextMenuCloseHandler = contextMenuCloseHandler;
+  }
+
   #syncStorySessionEventBridge(session: StoryPresentationSession | null): void {
     this.#teardownStorySessionEventBridge();
 
@@ -4556,9 +4926,12 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      if (this.#persistentStorySessionEditors.has(session.editor)) {
+        this.#lastPersistentStoryHistoryEditor = session.editor;
+      }
+
       if (session.kind === 'note') {
         this.#invalidateTrackedChangesForStory(session.locator);
-        this.#flowBlockCache.setHasExternalChanges(true);
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();
@@ -4572,6 +4945,7 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = transactionHandler;
     this.#scheduleSelectionUpdate({ immediate: true });
     this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+    this.#syncActiveSurfaceUiEventBridge();
   }
 
   #syncActiveStorySessionDocumentMode(session: StoryPresentationSession | null): void {
@@ -4612,9 +4986,28 @@ export class PresentationEditor extends EventEmitter {
         return doc?.body ?? this.#visibleHost ?? null;
       },
       editorFactory: ({ runtime, hostElement, activationOptions }) => {
+        const editorContext = activationOptions.editorContext ?? {};
+
+        if (runtime.kind === 'headerFooter' && runtime.locator.storyType === 'headerFooterPart') {
+          const descriptor = this.#headerFooterSession?.manager?.getDescriptorById(runtime.locator.refId) ?? null;
+          const persisted = descriptor
+            ? (this.#headerFooterSession?.manager?.ensureEditorSync(descriptor, {
+                editorHost: hostElement,
+                availableWidth: editorContext.availableWidth,
+                availableHeight: editorContext.availableHeight,
+                currentPageNumber: editorContext.currentPageNumber,
+                totalPageCount: editorContext.totalPageCount,
+              }) ?? null)
+            : null;
+
+          if (persisted) {
+            this.#persistentStorySessionEditors.add(persisted);
+            return { editor: persisted };
+          }
+        }
+
         const existing = runtime.editor;
         const pmJson = existing.getJSON() as unknown as Record<string, unknown>;
-        const editorContext = activationOptions.editorContext ?? {};
         const fresh = createStoryEditor(this.#editor, pmJson, {
           documentId: runtime.storyKey,
           isHeaderOrFooter: runtime.kind === 'headerFooter',
@@ -4642,6 +5035,7 @@ export class PresentationEditor extends EventEmitter {
         }
         this.#syncActiveStorySessionDocumentMode(activeSession);
         this.#syncStorySessionEventBridge(activeSession);
+        this.#syncActiveSurfaceUiEventBridge();
         this.#inputBridge?.notifyTargetChanged();
       },
     });
@@ -5002,20 +5396,24 @@ export class PresentationEditor extends EventEmitter {
       const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
+      const activeFootnoteOverride = this.#buildActiveNoteRenderOverride('footnote');
       const footnotesLayoutInput = buildFootnotesInput(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeFootnoteOverride,
       );
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
         : [];
+      const activeEndnoteOverride = this.#buildActiveNoteRenderOverride('endnote');
       const endnoteBlocks = buildEndnoteBlocks(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeEndnoteOverride,
       );
       const blocksForLayout =
         semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0
@@ -6604,6 +7002,10 @@ export class PresentationEditor extends EventEmitter {
     target: RenderedNoteTarget,
     options: { clientX: number; clientY: number; pageIndex?: number },
   ): boolean {
+    if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
+      this.#headerFooterSession?.exitMode();
+    }
+
     const storySessionManager = this.#ensureStorySessionManager();
 
     if (target.storyType !== 'footnote' && target.storyType !== 'endnote') {
@@ -6621,9 +7023,9 @@ export class PresentationEditor extends EventEmitter {
         noteId: target.noteId,
       },
       {
-        // Notes need to repaint while the user types; otherwise the hidden-host
-        // editor is active but the rendered footnote appears frozen until exit.
-        commitPolicy: 'continuous',
+        // Render from the active note session locally while typing, then persist
+        // the canonical notes part once when the session exits.
+        commitPolicy: 'onExit',
         preferHiddenHost: true,
         hostWidthPx: targetContext?.hostWidthPx ?? this.#visibleHost.clientWidth ?? 1,
         editorContext: {
@@ -6973,7 +7375,11 @@ export class PresentationEditor extends EventEmitter {
           return await this.#navigateToComment(target.entityId);
         }
         if (target.entityType === 'trackedChange') {
-          return await this.#navigateToTrackedChange(target.entityId, resolveStoryKeyFromAddress(target.story));
+          return await this.#navigateToTrackedChange(
+            target.entityId,
+            resolveStoryKeyFromAddress(target.story),
+            target.pageIndex,
+          );
         }
       }
 
@@ -7055,7 +7461,7 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #navigateToTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  async #navigateToTrackedChange(entityId: string, storyKey?: string, preferredPageIndex?: number): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
@@ -7064,13 +7470,13 @@ export class PresentationEditor extends EventEmitter {
         return true;
       }
 
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey)) {
+      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
         if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey);
+      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex);
     }
 
     const setCursorById = editor.commands?.setCursorById;
@@ -7084,7 +7490,7 @@ export class PresentationEditor extends EventEmitter {
     // Fall back to resolving the tracked change position and scrolling.
     const resolved = resolveTrackedChange(editor, entityId);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId);
+      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex);
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -7107,7 +7513,11 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #activateTrackedChangeStorySurface(entityId: string, storyKey: string): Promise<boolean> {
+  async #activateTrackedChangeStorySurface(
+    entityId: string,
+    storyKey: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
     let locator: StoryLocator | null = null;
     try {
       locator = parseStoryKey(storyKey);
@@ -7119,7 +7529,7 @@ export class PresentationEditor extends EventEmitter {
       return false;
     }
 
-    const candidate = this.#findRenderedTrackedChangeElements(entityId, storyKey)[0] ?? null;
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
     if (!candidate) {
       return false;
     }
@@ -7220,14 +7630,39 @@ export class PresentationEditor extends EventEmitter {
     this.#scheduleSelectionUpdate({ immediate: true });
   }
 
-  async #scrollToRenderedTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  #findRenderedTrackedChangeElement(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): HTMLElement | null {
     const candidates = this.#findRenderedTrackedChangeElements(entityId, storyKey);
     if (!candidates.length) {
+      return null;
+    }
+
+    if (!Number.isFinite(preferredPageIndex)) {
+      return candidates[0] ?? null;
+    }
+
+    return (
+      candidates.find((candidate) => this.#resolveRenderedPageIndexForElement(candidate) === preferredPageIndex) ??
+      candidates[0] ??
+      null
+    );
+  }
+
+  async #scrollToRenderedTrackedChange(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
+    if (!candidate) {
       return false;
     }
 
     try {
-      candidates[0]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      candidate.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
       return true;
     } catch {
       return false;

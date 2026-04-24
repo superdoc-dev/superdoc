@@ -30,6 +30,7 @@ export {
 // Runtime cache
 export { StoryRuntimeCache } from './runtime-cache.js';
 export {
+  commitLiveStorySessionRuntimes,
   registerLiveStorySessionRuntime,
   resolveLiveStorySessionRuntime,
   unregisterLiveStorySessionRuntime,

@@ -112,23 +112,17 @@ import {
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
-import {
-  applySdtContainerStyling,
-  getSdtContainerKey,
-  shouldRebuildForSdtBoundary,
-  type SdtBoundaryOptions,
-} from './utils/sdt-helpers.js';
+import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-  getParagraphBorderBox,
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
+import { expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
+import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -3104,6 +3098,7 @@ export class DomPainter {
       if (content) {
         // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
         const resolvedMarker = content.marker;
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
           const lineEl = this.renderLine(
@@ -3113,6 +3108,7 @@ export class DomPainter {
             resolvedLine.availableWidth,
             resolvedLine.lineIndex,
             resolvedLine.skipJustify,
+            expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
           );
@@ -3209,6 +3205,7 @@ export class DomPainter {
         const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
         const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
@@ -3313,6 +3310,7 @@ export class DomPainter {
             availableWidthOverride,
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
+            expandedRunsForBlock,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
 
@@ -3639,8 +3637,17 @@ export class DomPainter {
         ...item.paragraph,
         attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
       };
+      const expandedRunsForList = expandRunsForInlineNewlines(paraForList.runs);
       lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        const lineEl = this.renderLine(
+          paraForList,
+          line,
+          context,
+          fragment.width,
+          fragment.fromLine + idx,
+          true,
+          expandedRunsForList,
+        );
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
@@ -4899,6 +4906,7 @@ export class DomPainter {
 
       // Word justifies text inside table cells, but not the final line unless the
       // paragraph ends with an explicit line break.
+      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
       const renderLineForTableCell = (
         block: ParagraphBlock,
         line: Line,
@@ -4911,7 +4919,22 @@ export class DomPainter {
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
         const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+        let expandedRuns = tableCellExpandedRunsCache.get(block);
+        if (!expandedRuns) {
+          expandedRuns = expandRunsForInlineNewlines(block.runs);
+          tableCellExpandedRunsCache.set(block, expandedRuns);
+        }
+
+        return this.renderLine(
+          block,
+          line,
+          ctx,
+          undefined,
+          lineIndex,
+          shouldSkipJustify,
+          expandedRuns,
+          resolvedListTextStartPx,
+        );
       };
 
       /**
@@ -5913,6 +5936,7 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
    * @returns The rendered line element
@@ -5924,6 +5948,7 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
   ): HTMLElement {
@@ -5931,8 +5956,9 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
-    const lineRange = computeLinePmRange(block, line);
-    let runsForLine = sliceRunsForLine(block, line);
+    const expandedBlock = { ...block, runs: preExpandedRuns ?? expandRunsForInlineNewlines(block.runs) };
+    const lineRange = computeLinePmRange(expandedBlock, line);
+    let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
@@ -6844,11 +6870,7 @@ export class DomPainter {
       return true;
     }
 
-    return (
-      section === 'header' &&
-      fragment.kind === 'drawing' &&
-      this.isHeaderWordArtWatermark(resolvedItem?.block)
-    );
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
@@ -7937,109 +7959,6 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
 };
 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
-
-/**
- * Extracts and slices text runs that belong to a specific line within a paragraph block.
- * Handles partial runs at line boundaries by creating sliced copies with correct character ranges.
- *
- * @param {ParagraphBlock} block - The paragraph block containing runs
- * @param {Line} line - The line definition with fromRun/toRun and fromChar/toChar ranges
- * @returns {Run[]} Array of runs (or sliced run portions) that comprise the line
- *
- * @remarks
- * - Preserves run styling and metadata (pmStart, pmEnd positions) in sliced runs
- * - Tab runs are only included if the slice contains the actual tab character
- * - Text runs are sliced to match exact character boundaries of the line
- * - Returns empty array if no valid runs are found within the line range
- *
- * @example
- * ```typescript
- * const line = { fromRun: 0, toRun: 2, fromChar: 5, toChar: 10 };
- * const runs = sliceRunsForLine(paragraphBlock, line);
- * // Returns runs or run slices that fall within the specified character range
- * ```
- */
-export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if (run.kind === 'image') {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks don't have text content and are handled
-    // by the measurer creating new lines. Include them for PM position tracking.
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - similar to LineBreakRun
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // TabRun handling - tabs don't need slicing
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units like images
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units like images
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    // At this point, run must be TextRun (has .text property)
-    if (!('text' in run)) {
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-    const runLength = text.length;
-    const runPmStart = run.pmStart ?? null;
-    const fallbackPmEnd = runPmStart != null && run.pmEnd == null ? runPmStart + runLength : (run.pmEnd ?? null);
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      if (!slice) continue;
-
-      const pmSliceStart = runPmStart != null ? runPmStart + start : undefined;
-      const pmSliceEnd = runPmStart != null ? runPmStart + end : (fallbackPmEnd ?? undefined);
-
-      // TextRun: return a sliced TextRun preserving styles
-      const sliced: TextRun = {
-        ...(run as TextRun),
-        text: slice,
-        pmStart: pmSliceStart,
-        pmEnd: pmSliceEnd,
-        comments: (run as TextRun).comments ? [...(run as TextRun).comments!] : undefined,
-      };
-      result.push(sliced);
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
-};
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

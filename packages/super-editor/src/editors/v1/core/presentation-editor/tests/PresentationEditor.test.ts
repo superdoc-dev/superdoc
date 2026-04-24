@@ -2437,8 +2437,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2505,8 +2509,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       const transaction = { docChanged: true };
@@ -2563,8 +2571,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2834,7 +2846,7 @@ describe('PresentationEditor', () => {
       const { sessionEditor } = await activateFootnoteSession();
 
       expect(editor.getStorySessionManager()).not.toBeNull();
-      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('continuous');
+      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('onExit');
       expect(editor.getActiveEditor()).toBe(sessionEditor);
       expect(sessionEditor?.setDocumentMode).toHaveBeenCalledWith('editing');
 

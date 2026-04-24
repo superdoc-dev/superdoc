@@ -379,6 +379,7 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
       const start = isFirstRun ? line.fromChar : 0;
       const end = isLastRun ? line.toChar : text.length;
       const slice = text.slice(start, end);
+      if (!slice) continue;
       const pmStart =
         run.pmStart != null ? run.pmStart + start : run.pmEnd != null ? run.pmEnd - (text.length - start) : undefined;
       const pmEnd =

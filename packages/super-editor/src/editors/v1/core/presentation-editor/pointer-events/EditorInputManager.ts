@@ -1794,7 +1794,7 @@ export class EditorInputManager {
       normalized.pageLocalY,
     );
     if (region) {
-      if (sessionMode === 'body') {
+      if (sessionMode === 'body' || this.#isDifferentHeaderFooterRegionFromActiveSession(region)) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -2158,6 +2158,11 @@ export class EditorInputManager {
     }
 
     if (visiblePointerSurface?.kind === 'headerFooter' && !clickedInsideVisibleActiveSurface) {
+      if (this.#isDifferentHeaderFooterRegionFromActiveSession(headerFooterRegion)) {
+        event.preventDefault();
+        return true;
+      }
+
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling
     }
@@ -2170,6 +2175,64 @@ export class EditorInputManager {
     // session active, update any tracked-change/comment bubble state, and let
     // the normal rendered-surface hit testing place the selection/caret.
     return false;
+  }
+
+  #isDifferentHeaderFooterRegionFromActiveSession(region: HeaderFooterRegion): boolean {
+    const session = this.#deps?.getHeaderFooterSession()?.session;
+    if (!session || session.mode === 'body') {
+      return true;
+    }
+
+    if (session.mode !== region.kind) {
+      return true;
+    }
+
+    if (
+      session.headerFooterRefId &&
+      region.headerFooterRefId &&
+      session.headerFooterRefId !== region.headerFooterRefId
+    ) {
+      return true;
+    }
+
+    if (
+      Number.isFinite(session.pageIndex) &&
+      Number.isFinite(region.pageIndex) &&
+      session.pageIndex !== region.pageIndex
+    ) {
+      return true;
+    }
+
+    return (session.sectionType ?? null) !== (region.sectionType ?? null);
+  }
+
+  #isSameHeaderFooterRegion(
+    left: HeaderFooterRegion | null | undefined,
+    right: HeaderFooterRegion | null | undefined,
+  ): boolean {
+    if (!left || !right) {
+      return false;
+    }
+
+    if (left.kind !== right.kind || left.pageIndex !== right.pageIndex) {
+      return false;
+    }
+
+    if ((left.sectionId ?? null) !== (right.sectionId ?? null)) {
+      return false;
+    }
+
+    if ((left.sectionType ?? null) !== (right.sectionType ?? null)) {
+      return false;
+    }
+
+    const leftRefId = left.headerFooterRefId ?? null;
+    const rightRefId = right.headerFooterRefId ?? null;
+    if (leftRefId && rightRefId && leftRefId !== rightRefId) {
+      return false;
+    }
+
+    return true;
   }
 
   #handleInlineImageClick(
@@ -2422,17 +2485,12 @@ export class EditorInputManager {
   #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
-    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      this.#callbacks.clearHoverRegion?.();
-      return;
-    }
-
     if (this.#deps.getDocumentMode() === 'viewing') {
       this.#callbacks.clearHoverRegion?.();
       return;
     }
 
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     const region = this.#callbacks.hitTestHeaderFooterRegion?.(
       normalized.x,
       normalized.y,
@@ -2444,13 +2502,13 @@ export class EditorInputManager {
       return;
     }
 
+    if (sessionMode !== 'body' && !this.#isDifferentHeaderFooterRegionFromActiveSession(region)) {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
     const currentHover = this.#deps.getHeaderFooterSession()?.hoverRegion;
-    if (
-      currentHover &&
-      currentHover.kind === region.kind &&
-      currentHover.pageIndex === region.pageIndex &&
-      currentHover.sectionType === region.sectionType
-    ) {
+    if (this.#isSameHeaderFooterRegion(currentHover, region)) {
       return;
     }
 

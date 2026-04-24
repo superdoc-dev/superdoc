@@ -11357,6 +11357,95 @@ describe('applyRunDataAttributes', () => {
       }).not.toThrow();
     });
 
+    it('renders all lines when measure indices come from inline-newline expansion', () => {
+      const inlineNewlineBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'inline-newline-slice',
+        runs: [{ text: 'first\nsecond\nthird', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 18 }],
+      };
+
+      // Measurer expands inline '\n' into: text, break, text, break, text.
+      const inlineNewlineMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 2,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 6,
+            width: 50,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 4,
+            fromChar: 0,
+            toRun: 4,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const inlineNewlineLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'inline-newline-slice',
+                fromLine: 0,
+                toLine: 3,
+                x: 20,
+                y: 20,
+                width: 300,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [inlineNewlineBlock],
+        measures: [inlineNewlineMeasure],
+      });
+
+      expect(() => {
+        painter.paint(inlineNewlineLayout, mount);
+      }).not.toThrow();
+
+      const fragment = mount.querySelector<HTMLElement>('.superdoc-fragment');
+      expect(fragment).not.toBeNull();
+      expect(fragment?.textContent).toContain('first');
+      expect(fragment?.textContent).toContain('second');
+      expect(fragment?.textContent).toContain('third');
+      const lines = fragment?.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines?.length).toBe(3);
+      expect(lines?.[0].dataset.pmStart).toEqual('0');
+      expect(lines?.[0].dataset.pmEnd).toEqual('5');
+      expect(lines?.[1].dataset.pmStart).toEqual('6');
+      expect(lines?.[1].dataset.pmEnd).toEqual('12');
+      expect(lines?.[2].dataset.pmStart).toEqual('13');
+      expect(lines?.[2].dataset.pmEnd).toEqual('18');
+    });
+
     it('preserves PM positions for lineBreak runs', () => {
       const lineBreakBlock: FlowBlock = {
         kind: 'paragraph',

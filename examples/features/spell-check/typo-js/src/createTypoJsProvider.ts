@@ -1,4 +1,5 @@
 import type { TypoWorkerCancelMessage, TypoWorkerIssue, TypoWorkerRequest, TypoWorkerResponse } from './typoWorkerMessages';
+import typoWorkerUrl from './typoWorker?worker&url';
 
 type PendingRequest = {
   resolve: (value: { issues: TypoWorkerIssue[] }) => void;
@@ -18,7 +19,18 @@ function createAbortError(): DOMException | Error {
 
 export async function createTypoJsProvider() {
   // Run Typo.js work inside a dedicated worker to avoid UI stalls.
-  const worker = new Worker(new URL('./typoWorker.ts', import.meta.url), { type: 'module' });
+  // Worker is lazily created/recreated to survive dispose() calls.
+  let worker: Worker | null = null;
+
+  function ensureWorker(): Worker {
+    if (!worker) {
+      worker = new Worker(typoWorkerUrl, { type: 'module' });
+      worker.addEventListener('message', handleMessage);
+      worker.addEventListener('error', handleError);
+    }
+    return worker;
+  }
+
   const pending = new Map<number, PendingRequest>();
   let nextRequestId = 0;
 
@@ -48,8 +60,7 @@ export async function createTypoJsProvider() {
     pending.clear();
   };
 
-  worker.addEventListener('message', handleMessage);
-  worker.addEventListener('error', handleError);
+  ensureWorker();
 
   return {
     id: 'typo-js',
@@ -83,7 +94,7 @@ export async function createTypoJsProvider() {
           pending.delete(requestId);
           cleanup();
           const cancel: TypoWorkerCancelMessage = { type: 'cancel', id: requestId };
-          worker.postMessage(cancel);
+          ensureWorker().postMessage(cancel);
           reject(createAbortError());
         };
 
@@ -104,14 +115,17 @@ export async function createTypoJsProvider() {
           },
         };
 
-        worker.postMessage(payload);
+        ensureWorker().postMessage(payload);
       });
     },
 
     dispose() {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      worker.terminate();
+      if (worker) {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        worker.terminate();
+        worker = null;
+      }
 
       for (const [, entry] of pending) {
         entry.cleanup();

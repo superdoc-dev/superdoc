@@ -11,7 +11,6 @@
     { "path": "../dom-contract/tsconfig.json" },
     { "path": "../layout-engine/tsconfig.json" },
     { "path": "../measuring/dom/tsconfig.json" },
-    { "path": "../painters/dom/tsconfig.json" },
     { "path": "../../word-layout/tsconfig.json" },
     { "path": "../../../shared/common/tsconfig.json" }
   ]

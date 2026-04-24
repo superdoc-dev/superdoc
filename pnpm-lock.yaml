@@ -2484,13 +2484,13 @@ importers:
       '@superdoc/measuring-dom':
         specifier: workspace:*
         version: link:../measuring/dom
-      '@superdoc/painter-dom':
-        specifier: workspace:*
-        version: link:../painters/dom
       '@superdoc/word-layout':
         specifier: workspace:*
         version: link:../../word-layout
     devDependencies:
+      '@superdoc/painter-dom':
+        specifier: workspace:*
+        version: link:../painters/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
         version: link:../pm-adapter

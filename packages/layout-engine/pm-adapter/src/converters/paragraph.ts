@@ -227,12 +227,10 @@ export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
       const segments = textRun.text.split('\n');
       let cursor = textRun.pmStart ?? 0;
       segments.forEach((segment, idx) => {
-        if (segment.length === 0) {
-          return;
+        if (segment.length > 0) {
+          result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
+          cursor += segment.length;
         }
-
-        result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
-        cursor += segment.length;
         if (idx !== segments.length - 1) {
           result.push({
             kind: 'break',

@@ -37,11 +37,7 @@ describe('continueNumbering', () => {
   /** @type {any} */
   let tr;
   /** @type {any} */
-  let freshTr;
-  /** @type {any} */
   let editor;
-  /** @type {ReturnType<typeof vi.fn>} */
-  let dispatch;
 
   const createParagraph = ({ numId, ilvl = 0 }) => ({
     type: { name: 'paragraph' },
@@ -57,11 +53,9 @@ describe('continueNumbering', () => {
     resolveParent = vi.fn();
     findParentNode.mockReturnValue(resolveParent);
 
-    freshTr = {};
     state = { selection: {} };
     tr = { setMeta: vi.fn() };
-    editor = { state: { tr: freshTr } };
-    dispatch = vi.fn();
+    editor = {};
 
     isList.mockReturnValue(true);
   });
@@ -69,11 +63,10 @@ describe('continueNumbering', () => {
   it('returns false when no list paragraph is found', () => {
     resolveParent.mockReturnValue(null);
 
-    const result = continueNumbering({ editor, tr, state, dispatch });
+    const result = continueNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.removeLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when paragraph has no numId', () => {
@@ -83,22 +76,21 @@ describe('continueNumbering', () => {
     };
     resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
 
-    const result = continueNumbering({ editor, tr, state, dispatch });
+    const result = continueNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.removeLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it('removes lvlOverride for the current numId and ilvl, then dispatches fresh tr', () => {
+  it('removes lvlOverride and flags the captured tr with preventDispatch', () => {
     const paragraph = createParagraph({ numId: 7, ilvl: 0 });
     resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
 
-    const result = continueNumbering({ editor, tr, state, dispatch });
+    const result = continueNumbering({ editor, tr, state });
 
     expect(result).toBe(true);
     expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 7, 0);
-    expect(dispatch).toHaveBeenCalledWith(freshTr);
+    expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
   });
 
   it('defaults ilvl to 0 when not specified', () => {
@@ -115,15 +107,5 @@ describe('continueNumbering', () => {
 
     expect(result).toBe(true);
     expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 5, 0);
-  });
-
-  it('does not dispatch when dispatch is not provided', () => {
-    const paragraph = createParagraph({ numId: 7, ilvl: 0 });
-    resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
-
-    const result = continueNumbering({ editor, tr, state });
-
-    expect(result).toBe(true);
-    expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 7, 0);
   });
 });

@@ -46,8 +46,6 @@ describe('restartNumbering', () => {
   let tr;
   /** @type {any} */
   let editor;
-  /** @type {ReturnType<typeof vi.fn>} */
-  let dispatch;
 
   const createParagraph = ({ numId, ilvl = 0 }) => ({
     type: { name: 'paragraph' },
@@ -69,8 +67,7 @@ describe('restartNumbering', () => {
     };
     state = { selection: {}, doc: sharedDoc };
     tr = { setMeta: vi.fn() };
-    editor = { state: { tr: {}, doc: sharedDoc } };
-    dispatch = vi.fn();
+    editor = {};
 
     isList.mockReturnValue(true);
     ListHelpers.getAllListDefinitions.mockReturnValue({});
@@ -80,11 +77,10 @@ describe('restartNumbering', () => {
   it('returns false when no list paragraph is found', () => {
     resolveParent.mockReturnValue(null);
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    const result = restartNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.setLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when paragraph has no numId', () => {
@@ -94,31 +90,30 @@ describe('restartNumbering', () => {
     };
     resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    const result = restartNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.setLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   describe('first item in list (no preceding items)', () => {
     beforeEach(() => {
       // nodesBetween finds no preceding items
-      state.doc.nodesBetween.mockImplementation((from, to, cb) => {
+      state.doc.nodesBetween.mockImplementation((from, to) => {
         if (to === 5) return; // searching for preceding items — none found
       });
     });
 
-    it('sets startOverride on the existing numId and dispatches fresh tr', () => {
+    it('sets startOverride on the existing numId and flags the captured tr with preventDispatch', () => {
       const paragraph = createParagraph({ numId: 7, ilvl: 0 });
       resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
 
-      const result = restartNumbering({ editor, tr, state, dispatch });
+      const result = restartNumbering({ editor, tr, state });
 
       expect(result).toBe(true);
       expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
       expect(ListHelpers.createNumDefinition).not.toHaveBeenCalled();
-      expect(dispatch).toHaveBeenCalledWith(editor.state.tr);
+      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
     });
 
     it('defaults ilvl to 0 when not specified', () => {
@@ -131,20 +126,10 @@ describe('restartNumbering', () => {
       };
       resolveParent.mockReturnValue({ node: paragraph, pos: 3 });
 
-      const result = restartNumbering({ editor, tr, state, dispatch });
-
-      expect(result).toBe(true);
-      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 5, 0, { startOverride: 1 });
-    });
-
-    it('does not dispatch when dispatch is not provided', () => {
-      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
-      resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
-
       const result = restartNumbering({ editor, tr, state });
 
       expect(result).toBe(true);
-      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
+      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 5, 0, { startOverride: 1 });
     });
   });
 
@@ -175,7 +160,7 @@ describe('restartNumbering', () => {
       const paragraph = createParagraph({ numId: 7, ilvl: 0 });
       resolveParent.mockReturnValue({ node: paragraph, pos: 20 });
 
-      const result = restartNumbering({ editor, tr, state, dispatch });
+      const result = restartNumbering({ editor, tr, state });
 
       expect(result).toBe(true);
       expect(ListHelpers.createNumDefinition).toHaveBeenCalledWith(editor, 42);
@@ -197,7 +182,7 @@ describe('restartNumbering', () => {
         }
       });
 
-      restartNumbering({ editor, tr, state, dispatch });
+      restartNumbering({ editor, tr, state });
 
       expect(updateNumberingProperties).toHaveBeenCalledWith({ numId: 99, ilvl: 0 }, paragraph, 20, editor, tr);
       expect(updateNumberingProperties).toHaveBeenCalledWith(
@@ -214,7 +199,7 @@ describe('restartNumbering', () => {
       resolveParent.mockReturnValue({ node: paragraph, pos: 20 });
       ListHelpers.getAllListDefinitions.mockReturnValue({}); // no definition
 
-      const result = restartNumbering({ editor, tr, state, dispatch });
+      const result = restartNumbering({ editor, tr, state });
 
       expect(result).toBe(false);
       expect(ListHelpers.createNumDefinition).not.toHaveBeenCalled();

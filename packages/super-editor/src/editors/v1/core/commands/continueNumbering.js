@@ -7,10 +7,18 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
  * Remove the startOverride for the current list level so the counter continues
  * from where the previous list chain left off.
  *
- * This is the complement of `restartNumbering`: instead of setting
- * w:lvlOverride/w:startOverride, it removes the override entirely.
+ * `removeLvlOverride` mutates the numbering XML part. That mutation fires
+ * `list-definitions-change` (which flips `numberingPlugin.forceFullRecompute`
+ * on) and a `partChanged` event; `handleNumberingInvalidation` then dispatches
+ * a fresh empty tr that lets `numberingPlugin.appendTransaction` rewrite the
+ * affected `listRendering` attrs. That nested dispatch is the real work.
+ *
+ * After it runs, `editor.state.doc` has moved on. The tr CommandService
+ * captured before the command ran still points at the old doc, so dispatching
+ * it would throw "Applying a mismatched transaction" — flag it with
+ * `preventDispatch` so CommandService skips the dispatch.
  */
-export const continueNumbering = ({ editor, tr, state, dispatch }) => {
+export const continueNumbering = ({ editor, tr, state }) => {
   const { node: paragraph } = findParentNode(isList)(state.selection) || {};
   if (!paragraph) return false;
 
@@ -18,13 +26,6 @@ export const continueNumbering = ({ editor, tr, state, dispatch }) => {
   if (numId == null) return false;
 
   ListHelpers.removeLvlOverride(editor, numId, ilvl);
-
-  // removeLvlOverride synchronously triggers handleNumberingInvalidation, which
-  // dispatches a fresh tr that runs through appendTransaction and updates the doc.
-  // The `tr` captured by CommandService before this command ran is now stale, so
-  // flag it with preventDispatch. `dispatch` receives a fresh tr from the updated
-  // state so direct callers still see the update.
   tr.setMeta('preventDispatch', true);
-  if (dispatch) dispatch(editor.state.tr);
   return true;
 };

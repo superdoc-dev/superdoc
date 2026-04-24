@@ -15,7 +15,7 @@ import { updateNumberingProperties } from '@core/commands/changeListLevel.js';
  * independent numbering sequences: the items before restart are unchanged and
  * the items from the restart point count from 1.
  */
-export const restartNumbering = ({ editor, tr, state, dispatch }) => {
+export const restartNumbering = ({ editor, tr, state }) => {
   const parentResult = findParentNode(isList)(state.selection);
   const { node: paragraph, pos: paragraphPos } = parentResult || {};
   if (!paragraph) return false;
@@ -37,13 +37,13 @@ export const restartNumbering = ({ editor, tr, state, dispatch }) => {
 
   if (!hasPrecedingItems) {
     // Already the first item — pin startOverride on the existing numId.
-    // setLvlOverride may change counter values (e.g. the list was "continuing"
-    // from a prior list), triggering handleNumberingInvalidation which updates
-    // the doc synchronously. Prevent CommandService from dispatching the now-
-    // stale captured tr; dispatch a fresh one for non-CommandService callers.
+    // setLvlOverride triggers handleNumberingInvalidation, which dispatches a
+    // fresh tr that updates listRendering synchronously. After that, the tr
+    // CommandService captured before this command ran is built against a stale
+    // doc, so dispatching it would throw "Applying a mismatched transaction".
+    // Flag it with `preventDispatch` so CommandService skips the dispatch.
     ListHelpers.setLvlOverride(editor, numId, ilvl, { startOverride: 1 });
     tr.setMeta('preventDispatch', true);
-    if (dispatch) dispatch(editor.state.tr);
     return true;
   }
 
@@ -58,7 +58,8 @@ export const restartNumbering = ({ editor, tr, state, dispatch }) => {
   const { numId: newNumId } = ListHelpers.createNumDefinition(editor, Number(abstractId));
   ListHelpers.setLvlOverride(editor, newNumId, ilvl, { startOverride: 1 });
 
-  // Remap paragraphs from this position onwards to the new numId.
+  // Remap paragraphs from this position onwards to the new numId. Steps are
+  // accumulated on the captured tr; CommandService dispatches it after we return.
   state.doc.nodesBetween(paragraphPos, state.doc.content.size, (node, pos) => {
     if (node.type.name !== 'paragraph') return true;
     const props = getResolvedParagraphProperties(node)?.numberingProperties;
@@ -68,6 +69,5 @@ export const restartNumbering = ({ editor, tr, state, dispatch }) => {
     return true;
   });
 
-  if (dispatch) dispatch(tr);
   return true;
 };
